@@ -7,7 +7,9 @@
     "start-server": "cd server && node index.js",
     "dev-server": "cd server && nodemon index.js",
     "dev-client": "npm run dev --prefix client",
-    "start": "concurrently -n SERVER,CLIENT -c blue,green \"npm run dev-server\" \"npm run dev-client\""
+    "start": "concurrently -n SERVER,CLIENT -c blue,green \"npm run dev-server\" \"npm run dev-client\"",
+    "build:all": "npm run build --prefix client",
+    "build": "npm run build:all"
   },
   "keywords": [],
   "author": "",

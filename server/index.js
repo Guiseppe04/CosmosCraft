@@ -13,6 +13,16 @@ const userRoutes = require('./routes/userRoutes.js');
 const { errorHandler, notFound } = require('./middleware/errorHandler.js');
 
 const app = express();
+// Add after other middleware (around line 30)
+const path = require('path');
+
+// Serve static files from the client dist folder
+app.use(express.static(path.join(__dirname, '../client/dist')));
+
+// All other routes should serve index.html for React Router
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../client/dist/index.html'));
+});
 
 connectDB();
 
@@ -62,5 +72,8 @@ process.on('SIGTERM', () => {
     process.exit(0);
   });
 });
+
+
+
 
 module.exports = app;
