@@ -2,11 +2,12 @@
   "name": "backend",
   "version": "1.0.0",
   "description": "",
-  "main": "server.js",
+  "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "nodemon backend/server.js",
-    "start": "node backend/server.js"
+    "start-server": "cd server && node index.js",
+    "dev-server": "cd server && nodemon index.js",
+    "dev-client": "npm run dev --prefix client",
+    "start": "concurrently -n SERVER,CLIENT -c blue,green \"npm run dev-server\" \"npm run dev-client\""
   },
   "keywords": [],
   "author": "",
@@ -21,11 +22,13 @@
     "joi": "^18.0.2",
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.3.0",
+    "nodemailer": "^8.0.2",
     "passport": "^0.7.0",
     "passport-facebook": "^3.0.0",
     "passport-google-oauth20": "^2.0.0"
   },
   "devDependencies": {
+    "concurrently": "^8.2.2",
     "nodemon": "^3.1.14"
   }
 }
