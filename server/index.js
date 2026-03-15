@@ -46,11 +46,11 @@ app.use(errorHandler);
 const PORT = process.env.PORT || 5000;
 
 const server = app.listen(PORT, async () => {
-  console.log(`\n========================================`);
-  console.log(`✓ CosmosCraft Backend Running`);
-  console.log(`✓ Port: ${PORT}`);
-  console.log(`✓ Environment: ${process.env.NODE_ENV}`);
-  console.log(`========================================\n`);
+
+  console.log(`Backend Running`);
+  console.log(`Port: ${PORT}`);
+  console.log(`Environment: ${process.env.NODE_ENV}`);
+
 
   // Verify email service connection
   await mailService.verifyConnection();
@@ -62,8 +62,5 @@ process.on('SIGTERM', () => {
     process.exit(0);
   });
 });
-
-
-
 
 module.exports = app;
