@@ -11,7 +11,7 @@ export function OTPVerificationPage() {
   const [canResend, setCanResend] = useState(false)
   const [resendTimer, setResendTimer] = useState(0)
   const inputRefs = useRef([])
-
+  const API = import.meta.env.VITE_API_URL || 'http://localhost:5000'
   useEffect(() => {
     // Get email from localStorage
     const pendingEmail = localStorage.getItem('pendingEmail')
@@ -67,7 +67,7 @@ export function OTPVerificationPage() {
     setIsLoading(true)
 
     try {
-      const response = await fetch('http://localhost:5000/auth/verify-otp', {
+      const response = await fetch(`${API}/auth/verify-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -112,7 +112,7 @@ export function OTPVerificationPage() {
     setResendTimer(60) // 60 second cooldown
 
     try {
-      const response = await fetch('http://localhost:5000/auth/resend-otp', {
+      const response = await fetch(`${API}/auth/resend-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',

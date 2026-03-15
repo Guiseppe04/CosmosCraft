@@ -8,7 +8,7 @@ export function OAuthSignupPage() {
   const { login } = useAuth()
   const [isLoading, setIsLoading] = useState(false)
   const [userData, setUserData] = useState(null)
-
+  const API = import.meta.env.VITE_API_URL || 'http://localhost:5000'
   useEffect(() => {
     const provider = searchParams.get('provider')
     const userDataStr = searchParams.get('userData')
@@ -33,7 +33,7 @@ export function OAuthSignupPage() {
 
     try {
       // Call backend to complete signup
-      const response = await fetch('http://localhost:5000/auth/oauth-signup', {
+      const response = await fetch(`${API}/auth/oauth-signup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(userData),

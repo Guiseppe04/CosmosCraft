@@ -28,7 +28,7 @@ export function SignupPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
-
+  const API = import.meta.env.VITE_API_URL || 'http://localhost:5000'
   const updateField = (field, value) => {
     setForm(prev => ({ ...prev, [field]: value }))
     if (errors[field]) {
@@ -102,7 +102,7 @@ export function SignupPage() {
 
     setIsLoading(true)
     try {
-      const response = await fetch('http://localhost:5000/auth/email-signup', {
+      const response = await fetch(`${API}/auth/email-signup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',

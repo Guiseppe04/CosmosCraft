@@ -12,14 +12,14 @@ export function LoginModal() {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const navigate = useNavigate()
-
+  const API = import.meta.env.VITE_API_URL || 'http://localhost:5000'
   const handleSubmit = async e => {
     e.preventDefault()
     setError('')
     setIsLoading(true)
 
     try {
-      const response = await fetch('http://localhost:5000/auth/email-login', {
+      const response = await fetch(`${API}/auth/email-login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include', // Important: send cookies
@@ -178,7 +178,7 @@ export function LoginModal() {
               <div className="grid grid-cols-2 gap-3">
                 <button
                   type="button"
-                  onClick={() => window.location.href = 'http://localhost:5000/auth/google'}
+                  onClick={() => window.location.href = `${API}/auth/google`}
                   className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50"
                 >
                   <span className="w-5 h-5 rounded-full bg-white border border-gray-300 flex items-center justify-center text-[10px] font-bold text-red-500">
@@ -188,7 +188,7 @@ export function LoginModal() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => window.location.href = 'http://localhost:5000/auth/facebook'}
+                  onClick={() => window.location.href = `${API}/auth/facebook`}
                   className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50"
                 >
                   <span className="w-5 h-5 rounded-full bg-[#1877f2] text-white flex items-center justify-center text-[10px] font-bold">
