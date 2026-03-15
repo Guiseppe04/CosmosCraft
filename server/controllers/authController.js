@@ -188,6 +188,24 @@ exports.emailSignup = asyncHandler(async (req, res, next) => {
       // Still allow signup, but warn about email issue
     }
 
+    // Generate tokens for auto-login
+    const { accessToken, refreshToken } = await generateTokens(newUser._id, newUser.role);
+
+    // Set cookies
+    res.cookie('accessToken', accessToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 15 * 60 * 1000,
+    });
+
+    res.cookie('refreshToken', refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+
     res.status(201).json({
       status: 'success',
       message: 'Signup successful. Please check your email for the verification code.',
@@ -198,6 +216,8 @@ exports.emailSignup = asyncHandler(async (req, res, next) => {
           name: newUser.name,
           emailVerified: newUser.emailVerified,
         },
+        accessToken,
+        refreshToken,
       },
     });
   } catch (error) {

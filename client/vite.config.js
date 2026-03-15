@@ -9,9 +9,17 @@ export default defineConfig({
     port: 3000,
     open: true,
     proxy: {
-      '/api': API_URL,
-      '/auth': API_URL,
-      '/user': API_URL
+      '/auth/google': API_URL,
+      '/auth/facebook': API_URL,
+      '/auth/check': API_URL,
+      '/auth/refresh': API_URL,
+      '/auth/logout': API_URL,
+      '/auth/email-signup': API_URL,
+      '/auth/email-login': API_URL,
+      '/auth/verify-otp': API_URL,
+      '/auth/resend-otp': API_URL,
+      '/user': API_URL,
+      '/api': API_URL
     }
   },
   build: {

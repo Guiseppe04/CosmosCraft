@@ -11,7 +11,7 @@ const transporter = nodemailer.createTransport({
   secure: process.env.MAIL_SECURE === 'true' || false, // true for 465, false for other ports
   auth: {
     user: process.env.MAIL_USER,
-    pass: process.env.MAIL_PASSWORD,
+    pass: process.env.MAIL_PASS,
   },
 });
 
@@ -146,10 +146,10 @@ exports.sendOrderConfirmation = async (to, order) => {
 exports.verifyConnection = async () => {
   try {
     await transporter.verify();
-    console.log('✓ Email service connected successfully');
+    console.log('Email service connected successfully');
     return true;
   } catch (error) {
-    console.error('✗ Email service connection failed:', error.message);
+    console.error('Email service connection failed:', error.message);
     return false;
   }
 };

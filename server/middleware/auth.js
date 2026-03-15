@@ -10,7 +10,7 @@ const authenticateToken = (req, res, next) => {
       });
     }
 
-    jwt.verify(token, process.env.JWT_ACCESS_SECRET, (err, user) => {
+    jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
       if (err) {
         if (err.name === 'TokenExpiredError') {
           return res.status(401).json({
