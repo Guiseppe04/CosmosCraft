@@ -4,6 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "start": "node index.js",
     "start-server": "node index.js",
     "dev-server": "nodemon index.js",
     "dev": "concurrently -n SERVER,CLIENT -c blue,green \"npm run dev-server\" \"npm run dev --prefix ../client\""
