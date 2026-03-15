@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams, useNavigate } from 'react-router'
 import { useAuth } from '../context/AuthContext.jsx'
+import { API } from '../utils/apiConfig'
 
 export function OAuthSignupPage() {
   const [searchParams] = useSearchParams()
@@ -8,7 +9,6 @@ export function OAuthSignupPage() {
   const { login } = useAuth()
   const [isLoading, setIsLoading] = useState(false)
   const [userData, setUserData] = useState(null)
-  const API = import.meta.env.VITE_API_URL || 'http://localhost:5000'
   useEffect(() => {
     const provider = searchParams.get('provider')
     const userDataStr = searchParams.get('userData')

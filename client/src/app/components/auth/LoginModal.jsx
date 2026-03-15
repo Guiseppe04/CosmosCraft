@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { useNavigate } from 'react-router'
 import { useAuth } from '../../context/AuthContext.jsx'
+import { API } from '../../utils/apiConfig'
 
 export function LoginModal() {
   const { loginOpen, closeLogin, fetchUser } = useAuth()
@@ -12,7 +13,6 @@ export function LoginModal() {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const navigate = useNavigate()
-  const API = import.meta.env.VITE_API_URL || 'http://localhost:5000'
   const handleSubmit = async e => {
     e.preventDefault()
     setError('')

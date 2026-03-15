@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router'
+import { API } from '../utils/apiConfig'
 
 export function OTPVerificationPage() {
   const navigate = useNavigate()
@@ -11,7 +12,6 @@ export function OTPVerificationPage() {
   const [canResend, setCanResend] = useState(false)
   const [resendTimer, setResendTimer] = useState(0)
   const inputRefs = useRef([])
-  const API = import.meta.env.VITE_API_URL || 'http://localhost:5000'
   useEffect(() => {
     // Get email from localStorage
     const pendingEmail = localStorage.getItem('pendingEmail')

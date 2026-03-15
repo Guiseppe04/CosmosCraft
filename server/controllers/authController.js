@@ -5,6 +5,14 @@ const userService = require('../services/userService');
 const mailService = require('../services/mailService');
 const { validate, emailSignupSchema, emailLoginSchema, oauthSignupSchema } = require('../utils/validation');
 
+// Helper function to get the correct frontend URL based on environment
+const getFrontendUrl = () => {
+  if (process.env.NODE_ENV === 'production') {
+    return process.env.FRONTEND_URL_PROD || 'https://cosmoscraft.netlify.app';
+  }
+  return process.env.FRONTEND_URL || 'http://localhost:3000';
+};
+
 /**
  * OAuth Google Callback
  * User already exists: Log them in
@@ -14,7 +22,7 @@ exports.googleCallback = asyncHandler(async (req, res, next) => {
   if (!req.user) {
     // User doesn't exist - return OAuth data for frontend to complete signup
     return res.redirect(
-      `${process.env.FRONTEND_URL}/auth/oauth-signup?provider=google&userData=${encodeURIComponent(
+      `${getFrontendUrl()}/auth/oauth-signup?provider=google&userData=${encodeURIComponent(
         JSON.stringify(req.authInfo?.oauthData || {})
       )}`
     );
@@ -38,7 +46,7 @@ exports.googleCallback = asyncHandler(async (req, res, next) => {
   });
 
   return res.redirect(
-    `${process.env.FRONTEND_URL}/auth/success?userId=${req.user._id}&provider=google&isProfileComplete=${req.user.isProfileComplete}`
+    `${getFrontendUrl()}/auth/success?userId=${req.user._id}&provider=google&isProfileComplete=${req.user.isProfileComplete}`
   );
 });
 
@@ -49,7 +57,7 @@ exports.facebookCallback = asyncHandler(async (req, res, next) => {
   if (!req.user) {
     // User doesn't exist - return OAuth data for frontend to complete signup
     return res.redirect(
-      `${process.env.FRONTEND_URL}/auth/oauth-signup?provider=facebook&userData=${encodeURIComponent(
+      `${getFrontendUrl()}/auth/oauth-signup?provider=facebook&userData=${encodeURIComponent(
         JSON.stringify(req.authInfo?.oauthData || {})
       )}`
     );
@@ -73,7 +81,7 @@ exports.facebookCallback = asyncHandler(async (req, res, next) => {
   });
 
   return res.redirect(
-    `${process.env.FRONTEND_URL}/auth/success?userId=${req.user._id}&provider=facebook&isProfileComplete=${req.user.isProfileComplete}`
+    `${getFrontendUrl()}/auth/success?userId=${req.user._id}&provider=facebook&isProfileComplete=${req.user.isProfileComplete}`
   );
 });
 

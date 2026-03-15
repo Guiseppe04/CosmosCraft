@@ -6,6 +6,14 @@ const { asyncHandler } = require('../middleware/errorHandler');
 
 const router = express.Router();
 
+// Helper function to get the correct frontend URL based on environment
+const getFrontendUrl = () => {
+  if (process.env.NODE_ENV === 'production') {
+    return process.env.FRONTEND_URL_PROD || 'https://cosmoscraft.netlify.app';
+  }
+  return process.env.FRONTEND_URL || 'http://localhost:3000';
+};
+
 // Helper to generate tokens (import from utils)
 const { generateTokens } = require('../utils/generateTokens');
 
@@ -26,7 +34,7 @@ router.get(
         }
 
         if (!user) {
-          return res.redirect(`${process.env.FRONTEND_URL}/?auth_error=failed`);
+          return res.redirect(`${getFrontendUrl()}/?auth_error=failed`);
         }
 
         // User exists or was just created - generate tokens
@@ -46,7 +54,7 @@ router.get(
           maxAge: 7 * 24 * 60 * 60 * 1000,
         });
 
-        return res.redirect(`${process.env.FRONTEND_URL}/auth/success?userId=${user._id}&provider=google`);
+        return res.redirect(`${getFrontendUrl()}/auth/success?userId=${user._id}&provider=google`);
       } catch (error) {
         next(error);
       }
@@ -71,7 +79,7 @@ router.get(
         }
 
         if (!user) {
-          return res.redirect(`${process.env.FRONTEND_URL}/?auth_error=failed`);
+          return res.redirect(`${getFrontendUrl()}/?auth_error=failed`);
         }
 
         // User exists or was just created - generate tokens
@@ -91,7 +99,7 @@ router.get(
           maxAge: 7 * 24 * 60 * 60 * 1000,
         });
 
-        return res.redirect(`${process.env.FRONTEND_URL}/auth/success?userId=${user._id}&provider=facebook`);
+        return res.redirect(`${getFrontendUrl()}/auth/success?userId=${user._id}&provider=facebook`);
       } catch (error) {
         next(error);
       }

@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react'
+import { API } from '../utils/apiConfig'
 
 const AuthContext = createContext(null)
 
@@ -8,7 +9,6 @@ export function AuthProvider({ children }) {
   const [loginOpen, setLoginOpen] = useState(false)
   const [loginCallback, setLoginCallback] = useState(null)
   const [isLoadingUser, setIsLoadingUser] = useState(true)
-  const API = import.meta.env.VITE_API_URL || 'http://localhost:5000'
   // Fetch current authenticated user from backend
   const fetchUser = useCallback(async () => {
     try {

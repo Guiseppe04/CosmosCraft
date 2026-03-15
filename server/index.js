@@ -14,11 +14,19 @@ const { errorHandler, notFound } = require('./middleware/errorHandler.js');
 
 const app = express();
 
+// Helper function to get the correct frontend URL based on environment
+const getFrontendUrl = () => {
+  if (process.env.NODE_ENV === 'production') {
+    return process.env.FRONTEND_URL_PROD || 'https://cosmoscraft.netlify.app';
+  }
+  return process.env.FRONTEND_URL || 'http://localhost:3000';
+};
+
 connectDB();
 
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    origin: getFrontendUrl(),
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   })

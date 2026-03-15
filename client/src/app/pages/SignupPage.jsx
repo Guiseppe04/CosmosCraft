@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
 import { useAuth } from '../context/AuthContext.jsx'
+import { API } from '../utils/apiConfig'
 
 export function SignupPage() {
   const navigate = useNavigate()
@@ -28,7 +29,6 @@ export function SignupPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
-  const API = import.meta.env.VITE_API_URL || 'http://localhost:5000'
   const updateField = (field, value) => {
     setForm(prev => ({ ...prev, [field]: value }))
     if (errors[field]) {
