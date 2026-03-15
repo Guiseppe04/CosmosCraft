@@ -14,25 +14,11 @@ const { errorHandler, notFound } = require('./middleware/errorHandler.js');
 
 const app = express();
 
-// Helper function to get the correct frontend URL based on environment
-const getFrontendUrl = () => {
-  const prodUrl = process.env.FRONTEND_URL_PROD;
-  const devUrl = process.env.FRONTEND_URL;
-
-  if (prodUrl) {
-    return prodUrl;
-  }
-  if (devUrl) {
-    return devUrl;
-  }
-  throw new Error('Frontend URL not configured. Set FRONTEND_URL for development or FRONTEND_URL_PROD for production.');
-};
-
 connectDB();
 
 app.use(
   cors({
-    origin: getFrontendUrl(),
+    origin: process.env.FRONTEND_URL,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   })

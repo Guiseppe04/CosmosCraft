@@ -3,14 +3,6 @@ const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const FacebookStrategy = require('passport-facebook').Strategy;
 const User = require('../models/users.js');
 
-// Helper function to get the correct URL based on environment
-const getCallbackUrl = (envVar, envVarProd, fallback) => {
-  if (process.env.NODE_ENV === 'production') {
-    return process.env[envVarProd] || fallback;
-  }
-  return process.env[envVar] || fallback;
-};
-
 // Helper function to parse display name into firstName, middleName, lastName
 const parseDisplayName = (displayName) => {
   const nameParts = displayName.trim().split(/\s+/);
@@ -41,7 +33,7 @@ passport.use(
     {
       clientID: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-      callbackURL: getCallbackUrl('GOOGLE_CALLBACK_URL', 'GOOGLE_CALLBACK_URL_PROD', 'http://localhost:5000/auth/google/callback'),
+      callbackURL: process.env.GOOGLE_CALLBACK_URL,
     },
     async (accessToken, refreshToken, profile, done) => {
       try {
@@ -90,7 +82,7 @@ passport.use(
     {
       clientID: process.env.FACEBOOK_APP_ID,
       clientSecret: process.env.FACEBOOK_APP_SECRET,
-      callbackURL: getCallbackUrl('FACEBOOK_CALLBACK_URL', 'FACEBOOK_CALLBACK_URL_PROD', 'http://localhost:5000/auth/facebook/callback'),
+      callbackURL: process.env.FACEBOOK_CALLBACK_URL,
       profileFields: ['id', 'displayName', 'emails'],
     },
     async (accessToken, refreshToken, profile, done) => {

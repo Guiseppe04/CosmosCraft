@@ -33,18 +33,25 @@ router.get(
 router.get(
   '/google/callback',
   asyncHandler(async (req, res, next) => {
+    console.log('[Google Callback] Request received:', { query: req.query, params: req.params });
+    
     passport.authenticate('google', { session: false }, async (err, user, info) => {
       try {
+        console.log('[Google Callback] Auth result:', { err, user: user ? 'user found' : 'no user', info });
+        
         if (err) {
-          return res.status(500).json({ status: 'error', message: 'Authentication error', error: err.message });
+          console.error('[Google Callback] Auth error:', err);
+          return res.redirect(`${getFrontendUrl()}/?auth_error=${encodeURIComponent(err.message)}`);
         }
 
         if (!user) {
+          console.log('[Google Callback] No user found, redirecting to signup');
           return res.redirect(`${getFrontendUrl()}/?auth_error=failed`);
         }
 
         // User exists or was just created - generate tokens
         const { accessToken, refreshToken } = await generateTokens(user._id, user.role);
+        console.log('[Google Callback] Tokens generated for user:', user._id);
 
         res.cookie('accessToken', accessToken, {
           httpOnly: true,
@@ -60,9 +67,13 @@ router.get(
           maxAge: 7 * 24 * 60 * 60 * 1000,
         });
 
-        return res.redirect(`${getFrontendUrl()}/auth/success?userId=${user._id}&provider=google`);
+        const redirectUrl = `${getFrontendUrl()}/auth/success?userId=${user._id}&provider=google`;
+        console.log('[Google Callback] Redirecting to:', redirectUrl);
+        
+        return res.redirect(redirectUrl);
       } catch (error) {
-        next(error);
+        console.error('[Google Callback] Error in callback:', error);
+        return res.redirect(`${getFrontendUrl()}/?auth_error=${encodeURIComponent(error.message)}`);
       }
     })(req, res, next);
   })
