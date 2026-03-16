@@ -6,20 +6,6 @@ const { asyncHandler } = require('../middleware/errorHandler');
 
 const router = express.Router();
 
-// Helper function to get the correct frontend URL based on environment
-const getFrontendUrl = () => {
-  const prodUrl = process.env.FRONTEND_URL_PROD;
-  const devUrl = process.env.FRONTEND_URL;
-
-  if (prodUrl) {
-    return prodUrl;
-  }
-  if (devUrl) {
-    return devUrl;
-  }
-  throw new Error('Frontend URL not configured. Set FRONTEND_URL for development or FRONTEND_URL_PROD for production.');
-};
-
 // Helper to generate tokens (import from utils)
 const { generateTokens } = require('../utils/generateTokens');
 
@@ -41,12 +27,12 @@ router.get(
         
         if (err) {
           console.error('[Google Callback] Auth error:', err);
-          return res.redirect(`${getFrontendUrl()}/?auth_error=${encodeURIComponent(err.message)}`);
+          return res.redirect(`${process.env.FRONTEND_URL}/?auth_error=${encodeURIComponent(err.message)}`);
         }
 
         if (!user) {
           console.log('[Google Callback] No user found, redirecting to signup');
-          return res.redirect(`${getFrontendUrl()}/?auth_error=failed`);
+          return res.redirect(`${process.env.FRONTEND_URL}/?auth_error=failed`);
         }
 
         // User exists or was just created - generate tokens
@@ -67,13 +53,13 @@ router.get(
           maxAge: 7 * 24 * 60 * 60 * 1000,
         });
 
-        const redirectUrl = `${getFrontendUrl()}/auth/success?userId=${user._id}&provider=google`;
+        const redirectUrl = `${process.env.FRONTEND_URL}/auth/success?userId=${user._id}&provider=google`;
         console.log('[Google Callback] Redirecting to:', redirectUrl);
         
         return res.redirect(redirectUrl);
       } catch (error) {
         console.error('[Google Callback] Error in callback:', error);
-        return res.redirect(`${getFrontendUrl()}/?auth_error=${encodeURIComponent(error.message)}`);
+        return res.redirect(`${process.env.FRONTEND_URL}/?auth_error=${encodeURIComponent(error.message)}`);
       }
     })(req, res, next);
   })
@@ -96,7 +82,7 @@ router.get(
         }
 
         if (!user) {
-          return res.redirect(`${getFrontendUrl()}/?auth_error=failed`);
+          return res.redirect(`${process.env.FRONTEND_URL}/?auth_error=failed`);
         }
 
         // User exists or was just created - generate tokens
@@ -116,7 +102,7 @@ router.get(
           maxAge: 7 * 24 * 60 * 60 * 1000,
         });
 
-        return res.redirect(`${getFrontendUrl()}/auth/success?userId=${user._id}&provider=facebook`);
+        return res.redirect(`${process.env.FRONTEND_URL}/auth/success?userId=${user._id}&provider=facebook`);
       } catch (error) {
         next(error);
       }
