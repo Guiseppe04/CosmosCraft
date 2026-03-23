@@ -17,11 +17,13 @@ export function Header() {
   const { isAuthenticated, user, openLogin } = useAuth()
   const cartCount = getCartCount()
 
+  // Check if we're on admin or staff routes
+  const isAdminOrStaff = location.pathname.startsWith('/admin') || location.pathname.startsWith('/staff')
+
   const navLinks = [
     { path: '/', label: 'Home' },
     { path: '/customize', label: 'Customize' },
     { path: '/shop', label: 'Shop' },
-    { path: '/appointments', label: 'Appointments' },
   ]
 
   return (
@@ -40,7 +42,7 @@ export function Header() {
 
           {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center gap-1">
-            {navLinks.map((link) => (
+            {!isAdminOrStaff && navLinks.map((link) => (
               <Link
                 key={link.path}
                 to={link.path}
@@ -117,7 +119,7 @@ export function Header() {
             className="md:hidden border-t border-[var(--border)] bg-[var(--surface-dark)]"
           >
             <nav className="px-4 py-4 space-y-2">
-              {navLinks.map((link) => (
+              {!isAdminOrStaff && navLinks.map((link) => (
                 <Link
                   key={link.path}
                   to={link.path}

@@ -159,41 +159,24 @@ const GuitarPreview = memo(function GuitarPreview({ config, view, onViewChange }
 
   return (
     <div className="w-full">
-      <div className="mx-auto w-full max-w-[1160px] rounded-none border-l border-white/10 bg-[#111111] px-3 py-3 sm:px-4 lg:px-6">
-        <div className="mb-4 flex items-center gap-3">
-          <div className="inline-flex rounded-md bg-white/8 p-1">
-            <button
-              type="button"
-              onClick={() => onViewChange('front')}
-              className={`rounded-md px-5 py-2 text-sm font-semibold transition-colors ${
-                view === 'front' ? 'bg-[#11a9f3] text-white' : 'text-white/55 hover:text-white'
-              }`}
-            >
-              Front
-            </button>
-            <button
-              type="button"
-              onClick={() => onViewChange('rear')}
-              className={`rounded-md px-5 py-2 text-sm font-semibold transition-colors ${
-                view === 'rear' ? 'bg-[#11a9f3] text-white' : 'text-white/55 hover:text-white'
-              }`}
-            >
-              Rear
-            </button>
+      {/* Main guitar container */}
+      <div className="relative mx-auto w-full">
+        {/* Guitar display area */}
+        <div className="relative overflow-hidden rounded-xl">
+          {/* Background gradient for depth */}
+          <div className="absolute inset-0 bg-gradient-to-b from-[#1a1a1a] via-[#0f0f0f] to-[#0a0a0a]" />
+          
+          {/* Spotlight effect from top */}
+          <div className="absolute inset-0 overflow-hidden pointer-events-none">
+            <div className="absolute -top-20 left-1/2 -translate-x-1/2 w-[500px] h-[500px] bg-gradient-radial from-white/10 via-transparent to-transparent opacity-40" />
+            <div className="absolute top-0 left-1/4 w-[300px] h-[300px] bg-gradient-radial from-[#d4af37]/5 via-transparent to-transparent opacity-50" />
+            <div className="absolute top-0 right-1/4 w-[300px] h-[300px] bg-gradient-radial from-white/5 via-transparent to-transparent opacity-30" />
           </div>
-          <button type="button" className="grid h-12 w-12 place-items-center rounded-sm bg-[#11a9f3] text-white">
-            <CircleDot className="h-5 w-5" />
-          </button>
-          <button type="button" className="grid h-12 w-12 place-items-center rounded-sm bg-[#11a9f3] text-white">
-            <Trash2 className="h-5 w-5" />
-          </button>
-        </div>
-
-        <div className="relative h-[44vh] min-h-[320px] overflow-hidden bg-[#111111]">
-          <div className="absolute inset-0 bg-[linear-gradient(180deg,#191919_0%,#101010_45%,#0c0c0c_100%)]" />
-          <div className="absolute inset-0 flex items-center justify-center">
+          
+          {/* Guitar image */}
+          <div className="relative flex items-center justify-center py-8">
             <div
-              className="relative aspect-[16/7] w-full max-w-[1180px]"
+              className="relative aspect-[16/7] w-full max-w-[1000px] transition-transform duration-500 ease-out"
               style={{
                 transform: `translate(${previewX}px, ${previewY}px) scale(${previewScale}) ${previewFlip}`,
                 transformOrigin: '50% 50%',
@@ -214,15 +197,12 @@ const GuitarPreview = memo(function GuitarPreview({ config, view, onViewChange }
               {pickupLayers.map((layer, index) => (
                 <GuitarLayer key={`${layer.src}-${index}`} src={layer.src} className={layer.className} />
               ))}
-              <div className="absolute inset-x-[4%] top-[48%] z-50 h-[2px] bg-white/60" style={stringsOverlayStyle()} />
             </div>
           </div>
+          
+          {/* Reflection/shadow beneath guitar */}
+          <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-2/3 h-6 bg-gradient-to-b from-transparent via-black/30 to-black/50 blur-xl" />
         </div>
-
-        <p className="mt-3 text-center text-sm text-white/55">
-          {model.label} body with {guitarBuilder.PICKUP_OPTIONS[config.pickups]?.label ?? config.pickups} pickups,{' '}
-          {headstock.label} headstock, and {hardware.label.toLowerCase()} hardware
-        </p>
       </div>
     </div>
   )

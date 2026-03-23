@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
+import { motion } from 'motion/react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { API } from '../utils/apiConfig'
+import { ArrowRight } from 'lucide-react'
 
 export function SignupPage() {
   const navigate = useNavigate()
@@ -161,249 +163,273 @@ export function SignupPage() {
   }
 
   return (
-    <div className="min-h-screen bg-light py-12 px-4">
-      <div className="max-w-2xl mx-auto bg-white rounded-2xl shadow-lg p-8">
-        <h1 className="text-3xl font-bold text-dark mb-2">Create Your Account</h1>
-        <p className="text-sm text-dark opacity-70 mb-8">Join CosmosCraft and start your journey</p>
+    <div className="min-h-screen bg-[var(--bg-primary)] pt-24 pb-12 px-4">
+      <div className="max-w-2xl mx-auto">
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="mb-8"
+        >
+          <h1 className="text-3xl font-bold text-white mb-2">Create Your Account</h1>
+          <p className="text-sm text-[var(--text-muted)]">Join CosmosCraft and start your journey</p>
+        </motion.div>
 
-        {success && <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700">{success}</div>}
-        {errors.submit && <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{errors.submit}</div>}
-
-        <form onSubmit={handleSubmit} className="space-y-8">
-          {/* Personal Information Section */}
-          <div>
-            <h2 className="text-lg font-semibold text-dark mb-4">Personal Information</h2>
-            <div className="grid grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-semibold text-dark mb-1">First Name *</label>
-                <input
-                  type="text"
-                  value={form.firstName}
-                  onChange={e => updateField('firstName', e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-lg border border-gray-200 bg-white text-dark focus:outline-none focus:ring-2 focus:ring-gold"
-                />
-                {errors.firstName && <p className="mt-1 text-xs text-red-500">{errors.firstName}</p>}
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-dark mb-1">Middle Name</label>
-                <input
-                  type="text"
-                  value={form.middleName}
-                  onChange={e => updateField('middleName', e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-lg border border-gray-200 bg-white text-dark focus:outline-none focus:ring-2 focus:ring-gold"
-                  placeholder="(optional)"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-dark mb-1">Last Name *</label>
-                <input
-                  type="text"
-                  value={form.lastName}
-                  onChange={e => updateField('lastName', e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-lg border border-gray-200 bg-white text-dark focus:outline-none focus:ring-2 focus:ring-gold"
-                />
-                {errors.lastName && <p className="mt-1 text-xs text-red-500">{errors.lastName}</p>}
-              </div>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.1 }}
+          className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl shadow-lg p-8"
+        >
+          {success && (
+            <div className="mb-6 p-4 bg-[var(--gold-primary)]/10 border border-[var(--gold-primary)]/30 rounded-lg text-sm text-[var(--gold-primary)]">
+              {success}
             </div>
-          </div>
-
-          {/* Contact Information Section */}
-          <div>
-            <h2 className="text-lg font-semibold text-dark mb-4">Contact Information</h2>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-semibold text-dark mb-1">Email Address *</label>
-                <input
-                  type="email"
-                  value={form.email}
-                  onChange={e => updateField('email', e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-lg border border-gray-200 bg-white text-dark focus:outline-none focus:ring-2 focus:ring-gold"
-                />
-                {errors.email && <p className="mt-1 text-xs text-red-500">{errors.email}</p>}
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-dark mb-1">Phone Number *</label>
-                <input
-                  type="tel"
-                  value={form.phone}
-                  onChange={e => updateField('phone', e.target.value)}
-                  placeholder="(123) 456-7890 or 123-456-7890"
-                  className="w-full px-4 py-2.5 rounded-lg border border-gray-200 bg-white text-dark focus:outline-none focus:ring-2 focus:ring-gold"
-                />
-                {errors.phone && <p className="mt-1 text-xs text-red-500">{errors.phone}</p>}
-              </div>
+          )}
+          {errors.submit && (
+            <div className="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-lg text-sm text-red-400">
+              {errors.submit}
             </div>
-          </div>
+          )}
 
-          {/* Password Section */}
-          <div>
-            <h2 className="text-lg font-semibold text-dark mb-4">Security</h2>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-semibold text-dark mb-1">Password *</label>
-                <div className="relative">
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    value={form.password}
-                    onChange={e => updateField('password', e.target.value)}
-                    className="w-full px-4 py-2.5 rounded-lg border border-gray-200 bg-white text-dark pr-12 focus:outline-none focus:ring-2 focus:ring-gold"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-dark/60 hover:text-dark"
-                  >
-                    {showPassword ? 'Hide' : 'Show'}
-                  </button>
-                </div>
-                {errors.password && <p className="mt-1 text-xs text-red-500">{errors.password}</p>}
-                <div className="mt-2 text-xs text-dark/70 bg-gray-50 p-3 rounded">
-                  <p className="font-semibold mb-1">Password Requirements:</p>
-                  <ul className="list-disc list-inside space-y-1">
-                    <li>Minimum 12 characters, maximum 64</li>
-                    <li>Consider using a passphrase (e.g., "BlueSky-Guitar-2024")</li>
-                    <li>Can include uppercase, numbers, symbols, and spaces</li>
-                  </ul>
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-dark mb-1">Confirm Password *</label>
-                <div className="relative">
-                  <input
-                    type={showConfirm ? 'text' : 'password'}
-                    value={form.confirmPassword}
-                    onChange={e => updateField('confirmPassword', e.target.value)}
-                    className="w-full px-4 py-2.5 rounded-lg border border-gray-200 bg-white text-dark pr-12 focus:outline-none focus:ring-2 focus:ring-gold"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowConfirm(!showConfirm)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-dark/60 hover:text-dark"
-                  >
-                    {showConfirm ? 'Hide' : 'Show'}
-                  </button>
-                </div>
-                {errors.confirmPassword && <p className="mt-1 text-xs text-red-500">{errors.confirmPassword}</p>}
-              </div>
-            </div>
-          </div>
-
-          {/* Address Information Section */}
-          <div>
-            <h2 className="text-lg font-semibold text-dark mb-4">Address Information</h2>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-semibold text-dark mb-1">Street Address *</label>
-                <input
-                  type="text"
-                  value={form.address.streetLine1}
-                  onChange={e => updateAddressField('streetLine1', e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-lg border border-gray-200 bg-white text-dark focus:outline-none focus:ring-2 focus:ring-gold"
-                />
-                {errors['address.streetLine1'] && <p className="mt-1 text-xs text-red-500">{errors['address.streetLine1']}</p>}
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-dark mb-1">Apartment, Suite, etc. (optional)</label>
-                <input
-                  type="text"
-                  value={form.address.streetLine2}
-                  onChange={e => updateAddressField('streetLine2', e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-lg border border-gray-200 bg-white text-dark focus:outline-none focus:ring-2 focus:ring-gold"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
+          <form onSubmit={handleSubmit} className="space-y-8">
+            {/* Personal Information Section */}
+            <div>
+              <h2 className="text-lg font-semibold text-white mb-4">Personal Information</h2>
+              <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-sm font-semibold text-dark mb-1">City *</label>
+                  <label className="block text-sm font-semibold text-white mb-1">First Name *</label>
                   <input
                     type="text"
-                    value={form.address.city}
-                    onChange={e => updateAddressField('city', e.target.value)}
-                    className="w-full px-4 py-2.5 rounded-lg border border-gray-200 bg-white text-dark focus:outline-none focus:ring-2 focus:ring-gold"
+                    value={form.firstName}
+                    onChange={e => updateField('firstName', e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] text-white focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] transition-all duration-200"
                   />
-                  {errors['address.city'] && <p className="mt-1 text-xs text-red-500">{errors['address.city']}</p>}
+                  {errors.firstName && <p className="mt-1 text-xs text-red-400">{errors.firstName}</p>}
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-dark mb-1">State / Province *</label>
+                  <label className="block text-sm font-semibold text-white mb-1">Middle Name</label>
                   <input
                     type="text"
-                    value={form.address.stateProvince}
-                    onChange={e => updateAddressField('stateProvince', e.target.value)}
-                    className="w-full px-4 py-2.5 rounded-lg border border-gray-200 bg-white text-dark focus:outline-none focus:ring-2 focus:ring-gold"
+                    value={form.middleName}
+                    onChange={e => updateField('middleName', e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] text-white focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] transition-all duration-200"
+                    placeholder="(optional)"
                   />
-                  {errors['address.stateProvince'] && <p className="mt-1 text-xs text-red-500">{errors['address.stateProvince']}</p>}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold text-dark mb-1">Postal Code / Zip *</label>
-                  <input
-                    type="text"
-                    value={form.address.postalZipCode}
-                    onChange={e => updateAddressField('postalZipCode', e.target.value)}
-                    className="w-full px-4 py-2.5 rounded-lg border border-gray-200 bg-white text-dark focus:outline-none focus:ring-2 focus:ring-gold"
-                  />
-                  {errors['address.postalZipCode'] && <p className="mt-1 text-xs text-red-500">{errors['address.postalZipCode']}</p>}
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-dark mb-1">Country *</label>
+                  <label className="block text-sm font-semibold text-white mb-1">Last Name *</label>
                   <input
                     type="text"
-                    value={form.address.country}
-                    onChange={e => updateAddressField('country', e.target.value)}
-                    className="w-full px-4 py-2.5 rounded-lg border border-gray-200 bg-white text-dark focus:outline-none focus:ring-2 focus:ring-gold"
+                    value={form.lastName}
+                    onChange={e => updateField('lastName', e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] text-white focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] transition-all duration-200"
                   />
-                  {errors['address.country'] && <p className="mt-1 text-xs text-red-500">{errors['address.country']}</p>}
+                  {errors.lastName && <p className="mt-1 text-xs text-red-400">{errors.lastName}</p>}
                 </div>
               </div>
             </div>
+
+            {/* Contact Information Section */}
+            <div>
+              <h2 className="text-lg font-semibold text-white mb-4">Contact Information</h2>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold text-white mb-1">Email Address *</label>
+                  <input
+                    type="email"
+                    value={form.email}
+                    onChange={e => updateField('email', e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] text-white focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] transition-all duration-200"
+                  />
+                  {errors.email && <p className="mt-1 text-xs text-red-400">{errors.email}</p>}
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-white mb-1">Phone Number *</label>
+                  <input
+                    type="tel"
+                    value={form.phone}
+                    onChange={e => updateField('phone', e.target.value)}
+                    placeholder="(123) 456-7890 or 123-456-7890"
+                    className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] text-white placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] transition-all duration-200"
+                  />
+                  {errors.phone && <p className="mt-1 text-xs text-red-400">{errors.phone}</p>}
+                </div>
+              </div>
+            </div>
+
+            {/* Password Section */}
+            <div>
+              <h2 className="text-lg font-semibold text-white mb-4">Security</h2>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold text-white mb-1">Password *</label>
+                  <div className="relative">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      value={form.password}
+                      onChange={e => updateField('password', e.target.value)}
+                      className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] text-white pr-12 focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] transition-all duration-200"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-[var(--text-muted)] hover:text-[var(--gold-primary)] transition-colors duration-200"
+                    >
+                      {showPassword ? 'Hide' : 'Show'}
+                    </button>
+                  </div>
+                  {errors.password && <p className="mt-1 text-xs text-red-400">{errors.password}</p>}
+                  <div className="mt-2 text-xs text-[var(--text-muted)] bg-[var(--bg-primary)] p-3 rounded border border-[var(--border)]">
+                    <p className="font-semibold mb-1 text-white">Password Requirements:</p>
+                    <ul className="list-disc list-inside space-y-1">
+                      <li>Minimum 12 characters, maximum 64</li>
+                      <li>Consider using a passphrase (e.g., "BlueSky-Guitar-2024")</li>
+                      <li>Can include uppercase, numbers, symbols, and spaces</li>
+                    </ul>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-white mb-1">Confirm Password *</label>
+                  <div className="relative">
+                    <input
+                      type={showConfirm ? 'text' : 'password'}
+                      value={form.confirmPassword}
+                      onChange={e => updateField('confirmPassword', e.target.value)}
+                      className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] text-white pr-12 focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] transition-all duration-200"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirm(!showConfirm)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-[var(--text-muted)] hover:text-[var(--gold-primary)] transition-colors duration-200"
+                    >
+                      {showConfirm ? 'Hide' : 'Show'}
+                    </button>
+                  </div>
+                  {errors.confirmPassword && <p className="mt-1 text-xs text-red-400">{errors.confirmPassword}</p>}
+                </div>
+              </div>
+            </div>
+
+            {/* Address Information Section */}
+            <div>
+              <h2 className="text-lg font-semibold text-white mb-4">Address Information</h2>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold text-white mb-1">Street Address *</label>
+                  <input
+                    type="text"
+                    value={form.address.streetLine1}
+                    onChange={e => updateAddressField('streetLine1', e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] text-white focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] transition-all duration-200"
+                  />
+                  {errors['address.streetLine1'] && <p className="mt-1 text-xs text-red-400">{errors['address.streetLine1']}</p>}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-white mb-1">Apartment, Suite, etc. (optional)</label>
+                  <input
+                    type="text"
+                    value={form.address.streetLine2}
+                    onChange={e => updateAddressField('streetLine2', e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] text-white focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] transition-all duration-200"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-white mb-1">City *</label>
+                    <input
+                      type="text"
+                      value={form.address.city}
+                      onChange={e => updateAddressField('city', e.target.value)}
+                      className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] text-white focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] transition-all duration-200"
+                    />
+                    {errors['address.city'] && <p className="mt-1 text-xs text-red-400">{errors['address.city']}</p>}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-white mb-1">State / Province *</label>
+                    <input
+                      type="text"
+                      value={form.address.stateProvince}
+                      onChange={e => updateAddressField('stateProvince', e.target.value)}
+                      className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] text-white focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] transition-all duration-200"
+                    />
+                    {errors['address.stateProvince'] && <p className="mt-1 text-xs text-red-400">{errors['address.stateProvince']}</p>}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-white mb-1">Postal Code / Zip *</label>
+                    <input
+                      type="text"
+                      value={form.address.postalZipCode}
+                      onChange={e => updateAddressField('postalZipCode', e.target.value)}
+                      className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] text-white focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] transition-all duration-200"
+                    />
+                    {errors['address.postalZipCode'] && <p className="mt-1 text-xs text-red-400">{errors['address.postalZipCode']}</p>}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-white mb-1">Country *</label>
+                    <input
+                      type="text"
+                      value={form.address.country}
+                      onChange={e => updateAddressField('country', e.target.value)}
+                      className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] text-white focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] transition-all duration-200"
+                    />
+                    {errors['address.country'] && <p className="mt-1 text-xs text-red-400">{errors['address.country']}</p>}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Terms Checkbox */}
+            <label className="flex items-start gap-3 text-sm text-[var(--text-muted)] cursor-pointer">
+              <input
+                type="checkbox"
+                checked={form.terms}
+                onChange={e => updateField('terms', e.target.checked)}
+                className="mt-1 w-4 h-4 rounded border-[var(--border)] bg-[var(--bg-primary)] accent-[var(--gold-primary)]"
+              />
+              <span>
+                I agree to the <span className="font-semibold text-white">Terms and Conditions</span> and{' '}
+                <span className="font-semibold text-white">Privacy Policy</span>.
+              </span>
+            </label>
+            {errors.terms && <p className="text-xs text-red-400">{errors.terms}</p>}
+
+            {/* Submit Button */}
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="w-full px-8 py-4 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] rounded-xl font-semibold hover:shadow-[0_0_30px_rgba(212,175,55,0.5)] transition-all duration-200 disabled:opacity-60 flex items-center justify-center gap-2"
+            >
+              {isLoading ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-[var(--text-dark)]/30 border-t-[var(--text-dark)] rounded-full animate-spin"></div>
+                  Creating Account...
+                </>
+              ) : (
+                <>
+                  Create Account
+                  <ArrowRight className="w-5 h-5" />
+                </>
+              )}
+            </button>
+          </form>
+
+          <div className="mt-6 text-center text-sm text-[var(--text-muted)]">
+            Already have an account?{' '}
+            <button
+              onClick={() => navigate('/login')}
+              className="text-[var(--gold-primary)] font-semibold hover:text-[var(--gold-secondary)] transition-colors duration-200"
+            >
+              Sign In
+            </button>
           </div>
-
-          {/* Terms Checkbox */}
-          <label className="flex items-start gap-3 text-sm text-dark cursor-pointer">
-            <input
-              type="checkbox"
-              checked={form.terms}
-              onChange={e => updateField('terms', e.target.checked)}
-              className="mt-1 w-4 h-4 rounded border-gray-300 text-gold"
-            />
-            <span>
-              I agree to the <span className="font-semibold">Terms and Conditions</span> and{' '}
-              <span className="font-semibold">Privacy Policy</span>.
-            </span>
-          </label>
-          {errors.terms && <p className="text-xs text-red-500">{errors.terms}</p>}
-
-          {/* Submit Button */}
-          <button
-            type="submit"
-            disabled={isLoading}
-            className="w-full bg-gold hover:bg-gold-dark text-dark font-semibold py-3 rounded-lg transition disabled:opacity-60 flex items-center justify-center gap-2"
-          >
-            {isLoading ? (
-              <>
-                <div className="w-4 h-4 border-2 border-dark/30 border-t-dark rounded-full animate-spin"></div>
-                Creating Account...
-              </>
-            ) : (
-              'Create Account'
-            )}
-          </button>
-        </form>
-
-        <div className="mt-6 text-center text-sm text-dark/60">
-          Already have an account?{' '}
-          <button
-            onClick={() => navigate('/')}
-            className="text-gold font-semibold hover:underline"
-          >
-            Sign In
-          </button>
-        </div>
+        </motion.div>
       </div>
     </div>
   )
 }
-

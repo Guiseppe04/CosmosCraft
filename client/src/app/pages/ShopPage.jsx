@@ -12,9 +12,13 @@ export function ShopPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [showFilters, setShowFilters] = useState(false)
   const [notification, setNotification] = useState(null)
-  const { addToCart } = useCart()
+  const { cart, addToCart } = useCart()
   const navigate = useNavigate()
   const { isAuthenticated, openLogin } = useAuth()
+
+  const isInCart = (productId) => {
+    return cart.some(item => item.id === productId)
+  }
 
   const categories = [
     { value: 'all', label: 'All Products' },
@@ -66,24 +70,24 @@ export function ShopPage() {
   }
 
   return (
-    <div className="min-h-screen pt-16 bg-[#f5f5f7]">
+    <div className="min-h-screen pt-16 bg-[#111111]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-1">Guitar Shop</h1>
-          <p className="text-sm text-gray-500">Premium guitars and accessories</p>
+          <h1 className="text-3xl font-bold text-white mb-1">Guitar Shop</h1>
+          <p className="text-sm text-white/50">Premium guitars and accessories</p>
         </div>
 
         {/* Search Bar */}
         <div className="mb-8">
           <div className="relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/40" />
             <input
               type="text"
               placeholder="Search products..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              className="w-full pl-12 pr-4 py-3 bg-white border border-gray-200 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#d4af37] transition-all shadow-sm"
+              className="w-full pl-12 pr-4 py-3 bg-[#1a1a1a] border border-white/10 rounded-lg text-white placeholder-white/30 focus:outline-none focus:ring-2 focus:ring-[#d4af37] transition-all shadow-sm"
             />
           </div>
         </div>
@@ -95,7 +99,7 @@ export function ShopPage() {
             <div className="sticky top-24">
               <button
                 onClick={() => setShowFilters(!showFilters)}
-                className="w-full md:hidden flex items-center justify-center gap-2 px-4 py-3 bg-[#d4af37] text-gray-900 rounded-lg font-semibold mb-4"
+                className="w-full md:hidden flex items-center justify-center gap-2 px-4 py-3 bg-[#d4af37] text-[#111111] rounded-lg font-semibold mb-4"
               >
                 <Filter className="w-5 h-5" />
                 Filters
@@ -103,7 +107,7 @@ export function ShopPage() {
 
               <div className={`${showFilters ? 'block' : 'hidden'} md:block space-y-6`}>
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Category</h3>
+                  <h3 className="text-lg font-semibold text-white mb-4">Category</h3>
                   <div className="space-y-2">
                     {categories.map(cat => (
                       <button
@@ -111,8 +115,8 @@ export function ShopPage() {
                         onClick={() => setSelectedCategory(cat.value)}
                         className={`block w-full text-left px-4 py-2 rounded-lg text-sm transition-all ${
                           selectedCategory === cat.value
-                            ? 'bg-[#fff7dd] text-gray-900 border-r-4 border-[#d4af37]'
-                            : 'text-gray-600 hover:text-[#d4af37] hover:bg-gray-50'
+                            ? 'bg-[#d4af37]/10 text-[#d4af37] border-r-4 border-[#d4af37]'
+                            : 'text-white/50 hover:text-[#d4af37] hover:bg-white/5'
                         }`}
                       >
                         {cat.label}
@@ -122,7 +126,7 @@ export function ShopPage() {
                 </div>
 
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Price Range</h3>
+                  <h3 className="text-lg font-semibold text-white mb-4">Price Range</h3>
                   <div className="space-y-2">
                     <input
                       type="range"
@@ -130,9 +134,9 @@ export function ShopPage() {
                       max="20000"
                       value={priceRange[1]}
                       onChange={e => setPriceRange([priceRange[0], parseInt(e.target.value)])}
-                      className="w-full"
+                      className="w-full accent-[#d4af37]"
                     />
-                    <p className="text-gray-500 text-sm">
+                    <p className="text-white/50 text-sm">
                       ${priceRange[0].toLocaleString()} - ${priceRange[1].toLocaleString()}
                     </p>
                   </div>
@@ -148,7 +152,7 @@ export function ShopPage() {
                 initial={{ opacity: 0, y: -20 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
-                className="mb-4 p-4 bg-[#d4af37] text-[#231f20] rounded-lg flex items-center gap-2 shadow-sm"
+                className="mb-4 p-4 bg-[#d4af37] text-[#111111] rounded-lg flex items-center gap-2 shadow-sm"
               >
                 <Zap className="w-5 h-5" />
                 {notification}
@@ -157,48 +161,67 @@ export function ShopPage() {
 
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {filteredProducts.length > 0 ? (
-                filteredProducts.map((product, index) => (
-                  <motion.div
-                    key={product.id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: index * 0.05 }}
-                    className="bg-white border border-gray-200 rounded-2xl overflow-hidden hover:border-[#d4af37] hover:shadow-md transition-all"
-                  >
-                    <div className="aspect-square overflow-hidden">
-                      <img
-                        src={product.image}
-                        alt={product.name}
-                        className="w-full h-full object-cover hover:scale-110 transition-transform duration-300"
-                      />
-                    </div>
-                    <div className="p-4">
-                      <p className="text-xs text-gray-500 mb-1">{product.category}</p>
-                      <h3 className="font-semibold text-gray-900 mb-2">{product.name}</h3>
-                      <p className="text-xl font-bold text-[#d4af37] mb-4">
-                        ${product.price.toLocaleString()}
-                      </p>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleAddToCart(product)}
-                          className="flex-1 px-3 py-2 bg-[#d4af37] text-[#231f20] rounded-lg text-sm font-semibold hover:bg-[#c39d2f] transition-all"
-                        >
-                          <ShoppingCart className="w-4 h-4 inline mr-2" />
-                          Add
-                        </button>
-                        <button
-                          onClick={() => handleBuyNow(product)}
-                          className="flex-1 px-3 py-2 border border-[#d4af37] text-[#d4af37] rounded-lg text-sm font-semibold hover:bg-[#fff7dd] transition-all"
-                        >
-                          Buy
-                        </button>
+                filteredProducts.map((product, index) => {
+                  const inCart = isInCart(product.id)
+                  return (
+                    <motion.div
+                      key={product.id}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: index * 0.05 }}
+                      className="bg-[#1a1a1a] border border-white/10 rounded-2xl overflow-hidden hover:border-[#d4af37] hover:shadow-[0_0_20px_rgba(212,175,55,0.15)] transition-all"
+                    >
+                      <div className="aspect-square overflow-hidden">
+                        <img
+                          src={product.image}
+                          alt={product.name}
+                          className="w-full h-full object-cover hover:scale-110 transition-transform duration-300"
+                        />
                       </div>
-                    </div>
-                  </motion.div>
-                ))
+                      <div className="p-4">
+                        <p className="text-xs text-white/40 mb-1">{product.category}</p>
+                        <h3 className="font-semibold text-white mb-2">{product.name}</h3>
+                        <p className="text-xl font-bold text-[#d4af37] mb-4">
+                          ${product.price.toLocaleString()}
+                        </p>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => !inCart && handleAddToCart(product)}
+                            disabled={inCart}
+                            className={`flex-1 px-3 py-2 rounded-lg text-sm font-semibold transition-all flex items-center justify-center gap-2 ${
+                              inCart
+                                ? 'bg-green-600/20 text-green-400 border border-green-600/30 cursor-default'
+                                : 'bg-[#d4af37] text-[#111111] hover:bg-[#c39d2f]'
+                            }`}
+                          >
+                            {inCart ? (
+                              <>
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                </svg>
+                                Added
+                              </>
+                            ) : (
+                              <>
+                                <ShoppingCart className="w-4 h-4" />
+                                Add
+                              </>
+                            )}
+                          </button>
+                          <button
+                            onClick={() => handleBuyNow(product)}
+                            className="flex-1 px-3 py-2 border border-[#d4af37] text-[#d4af37] rounded-lg text-sm font-semibold hover:bg-[#d4af37]/10 transition-all"
+                          >
+                            Buy
+                          </button>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )
+                })
               ) : (
                 <div className="col-span-full text-center py-12">
-                  <p className="text-gray-500">No products found</p>
+                  <p className="text-white/40">No products found</p>
                 </div>
               )}
             </div>

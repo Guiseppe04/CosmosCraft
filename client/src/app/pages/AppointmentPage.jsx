@@ -110,7 +110,6 @@ export function AppointmentPage() {
   const timeSlots = ['9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM']
 
   const currentBranch = branches.find(b => b.id === selectedBranchId)
-  // Parse selectedDateId as a local date to avoid timezone shifts (e.g., 18 showing as 19)
   const selectedDate = selectedDateId ? new Date(`${selectedDateId}T00:00:00`) : null
   const monthMatrix = getMonthMatrix(currentYear, currentMonth)
 
@@ -149,10 +148,19 @@ export function AppointmentPage() {
   }
 
   return (
-    <div className="min-h-screen pt-16 bg-[#f5f5f7]">
+    <div className="min-h-screen pt-16 bg-[#111111]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-        <h1 className="text-3xl font-bold text-gray-900 mb-1">Book an Appointment</h1>
-        <p className="text-sm text-gray-500 mb-10">
+        <div className="flex items-center gap-4 mb-2">
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            className="p-2 rounded-lg bg-[#1a1a1a] border border-white/10 text-white/70 hover:text-white hover:border-[#d4af37] transition-all"
+          >
+            <ChevronLeft className="w-5 h-5" />
+          </button>
+          <h1 className="text-3xl font-bold text-white">Book an Appointment</h1>
+        </div>
+        <p className="text-sm text-white/50 mb-10">
           Schedule your guitar service at one of our locations
         </p>
 
@@ -163,7 +171,7 @@ export function AppointmentPage() {
             animate={{ opacity: 1, x: 0 }}
             className="space-y-4"
           >
-            <h2 className="text-xl font-bold text-gray-900 mb-4">Select Services</h2>
+            <h2 className="text-xl font-bold text-white mb-4">Select Services</h2>
             {guitarServices.map(service => {
               const Icon = service.icon
               const isSelected = selectedServices.includes(service.id)
@@ -172,10 +180,10 @@ export function AppointmentPage() {
                   key={service.id}
                   type="button"
                   onClick={() => handleToggleService(service.id)}
-                  className={`w-full p-4 text-left rounded-xl border-2 transition-all bg-white ${
+                  className={`w-full p-4 text-left rounded-xl border-2 transition-all ${
                     isSelected
-                      ? 'border-[#d4af37] bg-[#fff7dd]'
-                      : 'border-gray-200 hover:border-[#d4af37] hover:bg-gray-50'
+                      ? 'border-[#d4af37] bg-[#d4af37]/10'
+                      : 'border-white/10 bg-[#1a1a1a] hover:border-[#d4af37]/50 hover:bg-white/5'
                   }`}
                 >
                   <div className="flex items-start gap-3">
@@ -183,24 +191,24 @@ export function AppointmentPage() {
                       className={`mt-1 w-4 h-4 rounded-[4px] border flex items-center justify-center ${
                         isSelected
                           ? 'border-[#d4af37] bg-[#d4af37]'
-                          : 'border-gray-400 bg-transparent'
+                          : 'border-white/30 bg-transparent'
                       }`}
                     >
                       {isSelected && <span className="w-2 h-2 bg-white rounded-[2px]" />}
                     </div>
                     <Icon
                       className={`w-5 h-5 mt-1 flex-shrink-0 ${
-                        isSelected ? 'text-[#d4af37]' : 'text-gray-400'
+                        isSelected ? 'text-[#d4af37]' : 'text-white/30'
                       }`}
                     />
                     <div>
                       <div className="flex items-center justify-between gap-2">
-                        <h3 className="font-semibold text-gray-900">{service.name}</h3>
+                        <h3 className="font-semibold text-white">{service.name}</h3>
                         <span className="text-xs font-semibold text-[#d4af37]">
                           ${service.price}
                         </span>
                       </div>
-                      <p className="text-xs text-gray-500">{service.description}</p>
+                      <p className="text-xs text-white/40">{service.description}</p>
                     </div>
                   </div>
                 </button>
@@ -215,13 +223,13 @@ export function AppointmentPage() {
             transition={{ delay: 0.1 }}
             className="space-y-6"
           >
-            {/* Date picker with availability */}
-            <div className="bg-white border border-gray-200 rounded-2xl p-6 space-y-4 shadow-sm">
-              <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+            {/* Date picker */}
+            <div className="bg-[#1a1a1a] border border-white/10 rounded-2xl p-6 space-y-4 shadow-sm">
+              <h2 className="text-xl font-bold text-white flex items-center gap-2">
                 <Calendar className="w-5 h-5 text-[#d4af37]" />
                 Select Date
               </h2>
-              <p className="text-xs text-gray-500 mb-2">
+              <p className="text-xs text-white/40 mb-2">
                 Available dates are interactive; unavailable dates are dimmed.
               </p>
 
@@ -233,11 +241,11 @@ export function AppointmentPage() {
                     setCurrentYear(prev.getFullYear())
                     setCurrentMonth(prev.getMonth())
                   }}
-                  className="p-2 rounded-lg hover:bg-gray-100 text-gray-400"
+                  className="p-2 rounded-lg hover:bg-white/10 text-white/40"
                 >
                   <ChevronLeft className="w-4 h-4" />
                 </button>
-                <span className="text-sm font-semibold text-gray-900">
+                <span className="text-sm font-semibold text-white">
                   {new Date(currentYear, currentMonth, 1).toLocaleDateString(undefined, {
                     month: 'long',
                     year: 'numeric',
@@ -250,17 +258,15 @@ export function AppointmentPage() {
                     setCurrentYear(next.getFullYear())
                     setCurrentMonth(next.getMonth())
                   }}
-                  className="p-2 rounded-lg hover:bg-gray-100 text-gray-400"
+                  className="p-2 rounded-lg hover:bg-white/10 text-white/40"
                 >
                   <ChevronRight className="w-4 h-4" />
                 </button>
               </div>
 
-              <div className="grid grid-cols-7 gap-2 text-xs text-gray-400 mb-2">
+              <div className="grid grid-cols-7 gap-2 text-xs text-white/30 mb-2">
                 {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
-                  <span key={d} className="text-center">
-                    {d}
-                  </span>
+                  <span key={d} className="text-center">{d}</span>
                 ))}
               </div>
 
@@ -275,13 +281,13 @@ export function AppointmentPage() {
                     const isUnavailable = !day.isAvailable
 
                     const base =
-                      'flex items-center justify-center h-9 rounded-xl text-sm transition-all border bg-white'
+                      'flex items-center justify-center h-9 rounded-xl text-sm transition-all border'
 
                     if (isUnavailable) {
                       return (
                         <div
                           key={day.id}
-                          className={`${base} border-transparent text-gray-300 bg-gray-50`}
+                          className={`${base} border-transparent text-white/20 bg-white/5`}
                         >
                           {day.dayNumber}
                         </div>
@@ -295,8 +301,8 @@ export function AppointmentPage() {
                         onClick={() => setSelectedDateId(day.id)}
                         className={`${base} ${
                           isSelected
-                            ? 'bg-[#d4af37] text-white border-[#d4af37]'
-                            : 'border-gray-200 text-gray-700 hover:border-[#d4af37] hover:bg-[#fff7dd]'
+                            ? 'bg-[#d4af37] text-[#111111] border-[#d4af37] font-semibold'
+                            : 'border-white/10 text-white/70 hover:border-[#d4af37] hover:bg-[#d4af37]/10 hover:text-[#d4af37]'
                         }`}
                       >
                         {day.dayNumber}
@@ -308,8 +314,8 @@ export function AppointmentPage() {
             </div>
 
             {/* Time slots */}
-            <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
-              <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
+            <div className="bg-[#1a1a1a] border border-white/10 rounded-2xl p-6 shadow-sm">
+              <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
                 <ClockIcon className="w-5 h-5 text-[#d4af37]" />
                 Select Time
               </h2>
@@ -321,8 +327,8 @@ export function AppointmentPage() {
                     onClick={() => setSelectedTime(time)}
                     className={`py-2 rounded-lg transition-all font-semibold ${
                       selectedTime === time
-                        ? 'bg-[#d4af37] text-[#231f20]'
-                        : 'bg-gray-100 text-gray-600 hover:text-[#d4af37] border border-gray-200'
+                        ? 'bg-[#d4af37] text-[#111111]'
+                        : 'bg-white/5 text-white/50 hover:text-[#d4af37] border border-white/10 hover:border-[#d4af37]/50'
                     }`}
                   >
                     {time}
@@ -332,46 +338,46 @@ export function AppointmentPage() {
             </div>
 
             {/* Guitar details */}
-            <div className="bg-white border border-gray-200 rounded-2xl p-6 space-y-4 shadow-sm">
-              <h2 className="text-xl font-bold text-gray-900">Guitar Details</h2>
+            <div className="bg-[#1a1a1a] border border-white/10 rounded-2xl p-6 space-y-4 shadow-sm">
+              <h2 className="text-xl font-bold text-white">Guitar Details</h2>
               <div className="grid sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs text-gray-500 mb-1">Brand</label>
+                  <label className="block text-xs text-white/40 mb-1">Brand</label>
                   <input
                     type="text"
                     value={guitarDetails.brand}
                     onChange={e => setGuitarDetails({ ...guitarDetails, brand: e.target.value })}
-                    className="w-full px-3 py-2.5 bg-white text-gray-900 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#d4af37]"
+                    className="w-full px-3 py-2.5 bg-[#111111] text-white border border-white/10 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#d4af37] placeholder-white/20"
                     placeholder="Fender, Gibson, Ibanez..."
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-500 mb-1">Model</label>
+                  <label className="block text-xs text-white/40 mb-1">Model</label>
                   <input
                     type="text"
                     value={guitarDetails.model}
                     onChange={e => setGuitarDetails({ ...guitarDetails, model: e.target.value })}
-                    className="w-full px-3 py-2.5 bg-white text-gray-900 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#d4af37]"
+                    className="w-full px-3 py-2.5 bg-[#111111] text-white border border-white/10 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#d4af37] placeholder-white/20"
                     placeholder="Stratocaster, Les Paul..."
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-500 mb-1">Serial Number</label>
+                  <label className="block text-xs text-white/40 mb-1">Serial Number</label>
                   <input
                     type="text"
                     value={guitarDetails.serial}
                     onChange={e => setGuitarDetails({ ...guitarDetails, serial: e.target.value })}
-                    className="w-full px-3 py-2.5 bg-white text-gray-900 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#d4af37]"
+                    className="w-full px-3 py-2.5 bg-[#111111] text-white border border-white/10 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#d4af37] placeholder-white/20"
                     placeholder="Optional for tracking"
                   />
                 </div>
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Issues / Notes</label>
+                <label className="block text-xs text-white/40 mb-1">Issues / Notes</label>
                 <textarea
                   value={guitarDetails.notes}
                   onChange={e => setGuitarDetails({ ...guitarDetails, notes: e.target.value })}
-                  className="w-full h-24 px-3 py-2.5 bg-white text-gray-900 border border-gray-200 rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[#d4af37]"
+                  className="w-full h-24 px-3 py-2.5 bg-[#111111] text-white border border-white/10 rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[#d4af37] placeholder-white/20"
                   placeholder="Describe any issues, upgrades, or preferences..."
                 />
               </div>
@@ -385,13 +391,13 @@ export function AppointmentPage() {
             transition={{ delay: 0.2 }}
             className="space-y-6"
           >
-            <div className="bg-white border border-gray-200 rounded-2xl p-6 space-y-4 shadow-sm">
+            <div className="bg-[#1a1a1a] border border-white/10 rounded-2xl p-6 space-y-4 shadow-sm">
               <div className="space-y-2">
-                <label className="block text-xs text-gray-500">Location</label>
+                <label className="block text-xs text-white/40">Location</label>
                 <select
                   value={selectedBranchId}
                   onChange={e => setSelectedBranchId(e.target.value)}
-                  className="w-full px-3 py-2.5 bg-white text-gray-900 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#d4af37]"
+                  className="w-full px-3 py-2.5 bg-[#111111] text-white border border-white/10 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#d4af37]"
                 >
                   {branches.map(branch => (
                     <option key={branch.id} value={branch.id}>
@@ -401,33 +407,33 @@ export function AppointmentPage() {
                 </select>
               </div>
 
-              <div className="bg-gray-50 rounded-lg p-4 space-y-3">
+              <div className="bg-white/5 rounded-lg p-4 space-y-3">
                 <div className="flex items-start gap-2">
                   <MapPin className="w-5 h-5 text-[#d4af37] flex-shrink-0 mt-0.5" />
-                  <p className="text-sm text-gray-600">{currentBranch.address}</p>
+                  <p className="text-sm text-white/60">{currentBranch.address}</p>
                 </div>
                 <div className="flex items-start gap-2">
                   <Phone className="w-5 h-5 text-[#d4af37] flex-shrink-0 mt-0.5" />
-                  <p className="text-sm text-gray-600">{currentBranch.phone}</p>
+                  <p className="text-sm text-white/60">{currentBranch.phone}</p>
                 </div>
                 <div className="flex items-start gap-2">
                   <ClockIcon className="w-5 h-5 text-[#d4af37] flex-shrink-0 mt-0.5" />
-                  <p className="text-sm text-gray-600">{currentBranch.hours}</p>
+                  <p className="text-sm text-white/60">{currentBranch.hours}</p>
                 </div>
               </div>
             </div>
 
             {/* Booking summary */}
-            <div className="bg-white border border-gray-200 rounded-2xl p-6 space-y-4 shadow-sm">
-              <h2 className="text-xl font-bold text-gray-900 mb-2">Booking Summary</h2>
+            <div className="bg-[#1a1a1a] border border-white/10 rounded-2xl p-6 space-y-4 shadow-sm">
+              <h2 className="text-xl font-bold text-white mb-2">Booking Summary</h2>
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Location</span>
-                  <span className="text-gray-900">{currentBranch.name}</span>
+                  <span className="text-white/40">Location</span>
+                  <span className="text-white">{currentBranch.name}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Date</span>
-                  <span className="text-gray-900">
+                  <span className="text-white/40">Date</span>
+                  <span className="text-white">
                     {selectedDate
                       ? selectedDate.toLocaleDateString(undefined, {
                           month: 'short',
@@ -438,15 +444,13 @@ export function AppointmentPage() {
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Time</span>
-                  <span className="text-gray-900">
-                    {selectedTime || 'Not selected'}
-                  </span>
+                  <span className="text-white/40">Time</span>
+                  <span className="text-white">{selectedTime || 'Not selected'}</span>
                 </div>
-                <div className="border-t border-gray-200 pt-3 mt-3 space-y-1">
-                  <span className="block text-gray-500">Services</span>
+                <div className="border-t border-white/10 pt-3 mt-3 space-y-1">
+                  <span className="block text-white/40">Services</span>
                   {selectedServices.length ? (
-                    <ul className="text-gray-900 text-xs space-y-1">
+                    <ul className="text-white text-xs space-y-1">
                       {selectedServices.map(id => {
                         const svc = guitarServices.find(s => s.id === id)
                         return (
@@ -458,27 +462,27 @@ export function AppointmentPage() {
                       })}
                     </ul>
                   ) : (
-                    <p className="text-xs text-gray-500">No services selected</p>
+                    <p className="text-xs text-white/30">No services selected</p>
                   )}
                 </div>
-                <div className="border-t border-gray-200 pt-3 mt-3 space-y-1">
-                  <span className="block text-gray-500">Guitar</span>
-                  <p className="text-xs text-gray-900">
+                <div className="border-t border-white/10 pt-3 mt-3 space-y-1">
+                  <span className="block text-white/40">Guitar</span>
+                  <p className="text-xs text-white">
                     {guitarDetails.brand || guitarDetails.model
                       ? `${guitarDetails.brand} ${guitarDetails.model}`.trim()
                       : 'No guitar details'}
                   </p>
                 </div>
-                <div className="flex justify-between pt-3 border-t border-gray-200 mt-3">
-                  <span className="text-sm font-semibold text-gray-900">Total</span>
+                <div className="flex justify-between pt-3 border-t border-white/10 mt-3">
+                  <span className="text-sm font-semibold text-white">Total</span>
                   <span className="text-lg font-bold text-[#d4af37]">
                     ${totalPrice.toLocaleString()}
                   </span>
                 </div>
                 {referenceNumber && (
-                  <div className="pt-2 text-xs text-gray-500">
+                  <div className="pt-2 text-xs text-white/40">
                     Reference:&nbsp;
-                    <span className="font-mono text-gray-900">{referenceNumber}</span>
+                    <span className="font-mono text-white">{referenceNumber}</span>
                   </div>
                 )}
               </div>
@@ -486,7 +490,7 @@ export function AppointmentPage() {
               <button
                 type="submit"
                 disabled={!isFormComplete}
-                className="w-full mt-4 py-3 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] rounded-lg font-semibold hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full mt-4 py-3 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[#111111] rounded-lg font-semibold hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Complete Booking &amp; Go to Dashboard
               </button>
@@ -500,18 +504,18 @@ export function AppointmentPage() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 20 }}
-              className="fixed inset-0 flex items-center justify-center z-50 bg-black/50"
+              className="fixed inset-0 flex items-center justify-center z-50 bg-black/60"
             >
-              <div className="bg-[var(--surface-dark)] border border-[var(--gold-primary)] rounded-2xl px-10 py-8 text-center max-w-sm mx-4 shadow-2xl">
-                <CheckCircle2 className="w-16 h-16 text-[var(--gold-primary)] mx-auto mb-4" />
+              <div className="bg-[#1a1a1a] border border-[#d4af37] rounded-2xl px-10 py-8 text-center max-w-sm mx-4 shadow-2xl">
+                <CheckCircle2 className="w-16 h-16 text-[#d4af37] mx-auto mb-4" />
                 <h3 className="text-xl font-bold text-white mb-2">Booking Confirmed</h3>
-                <p className="text-sm text-[var(--text-muted)] mb-3">
+                <p className="text-sm text-white/50 mb-3">
                   Your appointment has been scheduled successfully.
                 </p>
                 {referenceNumber && (
-                  <p className="text-xs text-[var(--text-muted)]">
+                  <p className="text-xs text-white/40">
                     Reference:&nbsp;
-                    <span className="font-mono text-[var(--text-light)]">{referenceNumber}</span>
+                    <span className="font-mono text-white">{referenceNumber}</span>
                   </p>
                 )}
               </div>

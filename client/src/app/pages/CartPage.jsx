@@ -1,23 +1,35 @@
 import { Link } from 'react-router'
+import { motion } from 'motion/react'
 import { useCart } from '../context/CartContext.jsx'
-import { Trash2, Plus, Minus, ArrowRight } from 'lucide-react'
+import { Trash2, Plus, Minus, ArrowRight, ShoppingBag } from 'lucide-react'
 
 /**
  * CartPage - Shopping Cart
- * Ref: fromFigma/cart - Shopping cart display and management
+ * Theme: Dark theme with gold accents (matching LandingPage)
  */
 export function CartPage() {
   const { cart, removeFromCart, updateQuantity, getTotalPrice } = useCart()
 
   if (cart.length === 0) {
     return (
-      <div className="min-h-screen bg-light">
+      <div className="min-h-screen bg-[var(--bg-primary)] pt-24">
         <div className="page text-center space-y-6">
-          <h1 className="text-5xl font-bold text-dark">Your Cart is Empty</h1>
-          <p className="text-lg text-dark opacity-70">Start shopping to add items to your cart</p>
-          <Link to="/shop" className="btn btn-primary inline-flex items-center gap-2">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.5 }}
+            className="inline-flex items-center justify-center w-24 h-24 bg-[var(--surface-dark)] border border-[var(--border)] rounded-full mb-4"
+          >
+            <ShoppingBag className="w-12 h-12 text-[var(--gold-primary)]" />
+          </motion.div>
+          <h1 className="text-5xl font-bold text-white">Your Cart is Empty</h1>
+          <p className="text-lg text-[var(--text-muted)]">Start shopping to add items to your cart</p>
+          <Link 
+            to="/shop" 
+            className="inline-flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] rounded-xl font-semibold hover:shadow-[0_0_30px_rgba(212,175,55,0.5)] transition-all duration-200"
+          >
             Continue Shopping
-            <ArrowRight className="w-4 h-4" />
+            <ArrowRight className="w-5 h-5" />
           </Link>
         </div>
       </div>
@@ -25,86 +37,112 @@ export function CartPage() {
   }
 
   return (
-    <div className="min-h-screen bg-light">
+    <div className="min-h-screen bg-[var(--bg-primary)] pt-24">
       <div className="page">
-        <h1 className="text-5xl font-bold text-dark mb-12">Shopping Cart</h1>
+        <motion.h1
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="text-5xl font-bold text-white mb-12"
+        >
+          Shopping Cart
+        </motion.h1>
 
         <div className="grid lg:grid-cols-3 gap-8">
           {/* Items */}
           <div className="lg:col-span-2 space-y-4">
-            {cart.map(item => (
-              <div key={item.id} className="bg-white rounded-2xl p-6 flex justify-between items-center">
+            {cart.map((item, index) => (
+              <motion.div
+                key={item.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: index * 0.1 }}
+                className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6 flex justify-between items-center hover:border-[var(--gold-primary)]/50 transition-all duration-300"
+              >
                 <div className="flex-grow">
-                  <h3 className="text-xl font-bold text-dark">{item.name}</h3>
-                  <p className="text-dark opacity-70 mt-1">${item.price}</p>
+                  <h3 className="text-xl font-bold text-white">{item.name}</h3>
+                  <p className="text-[var(--text-muted)] mt-1">${item.price}</p>
                 </div>
 
                 {/* Quantity Controls */}
                 <div className="flex items-center gap-4 mx-6">
                   <button
                     onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                    className="p-1 hover:bg-light rounded transition"
+                    className="p-2 hover:bg-[var(--bg-primary)] border border-[var(--border)] rounded-lg transition-all duration-200 hover:border-[var(--gold-primary)]"
                   >
-                    <Minus className="w-4 h-4" />
+                    <Minus className="w-4 h-4 text-[var(--text-muted)]" />
                   </button>
-                  <span className="w-8 text-center font-bold">{item.quantity}</span>
+                  <span className="w-8 text-center font-bold text-white">{item.quantity}</span>
                   <button
                     onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                    className="p-1 hover:bg-light rounded transition"
+                    className="p-2 hover:bg-[var(--bg-primary)] border border-[var(--border)] rounded-lg transition-all duration-200 hover:border-[var(--gold-primary)]"
                   >
-                    <Plus className="w-4 h-4" />
+                    <Plus className="w-4 h-4 text-[var(--text-muted)]" />
                   </button>
                 </div>
 
                 {/* Subtotal */}
                 <div className="w-24 text-right">
-                  <p className="text-lg font-bold text-gold">${(item.price * item.quantity).toLocaleString()}</p>
+                  <p className="text-lg font-bold text-[var(--gold-primary)]">${(item.price * item.quantity).toLocaleString()}</p>
                 </div>
 
                 {/* Remove */}
                 <button
                   onClick={() => removeFromCart(item.id)}
-                  className="p-2 ml-4 hover:bg-light rounded transition text-red-500"
+                  className="p-2 ml-4 hover:bg-red-500/10 border border-transparent hover:border-red-500/30 rounded-lg transition-all duration-200 text-red-400 hover:text-red-300"
                   aria-label="Remove item"
                 >
                   <Trash2 className="w-5 h-5" />
                 </button>
-              </div>
+              </motion.div>
             ))}
           </div>
 
           {/* Summary */}
-          <div className="bg-white rounded-2xl p-8 h-fit space-y-6 sticky top-24">
-            <h2 className="text-2xl font-bold text-dark">Order Summary</h2>
+          <motion.div
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.5, delay: 0.2 }}
+            className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-8 h-fit space-y-6 sticky top-24"
+          >
+            <h2 className="text-2xl font-bold text-white">Order Summary</h2>
 
-            <div className="space-y-3 border-t border-light-dark pt-6">
+            <div className="space-y-3 border-t border-[var(--border)] pt-6">
               <div className="flex justify-between">
-                <span className="text-dark opacity-70">Subtotal</span>
-                <span className="font-bold text-dark">${getTotalPrice().toLocaleString()}</span>
+                <span className="text-[var(--text-muted)]">Subtotal</span>
+                <span className="font-bold text-white">${getTotalPrice().toLocaleString()}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-dark opacity-70">Shipping</span>
-                <span className="font-bold text-dark">$0</span>
+                <span className="text-[var(--text-muted)]">Shipping</span>
+                <span className="font-bold text-white">$0</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-dark opacity-70">Tax</span>
-                <span className="font-bold text-dark">${(getTotalPrice() * 0.1).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                <span className="text-[var(--text-muted)]">Tax</span>
+                <span className="font-bold text-white">${(getTotalPrice() * 0.1).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
               </div>
             </div>
 
-            <div className="border-t border-light-dark pt-6 flex justify-between items-center">
-              <span className="text-xl font-bold text-dark">Total</span>
-              <span className="text-3xl font-bold text-gold">${(getTotalPrice() * 1.1).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+            <div className="border-t border-[var(--border)] pt-6 flex justify-between items-center">
+              <span className="text-xl font-bold text-white">Total</span>
+              <span className="text-3xl font-bold bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] bg-clip-text text-transparent">
+                ${(getTotalPrice() * 1.1).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+              </span>
             </div>
 
-            <Link to="/checkout" className="btn btn-primary w-full">
+            <Link 
+              to="/checkout" 
+              className="block w-full px-8 py-4 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] rounded-xl font-semibold hover:shadow-[0_0_30px_rgba(212,175,55,0.5)] transition-all duration-200 text-center"
+            >
               Proceed to Checkout
             </Link>
 
-            <Link to="/shop" className="btn btn-outline w-full text-center">
+            <Link 
+              to="/shop" 
+              className="block w-full px-8 py-4 border-2 border-[var(--border)] text-white rounded-xl font-semibold hover:border-[var(--gold-primary)] hover:bg-[var(--gold-primary)]/10 transition-all duration-200 text-center"
+            >
               Continue Shopping
             </Link>
-          </div>
+          </motion.div>
         </div>
       </div>
     </div>

@@ -1,9 +1,11 @@
 import { useState } from 'react'
-import { Mail, Lock } from 'lucide-react'
+import { Link } from 'react-router'
+import { motion } from 'motion/react'
+import { Mail, Lock, ArrowRight } from 'lucide-react'
 
 /**
  * LoginPage - User Authentication
- * Ref: fromFigma/pages/LoginPage - User login and authentication
+ * Theme: Dark theme with gold accents (matching LandingPage)
  */
 export function LoginPage() {
   const [email, setEmail] = useState('')
@@ -28,51 +30,75 @@ export function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-light flex items-center justify-center py-12 px-4">
+    <div className="min-h-screen bg-[var(--bg-primary)] pt-24 flex items-center justify-center py-12 px-4">
       <div className="w-full max-w-md">
         {/* Logo/Header */}
-        <div className="mb-8">
-          <a href="/" className="text-2xl font-bold text-dark">CosmosCraft</a>
-        </div>
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="mb-8"
+        >
+          <Link to="/" className="text-2xl font-bold bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] bg-clip-text text-transparent">
+            CosmosCraft
+          </Link>
+        </motion.div>
 
         {/* Welcome Section */}
-        <div className="mb-6">
-          <h1 className="text-4xl font-bold text-dark mb-2">Welcome Back</h1>
-          <p className="text-dark opacity-60">Sign in to continue to CosmosCraft</p>
-        </div>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.1 }}
+          className="mb-6"
+        >
+          <h1 className="text-4xl font-bold text-white mb-2">Welcome Back</h1>
+          <p className="text-[var(--text-muted)]">Sign in to continue to CosmosCraft</p>
+        </motion.div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="bg-white rounded-2xl p-8 shadow-lg space-y-6">
+        <motion.form
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.2 }}
+          onSubmit={handleSubmit}
+          className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-8 space-y-6"
+        >
           {/* Email */}
           <div>
-            <label htmlFor="email" className="block text-sm font-semibold text-dark mb-2">
+            <label htmlFor="email" className="block text-sm font-semibold text-white mb-2">
               Email Address
             </label>
-            <input
-              id="email"
-              type="email"
-              placeholder="name@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              className="w-full px-4 py-3 border border-light-dark rounded-lg focus:outline-none focus:ring-2 focus:ring-gold focus:border-transparent"
-            />
+            <div className="relative">
+              <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[var(--text-muted)]" />
+              <input
+                id="email"
+                type="email"
+                placeholder="name@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                className="w-full pl-12 pr-4 py-3 bg-[var(--bg-primary)] border border-[var(--border)] rounded-lg text-white placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] focus:border-transparent transition-all duration-200"
+              />
+            </div>
           </div>
 
           {/* Password */}
           <div>
-            <label htmlFor="password" className="block text-sm font-semibold text-dark mb-2">
+            <label htmlFor="password" className="block text-sm font-semibold text-white mb-2">
               Password
             </label>
-            <input
-              id="password"
-              type="password"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              className="w-full px-4 py-3 border border-light-dark rounded-lg focus:outline-none focus:ring-2 focus:ring-gold focus:border-transparent"
-            />
+            <div className="relative">
+              <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[var(--text-muted)]" />
+              <input
+                id="password"
+                type="password"
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                className="w-full pl-12 pr-4 py-3 bg-[var(--bg-primary)] border border-[var(--border)] rounded-lg text-white placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] focus:border-transparent transition-all duration-200"
+              />
+            </div>
           </div>
 
           {/* Remember & Forgot */}
@@ -82,31 +108,41 @@ export function LoginPage() {
                 type="checkbox"
                 checked={rememberMe}
                 onChange={(e) => setRememberMe(e.target.checked)}
-                className="w-4 h-4 border border-light-dark rounded cursor-pointer"
+                className="w-4 h-4 border border-[var(--border)] rounded cursor-pointer bg-[var(--bg-primary)] accent-[var(--gold-primary)]"
               />
-              <span className="text-sm text-dark">Remember me</span>
+              <span className="text-sm text-[var(--text-muted)]">Remember me</span>
             </label>
-            <a href="#" className="text-sm text-gold hover:text-gold-dark font-medium">
+            <Link to="#" className="text-sm text-[var(--gold-primary)] hover:text-[var(--gold-secondary)] font-medium transition-colors duration-200">
               Forgot password?
-            </a>
+            </Link>
           </div>
 
           {/* Sign In Button */}
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full bg-gold hover:bg-gold-dark text-dark font-bold py-3 rounded-lg transition duration-200 disabled:opacity-50"
+            className="w-full px-8 py-4 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] rounded-xl font-semibold hover:shadow-[0_0_30px_rgba(212,175,55,0.5)] transition-all duration-200 disabled:opacity-50 flex items-center justify-center gap-2"
           >
-            {isLoading ? 'Signing in...' : 'Sign In'}
+            {isLoading ? (
+              <>
+                <div className="w-4 h-4 border-2 border-[var(--text-dark)]/30 border-t-[var(--text-dark)] rounded-full animate-spin"></div>
+                Signing in...
+              </>
+            ) : (
+              <>
+                Sign In
+                <ArrowRight className="w-5 h-5" />
+              </>
+            )}
           </button>
 
           {/* Divider */}
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-light-dark"></div>
+              <div className="w-full border-t border-[var(--border)]"></div>
             </div>
             <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-white text-dark opacity-60">Or continue with</span>
+              <span className="px-4 bg-[var(--surface-dark)] text-[var(--text-muted)]">Or continue with</span>
             </div>
           </div>
 
@@ -115,61 +151,77 @@ export function LoginPage() {
             <button
               type="button"
               onClick={() => handleSocialLogin('Google')}
-              className="w-full border border-light-dark hover:border-gold rounded-lg py-3 font-medium text-dark transition"
+              className="w-full border border-[var(--border)] hover:border-[var(--gold-primary)] bg-[var(--bg-primary)] rounded-lg py-3 font-medium text-white transition-all duration-200 hover:bg-[var(--gold-primary)]/10"
             >
               Google
             </button>
             <button
               type="button"
               onClick={() => handleSocialLogin('Facebook')}
-              className="w-full border border-light-dark hover:border-gold rounded-lg py-3 font-medium text-dark transition"
+              className="w-full border border-[var(--border)] hover:border-[var(--gold-primary)] bg-[var(--bg-primary)] rounded-lg py-3 font-medium text-white transition-all duration-200 hover:bg-[var(--gold-primary)]/10"
             >
               Facebook
             </button>
           </div>
-        </form>
+        </motion.form>
 
         {/* Sign Up Link */}
-        <div className="mt-6 text-center space-y-4">
-          <p className="text-dark">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.3 }}
+          className="mt-6 text-center space-y-4"
+        >
+          <p className="text-[var(--text-muted)]">
             Don't have an account?{' '}
-            <a href="#" className="text-gold font-bold hover:text-gold-dark">
+            <Link to="/signup" className="text-[var(--gold-primary)] font-bold hover:text-[var(--gold-secondary)] transition-colors duration-200">
               Sign up
-            </a>
+            </Link>
           </p>
-        </div>
+        </motion.div>
 
         {/* Demo Accounts */}
-        <div className="mt-12 bg-white rounded-2xl p-6 shadow-lg space-y-6">
-          <h3 className="font-bold text-dark text-lg">DEMO ACCOUNTS</h3>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.4 }}
+          className="mt-12 bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6 space-y-6"
+        >
+          <h3 className="font-bold text-white text-lg">DEMO ACCOUNTS</h3>
 
           <div className="space-y-4">
             {/* User Account */}
             <div>
-              <h4 className="font-bold text-dark mb-2">User Account</h4>
-              <div className="space-y-1 text-sm text-dark opacity-70">
-                <p>Email: <span className="font-semibold text-dark">user@cosmoscraft.com</span></p>
-                <p>Password: <span className="font-semibold text-dark">user123</span></p>
+              <h4 className="font-bold text-white mb-2">User Account</h4>
+              <div className="space-y-1 text-sm text-[var(--text-muted)]">
+                <p>Email: <span className="font-semibold text-white">user@cosmoscraft.com</span></p>
+                <p>Password: <span className="font-semibold text-white">user123</span></p>
               </div>
             </div>
 
             {/* Admin Account */}
             <div>
-              <h4 className="font-bold text-dark mb-2">Admin Account</h4>
-              <div className="space-y-1 text-sm text-dark opacity-70">
-                <p>Email: <span className="font-semibold text-dark">admin@cosmoscraft.com</span></p>
-                <p>Password: <span className="font-semibold text-dark">admin123</span></p>
+              <h4 className="font-bold text-white mb-2">Admin Account</h4>
+              <div className="space-y-1 text-sm text-[var(--text-muted)]">
+                <p>Email: <span className="font-semibold text-white">admin@cosmoscraft.com</span></p>
+                <p>Password: <span className="font-semibold text-white">admin123</span></p>
               </div>
             </div>
           </div>
-        </div>
+        </motion.div>
 
         {/* Back Link */}
-        <div className="mt-6 text-center">
-          <a href="/" className="text-gold hover:text-gold-dark font-medium">
-            ← Back to home
-          </a>
-        </div>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, delay: 0.5 }}
+          className="mt-6 text-center"
+        >
+          <Link to="/" className="inline-flex items-center gap-2 text-[var(--gold-primary)] hover:text-[var(--gold-secondary)] font-medium transition-colors duration-200">
+            <ArrowRight className="w-4 h-4 rotate-180" />
+            Back to home
+          </Link>
+        </motion.div>
       </div>
     </div>
   )
