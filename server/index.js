@@ -10,6 +10,8 @@ const passportConfig = require('./config/passport.js');
 const mailService = require('./services/mailService.js');
 const authRoutes = require('./routes/authRoutes.js');
 const userRoutes = require('./routes/userRoutes.js');
+const productRoutes = require('./routes/productRoutes.js');
+const guitarRoutes = require('./routes/guitarRoutes.js');
 const { errorHandler, notFound } = require('./middleware/errorHandler.js');
 
 const app = express();
@@ -38,6 +40,11 @@ app.get('/health', (req, res) => {
 });
 
 app.use('/auth', authRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/products', productRoutes);
+app.use('/api/guitars', guitarRoutes);
+
+// Legacy route alias kept for backwards-compat
 app.use('/user', userRoutes);
 
 app.use(notFound);

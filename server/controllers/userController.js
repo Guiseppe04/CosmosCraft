@@ -143,24 +143,61 @@ exports.getAllUsers = asyncHandler(async (req, res, next) => {
 });
 
 /**
- * Update User Role (Admin Only)
+ * Update User Role (super_admin only — can assign any role)
  */
 exports.updateUserRole = asyncHandler(async (req, res, next) => {
   const { userId } = req.params;
   const { role } = req.body;
 
-  if (!['user', 'admin', 'moderator'].includes(role)) {
-    throw new AppError('Invalid role. Must be user, admin, or moderator', 400);
+  const VALID_ROLES = ['customer', 'staff', 'admin', 'super_admin'];
+  if (!VALID_ROLES.includes(role)) {
+    throw new AppError(`Invalid role. Must be one of: ${VALID_ROLES.join(', ')}`, 400);
   }
 
-  const user = await userService.updateProfile(userId, { role });
+  // Prevent non-super_admins from assigning super_admin role
+  if (role === 'super_admin' && req.user.role !== 'super_admin') {
+    throw new AppError('Only super admins can assign the super_admin role', 403);
+  }
+
+  const { pool } = require('../config/database');
+  const res2 = await pool.query(
+    `UPDATE users SET role = $1, updated_at = now() WHERE user_id = $2 RETURNING user_id, email, role, is_active`,
+    [role, userId]
+  );
+  if (!res2.rows[0]) throw new AppError('User not found', 404);
 
   res.status(200).json({
     status: 'success',
     message: 'User role updated successfully',
-    data: { user },
+    data: { user: res2.rows[0] },
   });
 });
+
+/**
+ * Update User Active Status (admin+)
+ */
+exports.updateUserStatus = asyncHandler(async (req, res, next) => {
+  const { userId } = req.params;
+  const { is_active } = req.body;
+
+  if (typeof is_active !== 'boolean') {
+    throw new AppError('is_active must be a boolean', 400);
+  }
+
+  const { pool } = require('../config/database');
+  const result = await pool.query(
+    `UPDATE users SET is_active = $1, updated_at = now() WHERE user_id = $2 RETURNING user_id, email, role, is_active`,
+    [is_active, userId]
+  );
+  if (!result.rows[0]) throw new AppError('User not found', 404);
+
+  res.status(200).json({
+    status: 'success',
+    message: `User ${is_active ? 'activated' : 'deactivated'} successfully`,
+    data: { user: result.rows[0] },
+  });
+});
+
 
 /**
  * Deactivate Account

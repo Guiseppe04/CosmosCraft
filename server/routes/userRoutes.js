@@ -5,14 +5,14 @@ const userController = require('../controllers/userController.js');
 
 const router = express.Router();
 
-// User profile endpoints
+// ── Self (authenticated user) ─────────────────────────────────────────────────
 router.get('/profile', authenticateToken, userController.getCurrentUser);
 router.put('/profile', authenticateToken, validate(updateProfileSchema), userController.updateProfile);
 
-// Address management endpoints
+// Address management
 router.post('/addresses', authenticateToken, validate(addAddressSchema), userController.addAddress);
-router.put('/addresses/:id', authenticateToken, validate(updateAddressSchema), userController.updateAddress);
-router.delete('/addresses/:id', authenticateToken, userController.removeAddress);
+router.put('/addresses/:addressId', authenticateToken, validate(updateAddressSchema), userController.updateAddress);
+router.delete('/addresses/:addressId', authenticateToken, userController.removeAddress);
 
 // Password management
 router.post('/change-password', authenticateToken, validate(changePasswordSchema), userController.changePassword);
@@ -21,8 +21,9 @@ router.post('/change-password', authenticateToken, validate(changePasswordSchema
 router.post('/deactivate', authenticateToken, userController.deactivateAccount);
 router.post('/reactivate', authenticateToken, userController.reactivateAccount);
 
-// Admin endpoints
-router.get('/all', authenticateToken, authorize('admin'), userController.getAllUsers);
-router.put('/:id/role', authenticateToken, authorize('admin'), userController.updateUserRole);
+// ── Admin: User CRUD ──────────────────────────────────────────────────────────
+router.get('/', authenticateToken, authorize('admin', 'super_admin'), userController.getAllUsers);
+router.put('/:userId/role',   authenticateToken, authorize('super_admin'), userController.updateUserRole);
+router.put('/:userId/status', authenticateToken, authorize('admin', 'super_admin'), userController.updateUserStatus);
 
-module.exports = router;
+module.exports = router;
