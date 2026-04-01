@@ -91,14 +91,13 @@ const addressFields = {
       'any.required': 'Postal code is required',
     }),
   country: Joi.string()
-    .min(2)
-    .max(50)
+    .length(2)
     .required()
-    .pattern(/^[a-zA-Z\s'-]+$/)
+    .pattern(/^[A-Z]{2}$/)
+    .uppercase()
     .messages({
-      'string.pattern.base': 'Country can only contain letters, spaces, hyphens, and apostrophes',
-      'string.min': 'Country must be at least 2 characters',
-      'string.max': 'Country must not exceed 50 characters',
+      'string.pattern.base': 'Country must be a standard 2-letter ISO code (e.g. US, CA, PH)',
+      'string.length': 'Country code must be exactly 2 characters',
       'any.required': 'Country is required',
     }),
   isDefault: Joi.boolean().optional(),
@@ -207,15 +206,14 @@ exports.emailSignupSchema = Joi.object({
         'any.required': 'Postal code is required',
       }),
     country: Joi.string()
-      .min(2)
-      .max(50)
+      .length(2)
       .required()
       .trim()
-      .pattern(/^[a-zA-Z\s'-]+$/)
+      .pattern(/^[A-Z]{2}$/)
+      .uppercase()
       .messages({
-        'string.min': 'Country must be at least 2 characters',
-        'string.max': 'Country must not exceed 50 characters',
-        'string.pattern.base': 'Country can only contain letters, spaces, hyphens, and apostrophes',
+        'string.length': 'Country code must be exactly 2 characters (ISO)',
+        'string.pattern.base': 'Country must be a standard 2-letter ISO code (e.g. US, CA, PH)',
         'any.required': 'Country is required',
       }),
   }).required(),

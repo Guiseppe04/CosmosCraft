@@ -10,6 +10,7 @@
     "start": "vite"
   },
   "dependencies": {
+    "@aivangogh/ph-address": "^2025.4.2",
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
     "@mui/icons-material": "^7.3.5",
@@ -25,6 +26,7 @@
     "axios": "^1.6.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "country-state-city": "^3.2.1",
     "date-fns": "^3.6.0",
     "lucide-react": "^0.487.0",
     "motion": "^11.11.17",
