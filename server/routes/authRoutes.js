@@ -36,8 +36,8 @@ router.get(
         }
 
         // User exists or was just created - generate tokens
-        const { accessToken, refreshToken } = await generateTokens(user._id, user.role);
-        console.log('[Google Callback] Tokens generated for user:', user._id);
+        const { accessToken, refreshToken } = await generateTokens(user.user_id, user.role);
+        console.log('[Google Callback] Tokens generated for user:', user.user_id);
 
         res.cookie('accessToken', accessToken, {
           httpOnly: true,
@@ -53,7 +53,7 @@ router.get(
           maxAge: 7 * 24 * 60 * 60 * 1000,
         });
 
-        const redirectUrl = `${process.env.FRONTEND_URL}/auth/success?userId=${user._id}&provider=google`;
+        const redirectUrl = `${process.env.FRONTEND_URL}/auth/success?userId=${user.user_id}&provider=google`;
         console.log('[Google Callback] Redirecting to:', redirectUrl);
         
         return res.redirect(redirectUrl);
@@ -86,7 +86,7 @@ router.get(
         }
 
         // User exists or was just created - generate tokens
-        const { accessToken, refreshToken } = await generateTokens(user._id, user.role);
+        const { accessToken, refreshToken } = await generateTokens(user.user_id, user.role);
 
         res.cookie('accessToken', accessToken, {
           httpOnly: true,
@@ -102,7 +102,7 @@ router.get(
           maxAge: 7 * 24 * 60 * 60 * 1000,
         });
 
-        return res.redirect(`${process.env.FRONTEND_URL}/auth/success?userId=${user._id}&provider=facebook`);
+        return res.redirect(`${process.env.FRONTEND_URL}/auth/success?userId=${user.user_id}&provider=facebook`);
       } catch (error) {
         next(error);
       }

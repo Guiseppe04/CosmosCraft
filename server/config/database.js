@@ -1,14 +1,24 @@
-const mongoose = require('mongoose');
+const { Pool } = require('pg');
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+});
+
+pool.on('error', (err) => {
+  console.error('Unexpected error on idle client', err);
+  process.exit(-1);
+});
 
 const connectDB = async () => {
   try {
-    const conn = await mongoose.connect(process.env.MONGODB_URI);
-    console.log(`✓ MongoDB connected: ${conn.connection.host}`);
-    return conn;
+    const client = await pool.connect();
+    console.log(`PostgreSQL connected: ${client.host || 'local'}`);
+    client.release();
+    return pool;
   } catch (error) {
-    console.error(`✗ MongoDB error: ${error.message}`);
+    console.error(`PostgreSQL connection error: ${error.message}`);
     process.exit(1);
   }
 };
 
-module.exports = connectDB;
+module.exports = { pool, connectDB };

@@ -4,22 +4,10 @@
 const errorHandler = (err, req, res, next) => {
   console.error('Error:', err);
 
-  // Handle validation errors from Mongoose
-  if (err.name === 'ValidationError') {
-    const errors = Object.values(err.errors).map((e) => ({
-      field: e.path,
-      message: e.message,
-    }));
-    return res.status(400).json({
-      status: 'error',
-      message: 'Validation failed',
-      errors,
-    });
-  }
-
-  // Handle duplicate key errors (e.g., unique email)
-  if (err.code === 11000) {
-    const field = Object.keys(err.keyPattern)[0];
+  // Handle PostgreSQL duplicate key errors (e.g., unique email)
+  if (err.code === '23505') {
+    const fieldMatch = err.detail.match(/Key \((.*?)\)=/);
+    const field = fieldMatch ? fieldMatch[1] : 'Field';
     return res.status(409).json({
       status: 'error',
       message: `${field} already exists. Please use a different ${field}.`,
@@ -44,8 +32,8 @@ const errorHandler = (err, req, res, next) => {
     });
   }
 
-  // Handle Mongoose CastError (invalid ObjectId)
-  if (err.name === 'CastError') {
+  // Handle PostgreSQL invalid UUID (CastError equivalent)
+  if (err.code === '22P02') {
     return res.status(400).json({
       status: 'error',
       message: 'Invalid ID format',

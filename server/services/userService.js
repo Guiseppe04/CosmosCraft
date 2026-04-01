@@ -1,394 +1,303 @@
 const bcrypt = require('bcryptjs');
-const User = require('../models/users');
+const { pool } = require('../config/database');
 
-/**
- * Create a new user via OAuth signup
- * @param {Object} userData - User data from OAuth provider
- * @returns {Promise<Object>} Created user object
- */
 exports.createOAuthUser = async (userData) => {
+  const client = await pool.connect();
   try {
-    // Check if user already exists
-    const existingUser = await User.findOne({ email: userData.email });
-    if (existingUser) {
+    await client.query('BEGIN');
+    
+    // Check if user exists by email
+    const existRes = await client.query('SELECT user_id FROM users WHERE email = $1', [userData.email]);
+    if (existRes.rows.length > 0) {
       throw new Error('User already exists with this email');
     }
 
-    // Create new user
-    const user = new User({
-      googleId: userData.googleId || undefined,
-      facebookId: userData.facebookId || undefined,
-      name: {
-        firstName: userData.firstName,
-        middleName: userData.middleName || '',
-        lastName: userData.lastName,
-      },
-      email: userData.email,
-      providers: [userData.provider],
-      emailVerified: true, // OAuth emails are verified by provider
-    });
+    // Insert user
+    const userRes = await client.query(
+      `INSERT INTO users (email, first_name, middle_name, last_name, is_verified) 
+       VALUES ($1, $2, $3, $4, true) RETURNING *`,
+      [userData.email, userData.firstName, userData.middleName || null, userData.lastName]
+    );
+    const user = userRes.rows[0];
 
-    await user.save();
-    return user;
-  } catch (error) {
-    throw error;
-  }
-};
-
-/**
- * Create a new user via email/password signup
- * @param {Object} userData - User registration data
- * @returns {Promise<Object>} Created user object
- */
-exports.createEmailUser = async (userData) => {
-  // Validate required fields
-  if (!userData.email || !userData.password || !userData.firstName || !userData.lastName) {
-    throw new Error('Missing required fields: email, password, firstName, lastName');
-  }
-
-  // Check if user already exists by email (case-insensitive)
-  const existingUser = await User.findOne({ email: userData.email.toLowerCase() });
-  if (existingUser) {
-    throw new Error(`User with email '${userData.email}' already exists`);
-  }
-
-  try {
-    // Hash password with bcrypt
-    const hashedPassword = await bcrypt.hash(userData.password, 12);
-
-    // Create new user
-    const user = new User({
-      name: {
-        firstName: userData.firstName.trim(),
-        middleName: userData.middleName?.trim() || '',
-        lastName: userData.lastName.trim(),
-      },
-      email: userData.email.toLowerCase().trim(),
-      phone: userData.phone?.trim() || '',
-      password: hashedPassword,
-      addresses: userData.address ? [userData.address] : [],
-      providers: ['email'],
-      emailVerified: false, // Email verification required for email/password
-      isActive: true, // New users are active by default
-    });
-
-    // Save user to database
-    const savedUser = await user.save();
-
-    // Return user object without password
-    const userObj = savedUser.toObject();
-    delete userObj.password;
-    return userObj;
-  } catch (error) {
-    // Re-throw mongoose validation or save errors
-    if (error.name === 'ValidationError') {
-      const messages = Object.values(error.errors).map(e => e.message).join(', ');
-      throw new Error(`Validation error: ${messages}`);
-    }
-    throw error;
-  }
-};
-
-/**
- * Get user by ID
- * @param {string} userId - User ID
- * @returns {Promise<Object>} User object
- */
-exports.getUserById = async (userId) => {
-  try {
-    const user = await User.findById(userId).select('-password');
-    if (!user) {
-      throw new Error('User not found');
-    }
-    return user;
-  } catch (error) {
-    throw error;
-  }
-};
-
-/**
- * Get user by email
- * @param {string} email - User email
- * @returns {Promise<Object|null>} User object or null if not found
- */
-exports.getUserByEmail = async (email) => {
-  try {
-    const user = await User.findOne({ email: email.toLowerCase().trim() });
-    return user; // Return null if not found, not throw error
-  } catch (error) {
-    throw error;
-  }
-};
-
-/**
- * Update user profile (name, phone, bio)
- * @param {string} userId - User ID
- * @param {Object} updates - Fields to update
- * @returns {Promise<Object>} Updated user
- */
-exports.updateProfile = async (userId, updates) => {
-  try {
-    const user = await User.findByIdAndUpdate(userId, updates, {
-      new: true,
-      runValidators: true,
-    }).select('-password');
-
-    if (!user) {
-      throw new Error('User not found');
-    }
-
-    return user;
-  } catch (error) {
-    throw error;
-  }
-};
-
-/**
- * Add address to user (max 2 addresses)
- * @param {string} userId - User ID
- * @param {Object} addressData - Address information
- * @returns {Promise<Object>} Updated user with new address
- */
-exports.addAddress = async (userId, addressData) => {
-  try {
-    const user = await User.findById(userId);
-    if (!user) {
-      throw new Error('User not found');
-    }
-
-    // Check max addresses limit
-    if (user.addresses.length >= 2) {
-      throw new Error('Maximum 2 addresses allowed. Please update an existing address or remove one first.');
-    }
-
-    // If this is the first address or marked as default, set it as default
-    if (user.addresses.length === 0 || addressData.isDefault) {
-      user.addresses.forEach((addr) => {
-        addr.isDefault = false;
-      });
-      addressData.isDefault = true;
-    }
-
-    user.addresses.push(addressData);
-    user.isProfileComplete = true;
-    await user.save();
-
-    return user;
-  } catch (error) {
-    throw error;
-  }
-};
-
-/**
- * Update specific address
- * @param {string} userId - User ID
- * @param {string} addressId - Address ID (MongoDB _id)
- * @param {Object} updates - Fields to update
- * @returns {Promise<Object>} Updated user
- */
-exports.updateAddress = async (userId, addressId, updates) => {
-  try {
-    const user = await User.findById(userId);
-    if (!user) {
-      throw new Error('User not found');
-    }
-
-    const address = user.addresses.id(addressId);
-    if (!address) {
-      throw new Error('Address not found');
-    }
-
-    // Update address fields
-    Object.assign(address, updates);
-
-    // If marking as default, unmark others
-    if (updates.isDefault) {
-      user.addresses.forEach((addr) => {
-        if (addr._id.toString() !== addressId) {
-          addr.isDefault = false;
-        }
-      });
-    }
-
-    await user.save();
-    return user;
-  } catch (error) {
-    throw error;
-  }
-};
-
-/**
- * Remove address
- * @param {string} userId - User ID
- * @param {string} addressId - Address ID
- * @returns {Promise<Object>} Updated user
- */
-exports.removeAddress = async (userId, addressId) => {
-  try {
-    const user = await User.findByIdAndUpdate(
-      userId,
-      { $pull: { addresses: { _id: addressId } } },
-      { new: true }
+    // Insert identity
+    await client.query(
+      `INSERT INTO user_identities (user_id, provider, provider_user_id, provider_email)
+       VALUES ($1, $2, $3, $4)`,
+      [
+        user.user_id, 
+        userData.provider, 
+        userData.provider === 'google' ? userData.googleId : userData.facebookId,
+        userData.email
+      ]
     );
 
-    if (!user) {
-      throw new Error('User not found');
-    }
-
-    // If no addresses left, mark profile as incomplete
-    if (user.addresses.length === 0) {
-      user.isProfileComplete = false;
-      await user.save();
-    }
-
+    await client.query('COMMIT');
     return user;
-  } catch (error) {
-    throw error;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
   }
 };
 
-/**
- * Verify password for email/password users
- * @param {string} userId - User ID
- * @param {string} password - Plain text password
- * @returns {Promise<boolean>} True if password matches
- */
+exports.createEmailUser = async (userData) => {
+  if (!userData.email || !userData.password || !userData.firstName || !userData.lastName) {
+    throw new Error('Missing required fields');
+  }
+
+  const client = await pool.connect();
+  try {
+    const existRes = await client.query('SELECT user_id FROM users WHERE email = $1', [userData.email.toLowerCase()]);
+    if (existRes.rows.length > 0) {
+      throw new Error(`User with email '${userData.email}' already exists`);
+    }
+
+    const hashedPassword = await bcrypt.hash(userData.password, 12);
+
+    await client.query('BEGIN');
+    const userRes = await client.query(
+      `INSERT INTO users (email, password_hash, first_name, middle_name, last_name, phone, is_verified, is_active)
+       VALUES ($1, $2, $3, $4, $5, $6, false, true) RETURNING *`,
+      [
+        userData.email.toLowerCase().trim(),
+        hashedPassword,
+        userData.firstName.trim(),
+        userData.middleName?.trim() || null,
+        userData.lastName.trim(),
+        userData.phone?.trim() || null
+      ]
+    );
+    const user = userRes.rows[0];
+
+    if (userData.address) {
+      await client.query(
+        `INSERT INTO addresses (user_id, line1, line2, city, province, postal_code, country, is_default)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, true)`,
+        [
+          user.user_id,
+          userData.address.streetLine1,
+          userData.address.streetLine2 || null,
+          userData.address.city,
+          userData.address.stateProvince,
+          userData.address.postalZipCode,
+          userData.address.country
+        ]
+      );
+    }
+
+    await client.query('COMMIT');
+    delete user.password_hash;
+    return user;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+};
+
+exports.getUserById = async (userId) => {
+  const res = await pool.query('SELECT * FROM users WHERE user_id = $1', [userId]);
+  if (res.rows.length === 0) throw new Error('User not found');
+  const user = res.rows[0];
+  delete user.password_hash;
+  return user;
+};
+
+exports.getUserByEmail = async (email) => {
+  const res = await pool.query('SELECT * FROM users WHERE email = $1', [email.toLowerCase().trim()]);
+  return res.rows[0] || null;
+};
+
+exports.updateProfile = async (userId, updates) => {
+  const fields = [];
+  const values = [];
+  let idx = 1;
+  const validUpdates = ['first_name', 'middle_name', 'last_name', 'phone', 'avatar_url'];
+  
+  for (const key in updates) {
+    if (validUpdates.includes(key)) {
+      fields.push(`${key} = $${idx}`);
+      values.push(updates[key]);
+      idx++;
+    }
+  }
+
+  if (fields.length === 0) return await exports.getUserById(userId);
+
+  values.push(userId);
+  const res = await pool.query(
+    `UPDATE users SET ${fields.join(', ')}, updated_at = now() WHERE user_id = $${idx} RETURNING *`,
+    values
+  );
+
+  if (res.rows.length === 0) throw new Error('User not found');
+  const user = res.rows[0];
+  delete user.password_hash;
+  return user;
+};
+
+exports.addAddress = async (userId, addressData) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const existing = await client.query('SELECT count(*) FROM addresses WHERE user_id = $1', [userId]);
+    if (parseInt(existing.rows[0].count) >= 2) {
+      throw new Error('Maximum 2 addresses allowed.');
+    }
+
+    const isFirst = existing.rows[0].count === '0';
+    const isDefault = isFirst || addressData.isDefault;
+
+    if (isDefault) {
+      await client.query('UPDATE addresses SET is_default = false WHERE user_id = $1', [userId]);
+    }
+
+    const res = await client.query(
+      `INSERT INTO addresses (user_id, line1, line2, city, province, postal_code, country, is_default)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+      [
+        userId,
+        addressData.streetLine1,
+        addressData.streetLine2 || null,
+        addressData.city,
+        addressData.stateProvince,
+        addressData.postalZipCode,
+        addressData.country,
+        isDefault
+      ]
+    );
+
+    await client.query('COMMIT');
+    return exports.getUserById(userId); // Simplified return
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+};
+
+exports.updateAddress = async (userId, addressId, updates) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    
+    if (updates.isDefault) {
+      await client.query('UPDATE addresses SET is_default = false WHERE user_id = $1', [userId]);
+    }
+
+    const fields = [];
+    const values = [];
+    let idx = 1;
+    // Map frontend fields (e.g. streetLine1) to db columns if necessary
+    const map = { streetLine1: 'line1', streetLine2: 'line2', city: 'city', stateProvince: 'province', postalZipCode: 'postal_code', country: 'country', isDefault: 'is_default' };
+    
+    for (const key in updates) {
+      if (map[key]) {
+        fields.push(`${map[key]} = $${idx}`);
+        values.push(updates[key]);
+        idx++;
+      }
+    }
+    
+    if (fields.length > 0) {
+      values.push(addressId, userId);
+      await client.query(
+        `UPDATE addresses SET ${fields.join(', ')} WHERE address_id = $${idx} AND user_id = $${idx+1}`,
+        values
+      );
+    }
+    
+    await client.query('COMMIT');
+    return exports.getUserById(userId);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+};
+
+exports.removeAddress = async (userId, addressId) => {
+  await pool.query('DELETE FROM addresses WHERE user_id = $1 AND address_id = $2', [userId, addressId]);
+  return exports.getUserById(userId);
+};
+
 exports.verifyPassword = async (userId, password) => {
-  try {
-    const user = await User.findById(userId).select('+password');
-    if (!user) {
-      throw new Error('User not found');
-    }
-
-    if (!user.password) {
-      throw new Error('This account does not use password authentication');
-    }
-
-    // Compare provided password with stored hashed password
-    const isMatch = await bcrypt.compare(password, user.password);
-    return isMatch;
-  } catch (error) {
-    throw error;
-  }
+  const res = await pool.query('SELECT password_hash FROM users WHERE user_id = $1', [userId]);
+  if (res.rows.length === 0) throw new Error('User not found');
+  const user = res.rows[0];
+  if (!user.password_hash) throw new Error('This account does not use password authentication');
+  return bcrypt.compare(password, user.password_hash);
 };
 
-/**
- * Update password for email/password users
- * @param {string} userId - User ID
- * @param {string} oldPassword - Current password
- * @param {string} newPassword - New password
- * @returns {Promise<Object>} Updated user
- */
 exports.updatePassword = async (userId, oldPassword, newPassword) => {
-  try {
-    const user = await User.findById(userId);
-    if (!user) {
-      throw new Error('User not found');
-    }
-
-    if (!user.password) {
-      throw new Error('This account does not use password authentication');
-    }
-
-    // Verify old password
-    const isMatch = await bcrypt.compare(oldPassword, user.password);
-    if (!isMatch) {
-      throw new Error('Current password is incorrect');
-    }
-
-    // Hash new password
-    const hashedPassword = await bcrypt.hash(newPassword, 12);
-    user.password = hashedPassword;
-    await user.save();
-
-    return { message: 'Password updated successfully' };
-  } catch (error) {
-    throw error;
-  }
+  const isMatch = await exports.verifyPassword(userId, oldPassword);
+  if (!isMatch) throw new Error('Current password is incorrect');
+  
+  const hashedPassword = await bcrypt.hash(newPassword, 12);
+  await pool.query('UPDATE users SET password_hash = $1, updated_at = now() WHERE user_id = $2', [hashedPassword, userId]);
+  return { message: 'Password updated successfully' };
 };
 
-/**
- * Deactivate user account
- * @param {string} userId - User ID
- * @returns {Promise<Object>} Updated user
- */
 exports.deactivateAccount = async (userId) => {
-  try {
-    const user = await User.findByIdAndUpdate(
-      userId,
-      { isActive: false },
-      { new: true }
-    ).select('-password');
-
-    if (!user) {
-      throw new Error('User not found');
-    }
-
-    return user;
-  } catch (error) {
-    throw error;
-  }
+  await pool.query('UPDATE users SET is_active = false, updated_at = now() WHERE user_id = $1', [userId]);
+  return exports.getUserById(userId);
 };
 
-/**
- * Reactivate user account
- * @param {string} userId - User ID
- * @returns {Promise<Object>} Updated user
- */
 exports.reactivateAccount = async (userId) => {
-  try {
-    const user = await User.findByIdAndUpdate(
-      userId,
-      { isActive: true },
-      { new: true }
-    ).select('-password');
-
-    if (!user) {
-      throw new Error('User not found');
-    }
-
-    return user;
-  } catch (error) {
-    throw error;
-  }
+  await pool.query('UPDATE users SET is_active = true, updated_at = now() WHERE user_id = $1', [userId]);
+  return exports.getUserById(userId);
 };
 
-/**
- * List all users (admin only)
- * @param {Object} filters - Filter options (role, name, email)
- * @param {number} limit - Number of results
- * @param {number} skip - Number of results to skip
- * @returns {Promise<Array>} Array of users
- */
 exports.listUsers = async (filters = {}, limit = 10, skip = 0) => {
-  try {
-    const query = {};
+  let queryStr = 'SELECT user_id, email, first_name, last_name, role, is_active FROM users WHERE 1=1';
+  const values = [];
+  let idx = 1;
 
-    if (filters.role) {
-      query.role = filters.role;
-    }
-
-    if (filters.name) {
-      query.$or = [
-        { 'name.firstName': new RegExp(filters.name, 'i') },
-        { 'name.lastName': new RegExp(filters.name, 'i') },
-      ];
-    }
-
-    if (filters.email) {
-      query.email = new RegExp(filters.email, 'i');
-    }
-
-    const users = await User.find(query)
-      .select('-password')
-      .limit(limit)
-      .skip(skip)
-      .sort({ createdAt: -1 });
-
-    const total = await User.countDocuments(query);
-
-    return { users, total, limit, skip };
-  } catch (error) {
-    throw error;
+  if (filters.role) {
+    queryStr += ` AND role = $${idx}`;
+    values.push(filters.role);
+    idx++;
   }
+  if (filters.email) {
+    queryStr += ` AND email ILIKE $${idx}`;
+    values.push(`%${filters.email}%`);
+    idx++;
+  }
+  
+  
+  const paginatedQuery = queryStr + ` ORDER BY created_at DESC LIMIT $${idx} OFFSET $${idx+1}`;
+  
+  const [usersRes, countRes] = await Promise.all([
+    pool.query(paginatedQuery, [...values, limit, skip]),
+    pool.query(`SELECT count(*) FROM (${queryStr}) as t`, values)
+  ]);
+  
+  return { users: usersRes.rows, total: parseInt(countRes.rows[0].count), limit, skip };
 };
+
+exports.saveOTP = async (userId, otpCode, expiresAt, purpose = 'signup') => {
+  await pool.query(
+    `INSERT INTO otp_codes (user_id, code, purpose, expires_at) VALUES ($1, $2, $3, $4)`,
+    [userId, otpCode, purpose, expiresAt]
+  );
+};
+
+exports.verifyAndConsumeOTP = async (userId, otpCode, purpose = 'signup') => {
+  const res = await pool.query(
+    `UPDATE otp_codes SET is_used = true 
+     WHERE user_id = $1 AND code = $2 AND purpose = $3 AND is_used = false AND expires_at > now() 
+     RETURNING *`,
+    [userId, otpCode, purpose]
+  );
+  return res.rows.length > 0;
+};
+
+exports.markEmailVerified = async (userId) => {
+  await pool.query('UPDATE users SET is_verified = true, updated_at = now() WHERE user_id = $1', [userId]);
+};
+

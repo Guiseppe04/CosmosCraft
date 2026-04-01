@@ -1,5 +1,5 @@
 const jwt = require('jsonwebtoken');
-const RefreshToken = require('../models/refreshToken.js');
+const { pool } = require('../config/database');
 
 const generateTokens = async (userId, userRole = 'user') => {
   try {
@@ -18,11 +18,11 @@ const generateTokens = async (userId, userRole = 'user') => {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7);
 
-    await RefreshToken.create({
-      userId,
-      token: refreshToken,
-      expiresAt,
-    });
+    // Save refreshToken string as token_hash
+    await pool.query(
+      `INSERT INTO refresh_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, $3)`,
+      [userId, refreshToken, expiresAt]
+    );
 
     return { accessToken, refreshToken };
   } catch (error) {
@@ -32,11 +32,13 @@ const generateTokens = async (userId, userRole = 'user') => {
 
 const verifyRefreshToken = async (token) => {
   try {
-    const storedToken = await RefreshToken.findOne({ token });
-    if (!storedToken || storedToken.isRevoked) {
+    const res = await pool.query('SELECT * FROM refresh_tokens WHERE token_hash = $1', [token]);
+    const storedToken = res.rows[0];
+
+    if (!storedToken || storedToken.is_revoked) {
       throw new Error('Token is revoked or not found');
     }
-    if (storedToken.expiresAt < new Date()) {
+    if (new Date(storedToken.expires_at) < new Date()) {
       throw new Error('Token has expired');
     }
     return jwt.verify(token, process.env.JWT_REFRESH_SECRET);
@@ -46,7 +48,7 @@ const verifyRefreshToken = async (token) => {
 };
 
 const revokeRefreshToken = async (token) => {
-  await RefreshToken.updateOne({ token }, { isRevoked: true, revokedAt: new Date() });
+  await pool.query('UPDATE refresh_tokens SET is_revoked = true WHERE token_hash = $1', [token]);
 };
 
 module.exports = { generateTokens, verifyRefreshToken, revokeRefreshToken };

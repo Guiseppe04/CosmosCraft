@@ -5,7 +5,7 @@ const cookieParser = require('cookie-parser');
 const cors = require('cors');
 const passport = require('passport');
 
-const connectDB = require('./config/database.js');
+const { connectDB } = require('./config/database.js');
 const passportConfig = require('./config/passport.js');
 const mailService = require('./services/mailService.js');
 const authRoutes = require('./routes/authRoutes.js');

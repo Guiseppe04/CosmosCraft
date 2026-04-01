@@ -12,16 +12,12 @@ exports.getCurrentUser = asyncHandler(async (req, res, next) => {
     status: 'success',
     data: {
       user: {
-        id: user._id,
-        name: user.name,
+        id: user.user_id,
+        name: { firstName: user.first_name, lastName: user.last_name },
         email: user.email,
         phone: user.phone,
-        providers: user.providers,
         role: user.role,
-        isProfileComplete: user.isProfileComplete,
-        addresses: user.addresses,
-        profile: user.profile,
-        lastLogin: user.lastLogin,
+        isProfileComplete: !!user.first_name, // fallback
       },
     },
   });
