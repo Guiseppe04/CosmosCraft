@@ -12,6 +12,14 @@ const authRoutes = require('./routes/authRoutes.js');
 const userRoutes = require('./routes/userRoutes.js');
 const productRoutes = require('./routes/productRoutes.js');
 const guitarRoutes = require('./routes/guitarRoutes.js');
+const serviceRoutes = require('./routes/serviceRoutes');
+const appointmentRoutes = require('./routes/appointmentRoutes');
+const paymentRoutes = require('./routes/paymentRoutes');
+const cartRoutes = require('./routes/cartRoutes');
+const rbacRoutes = require('./routes/rbacRoutes');
+const notificationRoutes = require('./routes/notificationRoutes');
+const reportRoutes = require('./routes/reportRoutes');
+const auditRoutes = require('./routes/auditRoutes');
 const { errorHandler, notFound } = require('./middleware/errorHandler.js');
 
 const app = express();
@@ -43,7 +51,14 @@ app.use('/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/guitars', guitarRoutes);
-
+app.use('/api/services', serviceRoutes);
+app.use('/api/appointments', appointmentRoutes);
+app.use('/api/payments', paymentRoutes);
+app.use('/api/cart', cartRoutes);
+app.use('/api/rbac', rbacRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/reports', reportRoutes);
+app.use('/api/audit-logs', auditRoutes);
 // Legacy route alias kept for backwards-compat
 app.use('/user', userRoutes);
 
@@ -57,7 +72,6 @@ const server = app.listen(PORT, async () => {
   console.log(`Backend Running`);
   console.log(`Port: ${PORT}`);
   console.log(`Environment: ${process.env.NODE_ENV}`);
-
 
   // Verify email service connection
   await mailService.verifyConnection();

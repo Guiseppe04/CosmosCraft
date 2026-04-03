@@ -128,6 +128,16 @@ exports.emailLogin = asyncHandler(async (req, res, next) => {
 
   if (!isPasswordValid) throw new AppError('Invalid email or password', 401);
 
+  // Require email verification before allowing login
+  if (!user.is_verified) {
+    return res.status(403).json({
+      status: 'error',
+      message: 'Please verify your email before logging in.',
+      code: 'EMAIL_NOT_VERIFIED',
+      data: { emailVerified: false }
+    });
+  }
+
   const { accessToken, refreshToken } = await generateTokens(user.user_id, user.role);
 
   res.cookie('accessToken', accessToken, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'none', maxAge: 15 * 60 * 1000 });
