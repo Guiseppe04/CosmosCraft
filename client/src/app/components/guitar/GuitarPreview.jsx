@@ -1,4 +1,4 @@
-import { memo, useMemo } from 'react'
+import { useMemo } from 'react'
 import { CircleDot, Trash2 } from 'lucide-react'
 import {
   guitarBuilder,
@@ -49,7 +49,7 @@ function stringsOverlayStyle() {
   }
 }
 
-const GuitarPreview = memo(function GuitarPreview({ config, view, onViewChange }) {
+function GuitarPreview({ config, view, onViewChange }) {
   const model = guitarBuilder.BODY_OPTIONS[config.body] ?? guitarBuilder.BODY_OPTIONS.strat
   const bodyWood = guitarBuilder.BODY_WOOD_OPTIONS[config.bodyWood] ?? guitarBuilder.BODY_WOOD_OPTIONS.rosewood
   const bodyFinish = guitarBuilder.BODY_FINISH_OPTIONS[config.bodyFinish] ?? guitarBuilder.BODY_FINISH_OPTIONS.none
@@ -119,8 +119,17 @@ const GuitarPreview = memo(function GuitarPreview({ config, view, onViewChange }
             maskSrc: model.bodySrc,
             style: {
               backgroundImage: `url(${bodyFinish.texture})`,
-              opacity: 0.82,
-              mixBlendMode: 'soft-light',
+              opacity: 1,
+              mixBlendMode: 'normal',
+            },
+          }
+        : bodyFinish.color
+        ? {
+            maskSrc: model.bodySrc,
+            style: {
+              backgroundColor: bodyFinish.color,
+              opacity: 1,
+              mixBlendMode: 'normal',
             },
           }
         : null,
@@ -155,7 +164,7 @@ const GuitarPreview = memo(function GuitarPreview({ config, view, onViewChange }
       { src: headstock.trussCover, className: 'opacity-95' },
       { src: headstockTuners, className: 'opacity-95' },
     ].filter(Boolean)
-  }, [bodyFinish.texture, bodyWood.texture, colorKey, config.body, config.pickups, fretboard.src, headstock, headstockWood.texture, inlay.src, neck.filter, neck.src, hardware.color])
+  }, [bodyFinish.texture, bodyFinish.color, bodyWood.texture, colorKey, config.body, config.pickups, fretboard.src, headstock, headstockWood.texture, inlay.src, neck.filter, neck.src, hardware.color])
 
   return (
     <div className="w-full">
@@ -206,6 +215,6 @@ const GuitarPreview = memo(function GuitarPreview({ config, view, onViewChange }
       </div>
     </div>
   )
-})
+}
 
 export default GuitarPreview

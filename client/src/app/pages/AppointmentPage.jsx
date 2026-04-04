@@ -148,13 +148,13 @@ export function AppointmentPage() {
   }
 
   return (
-    <div className="min-h-screen pt-16 bg-[#111111]">
+    <div className="min-h-screen pt-16 bg-[var(--bg-primary)]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
         <div className="flex items-center gap-4 mb-2">
           <button
             type="button"
             onClick={() => navigate(-1)}
-            className="p-2 rounded-lg bg-[#1a1a1a] border border-white/10 text-white/70 hover:text-white hover:border-[#d4af37] transition-all"
+            className="p-2 rounded-lg bg-theme-surface-deep border border-white/10 text-white/70 hover:text-white hover:border-[#d4af37] transition-all"
           >
             <ChevronLeft className="w-5 h-5" />
           </button>
@@ -183,7 +183,7 @@ export function AppointmentPage() {
                   className={`w-full p-4 text-left rounded-xl border-2 transition-all ${
                     isSelected
                       ? 'border-[#d4af37] bg-[#d4af37]/10'
-                      : 'border-white/10 bg-[#1a1a1a] hover:border-[#d4af37]/50 hover:bg-white/5'
+                      : 'border-white/10 bg-theme-surface-deep hover:border-[#d4af37]/50 hover:bg-white/5'
                   }`}
                 >
                   <div className="flex items-start gap-3">
@@ -224,7 +224,7 @@ export function AppointmentPage() {
             className="space-y-6"
           >
             {/* Date picker */}
-            <div className="bg-[#1a1a1a] border border-white/10 rounded-2xl p-6 space-y-4 shadow-sm">
+            <div className="bg-theme-surface-deep border border-white/10 rounded-2xl p-6 space-y-4 shadow-sm">
               <h2 className="text-xl font-bold text-white flex items-center gap-2">
                 <Calendar className="w-5 h-5 text-[#d4af37]" />
                 Select Date
@@ -314,7 +314,7 @@ export function AppointmentPage() {
             </div>
 
             {/* Time slots */}
-            <div className="bg-[#1a1a1a] border border-white/10 rounded-2xl p-6 shadow-sm">
+            <div className="bg-theme-surface-deep border border-white/10 rounded-2xl p-6 shadow-sm">
               <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
                 <ClockIcon className="w-5 h-5 text-[#d4af37]" />
                 Select Time
@@ -338,7 +338,7 @@ export function AppointmentPage() {
             </div>
 
             {/* Guitar details */}
-            <div className="bg-[#1a1a1a] border border-white/10 rounded-2xl p-6 space-y-4 shadow-sm">
+            <div className="bg-theme-surface-deep border border-white/10 rounded-2xl p-6 space-y-4 shadow-sm">
               <h2 className="text-xl font-bold text-white">Guitar Details</h2>
               <div className="grid sm:grid-cols-2 gap-3">
                 <div>
@@ -391,7 +391,7 @@ export function AppointmentPage() {
             transition={{ delay: 0.2 }}
             className="space-y-6"
           >
-            <div className="bg-[#1a1a1a] border border-white/10 rounded-2xl p-6 space-y-4 shadow-sm">
+            <div className="bg-theme-surface-deep border border-white/10 rounded-2xl p-6 space-y-4 shadow-sm">
               <div className="space-y-2">
                 <label className="block text-xs text-white/40">Location</label>
                 <select
@@ -424,7 +424,7 @@ export function AppointmentPage() {
             </div>
 
             {/* Booking summary */}
-            <div className="bg-[#1a1a1a] border border-white/10 rounded-2xl p-6 space-y-4 shadow-sm">
+            <div className="bg-theme-surface-deep border border-white/10 rounded-2xl p-6 space-y-4 shadow-sm">
               <h2 className="text-xl font-bold text-white mb-2">Booking Summary</h2>
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
@@ -506,7 +506,7 @@ export function AppointmentPage() {
               exit={{ opacity: 0, y: 20 }}
               className="fixed inset-0 flex items-center justify-center z-50 bg-black/60"
             >
-              <div className="bg-[#1a1a1a] border border-[#d4af37] rounded-2xl px-10 py-8 text-center max-w-sm mx-4 shadow-2xl">
+              <div className="bg-theme-surface-deep border border-[#d4af37] rounded-2xl px-10 py-8 text-center max-w-sm mx-4 shadow-2xl">
                 <CheckCircle2 className="w-16 h-16 text-[#d4af37] mx-auto mb-4" />
                 <h3 className="text-xl font-bold text-white mb-2">Booking Confirmed</h3>
                 <p className="text-sm text-white/50 mb-3">

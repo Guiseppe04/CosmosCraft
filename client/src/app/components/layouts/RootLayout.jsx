@@ -12,7 +12,7 @@ export function RootLayout() {
   const isAdminOrStaff = location.pathname.startsWith('/admin') || location.pathname.startsWith('/staff') || location.pathname.startsWith('/staff/')
 
   return (
-    <div className="min-h-screen bg-[var(--black-deep)]">
+    <div className="min-h-screen bg-[var(--bg-primary)] transition-colors duration-300">
       {!isAdminOrStaff && <Header />}
       <main className={isAdminOrStaff ? 'pt-0' : ''}>
         <Outlet />

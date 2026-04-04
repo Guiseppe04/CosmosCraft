@@ -70,7 +70,7 @@ export function ShopPage() {
   }
 
   return (
-    <div className="min-h-screen pt-16 bg-[#111111]">
+    <div className="min-h-screen pt-16 bg-[var(--bg-primary)]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
         {/* Header */}
         <div className="mb-8">
@@ -87,7 +87,7 @@ export function ShopPage() {
               placeholder="Search products..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              className="w-full pl-12 pr-4 py-3 bg-[#1a1a1a] border border-white/10 rounded-lg text-white placeholder-white/30 focus:outline-none focus:ring-2 focus:ring-[#d4af37] transition-all shadow-sm"
+              className="w-full pl-12 pr-4 py-3 bg-theme-surface-deep border border-white/10 rounded-lg text-white placeholder-white/30 focus:outline-none focus:ring-2 focus:ring-[#d4af37] transition-all shadow-sm"
             />
           </div>
         </div>
@@ -169,7 +169,7 @@ export function ShopPage() {
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: index * 0.05 }}
-                      className="bg-[#1a1a1a] border border-white/10 rounded-2xl overflow-hidden hover:border-[#d4af37] hover:shadow-[0_0_20px_rgba(212,175,55,0.15)] transition-all"
+                      className="bg-theme-surface-deep border border-white/10 rounded-2xl overflow-hidden hover:border-[#d4af37] hover:shadow-[0_0_20px_rgba(212,175,55,0.15)] transition-all"
                     >
                       <div className="aspect-square overflow-hidden">
                         <img

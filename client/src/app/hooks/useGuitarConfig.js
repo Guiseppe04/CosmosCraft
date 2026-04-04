@@ -15,11 +15,23 @@ import {
   KNOB_OPTIONS_BY_BODY,
   PICKGUARD_OPTIONS_BY_BODY,
   PICKUP_OPTIONS,
+  GUITAR_TYPE_OPTIONS,
   guitarBuilder,
 } from '../lib/guitarBuilderData.js'
 
 export default function useGuitarConfig() {
   const [config, setConfig] = useState(DEFAULT_CONFIG)
+
+  // Auto-select valid body when guitar type changes
+  useEffect(() => {
+    const validBodies = Object.entries(BODY_OPTIONS)
+      .filter(([, opt]) => !opt.types || opt.types.includes(config.guitarType))
+      .map(([key]) => key)
+    
+    if (!validBodies.includes(config.body)) {
+      setConfig(prev => ({ ...prev, body: validBodies[0] }))
+    }
+  }, [config.guitarType])
 
   useEffect(() => {
     const pickguardKeys = Object.keys(PICKGUARD_OPTIONS_BY_BODY[config.body] ?? PICKGUARD_OPTIONS_BY_BODY.strat)
@@ -87,7 +99,13 @@ export default function useGuitarConfig() {
     [],
   )
   const bodyOptions = useMemo(
-    () => Object.entries(BODY_OPTIONS).map(([value, option]) => ({ value, ...option })),
+    () => Object.entries(BODY_OPTIONS)
+      .filter(([, opt]) => !opt.types || opt.types.includes(config.guitarType))
+      .map(([value, option]) => ({ value, ...option })),
+    [config.guitarType],
+  )
+  const guitarTypeOptions = useMemo(
+    () => GUITAR_TYPE_OPTIONS,
     [],
   )
   const neckOptions = useMemo(
@@ -168,6 +186,7 @@ export default function useGuitarConfig() {
     loadConfig,
     builder: guitarBuilder,
     options: {
+      guitarTypeOptions,
       bodyOptions,
       bodyWoodOptions,
       bodyFinishOptions,

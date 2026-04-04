@@ -68,7 +68,7 @@ export function LoginModal() {
     <AnimatePresence>
       {loginOpen && (
         <motion.div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 px-4"
+          className="fixed inset-0 z-[60] flex items-center justify-center theme-overlay px-4"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -77,38 +77,38 @@ export function LoginModal() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 20 }}
-            className="w-full max-w-md bg-white rounded-2xl shadow-2xl p-8 relative"
+            className="w-full max-w-md rounded-2xl shadow-2xl p-8 relative theme-card"
           >
             <button
               type="button"
               onClick={closeLogin}
-              className="absolute right-4 top-4 text-gray-400 hover:text-gray-600 text-xl leading-none"
+              className="absolute right-4 top-4 text-[var(--text-muted)] hover:text-[var(--gold-primary)] text-xl leading-none"
               aria-label="Close login"
             >
               ×
             </button>
 
             <div className="mb-6">
-              <h2 className="text-2xl font-bold text-gray-900 mb-1">Login to CosmosCraft</h2>
-              <p className="text-sm text-gray-500">Sign in to continue your purchase</p>
+              <h2 className="text-2xl font-bold text-[var(--text-light)] mb-1">Login to CosmosCraft</h2>
+              <p className="text-sm text-[var(--text-muted)]">Sign in to continue your purchase</p>
             </div>
 
-            {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
+            {error && <p className="mb-4 text-sm text-red-500">{error}</p>}
 
             <form onSubmit={handleSubmit} className="space-y-5">
               <div>
-                <label className="block text-sm font-semibold text-gray-800 mb-2">Email Address</label>
+                <label className="block text-sm font-semibold text-[var(--text-light)] mb-2">Email Address</label>
                 <input
                   type="email"
                   required
                   value={email}
                   onChange={e => setEmail(e.target.value)}
                   placeholder="name@example.com"
-                  className="w-full px-4 py-2.5 rounded-lg border border-gray-200 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#d4af37]"
+                  className="w-full px-4 py-2.5 rounded-lg border theme-input focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
                 />
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-800 mb-2">Password</label>
+                <label className="block text-sm font-semibold text-[var(--text-light)] mb-2">Password</label>
                 <div className="relative">
                   <input
                     type={showPassword ? 'text' : 'password'}
@@ -116,12 +116,12 @@ export function LoginModal() {
                     value={password}
                     onChange={e => setPassword(e.target.value)}
                     placeholder="••••••••"
-                    className="w-full px-4 py-2.5 rounded-lg border border-gray-200 bg-white text-gray-900 pr-10 focus:outline-none focus:ring-2 focus:ring-[#d4af37]"
+                    className="w-full px-4 py-2.5 rounded-lg border theme-input pr-10 focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(prev => !prev)}
-                    className="absolute inset-y-0 right-3 flex items-center text-xs text-gray-500 hover:text-gray-700"
+                    className="absolute inset-y-0 right-3 flex items-center text-xs text-[var(--text-muted)] hover:text-[var(--gold-primary)]"
                   >
                     {showPassword ? 'Hide' : 'Show'}
                   </button>
@@ -134,13 +134,13 @@ export function LoginModal() {
                     type="checkbox"
                     checked={rememberMe}
                     onChange={e => setRememberMe(e.target.checked)}
-                    className="w-4 h-4 rounded border-gray-300 text-[#d4af37]"
+                    className="w-4 h-4 rounded border-[var(--border)] text-[var(--gold-primary)]"
                   />
-                  <span className="text-gray-700">Remember me</span>
+                  <span className="text-[var(--text-muted)]">Remember me</span>
                 </label>
                 <button
                   type="button"
-                  className="text-[#d4af37] hover:text-[#c39d2f]"
+                  className="text-[var(--gold-primary)] hover:text-[var(--gold-secondary)]"
                 >
                   Forgot password?
                 </button>
@@ -149,18 +149,18 @@ export function LoginModal() {
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full mt-2 bg-[#d4af37] hover:bg-[#c39d2f] text-[#231f20] font-semibold py-2.5 rounded-lg transition disabled:opacity-60"
+                className="w-full mt-2 bg-[var(--gold-primary)] hover:bg-[var(--gold-secondary)] text-[var(--text-dark)] font-semibold py-2.5 rounded-lg transition disabled:opacity-60"
               >
                 {isLoading ? 'Signing in...' : 'Sign In'}
               </button>
             </form>
 
-            <div className="mt-6 text-center text-sm text-gray-600">
+            <div className="mt-6 text-center text-sm text-[var(--text-muted)]">
               <span>Don&apos;t have an account? </span>
               <button
                 type="button"
                 onClick={handleGoToSignup}
-                className="font-semibold text-[#d4af37] hover:text-[#c39d2f]"
+                className="font-semibold text-[var(--gold-primary)] hover:text-[var(--gold-secondary)]"
               >
                 Create Account
               </button>
@@ -169,17 +169,17 @@ export function LoginModal() {
             <div className="mt-6">
               <div className="relative mb-4">
                 <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-gray-200" />
+                  <div className="w-full border-t border-[var(--border)]" />
                 </div>
                 <div className="relative flex justify-center text-xs uppercase">
-                  <span className="px-2 bg-white text-gray-400">Or continue with</span>
+                  <span className="px-2 theme-card text-[var(--text-muted)]">Or continue with</span>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <button
                   type="button"
                   onClick={() => window.location.href = `${API}/auth/google`}
-                  className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border border-[var(--border)] text-sm font-medium text-[var(--text-light)] hover:bg-[var(--surface-elevated)]"
                 >
                   <span className="w-5 h-5 rounded-full bg-white border border-gray-300 flex items-center justify-center text-[10px] font-bold text-red-500">
                     G
@@ -189,7 +189,7 @@ export function LoginModal() {
                 <button
                   type="button"
                   onClick={() => window.location.href = `${API}/auth/facebook`}
-                  className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border border-[var(--border)] text-sm font-medium text-[var(--text-light)] hover:bg-[var(--surface-elevated)]"
                 >
                   <span className="w-5 h-5 rounded-full bg-[#1877f2] text-white flex items-center justify-center text-[10px] font-bold">
                     f

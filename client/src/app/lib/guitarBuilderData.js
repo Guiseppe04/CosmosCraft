@@ -2,6 +2,7 @@ export const asset = path => new URL(`../../../../builder/${path}`, import.meta.
 export const woodAsset = path => new URL(`../../../../woodtype/${path}`, import.meta.url).href
 
 export const DEFAULT_CONFIG = {
+  guitarType: 'electric',
   body: 'strat',
   bodyWood: 'rosewood',
   bodyFinish: 'none',
@@ -17,6 +18,11 @@ export const DEFAULT_CONFIG = {
   headstock: 'gt6',
 }
 
+export const GUITAR_TYPE_OPTIONS = [
+  { id: 'electric', label: 'Electric Guitar' },
+  { id: 'bass', label: 'Bass Guitar' },
+]
+
 export const BASE_PRICE = 1299
 
 export const BODY_OPTIONS = {
@@ -25,24 +31,42 @@ export const BODY_OPTIONS = {
     note: 'Balanced bolt-on body',
     bodySrc: asset('models/rs/bodies/front/masks/bodymask.png'),
     price: 0,
+    types: ['electric'],
   },
   solo: {
     label: 'Solo',
     note: 'Modern singlecut body',
     bodySrc: asset('models/solo/bodies/front/masks/bv-bodymask.png'),
     price: 150,
+    types: ['electric'],
   },
   dc: {
     label: 'DC',
     note: 'Double-cut access',
     bodySrc: asset('models/dc/bodies/front/masks/bodymask.png'),
     price: 180,
+    types: ['electric'],
   },
   delos: {
     label: 'Delos',
     note: 'Contoured body build',
     bodySrc: asset('models/delos/bodies/front/masks/bodymask.png'),
     price: 220,
+    types: ['electric'],
+  },
+  precision: {
+    label: 'Precision',
+    note: 'Classic precision bass',
+    bodySrc: asset('models/rs/bodies/front/masks/bodymask.png'),
+    price: 0,
+    types: ['bass'],
+  },
+  jazz: {
+    label: 'Jazz',
+    note: 'Modern jazz bass',
+    bodySrc: asset('models/solo/bodies/front/masks/bv-bodymask.png'),
+    price: 150,
+    types: ['bass'],
   },
 }
 
@@ -90,12 +114,14 @@ export const BODY_FINISH_OPTIONS = {
     label: 'Jet Black',
     note: 'Opaque black finish',
     texture: asset('models/all-models/woods-colors/colors/solids/black.png'),
+    color: '#1a1a1a',
     price: 25,
   },
   white: {
     label: 'Classic White',
     note: 'Clean opaque finish',
     texture: asset('models/all-models/woods-colors/colors/solids/white-white.png'),
+    color: '#f5f5f5',
     price: 25,
   },
   transBlack: {
@@ -103,6 +129,27 @@ export const BODY_FINISH_OPTIONS = {
     note: 'Tinted translucent finish',
     texture: asset('models/all-models/woods-colors/colors/transluscents/trans-black.png'),
     price: 35,
+  },
+  red: {
+    label: 'Vintage Red',
+    note: 'Classic red finish',
+    texture: null,
+    color: '#b91c1c',
+    price: 30,
+  },
+  blue: {
+    label: 'Ocean Blue',
+    note: 'Deep blue finish',
+    texture: null,
+    color: '#1e40af',
+    price: 30,
+  },
+  green: {
+    label: 'Forest Green',
+    note: 'Rich green finish',
+    texture: null,
+    color: '#166534',
+    price: 30,
   },
 }
 

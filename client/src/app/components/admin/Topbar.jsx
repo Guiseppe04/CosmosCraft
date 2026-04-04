@@ -9,9 +9,10 @@ import {
   Menu,
   X,
   ChevronDown,
-  Moon,
   Sun,
+  Moon,
 } from 'lucide-react'
+import { useTheme } from '../../context/ThemeContext.jsx'
 
 /**
  * Topbar Component for Admin Dashboard
@@ -27,7 +28,7 @@ export function Topbar({
   const [showSearch, setShowSearch] = useState(false)
   const [showNotifications, setShowNotifications] = useState(false)
   const [showUserMenu, setShowUserMenu] = useState(false)
-  const [darkMode, setDarkMode] = useState(false)
+  const { theme, toggleTheme, mounted } = useTheme()
 
   // Mock notifications
   const notifications = [
@@ -93,17 +94,22 @@ export function Topbar({
             )}
           </div>
 
-          {/* Dark Mode Toggle */}
-          <button
-            onClick={() => setDarkMode(!darkMode)}
-            className="p-2 hover:bg-[var(--surface-dark)] rounded-lg transition-colors duration-200"
-          >
-            {darkMode ? (
-              <Sun className="w-5 h-5 text-[var(--gold-primary)]" />
-            ) : (
-              <Moon className="w-5 h-5 text-[var(--text-muted)]" />
-            )}
-          </button>
+          {/* Theme Toggle */}
+          {!mounted ? (
+            <div className="w-9 h-9" />
+          ) : (
+            <button
+              onClick={toggleTheme}
+              className="p-2 hover:bg-[var(--surface-dark)] rounded-lg transition-colors duration-200"
+              aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+            >
+              {theme === 'dark' ? (
+                <Moon className="w-5 h-5 text-[var(--text-muted)]" />
+              ) : (
+                <Sun className="w-5 h-5 text-[var(--gold-primary)]" />
+              )}
+            </button>
+          )}
 
           {/* Notifications */}
           <div className="relative">

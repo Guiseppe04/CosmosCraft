@@ -1,9 +1,11 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useRef, useEffect } from 'react'
+import { useSearchParams } from 'react-router'
 import { 
   RotateCcw, Save, ChevronDown, ChevronRight, Info, 
   ShoppingCart, Clock, Truck, Shield, Check,
   Sparkles, Layers, Palette, Cog, Zap
 } from 'lucide-react'
+import { formatCurrency, toPHP } from '../utils/formatCurrency'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useCart } from '../context/CartContext.jsx'
 import useGuitarConfig from '../hooks/useGuitarConfig.js'
@@ -47,9 +49,9 @@ function Tooltip({ content, children }) {
     <div className="group relative inline-flex">
       {children}
       <div className="absolute bottom-full left-1/2 z-50 mb-2 -translate-x-1/2 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-all duration-200">
-        <div className="bg-[#1a1a1a] border border-white/10 rounded-lg px-3 py-2 text-xs text-white/90 whitespace-nowrap shadow-xl shadow-black/50 max-w-xs">
+        <div className="bg-theme-surface-deep border border-white/10 rounded-lg px-3 py-2 text-xs text-white/90 whitespace-nowrap shadow-xl shadow-black/50 max-w-xs">
           {content}
-          <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-[#1a1a1a]" />
+          <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-[var(--surface-elevated)]" />
         </div>
       </div>
     </div>
@@ -59,7 +61,8 @@ function Tooltip({ content, children }) {
 // Animated price display
 function AnimatedPrice({ price }) {
   const displayPrice = useMemo(() => {
-    return price.toLocaleString()
+    const phpPrice = toPHP(price, true)
+    return phpPrice.toLocaleString('en-PH')
   }, [price])
   
   return (
@@ -69,11 +72,8 @@ function AnimatedPrice({ price }) {
           price > 0 ? 'text-transparent bg-clip-text bg-gradient-to-r from-[#d4af37] via-[#f4d03f] to-[#d4af37]' : 'text-white/30'
         }`}
       >
-        ${displayPrice}
+        ₱{displayPrice}
       </span>
-      <div className="absolute -right-16 top-1/2 -translate-y-1/2 text-xs text-white/40 font-medium">
-        USD
-      </div>
     </div>
   )
 }
@@ -87,7 +87,7 @@ function OptionButton({ option, isSelected, onClick }) {
       className={`group relative w-full rounded-xl border p-3.5 text-left transition-all duration-200 ${
         isSelected
           ? 'border-[#d4af37] bg-gradient-to-br from-[#d4af37]/20 to-[#d4af37]/5 shadow-lg shadow-[#d4af37]/10'
-          : 'border-white/10 bg-white/[0.02] hover:border-white/20 hover:bg-white/[0.04]'
+          : 'border-[var(--border)] bg-[var(--surface-elevated)] hover:border-[var(--gold-primary)] hover:bg-[var(--surface-dark)]'
       }`}
     >
       {/* Selected indicator */}
@@ -99,7 +99,7 @@ function OptionButton({ option, isSelected, onClick }) {
       
       <div className="space-y-1">
         <div className={`text-sm font-semibold transition-colors duration-200 ${
-          isSelected ? 'text-white' : 'text-white/70 group-hover:text-white'
+          isSelected ? 'text-[var(--text-light)]' : 'text-[var(--text-muted)] group-hover:text-[var(--text-light)]'
         }`}>
           {option.label}
         </div>
@@ -112,7 +112,7 @@ function OptionButton({ option, isSelected, onClick }) {
           <div className={`text-xs font-semibold ${
             isSelected ? 'text-[#d4af37]' : 'text-[#d4af37]/70'
           }`}>
-            +${option.price}
+            +₱{toPHP(option.price, true).toLocaleString('en-PH')}
           </div>
         )}
       </div>
@@ -165,7 +165,7 @@ function VisualCard({ option, isSelected, onClick, previewImage }) {
           <div className={`text-[10px] font-medium ${
             isSelected ? 'text-[#d4af37]' : 'text-[#d4af37]/70'
           }`}>
-            +${option.price}
+            +₱{toPHP(option.price, true).toLocaleString('en-PH')}
           </div>
         )}
       </div>
@@ -181,11 +181,37 @@ function VisualCard({ option, isSelected, onClick, previewImage }) {
 }
 
 export function CustomizePage() {
+  const [searchParams] = useSearchParams()
   const { config, updateConfig, resetConfig, price, summary, exportConfig, loadConfig, builder, options } =
     useGuitarConfig()
   const [view, setView] = useState('front')
   const [activeCategory, setActiveCategory] = useState('body')
+  const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false)
+  const [guitarTypeDropdownOpen, setGuitarTypeDropdownOpen] = useState(false)
+  const categoryDropdownRef = useRef(null)
   const { isAuthenticated, openLogin } = useAuth()
+
+  // Get guitar type from URL and sync with config
+  const urlGuitarType = searchParams.get('type') || 'electric'
+  
+  // Sync config with URL parameter on mount
+  useEffect(() => {
+    if (config.guitarType !== urlGuitarType) {
+      updateConfig({ guitarType: urlGuitarType })
+    }
+  }, [urlGuitarType])
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (categoryDropdownRef.current && !categoryDropdownRef.current.contains(event.target)) {
+        setCategoryDropdownOpen(false)
+        setGuitarTypeDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
   const { addToCart, setIsOpen: setCartOpen } = useCart()
 
   // Get pickguard options for current body
@@ -271,56 +297,86 @@ export function CustomizePage() {
   }
 
   return (
-    <div className="h-screen overflow-hidden bg-[#0a0a0a] pt-16 text-white">
+    <div className="h-screen overflow-hidden bg-[var(--bg-primary)] pt-16 text-[var(--text-light)]">
       <div className="mx-auto flex h-full max-w-[2000px] flex-col px-3 pb-3 sm:px-4 lg:px-6 lg:pb-6">
         
         {/* Main layout: Left panel - Center guitar - Right panel */}
         <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[340px_minmax(0,1fr)_400px]">
           
-          {/* LEFT PANEL - Configuration Categories */}
-          <aside className="min-h-0 rounded-2xl border border-white/10 bg-[#111111] overflow-hidden flex flex-col">
+{/* LEFT PANEL - Configuration Categories */}
+<aside className="min-h-0 rounded-2xl border border-white/10 bg-[var(--bg-primary)] overflow-hidden flex flex-col">
             <div className="border-b border-white/10 px-4 py-4">
               <h2 className="text-lg font-semibold tracking-tight">Build Your Guitar</h2>
               <p className="mt-1 text-xs text-white/50">Select a category to customize</p>
             </div>
             
-            {/* Category buttons */}
-            <div className="p-3 space-y-1 flex-shrink-0">
-              {CATEGORIES.map((category) => {
-                const Icon = category.icon
-                const isActive = activeCategory === category.id
+            {/* Combined dropdown - Guitar Type + Categories */}
+            <div className="p-3 flex-shrink-0" ref={categoryDropdownRef}>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setCategoryDropdownOpen(!categoryDropdownOpen)}
+                  className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-all duration-200 border border-[var(--border)] bg-[var(--surface-elevated)]"
+                >
+                  <div 
+                    className="flex h-9 w-9 items-center justify-center rounded-lg"
+                    style={{ 
+                      backgroundColor: CATEGORIES.find(c => c.id === activeCategory)?.color + '20',
+                    }}
+                  >
+                    {(() => {
+                      const CatIcon = CATEGORIES.find(c => c.id === activeCategory)?.icon
+                      return CatIcon ? <CatIcon className="h-4 w-4" style={{ color: CATEGORIES.find(c => c.id === activeCategory)?.color }} /> : null
+                    })()}
+                  </div>
+                  <span className="text-sm font-medium text-[var(--text-light)] flex-1">
+                    {CATEGORIES.find(c => c.id === activeCategory)?.label}
+                  </span>
+                  <ChevronDown className={`h-4 w-4 text-[var(--text-muted)] transition-transform duration-200 ${categoryDropdownOpen ? 'rotate-180' : ''}`} />
+                </button>
                 
-                return (
-                  <Tooltip key={category.id} content={category.tooltip}>
-                    <button
-                      type="button"
-                      onClick={() => setActiveCategory(category.id)}
-                      className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-all duration-200 ${
-                        isActive
-                          ? 'bg-gradient-to-r from-[#d4af37]/20 to-transparent border border-[#d4af37]/30'
-                          : 'hover:bg-white/[0.03] border border-transparent'
-                      }`}
-                    >
-                      <div 
-                        className="flex h-9 w-9 items-center justify-center rounded-lg transition-all duration-200"
-                        style={{ 
-                          backgroundColor: isActive ? `${category.color}20` : 'rgba(255,255,255,0.05)',
-                        }}
-                      >
-                        <Icon className="h-4 w-4" style={{ color: isActive ? category.color : 'rgba(255,255,255,0.4)' }} />
-                      </div>
-                      <span className={`text-sm font-medium transition-colors duration-200 ${
-                        isActive ? 'text-white' : 'text-white/50'
-                      }`}>
-                        {category.label}
-                      </span>
-                      {isActive && (
-                        <div className="ml-auto h-1.5 w-1.5 rounded-full bg-[#d4af37]" />
-                      )}
-                    </button>
-                  </Tooltip>
-                )
-              })}
+                {/* Dropdown menu */}
+                {categoryDropdownOpen && (
+                  <div className="absolute top-full left-0 right-0 mt-1 z-50 border border-[var(--border)] rounded-xl bg-[var(--surface-elevated)] shadow-lg overflow-hidden">
+                    {/* Categories Section */}
+                    <div className="px-3 py-2 text-xs font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)] border-b border-[var(--border)]">
+                      Category
+                    </div>
+                    {CATEGORIES.map((category) => {
+                      const Icon = category.icon
+                      const isActive = activeCategory === category.id
+                      
+                      return (
+                        <button
+                          key={category.id}
+                          type="button"
+                          onClick={() => {
+                            setActiveCategory(category.id)
+                            setCategoryDropdownOpen(false)
+                          }}
+                          className={`flex w-full items-center gap-3 px-3 py-2.5 text-left transition-all duration-200 ${
+                            isActive
+                              ? 'bg-gradient-to-r from-[#d4af37]/20 border-l-2 border-[#d4af37]'
+                              : 'hover:bg-[var(--surface-dark)] border-l-2 border-transparent'
+                          }`}
+                        >
+                          <div 
+                            className="flex h-9 w-9 items-center justify-center rounded-lg"
+                            style={{ 
+                              backgroundColor: isActive ? `${category.color}20` : 'var(--surface-dark)',
+                            }}
+                          >
+                            <Icon className="h-4 w-4" style={{ color: isActive ? category.color : 'var(--text-muted)' }} />
+                          </div>
+                          <span className={`text-sm font-medium ${isActive ? 'text-[var(--text-light)]' : 'text-[var(--text-muted)]'}`}>
+                            {category.label}
+                          </span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
             
             {/* Category-specific options */}
@@ -569,7 +625,8 @@ export function CustomizePage() {
               <button
                 type="button"
                 onClick={resetConfig}
-                className="flex w-full items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.02] px-4 py-2.5 text-sm font-medium text-white/70 transition-all duration-200 hover:bg-white/[0.05] hover:text-white"
+                className="flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] px-4 py-2.5 text-sm font-medium transition-all duration-200 hover:bg-[var(--surface-dark)]"
+                style={{ color: 'var(--text-muted)' }}
               >
                 <RotateCcw className="h-4 w-4" />
                 Reset Configuration
@@ -577,7 +634,8 @@ export function CustomizePage() {
               <button
                 type="button"
                 onClick={handleSave}
-                className="flex w-full items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.02] px-4 py-2.5 text-sm font-medium text-white/70 transition-all duration-200 hover:bg-white/[0.05] hover:text-white"
+                className="flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] px-4 py-2.5 text-sm font-medium transition-all duration-200 hover:bg-[var(--surface-dark)]"
+                style={{ color: 'var(--text-muted)' }}
               >
                 <Save className="h-4 w-4" />
                 Save Build
@@ -588,12 +646,12 @@ export function CustomizePage() {
           {/* CENTER - Guitar Preview */}
           <main className="min-h-0 flex flex-col">
             {/* Price & CTA Header */}
-            <div className="mb-4 rounded-2xl border border-white/10 bg-gradient-to-br from-[#1a1a1a] to-[#0f0f0f] p-5">
+            <div className="mb-4 rounded-2xl border border-white/10 bg-theme-surface-deep p-5">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
                   <p className="text-xs uppercase tracking-[0.2em] text-white/40">Your Build Total</p>
                   <AnimatedPrice price={price} />
-                  <p className="mt-1 text-xs text-white/30">Base price: $1,299</p>
+                  <p className="mt-1 text-xs text-white/30">Base price: ₱{toPHP(1299, true).toLocaleString('en-PH')}</p>
                 </div>
                 
                 <div className="flex flex-col sm:flex-row gap-3">
@@ -653,7 +711,7 @@ export function CustomizePage() {
                   className={`rounded-lg px-4 py-2 text-xs font-semibold transition-all duration-200 ${
                     view === 'front'
                       ? 'bg-[#d4af37] text-black'
-                      : 'bg-white/10 text-white/60 hover:bg-white/20'
+                      : 'bg-[var(--border)] text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]'
                   }`}
                 >
                   Front View
@@ -664,7 +722,7 @@ export function CustomizePage() {
                   className={`rounded-lg px-4 py-2 text-xs font-semibold transition-all duration-200 ${
                     view === 'rear'
                       ? 'bg-[#d4af37] text-black'
-                      : 'bg-white/10 text-white/60 hover:bg-white/20'
+                      : 'bg-[var(--border)] text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]'
                   }`}
                 >
                   Rear View
@@ -673,7 +731,7 @@ export function CustomizePage() {
             </div>
             
             {/* Guitar specs footer */}
-            <div className="mt-4 rounded-xl border border-white/10 bg-[#111111] p-4">
+            <div className="mt-4 rounded-xl border border-white/10 bg-theme-surface-deep p-4">
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <div>
                   <p className="text-[10px] uppercase tracking-[0.15em] text-white/40">Body</p>
@@ -696,7 +754,7 @@ export function CustomizePage() {
           </main>
 
           {/* RIGHT PANEL - Summary & Actions */}
-          <aside className="min-h-0 rounded-2xl border border-white/10 bg-[#111111] overflow-hidden flex flex-col">
+          <aside className="min-h-0 rounded-2xl border border-white/10 bg-[var(--bg-primary)] overflow-hidden flex flex-col">
             {/* Header with current editing label */}
             <div className="border-b border-white/10 px-5 py-4 flex-shrink-0">
               <div className="flex items-center gap-2 text-xs text-[#d4af37]">
@@ -812,14 +870,16 @@ export function CustomizePage() {
                 <button
                   type="button"
                   onClick={handleExport}
-                  className="flex-1 rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 text-xs font-medium text-white/60 transition-all duration-200 hover:bg-white/[0.05] hover:text-white"
+                  className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 py-2 text-xs font-medium transition-all duration-200 hover:bg-[var(--surface-dark)]"
+                  style={{ color: 'var(--text-muted)' }}
                 >
                   Export Config
                 </button>
                 <button
                   type="button"
                   onClick={handleLoad}
-                  className="flex-1 rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 text-xs font-medium text-white/60 transition-all duration-200 hover:bg-white/[0.05] hover:text-white"
+                  className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 py-2 text-xs font-medium transition-all duration-200 hover:bg-[var(--surface-dark)]"
+                  style={{ color: 'var(--text-muted)' }}
                 >
                   Load Config
                 </button>

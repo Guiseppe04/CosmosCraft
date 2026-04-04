@@ -1,9 +1,11 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
-import { Guitar, Menu, X, User, ShoppingCart } from 'lucide-react'
+import { Guitar, Menu, X, User, ShoppingCart, ChevronDown } from 'lucide-react'
 import { motion, AnimatePresence } from 'motion/react'
 import { useCart } from '../context/CartContext.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
+import { ThemeToggle } from './ThemeToggle.jsx'
+import { GUITAR_TYPE_OPTIONS } from '../lib/guitarBuilderData.js'
 
 /**
  * Header Component (fromFigma)
@@ -13,6 +15,8 @@ export function Header() {
   const location = useLocation()
   const navigate = useNavigate()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [customizeOpen, setCustomizeOpen] = useState(false)
+  const customizeRef = useRef(null)
   const { getCartCount, setIsOpen: setCartOpen } = useCart()
   const { isAuthenticated, user, openLogin } = useAuth()
   const cartCount = getCartCount()
@@ -20,10 +24,38 @@ export function Header() {
   // Check if we're on admin or staff routes
   const isAdminOrStaff = location.pathname.startsWith('/admin') || location.pathname.startsWith('/staff')
 
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (customizeRef.current && !customizeRef.current.contains(event.target)) {
+        setCustomizeOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  // Close on Escape key
+  useEffect(() => {
+    function handleKeyDown(event) {
+      if (event.key === 'Escape') {
+        setCustomizeOpen(false)
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [])
+
+  const handleSelectGuitarType = (guitarType) => {
+    navigate(`/customize?type=${guitarType}`)
+    setCustomizeOpen(false)
+  }
+
+  const isCustomizeActive = location.pathname === '/customize'
+  const currentGuitarType = new URLSearchParams(location.search).get('type') || 'electric'
+
   const navLinks = [
     { path: '/', label: 'Home' },
-    { path: '/customize', label: 'Customize' },
-    { path: '/shop', label: 'Shop' },
   ]
 
   return (
@@ -42,23 +74,97 @@ export function Header() {
 
           {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center gap-1">
-            {!isAdminOrStaff && navLinks.map((link) => (
-              <Link
-                key={link.path}
-                to={link.path}
-                className={`px-4 py-2 rounded-lg transition-all duration-200 ${
-                  location.pathname === link.path
-                    ? 'bg-[var(--gold-primary)] text-[var(--text-dark)]'
-                    : 'text-[var(--text-muted)] hover:text-[var(--gold-primary)] hover:bg-[var(--surface-elevated)]'
-                }`}
-              >
-                {link.label}
-              </Link>
-            ))}
+            {!isAdminOrStaff && (
+              <>
+                {navLinks.map((link) => (
+                  <Link
+                    key={link.path}
+                    to={link.path}
+                    className={`px-4 py-2 rounded-lg transition-all duration-200 ${
+                      location.pathname === link.path
+                        ? 'bg-[var(--gold-primary)] text-[var(--text-dark)]'
+                        : 'text-[var(--text-muted)] hover:text-[var(--gold-primary)] hover:bg-[var(--surface-elevated)]'
+                    }`}
+                  >
+                    {link.label}
+                  </Link>
+                ))}
+                
+                {/* Customize Dropdown */}
+                <div className="relative" ref={customizeRef}>
+                  <button
+                    type="button"
+                    aria-haspopup="true"
+                    aria-expanded={customizeOpen}
+                    aria-label="Customize guitar - select guitar type"
+                    onClick={() => setCustomizeOpen(!customizeOpen)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'ArrowDown') {
+                        e.preventDefault()
+                        setCustomizeOpen(true)
+                      }
+                    }}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-200 ${
+                      isCustomizeActive
+                        ? 'bg-[var(--gold-primary)] text-[var(--text-dark)]'
+                        : 'text-[var(--text-muted)] hover:text-[var(--gold-primary)] hover:bg-[var(--surface-elevated)]'
+                    }`}
+                  >
+                    <span className="text-sm font-medium">Customize</span>
+                    <ChevronDown className={`w-3 h-3 transition-transform ${customizeOpen ? 'rotate-180' : ''}`} />
+                  </button>
+                  
+                  {customizeOpen && (
+                    <div 
+                      role="menu"
+                      className="absolute top-full left-0 mt-1 w-56 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] shadow-lg overflow-hidden z-50"
+                    >
+                      <div className="px-3 py-2 text-xs font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)] border-b border-[var(--border)]">
+                        Select Guitar Type
+                      </div>
+                      {GUITAR_TYPE_OPTIONS.map((type) => (
+                        <button
+                          key={type.id}
+                          role="menuitem"
+                          type="button"
+                          onClick={() => handleSelectGuitarType(type.id)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              handleSelectGuitarType(type.id)
+                            }
+                          }}
+                          className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-all duration-200 ${
+                            isCustomizeActive && currentGuitarType === type.id
+                              ? 'bg-[var(--gold-primary)]/20 text-[var(--gold-primary)]'
+                              : 'text-[var(--text-muted)] hover:bg-[var(--surface-dark)] hover:text-[var(--text-light)]'
+                          }`}
+                        >
+                          <Guitar className="w-4 h-4" />
+                          <span className="text-sm font-medium">{type.label}</span>
+                          <span className="text-xs ml-auto">Customization</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                
+                <Link
+                  to="/shop"
+                  className={`px-4 py-2 rounded-lg transition-all duration-200 ${
+                    location.pathname === '/shop'
+                      ? 'bg-[var(--gold-primary)] text-[var(--text-dark)]'
+                      : 'text-[var(--text-muted)] hover:text-[var(--gold-primary)] hover:bg-[var(--surface-elevated)]'
+                  }`}
+                >
+                  Shop
+                </Link>
+              </>
+            )}
           </nav>
 
           {/* User Actions */}
           <div className="hidden md:flex items-center gap-3 relative">
+            <ThemeToggle />
             {isAuthenticated ? (
               <button
                 type="button"
@@ -145,6 +251,9 @@ export function Header() {
                   Login
                 </button>
               )}
+              <div className="px-4 py-2">
+                <ThemeToggle />
+              </div>
             </nav>
           </motion.div>
         )}
