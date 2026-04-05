@@ -41,7 +41,7 @@ export function Topbar({
   const unreadCount = notifications.filter(n => n.unread).length
 
   return (
-    <header className="sticky top-0 z-30 bg-[var(--bg-primary)]/95 backdrop-blur-md border-b border-[var(--border)]">
+    <header className="bg-[var(--bg-primary)] backdrop-blur-md border-b border-[var(--border)]">
       <div className="flex items-center justify-between px-6 py-4">
         {/* Left Section */}
         <div className="flex items-center gap-4">

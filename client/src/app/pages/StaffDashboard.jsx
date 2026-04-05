@@ -228,14 +228,14 @@ export function StaffDashboard() {
     <div className="min-h-screen bg-[var(--bg-primary)]">
       {/* Sidebar */}
       <aside
-        className={`fixed left-0 top-20 h-[calc(100vh-5rem)] bg-[var(--surface-dark)] border-r-2 border-white/30 transition-all duration-300 z-40 ${
+        className={`fixed left-0 top-0 h-screen bg-[#1E201E] border-r-2 border-white/30 transition-all duration-300 z-40 ${
           sidebarCollapsed ? 'w-20' : 'w-64'
         } ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}
       >
         {/* Toggle Button */}
         <button
           onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-          className="absolute -right-3 top-6 w-6 h-6 bg-[var(--surface-dark)] border border-[var(--border)] rounded-full flex items-center justify-center hover:bg-[var(--gold-primary)] hover:border-[var(--gold-primary)] transition-all duration-200 hidden lg:flex"
+          className="absolute -right-3 top-6 w-6 h-6 bg-[#1E201E] border border-white/30 rounded-full flex items-center justify-center hover:bg-[var(--gold-primary)] hover:border-[var(--gold-primary)] transition-all duration-200 hidden lg:flex"
         >
           {sidebarCollapsed ? (
             <ChevronRight className="w-4 h-4 text-[var(--text-muted)]" />
@@ -281,7 +281,7 @@ export function StaffDashboard() {
 
         {/* User Profile */}
         <div className={`absolute bottom-4 left-0 right-0 px-4 ${sidebarCollapsed ? 'text-center' : ''}`}>
-          <div className={`flex items-center gap-3 p-3 rounded-xl bg-[var(--bg-primary)] border border-white/20 ${sidebarCollapsed ? 'justify-center' : ''}`}>
+          <div className={`flex items-center gap-3 p-3 rounded-xl bg-[#1E201E] border border-white/30 ${sidebarCollapsed ? 'justify-center' : ''}`}>
             <div className="w-10 h-10 rounded-full bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] flex items-center justify-center flex-shrink-0 border-2 border-white">
               <User className="w-5 h-5 text-[var(--text-dark)]" />
             </div>
@@ -304,7 +304,7 @@ export function StaffDashboard() {
       )}
 
       {/* Main Content */}
-      <div className={`transition-all duration-300 ${sidebarCollapsed ? 'lg:ml-20' : 'lg:ml-64'}`}>
+      <div className="lg:pl-64">
         {/* Topbar */}
         <Topbar
           title={staffNavItems.find(t => t.id === activeTab)?.label || 'Dashboard'}
@@ -314,7 +314,7 @@ export function StaffDashboard() {
         />
 
         {/* Page Content */}
-        <main className="p-6">
+        <main className="p-6 pt-20">
           {/* My Tasks Tab */}
           {activeTab === 'mytasks' && (
             <motion.div

@@ -42,14 +42,14 @@ export function Sidebar({ userRole = 'admin', collapsed = false, onToggle }) {
 
   return (
     <aside
-      className={`fixed left-0 top-20 h-[calc(100vh-5rem)] bg-[var(--surface-dark)] border-r border-[var(--border)] transition-all duration-300 z-40 ${
+      className={`fixed left-0 top-0 h-screen bg-[#1E201E] border-r-2 border-white/30 transition-all duration-300 z-40 ${
         collapsed ? 'w-20' : 'w-64'
       }`}
     >
       {/* Toggle Button */}
       <button
         onClick={onToggle}
-        className="absolute -right-3 top-6 w-6 h-6 bg-[var(--surface-dark)] border border-[var(--border)] rounded-full flex items-center justify-center hover:bg-[var(--gold-primary)] hover:border-[var(--gold-primary)] transition-all duration-200"
+        className="absolute -right-3 top-6 w-6 h-6 bg-[#1E201E] border border-white/30 rounded-full flex items-center justify-center hover:bg-[var(--gold-primary)] hover:border-[var(--gold-primary)] transition-all duration-200"
       >
         {collapsed ? (
           <ChevronRight className="w-4 h-4 text-[var(--text-muted)]" />
@@ -94,7 +94,7 @@ export function Sidebar({ userRole = 'admin', collapsed = false, onToggle }) {
 
       {/* User Profile (at bottom) */}
       <div className={`absolute bottom-4 left-0 right-0 px-4 ${collapsed ? 'text-center' : ''}`}>
-        <div className={`flex items-center gap-3 p-3 rounded-xl bg-[var(--bg-primary)] ${collapsed ? 'justify-center' : ''}`}>
+        <div className={`flex items-center gap-3 p-3 rounded-xl bg-[#1E201E] border border-white/30 ${collapsed ? 'justify-center' : ''}`}>
           <div className="w-10 h-10 rounded-full bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] flex items-center justify-center flex-shrink-0">
             <User className="w-5 h-5 text-[var(--text-dark)]" />
           </div>

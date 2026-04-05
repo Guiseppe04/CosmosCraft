@@ -64,4 +64,34 @@ export const adminApi = {
   },
   updateUserRole: (id, role) => request(`/api/users/${id}/role`, { method: 'PUT', body: { role } }),
   updateUserStatus: (id, is_active) => request(`/api/users/${id}/status`, { method: 'PUT', body: { is_active } }),
+
+  // Orders
+  getOrders: (params = {}) => {
+    const qs = new URLSearchParams(params).toString()
+    return request(`/api/orders${qs ? '?' + qs : ''}`)
+  },
+  getOrder: (id) => request(`/api/orders/${id}`),
+  updateOrder: (id, body) => request(`/api/orders/${id}`, { method: 'PUT', body }),
+  cancelOrder: (id) => request(`/api/orders/${id}/cancel`, { method: 'POST' }),
+
+  // Projects
+  getProjects: (params = {}) => {
+    const qs = new URLSearchParams(params).toString()
+    return request(`/api/projects${qs ? '?' + qs : ''}`)
+  },
+  getProject: (id) => request(`/api/projects/${id}`),
+  createProject: (body) => request('/api/projects', { method: 'POST', body }),
+  updateProject: (id, body) => request(`/api/projects/${id}`, { method: 'PUT', body }),
+  deleteProject: (id) => request(`/api/projects/${id}`, { method: 'DELETE' }),
+  assignTeam: (id, userIds) => request(`/api/projects/${id}/team`, { method: 'PUT', body: { user_ids: userIds } }),
+
+  // Appointments
+  getAppointments: (params = {}) => {
+    const qs = new URLSearchParams(params).toString()
+    return request(`/api/appointments${qs ? '?' + qs : ''}`)
+  },
+  getAppointment: (id) => request(`/api/appointments/${id}`),
+  createAppointment: (body) => request('/api/appointments', { method: 'POST', body }),
+  updateAppointment: (id, body) => request(`/api/appointments/${id}`, { method: 'PUT', body }),
+  deleteAppointment: (id) => request(`/api/appointments/${id}`, { method: 'DELETE' }),
 }
