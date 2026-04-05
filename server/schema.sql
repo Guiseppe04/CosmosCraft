@@ -11,7 +11,16 @@ CREATE TYPE user_role_enum AS ENUM ('customer', 'staff', 'admin', 'super_admin')
 CREATE TYPE auth_provider_enum AS ENUM ('local', 'google', 'facebook');
 CREATE TYPE guitar_type_enum AS ENUM ('acoustic', 'electric', 'bass');
 CREATE TYPE order_status_enum AS ENUM ('pending', 'processing', 'completed', 'cancelled');
-CREATE TYPE payment_status_enum AS ENUM ('pending', 'paid', 'failed');
+CREATE TYPE payment_method_enum AS ENUM ('gcash', 'bank_transfer', 'cash');
+CREATE TYPE payment_status_enum AS ENUM (
+  'pending',
+  'for_verification',
+  'verified',
+  'rejected',
+  'cancelled',
+  'refunded'
+);
+CREATE TYPE order_payment_status_enum AS ENUM ('pending', 'paid', 'failed');
 CREATE TYPE appointment_status_enum AS ENUM ('pending', 'approved', 'completed', 'cancelled');
 CREATE TYPE project_status_enum AS ENUM ('not_started', 'in_progress', 'completed');
 CREATE TYPE notification_type_enum AS ENUM ('order_update', 'appointment_reminder', 'system', 'promotional');
@@ -314,7 +323,7 @@ CREATE TABLE orders (
     discount_amount NUMERIC(12, 2) NOT NULL DEFAULT 0 CHECK (discount_amount >= 0),
     total_amount NUMERIC(12, 2) NOT NULL CHECK (total_amount >= 0),
     status order_status_enum NOT NULL DEFAULT 'pending',
-    payment_status payment_status_enum NOT NULL DEFAULT 'pending',
+    payment_status order_payment_status_enum NOT NULL DEFAULT 'pending',
     notes TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -360,21 +369,61 @@ CREATE INDEX idx_order_items_product_id ON order_items(product_id);
 CREATE TABLE payments (
     payment_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     order_id UUID NOT NULL,
+    user_id UUID,
     amount NUMERIC(12, 2) NOT NULL CHECK (amount > 0),
-    currency VARCHAR(3) NOT NULL DEFAULT 'USD',
-    method VARCHAR(50) NOT NULL,
+    currency VARCHAR(3) NOT NULL DEFAULT 'PHP',
+    method payment_method_enum NOT NULL,
     status payment_status_enum NOT NULL DEFAULT 'pending',
     reference_number VARCHAR(100),
+    proof_url TEXT,
+    payment_instructions JSONB,
+    verified_by UUID,
+    verified_at TIMESTAMPTZ,
+    rejection_reason TEXT,
     metadata JSONB,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     
     FOREIGN KEY (order_id) REFERENCES orders(order_id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE SET NULL,
+    FOREIGN KEY (verified_by) REFERENCES users(user_id) ON DELETE SET NULL,
     UNIQUE(order_id, reference_number)
 );
 
 CREATE INDEX idx_payments_order_id ON payments(order_id);
+CREATE INDEX idx_payments_user_id ON payments(user_id);
 CREATE INDEX idx_payments_status ON payments(status);
+CREATE INDEX idx_payments_method ON payments(method);
+CREATE INDEX idx_payments_created_at ON payments(created_at DESC);
+CREATE INDEX idx_payments_reference_number ON payments(reference_number);
+
+-- =============================================
+-- 15A. PAYMENT CONFIGURATION
+-- =============================================
+
+CREATE TABLE payment_config (
+    config_id SERIAL PRIMARY KEY,
+    payment_method payment_method_enum NOT NULL,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    gcash_number VARCHAR(20),
+    gcash_qr_code TEXT,
+    bank_name VARCHAR(100),
+    bank_account_name VARCHAR(150),
+    bank_account_number VARCHAR(50),
+    bank_branch VARCHAR(100),
+    instructions TEXT,
+    display_name VARCHAR(100),
+    sort_order SMALLINT NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    
+    UNIQUE(payment_method)
+);
+
+INSERT INTO payment_config (payment_method, is_active, display_name, instructions, sort_order) VALUES
+('gcash'::payment_method_enum, true, 'GCash', 'Send payment via GCash to our designated number. Upload your receipt as proof of payment.', 1),
+('bank_transfer'::payment_method_enum, true, 'Bank Transfer', 'Transfer to our bank account. Keep your transaction reference for verification.', 2),
+('cash'::payment_method_enum, true, 'Cash', 'Pay directly at our store location.', 3);
 
 
 -- =============================================
@@ -530,3 +579,175 @@ CREATE TABLE otp_attempts (
 CREATE INDEX idx_otp_attempts_otp_id ON otp_attempts(otp_id);
 CREATE INDEX idx_otp_attempts_success ON otp_attempts(success);
 CREATE INDEX idx_otp_attempts_created_at ON otp_attempts(created_at DESC);
+
+
+-- =============================================
+-- 23. ROLES (RBAC)
+-- =============================================
+
+CREATE TABLE roles (
+    role_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name VARCHAR(50) NOT NULL UNIQUE,
+    description TEXT,
+    level INT NOT NULL DEFAULT 0 CHECK (level >= 0),
+    parent_role_id UUID,
+    is_system BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    
+    FOREIGN KEY (parent_role_id) REFERENCES roles(role_id) ON DELETE SET NULL
+);
+
+CREATE INDEX idx_roles_name ON roles(name);
+CREATE INDEX idx_roles_level ON roles(level);
+CREATE INDEX idx_roles_parent ON roles(parent_role_id);
+
+
+-- =============================================
+-- 24. PERMISSIONS (RBAC)
+-- =============================================
+
+CREATE TABLE permissions (
+    permission_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name VARCHAR(100) NOT NULL UNIQUE,
+    description TEXT,
+    category VARCHAR(50),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_permissions_name ON permissions(name);
+CREATE INDEX idx_permissions_category ON permissions(category);
+
+
+-- =============================================
+-- 25. ROLE PERMISSIONS (RBAC)
+-- =============================================
+
+CREATE TABLE role_permissions (
+    role_id UUID NOT NULL,
+    permission_id UUID NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    
+    FOREIGN KEY (role_id) REFERENCES roles(role_id) ON DELETE CASCADE,
+    FOREIGN KEY (permission_id) REFERENCES permissions(permission_id) ON DELETE CASCADE,
+    UNIQUE(role_id, permission_id)
+);
+
+CREATE INDEX idx_role_permissions_role ON role_permissions(role_id);
+CREATE INDEX idx_role_permissions_permission ON role_permissions(permission_id);
+
+
+-- =============================================
+-- 26. USER ROLES (RBAC)
+-- =============================================
+
+CREATE TABLE user_roles (
+    user_id UUID NOT NULL,
+    role_id UUID NOT NULL,
+    assigned_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    assigned_by UUID,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    expires_at TIMESTAMPTZ,
+    
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (role_id) REFERENCES roles(role_id) ON DELETE CASCADE,
+    FOREIGN KEY (assigned_by) REFERENCES users(user_id) ON DELETE SET NULL,
+    UNIQUE(user_id, role_id)
+);
+
+CREATE INDEX idx_user_roles_user ON user_roles(user_id);
+CREATE INDEX idx_user_roles_role ON user_roles(role_id);
+CREATE INDEX idx_user_roles_expires ON user_roles(expires_at);
+
+
+-- =============================================
+-- SEED DEFAULT ROLES
+-- =============================================
+
+INSERT INTO roles (role_id, name, description, level, is_system) VALUES
+    ('00000000-0000-0000-0000-000000000001', 'super_admin', 'Full system access with all permissions', 100, true),
+    ('00000000-0000-0000-0000-000000000002', 'admin', 'Administrative access to manage system', 80, true),
+    ('00000000-0000-0000-0000-000000000003', 'staff', 'Staff access for day-to-day operations', 50, true),
+    ('00000000-0000-0000-0000-000000000004', 'customer', 'Regular customer access', 10, true)
+ON CONFLICT (name) DO NOTHING;
+
+
+-- =============================================
+-- SEED DEFAULT PERMISSIONS
+-- =============================================
+
+INSERT INTO permissions (permission_id, name, description, category) VALUES
+    ('00000000-0000-0000-0000-000000000101', 'manage_users', 'Create, update, delete users', 'users'),
+    ('00000000-0000-0000-0000-000000000102', 'assign_roles', 'Assign roles to users', 'users'),
+    ('00000000-0000-0000-0000-000000000103', 'view_users', 'View user information', 'users'),
+    ('00000000-0000-0000-0000-000000000104', 'manage_products', 'Create, update, delete products', 'products'),
+    ('00000000-0000-0000-0000-000000000105', 'view_products', 'View product catalog', 'products'),
+    ('00000000-0000-0000-0000-000000000106', 'manage_orders', 'Create, update, delete orders', 'orders'),
+    ('00000000-0000-0000-0000-000000000107', 'view_orders', 'View order details', 'orders'),
+    ('00000000-0000-0000-0000-000000000108', 'cancel_orders', 'Cancel orders', 'orders'),
+    ('00000000-0000-0000-0000-000000000109', 'manage_services', 'Create, update, delete services', 'services'),
+    ('00000000-0000-0000-0000-000000000110', 'view_services', 'View service list', 'services'),
+    ('00000000-0000-0000-0000-000000000111', 'manage_appointments', 'Create, update, delete appointments', 'appointments'),
+    ('00000000-0000-0000-0000-000000000112', 'view_appointments', 'View appointment details', 'appointments'),
+    ('00000000-0000-0000-0000-000000000113', 'approve_appointments', 'Approve or reject appointments', 'appointments'),
+    ('00000000-0000-0000-0000-000000000114', 'manage_payments', 'View and manage payments', 'payments'),
+    ('00000000-0000-0000-0000-000000000115', 'verify_payments', 'Verify payment submissions', 'payments'),
+    ('00000000-0000-0000-0000-000000000116', 'refund_payments', 'Process payment refunds', 'payments'),
+    ('00000000-0000-0000-0000-000000000117', 'manage_cart', 'Manage shopping cart', 'cart'),
+    ('00000000-0000-0000-0000-000000000118', 'checkout', 'Process checkout and orders', 'cart'),
+    ('00000000-0000-0000-0000-000000000119', 'manage_customizations', 'Create, update, delete customizations', 'customizations'),
+    ('00000000-0000-0000-0000-000000000120', 'view_customizations', 'View customization designs', 'customizations'),
+    ('00000000-0000-0000-0000-000000000121', 'view_reports', 'Access reports and analytics', 'reports'),
+    ('00000000-0000-0000-0000-000000000122', 'export_data', 'Export data from system', 'reports'),
+    ('00000000-0000-0000-0000-000000000123', 'manage_settings', 'Manage system settings', 'system'),
+    ('00000000-0000-0000-0000-000000000124', 'manage_roles', 'Create and manage roles', 'system'),
+    ('00000000-0000-0000-0000-000000000125', 'manage_permissions', 'Manage permissions', 'system')
+ON CONFLICT (name) DO NOTHING;
+
+
+-- =============================================
+-- SEED ROLE-PERMISSION ASSIGNMENTS
+-- =============================================
+
+INSERT INTO role_permissions (role_id, permission_id)
+SELECT '00000000-0000-0000-0000-000000000001', permission_id 
+FROM permissions
+ON CONFLICT DO NOTHING;
+
+INSERT INTO role_permissions (role_id, permission_id)
+SELECT '00000000-0000-0000-0000-000000000002', permission_id 
+FROM permissions 
+WHERE name NOT IN ('manage_roles', 'manage_permissions')
+ON CONFLICT DO NOTHING;
+
+INSERT INTO role_permissions (role_id, permission_id)
+SELECT '00000000-0000-0000-0000-000000000003', permission_id 
+FROM permissions 
+WHERE name IN ('view_products', 'manage_orders', 'view_orders', 'cancel_orders', 
+               'view_services', 'manage_appointments', 'view_appointments', 'approve_appointments',
+               'manage_payments', 'verify_payments', 'view_customizations')
+ON CONFLICT DO NOTHING;
+
+INSERT INTO role_permissions (role_id, permission_id)
+SELECT '00000000-0000-0000-0000-000000000004', permission_id 
+FROM permissions 
+WHERE name IN ('view_products', 'view_services', 'view_appointments',
+               'manage_cart', 'checkout', 'view_customizations', 'view_orders')
+ON CONFLICT DO NOTHING;
+
+
+-- =============================================
+-- MIGRATE EXISTING USERS TO RBAC
+-- =============================================
+
+INSERT INTO user_roles (user_id, role_id)
+SELECT user_id, 
+    CASE 
+        WHEN role = 'super_admin' THEN '00000000-0000-0000-0000-000000000001'::uuid
+        WHEN role = 'admin' THEN '00000000-0000-0000-0000-000000000002'::uuid
+        WHEN role = 'staff' THEN '00000000-0000-0000-0000-000000000003'::uuid
+        ELSE '00000000-0000-0000-0000-000000000004'::uuid
+    END
+FROM users
+WHERE role IS NOT NULL
+ON CONFLICT DO NOTHING;
