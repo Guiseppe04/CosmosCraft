@@ -68,17 +68,17 @@
   --color-light-dark: #d4d7dc;  /* Muted light — borders, dividers, scrollbar track */
 
   /* ─── Figma Theme Tokens ───────────────────────────────────────────────── */
-  --gold-primary: #d4af37;      /* Main gold — buttons, icons, accents */
-  --gold-secondary: #b8941d;    /* Deeper gold — hover/active on primary gold */
-  --gold-accent: #e8c547;       /* Lightest gold — subtle highlights, badges */
-  --black-deep: #231f20;        /* Deepest dark — page background, footers */
-  --surface-dark: #231f20;      /* Default dark surface — base layer bg */
-  --surface-elevated: #3d3a3b;  /* Raised dark surface — cards, dropdowns */
+  --gold-primary: #FFD700;      /* Main gold — buttons, icons, accents (bright yellow) */
+  --gold-secondary: #FFD700;    /* Deeper gold — hover/active on primary gold */
+  --gold-accent: #FFD700;       /* Lightest gold — subtle highlights, badges */
+  --black-deep: #454040;        /* Deepest dark — page background, footers */
+  --surface-dark: #454040;      /* Default dark surface — base layer bg */
+  --surface-elevated: #a55f2e;  /* Raised dark surface — cards, dropdowns */
   --text-light: #eff1f3;        /* Primary text on dark backgrounds */
   --text-muted: #b0b4bc;        /* Secondary/placeholder text on dark backgrounds */
-  --text-dark: #231f20;         /* Primary text on light backgrounds */
-  --bg-primary: #231f20;        /* Root page background color */
-  --border: rgba(255, 255, 255, 0.08);
+  --text-dark: #454040;         /* Primary text on light backgrounds */
+  --bg-primary: #454040;        /* Root page background color */
+  --border: #4A4747;           /* Subtle lighter gray borders */
 
   /* ─── Neutrals ─────────────────────────────────────────────────────────── */
   --color-white: #ffffff;       /* Pure white — overlays, cards on dark bg */
