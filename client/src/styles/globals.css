@@ -73,7 +73,7 @@
   --gold-accent: #FFD700;       /* Lightest gold — subtle highlights, badges */
   --black-deep: #454040;        /* Deepest dark — page background, footers */
   --surface-dark: #454040;      /* Default dark surface — base layer bg */
-  --surface-elevated: #a55f2e;  /* Raised dark surface — cards, dropdowns */
+  --surface-elevated: #2d2d2d;  /* Raised dark surface — cards, dropdowns */
   --text-light: #eff1f3;        /* Primary text on dark backgrounds */
   --text-muted: #b0b4bc;        /* Secondary/placeholder text on dark backgrounds */
   --text-dark: #454040;         /* Primary text on light backgrounds */
