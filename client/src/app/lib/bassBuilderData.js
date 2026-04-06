@@ -8,14 +8,21 @@ export const BASS_DEFAULT_CONFIG = {
   neck: 'maple',
   fretboard: 'rosewood',
   headstockWood: 'maple',
-  inlays: 'pearl',
+  headstockStyle: 'ch',
+  neckStyle: 'roundBottom',
+  inlays: 'whiteDots',
   bridge: 'standard',
-  pickguard: 'black',
+  pickguard: 'none',
   knobs: 'black',
   pickups: 'standard',
+  pickupTypeStyle: 'j',
   hardware: 'chrome',
   strings: '4',
   pickupConfig: 'j',
+  logo: 'standard',
+  backplate: 'standard',
+  pickupScrews: 'black',
+  controlPlate: 'black',
 }
 
 export const BASS_TYPE_OPTIONS = [
@@ -24,7 +31,8 @@ export const BASS_TYPE_OPTIONS = [
   { id: 'jb', label: 'Jazz', note: 'Modern J-bass style' },
 ]
 
-export const BASS_BASE_PRICE = 1499
+// Base price in PHP (Philippine Peso) - approximately 1500 USD equivalent
+export const BASS_BASE_PRICE = 89999
 
 export const BASS_BODY_OPTIONS = {
   vader: {
@@ -37,13 +45,13 @@ export const BASS_BODY_OPTIONS = {
     label: 'Precision',
     note: 'Classic P-bass style',
     bodySrc: bassAsset('bass/pb/front/masks/bodymask.png'),
-    price: 100,
+    price: 5999,
   },
   jb: {
     label: 'Jazz',
     note: 'Modern J-bass style',
     bodySrc: bassAsset('bass/jb/front/masks/bodymask.png'),
-    price: 150,
+    price: 8999,
   },
 }
 
@@ -51,26 +59,56 @@ export const BASS_BODY_WOOD_OPTIONS = {
   maple: {
     label: 'Maple',
     note: 'Bright even grain',
-    texture: bassWoodAsset('maple.jpg'),
+    texture: bassAsset('all-models/woods-colors/body-woods/maple.png'),
     price: 0,
   },
   ash: {
     label: 'Ash',
     note: 'Warm resonant grain',
-    texture: bassWoodAsset('maple.jpg'),
-    price: 75,
+    texture: bassAsset('all-models/woods-colors/body-woods/ash1.png'),
+    price: 4499,
+  },
+  ash2: {
+    label: 'Ash 2',
+    note: 'Alt ash grain pattern',
+    texture: bassAsset('all-models/woods-colors/body-woods/ash2.png'),
+    price: 4499,
   },
   mahogany: {
     label: 'Mahogany',
     note: 'Rich warm tone',
-    texture: bassWoodAsset('rosewood.jpg'),
-    price: 120,
+    texture: bassAsset('all-models/woods-colors/body-woods/mah.png'),
+    price: 7199,
   },
-  swampAsh: {
-    label: 'Swamp Ash',
-    note: 'Lightweight, bright',
-    texture: bassWoodAsset('maple.jpg'),
-    price: 150,
+  walnut: {
+    label: 'Walnut',
+    note: 'Deep dark wood',
+    texture: bassAsset('all-models/woods-colors/body-woods/wal.png'),
+    price: 6599,
+  },
+  roastedAsh: {
+    label: 'Roasted Ash',
+    note: 'Dark roasted finish',
+    texture: bassAsset('all-models/woods-colors/body-woods/roasted-ash.png'),
+    price: 7799,
+  },
+  roastedAsh1: {
+    label: 'Roasted Ash Alt',
+    note: 'Alt roasted ash',
+    texture: bassAsset('all-models/woods-colors/body-woods/roasted-ash1.png'),
+    price: 7799,
+  },
+  lmb: {
+    label: 'Laminated',
+    note: 'Laminated wood body',
+    texture: bassAsset('all-models/woods-colors/body-woods/lmb.png'),
+    price: 5699,
+  },
+  ald: {
+    label: 'Alder',
+    note: 'Classic alder wood',
+    texture: bassAsset('all-models/woods-colors/body-woods/ald.png'),
+    price: 5099,
   },
 }
 
@@ -81,67 +119,155 @@ export const BASS_BODY_FINISH_OPTIONS = {
     texture: null,
     price: 0,
   },
+  // Solid Colors
   black: {
     label: 'Jet Black',
     note: 'Opaque black finish',
     texture: bassAsset('all-models/woods-colors/colors/solids/black.png'),
     color: '#1a1a1a',
-    price: 30,
+    price: 1800,
   },
   white: {
     label: 'Classic White',
     note: 'Clean opaque finish',
     texture: bassAsset('all-models/woods-colors/colors/solids/white-white.png'),
     color: '#f5f5f5',
-    price: 30,
+    price: 1800,
   },
+  classicWhite: {
+    label: 'Classic White',
+    note: 'Pure white finish',
+    texture: bassAsset('all-models/woods-colors/colors/solids/classic-white.png'),
+    price: 1800,
+  },
+  bloodRed: {
+    label: 'Blood Red',
+    note: 'Deep crimson finish',
+    texture: bassAsset('all-models/woods-colors/colors/solids/blood-red.png'),
+    price: 2100,
+  },
+  ferrariRed: {
+    label: 'Ferrari Red',
+    note: 'Iconic racing red',
+    texture: bassAsset('all-models/woods-colors/colors/solids/ferrari-red.png'),
+    price: 2400,
+  },
+  deepPink: {
+    label: 'Deep Pink',
+    note: 'Rich pink finish',
+    texture: bassAsset('all-models/woods-colors/colors/solids/deep-pink.png'),
+    price: 2100,
+  },
+  hotPink: {
+    label: 'Hot Pink',
+    note: 'Vibrant pink tone',
+    texture: bassAsset('all-models/woods-colors/colors/solids/hot-pink.png'),
+    price: 2100,
+  },
+  lightPink: {
+    label: 'Light Pink',
+    note: 'Pastel pink finish',
+    texture: bassAsset('all-models/woods-colors/colors/solids/light-pink.png'),
+    price: 1800,
+  },
+  royalBlue: {
+    label: 'Royal Blue',
+    note: 'Deep royal blue',
+    texture: bassAsset('all-models/woods-colors/colors/solids/royal-blue.png'),
+    price: 2100,
+  },
+  lightBlue: {
+    label: 'Light Blue',
+    note: 'Soft sky blue',
+    texture: bassAsset('all-models/woods-colors/colors/solids/light-blue.png'),
+    price: 1800,
+  },
+  grabberBlue: {
+    label: 'Grabber Blue',
+    note: 'Classic grabber blue',
+    texture: bassAsset('all-models/woods-colors/colors/solids/grabber-blue.png'),
+    price: 2100,
+  },
+  primerGray: {
+    label: 'Primer Gray',
+    note: 'Industrial primer gray',
+    texture: bassAsset('all-models/woods-colors/colors/solids/primer-gray.png'),
+    price: 1500,
+  },
+  lavender: {
+    label: 'Lavender',
+    note: 'Soft lavender tone',
+    texture: bassAsset('all-models/woods-colors/colors/solids/lavender.png'),
+    price: 1800,
+  },
+  purple: {
+    label: 'Purple',
+    note: 'Rich purple finish',
+    texture: bassAsset('all-models/woods-colors/colors/solids/purple.png'),
+    price: 2100,
+  },
+  odGreen: {
+    label: 'OD Green',
+    note: 'Olive drab green',
+    texture: bassAsset('all-models/woods-colors/colors/solids/od-green.png'),
+    price: 2100,
+  },
+  surfGreen: {
+    label: 'Surf Green',
+    note: 'Wet surf green',
+    texture: bassAsset('all-models/woods-colors/colors/solids/surf-green.png'),
+    price: 2100,
+  },
+  seafoamGreen: {
+    label: 'Seafoam Green',
+    note: 'Vintage seafoam',
+    texture: bassAsset('all-models/woods-colors/colors/solids/seafoam-green.png'),
+    price: 2100,
+  },
+  britishRacingGreen: {
+    label: 'British Racing Green',
+    note: 'Classic racing green',
+    texture: bassAsset('all-models/woods-colors/colors/solids/british-racing-green.png'),
+    price: 2400,
+  },
+  kieselOrange: {
+    label: 'Kiesel Orange',
+    note: 'Racing orange finish',
+    texture: bassAsset('all-models/woods-colors/colors/solids/kiesel-racing-orange.png'),
+    price: 2400,
+  },
+  mclarenYellow: {
+    label: 'McLaren Yellow',
+    note: 'Bright yellow finish',
+    texture: bassAsset('all-models/woods-colors/colors/solids/mclaren-yellow.png'),
+    price: 2400,
+  },
+  tropicTurquoise: {
+    label: 'Tropic',
+    note: 'Tropical turquoise',
+    texture: bassAsset('all-models/woods-colors/colors/solids/tropic.png'),
+    price: 2100,
+  },
+  // Translucent Colors
   transBlack: {
     label: 'Trans Black',
     note: 'Tinted translucent finish',
     texture: bassAsset('all-models/woods-colors/colors/transluscents/trans-black.png'),
-    price: 45,
+    price: 2700,
   },
   vintageSunburst: {
     label: 'Vintage Sunburst',
     note: 'Classic sunburst finish',
     texture: null,
     color: '#8B4513',
-    price: 40,
+    price: 2400,
   },
   tobaccoBurst: {
     label: 'Tobacco Burst',
     note: 'Rich tobacco finish',
     texture: null,
     color: '#8B5A2B',
-    price: 45,
-  },
-  red: {
-    label: 'Cherry Red',
-    note: 'Classic red finish',
-    texture: null,
-    color: '#b91c1c',
-    price: 35,
-  },
-  blue: {
-    label: 'Ocean Blue',
-    note: 'Deep blue finish',
-    texture: null,
-    color: '#1e40af',
-    price: 35,
-  },
-  green: {
-    label: 'Forest Green',
-    note: 'Rich green finish',
-    texture: null,
-    color: '#166534',
-    price: 35,
-  },
-  seafoamGreen: {
-    label: 'Seafoam Green',
-    note: 'Vintage pastel green',
-    texture: null,
-    color: '#98D8C8',
-    price: 40,
+    price: 2700,
   },
 }
 
@@ -156,14 +282,14 @@ export const BASS_NECK_OPTIONS = {
     label: 'Roasted',
     note: 'Dark roasted finish',
     src: bassAsset('all-models/woods-colors/bass/neck-woods/roasted-maple.png'),
-    price: 85,
+    price: 5099,
     filter: 'sepia(0.65) saturate(1.15) brightness(0.82) contrast(1.05)',
   },
   walnut: {
     label: 'Walnut',
     note: 'Warm darker neck',
     src: bassAsset('all-models/woods-colors/bass/neck-woods/waln.png'),
-    price: 100,
+    price: 5999,
     filter: 'sepia(0.9) saturate(1.15) brightness(0.55) contrast(1.08)',
   },
 }
@@ -179,13 +305,61 @@ export const BASS_FRETBOARD_OPTIONS = {
     label: 'Rosewood',
     note: 'Classic dark board',
     src: bassAsset('all-models/woods-colors/fingerboard-woods/rosewood.png'),
-    price: 70,
+    price: 4199,
   },
   ebony: {
     label: 'Ebony',
     note: 'Snappy premium board',
     src: bassAsset('all-models/woods-colors/fingerboard-woods/ebony.png'),
-    price: 95,
+    price: 5699,
+  },
+  royalEbony: {
+    label: 'Royal Ebony',
+    note: 'Rich ebony tone',
+    src: bassAsset('all-models/woods-colors/fingerboard-woods/royal-ebony.png'),
+    price: 5999,
+  },
+  flamedMaple: {
+    label: 'Flamed Maple',
+    note: 'Figured maple board',
+    src: bassAsset('all-models/woods-colors/fingerboard-woods/flamed-maple.png'),
+    price: 7199,
+  },
+  birdseyeMaple: {
+    label: 'Birdseye Maple',
+    note: 'Premium speckled maple',
+    src: bassAsset('all-models/woods-colors/fingerboard-woods/birdseye-maple.png'),
+    price: 7499,
+  },
+  roastedFlame: {
+    label: 'Roasted Flame',
+    note: 'Roasted flamed maple',
+    src: bassAsset('all-models/woods-colors/fingerboard-woods/roasted-flame.png'),
+    price: 8099,
+  },
+  roastedBirdseye: {
+    label: 'Roasted Birdseye',
+    note: 'Roasted birdseye maple',
+    src: bassAsset('all-models/woods-colors/fingerboard-woods/roasted-birdseye.png'),
+    price: 8099,
+  },
+  zebrawood: {
+    label: 'Zebrawood',
+    note: 'Striped exotic board',
+    src: bassAsset('all-models/woods-colors/fingerboard-woods/zebrawood.png'),
+    price: 7799,
+  },
+  richliteMapleValley: {
+    label: 'Richlite Maple Valley',
+    note: 'Composite richlite board',
+    src: bassAsset('all-models/woods-colors/fingerboard-woods/richlite-maple-valley.png'),
+    price: 4499,
+  },
+  efb: {
+    label: 'EFB',
+    note: 'Exotic wood board',
+    src: bassAsset('all-models/woods-colors/fingerboard-woods/efb.png'),
+    price: 6599,
   },
 }
 
@@ -210,69 +384,285 @@ export const BASS_HEADSTOCK_WOOD_OPTIONS = {
     label: 'Rosewood',
     note: 'Warm headstock wood',
     texture: bassAsset('all-models/woods-colors/bass/neck-woods/waln.png'),
-    price: 25,
+    price: 1500,
   },
   ebony: {
     label: 'Ebony',
     note: 'Dark premium wood',
     texture: bassAsset('all-models/woods-colors/bass/neck-woods/rfmn.png'),
-    price: 35,
+    price: 2100,
   },
 }
 
 export const BASS_INLAY_OPTIONS = {
-  pearl: {
-    label: 'White Pearl',
-    note: 'Classic dot inlays',
+  whiteDots: {
+    label: 'White Dots',
+    note: 'Classic white dot inlays',
     src: bassAsset('all-models/necks/bass/4-string/front/20-fret/round-bottom/inlays/id/white.png'),
     price: 0,
   },
-  black: {
-    label: 'Black',
-    note: 'Subtle black dots',
-    src: bassAsset('all-models/necks/bass/4-string/front/20-fret/round-bottom/inlays/ib/white.png'),
-    price: 0,
-  },
   luminlay: {
-    label: 'Luminlay',
-    note: 'Glow-in-the-dark dots',
+    label: 'Luminlay Dots',
+    note: 'Glow-in-the-dark inlays',
     src: bassAsset('all-models/necks/bass/4-string/front/20-fret/round-bottom/inlays/id/luminlay.png'),
     price: 40,
+  },
+  blackDots: {
+    label: 'Black Dots',
+    note: 'Subtle black dot inlays',
+    src: bassAsset('all-models/necks/bass/4-string/front/20-fret/round-bottom/inlays/ib/white.png'),
+    price: 20,
+  },
+  diamondLuminlay: {
+    label: 'Diamond Luminlay',
+    note: 'Diamond-shaped glow inlays',
+    src: bassAsset('all-models/necks/bass/4-string/front/20-fret/round-bottom/inlays/idia/luminlay.png'),
+    price: 60,
+  },
+  diamondWhite: {
+    label: 'Diamond White',
+    note: 'Diamond-shaped white inlays',
+    src: bassAsset('all-models/necks/bass/4-string/front/20-fret/round-bottom/inlays/idia/white.png'),
+    price: 50,
+  },
+}
+
+// Headstock Style Options from all-models
+export const BASS_HEADSTOCK_STYLE_OPTIONS = {
+  ch: {
+    label: 'Classic Headstock',
+    note: 'Traditional design',
+    src: bassAsset('all-models/headstocks/bass/4-string/ch/'),
+    price: 0,
+  },
+  chr: {
+    label: 'Classic Reverse',
+    note: 'Classic reverse design',
+    src: bassAsset('all-models/headstocks/bass/4-string/chr/'),
+    price: 25,
+  },
+  gt4: {
+    label: 'GT-4',
+    note: 'Modern GT-4 design',
+    src: bassAsset('all-models/headstocks/bass/4-string/gt4/'),
+    price: 50,
+  },
+  gt4r: {
+    label: 'GT-4 Reverse',
+    note: 'Modern reverse design',
+    src: bassAsset('all-models/headstocks/bass/4-string/gt4r/'),
+    price: 50,
+  },
+}
+
+// Neck Style Options from all-models
+export const BASS_NECK_STYLE_OPTIONS = {
+  roundBottom: {
+    label: 'Round Bottom',
+    note: 'Comfortable round profile',
+    src: bassAsset('all-models/necks/bass/4-string/front/'),
+    price: 0,
+  },
+}
+
+// Pickup Style Options from all-models
+export const BASS_PICKUP_TYPE_STYLE_OPTIONS = {
+  j: {
+    label: 'J-Style Pickup',
+    note: 'Single coil J-pickup',
+    src: bassAsset('all-models/pickups/bass/j/'),
+    price: 0,
+  },
+  p: {
+    label: 'P-Style Pickup',
+    note: 'Split coil P-pickup',
+    src: bassAsset('all-models/pickups/bass/p/'),
+    price: 15,
+  },
+  k: {
+    label: 'K-Style Pickup',
+    note: 'Modern K-style design',
+    src: bassAsset('all-models/pickups/bass/k/'),
+    price: 35,
+  },
+  acf: {
+    label: 'ACF Pickup',
+    note: 'Compact ACF design',
+    src: bassAsset('all-models/pickups/bass/acf/'),
+    price: 45,
+  },
+}
+
+
+// Logo Options - Vader specific
+// Logo Options - Only available for Vader body
+export const BASS_LOGO_OPTIONS = {
+  vader: {
+    standard: {
+      label: 'Standard Logo',
+      note: 'Standard bass logo',
+      src: bassAsset('bass/vader/front/logos/bl.png'),
+      price: 0,
+    },
+    extended: {
+      label: 'Extended Logo',
+      note: 'Extended 5-string logo',
+      src: bassAsset('bass/vader/front/logos/bl-5.png'),
+      price: 0,
+    },
+  },
+  jb: {
+    standard: {
+      label: 'Standard Logo',
+      note: 'Standard bass logo',
+      src: null,
+      price: 0,
+    },
+  },
+  pb: {
+    standard: {
+      label: 'Standard Logo',
+      note: 'Standard bass logo',
+      src: null,
+      price: 0,
+    },
+  },
+}
+
+// Backplate Options - Back customization
+export const BASS_BACKPLATE_OPTIONS = {
+  standard: {
+    label: 'Standard',
+    note: 'Standard back panel',
+    src: bassAsset('bass/pb/back/backplates/battery-compartment.png'),
+    price: 0,
+  },
+  extended: {
+    label: 'Extended 5-String',
+    note: 'Extended 5-string back panel',
+    src: bassAsset('bass/pb/back/backplates/battery-compartment-5.png'),
+    price: 0,
+  },
+}
+
+// Pickup Screw Options
+export const BASS_PICKUP_SCREW_OPTIONS = {
+  black: {
+    label: 'Black Screws',
+    note: 'Black pickup mounting screws',
+    src: bassAsset('bass/jb/front/pickguard/screws-black.png'),
+    price: 0,
+  },
+  chrome: {
+    label: 'Chrome Screws',
+    note: 'Chrome pickup mounting screws',
+    src: bassAsset('bass/jb/front/pickguard/screws-chrome.png'),
+    price: 10,
+  },
+  gold: {
+    label: 'Gold Screws',
+    note: 'Gold pickup mounting screws',
+    src: bassAsset('bass/jb/front/pickguard/screws-gold.png'),
+    price: 15,
+  },
+}
+
+// Control Plate Options
+export const BASS_CONTROL_PLATE_OPTIONS = {
+  black: {
+    label: 'Black Control Plate',
+    note: 'Black control plate',
+    src: bassAsset('bass/jb/front/pickguard/control-black.png'),
+    price: 0,
+  },
+  chrome: {
+    label: 'Chrome Control Plate',
+    note: 'Chrome control plate',
+    src: bassAsset('bass/jb/front/pickguard/control-chrome.png'),
+    price: 20,
+  },
+  gold: {
+    label: 'Gold Control Plate',
+    note: 'Gold control plate',
+    src: bassAsset('bass/jb/front/pickguard/control-gold.png'),
+    price: 25,
   },
 }
 
 export const BASS_BRIDGE_OPTIONS = {
-  standard: {
-    label: 'Standard',
-    note: 'Classic bass bridge',
-    assets: {
-      chrome: bassAsset('bass/pb/front/bridges/4/chrome.png'),
-      black: bassAsset('bass/pb/front/bridges/4/black.png'),
-      gold: bassAsset('bass/pb/front/bridges/4/gold.png'),
+  vader: {
+    standard: {
+      label: 'Standard',
+      note: 'Standard bridge',
+      assets: {
+        chrome: bassAsset('bass/vader/front/bridges/bridge.png'),
+        black: bassAsset('bass/vader/front/bridges/bridge.png'),
+        gold: bassAsset('bass/vader/front/bridges/bridge.png'),
+      },
+      price: 0,
     },
-    price: 0,
+    extended5: {
+      label: 'Extended 5-String',
+      note: '5-string bridge',
+      assets: {
+        chrome: bassAsset('bass/vader/front/bridges/bridge-5.png'),
+        black: bassAsset('bass/vader/front/bridges/bridge-5.png'),
+        gold: bassAsset('bass/vader/front/bridges/bridge-5.png'),
+      },
+      price: 0,
+    },
+    extended300: {
+      label: 'Extended 300',
+      note: 'Extended 300 bridge variant',
+      assets: {
+        chrome: bassAsset('bass/vader/front/bridges/bridge-300.png'),
+        black: bassAsset('bass/vader/front/bridges/bridge-300.png'),
+        gold: bassAsset('bass/vader/front/bridges/bridge-300.png'),
+      },
+      price: 0,
+    },
   },
-  hipshot: {
-    label: 'Hipshot',
-    note: 'Modern string-through',
-    assets: {
-      chrome: bassAsset('bass/vader/front/bridges/bridge.png'),
-      black: bassAsset('bass/vader/front/bridges/bridge.png'),
-      gold: bassAsset('bass/vader/front/bridges/bridge.png'),
+  jb: {
+    kiesel: {
+      label: 'Kiesel',
+      note: 'Custom kiesel bridge',
+      assets: {
+        chrome: bassAsset('bass/jb/front/bridges/kiesel/chrome.png'),
+        black: bassAsset('bass/jb/front/bridges/kiesel/black.png'),
+        gold: bassAsset('bass/jb/front/bridges/kiesel/gold.png'),
+      },
+      price: 0,
     },
-    price: 65,
+  },
+  pb: {
+    standard4: {
+      label: 'Standard 4-String',
+      note: 'Classic 4-string bridge',
+      assets: {
+        chrome: bassAsset('bass/pb/front/bridges/4/chrome.png'),
+        black: bassAsset('bass/pb/front/bridges/4/black.png'),
+        gold: bassAsset('bass/pb/front/bridges/4/gold.png'),
+      },
+      price: 0,
+    },
+    standard5: {
+      label: 'Standard 5-String',
+      note: 'Extended 5-string bridge',
+      assets: {
+        chrome: bassAsset('bass/pb/front/bridges/5/chrome.png'),
+        black: bassAsset('bass/pb/front/bridges/5/black.png'),
+        gold: bassAsset('bass/pb/front/bridges/5/gold.png'),
+      },
+      price: 0,
+    },
   },
 }
+
+
 
 export const BASS_PICKGUARD_OPTIONS = {
   vader: {
     none: { label: 'None', note: 'No pickguard', src: null, price: 0 },
-    black: {
-      label: 'Black',
-      note: 'Black pickguard',
-      src: null,
-      price: 0,
-    },
   },
   pb: {
     none: { label: 'None', note: 'No pickguard', src: null, price: 0 },
@@ -306,8 +696,32 @@ export const BASS_PICKGUARD_OPTIONS = {
     black: {
       label: 'Black',
       note: 'Black pickguard',
-      src: null,
+      src: bassAsset('bass/jb/front/pickguard/black.png'),
       price: 0,
+    },
+    white: {
+      label: 'White',
+      note: 'Clean white guard',
+      src: bassAsset('bass/jb/front/pickguard/white.png'),
+      price: 0,
+    },
+    tortoise: {
+      label: 'Tortoise',
+      note: 'Red tortoise shell',
+      src: bassAsset('bass/jb/front/pickguard/red-tortoise.png'),
+      price: 30,
+    },
+    satinBlack: {
+      label: 'Satin Black',
+      note: 'Matte black guard',
+      src: bassAsset('bass/jb/front/pickguard/satin-black.png'),
+      price: 25,
+    },
+    pearloid: {
+      label: 'Pearloid',
+      note: 'Bright pearloid finish',
+      src: bassAsset('bass/jb/front/pickguard/white-pearloid.png'),
+      price: 25,
     },
   },
 }
@@ -338,6 +752,12 @@ export const BASS_KNOB_OPTIONS = {
       src: bassAsset('bass/vader/front/knobs/white-pearl-inlay.png'),
       price: 25,
     },
+    abalone: {
+      label: 'Abalone Inlay',
+      note: 'Premium abalone inlay',
+      src: bassAsset('bass/vader/front/knobs/abalone-inlay.png'),
+      price: 40,
+    },
   },
   pb: {
     black: {
@@ -346,10 +766,34 @@ export const BASS_KNOB_OPTIONS = {
       src: bassAsset('bass/pb/front/knobs/black.png'),
       price: 0,
     },
+    blackActive: {
+      label: 'Black With Active',
+      note: 'Black knobs with active electronics',
+      src: bassAsset('bass/pb/front/knobs/black-active.png'),
+      price: 10,
+    },
+    blackThree: {
+      label: 'Black Three String',
+      note: 'Black knobs for 3-string config',
+      src: bassAsset('bass/pb/front/knobs/black-three.png'),
+      price: 0,
+    },
     chrome: {
       label: 'Chrome',
       note: 'Shiny chrome finish',
       src: bassAsset('bass/pb/front/knobs/chrome.png'),
+      price: 15,
+    },
+    chromeActive: {
+      label: 'Chrome With Active',
+      note: 'Chrome knobs with active electronics',
+      src: bassAsset('bass/pb/front/knobs/chrome-active.png'),
+      price: 25,
+    },
+    chromeThree: {
+      label: 'Chrome Three String',
+      note: 'Chrome knobs for 3-string config',
+      src: bassAsset('bass/pb/front/knobs/chrome-three.png'),
       price: 15,
     },
     tamarind: {
@@ -358,10 +802,34 @@ export const BASS_KNOB_OPTIONS = {
       src: bassAsset('bass/pb/front/knobs/tamarind.png'),
       price: 20,
     },
+    tamarindActive: {
+      label: 'Tamarind With Active',
+      note: 'Tamarind knobs with active electronics',
+      src: bassAsset('bass/pb/front/knobs/tamarind-active.png'),
+      price: 30,
+    },
+    tamarindThree: {
+      label: 'Tamarind Three String',
+      note: 'Tamarind knobs for 3-string config',
+      src: bassAsset('bass/pb/front/knobs/tamarind-three.png'),
+      price: 20,
+    },
     gold: {
       label: 'Gold',
       note: 'Premium gold knobs',
       src: bassAsset('bass/pb/front/knobs/gold.png'),
+      price: 30,
+    },
+    goldActive: {
+      label: 'Gold With Active',
+      note: 'Gold knobs with active electronics',
+      src: bassAsset('bass/pb/front/knobs/gold-active.png'),
+      price: 40,
+    },
+    goldThree: {
+      label: 'Gold Three String',
+      note: 'Gold knobs for 3-string config',
+      src: bassAsset('bass/pb/front/knobs/gold-three.png'),
       price: 30,
     },
     pearl: {
@@ -370,19 +838,67 @@ export const BASS_KNOB_OPTIONS = {
       src: bassAsset('bass/pb/front/knobs/white-pearl-inlay.png'),
       price: 25,
     },
+    pearlActive: {
+      label: 'Pearl Inlay With Active',
+      note: 'Pearl inlay knobs with active electronics',
+      src: bassAsset('bass/pb/front/knobs/white-pearl-inlay-active.png'),
+      price: 35,
+    },
+    pearlThree: {
+      label: 'Pearl Inlay Three String',
+      note: 'Pearl inlay knobs for 3-string config',
+      src: bassAsset('bass/pb/front/knobs/white-pearl-inlay-three.png'),
+      price: 25,
+    },
+    abaloneInlay: {
+      label: 'Abalone Inlay',
+      note: 'Premium abalone inlay knobs',
+      src: bassAsset('bass/pb/front/knobs/abalone-inlay.png'),
+      price: 40,
+    },
+    abaloneInlayThree: {
+      label: 'Abalone Inlay Three String',
+      note: 'Abalone inlay knobs for 3-string config',
+      src: bassAsset('bass/pb/front/knobs/abalone-inlay-three.png'),
+      price: 40,
+    },
   },
   jb: {
     black: {
       label: 'Black',
       note: 'Standard black knobs',
-      src: bassAsset('bass/vader/front/knobs/black.png'),
+      src: bassAsset('bass/jb/front/knobs/black.png'),
       price: 0,
     },
     chrome: {
       label: 'Chrome',
       note: 'Shiny chrome finish',
-      src: bassAsset('bass/vader/front/knobs/chrome.png'),
+      src: bassAsset('bass/jb/front/knobs/chrome.png'),
       price: 15,
+    },
+    tamarind: {
+      label: 'Tamarind',
+      note: 'Warm wood-look knobs',
+      src: bassAsset('bass/jb/front/knobs/tamarind.png'),
+      price: 20,
+    },
+    gold: {
+      label: 'Gold',
+      note: 'Premium gold knobs',
+      src: bassAsset('bass/jb/front/knobs/gold.png'),
+      price: 30,
+    },
+    pearl: {
+      label: 'Pearl Inlay',
+      note: 'White pearl inlay knobs',
+      src: bassAsset('bass/jb/front/knobs/white-pearl-inlay.png'),
+      price: 25,
+    },
+    abalone: {
+      label: 'Abalone Inlay',
+      note: 'Premium abalone inlay',
+      src: bassAsset('bass/jb/front/knobs/abalone-inlay.png'),
+      price: 40,
     },
   },
 }
@@ -476,7 +992,7 @@ export const BASS_PREVIEW_LAYOUTS = {
 
 export const BASS_BODY_LAYER_ASSETS = {
   vader: {
-    bridge: BASS_BRIDGE_OPTIONS.hipshot.assets,
+    bridge: BASS_BRIDGE_OPTIONS.vader.standard.assets,
     knobs: {
       chrome: bassAsset('bass/vader/front/knobs/chrome.png'),
       black: bassAsset('bass/vader/front/knobs/black.png'),
@@ -487,10 +1003,12 @@ export const BASS_BODY_LAYER_ASSETS = {
       black: bassAsset('bass/vader/front/strap buttons/standard/black.png'),
       gold: bassAsset('bass/vader/front/strap buttons/standard/gold.png'),
     },
+    pickups: bassAsset('bass/vader/front/pickups/hb/standard/'),
+    shadows: bassAsset('bass/vader/front/shadows_highlights/'),
     pickguard: null,
   },
   pb: {
-    bridge: BASS_BRIDGE_OPTIONS.standard.assets,
+    bridge: BASS_BRIDGE_OPTIONS.pb.standard4.assets,
     knobs: {
       chrome: bassAsset('bass/pb/front/knobs/chrome.png'),
       black: bassAsset('bass/pb/front/knobs/black.png'),
@@ -501,6 +1019,8 @@ export const BASS_BODY_LAYER_ASSETS = {
       black: bassAsset('bass/pb/front/strap buttons/standard/black.png'),
       gold: bassAsset('bass/pb/front/strap buttons/standard/gold.png'),
     },
+    pickups: bassAsset('all-models/pickups/bass/p/'),
+    shadows: bassAsset('bass/pb/front/shadows_highlights/'),
     pickguard: {
       chrome: bassAsset('bass/pb/front/pickguard/black.png'),
       black: bassAsset('bass/pb/front/pickguard/black.png'),
@@ -508,17 +1028,19 @@ export const BASS_BODY_LAYER_ASSETS = {
     },
   },
   jb: {
-    bridge: BASS_BRIDGE_OPTIONS.standard.assets,
+    bridge: BASS_BRIDGE_OPTIONS.jb.kiesel.assets,
     knobs: {
-      chrome: bassAsset('bass/vader/front/knobs/chrome.png'),
-      black: bassAsset('bass/vader/front/knobs/black.png'),
-      gold: bassAsset('bass/vader/front/knobs/tamarind.png'),
+      chrome: bassAsset('bass/jb/front/knobs/chrome.png'),
+      black: bassAsset('bass/jb/front/knobs/black.png'),
+      gold: bassAsset('bass/jb/front/knobs/gold.png'),
     },
     strap: {
       chrome: bassAsset('bass/jb/front/strap buttons/standard/chrome.png'),
       black: bassAsset('bass/jb/front/strap buttons/standard/black.png'),
       gold: bassAsset('bass/jb/front/strap buttons/standard/gold.png'),
     },
+    pickups: bassAsset('all-models/pickups/bass/j/4/'),
+    shadows: bassAsset('bass/jb/front/shadows_highlights/'),
     pickguard: null,
   },
 }
@@ -541,12 +1063,19 @@ export const bassBuilder = {
   NECK_FRETS: BASS_NECK_FRETS,
   NECK_NUT: BASS_NECK_NUT,
   HEADSTOCK_WOOD_OPTIONS: BASS_HEADSTOCK_WOOD_OPTIONS,
+  HEADSTOCK_STYLE_OPTIONS: BASS_HEADSTOCK_STYLE_OPTIONS,
+  NECK_STYLE_OPTIONS: BASS_NECK_STYLE_OPTIONS,
   INLAY_OPTIONS: BASS_INLAY_OPTIONS,
+  LOGO_OPTIONS: BASS_LOGO_OPTIONS,
+  BACKPLATE_OPTIONS: BASS_BACKPLATE_OPTIONS,
+  PICKUP_SCREW_OPTIONS: BASS_PICKUP_SCREW_OPTIONS,
+  CONTROL_PLATE_OPTIONS: BASS_CONTROL_PLATE_OPTIONS,
   BRIDGE_OPTIONS: BASS_BRIDGE_OPTIONS,
   PICKGUARD_OPTIONS: BASS_PICKGUARD_OPTIONS,
   KNOB_OPTIONS: BASS_KNOB_OPTIONS,
   HARDWARE_OPTIONS: BASS_HARDWARE_OPTIONS,
   PICKUP_OPTIONS: BASS_PICKUP_OPTIONS,
+  PICKUP_TYPE_STYLE_OPTIONS: BASS_PICKUP_TYPE_STYLE_OPTIONS,
   PICKUP_CONFIG_OPTIONS: BASS_PICKUP_CONFIG_OPTIONS,
   STRING_OPTIONS: BASS_STRING_OPTIONS,
   PREVIEW_LAYOUTS: BASS_PREVIEW_LAYOUTS,

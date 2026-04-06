@@ -243,24 +243,60 @@ export function BassCustomizePage() {
     addBuildToCart()
   }
 
-  const handleExport = () => {
+  const [savedBuilds, setSavedBuilds] = useState([])
+  const [showLoadModal, setShowLoadModal] = useState(false)
+
+  useEffect(() => {
+    // Load saved builds from localStorage
+    const stored = JSON.parse(window.localStorage.getItem('cosmoscraft_saved_bass_builds') || '[]')
+    setSavedBuilds(stored)
+  }, [])
+
+  const handleSaveImage = () => {
+    if (!isAuthenticated) {
+      openLogin(() => {
+        window.alert('Please log in to save your bass design as an image.')
+      })
+      return
+    }
+
+    window.alert('Image save feature coming soon! Your build configuration is automatically saved.')
+  }
+
+  const handleLoadBuild = (buildId) => {
+    const build = savedBuilds.find(b => b.id === buildId)
+    if (build) {
+      loadConfig(build.config)
+      setShowLoadModal(false)
+    }
+  }
+
+  const handleDeleteBuild = (buildId) => {
+    const updated = savedBuilds.filter(b => b.id !== buildId)
+    setSavedBuilds(updated)
+    window.localStorage.setItem('cosmoscraft_saved_bass_builds', JSON.stringify(updated))
+  }
+
+  const handleExportConfig = () => {
     const data = exportConfig()
     const blob = new Blob([data], { type: 'application/json' })
     const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = 'cosmoscraft-bass-builder-config.json'
+    link.download = `cosmoscraft-bass-${config.bassType}-${Date.now()}.json`
     link.click()
     window.URL.revokeObjectURL(url)
   }
 
-  const handleLoad = () => {
-    const raw = window.prompt('Paste a saved builder JSON configuration')
+  const handleImportConfig = () => {
+    const raw = window.prompt('Paste your saved builder JSON configuration')
     if (!raw) return
     try {
-      loadConfig(JSON.parse(raw))
+      const parsed = JSON.parse(raw)
+      loadConfig(parsed)
+      window.alert('Configuration loaded successfully!')
     } catch {
-      window.alert('Invalid JSON configuration')
+      window.alert('Invalid JSON configuration. Please check and try again.')
     }
   }
 
@@ -409,6 +445,20 @@ export function BassCustomizePage() {
                       ))}
                     </div>
                   </div>
+
+                  <div>
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Front Logo</h3>
+                    <div className="grid grid-cols-2 gap-2">
+                      {options.logoOptions?.map((opt) => (
+                        <OptionButton
+                          key={opt.value}
+                          option={opt}
+                          isSelected={config.logo === opt.value}
+                          onClick={() => updateConfig({ logo: opt.value })}
+                        />
+                      ))}
+                    </div>
+                  </div>
                 </div>
               )}
               
@@ -471,6 +521,34 @@ export function BassCustomizePage() {
                       ))}
                     </div>
                   </div>
+                  
+                  <div>
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Headstock Style</h3>
+                    <div className="grid grid-cols-2 gap-2">
+                      {options.headstockStyleOptions?.map((opt) => (
+                        <OptionButton
+                          key={opt.value}
+                          option={opt}
+                          isSelected={config.headstockStyle === opt.value}
+                          onClick={() => updateConfig({ headstockStyle: opt.value })}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Neck Profile</h3>
+                    <div className="grid grid-cols-2 gap-2">
+                      {options.neckStyleOptions?.map((opt) => (
+                        <OptionButton
+                          key={opt.value}
+                          option={opt}
+                          isSelected={config.neckStyle === opt.value}
+                          onClick={() => updateConfig({ neckStyle: opt.value })}
+                        />
+                      ))}
+                    </div>
+                  </div>
                 </div>
               )}
               
@@ -518,6 +596,48 @@ export function BassCustomizePage() {
                       ))}
                     </div>
                   </div>
+
+                  <div>
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Back Plate</h3>
+                    <div className="grid grid-cols-2 gap-2">
+                      {options.backplateOptions?.map((opt) => (
+                        <OptionButton
+                          key={opt.value}
+                          option={opt}
+                          isSelected={config.backplate === opt.value}
+                          onClick={() => updateConfig({ backplate: opt.value })}
+                        />
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Pickup Screws</h3>
+                    <div className="grid grid-cols-2 gap-2">
+                      {options.pickupScrewOptions?.map((opt) => (
+                        <OptionButton
+                          key={opt.value}
+                          option={opt}
+                          isSelected={config.pickupScrews === opt.value}
+                          onClick={() => updateConfig({ pickupScrews: opt.value })}
+                        />
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Control Plate</h3>
+                    <div className="grid grid-cols-2 gap-2">
+                      {options.controlPlateOptions?.map((opt) => (
+                        <OptionButton
+                          key={opt.value}
+                          option={opt}
+                          isSelected={config.controlPlate === opt.value}
+                          onClick={() => updateConfig({ controlPlate: opt.value })}
+                        />
+                      ))}
+                    </div>
+                  </div>
                 </div>
               )}
               
@@ -533,6 +653,20 @@ export function BassCustomizePage() {
                           option={opt}
                           isSelected={config.pickups === opt.value}
                           onClick={() => updateConfig({ pickups: opt.value })}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Pickup Style</h3>
+                    <div className="grid grid-cols-2 gap-2">
+                      {options.pickupTypeStyleOptions?.map((opt) => (
+                        <OptionButton
+                          key={opt.value}
+                          option={opt}
+                          isSelected={config.pickupTypeStyle === opt.value}
+                          onClick={() => updateConfig({ pickupTypeStyle: opt.value })}
                         />
                       ))}
                     </div>
@@ -596,7 +730,7 @@ export function BassCustomizePage() {
                 style={{ color: 'var(--text-muted)' }}
               >
                 <RotateCcw className="h-4 w-4" />
-                Reset Configuration
+                Reset
               </button>
               <button
                 type="button"
@@ -607,6 +741,17 @@ export function BassCustomizePage() {
                 <Save className="h-4 w-4" />
                 Save Build
               </button>
+              {savedBuilds.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowLoadModal(true)}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] px-4 py-2.5 text-sm font-medium transition-all duration-200 hover:bg-[var(--surface-dark)]"
+                  style={{ color: 'var(--text-muted)' }}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                  Load Build ({savedBuilds.length})
+                </button>
+              )}
             </div>
           </aside>
 
@@ -617,7 +762,7 @@ export function BassCustomizePage() {
                 <div>
                   <p className="text-xs uppercase tracking-[0.2em] text-white/40">Your Build Total</p>
                   <AnimatedPrice price={price} />
-                  <p className="mt-1 text-xs text-white/30">Base price: ₱{toPHP(1499, true).toLocaleString('en-PH')}</p>
+                  <p className="mt-1 text-xs text-white/30">Base price: ₱{toPHP(89999, true).toLocaleString('en-PH')}</p>
                 </div>
                 
                 <div className="flex flex-col sm:flex-row gap-3">
@@ -825,29 +970,94 @@ export function BassCustomizePage() {
               </div>
             </div>
             
-            <div className="border-t border-white/10 p-4 flex-shrink-0">
+            <div className="border-t border-white/10 p-4 flex-shrink-0 space-y-2">
               <div className="flex gap-2">
                 <button
                   type="button"
-                  onClick={handleExport}
+                  onClick={handleExportConfig}
                   className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 py-2 text-xs font-medium transition-all duration-200 hover:bg-[var(--surface-dark)]"
                   style={{ color: 'var(--text-muted)' }}
                 >
-                  Export Config
+                  Export
                 </button>
                 <button
                   type="button"
-                  onClick={handleLoad}
+                  onClick={handleImportConfig}
                   className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 py-2 text-xs font-medium transition-all duration-200 hover:bg-[var(--surface-dark)]"
                   style={{ color: 'var(--text-muted)' }}
                 >
-                  Load Config
+                  Import
                 </button>
               </div>
             </div>
           </aside>
         </div>
       </div>
+      
+      {/* Load Builds Modal */}
+      {showLoadModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="relative max-w-2xl w-full max-h-[80vh] overflow-hidden rounded-2xl border border-white/10 bg-[var(--bg-primary)] shadow-2xl flex flex-col">
+            {/* Header */}
+            <div className="border-b border-white/10 px-6 py-4 flex-shrink-0">
+              <h3 className="text-lg font-semibold">Load Saved Build</h3>
+              <p className="mt-1 text-xs text-white/50">Select a previous build to continue editing</p>
+            </div>
+            
+            {/* Builds List */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-3">
+              {savedBuilds.length === 0 ? (
+                <div className="flex items-center justify-center py-8 text-white/50">
+                  <p>No saved builds yet. Create one using the Save Build button!</p>
+                </div>
+              ) : (
+                savedBuilds.map((build) => (
+                  <div
+                    key={build.id}
+                    className="group relative rounded-xl border border-white/10 bg-white/[0.02] p-4 hover:bg-white/[0.04] transition-colors duration-200 cursor-pointer"
+                    onClick={() => handleLoadBuild(build.id)}
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 min-w-0">
+                        <h4 className="font-medium truncate">{build.name}</h4>
+                        <div className="mt-1 space-y-1 text-xs text-white/50">
+                          <p>{build.config.bassType} / {build.config.bodyWood} / {build.config.pickups}</p>
+                          <p>Created: {new Date(build.createdAt).toLocaleDateString('en-PH')}</p>
+                        </div>
+                        <div className="mt-2 text-sm font-semibold text-[#d4af37]">
+                          ₱{toPHP(build.price, true).toLocaleString('en-PH')}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleDeleteBuild(build.id)
+                        }}
+                        className="flex-shrink-0 rounded-lg bg-red-500/20 px-3 py-2 text-xs font-medium text-red-400 opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+            
+            {/* Footer */}
+            <div className="border-t border-white/10 px-6 py-4 flex-shrink-0 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setShowLoadModal(false)}
+                className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-4 py-2.5 text-sm font-medium transition-all duration-200 hover:bg-[var(--surface-dark)]"
+                style={{ color: 'var(--text-muted)' }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       
       <p className="mt-2 text-center text-[10px] uppercase tracking-[0.15em] text-white/30">
         Graphic representation only. Actual product may differ slightly due to natural wood variations.

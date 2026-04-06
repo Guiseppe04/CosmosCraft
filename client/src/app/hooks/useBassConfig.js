@@ -9,11 +9,18 @@ import {
   BASS_FRETBOARD_OPTIONS,
   BASS_NECK_OPTIONS,
   BASS_HEADSTOCK_WOOD_OPTIONS,
+  BASS_HEADSTOCK_STYLE_OPTIONS,
+  BASS_NECK_STYLE_OPTIONS,
   BASS_HARDWARE_OPTIONS,
   BASS_INLAY_OPTIONS,
+  BASS_LOGO_OPTIONS,
+  BASS_BACKPLATE_OPTIONS,
+  BASS_PICKUP_SCREW_OPTIONS,
+  BASS_CONTROL_PLATE_OPTIONS,
   BASS_PICKGUARD_OPTIONS,
   BASS_KNOB_OPTIONS,
   BASS_PICKUP_OPTIONS,
+  BASS_PICKUP_TYPE_STYLE_OPTIONS,
   BASS_STRING_OPTIONS,
   BASS_PICKUP_CONFIG_OPTIONS,
   BASS_TYPE_OPTIONS,
@@ -26,17 +33,24 @@ export default function useBassConfig() {
   useEffect(() => {
     const pickguardKeys = Object.keys(BASS_PICKGUARD_OPTIONS[config.bassType] ?? BASS_PICKGUARD_OPTIONS.vader)
     const knobKeys = Object.keys(BASS_KNOB_OPTIONS[config.bassType] ?? BASS_KNOB_OPTIONS.vader)
+    const bridgeKeys = Object.keys(BASS_BRIDGE_OPTIONS[config.bassType] ?? BASS_BRIDGE_OPTIONS.vader)
+    const logoKeys = Object.keys(BASS_LOGO_OPTIONS[config.bassType] ?? BASS_LOGO_OPTIONS.vader)
+    
     const nextPickguard = pickguardKeys.includes(config.pickguard) ? config.pickguard : pickguardKeys[0]
     const nextKnobs = knobKeys.includes(config.knobs) ? config.knobs : knobKeys[0]
+    const nextBridge = bridgeKeys.includes(config.bridge) ? config.bridge : bridgeKeys[0]
+    const nextLogo = logoKeys.includes(config.logo) ? config.logo : logoKeys[0]
 
-    if (nextPickguard !== config.pickguard || nextKnobs !== config.knobs) {
+    if (nextPickguard !== config.pickguard || nextKnobs !== config.knobs || nextBridge !== config.bridge || nextLogo !== config.logo) {
       setConfig(prev => ({
         ...prev,
         pickguard: nextPickguard,
         knobs: nextKnobs,
+        bridge: nextBridge,
+        logo: nextLogo,
       }))
     }
-  }, [config.bassType, config.knobs, config.pickguard])
+  }, [config.bassType, config.knobs, config.pickguard, config.bridge, config.logo])
 
   const updateConfig = patch => setConfig(prev => ({ ...prev, ...patch }))
 
@@ -51,12 +65,19 @@ export default function useBassConfig() {
       (BASS_NECK_OPTIONS[config.neck]?.price ?? 0) +
       (BASS_FRETBOARD_OPTIONS[config.fretboard]?.price ?? 0) +
       (BASS_HEADSTOCK_WOOD_OPTIONS[config.headstockWood]?.price ?? 0) +
+      (BASS_HEADSTOCK_STYLE_OPTIONS[config.headstockStyle]?.price ?? 0) +
+      (BASS_NECK_STYLE_OPTIONS[config.neckStyle]?.price ?? 0) +
       (BASS_INLAY_OPTIONS[config.inlays]?.price ?? 0) +
+      (BASS_LOGO_OPTIONS[config.logo]?.price ?? 0) +
+      (BASS_BACKPLATE_OPTIONS[config.backplate]?.price ?? 0) +
+      (BASS_PICKUP_SCREW_OPTIONS[config.pickupScrews]?.price ?? 0) +
+      (BASS_CONTROL_PLATE_OPTIONS[config.controlPlate]?.price ?? 0) +
       (BASS_BRIDGE_OPTIONS[config.bridge]?.price ?? 0) +
       (BASS_PICKGUARD_OPTIONS[config.bassType]?.[config.pickguard]?.price ?? 0) +
       (BASS_KNOB_OPTIONS[config.bassType]?.[config.knobs]?.price ?? 0) +
       (BASS_HARDWARE_OPTIONS[config.hardware]?.price ?? 0) +
       (BASS_PICKUP_OPTIONS[config.pickups]?.price ?? 0) +
+      (BASS_PICKUP_TYPE_STYLE_OPTIONS[config.pickupTypeStyle]?.price ?? 0) +
       (BASS_STRING_OPTIONS[config.strings]?.price ?? 0)
     )
   }, [config])
@@ -69,12 +90,19 @@ export default function useBassConfig() {
       neck: BASS_NECK_OPTIONS[config.neck]?.label ?? config.neck,
       fretboard: BASS_FRETBOARD_OPTIONS[config.fretboard]?.label ?? config.fretboard,
       headstockWood: BASS_HEADSTOCK_WOOD_OPTIONS[config.headstockWood]?.label ?? config.headstockWood,
+      headstockStyle: BASS_HEADSTOCK_STYLE_OPTIONS[config.headstockStyle]?.label ?? config.headstockStyle,
+      neckStyle: BASS_NECK_STYLE_OPTIONS[config.neckStyle]?.label ?? config.neckStyle,
       inlays: BASS_INLAY_OPTIONS[config.inlays]?.label ?? config.inlays,
+      logo: BASS_LOGO_OPTIONS[config.logo]?.label ?? config.logo,
+      backplate: BASS_BACKPLATE_OPTIONS[config.backplate]?.label ?? config.backplate,
+      pickupScrews: BASS_PICKUP_SCREW_OPTIONS[config.pickupScrews]?.label ?? config.pickupScrews,
+      controlPlate: BASS_CONTROL_PLATE_OPTIONS[config.controlPlate]?.label ?? config.controlPlate,
       bridge: BASS_BRIDGE_OPTIONS[config.bridge]?.label ?? config.bridge,
       pickguard: BASS_PICKGUARD_OPTIONS[config.bassType]?.[config.pickguard]?.label ?? config.pickguard,
       knobs: BASS_KNOB_OPTIONS[config.bassType]?.[config.knobs]?.label ?? config.knobs,
       hardware: BASS_HARDWARE_OPTIONS[config.hardware]?.label ?? config.hardware,
       pickups: BASS_PICKUP_OPTIONS[config.pickups]?.label ?? config.pickups,
+      pickupTypeStyle: BASS_PICKUP_TYPE_STYLE_OPTIONS[config.pickupTypeStyle]?.label ?? config.pickupTypeStyle,
       strings: BASS_STRING_OPTIONS[config.strings]?.label ?? config.strings,
       pickupConfig: BASS_PICKUP_CONFIG_OPTIONS[config.pickupConfig]?.label ?? config.pickupConfig,
     }),
@@ -115,12 +143,12 @@ export default function useBassConfig() {
   )
   const bridgeOptions = useMemo(
     () =>
-      Object.entries(BASS_BRIDGE_OPTIONS).map(([value, option]) => ({
+      Object.entries(BASS_BRIDGE_OPTIONS[config.bassType] ?? BASS_BRIDGE_OPTIONS.vader).map(([value, option]) => ({
         value,
         ...option,
         preview: option.assets?.[config.hardware] ?? option.assets?.chrome ?? option.assets?.black ?? option.assets?.gold,
       })),
-    [config.hardware],
+    [config.hardware, config.bassType],
   )
   const pickguardOptions = useMemo(
     () =>
@@ -152,8 +180,36 @@ export default function useBassConfig() {
     () => Object.entries(BASS_STRING_OPTIONS).map(([value, option]) => ({ value, ...option })),
     [],
   )
+  const headstockStyleOptions = useMemo(
+    () => Object.entries(BASS_HEADSTOCK_STYLE_OPTIONS).map(([value, option]) => ({ value, ...option })),
+    [],
+  )
+  const neckStyleOptions = useMemo(
+    () => Object.entries(BASS_NECK_STYLE_OPTIONS).map(([value, option]) => ({ value, ...option })),
+    [],
+  )
+  const pickupTypeStyleOptions = useMemo(
+    () => Object.entries(BASS_PICKUP_TYPE_STYLE_OPTIONS).map(([value, option]) => ({ value, ...option })),
+    [],
+  )
   const hardwareOptions = useMemo(
     () => Object.entries(BASS_HARDWARE_OPTIONS).map(([value, option]) => ({ value, ...option })),
+    [],
+  )
+  const logoOptions = useMemo(
+    () => Object.entries(BASS_LOGO_OPTIONS[config.bassType] ?? BASS_LOGO_OPTIONS.vader).map(([value, option]) => ({ value, ...option, preview: option.src })),
+    [config.bassType],
+  )
+  const backplateOptions = useMemo(
+    () => Object.entries(BASS_BACKPLATE_OPTIONS).map(([value, option]) => ({ value, ...option })),
+    [],
+  )
+  const pickupScrewOptions = useMemo(
+    () => Object.entries(BASS_PICKUP_SCREW_OPTIONS).map(([value, option]) => ({ value, ...option })),
+    [],
+  )
+  const controlPlateOptions = useMemo(
+    () => Object.entries(BASS_CONTROL_PLATE_OPTIONS).map(([value, option]) => ({ value, ...option })),
     [],
   )
 
@@ -186,11 +242,18 @@ export default function useBassConfig() {
       neckOptions,
       fretboardOptions,
       headstockWoodOptions,
+      headstockStyleOptions,
+      neckStyleOptions,
       inlayOptions,
+      logoOptions,
+      backplateOptions,
+      pickupScrewOptions,
+      controlPlateOptions,
       bridgeOptions,
       pickguardOptions,
       knobOptions,
       pickupOptions,
+      pickupTypeStyleOptions,
       pickupConfigOptions,
       stringOptions,
       hardwareOptions,

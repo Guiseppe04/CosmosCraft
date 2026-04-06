@@ -33,7 +33,7 @@ export default function BodyOptions({
         options={options.bridgeOptions}
         isOpen={openKey === 'bridge'}
         onToggle={() => setOpenKey(prev => (prev === 'bridge' ? null : 'bridge'))}
-        selectedLabel={builder.BRIDGE_OPTIONS[config.bridge]?.label ?? config.bridge}
+        selectedLabel={builder.BRIDGE_OPTIONS[config.body]?.[config.bridge]?.label ?? config.bridge}
       />
       <OptionGroup
         title="Pickguard"
@@ -43,7 +43,7 @@ export default function BodyOptions({
         options={options.pickguardOptions}
         isOpen={openKey === 'pickguard'}
         onToggle={() => setOpenKey(prev => (prev === 'pickguard' ? null : 'pickguard'))}
-        selectedLabel={builder.PICKGUARD_OPTIONS_BY_BODY[config.body]?.[config.pickguard]?.label ?? config.pickguard}
+        selectedLabel={builder.PICKGUARD_OPTIONS[config.body]?.[config.pickguard]?.label ?? config.pickguard}
       />
     </>
   )
