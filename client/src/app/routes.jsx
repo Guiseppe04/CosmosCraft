@@ -2,6 +2,7 @@ import { createBrowserRouter } from 'react-router'
 import { RootLayout } from './components/layouts/RootLayout.jsx'
 import { LandingPage } from './pages/LandingPage.jsx'
 import { CustomizePage } from './pages/CustomizePage.jsx'
+import { BassCustomizePage } from './pages/BassCustomizePage.jsx'
 import { ShopPage } from './pages/ShopPage.jsx'
 import { AppointmentPage } from './pages/AppointmentPage.jsx'
 import { DashboardPage } from './pages/DashboardPage.jsx'
@@ -32,6 +33,7 @@ export const router = createBrowserRouter([
       // Public routes
       { index: true, Component: LandingPage },
       { path: 'customize', Component: CustomizePage },
+      { path: 'customize-bass', Component: BassCustomizePage },
       { path: 'shop', Component: ShopPage },
       { path: 'appointments', Component: AppointmentPage },
       

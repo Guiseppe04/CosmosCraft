@@ -47,12 +47,16 @@ export function Header() {
   }, [])
 
   const handleSelectGuitarType = (guitarType) => {
-    navigate(`/customize?type=${guitarType}`)
+    if (guitarType === 'bass') {
+      navigate('/customize-bass')
+    } else {
+      navigate(`/customize?type=${guitarType}`)
+    }
     setCustomizeOpen(false)
   }
 
-  const isCustomizeActive = location.pathname === '/customize'
-  const currentGuitarType = new URLSearchParams(location.search).get('type') || 'electric'
+  const isCustomizeActive = location.pathname === '/customize' || location.pathname === '/customize-bass'
+  const currentGuitarType = location.pathname === '/customize-bass' ? 'bass' : new URLSearchParams(location.search).get('type') || 'electric'
 
   const navLinks = [
     { path: '/', label: 'Home' },
