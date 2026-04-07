@@ -20,6 +20,8 @@ const rbacRoutes = require('./routes/rbacRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const reportRoutes = require('./routes/reportRoutes');
 const auditRoutes = require('./routes/auditRoutes');
+const inventoryRoutes = require('./routes/inventoryRoutes');
+const posRoutes = require('./routes/posRoutes');
 const { errorHandler, notFound } = require('./middleware/errorHandler.js');
 
 const app = express();
@@ -59,6 +61,8 @@ app.use('/api/rbac', rbacRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/audit-logs', auditRoutes);
+app.use('/api/inventory', inventoryRoutes);
+app.use('/api/pos', posRoutes);
 // Legacy route alias kept for backwards-compat
 app.use('/user', userRoutes);
 

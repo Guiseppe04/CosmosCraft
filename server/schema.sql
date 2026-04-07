@@ -751,3 +751,198 @@ SELECT user_id,
 FROM users
 WHERE role IS NOT NULL
 ON CONFLICT DO NOTHING;
+
+
+-- =============================================
+-- INVENTORY & POS MODULE (TABLES 27-31)
+-- =============================================
+
+-- =============================================
+-- ENUMS FOR INVENTORY & POS
+-- =============================================
+
+CREATE TYPE inventory_change_type_enum AS ENUM ('stock_in', 'stock_out', 'adjustment', 'sale', 'return');
+CREATE TYPE pos_payment_method_enum AS ENUM ('cash', 'gcash', 'bank_transfer');
+CREATE TYPE pos_sale_status_enum AS ENUM ('pending', 'completed', 'cancelled', 'refunded');
+
+
+-- =============================================
+-- 27. INVENTORY LOGS
+-- =============================================
+-- Tracks all inventory movements with reference to source transactions
+
+CREATE TABLE inventory_logs (
+    log_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    product_id UUID NOT NULL,
+    change_type inventory_change_type_enum NOT NULL,
+    quantity INT NOT NULL CHECK (quantity != 0),
+    reference_type VARCHAR(50),
+    reference_id UUID,
+    notes TEXT,
+    created_by UUID,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    
+    FOREIGN KEY (product_id) REFERENCES products(product_id) ON DELETE CASCADE,
+    FOREIGN KEY (created_by) REFERENCES users(user_id) ON DELETE SET NULL
+);
+
+CREATE INDEX idx_inventory_logs_product_id ON inventory_logs(product_id);
+CREATE INDEX idx_inventory_logs_reference ON inventory_logs(reference_type, reference_id);
+CREATE INDEX idx_inventory_logs_created_at ON inventory_logs(created_at DESC);
+CREATE INDEX idx_inventory_logs_change_type ON inventory_logs(change_type);
+
+
+-- =============================================
+-- 28. POS SALES (Point of Sale Transactions)
+-- =============================================
+-- Represents a walk-in customer transaction
+
+CREATE TABLE pos_sales (
+    sale_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    sale_number VARCHAR(30) NOT NULL UNIQUE,
+    staff_id UUID NOT NULL,
+    customer_name VARCHAR(150),
+    customer_phone VARCHAR(15),
+    subtotal NUMERIC(12, 2) NOT NULL DEFAULT 0 CHECK (subtotal >= 0),
+    discount_amount NUMERIC(12, 2) NOT NULL DEFAULT 0 CHECK (discount_amount >= 0),
+    tax_amount NUMERIC(12, 2) NOT NULL DEFAULT 0 CHECK (tax_amount >= 0),
+    total_amount NUMERIC(12, 2) NOT NULL CHECK (total_amount >= 0),
+    payment_method pos_payment_method_enum NOT NULL,
+    payment_status payment_status_enum NOT NULL DEFAULT 'pending',
+    status pos_sale_status_enum NOT NULL DEFAULT 'pending',
+    reference_number VARCHAR(100),
+    notes TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    completed_at TIMESTAMPTZ,
+    cancelled_at TIMESTAMPTZ,
+    cancelled_by UUID,
+    
+    FOREIGN KEY (staff_id) REFERENCES users(user_id) ON DELETE RESTRICT,
+    FOREIGN KEY (cancelled_by) REFERENCES users(user_id) ON DELETE SET NULL,
+    UNIQUE(sale_number)
+);
+
+CREATE INDEX idx_pos_sales_sale_number ON pos_sales(sale_number);
+CREATE INDEX idx_pos_sales_staff_id ON pos_sales(staff_id);
+CREATE INDEX idx_pos_sales_status ON pos_sales(status);
+CREATE INDEX idx_pos_sales_payment_status ON pos_sales(payment_status);
+CREATE INDEX idx_pos_sales_created_at ON pos_sales(created_at DESC);
+CREATE INDEX idx_pos_sales_completed_at ON pos_sales(completed_at DESC);
+
+
+-- =============================================
+-- 29. POS SALE ITEMS
+-- =============================================
+-- Individual line items in a POS sale
+
+CREATE TABLE pos_sale_items (
+    item_id BIGSERIAL PRIMARY KEY,
+    sale_id UUID NOT NULL,
+    product_id UUID,
+    service_id INT,
+    item_name VARCHAR(200) NOT NULL,
+    quantity INT NOT NULL CHECK (quantity > 0),
+    unit_price NUMERIC(12, 2) NOT NULL CHECK (unit_price >= 0),
+    discount_amount NUMERIC(12, 2) NOT NULL DEFAULT 0 CHECK (discount_amount >= 0),
+    subtotal NUMERIC(12, 2) NOT NULL CHECK (subtotal >= 0),
+    notes TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    
+    FOREIGN KEY (sale_id) REFERENCES pos_sales(sale_id) ON DELETE CASCADE,
+    FOREIGN KEY (product_id) REFERENCES products(product_id) ON DELETE SET NULL,
+    FOREIGN KEY (service_id) REFERENCES services(service_id) ON DELETE SET NULL,
+    CHECK ((product_id IS NOT NULL) OR (service_id IS NOT NULL))
+);
+
+CREATE INDEX idx_pos_sale_items_sale_id ON pos_sale_items(sale_id);
+CREATE INDEX idx_pos_sale_items_product_id ON pos_sale_items(product_id);
+CREATE INDEX idx_pos_sale_items_service_id ON pos_sale_items(service_id);
+
+
+-- =============================================
+-- 30. POS PAYMENTS
+-- =============================================
+-- Payment tracking for POS sales
+
+CREATE TABLE pos_payments (
+    payment_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    sale_id UUID NOT NULL UNIQUE,
+    amount NUMERIC(12, 2) NOT NULL CHECK (amount > 0),
+    currency VARCHAR(3) NOT NULL DEFAULT 'PHP',
+    payment_method pos_payment_method_enum NOT NULL,
+    status payment_status_enum NOT NULL DEFAULT 'pending',
+    reference_number VARCHAR(100),
+    notes TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    verified_at TIMESTAMPTZ,
+    verified_by UUID,
+    
+    FOREIGN KEY (sale_id) REFERENCES pos_sales(sale_id) ON DELETE CASCADE,
+    FOREIGN KEY (verified_by) REFERENCES users(user_id) ON DELETE SET NULL
+);
+
+CREATE INDEX idx_pos_payments_sale_id ON pos_payments(sale_id);
+CREATE INDEX idx_pos_payments_status ON pos_payments(status);
+CREATE INDEX idx_pos_payments_created_at ON pos_payments(created_at DESC);
+
+
+-- =============================================
+-- 31. LOW STOCK ALERTS (Optional)
+-- =============================================
+-- Tracks low stock alert notifications
+
+CREATE TABLE low_stock_alerts (
+    alert_id BIGSERIAL PRIMARY KEY,
+    product_id UUID NOT NULL,
+    current_stock INT NOT NULL,
+    threshold INT NOT NULL,
+    is_read BOOLEAN NOT NULL DEFAULT FALSE,
+    read_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    
+    FOREIGN KEY (product_id) REFERENCES products(product_id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_low_stock_alerts_product_id ON low_stock_alerts(product_id);
+CREATE INDEX idx_low_stock_alerts_is_read ON low_stock_alerts(is_read);
+CREATE INDEX idx_low_stock_alerts_created_at ON low_stock_alerts(created_at DESC);
+
+
+-- =============================================
+-- ADD INVENTORY/POS PERMISSIONS TO RBAC
+-- =============================================
+
+INSERT INTO permissions (permission_id, name, description, category) VALUES
+    ('00000000-0000-0000-0000-000000000201', 'manage_inventory', 'Create, update, manage product inventory', 'inventory'),
+    ('00000000-0000-0000-0000-000000000202', 'view_inventory', 'View inventory and stock levels', 'inventory'),
+    ('00000000-0000-0000-0000-000000000203', 'adjust_stock', 'Add/remove stock and adjust inventory', 'inventory'),
+    ('00000000-0000-0000-0000-000000000204', 'view_inventory_logs', 'View inventory transaction logs', 'inventory'),
+    ('00000000-0000-0000-0000-000000000205', 'manage_pos', 'Create, manage POS sales', 'pos'),
+    ('00000000-0000-0000-0000-000000000206', 'view_pos', 'View POS sales and transactions', 'pos'),
+    ('00000000-0000-0000-0000-000000000207', 'void_pos_sale', 'Void/cancel POS transactions', 'pos'),
+    ('00000000-0000-0000-0000-000000000208', 'verify_pos_payment', 'Verify and authorize POS payments', 'pos')
+ON CONFLICT (name) DO NOTHING;
+
+
+-- =============================================
+-- ASSIGN INVENTORY/POS PERMISSIONS TO ROLES
+-- =============================================
+
+-- Staff: Limited inventory view, full POS access, verify payments
+INSERT INTO role_permissions (role_id, permission_id)
+SELECT '00000000-0000-0000-0000-000000000003', permission_id 
+FROM permissions 
+WHERE name IN ('view_inventory', 'adjust_stock', 'manage_pos', 'view_pos', 'verify_pos_payment')
+ON CONFLICT DO NOTHING;
+
+-- Admin: Full inventory and POS management
+INSERT INTO role_permissions (role_id, permission_id)
+SELECT '00000000-0000-0000-0000-000000000002', permission_id 
+FROM permissions 
+WHERE name IN ('manage_inventory', 'view_inventory', 'adjust_stock', 'view_inventory_logs', 
+               'manage_pos', 'view_pos', 'void_pos_sale', 'verify_pos_payment')
+ON CONFLICT DO NOTHING;
+
+-- Super Admin: All permissions (already has all)
