@@ -42,7 +42,114 @@ export function AdminPage() {
   const [orders, setOrders] = useState([])
   const [projects, setProjects] = useState([])
   const [appointments, setAppointments] = useState([])
+  const [inventory, setInventory] = useState([])
   const [salesReport, setSalesReport] = useState(null)
+
+  const sampleProducts = [
+    { product_id: 'sample-1', sku: 'STR-001', name: 'Custom Stratocaster Body', category_name: 'Guitar Parts', price: 4500, is_active: true, stock: 16, low_stock_threshold: 8 },
+    { product_id: 'sample-2', sku: 'NEC-002', name: 'Roasted Maple Neck', category_name: 'Guitar Parts', price: 3800, is_active: true, stock: 5, low_stock_threshold: 6 },
+    { product_id: 'sample-3', sku: 'PUP-003', name: 'Vintage Humbucker Set', category_name: 'Pickups', price: 2300, is_active: false, stock: 2, low_stock_threshold: 4 },
+  ]
+
+  const sampleParts = [
+    { part_id: 'part-1', part_name: 'Alnico V Pickup', product_name: 'Vintage Humbucker Set', quantity: 14, price: 1600 },
+    { part_id: 'part-2', part_name: 'Rosewood Fingerboard', product_name: 'Custom Stratocaster Body', quantity: 8, price: 1800 },
+    { part_id: 'part-3', part_name: 'Tremolo Bridge', product_name: 'Custom Stratocaster Body', quantity: 5, price: 950 },
+  ]
+
+  const sampleGuitars = [
+    { customization_id: 'guitar-1', user_name: 'Alden Cruz', user_email: 'alden@example.com', name: 'Midnight Explorer', guitar_type: 'electric', total_price: 68500, is_saved: true },
+    { customization_id: 'guitar-2', user_name: 'Mira Santos', user_email: 'mira@example.com', name: 'Sunburst Voyager', guitar_type: 'acoustic', total_price: 54900, is_saved: false },
+    { customization_id: 'guitar-3', user_name: 'Leo Ramirez', user_email: 'leo@example.com', name: 'Thunderbolt Bass', guitar_type: 'bass', total_price: 71250, is_saved: true },
+  ]
+
+  const sampleCategories = [
+    { category_id: 'cat-1', name: 'Guitar Parts', slug: 'guitar-parts', parent_name: 'Inventory', is_active: true },
+    { category_id: 'cat-2', name: 'Pickups', slug: 'pickups', parent_name: 'Guitar Parts', is_active: true },
+    { category_id: 'cat-3', name: 'Hardware', slug: 'hardware', parent_name: 'Guitar Parts', is_active: false },
+  ]
+
+  const sampleOrders = [
+    { order_id: 'ord-1', order_number: '1001', customer_name: 'Alden Cruz', items: [{ name: 'Custom Strat Body' }, { name: 'Pickup' }], total: 12000, status: 'Pending', created_at: '2026-04-08' },
+    { order_id: 'ord-2', order_number: '1002', customer_name: 'Mira Santos', items: [{ name: 'Roasted Maple Neck' }, { name: 'Bridge' }], total: 18000, status: 'Confirmed', created_at: '2026-04-07' },
+    { order_id: 'ord-3', order_number: '1003', customer_name: 'Leo Ramirez', items: [{ name: 'Thunderbolt Bass' }], total: 24500, status: 'Completed', created_at: '2026-04-05' },
+  ]
+
+  const sampleProjects = [
+    { project_id: 'proj-1', name: 'Amped Strat Build', customer_name: 'Alden Cruz', status: 'In Progress', description: 'Complete custom Strat with premium hardware upgrade and tremolo system.', progress: 65 },
+    { project_id: 'proj-2', name: 'Rosewood Neck Set', customer_name: 'Mira Santos', status: 'Pending', description: 'Finish and install roasted maple necks with custom fretboard inlays.', progress: 25 },
+    { project_id: 'proj-3', name: 'Bass Refit', customer_name: 'Leo Ramirez', status: 'Completed', description: 'Set up Thunderbolt bass with active electronics and new bridge.', progress: 100 },
+  ]
+
+  const sampleAppointments = [
+    { appointment_id: 'apt-1', title: 'Setup Consultation', customer_name: 'Alden Cruz', customer_email: 'alden@example.com', date: '2026-04-09', time: '10:00 AM', status: 'Scheduled', notes: 'Discuss guitar setup options.' },
+    { appointment_id: 'apt-2', title: 'Pickup Order', customer_name: 'Mira Santos', customer_email: 'mira@example.com', date: '2026-04-10', time: '2:30 PM', status: 'Scheduled', notes: 'Customer will collect custom neck.' },
+    { appointment_id: 'apt-3', title: 'Guitar Review', customer_name: 'Leo Ramirez', customer_email: 'leo@example.com', date: '2026-04-12', time: '1:00 PM', status: 'Completed', notes: 'Final check and setup review.' },
+  ]
+
+  const sampleUsers = [
+    { user_id: 'user-1', first_name: 'Alden', last_name: 'Cruz', email: 'alden@example.com', role: 'customer', is_active: true, created_at: '2025-10-12' },
+    { user_id: 'user-2', first_name: 'Mira', last_name: 'Santos', email: 'mira@example.com', role: 'staff', is_active: true, created_at: '2026-01-18' },
+    { user_id: 'user-3', first_name: 'Leo', last_name: 'Ramirez', email: 'leo@example.com', role: 'admin', is_active: false, created_at: '2025-12-05' },
+  ]
+
+  const sampleInventory = [
+    { id: 'inv-1', name: 'Roasted Maple Neck', type: 'Neck', qty: 8, status: 'Healthy' },
+    { id: 'inv-2', name: 'Mahogany Body', type: 'Body', qty: 3, status: 'Critical' },
+    { id: 'inv-3', name: 'Vintage Humbucker Set', type: 'Pickup', qty: 12, status: 'Warning' },
+  ]
+
+  const visibleProducts = products.length > 0 ? products : sampleProducts
+  const visibleParts = parts.length > 0 ? parts : sampleParts
+  const visibleGuitars = guitars.length > 0 ? guitars : sampleGuitars
+  const visibleCategories = categories.length > 0 ? categories : sampleCategories
+  const visibleOrders = orders.length > 0 ? orders : sampleOrders
+  const visibleProjects = projects.length > 0 ? projects : sampleProjects
+  const visibleAppointments = appointments.length > 0 ? appointments : sampleAppointments
+  const visibleUsers = users.length > 0 ? users : sampleUsers
+  const visibleInventory = inventory.length > 0 ? inventory : sampleInventory
+
+  const inventoryHealthData = (() => {
+    const productItems = visibleProducts.map((product) => ({
+      stock: Number(product.stock ?? 0),
+      threshold: Number(product.low_stock_threshold ?? 10),
+    }))
+    const partItems = visibleParts.map((part) => ({
+      stock: Number(part.quantity ?? 0),
+      threshold: 10,
+    }))
+    const items = [...productItems, ...partItems]
+
+    if (items.length === 0) {
+      return {
+        value: '0%',
+        status: 'Healthy',
+        statusClass: 'text-emerald-400',
+        iconBg: 'bg-emerald-500/15',
+      }
+    }
+
+    let critical = false
+    let warning = false
+    let healthyCount = 0
+
+    items.forEach(({ stock, threshold }) => {
+      if (stock <= threshold) {
+        critical = true
+      } else if (stock <= threshold * 2) {
+        warning = true
+      } else {
+        healthyCount += 1
+      }
+    })
+
+    const status = critical ? 'Critical' : warning ? 'Warning' : 'Healthy'
+    const statusClass = critical ? 'text-red-400' : warning ? 'text-amber-400' : 'text-emerald-400'
+    const iconBg = critical ? 'bg-red-500/15' : warning ? 'bg-amber-500/15' : 'bg-emerald-500/15'
+    const value = `${Math.round((healthyCount / items.length) * 100)}%`
+
+    return { value, status, statusClass, iconBg }
+  })()
 
   // Form state for modals
   const [form, setForm] = useState({})
@@ -436,6 +543,38 @@ export function AdminPage() {
     finally { setIsSaving(false) }
   }
 
+  const saveInventory = async () => {
+    setIsSaving(true)
+    try {
+      const currentInventory = inventory.length > 0 ? inventory : sampleInventory
+      const newItem = {
+        id: modal.data?.id || `inv-${Date.now()}`,
+        name: form.name || 'New Inventory Item',
+        type: form.type || 'Material',
+        qty: Number(form.qty || 0),
+        status: form.status || 'Healthy',
+      }
+
+      if (modal.data?.id) {
+        setInventory(currentInventory.map(item => item.id === modal.data.id ? newItem : item))
+        showToast('Inventory item updated!')
+      } else {
+        setInventory([...currentInventory, newItem])
+        showToast('Inventory item added!')
+      }
+
+      closeModal()
+    } catch (e) { showToast(e.message, 'error') }
+    finally { setIsSaving(false) }
+  }
+
+  const deleteInventory = (id) => {
+    if (!confirm('Delete this inventory item?')) return
+    const currentInventory = inventory.length > 0 ? inventory : sampleInventory
+    setInventory(currentInventory.filter(item => item.id !== id))
+    showToast('Inventory item deleted')
+  }
+
   const deleteAppointment = async (id) => {
     if (!confirm('Cancel this appointment?')) return
     try {
@@ -476,7 +615,7 @@ export function AdminPage() {
     { id: 'sales-report', label: 'Sales Report',   icon: PieChart },
     { id: 'projects',   label: 'Projects',         icon: Briefcase },
     { id: 'appointments', label: 'Appointments',   icon: Calendar },
-    { id: 'users',      label: 'Users & RBAC',     icon: Shield },
+    { id: 'users',      label: 'Users',             icon: Shield },
   ]
 
   // ── Return JSX ─────────────────────────────────────────────────────────────
@@ -660,11 +799,11 @@ export function AdminPage() {
           {/* ── GUITAR PARTS & PRODUCTS TAB ───────────────────────────────── */}
           {activeTab === 'products-parts' && (
             <motion.div key="products-parts" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-              {products.length === 0 ? (
+              {visibleProducts.length === 0 ? (
                 <EmptyState icon={Package} label="No products found" action={() => openModal('product')} actionLabel="Add First Product" />
               ) : (
                 <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {products.map((p) => (
+                  {visibleProducts.map((p) => (
                     <motion.div key={p.product_id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
                       className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6 hover:border-[var(--gold-primary)]/50 transition-all"
                     >
@@ -704,7 +843,7 @@ export function AdminPage() {
               <h3 className="text-white text-xl font-semibold mb-4 mt-8">Guitar Parts</h3>
               <AdminTable
                 columns={['Part Name', 'Linked Product', 'Qty', 'Price', 'Actions']}
-                rows={parts}
+                rows={visibleParts}
                 renderRow={(part) => (
                   <>
                     <td className="py-4 px-6 text-white font-semibold">{part.part_name}</td>
@@ -733,7 +872,7 @@ export function AdminPage() {
             <motion.div key="categories" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
               <AdminTable
                 columns={['Name', 'Slug', 'Parent', 'Status', 'Actions']}
-                rows={categories}
+                rows={visibleCategories}
                 renderRow={(cat) => (
                   <>
                     <td className="py-4 px-6 text-white font-semibold">{cat.name}</td>
@@ -764,7 +903,7 @@ export function AdminPage() {
             <motion.div key="guitars" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
               <AdminTable
                 columns={['Customer', 'Guitar', 'Type', 'Price', 'Saved', 'Actions']}
-                rows={guitars}
+                rows={visibleGuitars}
                 renderRow={(g) => (
                   <>
                     <td className="py-4 px-6">
@@ -803,7 +942,7 @@ export function AdminPage() {
             <motion.div key="users" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
               <AdminTable
                 columns={['User', 'Role', 'Status', 'Joined', 'Actions']}
-                rows={users}
+                rows={visibleUsers}
                 renderRow={(u) => (
                   <>
                     <td className="py-4 px-6">
@@ -851,11 +990,11 @@ export function AdminPage() {
           {/* ── ORDERS TAB ───────────────────────────────────────────────────── */}
           {activeTab === 'orders' && (
             <motion.div key="orders" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-              {orders.length === 0 ? (
+              {visibleOrders.length === 0 ? (
                 <EmptyState icon={ShoppingBag} label="No orders found" />
               ) : (
                 <div className="space-y-4">
-                  {orders.map((order) => (
+                  {visibleOrders.map((order) => (
                     <motion.div key={order.order_id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
                       className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6 hover:border-[var(--gold-primary)]/50 transition-all"
                     >
@@ -906,11 +1045,11 @@ export function AdminPage() {
           {/* ── PROJECTS TAB ─────────────────────────────────────────────────── */}
           {activeTab === 'projects' && (
             <motion.div key="projects" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-              {projects.length === 0 ? (
+              {visibleProjects.length === 0 ? (
                 <EmptyState icon={Briefcase} label="No projects yet" action={() => openModal('project')} actionLabel="Create Project" />
               ) : (
                 <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {projects.map((project) => (
+                  {visibleProjects.map((project) => (
                     <motion.div key={project.project_id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
                       className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6 hover:border-[var(--gold-primary)]/50 transition-all"
                     >
@@ -959,7 +1098,7 @@ export function AdminPage() {
           {activeTab === 'appointments' && (
             <motion.div key="appointments" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
               {/* Appointments Table */}
-              {appointments.length === 0 ? (
+              {visibleAppointments.length === 0 ? (
                 <EmptyState icon={Calendar} label="No appointments scheduled" action={() => openModal('appointment')} actionLabel="Book Appointment" />
               ) : (
                 <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl overflow-hidden">
@@ -977,7 +1116,7 @@ export function AdminPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {appointments.map((apt, i) => {
+                        {visibleAppointments.map((apt, i) => {
                           const statusColors = {
                             Scheduled: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
                             Completed: 'bg-green-500/20 text-green-400 border-green-500/30',
@@ -1056,17 +1195,17 @@ export function AdminPage() {
                     </div>
                     <div className="rounded-3xl border border-[var(--border)] bg-[var(--bg-primary)] p-5">
                       <p className="text-[var(--text-muted)] text-sm">Total orders</p>
-                      <p className="mt-3 text-3xl font-bold text-white">{orders.length}</p>
+                      <p className="mt-3 text-3xl font-bold text-white">{visibleOrders.length}</p>
                       <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-blue-500/10 px-3 py-1 text-sm text-blue-400">Order volume up</div>
                     </div>
                     <div className="rounded-3xl border border-[var(--border)] bg-[var(--bg-primary)] p-5">
                       <p className="text-[var(--text-muted)] text-sm">Active projects</p>
-                      <p className="mt-3 text-3xl font-bold text-white">{projects.length}</p>
+                      <p className="mt-3 text-3xl font-bold text-white">{visibleProjects.length}</p>
                       <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-purple-500/10 px-3 py-1 text-sm text-purple-400">Project pace strong</div>
                     </div>
                     <div className="rounded-3xl border border-[var(--border)] bg-[var(--bg-primary)] p-5">
                       <p className="text-[var(--text-muted)] text-sm">Open appointments</p>
-                      <p className="mt-3 text-3xl font-bold text-white">{appointments.length}</p>
+                      <p className="mt-3 text-3xl font-bold text-white">{visibleAppointments.length}</p>
                       <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-[var(--gold-primary)]/10 px-3 py-1 text-sm text-[var(--gold-primary)]">Action required</div>
                     </div>
                   </div>
@@ -1140,20 +1279,41 @@ export function AdminPage() {
                       </div>
                       <div className="space-y-4">
                         {[
-                          { label: 'Inventory health', value: '92%', status: 'Stable', icon: CheckCircle },
-                          { label: 'Pending orders', value: orders.length, status: 'Processing', icon: Package },
-                          { label: 'Support tickets', value: 5, status: 'Attention', icon: MessageSquare },
+                          {
+                            label: 'Inventory health',
+                            value: inventoryHealthData.value,
+                            status: inventoryHealthData.status,
+                            icon: Activity,
+                            iconBg: inventoryHealthData.iconBg,
+                            statusClass: inventoryHealthData.statusClass,
+                          },
+                          {
+                            label: 'Pending orders',
+                            value: visibleOrders.length,
+                            status: 'Processing',
+                            icon: Package,
+                            statusClass: 'text-blue-400',
+                            iconBg: 'bg-blue-500/15',
+                          },
+                          {
+                            label: 'Appointments',
+                            value: visibleAppointments.length,
+                            status: visibleAppointments.length ? 'Upcoming' : 'None',
+                            icon: Calendar,
+                            statusClass: visibleAppointments.length ? 'text-[var(--gold-primary)]' : 'text-[var(--text-muted)]',
+                            iconBg: visibleAppointments.length ? 'bg-[var(--gold-primary)]/15' : 'bg-[var(--surface-dark)]',
+                          },
                         ].map((item) => {
                           const Icon = item.icon
                           return (
                             <div key={item.label} className="flex items-center justify-between rounded-3xl border border-[var(--border)] bg-[var(--bg-primary)] p-4">
                               <div className="flex items-center gap-4">
-                                <div className="grid h-11 w-11 place-items-center rounded-2xl bg-[var(--gold-primary)]/15">
+                                <div className={`grid h-11 w-11 place-items-center rounded-2xl ${item.iconBg || 'bg-[var(--gold-primary)]/15'}`}>
                                   <Icon className="w-5 h-5 text-[var(--gold-primary)]" />
                                 </div>
                                 <div>
                                   <p className="text-white font-semibold">{item.label}</p>
-                                  <p className="text-[var(--text-muted)] text-sm">{item.status}</p>
+                                  <p className={`text-sm ${item.statusClass || 'text-[var(--text-muted)]'}`}>{item.status}</p>
                                 </div>
                               </div>
                               <p className="text-white text-lg font-semibold">{item.value}</p>
@@ -1171,11 +1331,11 @@ export function AdminPage() {
                         </div>
                         <button onClick={() => setActiveTab('appointments')} className="text-[var(--gold-primary)] text-sm font-semibold hover:underline">View all</button>
                       </div>
-                      {appointments.length === 0 ? (
+                      {visibleAppointments.length === 0 ? (
                         <div className="rounded-3xl border border-[var(--border)] bg-[var(--bg-primary)] p-8 text-center text-[var(--text-muted)]">No upcoming appointments.</div>
                       ) : (
                         <div className="space-y-3">
-                          {appointments.slice(0, 4).map((apt) => (
+                          {visibleAppointments.slice(0, 4).map((apt) => (
                             <div key={apt.appointment_id} className="rounded-3xl border border-[var(--border)] bg-[var(--bg-primary)] p-4">
                               <div className="flex items-start justify-between gap-4">
                                 <div>
@@ -1201,10 +1361,79 @@ export function AdminPage() {
           {/* ── INVENTORY TAB ────────────────────────────────────────────────── */}
           {activeTab === 'inventory' && (
             <motion.div key="inventory" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-              <div className="text-center py-12">
-                <Activity className="w-16 h-16 text-[var(--gold-primary)] mx-auto mb-4" />
-                <h2 className="text-white text-xl font-semibold mb-2">Inventory Management</h2>
-                <p className="text-[var(--text-muted)]">Track and manage your guitar parts and materials inventory.</p>
+              <div className="space-y-6">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                  <div>
+                    <h2 className="text-white text-2xl font-semibold">Inventory Management</h2>
+                    <p className="text-[var(--text-muted)]">Track stock levels for guitars, parts, and materials.</p>
+                  </div>
+                  <button onClick={() => openModal('inventory')} className="inline-flex items-center gap-2 rounded-2xl bg-[var(--gold-primary)] px-4 py-2 text-sm font-semibold text-black hover:bg-[var(--gold-secondary)] transition-all">
+                    <Plus className="w-4 h-4" /> Add stock
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="rounded-3xl border border-[var(--border)] bg-[var(--bg-primary)] p-5">
+                    <p className="text-[var(--text-muted)] text-sm">Total inventory items</p>
+                    <p className="mt-3 text-3xl font-bold text-white">{visibleInventory.length}</p>
+                  </div>
+                  <div className="rounded-3xl border border-[var(--border)] bg-[var(--bg-primary)] p-5">
+                    <p className="text-[var(--text-muted)] text-sm">Critical stock</p>
+                    <p className="mt-3 text-3xl font-bold text-red-400">{visibleInventory.filter(item => item.status === 'Critical').length}</p>
+                  </div>
+                  <div className="rounded-3xl border border-[var(--border)] bg-[var(--bg-primary)] p-5">
+                    <p className="text-[var(--text-muted)] text-sm">Warning stock</p>
+                    <p className="mt-3 text-3xl font-bold text-amber-400">{visibleInventory.filter(item => item.status === 'Warning').length}</p>
+                  </div>
+                </div>
+
+                <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-6 overflow-x-auto">
+                  <div className="flex items-center justify-between mb-6">
+                    <div>
+                      <h3 className="text-white text-xl font-semibold">Current stock overview</h3>
+                      <p className="text-[var(--text-muted)] text-sm">Review the latest component inventory levels and reorder priorities.</p>
+                    </div>
+                    <span className="px-3 py-1 rounded-full bg-[var(--gold-primary)]/10 text-[var(--gold-primary)] text-xs font-semibold">Updated now</span>
+                  </div>
+                  <table className="w-full text-left">
+                    <thead className="border-b border-[var(--border)]/50">
+                      <tr>
+                        <th className="py-4 pr-6 text-[var(--text-muted)] text-xs uppercase tracking-[0.15em]">Item</th>
+                        <th className="py-4 pr-6 text-[var(--text-muted)] text-xs uppercase tracking-[0.15em]">Type</th>
+                        <th className="py-4 pr-6 text-[var(--text-muted)] text-xs uppercase tracking-[0.15em]">Quantity</th>
+                        <th className="py-4 pr-6 text-[var(--text-muted)] text-xs uppercase tracking-[0.15em]">Status</th>
+                        <th className="py-4 pr-6 text-[var(--text-muted)] text-xs uppercase tracking-[0.15em]">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {visibleInventory.map((item) => (
+                        <tr key={item.id} className="border-b border-[var(--border)]/20 hover:bg-[var(--bg-primary)]/50 transition-colors">
+                          <td className="py-4 pr-6 text-white font-semibold">{item.name}</td>
+                          <td className="py-4 pr-6 text-[var(--text-muted)]">{item.type}</td>
+                          <td className="py-4 pr-6 text-white">{item.qty}</td>
+                          <td className="py-4 pr-6">
+                            <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${
+                              item.status === 'Critical' ? 'bg-red-500/15 text-red-400 border border-red-500/20' :
+                              item.status === 'Warning' ? 'bg-amber-500/15 text-amber-400 border border-amber-500/20' :
+                              'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20'
+                            }`}>
+                              {item.status}
+                            </span>
+                          </td>
+                          <td className="py-4 pr-6">
+                            <div className="flex gap-2">
+                              <button onClick={() => openModal('inventory', item)} className="p-2 hover:bg-[var(--gold-primary)]/10 rounded-lg transition-colors">
+                                <Edit className="w-4 h-4 text-[var(--text-muted)]" />
+                              </button>
+                              <button onClick={() => deleteInventory(item.id)} className="p-2 hover:bg-red-500/10 rounded-lg transition-colors">
+                                <Trash2 className="w-4 h-4 text-red-400" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </motion.div>
           )}
@@ -1703,6 +1932,29 @@ export function AdminPage() {
                     </div>
                   </div>
                   <ModalFooter onCancel={closeModal} onSave={savePart} isSaving={isSaving} />
+                </>
+              )}
+
+              {/* Inventory Modal */}
+              {modal.type === 'inventory' && (
+                <>
+                  <ModalHeader title={modal.data ? 'Edit Inventory Item' : 'Add Stock Item'} onClose={closeModal} />
+                  <div className="space-y-4 mt-6">
+                    <FormField label="Item Name *" value={form.name || ''} onChange={v => setForm(f => ({...f, name: v}))} placeholder="e.g. Ebony Fretboard" />
+                    <FormField label="Type" value={form.type || ''} onChange={v => setForm(f => ({...f, type: v}))} placeholder="e.g. Neck, Body, Pickup" />
+                    <div className="grid grid-cols-2 gap-4">
+                      <FormField label="Quantity *" type="number" value={form.qty ?? ''} onChange={v => setForm(f => ({...f, qty: v}))} />
+                      <div>
+                        <label className={labelCls}>Status</label>
+                        <select value={form.status || 'Healthy'} onChange={e => setForm(f => ({...f, status: e.target.value}))} className={inputCls}>
+                          <option value="Healthy">Healthy</option>
+                          <option value="Warning">Warning</option>
+                          <option value="Critical">Critical</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                  <ModalFooter onCancel={closeModal} onSave={saveInventory} isSaving={isSaving} />
                 </>
               )}
 
