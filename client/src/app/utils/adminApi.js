@@ -94,4 +94,7 @@ export const adminApi = {
   createAppointment: (body) => request('/api/appointments', { method: 'POST', body }),
   updateAppointment: (id, body) => request(`/api/appointments/${id}`, { method: 'PUT', body }),
   deleteAppointment: (id) => request(`/api/appointments/${id}`, { method: 'DELETE' }),
+
+  // Reports
+  getSalesReport: () => request('/api/reports/sales'),
 }

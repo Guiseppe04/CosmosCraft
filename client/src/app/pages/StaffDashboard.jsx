@@ -142,6 +142,19 @@ export function StaffDashboard() {
     setShowStageSelector(false)
   }
 
+  // Get stage color based on stage number
+  const getStageColor = (stage) => {
+    const stageColors = [
+      'from-purple-500 to-purple-600',   // 0: Design
+      'from-amber-500 to-amber-600',     // 1: Wood Selection
+      'from-blue-500 to-blue-600',       // 2: Assembly
+      'from-pink-500 to-pink-600',       // 3: Painting
+      'from-cyan-500 to-cyan-600',       // 4: Setup
+      'from-green-500 to-green-600',     // 5: Completed
+    ]
+    return stageColors[stage] || stageColors[0]
+  }
+
   // Open create project modal
   const handleOpenCreateProject = () => {
     setEditingProject(null)
@@ -435,7 +448,7 @@ export function StaffDashboard() {
                         <div className="flex items-center gap-2">
                           <div className="w-24 h-2 bg-[var(--surface-dark)] rounded-full overflow-hidden">
                             <div
-                              className="h-full bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] rounded-full"
+                              className={`h-full bg-gradient-to-r ${getStageColor(project.stage)} rounded-full`}
                               style={{ width: `${((project.stage + 1) / 6) * 100}%` }}
                             />
                           </div>
