@@ -175,6 +175,23 @@ export default function useGuitarConfig() {
     }))
   }
 
+  const pricingBreakdown = useMemo(() => ({
+      base: BASE_PRICE,
+      body: BODY_OPTIONS[config.body]?.price ?? 0,
+      bodyWood: BODY_WOOD_OPTIONS[config.bodyWood]?.price ?? 0,
+      bodyFinish: BODY_FINISH_OPTIONS[config.bodyFinish]?.price ?? 0,
+      neck: NECK_OPTIONS[config.neck]?.price ?? 0,
+      fretboard: FRETBOARD_OPTIONS[config.fretboard]?.price ?? 0,
+      headstock: HEADSTOCK_OPTIONS[config.headstock]?.price ?? 0,
+      headstockWood: HEADSTOCK_WOOD_OPTIONS[config.headstockWood]?.price ?? 0,
+      inlays: INLAY_OPTIONS[config.inlays]?.price ?? 0,
+      bridge: BRIDGE_OPTIONS[config.bridge]?.price ?? 0,
+      pickguard: PICKGUARD_OPTIONS_BY_BODY[config.body]?.[config.pickguard]?.price ?? 0,
+      knobs: KNOB_OPTIONS_BY_BODY[config.body]?.[config.knobs]?.price ?? 0,
+      hardware: HARDWARE_OPTIONS[config.hardware]?.price ?? 0,
+      pickups: PICKUP_OPTIONS[config.pickups]?.price ?? 0
+  }), [config, config.body, config.bodyWood, config.bodyFinish, config.neck, config.fretboard, config.headstock, config.headstockWood, config.inlays, config.bridge, config.pickguard, config.knobs, config.hardware, config.pickups])
+
   return {
     config,
     setConfig,
@@ -182,6 +199,7 @@ export default function useGuitarConfig() {
     resetConfig,
     price,
     summary,
+    pricingBreakdown,
     exportConfig,
     loadConfig,
     builder: guitarBuilder,

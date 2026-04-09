@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { motion } from 'motion/react'
-import { Filter, Search, ShoppingCart, Zap } from 'lucide-react'
+import { Filter, Search, ShoppingCart, Zap, Check, X } from 'lucide-react'
 import { mockProducts } from '../data/products.js'
 import { useCart } from '../context/CartContext.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
@@ -12,12 +12,29 @@ export function ShopPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [showFilters, setShowFilters] = useState(false)
   const [notification, setNotification] = useState(null)
-  const { cart, addToCart } = useCart()
+  const { cart, addToCart, isItemAtMaxQuantity, getItemAddedState } = useCart()
   const navigate = useNavigate()
   const { isAuthenticated, openLogin } = useAuth()
 
   const isInCart = (productId) => {
     return cart.some(item => item.id === productId)
+  }
+
+  const getProductStock = (productId) => {
+    const product = mockProducts.find(p => p.id === productId)
+    return product?.stock || 0
+  }
+
+  const isOutOfStock = (productId) => {
+    return getProductStock(productId) === 0
+  }
+
+  const isAtMaxLimit = (productId) => {
+    return isItemAtMaxQuantity(productId)
+  }
+
+  const isItemJustAdded = (productId) => {
+    return getItemAddedState(productId)
   }
 
   const categories = [
@@ -37,19 +54,28 @@ export function ShopPage() {
   })
 
   const handleAddToCart = product => {
-    addToCart({
+    if (isOutOfStock(product.id)) return
+    if (isAtMaxLimit(product.id)) return
+    
+    const added = addToCart({
       id: product.id,
       name: product.name,
       price: product.price,
       image: product.image,
       category: product.category,
       type: 'product',
+      stock: product.stock,
     })
-    setNotification(`${product.name} added to cart!`)
-    setTimeout(() => setNotification(null), 3000)
+    
+    if (added) {
+      setNotification(`${product.name} added to cart!`)
+      setTimeout(() => setNotification(null), 3000)
+    }
   }
 
   const performBuyNow = product => {
+    if (isOutOfStock(product.id)) return
+    
     addToCart({
       id: product.id,
       name: product.name,
@@ -57,16 +83,27 @@ export function ShopPage() {
       image: product.image,
       category: product.category,
       type: 'product',
+      stock: product.stock,
     })
     navigate('/checkout')
   }
 
   const handleBuyNow = product => {
+    if (isOutOfStock(product.id)) return
+    
     if (!isAuthenticated) {
       openLogin(() => performBuyNow(product))
     } else {
       performBuyNow(product)
     }
+  }
+
+  const getAddButtonState = (product) => {
+    if (isOutOfStock(product.id)) return 'out_of_stock'
+    if (isItemJustAdded(product.id)) return 'item_added'
+    if (isAtMaxLimit(product.id)) return 'max_limit'
+    if (isInCart(product.id)) return 'in_cart'
+    return 'add'
   }
 
   return (
@@ -77,6 +114,28 @@ export function ShopPage() {
           <h1 className="text-3xl font-bold text-white mb-1">Guitar Shop</h1>
           <p className="text-sm text-white/50">Premium guitars and accessories</p>
         </div>
+
+        {/* Adding Parts to Build Banner */}
+        {localStorage.getItem('cosmoscraft_target_build_id') && (
+          <div className="mb-8 p-4 bg-[var(--surface-dark)] border border-[var(--gold-primary)] rounded-xl flex items-center justify-between shadow-[0_0_15px_rgba(212,175,55,0.2)]">
+             <div>
+                <h3 className="text-[var(--gold-primary)] font-bold text-lg mb-1 flex items-center gap-2">
+                  <Zap className="w-5 h-5" /> Adding Parts to Custom Build
+                </h3>
+                <p className="text-sm text-[var(--text-muted)]">Select accessories or parts to add. They will be linked directly to your custom guitar.</p>
+             </div>
+             <button
+               type="button"
+               onClick={() => {
+                 localStorage.removeItem('cosmoscraft_target_build_id');
+                 navigate('/dashboard');
+               }}
+               className="px-6 py-2.5 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] rounded-lg font-bold shadow-[0_0_10px_rgba(212,175,55,0.3)] hover:shadow-[0_0_20px_rgba(212,175,55,0.5)] transition-all"
+             >
+                Done Adding
+             </button>
+          </div>
+        )}
 
         {/* Search Bar */}
         <div className="mb-8">
@@ -163,45 +222,85 @@ export function ShopPage() {
               {filteredProducts.length > 0 ? (
                 filteredProducts.map((product, index) => {
                   const inCart = isInCart(product.id)
+                  const buttonState = getAddButtonState(product)
+                  const outOfStock = isOutOfStock(product.id)
+                  
                   return (
                     <motion.div
                       key={product.id}
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: index * 0.05 }}
-                      className="bg-theme-surface-deep border border-white/10 rounded-2xl overflow-hidden hover:border-[#d4af37] hover:shadow-[0_0_20px_rgba(212,175,55,0.15)] transition-all"
+                      className={`bg-theme-surface-deep border border-white/10 rounded-2xl overflow-hidden hover:border-[#d4af37] hover:shadow-[0_0_20px_rgba(212,175,55,0.15)] transition-all ${outOfStock ? 'opacity-75' : ''}`}
                     >
-                      <div className="aspect-square overflow-hidden">
+                      <div className="aspect-square overflow-hidden relative">
                         <img
                           src={product.image}
                           alt={product.name}
                           className="w-full h-full object-cover hover:scale-110 transition-transform duration-300"
                         />
+                        {outOfStock && (
+                          <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
+                            <span className="px-4 py-2 bg-red-500/80 text-white font-semibold rounded-lg">
+                              Out of Stock
+                            </span>
+                          </div>
+                        )}
                       </div>
                       <div className="p-4">
-                        <p className="text-xs text-white/40 mb-1">{product.category}</p>
+                        <div className="flex items-center justify-between mb-1">
+                          <p className="text-xs text-white/40">{product.category}</p>
+                          {!outOfStock && product.stock !== undefined && (
+                            <span className="text-xs text-white/40">
+                              Stock: {product.stock}
+                            </span>
+                          )}
+                        </div>
                         <h3 className="font-semibold text-white mb-2">{product.name}</h3>
                         <p className="text-xl font-bold text-[#d4af37] mb-4">
                           ${product.price.toLocaleString()}
                         </p>
                         <div className="flex gap-2">
                           <button
-                            onClick={() => !inCart && handleAddToCart(product)}
-                            disabled={inCart}
+                            onClick={() => handleAddToCart(product)}
+                            disabled={buttonState !== 'add'}
                             className={`flex-1 px-3 py-2 rounded-lg text-sm font-semibold transition-all flex items-center justify-center gap-2 ${
-                              inCart
-                                ? 'bg-green-600/20 text-green-400 border border-green-600/30 cursor-default'
+                              buttonState === 'out_of_stock'
+                                ? 'bg-gray-500/20 text-gray-400 border border-gray-500/30 cursor-not-allowed'
+                                : buttonState === 'max_limit'
+                                ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30 cursor-not-allowed'
+                                : buttonState === 'item_added'
+                                ? 'bg-green-600/20 text-green-400 border border-green-600/30'
+                                : buttonState === 'in_cart'
+                                ? 'bg-green-600/20 text-green-400 border border-green-600/30'
                                 : 'bg-[#d4af37] text-[#111111] hover:bg-[#c39d2f]'
                             }`}
                           >
-                            {inCart ? (
+                            {buttonState === 'out_of_stock' && (
                               <>
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                </svg>
+                                <X className="w-4 h-4" />
+                                Out of Stock
+                              </>
+                            )}
+                            {buttonState === 'max_limit' && (
+                              <>
+                                <X className="w-4 h-4" />
+                                Max limit
+                              </>
+                            )}
+                            {buttonState === 'item_added' && (
+                              <>
+                                <Check className="w-4 h-4" />
                                 Added
                               </>
-                            ) : (
+                            )}
+                            {buttonState === 'in_cart' && (
+                              <>
+                                <Check className="w-4 h-4" />
+                                Added
+                              </>
+                            )}
+                            {buttonState === 'add' && (
                               <>
                                 <ShoppingCart className="w-4 h-4" />
                                 Add
@@ -210,9 +309,14 @@ export function ShopPage() {
                           </button>
                           <button
                             onClick={() => handleBuyNow(product)}
-                            className="flex-1 px-3 py-2 border border-[#d4af37] text-[#d4af37] rounded-lg text-sm font-semibold hover:bg-[#d4af37]/10 transition-all"
+                            disabled={outOfStock}
+                            className={`flex-1 px-3 py-2 rounded-lg text-sm font-semibold transition-all ${
+                              outOfStock
+                                ? 'border border-gray-500/30 text-gray-400 cursor-not-allowed'
+                                : 'border border-[#d4af37] text-[#d4af37] hover:bg-[#d4af37]/10'
+                            }`}
                           >
-                            Buy
+                            {outOfStock ? 'Unavailable' : 'Buy'}
                           </button>
                         </div>
                       </div>

@@ -61,7 +61,18 @@ export function CartPage() {
               >
                 <div className="flex-grow">
                   <h3 className="text-xl font-bold text-white">{item.name}</h3>
-                  <p className="text-[var(--text-muted)] mt-1">${item.price}</p>
+                  <p className="text-[var(--text-muted)] mt-1">₱{item.price.toLocaleString('en-PH')}</p>
+                  {item.metadata && (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {Object.entries(item.metadata).map(([k, v]) => 
+                        v && typeof v === 'string' ? (
+                          <span key={k} className="text-xs px-2.5 py-1 rounded-md bg-white/5 border border-[var(--border)] text-white/80 capitalize">
+                            {v}
+                          </span>
+                        ) : null
+                      ).filter(Boolean).slice(0, 6)}
+                    </div>
+                  )}
                 </div>
 
                 {/* Quantity Controls */}

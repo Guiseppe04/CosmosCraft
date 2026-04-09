@@ -16,7 +16,7 @@ export function CartDrawer() {
     <AnimatePresence>
       {isOpen && (
         <motion.div
-          className="fixed inset-0 z-50 flex justify-end theme-overlay"
+          className="fixed inset-0 z-50 flex justify-end bg-black/60"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -26,7 +26,7 @@ export function CartDrawer() {
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
             transition={{ type: 'tween', duration: 0.25 }}
-            className="w-full max-w-md h-full shadow-2xl flex flex-col theme-card"
+            className="w-full max-w-md h-full shadow-2xl flex flex-col bg-[var(--surface-elevated)]"
           >
             <div className="px-6 py-4 border-b border-[var(--border)] flex items-center justify-between">
               <h2 className="text-lg font-semibold text-[var(--text-light)]">Shopping Cart</h2>

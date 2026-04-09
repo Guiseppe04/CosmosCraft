@@ -5,7 +5,7 @@ import { useAuth } from '../../context/AuthContext.jsx'
 import { API } from '../../utils/apiConfig'
 
 export function LoginModal() {
-  const { loginOpen, closeLogin, fetchUser } = useAuth()
+  const { loginOpen, closeLogin, login, fetchUser } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -33,9 +33,11 @@ export function LoginModal() {
         return
       }
 
-      // Successful login - fetch user data to update auth context
-      await fetchUser()
-      
+      // Set user data directly from login response
+      if (data.data?.user) {
+        login(data.data.user)
+      }
+
       // Clear form and close modal
       setEmail('')
       setPassword('')
@@ -68,7 +70,7 @@ export function LoginModal() {
     <AnimatePresence>
       {loginOpen && (
         <motion.div
-          className="fixed inset-0 z-[60] flex items-center justify-center theme-overlay px-4"
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 px-4"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -77,7 +79,7 @@ export function LoginModal() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 20 }}
-            className="w-full max-w-md rounded-2xl shadow-2xl p-8 relative theme-card"
+            className="w-full max-w-md rounded-2xl shadow-2xl p-8 relative bg-[var(--surface-elevated)]"
           >
             <button
               type="button"
@@ -172,7 +174,7 @@ export function LoginModal() {
                   <div className="w-full border-t border-[var(--border)]" />
                 </div>
                 <div className="relative flex justify-center text-xs uppercase">
-                  <span className="px-2 theme-card text-[var(--text-muted)]">Or continue with</span>
+                  <span className="px-2 bg-[var(--surface-elevated)] text-[var(--text-muted)]">Or continue with</span>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
-import { Guitar, Menu, X, User, ShoppingCart, ChevronDown } from 'lucide-react'
+import { Guitar, Menu, X, User, ShoppingCart, ChevronDown, UserCircle2 } from 'lucide-react'
 import { motion, AnimatePresence } from 'motion/react'
 import { useCart } from '../context/CartContext.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
@@ -169,15 +169,35 @@ export function Header() {
           {/* User Actions */}
           <div className="hidden md:flex items-center gap-3 relative">
             <ThemeToggle />
+            <button
+              type="button"
+              onClick={() => setCartOpen(true)}
+              className="relative p-2 rounded-lg text-[var(--text-muted)] hover:text-[var(--gold-primary)] hover:bg-[var(--surface-elevated)] transition-all duration-200"
+            >
+              <ShoppingCart className="w-5 h-5" />
+              {cartCount > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-[20px] h-5 flex items-center justify-center bg-[var(--gold-primary)] text-[var(--text-dark)] text-xs font-bold px-1.5 rounded-full">
+                  {cartCount}
+                </span>
+              )}
+            </button>
             {isAuthenticated ? (
               <button
                 type="button"
                 onClick={() => navigate('/dashboard')}
                 className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[var(--surface-elevated)] text-[var(--text-muted)] hover:text-[var(--gold-primary)] hover:bg-[var(--surface-elevated)]/80 transition-all duration-200"
               >
-                <div className="w-7 h-7 rounded-full bg-[var(--gold-primary)] text-[var(--text-dark)] flex items-center justify-center text-xs font-bold">
-                  {(user?.name?.firstName || user?.email || 'G').charAt(0).toUpperCase()}
-                </div>
+                {user?.avatar ? (
+                  <img 
+                    src={user.avatar} 
+                    alt="Profile" 
+                    className="w-7 h-7 rounded-full object-cover"
+                  />
+                ) : (
+                  <div className="w-7 h-7 rounded-full bg-[var(--gold-primary)] text-[var(--text-dark)] flex items-center justify-center text-xs font-bold">
+                    {(user?.name?.firstName || user?.email || 'G').charAt(0).toUpperCase()}
+                  </div>
+                )}
                 <span className="text-xs font-medium max-w-[120px] truncate">
                   {user?.name?.firstName && user?.name?.lastName
                     ? `${user.name.firstName} ${user.name.lastName}`
@@ -195,18 +215,6 @@ export function Header() {
                 <User className="w-5 h-5" />
               </button>
             )}
-            <button
-              type="button"
-              onClick={() => setCartOpen(true)}
-              className="relative p-2 rounded-lg text-[var(--text-muted)] hover:text-[var(--gold-primary)] hover:bg-[var(--surface-elevated)] transition-all duration-200"
-            >
-              <ShoppingCart className="w-5 h-5" />
-              {cartCount > 0 && (
-                <span className="absolute -top-1 -right-1 min-w-[20px] h-5 flex items-center justify-center bg-[var(--gold-primary)] text-[var(--text-dark)] text-xs font-bold px-1.5 rounded-full">
-                  {cartCount}
-                </span>
-              )}
-            </button>
           </div>
 
           {/* Mobile Menu Button */}
