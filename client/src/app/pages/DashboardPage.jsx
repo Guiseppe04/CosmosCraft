@@ -1,9 +1,29 @@
 import { useState, useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router'
-import { motion } from 'motion/react'
-import { User, CreditCard, MapPin, Lock, Settings, Bell, Package, Calendar, ChevronRight, Upload, Save, Wallet, ShoppingBag, Trash2, Minus, Plus, MessageSquare, Send, Guitar } from 'lucide-react'
+import { motion, AnimatePresence } from 'motion/react'
+import { User, CreditCard, MapPin, Lock, Settings, Bell, Package, Calendar, ChevronRight, Upload, Save, Wallet, ShoppingBag, ShoppingCart, Trash2, Minus, Plus, MessageSquare, Send, Guitar, Clock, Truck, CheckCircle, XCircle } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useCart } from '../context/CartContext.jsx'
+import { BASE_PRICE, BODY_OPTIONS, BODY_WOOD_OPTIONS, BODY_FINISH_OPTIONS, NECK_OPTIONS, FRETBOARD_OPTIONS, HEADSTOCK_OPTIONS, HEADSTOCK_WOOD_OPTIONS, INLAY_OPTIONS, BRIDGE_OPTIONS, PICKGUARD_OPTIONS_BY_BODY, KNOB_OPTIONS_BY_BODY, HARDWARE_OPTIONS, PICKUP_OPTIONS } from '../lib/guitarBuilderData.js'
+
+const getOldConfigData = (key, val, bodyType) => {
+    let price;
+    let label = val;
+    if (key === 'body') { price = BODY_OPTIONS[val]?.price; label = BODY_OPTIONS[val]?.label; }
+    else if (key === 'bodyWood') { price = BODY_WOOD_OPTIONS[val]?.price; label = BODY_WOOD_OPTIONS[val]?.label; }
+    else if (key === 'bodyFinish') { price = BODY_FINISH_OPTIONS[val]?.price; label = BODY_FINISH_OPTIONS[val]?.label; }
+    else if (key === 'neck') { price = NECK_OPTIONS[val]?.price; label = NECK_OPTIONS[val]?.label; }
+    else if (key === 'fretboard') { price = FRETBOARD_OPTIONS[val]?.price; label = FRETBOARD_OPTIONS[val]?.label; }
+    else if (key === 'headstock') { price = HEADSTOCK_OPTIONS[val]?.price; label = HEADSTOCK_OPTIONS[val]?.label; }
+    else if (key === 'headstockWood') { price = HEADSTOCK_WOOD_OPTIONS[val]?.price; label = HEADSTOCK_WOOD_OPTIONS[val]?.label; }
+    else if (key === 'inlays') { price = INLAY_OPTIONS[val]?.price; label = INLAY_OPTIONS[val]?.label; }
+    else if (key === 'bridge') { price = BRIDGE_OPTIONS[val]?.price; label = BRIDGE_OPTIONS[val]?.label; }
+    else if (key === 'pickguard') { price = PICKGUARD_OPTIONS_BY_BODY[bodyType]?.[val]?.price; label = PICKGUARD_OPTIONS_BY_BODY[bodyType]?.[val]?.label; }
+    else if (key === 'knobs') { price = KNOB_OPTIONS_BY_BODY[bodyType]?.[val]?.price; label = KNOB_OPTIONS_BY_BODY[bodyType]?.[val]?.label; }
+    else if (key === 'hardware') { price = HARDWARE_OPTIONS[val]?.price; label = HARDWARE_OPTIONS[val]?.label; }
+    else if (key === 'pickups') { price = PICKUP_OPTIONS[val]?.price; label = PICKUP_OPTIONS[val]?.label; }
+    return { price, label: label || val };
+}
 
 function NotificationRow({ setting }) {
   const [enabled, setEnabled] = useState(setting.defaultOn)
@@ -40,95 +60,68 @@ export function DashboardPage() {
   const initialSection = location.state?.section || 'profile'
   const [activeSection, setActiveSection] = useState(initialSection)
   const [profileImage, setProfileImage] = useState('https://i.pravatar.cc/150?img=68')
-  const [newMessage, setNewMessage] = useState('')
-  const [selectedConversation, setSelectedConversation] = useState(1)
-  const [messages, setMessages] = useState([
-    {
-      id: 1,
-      sender: 'CosmosCraft Support',
-      avatar: 'CC',
-      content: 'Welcome to CosmosCraft! Your custom guitar order has been received and our luthiers are preparing to begin work.',
-      timestamp: '2 hours ago',
-      unread: true,
-    },
-    {
-      id: 2,
-      sender: 'John Martinez',
-      avatar: 'JM',
-      content: 'Hi! Just wanted to check on the progress of my guitar. Is everything on schedule?',
-      timestamp: '1 day ago',
-      unread: false,
-    },
-    {
-      id: 3,
-      sender: 'CosmosCraft Team',
-      avatar: 'CT',
-      content: 'Your guitar has passed the quality check! We will begin the finishing process tomorrow.',
-      timestamp: '3 days ago',
-      unread: false,
-    },
-  ])
+  const [showSelectInstrumentModal, setShowSelectInstrumentModal] = useState(false)
+  const [viewingBuild, setViewingBuild] = useState(null)
+  const [toastMessage, setToastMessage] = useState(location.state?.message || null)
+  const [refreshCounter, setRefreshCounter] = useState(0)
+  const [buildToDelete, setBuildToDelete] = useState(null)
 
-  // Guitar Build Options State
-  const [guitarBuild, setGuitarBuild] = useState({
-    bodyStyle: 'strat',
-    woodType: 'mahogany',
-    neckWood: 'maple',
-    fretboard: 'rosewood',
-    pickups: 'humbucker',
-    bridge: 'fixed',
-    finish: 'gloss',
-    tuners: 'locking',
-    price: 8500,
-  })
+  const confirmDelete = () => {
+    if (!buildToDelete) return;
+    for (const storageKey of ['cosmoscraft_saved_builds', 'cosmoscraft_saved_bass_builds']) {
+      const builds = JSON.parse(window.localStorage.getItem(storageKey) || '[]');
+      const filtered = builds.filter(b => b.id !== buildToDelete);
+      if (builds.length !== filtered.length) {
+        window.localStorage.setItem(storageKey, JSON.stringify(filtered));
+        if (window.localStorage.getItem('cosmoscraft_target_build_id') === buildToDelete) {
+          window.localStorage.removeItem('cosmoscraft_target_build_id');
+        }
+        setRefreshCounter(prev => prev + 1);
+        setToastMessage('Build deleted successfully');
+        break;
+      }
+    }
+    setBuildToDelete(null);
+  };
 
-  const guitarBuildOptions = {
-    bodyStyle: [
-      { id: 'strat', name: 'Stratocaster', price: 0, image: 'https://images.unsplash.com/photo-1564186763535-ebb21ef5277f?w=200&q=80' },
-      { id: 'tele', name: 'Telecaster', price: 0, image: 'https://images.unsplash.com/photo-1510915361894-db8b60106cb1?w=200&q=80' },
-      { id: 'lespaul', name: 'Les Paul', price: 500, image: 'https://images.unsplash.com/photo-1550985616-10810253b84d?w=200&q=80' },
-      { id: 'supernova', name: 'Supernova', price: 800, image: 'https://images.unsplash.com/photo-1525201548942-d8732f6617a0?w=200&q=80' },
-    ],
-    woodType: [
-      { id: 'mahogany', name: 'Mahogany', price: 0 },
-      { id: 'alder', name: 'Alder', price: 200 },
-      { id: 'ash', name: 'Swamp Ash', price: 350 },
-      { id: 'korina', name: 'Korina', price: 600 },
-    ],
-    neckWood: [
-      { id: 'maple', name: 'Maple', price: 0 },
-      { id: 'rosewood', name: 'Rosewood', price: 150 },
-      { id: 'ebony', name: 'Ebony', price: 300 },
-    ],
-    fretboard: [
-      { id: 'rosewood', name: 'Rosewood', price: 0 },
-      { id: 'maple', name: 'Maple', price: 0 },
-      { id: 'ebony', name: 'Ebony', price: 100 },
-    ],
-    pickups: [
-      { id: 'single', name: 'Single Coil', price: 0 },
-      { id: 'humbucker', name: 'Humbucker', price: 200 },
-      { id: 'p90', name: 'P90', price: 150 },
-      { id: 'active', name: 'Active Electronics', price: 400 },
-    ],
-    bridge: [
-      { id: 'fixed', name: 'Fixed Bridge', price: 0 },
-      { id: 'tune-o-matic', name: 'Tune-O-Matic', price: 150 },
-      { id: 'tremolo', name: 'Tremolo', price: 250 },
-      { id: 'floyd', name: 'Floyd Rose', price: 450 },
-    ],
-    finish: [
-      { id: 'gloss', name: 'Gloss', price: 0 },
-      { id: 'satin', name: 'Satin', price: 100 },
-      { id: 'matte', name: 'Matte', price: 150 },
-      { id: 'burst', name: 'Sunburst', price: 200 },
-    ],
-    tuners: [
-      { id: 'standard', name: 'Standard', price: 0 },
-      { id: 'locking', name: 'Locking', price: 200 },
-      { id: 'gotoh', name: 'Gotoh', price: 350 },
-    ],
+  useEffect(() => {
+    if (toastMessage) {
+      const timer = setTimeout(() => setToastMessage(null), 3000)
+      return () => clearTimeout(timer)
+    }
+  }, [toastMessage])
+
+  useEffect(() => {
+    if (location.state?.message) {
+      navigate(location.pathname, { replace: true, state: { ...location.state, message: undefined } })
+    }
+  }, [location, navigate])
+
+  const updateAdditionalPartQuantity = (buildId, partIndex, newQuantity) => {
+    const updatedBuild = { ...viewingBuild };
+    const partsArray = [...updatedBuild.additionalParts];
+    
+    if (newQuantity <= 0) {
+      partsArray.splice(partIndex, 1);
+    } else {
+      partsArray[partIndex] = { ...partsArray[partIndex], quantity: newQuantity };
+    }
+    updatedBuild.additionalParts = partsArray;
+    
+    setViewingBuild(updatedBuild);
+    
+    for (const key of ['cosmoscraft_saved_builds', 'cosmoscraft_saved_bass_builds']) {
+      const builds = JSON.parse(window.localStorage.getItem(key) || '[]');
+      const bIndex = builds.findIndex(b => b.id === buildId);
+      if (bIndex !== -1) {
+        builds[bIndex] = updatedBuild;
+        window.localStorage.setItem(key, JSON.stringify(builds));
+        setRefreshCounter(prev => prev + 1);
+        break;
+      }
+    }
   }
+
   const [profileData, setProfileData] = useState({
     username: '',
     name: '',
@@ -181,7 +174,6 @@ export function DashboardPage() {
     { id: 'privacy', label: 'Privacy Settings', icon: Settings, group: 'account' },
     { id: 'notifications', label: 'Notification Settings', icon: Bell, group: 'account' },
     { id: 'my-guitar', label: 'My Guitar', icon: Guitar, group: 'orders' },
-    { id: 'messages', label: 'Messages', icon: MessageSquare, group: 'orders' },
     { id: 'appointments', label: 'My Appointments', icon: Calendar, group: 'orders' },
     { id: 'cart', label: 'My Cart', icon: ShoppingBag, group: 'orders' },
     { id: 'purchases', label: 'My Purchase', icon: Package, group: 'orders' },
@@ -272,437 +264,116 @@ export function DashboardPage() {
   )
 
   const renderMyGuitarContent = () => {
-    const updateBuildOption = (option, value) => {
-      setGuitarBuild(prev => ({ ...prev, [option]: value }))
-    }
+    const savedGuitarBuilds = JSON.parse(window.localStorage.getItem('cosmoscraft_saved_builds') || '[]').map(b => ({...b, isBass: false}))
+    const savedBassBuilds = JSON.parse(window.localStorage.getItem('cosmoscraft_saved_bass_builds') || '[]').map(b => ({...b, isBass: true}))
+    const allBuilds = [...savedGuitarBuilds, ...savedBassBuilds].sort((a, b) => new Date(b.savedAt || 0) - new Date(a.savedAt || 0))
 
-    const selectedBodyStyle = guitarBuildOptions.bodyStyle.find(b => b.id === guitarBuild.bodyStyle)
-    const totalPrice = guitarBuild.price + 
-      (guitarBuildOptions.woodType.find(w => w.id === guitarBuild.woodType)?.price || 0) +
-      (guitarBuildOptions.neckWood.find(w => w.id === guitarBuild.neckWood)?.price || 0) +
-      (guitarBuildOptions.fretboard.find(w => w.id === guitarBuild.fretboard)?.price || 0) +
-      (guitarBuildOptions.pickups.find(w => w.id === guitarBuild.pickups)?.price || 0) +
-      (guitarBuildOptions.bridge.find(w => w.id === guitarBuild.bridge)?.price || 0) +
-      (guitarBuildOptions.finish.find(w => w.id === guitarBuild.finish)?.price || 0) +
-      (guitarBuildOptions.tuners.find(w => w.id === guitarBuild.tuners)?.price || 0)
+    const deleteBuild = (buildId) => {
+      setBuildToDelete(buildId);
+    };
 
     return (
       <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-8">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h2 className="text-2xl font-bold text-white mb-1">Build Your Guitar</h2>
-            <p className="text-sm text-[var(--text-muted)]">Customize your dream guitar from scratch</p>
+            <h2 className="text-2xl font-bold text-white mb-1">My Saved Builds</h2>
+            <p className="text-sm text-[var(--text-muted)]">Manage your custom guitar and bass designs</p>
           </div>
-          <div className="text-right">
-            <p className="text-sm text-[var(--text-muted)]">Estimated Price</p>
-            <p className="text-2xl font-bold text-[var(--gold-primary)]">${totalPrice.toLocaleString()}</p>
-          </div>
-        </div>
-
-        <div className="grid lg:grid-cols-2 gap-8">
-          {/* Guitar Preview */}
-          <div>
-            <div className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl overflow-hidden mb-6">
-              <div className="aspect-square overflow-hidden">
-                <img
-                  src={selectedBodyStyle?.image || 'https://images.unsplash.com/photo-1564186763535-ebb21ef5277f?w=800&q=80'}
-                  alt="Guitar Preview"
-                  className="w-full h-full object-cover"
-                />
-              </div>
-              <div className="p-4">
-                <h3 className="font-semibold text-white mb-2">
-                  {selectedBodyStyle?.name || 'Custom Guitar'} Style
-                </h3>
-                <p className="text-sm text-[var(--text-muted)]">
-                  {guitarBuildOptions.woodType.find(w => w.id === guitarBuild.woodType)?.name} Body •{' '}
-                  {guitarBuildOptions.neckWood.find(w => w.id === guitarBuild.neckWood)?.name} Neck
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Build Options */}
-          <div className="space-y-6 max-h-[600px] overflow-y-auto pr-2">
-            {/* Body Style */}
-            <div>
-              <h4 className="text-sm font-semibold text-white mb-3">Body Style</h4>
-              <div className="grid grid-cols-2 gap-2">
-                {guitarBuildOptions.bodyStyle.map((style) => (
-                  <button
-                    key={style.id}
-                    type="button"
-                    onClick={() => updateBuildOption('bodyStyle', style.id)}
-                    className={`p-3 rounded-lg border text-left transition-all ${
-                      guitarBuild.bodyStyle === style.id
-                        ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)] text-black font-medium shadow-[0_0_12px_rgba(184,134,11,0.3)]'
-                        : 'border-[var(--border)] bg-[var(--surface-dark)] hover:border-[var(--gold-primary)]/50 text-[var(--text-muted)] hover:text-white'
-                    }`}
-                  >
-                    <p className="text-sm font-medium">{style.name}</p>
-                    {style.price > 0 && (
-                      <p className={`text-xs ${guitarBuild.bodyStyle === style.id ? 'text-black/70' : 'text-[var(--gold-primary)]'}`}>
-                        +${style.price}
-                      </p>
-                    )}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Wood Type */}
-            <div>
-              <h4 className="text-sm font-semibold text-white mb-3">Body Wood</h4>
-              <div className="flex flex-wrap gap-2">
-                {guitarBuildOptions.woodType.map((wood) => (
-                  <button
-                    key={wood.id}
-                    type="button"
-                    onClick={() => updateBuildOption('woodType', wood.id)}
-                    className={`px-4 py-2 rounded-lg border text-sm transition-all ${
-                      guitarBuild.woodType === wood.id
-                        ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)] text-black font-medium shadow-[0_0_10px_rgba(184,134,11,0.25)]'
-                        : 'border-[var(--border)] bg-[var(--surface-dark)] text-[var(--text-muted)] hover:border-[var(--gold-primary)]/50 hover:text-white'
-                    }`}
-                  >
-                    {wood.name}
-                    {wood.price > 0 && (
-                      <span className={`ml-1 ${guitarBuild.woodType === wood.id ? 'text-black/70' : 'text-[var(--gold-primary)]'}`}>
-                        +${wood.price}
-                      </span>
-                    )}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Neck Wood */}
-            <div>
-              <h4 className="text-sm font-semibold text-white mb-3">Neck Wood</h4>
-              <div className="flex flex-wrap gap-2">
-                {guitarBuildOptions.neckWood.map((wood) => (
-                  <button
-                    key={wood.id}
-                    type="button"
-                    onClick={() => updateBuildOption('neckWood', wood.id)}
-                    className={`px-4 py-2 rounded-lg border text-sm transition-all ${
-                      guitarBuild.neckWood === wood.id
-                        ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)] text-black font-medium shadow-[0_0_10px_rgba(184,134,11,0.25)]'
-                        : 'border-[var(--border)] bg-[var(--surface-dark)] text-[var(--text-muted)] hover:border-[var(--gold-primary)]/50 hover:text-white'
-                    }`}
-                  >
-                    {wood.name}
-                    {wood.price > 0 && (
-                      <span className={`ml-1 ${guitarBuild.neckWood === wood.id ? 'text-black/70' : 'text-[var(--gold-primary)]'}`}>
-                        +${wood.price}
-                      </span>
-                    )}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Fretboard */}
-            <div>
-              <h4 className="text-sm font-semibold text-white mb-3">Fretboard</h4>
-              <div className="flex flex-wrap gap-2">
-                {guitarBuildOptions.fretboard.map((fret) => (
-                  <button
-                    key={fret.id}
-                    type="button"
-                    onClick={() => updateBuildOption('fretboard', fret.id)}
-                    className={`px-4 py-2 rounded-lg border text-sm transition-all ${
-                      guitarBuild.fretboard === fret.id
-                        ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)] text-black font-medium shadow-[0_0_10px_rgba(184,134,11,0.25)]'
-                        : 'border-[var(--border)] bg-[var(--surface-dark)] text-[var(--text-muted)] hover:border-[var(--gold-primary)]/50 hover:text-white'
-                    }`}
-                  >
-                    {fret.name}
-                    {fret.price > 0 && (
-                      <span className={`ml-1 ${guitarBuild.fretboard === fret.id ? 'text-black/70' : 'text-[var(--gold-primary)]'}`}>
-                        +${fret.price}
-                      </span>
-                    )}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Pickups */}
-            <div>
-              <h4 className="text-sm font-semibold text-white mb-3">Pickups</h4>
-              <div className="flex flex-wrap gap-2">
-                {guitarBuildOptions.pickups.map((pickup) => (
-                  <button
-                    key={pickup.id}
-                    type="button"
-                    onClick={() => updateBuildOption('pickups', pickup.id)}
-                    className={`px-4 py-2 rounded-lg border text-sm transition-all ${
-                      guitarBuild.pickups === pickup.id
-                        ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)] text-black font-medium shadow-[0_0_10px_rgba(184,134,11,0.25)]'
-                        : 'border-[var(--border)] bg-[var(--surface-dark)] text-[var(--text-muted)] hover:border-[var(--gold-primary)]/50 hover:text-white'
-                    }`}
-                  >
-                    {pickup.name}
-                    {pickup.price > 0 && (
-                      <span className={`ml-1 ${guitarBuild.pickups === pickup.id ? 'text-black/70' : 'text-[var(--gold-primary)]'}`}>
-                        +${pickup.price}
-                      </span>
-                    )}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Bridge */}
-            <div>
-              <h4 className="text-sm font-semibold text-white mb-3">Bridge</h4>
-              <div className="flex flex-wrap gap-2">
-                {guitarBuildOptions.bridge.map((bridge) => (
-                  <button
-                    key={bridge.id}
-                    type="button"
-                    onClick={() => updateBuildOption('bridge', bridge.id)}
-                    className={`px-4 py-2 rounded-lg border text-sm transition-all ${
-                      guitarBuild.bridge === bridge.id
-                        ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)] text-black font-medium shadow-[0_0_10px_rgba(184,134,11,0.25)]'
-                        : 'border-[var(--border)] bg-[var(--surface-dark)] text-[var(--text-muted)] hover:border-[var(--gold-primary)]/50 hover:text-white'
-                    }`}
-                  >
-                    {bridge.name}
-                    {bridge.price > 0 && (
-                      <span className={`ml-1 ${guitarBuild.bridge === bridge.id ? 'text-black/70' : 'text-[var(--gold-primary)]'}`}>
-                        +${bridge.price}
-                      </span>
-                    )}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Finish */}
-            <div>
-              <h4 className="text-sm font-semibold text-white mb-3">Finish</h4>
-              <div className="flex flex-wrap gap-2">
-                {guitarBuildOptions.finish.map((finish) => (
-                  <button
-                    key={finish.id}
-                    type="button"
-                    onClick={() => updateBuildOption('finish', finish.id)}
-                    className={`px-4 py-2 rounded-lg border text-sm transition-all ${
-                      guitarBuild.finish === finish.id
-                        ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)] text-black font-medium shadow-[0_0_10px_rgba(184,134,11,0.25)]'
-                        : 'border-[var(--border)] bg-[var(--surface-dark)] text-[var(--text-muted)] hover:border-[var(--gold-primary)]/50 hover:text-white'
-                    }`}
-                  >
-                    {finish.name}
-                    {finish.price > 0 && (
-                      <span className={`ml-1 ${guitarBuild.finish === finish.id ? 'text-black/70' : 'text-[var(--gold-primary)]'}`}>
-                        +${finish.price}
-                      </span>
-                    )}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Tuners */}
-            <div>
-              <h4 className="text-sm font-semibold text-white mb-3">Tuners</h4>
-              <div className="flex flex-wrap gap-2">
-                {guitarBuildOptions.tuners.map((tuner) => (
-                  <button
-                    key={tuner.id}
-                    type="button"
-                    onClick={() => updateBuildOption('tuners', tuner.id)}
-                    className={`px-4 py-2 rounded-lg border text-sm transition-all ${
-                      guitarBuild.tuners === tuner.id
-                        ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)] text-black font-medium shadow-[0_0_10px_rgba(184,134,11,0.25)]'
-                        : 'border-[var(--border)] bg-[var(--surface-dark)] text-[var(--text-muted)] hover:border-[var(--gold-primary)]/50 hover:text-white'
-                    }`}
-                  >
-                    {tuner.name}
-                    {tuner.price > 0 && (
-                      <span className={`ml-1 ${guitarBuild.tuners === tuner.id ? 'text-black/70' : 'text-[var(--gold-primary)]'}`}>
-                        +${tuner.price}
-                      </span>
-                    )}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Action Buttons */}
-            <div className="flex gap-3 pt-4 border-t border-[var(--border)]">
-              <button
-                type="button"
-                onClick={() => navigate('/customize')}
-                className="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-semibold hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all"
-              >
-                Customize Guitar
-              </button>
-              <button
-                type="button"
-                onClick={() => navigate('/appointments')}
-                className="flex-1 py-3 px-4 rounded-xl border border-[var(--gold-primary)] text-[var(--gold-primary)] font-semibold hover:bg-[var(--gold-primary)]/10 transition-all"
-              >
-                Book Consultation
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  addToCart({
-                    id: 'custom-guitar-' + Date.now(),
-                    name: 'Custom Guitar - ' + selectedBodyStyle?.name,
-                    price: totalPrice,
-                    image: selectedBodyStyle?.image || 'https://images.unsplash.com/photo-1564186763535-ebb21ef5277f?w=800&q=80',
-                    category: 'Custom Build',
-                    type: 'custom',
-                    specs: guitarBuild,
-                  })
-                  setActiveSection('cart')
-                }}
-                className="flex-1 py-3 px-4 rounded-xl border border-[var(--gold-primary)] text-[var(--gold-primary)] font-semibold hover:bg-[var(--gold-primary)]/10 transition-all"
-              >
-                Add to Cart
-              </button>
-            </div>
+          <div className="flex gap-3">
+            <button
+              onClick={() => setShowSelectInstrumentModal(true)}
+              className="px-4 py-2 rounded-lg bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-semibold text-sm hover:shadow-[0_0_15px_rgba(212,175,55,0.4)] transition-all flex items-center gap-2"
+            >
+              <Guitar className="w-4 h-4" />
+              Create New
+            </button>
           </div>
         </div>
-      </div>
-    )
-  }
 
-  const renderMessagesContent = () => {
-    const handleSendMessage = () => {
-      if (newMessage.trim()) {
-        const message = {
-          id: Date.now(),
-          conversationId: selectedConversation,
-          sender: 'You',
-          avatar: 'ME',
-          content: newMessage,
-          timestamp: 'Just now',
-          unread: false,
-          isUser: true,
-        }
-        setMessages(prev => [...prev, message])
-        setNewMessage('')
-      }
-    }
-
-    const currentConversation = messages.find(m => m.id === selectedConversation)
-    const conversationMessages = messages.filter(m => m.conversationId === selectedConversation || m.id === selectedConversation)
-
-    return (
-      <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-8">
-        <h2 className="text-2xl font-bold text-white mb-1">Messages</h2>
-        <p className="text-sm text-[var(--text-muted)] mb-6">Communicate with our team and staff</p>
-
-        <div className="grid lg:grid-cols-3 gap-6 h-[600px]">
-          {/* Conversations List */}
-          <div className="lg:col-span-1 bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl overflow-hidden flex flex-col">
-            <div className="p-4 border-b border-[var(--border)]">
-              <input
-                type="text"
-                placeholder="Search messages..."
-                className="w-full px-4 py-2 bg-[var(--surface-dark)] border border-[var(--border)] rounded-lg text-white text-sm placeholder-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
-              />
+        {allBuilds.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-10">
+            <div className="w-16 h-16 rounded-full border-2 border-[var(--border)] flex items-center justify-center mb-6">
+              <Guitar className="w-8 h-8 text-[var(--text-muted)]" />
             </div>
-            <div className="flex-1 overflow-y-auto">
-              {messages.filter((m, i, arr) => arr.findIndex(x => x.sender === m.sender) === i).map((message) => (
-                <button
-                  key={message.id}
-                  type="button"
-                  onClick={() => setSelectedConversation(message.id)}
-                  className={`w-full p-4 flex items-start gap-3 hover:bg-white/5 transition-colors text-left border-b border-[var(--border)] ${
-                    selectedConversation === message.id ? 'bg-[var(--gold-primary)]/10 border-l-2 border-[var(--gold-primary)]' : ''
-                  }`}
-                >
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[var(--gold-primary)] to-[var(--gold-secondary)] flex items-center justify-center text-[var(--text-dark)] font-bold text-sm flex-shrink-0">
-                    {message.avatar}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-2 mb-1">
-                      <span className={`font-medium truncate ${message.unread ? 'text-white' : 'text-[var(--text-muted)]'}`}>
-                        {message.sender}
-                      </span>
-                      <span className="text-xs text-[var(--text-muted)] flex-shrink-0">{message.timestamp}</span>
-                    </div>
-                    <p className={`text-sm truncate ${message.unread ? 'text-white' : 'text-[var(--text-muted)]'}`}>
-                      {message.content}
-                    </p>
-                  </div>
-                </button>
-              ))}
-            </div>
+            <p className="text-white font-medium mb-1">No saved builds yet</p>
+            <p className="text-sm text-[var(--text-muted)] mb-6">Start customizing your dream instrument</p>
           </div>
+        ) : (
+          <div className="grid md:grid-cols-2 gap-6">
+            {allBuilds.map((build) => {
+              const additionalPartsTotal = (build.additionalParts || []).reduce((sum, p) => sum + (p.price * p.quantity), 0);
+              const grandTotal = build.price + additionalPartsTotal;
 
-          {/* Chat Area */}
-          <div className="lg:col-span-2 bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl overflow-hidden flex flex-col">
-            {/* Chat Header */}
-            <div className="p-4 border-b border-[var(--border)] flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[var(--gold-primary)] to-[var(--gold-secondary)] flex items-center justify-center text-[var(--text-dark)] font-bold text-sm">
-                {currentConversation?.avatar || 'CC'}
-              </div>
-              <div>
-                <h4 className="font-semibold text-white">{currentConversation?.sender || 'CosmosCraft Support'}</h4>
-                <p className="text-xs text-green-400">Online</p>
-              </div>
-            </div>
-
-            {/* Messages */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              {conversationMessages.length > 0 ? (
-                conversationMessages.map((message) => (
-                  <div
-                    key={message.id}
-                    className={`flex gap-3 ${message.isUser ? 'flex-row-reverse' : ''}`}
-                  >
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[var(--text-dark)] font-bold text-xs flex-shrink-0 ${message.isUser ? 'bg-[var(--gold-primary)]' : 'bg-[var(--surface-dark)] border border-[var(--border)]'}`}>
-                      {message.avatar}
-                    </div>
-                    <div className={`max-w-[70%] ${message.isUser ? 'text-right' : ''}`}>
-                      <div className={`inline-block px-4 py-3 rounded-2xl ${
-                        message.isUser
-                          ? 'bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] rounded-br-md'
-                          : 'bg-[var(--surface-dark)] border border-[var(--border)] text-white rounded-bl-md'
-                      }`}>
-                        <p className="text-sm">{message.content}</p>
-                      </div>
-                      <p className="text-xs text-[var(--text-muted)] mt-1">{message.timestamp}</p>
-                    </div>
+              return (
+              <div key={build.id} className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl p-5 hover:border-[var(--gold-primary)]/40 transition-colors flex flex-col h-full">
+                <div className="flex justify-between items-start mb-4">
+                  <div>
+                    <h3 className="text-lg font-bold text-white">{build.name || 'Custom Build'}</h3>
+                    <p className="text-xs text-[var(--text-muted)] mt-1">Saved on {new Date(build.savedAt || new Date()).toLocaleDateString()}</p>
                   </div>
-                ))
-              ) : (
-                <div className="flex items-center justify-center h-full">
-                  <p className="text-[var(--text-muted)]">Select a conversation to view messages</p>
+                  <div className="text-right">
+                    <span className="text-lg font-bold text-[var(--gold-primary)] block">₱{grandTotal.toLocaleString('en-PH')}</span>
+                    {additionalPartsTotal > 0 && <span className="text-xs text-[var(--text-muted)]">Includes Add-ons</span>}
+                  </div>
                 </div>
-              )}
-            </div>
+                
+                <div className="grid grid-cols-2 gap-2 mt-4 text-sm flex-1">
+                   {Object.entries(build.config || {}).map(([key, val]) => (
+                     val && typeof val === 'string' ? (
+                       <div key={key} className="flex items-center gap-1">
+                         <span className="text-xs text-[var(--text-muted)] capitalize truncate max-w-[80px]">{key}:</span>
+                         <span className="text-xs text-white truncate max-w-[100px]">{val}</span>
+                       </div>
+                     ) : null
+                   )).slice(0, 6)}
+                </div>
 
-            {/* Message Input */}
-            <div className="p-4 border-t border-[var(--border)]">
-              <div className="flex gap-3">
-                <input
-                  type="text"
-                  value={newMessage}
-                  onChange={(e) => setNewMessage(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-                  placeholder="Type your message..."
-                  className="flex-1 px-4 py-3 bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl text-white text-sm placeholder-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
-                />
-                <button
-                  type="button"
-                  onClick={handleSendMessage}
-                  className="px-4 py-3 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] rounded-xl text-[var(--text-dark)] hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all"
-                >
-                  <Send className="w-5 h-5" />
-                </button>
+                <div className="mt-6 space-y-2">
+                   <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          window.localStorage.setItem('cosmoscraft_target_build_id', build.id);
+                          navigate('/shop');
+                        }}
+                        className="flex-1 py-1.5 px-2 rounded-lg border border-[var(--border)] text-[var(--text-light)] text-xs hover:bg-white/5 transition-all text-center font-medium"
+                      >
+                        Add Parts
+                      </button>
+                      <button
+                        onClick={() => setViewingBuild(build)}
+                        className="flex-1 py-1.5 px-2 rounded-lg border border-[var(--border)] text-[var(--text-light)] text-xs hover:bg-white/5 transition-all text-center font-medium"
+                      >
+                        View Summary
+                      </button>
+                   </div>
+                   <div className="flex gap-2">
+                      <button
+                        onClick={() => navigate(build.isBass ? `/customize-bass?edit=${build.id}` : `/customize?edit=${build.id}`)}
+                        className="flex-1 py-1.5 px-2 rounded-lg border border-blue-500/30 text-blue-400 text-xs hover:bg-blue-500/10 transition-all text-center font-medium"
+                      >
+                        Edit Build
+                      </button>
+                      <button
+                        onClick={() => deleteBuild(build.id)}
+                        className="flex-[0.5] py-1.5 px-2 rounded-lg border border-red-500/30 text-red-400 text-xs hover:bg-red-500/10 transition-all flex items-center justify-center font-medium"
+                      >
+                        Delete
+                      </button>
+                   </div>
+                  <button
+                    onClick={() => {
+                        navigate('/checkout', { state: { checkoutItem: build, isCustomBuild: true } });
+                    }}
+                    className="w-full mt-2 py-2.5 px-3 rounded-lg bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-bold text-sm shadow-[0_0_10px_rgba(212,175,55,0.3)] hover:shadow-[0_0_15px_rgba(212,175,55,0.5)] transition-all flex items-center justify-center gap-2"
+                  >
+                    <ShoppingCart className="w-4 h-4" />
+                    Order This Build
+                  </button>
+                </div>
               </div>
-            </div>
+            )})}
           </div>
-        </div>
+        )}
       </div>
     )
   }
@@ -977,6 +648,19 @@ export function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-[var(--bg-primary)] pt-24 pb-12">
+      <AnimatePresence>
+        {toastMessage && (
+          <motion.div
+            initial={{ opacity: 0, y: -20, x: '-50%' }}
+            animate={{ opacity: 1, y: 0, x: '-50%' }}
+            exit={{ opacity: 0, y: -20, x: '-50%' }}
+            className="fixed top-24 left-1/2 z-[100] bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] px-6 py-3 rounded-xl font-bold shadow-[0_0_20px_rgba(212,175,55,0.4)] flex items-center gap-2"
+          >
+            <CheckCircle className="w-5 h-5" />
+            {toastMessage}
+          </motion.div>
+        )}
+      </AnimatePresence>
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
         <div className="grid md:grid-cols-[260px_minmax(0,1fr)] gap-0">
           {/* Sidebar */}
@@ -1086,7 +770,6 @@ export function DashboardPage() {
             {activeSection === 'profile' && renderProfileContent()}
             {activeSection === 'payment-methods' && renderPaymentMethodsContent()}
             {activeSection === 'my-guitar' && renderMyGuitarContent()}
-            {activeSection === 'messages' && renderMessagesContent()}
             {activeSection === 'appointments' && renderAppointmentsContent()}
             {activeSection === 'cart' && renderCartContent()}
             {activeSection === 'purchases' && renderPurchasesContent()}
@@ -1180,6 +863,166 @@ export function DashboardPage() {
           </motion.main>
         </div>
       </div>
+
+      {/* Select Instrument Modal */}
+      {showSelectInstrumentModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
+          <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6 w-full max-w-md relative">
+            <h2 className="text-xl font-bold text-white mb-2">Select Instrument</h2>
+            <p className="text-sm text-[var(--text-muted)] mb-6">Choose an instrument to start your custom build.</p>
+            <div className="flex flex-col gap-3">
+              <button type="button" onClick={() => navigate('/customize')} className="w-full p-4 rounded-xl border border-[var(--border)] hover:border-[var(--gold-primary)] hover:bg-[var(--gold-primary)]/10 text-left transition-colors">
+                <span className="block font-bold text-white mb-1">Custom Guitar</span>
+                <span className="block text-xs text-[var(--text-muted)]">Design your own electric or acoustic guitar</span>
+              </button>
+              <button type="button" onClick={() => navigate('/customize-bass')} className="w-full p-4 rounded-xl border border-[var(--border)] hover:border-[var(--gold-primary)] hover:bg-[var(--gold-primary)]/10 text-left transition-colors">
+                <span className="block font-bold text-white mb-1">Custom Bass</span>
+                <span className="block text-xs text-[var(--text-muted)]">Build your perfect bass configuration</span>
+              </button>
+            </div>
+            <button type="button" onClick={() => setShowSelectInstrumentModal(false)} className="mt-6 w-full py-3 rounded-xl border border-[var(--border)] text-white hover:bg-white/5 transition-colors font-medium">Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {buildToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
+          <div className="bg-[var(--surface-dark)] border border-red-500/30 rounded-2xl p-6 w-full max-w-sm relative shadow-[0_0_30px_rgba(239,68,68,0.15)]">
+            <h2 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
+              <Trash2 className="w-5 h-5 text-red-400" />
+              Delete Build
+            </h2>
+            <p className="text-sm text-[var(--text-muted)] mb-6">Are you sure you want to permanently delete this build? This action cannot be undone.</p>
+            <div className="flex gap-3">
+              <button 
+                type="button" 
+                onClick={() => setBuildToDelete(null)} 
+                className="flex-1 py-2.5 rounded-xl border border-[var(--border)] text-white hover:bg-white/5 transition-colors font-medium text-sm"
+              >
+                Cancel
+              </button>
+              <button 
+                type="button" 
+                onClick={confirmDelete}
+                className="flex-1 py-2.5 rounded-xl bg-red-500 text-white hover:bg-red-600 transition-colors font-bold text-sm shadow-[0_0_10px_rgba(239,68,68,0.3)]"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* View Summary Modal */}
+      {viewingBuild && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4 py-8">
+          <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6 w-full max-w-4xl max-h-full overflow-y-auto relative shadow-2xl">
+            <button type="button" onClick={() => setViewingBuild(null)} className="absolute top-4 right-4 text-[var(--text-muted)] hover:text-white transition-colors">
+              <XCircle className="w-6 h-6" />
+            </button>
+            <h2 className="text-2xl font-bold text-white mb-1">{viewingBuild.name || 'Custom Build'} Summary</h2>
+            <p className="text-sm text-[var(--text-muted)] mb-6">Saved on {new Date(viewingBuild.savedAt || new Date()).toLocaleDateString()}</p>
+            
+            <div className="bg-[var(--bg-primary)] rounded-xl p-5 border border-[var(--border)] mb-6">
+              <h3 className="text-lg font-bold text-white mb-4 border-b border-[var(--border)] pb-2 flex justify-between">
+                <span>Configuration Breakdown</span>
+                <span className="text-[var(--gold-primary)]">₱{(viewingBuild.price || 0).toLocaleString('en-PH')}</span>
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-4">
+                 {viewingBuild.pricingBreakdown ? Object.entries(viewingBuild.pricingBreakdown).map(([key, price]) => {
+                   const label = key === 'base' ? 'Base Model' : viewingBuild.summary?.[key] || viewingBuild.config?.[key];
+                   if (!label && price === 0) return null;
+                   return (
+                     <div key={key} className="flex justify-between items-center text-sm pb-2 border-b border-[var(--border)]">
+                       <div className="truncate pr-4">
+                           <span className="block text-xs text-[var(--text-muted)] capitalize mb-0.5">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
+                           <span className="block font-medium text-white truncate">{label}</span>
+                       </div>
+                       {price > 0 && (
+                         <span className="text-gray-300 shrink-0 font-mono text-right">₱{price.toLocaleString('en-PH')}</span>
+                       )}
+                     </div>
+                   )
+                 }) : (
+                   <>
+                     <div className="flex justify-between items-center text-sm pb-2 border-b border-[var(--border)]">
+                       <div className="truncate pr-4">
+                           <span className="block text-xs text-[var(--text-muted)] capitalize mb-0.5">Base Model</span>
+                           <span className="block font-medium text-white truncate">Standard Build</span>
+                       </div>
+                       <span className="text-gray-300 shrink-0 font-mono text-right">₱{BASE_PRICE.toLocaleString('en-PH')}</span>
+                     </div>
+                     {Object.entries(viewingBuild.config || {}).map(([key, val]) => {
+                       if (!val || typeof val !== 'string') return null;
+                       const { price, label } = getOldConfigData(key, val, viewingBuild.config?.body);
+                       return (
+                         <div key={key} className="flex justify-between items-center text-sm pb-2 border-b border-[var(--border)]">
+                           <div className="truncate pr-4">
+                               <span className="block text-xs text-[var(--text-muted)] capitalize mb-0.5">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
+                               <span className="block font-medium text-white truncate">{label}</span>
+                           </div>
+                           {price > 0 && (
+                             <span className="text-gray-300 shrink-0 font-mono text-right">₱{price.toLocaleString('en-PH')}</span>
+                           )}
+                         </div>
+                       )
+                     })}
+                   </>
+                 )}
+              </div>
+            </div>
+
+            {viewingBuild.additionalParts && viewingBuild.additionalParts.length > 0 && (
+              <div className="bg-[var(--bg-primary)] rounded-xl p-5 border border-[var(--border)] mb-6">
+                <h3 className="text-lg font-bold text-white mb-4 border-b border-[var(--border)] pb-2 flex justify-between">
+                  <span>Additional Parts</span>
+                  <span className="text-[var(--gold-primary)]">₱{viewingBuild.additionalParts.reduce((sum, p) => sum + (p.price * p.quantity), 0).toLocaleString('en-PH')}</span>
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3">
+                  {viewingBuild.additionalParts.map((part, idx) => (
+                    <div key={idx} className="flex flex-col sm:flex-row justify-between sm:items-center text-sm pb-3 border-b border-[var(--border)] gap-2">
+                      <div className="flex-1 truncate">
+                        <span className="text-white block font-medium truncate mb-1.5">{part.name}</span>
+                        <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-2 bg-[var(--surface-dark)] border border-[var(--border)] rounded-md px-1.5 py-0.5 w-fit">
+                            <button onClick={() => updateAdditionalPartQuantity(viewingBuild.id, idx, part.quantity - 1)} className="p-0.5 hover:bg-white/10 rounded cursor-pointer transition-colors"><Minus className="w-3.5 h-3.5 text-white" /></button>
+                            <span className="text-[var(--text-muted)] text-xs w-4 text-center">{part.quantity}</span>
+                            <button onClick={() => updateAdditionalPartQuantity(viewingBuild.id, idx, part.quantity + 1)} className="p-0.5 hover:bg-white/10 rounded cursor-pointer transition-colors"><Plus className="w-3.5 h-3.5 text-white" /></button>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center sm:block sm:text-right shrink-0">
+                        <span className="text-gray-300 font-mono text-sm">₱{(part.price * part.quantity).toLocaleString('en-PH')}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-between items-center border-t border-[var(--border)] pt-6 mt-4">
+               <span className="text-lg text-[var(--text-muted)]">Grand Total</span>
+               <span className="text-3xl font-bold text-[var(--gold-primary)]">
+                 ₱{(Number(viewingBuild.price) + (viewingBuild.additionalParts || []).reduce((sum, p) => sum + (p.price * p.quantity), 0)).toLocaleString('en-PH')}
+               </span>
+            </div>
+            
+            <button
+              type="button"
+              onClick={() => {
+                  setViewingBuild(null);
+                  navigate('/checkout', { state: { checkoutItem: viewingBuild, isCustomBuild: true } });
+              }}
+              className="w-full mt-8 py-4 px-4 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-bold text-lg shadow-[0_0_10px_rgba(212,175,55,0.3)] hover:shadow-[0_0_20px_rgba(212,175,55,0.5)] transition-all flex items-center justify-center gap-3"
+            >
+              <ShoppingCart className="w-6 h-6" />
+              Order This Build
+            </button>
+          </div>
+        </div>
+      )}
+
     </div>
   )
 }

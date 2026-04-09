@@ -348,6 +348,8 @@ CREATE TABLE order_items (
     order_id UUID NOT NULL,
     product_id UUID,
     customization_id UUID,
+    product_sku VARCHAR(50),
+    product_name VARCHAR(150),
     quantity INT NOT NULL CHECK (quantity > 0),
     unit_price NUMERIC(12, 2) NOT NULL CHECK (unit_price >= 0),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -355,7 +357,7 @@ CREATE TABLE order_items (
     FOREIGN KEY (order_id) REFERENCES orders(order_id) ON DELETE CASCADE,
     FOREIGN KEY (product_id) REFERENCES products(product_id) ON DELETE SET NULL,
     FOREIGN KEY (customization_id) REFERENCES customizations(customization_id) ON DELETE SET NULL,
-    CHECK ((product_id IS NOT NULL) OR (customization_id IS NOT NULL))
+    CHECK ((product_id IS NOT NULL) OR (customization_id IS NOT NULL) OR (product_sku IS NOT NULL))
 );
 
 CREATE INDEX idx_order_items_order_id ON order_items(order_id);

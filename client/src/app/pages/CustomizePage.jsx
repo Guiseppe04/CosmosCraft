@@ -1,8 +1,9 @@
 import { useMemo, useState, useRef, useEffect } from 'react'
-import { useSearchParams } from 'react-router'
+import { motion, AnimatePresence } from 'motion/react'
+import { useSearchParams, useNavigate } from 'react-router'
 import { 
   RotateCcw, Save, ChevronDown, ChevronRight, Info, 
-  ShoppingCart, Clock, Truck, Shield, Check,
+  ShoppingCart, Clock, Truck, Shield, Check, CheckCircle,
   Sparkles, Layers, Palette, Cog, Zap
 } from 'lucide-react'
 import { formatCurrency, toPHP } from '../utils/formatCurrency'
@@ -182,8 +183,11 @@ function VisualCard({ option, isSelected, onClick, previewImage }) {
 
 export function CustomizePage() {
   const [searchParams] = useSearchParams()
-  const { config, updateConfig, resetConfig, price, summary, exportConfig, loadConfig, builder, options } =
+  const editBuildId = searchParams.get('edit')
+  
+  const { config, updateConfig, resetConfig, price, summary, pricingBreakdown, exportConfig, loadConfig, builder, options } =
     useGuitarConfig()
+  const navigate = useNavigate()
   const [view, setView] = useState('front')
   const [activeCategory, setActiveCategory] = useState('body')
   const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false)
@@ -212,6 +216,25 @@ export function CustomizePage() {
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
+
+  // Load existing build if editBuildId is provided
+  useEffect(() => {
+    if (editBuildId) {
+      for (const storageKey of ['cosmoscraft_saved_builds', 'cosmoscraft_saved_bass_builds']) {
+        const builds = JSON.parse(window.localStorage.getItem(storageKey) || '[]')
+        const target = builds.find(b => b.id === editBuildId)
+        if (target) {
+          try {
+            loadConfig(target.config)
+          } catch (e) {
+            console.error('Failed to load build config for editing:', e)
+          }
+          break
+        }
+      }
+    }
+  }, [editBuildId, loadConfig])
+
   const { addToCart, setIsOpen: setCartOpen } = useCart()
 
   // Get pickguard options for current body
@@ -226,47 +249,76 @@ export function CustomizePage() {
     return options.knobOptions
   }, [options.knobOptions, config.body])
 
-  const saveBuild = () => {
+  const [toastMessage, setToastMessage] = useState(null)
+
+  useEffect(() => {
+    if (toastMessage) {
+      const timer = setTimeout(() => setToastMessage(null), 3000)
+      return () => clearTimeout(timer)
+    }
+  }, [toastMessage])
+
+  const saveBuild = (shouldNavigate = true) => {
+    const buildId = editBuildId || `build-${Date.now()}`
     const build = {
-      id: `build-${Date.now()}`,
+      id: buildId,
       name: `${summary.body} build`,
       price,
       config,
+      pricingBreakdown,
+      summary,
       savedAt: new Date().toISOString(),
     }
 
-    const stored = JSON.parse(window.localStorage.getItem('cosmoscraft_saved_builds') || '[]')
-    stored.unshift(build)
-    window.localStorage.setItem('cosmoscraft_saved_builds', JSON.stringify(stored.slice(0, 20)))
+    let storedKey = 'cosmoscraft_saved_builds'
+    let stored = JSON.parse(window.localStorage.getItem(storedKey) || '[]')
+    
+    // Look in bass builds if not found in normal builds (for safety)
+    let existingIndex = stored.findIndex(b => b.id === buildId)
+    if (existingIndex === -1 && window.localStorage.getItem('cosmoscraft_saved_bass_builds')) {
+      const bassStored = JSON.parse(window.localStorage.getItem('cosmoscraft_saved_bass_builds'))
+      const bassIndex = bassStored.findIndex(b => b.id === buildId)
+      if (bassIndex !== -1) {
+        storedKey = 'cosmoscraft_saved_bass_builds'
+        stored = bassStored
+        existingIndex = bassIndex
+      }
+    }
+
+    if (existingIndex !== -1) {
+      // Preserve existing properties like additionalParts
+      stored[existingIndex] = { ...stored[existingIndex], ...build }
+    } else {
+      stored.unshift(build)
+    }
+
+    if (stored.length > 20) stored = stored.slice(0, 20)
+    window.localStorage.setItem(storedKey, JSON.stringify(stored))
+    
+    if (shouldNavigate) {
+      navigate('/dashboard', { state: { section: 'guitar', message: 'Build saved to My Guitar!' } })
+    } else {
+      setToastMessage('Your Build is saved to My Guitar!')
+    }
   }
 
   const handleSave = () => {
     if (!isAuthenticated) {
-      openLogin(saveBuild)
+      openLogin(() => saveBuild(true))
       return
     }
-    saveBuild()
+    saveBuild(true)
   }
 
   const handleAddToCart = () => {
-    const addBuildToCart = () => {
-      addToCart({
-        id: `custom-build-${Date.now()}`,
-        name: `Custom ${summary.body} Guitar`,
-        price,
-        quantity: 1,
-        image: config.body,
-        metadata: config,
-      })
-      setCartOpen(true)
-    }
+    const saveAndToast = () => saveBuild(false)
 
     if (!isAuthenticated) {
-      openLogin(addBuildToCart)
+      openLogin(saveAndToast)
       return
     }
 
-    addBuildToCart()
+    saveAndToast()
   }
 
   const handleExport = () => {
@@ -297,7 +349,20 @@ export function CustomizePage() {
   }
 
   return (
-    <div className="h-screen overflow-hidden bg-[var(--bg-primary)] pt-16 text-[var(--text-light)]">
+    <div className="h-screen overflow-hidden bg-[var(--bg-primary)] pt-16 text-[var(--text-light)] relative">
+      <AnimatePresence>
+        {toastMessage && (
+          <motion.div
+            initial={{ opacity: 0, y: -20, x: '-50%' }}
+            animate={{ opacity: 1, y: 0, x: '-50%' }}
+            exit={{ opacity: 0, y: -20, x: '-50%' }}
+            className="fixed top-24 left-1/2 z-[100] bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] px-6 py-3 rounded-xl font-bold shadow-[0_0_20px_rgba(212,175,55,0.4)] flex items-center gap-2"
+          >
+            <CheckCircle className="w-5 h-5" />
+            {toastMessage}
+          </motion.div>
+        )}
+      </AnimatePresence>
       <div className="mx-auto flex h-full max-w-[2000px] flex-col px-3 pb-3 sm:px-4 lg:px-6 lg:pb-6">
         
         {/* Main layout: Left panel - Center guitar - Right panel */}

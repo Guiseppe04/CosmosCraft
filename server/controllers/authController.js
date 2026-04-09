@@ -21,8 +21,20 @@ exports.googleCallback = asyncHandler(async (req, res, next) => {
 
   const { accessToken, refreshToken } = await generateTokens(req.user.user_id, req.user.role);
 
-  res.cookie('accessToken', accessToken, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'none', maxAge: 15 * 60 * 1000 });
-  res.cookie('refreshToken', refreshToken, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'none', maxAge: 7 * 24 * 60 * 60 * 1000 });
+  const cookieOptions = {
+    httpOnly: true,
+    maxAge: 15 * 60 * 1000,
+    ...(process.env.NODE_ENV === 'production' ? {
+      secure: true,
+      sameSite: 'none'
+    } : {
+      secure: false,
+      sameSite: 'lax'
+    })
+  };
+
+  res.cookie('accessToken', accessToken, cookieOptions);
+  res.cookie('refreshToken', refreshToken, { ...cookieOptions, maxAge: 7 * 24 * 60 * 60 * 1000 });
 
   return res.redirect(`${getFrontendUrl()}/auth/success?userId=${req.user.user_id}&provider=google`);
 });
@@ -34,8 +46,20 @@ exports.facebookCallback = asyncHandler(async (req, res, next) => {
 
   const { accessToken, refreshToken } = await generateTokens(req.user.user_id, req.user.role);
 
-  res.cookie('accessToken', accessToken, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'none', maxAge: 15 * 60 * 1000 });
-  res.cookie('refreshToken', refreshToken, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'none', maxAge: 7 * 24 * 60 * 60 * 1000 });
+  const cookieOptions = {
+    httpOnly: true,
+    maxAge: 15 * 60 * 1000,
+    ...(process.env.NODE_ENV === 'production' ? {
+      secure: true,
+      sameSite: 'none'
+    } : {
+      secure: false,
+      sameSite: 'lax'
+    })
+  };
+
+  res.cookie('accessToken', accessToken, cookieOptions);
+  res.cookie('refreshToken', refreshToken, { ...cookieOptions, maxAge: 7 * 24 * 60 * 60 * 1000 });
 
   return res.redirect(`${getFrontendUrl()}/auth/success?userId=${req.user.user_id}&provider=facebook`);
 });
@@ -64,8 +88,20 @@ exports.oauthSignup = asyncHandler(async (req, res, next) => {
 
   const { accessToken, refreshToken } = await generateTokens(newUser.user_id, newUser.role);
 
-  res.cookie('accessToken', accessToken, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'none', maxAge: 15 * 60 * 1000 });
-  res.cookie('refreshToken', refreshToken, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'none', maxAge: 7 * 24 * 60 * 60 * 1000 });
+  const cookieOptions = {
+    httpOnly: true,
+    maxAge: 15 * 60 * 1000,
+    ...(process.env.NODE_ENV === 'production' ? {
+      secure: true,
+      sameSite: 'none'
+    } : {
+      secure: false,
+      sameSite: 'lax'
+    })
+  };
+
+  res.cookie('accessToken', accessToken, cookieOptions);
+  res.cookie('refreshToken', refreshToken, { ...cookieOptions, maxAge: 7 * 24 * 60 * 60 * 1000 });
 
   res.status(201).json({
     status: 'success', message: 'OAuth signup successful',
@@ -94,8 +130,20 @@ exports.emailSignup = asyncHandler(async (req, res, next) => {
 
     const { accessToken, refreshToken } = await generateTokens(newUser.user_id, newUser.role);
 
-    res.cookie('accessToken', accessToken, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'none', maxAge: 15 * 60 * 1000 });
-    res.cookie('refreshToken', refreshToken, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'none', maxAge: 7 * 24 * 60 * 60 * 1000 });
+    const cookieOptions = {
+      httpOnly: true,
+      maxAge: 15 * 60 * 1000,
+      ...(process.env.NODE_ENV === 'production' ? {
+        secure: true,
+        sameSite: 'none'
+      } : {
+        secure: false,
+        sameSite: 'lax'
+      })
+    };
+
+    res.cookie('accessToken', accessToken, cookieOptions);
+    res.cookie('refreshToken', refreshToken, { ...cookieOptions, maxAge: 7 * 24 * 60 * 60 * 1000 });
 
     res.status(201).json({
       status: 'success', message: 'Signup successful. Please check your email for the verification code.',
@@ -140,12 +188,32 @@ exports.emailLogin = asyncHandler(async (req, res, next) => {
 
   const { accessToken, refreshToken } = await generateTokens(user.user_id, user.role);
 
-  res.cookie('accessToken', accessToken, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'none', maxAge: 15 * 60 * 1000 });
-  res.cookie('refreshToken', refreshToken, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'none', maxAge: 7 * 24 * 60 * 60 * 1000 });
+  const cookieOptions = {
+    httpOnly: true,
+    maxAge: 15 * 60 * 1000,
+    ...(process.env.NODE_ENV === 'production' ? {
+      secure: true,
+      sameSite: 'none'
+    } : {
+      secure: false,
+      sameSite: 'lax'
+    })
+  };
+
+  res.cookie('accessToken', accessToken, cookieOptions);
+  res.cookie('refreshToken', refreshToken, { ...cookieOptions, maxAge: 7 * 24 * 60 * 60 * 1000 });
 
   res.status(200).json({
     status: 'success', message: 'Login successful',
-    data: { user: { id: user.user_id, email: user.email, is_verified: user.is_verified } }
+    data: { 
+      user: { 
+        id: user.user_id, 
+        email: user.email, 
+        name: { firstName: user.first_name, lastName: user.last_name },
+        avatar: user.avatar_url,
+        role: user.role
+      } 
+    }
   });
 });
 
@@ -158,8 +226,20 @@ exports.refreshAccessToken = asyncHandler(async (req, res, next) => {
 
   const tokens = await generateTokens(user.user_id, user.role);
 
-  res.cookie('accessToken', tokens.accessToken, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'none', maxAge: 15 * 60 * 1000 });
-  res.cookie('refreshToken', tokens.refreshToken, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'none', maxAge: 7 * 24 * 60 * 60 * 1000 });
+  const cookieOptions = {
+    httpOnly: true,
+    maxAge: 15 * 60 * 1000,
+    ...(process.env.NODE_ENV === 'production' ? {
+      secure: true,
+      sameSite: 'none'
+    } : {
+      secure: false,
+      sameSite: 'lax'
+    })
+  };
+
+  res.cookie('accessToken', tokens.accessToken, cookieOptions);
+  res.cookie('refreshToken', tokens.refreshToken, { ...cookieOptions, maxAge: 7 * 24 * 60 * 60 * 1000 });
 
   res.status(200).json({ status: 'success', message: 'Token refreshed' });
 });
@@ -174,7 +254,19 @@ exports.logout = asyncHandler(async (req, res, next) => {
 
 exports.checkAuth = asyncHandler(async (req, res, next) => {
   const user = await userService.getUserById(req.user.id);
-  res.status(200).json({ status: 'success', data: { isAuthenticated: true, user: { id: user.user_id, email: user.email, role: user.role } } });
+  res.status(200).json({ 
+    status: 'success', 
+    data: { 
+      isAuthenticated: true, 
+      user: { 
+        id: user.user_id, 
+        email: user.email, 
+        name: { firstName: user.first_name, lastName: user.last_name },
+        avatar: user.avatar_url,
+        role: user.role
+      } 
+    } 
+  });
 });
 
 exports.verifyEmailOTP = asyncHandler(async (req, res, next) => {

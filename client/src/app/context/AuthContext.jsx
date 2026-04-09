@@ -97,7 +97,6 @@ export function AuthProvider({ children }) {
   // Fetch current authenticated user from backend
   const fetchUser = useCallback(async () => {
     try {
-      setIsLoadingUser(true)
       const response = await fetch(`${API}/auth/check`, {
         method: 'GET',
         credentials: 'include',
@@ -115,17 +114,15 @@ export function AuthProvider({ children }) {
           )
           return data.data.user
         }
-      } else {
-        // Token invalid or expired
+      } else if (response.status === 401) {
+        // Token explicitly invalid or expired
         setIsAuthenticated(false)
         setUser(null)
         window.localStorage.removeItem('cosmoscraft_auth')
       }
     } catch (error) {
       console.error('Failed to fetch user:', error)
-      setIsAuthenticated(false)
-      setUser(null)
-      window.localStorage.removeItem('cosmoscraft_auth')
+      // Don't clear auth on network error - keep user logged in optimistically
     } finally {
       setIsLoadingUser(false)
     }
@@ -140,7 +137,12 @@ export function AuthProvider({ children }) {
         try {
           const parsed = JSON.parse(stored)
           if (parsed?.id || parsed?._id) {
-            // Verify with backend - this will refresh the token if valid
+            // Restore user immediately from localStorage
+            setIsAuthenticated(true)
+            setUser(parsed)
+            setIsLoadingUser(false)
+            
+            // Verify with backend in background
             await fetchUser()
           } else {
             setIsLoadingUser(false)
@@ -159,8 +161,10 @@ export function AuthProvider({ children }) {
 
   const openLogin = useCallback(callback => {
     setLoginOpen(true)
-    if (callback) {
+    if (typeof callback === 'function') {
       setLoginCallback(() => callback)
+    } else {
+      setLoginCallback(null)
     }
   }, [])
 
