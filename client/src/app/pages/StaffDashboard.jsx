@@ -25,6 +25,7 @@ import {
   Plus,
   Edit,
   Save,
+  RotateCw,
   Package,
   ShoppingBag,
   Guitar,
@@ -362,7 +363,7 @@ export function StaffDashboard() {
               transition={{ duration: 0.3 }}
             >
               {/* Quick Stats */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+              <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
                 <div className="bg-[var(--surface-dark)] border-2 border-[var(--border)] rounded-2xl p-4 hover:border-[var(--gold-primary)] hover:shadow-[0_0_15px_rgba(212,175,55,0.2)] transition-all duration-200 cursor-pointer">
                   <div className="flex items-center justify-between mb-2">
                     <p className="text-[var(--text-muted)] text-sm">Total Projects</p>
@@ -383,13 +384,6 @@ export function StaffDashboard() {
                     <CheckCircle2 className="w-5 h-5 text-green-400" />
                   </div>
                   <p className="text-3xl font-bold text-white">{completedProjects}</p>
-                </div>
-                <div className="bg-[var(--surface-dark)] border-2 border-[var(--border)] rounded-2xl p-4 hover:border-yellow-400 hover:shadow-[0_0_15px_rgba(234,179,8,0.2)] transition-all duration-200 cursor-pointer">
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-[var(--text-muted)] text-sm">Unread Messages</p>
-                    <MessageSquare className="w-5 h-5 text-yellow-400" />
-                  </div>
-                  <p className="text-3xl font-bold text-white">{unreadMessages}</p>
                 </div>
               </div>
 
@@ -567,7 +561,7 @@ export function StaffDashboard() {
                       <p className="text-[var(--text-muted)] text-sm">Review stock levels and material status for assigned work.</p>
                     </div>
                     <button className="inline-flex items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-2 text-sm font-semibold text-white hover:border-[var(--gold-primary)]/50 transition-all">
-                      <Package className="w-4 h-4 text-[var(--gold-primary)]" /> Refresh Inventory
+                      <RotateCw className="w-4 h-4 text-[var(--gold-primary)]" /> Refresh Inventory
                     </button>
                   </div>
 
@@ -609,7 +603,7 @@ export function StaffDashboard() {
                       <p className="text-[var(--text-muted)] text-sm">Track the progress of orders currently assigned to you.</p>
                     </div>
                     <button className="inline-flex items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-2 text-sm font-semibold text-white hover:border-[var(--gold-primary)]/50 transition-all">
-                      <ShoppingBag className="w-4 h-4 text-[var(--gold-primary)]" /> Refresh Orders
+                      <RotateCw className="w-4 h-4 text-[var(--gold-primary)]" /> Refresh Orders
                     </button>
                   </div>
 
@@ -654,7 +648,7 @@ export function StaffDashboard() {
                       <p className="text-[var(--text-muted)] text-sm">Monitor active custom guitar builds and stage progress.</p>
                     </div>
                     <button className="inline-flex items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-2 text-sm font-semibold text-white hover:border-[var(--gold-primary)]/50 transition-all">
-                      <Guitar className="w-4 h-4 text-[var(--gold-primary)]" /> Refresh Customizations
+                      <RotateCw className="w-4 h-4 text-[var(--gold-primary)]" /> Refresh Customizations
                     </button>
                   </div>
 
@@ -696,7 +690,7 @@ export function StaffDashboard() {
                       <p className="text-[var(--text-muted)] text-sm">View upcoming appointment schedules and status.</p>
                     </div>
                     <button className="inline-flex items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-2 text-sm font-semibold text-white hover:border-[var(--gold-primary)]/50 transition-all">
-                      <Calendar className="w-4 h-4 text-[var(--gold-primary)]" /> Refresh Schedule
+                      <RotateCw className="w-4 h-4 text-[var(--gold-primary)]" /> Refresh Schedule
                     </button>
                   </div>
 
