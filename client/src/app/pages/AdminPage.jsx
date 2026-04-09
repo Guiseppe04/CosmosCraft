@@ -453,7 +453,7 @@ export function AdminPage() {
       Inactive: 'bg-gray-500/20 text-gray-400 border-gray-500/30',
       Completed: 'bg-green-500/20 text-green-400 border-green-500/30',
       'In Progress': 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-      Pending: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+      Pending: 'bg-[var(--gold-primary)]/20 text-[var(--gold-primary)] border-[var(--gold-primary)]/30',
       Confirmed: 'bg-green-500/20 text-green-400 border-green-500/30',
       Cancelled: 'bg-red-500/20 text-red-400 border-red-500/30',
       'Low Stock': 'bg-orange-500/20 text-orange-400 border-orange-500/30',
@@ -504,7 +504,7 @@ export function AdminPage() {
       <aside className={`fixed left-0 top-0 h-screen bg-[#1E201E] border-r border-[#5A5555] transition-all duration-300 z-40 ${sidebarCollapsed ? 'w-20' : 'w-64'}`}>
         <button
           onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-          className="absolute -right-3 top-6 w-6 h-6 bg-[#1E201E] border border-[#5A5555] rounded-full flex items-center justify-center hover:bg-[#FFD700] hover:border-[#FFD700] transition-all"
+          className="absolute -right-3 top-6 w-6 h-6 bg-[#1E201E] border border-[#5A5555] rounded-full flex items-center justify-center hover:bg-[var(--gold-primary)] hover:border-[var(--gold-primary)] transition-all"
         >
           {sidebarCollapsed ? <ChevronRight className="w-4 h-4 text-[#F5F5F5]" /> : <ChevronLeft className="w-4 h-4 text-[#F5F5F5]" />}
         </button>
@@ -518,27 +518,29 @@ export function AdminPage() {
                 onClick={() => setActiveTab(tab.id)}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl font-medium transition-all duration-200 ${
                   activeTab === tab.id
-                    ? 'bg-[#FFD700] text-[#1E201E] font-bold shadow-lg shadow-[#FFD700]/20'
-                    : 'text-[#F5F5F5] hover:bg-[#5A5555] hover:text-[#F5F5F5]'
+                    ? 'bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] border-2 border-[var(--gold-primary)] shadow-[0_0_15px_rgba(212,175,55,0.3)]'
+                    : 'text-[var(--text-muted)] hover:bg-[var(--bg-primary)] hover:text-white border-2 border-transparent'
                 }`}
               >
-                <Icon className={`w-5 h-5 flex-shrink-0 ${activeTab === tab.id ? 'text-[#1E201E]' : 'text-[#FFD700]'}`} />
-                {!sidebarCollapsed && <span className={`truncate ${activeTab === tab.id ? 'text-[#1E201E]' : 'text-[#F5F5F5]'}`}>{tab.label}</span>}
+                <Icon className={`w-5 h-5 flex-shrink-0 ${activeTab === tab.id ? 'text-[var(--text-dark)]' : 'text-[var(--text-muted)]'}`} />
+                {!sidebarCollapsed && (
+                  <span className={`truncate ${activeTab === tab.id ? 'text-[var(--text-dark)]' : 'text-[var(--text-muted)]'}`}>{tab.label}</span>
+                )}
               </button>
             )
           })}
         </nav>
 
         {/* Admin badge */}
-        <div className={`absolute bottom-4 left-0 right-0 px-4`}>
+        <div className={`absolute bottom-4 left-0 right-0 px-4 ${sidebarCollapsed ? 'text-center' : ''}`}>
           <div className={`flex items-center gap-3 p-4 rounded-2xl bg-[#1E201E] border border-[#5A5555] ${sidebarCollapsed ? 'justify-center' : ''}`}>
-            <div className="w-10 h-10 rounded-full bg-gradient-to-r from-[#FFD700] to-[#FFED4E] flex items-center justify-center flex-shrink-0">
-              <User className="w-5 h-5 text-[#1E201E]" />
+            <div className="w-10 h-10 rounded-full bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] flex items-center justify-center flex-shrink-0 border-2 border-white">
+              <User className="w-5 h-5 text-[var(--text-dark)]" />
             </div>
             {!sidebarCollapsed && (
               <div className="flex-1 min-w-0">
-                <p className="text-[#F5F5F5] font-semibold text-sm truncate">{user?.firstName || 'Admin'}</p>
-                <p className="text-[#FFD700] text-xs capitalize">{user?.role?.replace('_', ' ')}</p>
+                <p className="text-white font-medium text-sm truncate">{user?.firstName || 'Admin'}</p>
+                <p className="text-[var(--gold-primary)] text-xs capitalize">{user?.role?.replace('_', ' ')}</p>
               </div>
             )}
           </div>
@@ -685,7 +687,7 @@ export function AdminPage() {
                           <button onClick={() => openModal('product', p)} className="p-1.5 hover:bg-[var(--gold-primary)]/10 rounded transition-colors">
                             <Eye className="w-4 h-4 text-[var(--text-muted)]" />
                           </button>
-                          <button onClick={() => openModal('product_edit', p)} className="p-1.5 hover:bg-[var(--gold-primary)]/10 rounded transition-colors">
+                          <button onClick={() => openModal('product', p)} className="p-1.5 hover:bg-[var(--gold-primary)]/10 rounded transition-colors">
                             <Edit className="w-4 h-4 text-[var(--text-muted)]" />
                           </button>
                           <button onClick={() => deleteProduct(p.product_id)} className="p-1.5 hover:bg-red-500/10 rounded transition-colors">
@@ -1481,7 +1483,7 @@ export function AdminPage() {
                               <td className="py-4 px-6">
                                 <div className="flex items-center gap-3">
                                   <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-sm ${
-                                    i === 0 ? 'bg-yellow-500' : i === 1 ? 'bg-gray-400' : i === 2 ? 'bg-orange-600' : 'bg-[var(--bg-primary)]'
+                                    i === 0 ? 'bg-[var(--gold-primary)]' : i === 1 ? 'bg-gray-400' : i === 2 ? 'bg-orange-600' : 'bg-[var(--bg-primary)]'
                                   }`}>
                                     {i + 1}
                                   </div>
