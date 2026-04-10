@@ -5,6 +5,34 @@
 
 const API_URL = import.meta.env.VITE_API_URL
 
+function buildQueryString(params = {}) {
+  const qs = new URLSearchParams()
+  Object.entries(params).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === '') return
+    qs.append(key, String(value))
+  })
+  return qs.toString()
+}
+
+function normalizeListResponse(res, legacyKey) {
+  const data = Array.isArray(res?.data)
+    ? res.data
+    : Array.isArray(res?.data?.[legacyKey])
+      ? res.data[legacyKey]
+      : []
+
+  return {
+    ...res,
+    data,
+    pagination: res?.pagination || {
+      page: 1,
+      pageSize: data.length || 10,
+      total: data.length,
+      totalPages: 1,
+    },
+  }
+}
+
 async function request(path, options = {}) {
   const res = await fetch(`${API_URL}${path}`, {
     headers: { 'Content-Type': 'application/json', ...options.headers },
@@ -21,8 +49,8 @@ async function request(path, options = {}) {
 export const adminApi = {
   // Products
   getProducts: (params = {}) => {
-    const qs = new URLSearchParams(params).toString()
-    return request(`/api/products${qs ? '?' + qs : ''}`)
+    const qs = buildQueryString(params)
+    return request(`/api/products${qs ? '?' + qs : ''}`).then((res) => normalizeListResponse(res, 'products'))
   },
   getProduct: (id) => request(`/api/products/${id}`),
   createProduct: (body) => request('/api/products', { method: 'POST', body }),
@@ -41,7 +69,7 @@ export const adminApi = {
 
   // Guitar Customizations
   getCustomizations: (params = {}) => {
-    const qs = new URLSearchParams(params).toString()
+    const qs = buildQueryString(params)
     return request(`/api/guitars/customizations${qs ? '?' + qs : ''}`)
   },
   getCustomization: (id) => request(`/api/guitars/customizations/${id}`),
@@ -50,7 +78,7 @@ export const adminApi = {
 
   // Guitar Parts
   getParts: (params = {}) => {
-    const qs = new URLSearchParams(params).toString()
+    const qs = buildQueryString(params)
     return request(`/api/guitars/parts${qs ? '?' + qs : ''}`)
   },
   createPart: (body) => request('/api/guitars/parts', { method: 'POST', body }),
@@ -59,8 +87,8 @@ export const adminApi = {
 
   // Builder Catalog Parts (for Frontend Guitar Customizer)
   getBuilderParts: (params = {}) => {
-    const qs = new URLSearchParams(params).toString()
-    return request(`/api/builder-parts${qs ? '?' + qs : ''}`)
+    const qs = buildQueryString(params)
+    return request(`/api/builder-parts${qs ? '?' + qs : ''}`).then((res) => normalizeListResponse(res, 'parts'))
   },
   createBuilderPart: (body) => request('/api/builder-parts', { method: 'POST', body }),
   updateBuilderPart: (id, body) => request(`/api/builder-parts/${id}`, { method: 'PUT', body }),
@@ -68,7 +96,7 @@ export const adminApi = {
 
   // Users / RBAC
   getUsers: (params = {}) => {
-    const qs = new URLSearchParams(params).toString()
+    const qs = buildQueryString(params)
     return request(`/api/users${qs ? '?' + qs : ''}`)
   },
   updateUserRole: (id, role) => request(`/api/users/${id}/role`, { method: 'PUT', body: { role } }),
@@ -76,7 +104,7 @@ export const adminApi = {
 
   // Orders
   getOrders: (params = {}) => {
-    const qs = new URLSearchParams(params).toString()
+    const qs = buildQueryString(params)
     return request(`/api/orders${qs ? '?' + qs : ''}`)
   },
   getOrder: (id) => request(`/api/orders/${id}`),
@@ -85,7 +113,7 @@ export const adminApi = {
 
   // Projects
   getProjects: (params = {}) => {
-    const qs = new URLSearchParams(params).toString()
+    const qs = buildQueryString(params)
     return request(`/api/projects${qs ? '?' + qs : ''}`)
   },
   getMyProjects: () => request('/api/projects/my'),
@@ -105,7 +133,7 @@ export const adminApi = {
 
   // Appointments
   getAppointments: (params = {}) => {
-    const qs = new URLSearchParams(params).toString()
+    const qs = buildQueryString(params)
     return request(`/api/appointments${qs ? '?' + qs : ''}`)
   },
   getAppointment: (id) => request(`/api/appointments/${id}`),
@@ -119,11 +147,11 @@ export const adminApi = {
   // Inventory
   getInventorySummary: () => request('/api/inventory/summary'),
   getInventoryProducts: (params = {}) => {
-    const qs = new URLSearchParams(params).toString()
+    const qs = buildQueryString(params)
     return request(`/api/inventory/products${qs ? '?' + qs : ''}`)
   },
   getInventoryLogs: (params = {}) => {
-    const qs = new URLSearchParams(params).toString()
+    const qs = buildQueryString(params)
     return request(`/api/inventory/logs${qs ? '?' + qs : ''}`)
   },
   addStock: ({ product_id, ...rest }) => request('/api/inventory/stock-in', { method: 'PATCH', body: { productId: product_id, ...rest } }),

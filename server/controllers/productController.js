@@ -1,5 +1,6 @@
 const productService = require('../services/productService');
 const { AppError } = require('../middleware/errorHandler');
+const auditService = require('../services/auditService');
 
 // ─── CATEGORIES ──────────────────────────────────────────────────────────────
 
@@ -36,8 +37,8 @@ exports.deleteCategory = async (req, res, next) => {
 
 exports.getProducts = async (req, res, next) => {
   try {
-    const products = await productService.getAllProducts(req.query);
-    res.json({ status: 'success', data: products });
+    const { items, pagination } = await productService.getAllProducts(req.query);
+    res.json({ status: 'success', data: items, pagination });
   } catch (err) { next(err); }
 };
 
@@ -71,6 +72,15 @@ exports.createProduct = async (req, res, next) => {
       product.primary_image = data.image_url;
     }
 
+    await auditService.logCreate(
+      req.user?.user_id || null,
+      auditService.MODULES.PRODUCTS,
+      'products',
+      product.product_id,
+      product,
+      req.ip
+    );
+
     res.status(201).json({ status: 'success', data: product });
   } catch (err) { next(err); }
 };
@@ -86,7 +96,7 @@ exports.updateProduct = async (req, res, next) => {
     const product = await productService.updateProduct(req.params.id, data);
 
     // Only add new image if it's provided AND different from the current primary image
-    if (data.image_url && data.image_url !== existing.primary_image) {
+    if (data.image_url && data.image_url !== (existing.primary_image || '')) {
       await productService.addProductImage(product.product_id, { 
         image_url: data.image_url, 
         is_primary: true,
@@ -97,14 +107,37 @@ exports.updateProduct = async (req, res, next) => {
       product.primary_image = existing.primary_image;
     }
 
+    await auditService.logUpdate(
+      req.user?.user_id || null,
+      auditService.MODULES.PRODUCTS,
+      'products',
+      product.product_id,
+      existing,
+      product,
+      req.ip
+    );
+
     res.json({ status: 'success', data: product });
   } catch (err) { next(err); }
 };
 
 exports.deleteProduct = async (req, res, next) => {
   try {
+    const existing = await productService.getProductById(req.params.id);
+    if (!existing) throw new AppError('Product not found', 404);
+
     const product = await productService.deleteProduct(req.params.id);
     if (!product) throw new AppError('Product not found', 404);
+
+    await auditService.logDelete(
+      req.user?.user_id || null,
+      auditService.MODULES.PRODUCTS,
+      'products',
+      product.product_id,
+      existing,
+      req.ip
+    );
+
     res.json({ status: 'success', message: 'Product deactivated', data: product });
   } catch (err) { next(err); }
 };

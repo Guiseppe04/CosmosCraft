@@ -52,7 +52,17 @@ exports.deleteCategory = async (id) => {
 
 // ─── PRODUCTS ────────────────────────────────────────────────────────────────
 
-exports.getAllProducts = async ({ search, category_id, is_active } = {}) => {
+exports.getAllProducts = async ({
+  search,
+  category_id,
+  is_active,
+  min_price,
+  max_price,
+  page = 1,
+  pageSize = 10,
+  sortBy = 'created_at',
+  sortDir = 'desc',
+} = {}) => {
   let where = [];
   let params = [];
   let idx = 1;
@@ -72,8 +82,38 @@ exports.getAllProducts = async ({ search, category_id, is_active } = {}) => {
     params.push(is_active === 'true' || is_active === true);
     idx++;
   }
+  if (min_price !== undefined && min_price !== '') {
+    where.push(`p.price >= $${idx}`);
+    params.push(Number(min_price));
+    idx++;
+  }
+  if (max_price !== undefined && max_price !== '') {
+    where.push(`p.price <= $${idx}`);
+    params.push(Number(max_price));
+    idx++;
+  }
 
   const condition = where.length ? `WHERE ${where.join(' AND ')}` : '';
+  const sortableColumns = {
+    created_at: 'p.created_at',
+    name: 'p.name',
+    price: 'p.price',
+    stock: 'p.stock',
+  };
+  const orderColumn = sortableColumns[sortBy] || sortableColumns.created_at;
+  const orderDirection = String(sortDir).toLowerCase() === 'asc' ? 'ASC' : 'DESC';
+
+  const normalizedPageSize = Math.min(Math.max(Number(pageSize) || 10, 1), 100);
+  const normalizedPage = Math.max(Number(page) || 1, 1);
+  const offset = (normalizedPage - 1) * normalizedPageSize;
+
+  const countRes = await pool.query(
+    `SELECT COUNT(*)::int AS total
+     FROM products p
+     ${condition}`,
+    params
+  );
+  const total = countRes.rows[0]?.total || 0;
 
   const res = await pool.query(
     `SELECT p.*, c.name AS category_name,
@@ -81,15 +121,29 @@ exports.getAllProducts = async ({ search, category_id, is_active } = {}) => {
      FROM products p
      LEFT JOIN categories c ON p.category_id = c.category_id
      ${condition}
-     ORDER BY p.created_at DESC`,
-    params
+     ORDER BY ${orderColumn} ${orderDirection}
+     LIMIT $${idx} OFFSET $${idx + 1}`,
+    [...params, normalizedPageSize, offset]
   );
-  return res.rows;
+
+  return {
+    items: res.rows,
+    pagination: {
+      page: normalizedPage,
+      pageSize: normalizedPageSize,
+      total,
+      totalPages: Math.max(Math.ceil(total / normalizedPageSize), 1),
+    },
+  };
 };
 
 exports.getProductById = async (id) => {
   const res = await pool.query(
-    `SELECT p.*, c.name AS category_name
+    `SELECT p.*, c.name AS category_name,
+            (SELECT image_url
+             FROM product_images
+             WHERE product_id = p.product_id AND is_primary = true
+             LIMIT 1) AS primary_image
      FROM products p
      LEFT JOIN categories c ON p.category_id = c.category_id
      WHERE p.product_id = $1`,

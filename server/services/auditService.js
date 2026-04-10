@@ -16,7 +16,7 @@ const MODULES = {
 };
 
 const ACTIONS = {
-  CREATE: 'CREATE',
+  CREATE: 'INSERT',
   UPDATE: 'UPDATE',
   DELETE: 'DELETE',
   LOGIN: 'LOGIN',

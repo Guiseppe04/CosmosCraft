@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import {
   Users, Package, ShoppingBag, Calendar, Search,
@@ -54,6 +54,27 @@ const PART_RULES = {
   name: [required('Name')],
   type_mapping: [required('Type Mapping')],
 }
+const BUILDER_CATEGORY_MAP = {
+  body: ['body', 'bodyWood', 'bodyFinish', 'pickguard'],
+  neck: ['neck', 'fretboard', 'headstock', 'headstockWood', 'inlays'],
+  hardware: ['hardware', 'bridge', 'knobs'],
+  electronics: ['pickups'],
+}
+const SLOT_TO_PART_CATEGORY = {
+  body: 'body',
+  bodyWood: 'wood_type',
+  bodyFinish: 'finish',
+  pickguard: 'pickguard',
+  neck: 'neck',
+  fretboard: 'fretboard',
+  headstock: 'misc',
+  headstockWood: 'wood_type',
+  inlays: 'misc',
+  hardware: 'hardware',
+  bridge: 'bridge',
+  knobs: 'hardware',
+  pickups: 'pickups',
+}
 const PROJECT_RULES = {
   name: [required('Project Name')],
 }
@@ -61,6 +82,8 @@ const APPOINTMENT_RULES = {
   title: [required('Title')],
   date: [required('Date')],
 }
+
+const PAGE_SIZE_OPTIONS = [10, 25, 50]
 
 export function AdminPage() {
   const { user } = useAuth()
@@ -82,6 +105,27 @@ export function AdminPage() {
   // Filters
   const [userRoleFilter, setUserRoleFilter] = useState('all')
   const [userStatusFilter, setUserStatusFilter] = useState('all')
+  const [productQuery, setProductQuery] = useState({
+    page: 1,
+    pageSize: 10,
+    sortBy: 'created_at',
+    sortDir: 'desc',
+    category_id: '',
+    is_active: '',
+    min_price: '',
+    max_price: '',
+  })
+  const [partQuery, setPartQuery] = useState({
+    page: 1,
+    pageSize: 10,
+    sortBy: 'created_at',
+    sortDir: 'desc',
+    guitar_type: '',
+    part_category: '',
+    is_active: '',
+    min_price: '',
+    max_price: '',
+  })
 
   // Data state
   const [products, setProducts] = useState([])
@@ -102,6 +146,10 @@ export function AdminPage() {
   const [formErrors, setFormErrors] = useState({})
   const [isSaving, setIsSaving] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
+  const [productsLoading, setProductsLoading] = useState(false)
+  const [partsLoading, setPartsLoading] = useState(false)
+  const [productsPagination, setProductsPagination] = useState({ page: 1, pageSize: 10, total: 0, totalPages: 1 })
+  const [partsPagination, setPartsPagination] = useState({ page: 1, pageSize: 10, total: 0, totalPages: 1 })
 
   // Message panel
   const [messagePanelOpen, setMessagePanelOpen] = useState(false)
@@ -125,6 +173,15 @@ export function AdminPage() {
     }
     return true
   })
+
+  const partCategoryOptions = useMemo(
+    () => Array.from(new Set((parts || []).map((p) => p.part_category).filter(Boolean))).sort(),
+    [parts]
+  )
+  const guitarTypeOptions = useMemo(
+    () => Array.from(new Set((parts || []).map((p) => p.guitar_type).filter(Boolean))).sort(),
+    [parts]
+  )
 
   const inventoryHealthData = (() => {
     const productItems = visibleProducts.map((p) => ({ stock: Number(p.stock ?? 0), threshold: Number(p.low_stock_threshold ?? 10) }))
@@ -165,11 +222,17 @@ export function AdminPage() {
 
   // ── Data fetching ────────────────────────────────────────────────────────
   const fetchProducts = useCallback(async () => {
+    setProductsLoading(true)
     try {
-      const res = await adminApi.getProducts({ search: debouncedSearch })
-      setProducts(Array.isArray(res.data) ? res.data : res.data?.products || [])
+      const res = await adminApi.getProducts({
+        search: debouncedSearch,
+        ...productQuery,
+      })
+      setProducts(res.data || [])
+      setProductsPagination(res.pagination || { page: 1, pageSize: 10, total: 0, totalPages: 1 })
     } catch (e) { showToast(e.message, 'error') }
-  }, [debouncedSearch, showToast])
+    finally { setProductsLoading(false) }
+  }, [debouncedSearch, productQuery, showToast])
 
   const fetchCategories = useCallback(async () => {
     try {
@@ -186,11 +249,17 @@ export function AdminPage() {
   }, [debouncedSearch, showToast])
 
   const fetchParts = useCallback(async () => {
+    setPartsLoading(true)
     try {
-      const res = await adminApi.getBuilderParts()
-      setParts(Array.isArray(res.data) ? res.data : res.data?.parts || [])
+      const res = await adminApi.getBuilderParts({
+        search: debouncedSearch,
+        ...partQuery,
+      })
+      setParts(res.data || [])
+      setPartsPagination(res.pagination || { page: 1, pageSize: 10, total: 0, totalPages: 1 })
     } catch (e) { showToast(e.message, 'error') }
-  }, [showToast])
+    finally { setPartsLoading(false) }
+  }, [debouncedSearch, partQuery, showToast])
 
   const fetchUsers = useCallback(async () => {
     try {
@@ -268,7 +337,10 @@ export function AdminPage() {
 
   // ── Re-fetch when debounced search changes ───────────────────────────────
   useEffect(() => {
-    if (activeTab === 'products-parts') { fetchProducts(); fetchParts() }
+    if (activeTab === 'products-parts') {
+      setProductQuery((prev) => ({ ...prev, page: 1 }))
+      setPartQuery((prev) => ({ ...prev, page: 1 }))
+    }
     if (activeTab === 'guitars') fetchGuitars()
     if (activeTab === 'users') fetchUsers()
     if (activeTab === 'orders') fetchOrders()
@@ -276,6 +348,14 @@ export function AdminPage() {
     if (activeTab === 'appointments') fetchAppointments()
     if (activeTab === 'inventory') { fetchInventory(); fetchParts(); }
   }, [debouncedSearch]) // eslint-disable-line
+
+  useEffect(() => {
+    if (activeTab === 'products-parts') fetchProducts()
+  }, [activeTab, fetchProducts])
+
+  useEffect(() => {
+    if (activeTab === 'products-parts' || activeTab === 'inventory') fetchParts()
+  }, [activeTab, fetchParts])
 
   // ── Smart polling: active tab ────────────────────────────────────────────
   const pollingFn = useCallback(async () => {
@@ -908,21 +988,80 @@ export function AdminPage() {
           {/* ── PRODUCTS & PARTS ───────────────────────────────────────────── */}
           {activeTab === 'products-parts' && (
             <motion.div key="products-parts" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-              {visibleProducts.length === 0 ? (
-                <EmptyState icon={Package} label="No products found" action={() => openModal('product')} actionLabel="Add First Product" />
+              <div className="mb-4 flex items-end justify-between gap-3">
+                <div>
+                  <h2 className="text-white text-xl font-semibold">Products</h2>
+                  <p className="text-[var(--text-muted)] text-sm">Manage catalog items, visibility, and pricing.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setProductQuery({ page: 1, pageSize: productQuery.pageSize, sortBy: 'created_at', sortDir: 'desc', category_id: '', is_active: '', min_price: '', max_price: '' })}
+                  className="px-3 py-2 rounded-lg border border-[var(--border)] text-sm text-[var(--text-muted)] hover:text-white hover:border-[var(--gold-primary)] transition-colors"
+                >
+                  Clear product filters
+                </button>
+              </div>
+              <div className="mb-6 p-4 rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)]/70 backdrop-blur-sm">
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3">
+                  <select aria-label="Filter products by category" value={productQuery.category_id} onChange={(e) => setProductQuery((prev) => ({ ...prev, page: 1, category_id: e.target.value }))} className={inputCls}>
+                    <option value="">All categories</option>
+                    {visibleCategories.map((c) => <option key={c.category_id} value={c.category_id}>{c.name}</option>)}
+                  </select>
+                  <select aria-label="Filter products by status" value={productQuery.is_active} onChange={(e) => setProductQuery((prev) => ({ ...prev, page: 1, is_active: e.target.value }))} className={inputCls}>
+                    <option value="">All statuses</option>
+                    <option value="true">Active</option>
+                    <option value="false">Inactive</option>
+                  </select>
+                  <select aria-label="Sort products" value={`${productQuery.sortBy}:${productQuery.sortDir}`} onChange={(e) => {
+                    const [sortBy, sortDir] = e.target.value.split(':')
+                    setProductQuery((prev) => ({ ...prev, page: 1, sortBy, sortDir }))
+                  }} className={inputCls}>
+                    <option value="created_at:desc">Newest first</option>
+                    <option value="created_at:asc">Oldest first</option>
+                    <option value="name:asc">Name A-Z</option>
+                    <option value="name:desc">Name Z-A</option>
+                    <option value="price:asc">Price low-high</option>
+                    <option value="price:desc">Price high-low</option>
+                  </select>
+                  <select aria-label="Products page size" value={productQuery.pageSize} onChange={(e) => setProductQuery((prev) => ({ ...prev, page: 1, pageSize: Number(e.target.value) }))} className={inputCls}>
+                    {PAGE_SIZE_OPTIONS.map((n) => <option key={n} value={n}>{n} per page</option>)}
+                  </select>
+                  <input
+                    type="number"
+                    aria-label="Minimum product price"
+                    placeholder="Min price"
+                    value={productQuery.min_price}
+                    onChange={(e) => setProductQuery((prev) => ({ ...prev, page: 1, min_price: e.target.value }))}
+                    className={inputCls}
+                  />
+                  <input
+                    type="number"
+                    aria-label="Maximum product price"
+                    placeholder="Max price"
+                    value={productQuery.max_price}
+                    onChange={(e) => setProductQuery((prev) => ({ ...prev, page: 1, max_price: e.target.value }))}
+                    className={inputCls}
+                  />
+                </div>
+              </div>
+
+              {productsLoading ? (
+                <SectionLoader label="Loading products..." />
+              ) : visibleProducts.length === 0 ? (
+                <EmptyState icon={Package} label={debouncedSearch ? 'No products match your search/filters' : 'No products found'} action={() => openModal('product')} actionLabel="Add First Product" />
               ) : (
                 <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {visibleProducts.map((p) => (
                     <motion.div key={p.product_id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-                      className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6 hover:border-[var(--gold-primary)]/50 transition-all"
+                      className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6 hover:border-[var(--gold-primary)]/50 hover:-translate-y-0.5 transition-all"
                     >
                       {p.primary_image && (
-                        <img src={p.primary_image} alt={p.name} className="w-full h-36 object-cover rounded-xl mb-4 border border-white/5" />
+                        <img src={p.primary_image} alt={p.name} className="w-full h-36 object-cover rounded-xl mb-4 border border-white/5" loading="lazy" />
                       )}
                       <div className="flex items-start justify-between mb-2">
                         <div>
                           <p className="text-[var(--text-muted)] text-xs font-mono">{p.sku}</p>
-                          <h3 className="text-white font-semibold">{p.name}</h3>
+                          <h3 className="text-white font-semibold line-clamp-1">{p.name}</h3>
                           <p className="text-[var(--text-muted)] text-xs">{p.category_name || 'Uncategorised'}</p>
                         </div>
                         <span className={`px-2 py-0.5 rounded-full text-xs font-semibold border ${p.is_active ? 'bg-green-500/20 text-green-400 border-green-500/30' : 'bg-gray-500/20 text-gray-400 border-gray-500/30'}`}>
@@ -932,6 +1071,9 @@ export function AdminPage() {
                       <div className="flex items-center justify-between mt-4 pt-4 border-t border-[var(--border)]">
                         <span className="text-[var(--gold-primary)] font-bold">{formatCurrency(p.price, true)}</span>
                         <div className="flex gap-2">
+                          <button onClick={() => openModal('product', p)} className="p-1.5 hover:bg-[var(--gold-primary)]/10 rounded transition-colors" title="View" aria-label={`View ${p.name}`}>
+                            <Eye className="w-4 h-4 text-[var(--text-muted)]" />
+                          </button>
                           <button onClick={() => openModal('product', p)} className="p-1.5 hover:bg-[var(--gold-primary)]/10 rounded transition-colors" title="Edit">
                             <Edit className="w-4 h-4 text-[var(--text-muted)]" />
                           </button>
@@ -944,52 +1086,127 @@ export function AdminPage() {
                   ))}
                 </div>
               )}
+              <PaginationBar
+                pagination={productsPagination}
+                onPageChange={(nextPage) => setProductQuery((prev) => ({ ...prev, page: nextPage }))}
+              />
 
               {/* Builder Parts Section */}
-              <div className="flex justify-between items-center mb-4 mt-8">
-                <h3 className="text-white text-xl font-semibold">Guitar Parts (Builder Catalog)</h3>
+              <div className="flex justify-between items-center mb-4 mt-10">
+                <div>
+                  <h3 className="text-white text-xl font-semibold">Guitar Parts (Builder Catalog)</h3>
+                  <p className="text-[var(--text-muted)] text-sm">Align parts with builder slots used in customization pages.</p>
+                </div>
                 <button onClick={() => openModal('part')} className="flex items-center gap-2 bg-[var(--surface-dark)] border border-[var(--border)] text-white px-4 py-2 rounded-xl font-semibold hover:border-[var(--gold-primary)]/50 transition-colors">
                   <Plus className="w-5 h-5 text-[var(--gold-primary)]" /> Add Builder Part
                 </button>
               </div>
-              <AdminTable
-                columns={['Asset', 'Part Name', 'Type (UI Slot)', 'Stock', 'Upgrade Price', 'Status', 'Actions']}
-                rows={visibleParts}
-                renderRow={(part) => (
-                  <>
-                    <td className="py-4 px-6">
-                      {part.image_url ? (
-                        <div className="w-12 h-12 relative flex items-center justify-center p-1 bg-black/30 rounded-lg overflow-hidden border border-[var(--border)]">
-                          <img src={part.image_url} alt={part.name} className="max-w-full max-h-full object-contain drop-shadow-md" loading="lazy" />
+              <div className="mb-3 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setPartQuery({ page: 1, pageSize: partQuery.pageSize, sortBy: 'created_at', sortDir: 'desc', guitar_type: '', part_category: '', is_active: '', min_price: '', max_price: '' })}
+                  className="px-3 py-2 rounded-lg border border-[var(--border)] text-sm text-[var(--text-muted)] hover:text-white hover:border-[var(--gold-primary)] transition-colors"
+                >
+                  Clear part filters
+                </button>
+              </div>
+              <div className="mb-4 p-4 rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)]/70 backdrop-blur-sm">
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-7 gap-3">
+                  <select aria-label="Filter parts by guitar type" value={partQuery.guitar_type} onChange={(e) => setPartQuery((prev) => ({ ...prev, page: 1, guitar_type: e.target.value }))} className={inputCls}>
+                    <option value="">All guitar types</option>
+                    {guitarTypeOptions.map((val) => <option key={val} value={val}>{val}</option>)}
+                  </select>
+                  <select aria-label="Filter parts by category" value={partQuery.part_category} onChange={(e) => setPartQuery((prev) => ({ ...prev, page: 1, part_category: e.target.value }))} className={inputCls}>
+                    <option value="">All categories</option>
+                    {partCategoryOptions.map((val) => <option key={val} value={val}>{val}</option>)}
+                  </select>
+                  <select aria-label="Filter parts by status" value={partQuery.is_active} onChange={(e) => setPartQuery((prev) => ({ ...prev, page: 1, is_active: e.target.value }))} className={inputCls}>
+                    <option value="">All statuses</option>
+                    <option value="true">Active</option>
+                    <option value="false">Inactive</option>
+                  </select>
+                  <select aria-label="Sort parts" value={`${partQuery.sortBy}:${partQuery.sortDir}`} onChange={(e) => {
+                    const [sortBy, sortDir] = e.target.value.split(':')
+                    setPartQuery((prev) => ({ ...prev, page: 1, sortBy, sortDir }))
+                  }} className={inputCls}>
+                    <option value="created_at:desc">Newest first</option>
+                    <option value="created_at:asc">Oldest first</option>
+                    <option value="name:asc">Name A-Z</option>
+                    <option value="name:desc">Name Z-A</option>
+                    <option value="price:asc">Price low-high</option>
+                    <option value="price:desc">Price high-low</option>
+                  </select>
+                  <select aria-label="Parts page size" value={partQuery.pageSize} onChange={(e) => setPartQuery((prev) => ({ ...prev, page: 1, pageSize: Number(e.target.value) }))} className={inputCls}>
+                    {PAGE_SIZE_OPTIONS.map((n) => <option key={n} value={n}>{n} per page</option>)}
+                  </select>
+                  <input
+                    type="number"
+                    aria-label="Minimum part price"
+                    placeholder="Min price"
+                    value={partQuery.min_price}
+                    onChange={(e) => setPartQuery((prev) => ({ ...prev, page: 1, min_price: e.target.value }))}
+                    className={inputCls}
+                  />
+                  <input
+                    type="number"
+                    aria-label="Maximum part price"
+                    placeholder="Max price"
+                    value={partQuery.max_price}
+                    onChange={(e) => setPartQuery((prev) => ({ ...prev, page: 1, max_price: e.target.value }))}
+                    className={inputCls}
+                  />
+                </div>
+              </div>
+              {partsLoading ? (
+                <SectionLoader label="Loading builder parts..." />
+              ) : (
+                <AdminTable
+                  columns={['Asset', 'Part Name', 'Guitar Type', 'Category', 'Stock', 'Upgrade Price', 'Status', 'Actions']}
+                  rows={visibleParts}
+                  renderRow={(part) => (
+                    <>
+                      <td className="py-4 px-6">
+                        {part.image_url ? (
+                          <div className="w-12 h-12 relative flex items-center justify-center p-1 bg-black/30 rounded-lg overflow-hidden border border-[var(--border)]">
+                            <img src={part.image_url} alt={part.name} className="max-w-full max-h-full object-contain drop-shadow-md" loading="lazy" />
+                          </div>
+                        ) : (
+                          <div className="w-12 h-12 bg-[var(--bg-primary)] border border-[var(--border)] rounded-lg flex items-center justify-center">
+                            <Guitar className="w-5 h-5 text-[var(--text-muted)]" />
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-4 px-6 text-white font-semibold">{part.name}</td>
+                      <td className="py-4 px-6 text-[var(--text-muted)] capitalize">{part.guitar_type || '—'}</td>
+                      <td className="py-4 px-6 text-[var(--text-muted)] capitalize">{(part.part_category || part.type_mapping || '—').replace('_', ' ')}</td>
+                      <td className="py-4 px-6 text-white">{part.stock}</td>
+                      <td className="py-4 px-6 text-[var(--gold-primary)] font-bold">{formatCurrency(part.price, true)}</td>
+                      <td className="py-4 px-6">
+                        <span className={`px-2 py-1 rounded-full text-xs font-semibold border ${part.is_active ? 'bg-green-500/20 text-green-400 border-green-500/30' : 'bg-gray-500/20 text-gray-400 border-gray-500/30'}`}>
+                          {part.is_active ? 'Active' : 'Inactive'}
+                        </span>
+                      </td>
+                      <td className="py-4 px-6">
+                        <div className="flex gap-2">
+                          <button onClick={() => openModal('part', part)} className="p-2 hover:bg-[var(--gold-primary)]/10 rounded-lg transition-colors" aria-label={`View ${part.name}`}>
+                            <Eye className="w-4 h-4 text-[var(--text-muted)]" />
+                          </button>
+                          <button onClick={() => openModal('part', part)} className="p-2 hover:bg-[var(--gold-primary)]/10 rounded-lg transition-colors" aria-label={`Edit ${part.name}`}>
+                            <Edit className="w-4 h-4 text-[var(--text-muted)]" />
+                          </button>
+                          <button onClick={() => deletePart(part.part_id, part.name)} className="p-2 hover:bg-red-500/10 rounded-lg transition-colors" aria-label={`Deactivate ${part.name}`}>
+                            <Trash2 className="w-4 h-4 text-red-400" />
+                          </button>
                         </div>
-                      ) : (
-                        <div className="w-12 h-12 bg-[var(--bg-primary)] border border-[var(--border)] rounded-lg flex items-center justify-center">
-                          <Guitar className="w-5 h-5 text-[var(--text-muted)]" />
-                        </div>
-                      )}
-                    </td>
-                    <td className="py-4 px-6 text-white font-semibold">{part.name}</td>
-                    <td className="py-4 px-6 text-[var(--text-muted)] capitalize">{part.type_mapping ? part.type_mapping.replace('_', ' ') : '—'}</td>
-                    <td className="py-4 px-6 text-white">{part.stock}</td>
-                    <td className="py-4 px-6 text-[var(--gold-primary)] font-bold">{formatCurrency(part.price, true)}</td>
-                    <td className="py-4 px-6">
-                      <span className={`px-2 py-1 rounded-full text-xs font-semibold border ${part.is_active ? 'bg-green-500/20 text-green-400 border-green-500/30' : 'bg-gray-500/20 text-gray-400 border-gray-500/30'}`}>
-                        {part.is_active ? 'Active' : 'Inactive'}
-                      </span>
-                    </td>
-                    <td className="py-4 px-6">
-                      <div className="flex gap-2">
-                        <button onClick={() => openModal('part', part)} className="p-2 hover:bg-[var(--gold-primary)]/10 rounded-lg transition-colors">
-                          <Edit className="w-4 h-4 text-[var(--text-muted)]" />
-                        </button>
-                        <button onClick={() => deletePart(part.part_id, part.name)} className="p-2 hover:bg-red-500/10 rounded-lg transition-colors">
-                          <Trash2 className="w-4 h-4 text-red-400" />
-                        </button>
-                      </div>
-                    </td>
-                  </>
-                )}
-                empty={<EmptyState icon={Layers} label="No builder parts yet" action={() => openModal('part')} actionLabel="Add Builder Part" />}
+                      </td>
+                    </>
+                  )}
+                  empty={<EmptyState icon={Layers} label={debouncedSearch ? 'No builder parts match your search/filters' : 'No builder parts yet'} action={() => openModal('part')} actionLabel="Add Builder Part" />}
+                />
+              )}
+              <PaginationBar
+                pagination={partsPagination}
+                onPageChange={(nextPage) => setPartQuery((prev) => ({ ...prev, page: nextPage }))}
               />
             </motion.div>
           )}
@@ -1649,9 +1866,8 @@ export function AdminPage() {
                       <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
                         <FormField label="Stock Keeping Unit (SKU) *" value={form.sku || ''} onChange={v => setForm(f => ({ ...f, sku: v }))} placeholder="e.g. GTR-STR-001" error={formErrors.sku} />
                         
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 bg-[var(--bg-primary)] p-5 rounded-2xl border border-[var(--border)]">
-                          <FormField label="Retail Price (₱) *" type="number" value={form.price || ''} onChange={v => setForm(f => ({ ...f, price: v }))} error={formErrors.price} placeholder="e.g. 50000" />
-                          <FormField label="Base Cost (₱)" type="number" value={form.cost || ''} onChange={v => setForm(f => ({ ...f, cost: v }))} placeholder="e.g. 30000" />
+                        <div className="bg-[var(--bg-primary)] p-5 rounded-2xl border border-[var(--border)]">
+                          <FormField label="Price (₱) *" type="number" value={form.price || ''} onChange={v => setForm(f => ({ ...f, price: v }))} error={formErrors.price} placeholder="e.g. 50000" />
                         </div>
                         
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 bg-[var(--bg-primary)] p-5 rounded-2xl border border-[var(--border)]">
@@ -1724,14 +1940,71 @@ export function AdminPage() {
                       <FormField label="Part Name *" value={form.name || ''} onChange={v => setForm(f => ({ ...f, name: v }))} placeholder="e.g. Mahogany Body" error={formErrors.name} />
                       <FormField label="Description" value={form.description || ''} onChange={v => setForm(f => ({ ...f, description: v }))} textarea />
                       <div>
+                        <label className={labelCls}>Builder Category (Customize Page)</label>
+                        <select
+                          value={form.builder_category || ''}
+                          onChange={e => {
+                            const builderCategory = e.target.value
+                            const firstSlot = BUILDER_CATEGORY_MAP[builderCategory]?.[0] || ''
+                            setForm(f => ({
+                              ...f,
+                              builder_category: builderCategory,
+                              type_mapping: firstSlot || f.type_mapping || '',
+                              part_category: SLOT_TO_PART_CATEGORY[firstSlot] || f.part_category || 'misc',
+                            }))
+                          }}
+                          className={inputCls}
+                        >
+                          <option value="">— Select Category —</option>
+                          <option value="body">Body</option>
+                          <option value="neck">Neck & Headstock</option>
+                          <option value="hardware">Hardware</option>
+                          <option value="electronics">Electronics</option>
+                        </select>
+                      </div>
+                      <div>
                         <label className={`${labelCls} ${formErrors.type_mapping ? 'text-red-400' : ''}`}>Type Mapping (UI Slot) *</label>
-                        <select value={form.type_mapping || ''} onChange={e => setForm(f => ({ ...f, type_mapping: e.target.value }))} className={formErrors.type_mapping ? inputErrCls : inputCls}>
+                        <select
+                          value={form.type_mapping || ''}
+                          onChange={e => {
+                            const typeMapping = e.target.value
+                            setForm(f => ({
+                              ...f,
+                              type_mapping: typeMapping,
+                              part_category: SLOT_TO_PART_CATEGORY[typeMapping] || f.part_category || 'misc',
+                            }))
+                          }}
+                          className={formErrors.type_mapping ? inputErrCls : inputCls}
+                        >
                           <option value="">— Select Type —</option>
-                          {['body', 'neck', 'fretboard', 'pickups', 'bridge', 'knobs', 'tuning_pegs'].map(t => (
-                            <option key={t} value={t}>{t.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}</option>
+                          {(
+                            form.builder_category
+                              ? BUILDER_CATEGORY_MAP[form.builder_category] || []
+                              : Object.values(BUILDER_CATEGORY_MAP).flat()
+                          ).map((t) => (
+                            <option key={t} value={t}>{t.replace(/([A-Z])/g, ' $1').replace('_', ' ').replace(/\b\w/g, (l) => l.toUpperCase())}</option>
                           ))}
                         </select>
                         {formErrors.type_mapping && <p className="text-red-400 text-xs mt-1">{formErrors.type_mapping}</p>}
+                        <p className="text-[var(--text-muted)] text-xs mt-1">Slots follow `CustomizePage` field names to keep admin parts aligned with builder logic.</p>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className={labelCls}>Guitar Type</label>
+                          <select value={form.guitar_type || 'electric'} onChange={e => setForm(f => ({ ...f, guitar_type: e.target.value }))} className={inputCls}>
+                            {['electric', 'bass', 'acoustic', 'ukulele'].map(t => (
+                              <option key={t} value={t}>{t.replace(/\b\w/g, l => l.toUpperCase())}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className={labelCls}>Part Category</label>
+                          <select value={form.part_category || form.type_mapping || 'misc'} onChange={e => setForm(f => ({ ...f, part_category: e.target.value }))} className={inputCls}>
+                            {['body', 'neck', 'fretboard', 'pickups', 'bridge', 'electronics', 'hardware', 'tuners', 'strings', 'finish', 'wood_type', 'pickguard', 'misc'].map(t => (
+                              <option key={t} value={t}>{t.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}</option>
+                            ))}
+                          </select>
+                        </div>
                       </div>
                       <div className="grid grid-cols-2 gap-4">
                         <FormField label="Qty in Stock" type="number" value={form.stock ?? ''} onChange={v => setForm(f => ({ ...f, stock: v }))} />
@@ -1993,6 +2266,53 @@ function EmptyState({ icon: Icon, label, action, actionLabel }) {
           {actionLabel}
         </button>
       )}
+    </div>
+  )
+}
+
+function SectionLoader({ label = 'Loading...' }) {
+  return (
+    <div className="flex items-center justify-center gap-3 py-12 bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl text-[var(--text-muted)]">
+      <Loader2 className="w-5 h-5 animate-spin text-[var(--gold-primary)]" />
+      <span>{label}</span>
+    </div>
+  )
+}
+
+function PaginationBar({ pagination, onPageChange }) {
+  const page = pagination?.page || 1
+  const totalPages = pagination?.totalPages || 1
+  const total = pagination?.total || 0
+  const pageSize = pagination?.pageSize || 10
+
+  if (total <= 0) return null
+
+  const pages = []
+  for (let p = Math.max(1, page - 2); p <= Math.min(totalPages, page + 2); p += 1) pages.push(p)
+
+  return (
+    <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 border border-[var(--border)] rounded-xl bg-[var(--surface-dark)]">
+      <p className="text-xs text-[var(--text-muted)]">
+        Showing {Math.min((page - 1) * pageSize + 1, total)}-{Math.min(page * pageSize, total)} of {total}
+      </p>
+      <div className="flex items-center gap-1">
+        <button type="button" onClick={() => onPageChange(page - 1)} disabled={page <= 1} className="px-3 py-1.5 rounded-lg border border-[var(--border)] text-sm text-white disabled:opacity-40 hover:border-[var(--gold-primary)]">
+          Prev
+        </button>
+        {pages.map((p) => (
+          <button
+            key={p}
+            type="button"
+            onClick={() => onPageChange(p)}
+            className={`px-3 py-1.5 rounded-lg border text-sm ${p === page ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)]/20 text-[var(--gold-primary)]' : 'border-[var(--border)] text-white hover:border-[var(--gold-primary)]'}`}
+          >
+            {p}
+          </button>
+        ))}
+        <button type="button" onClick={() => onPageChange(page + 1)} disabled={page >= totalPages} className="px-3 py-1.5 rounded-lg border border-[var(--border)] text-sm text-white disabled:opacity-40 hover:border-[var(--gold-primary)]">
+          Next
+        </button>
+      </div>
     </div>
   )
 }

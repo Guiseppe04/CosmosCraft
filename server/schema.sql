@@ -3,6 +3,9 @@
 -- Full Schema with OTP Management
 -- =============================================
 
+-- Required for gen_random_uuid()
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
 -- =============================================
 -- ENUMS & CUSTOM TYPES
 -- =============================================
@@ -517,7 +520,210 @@ CREATE INDEX idx_project_tasks_status ON project_tasks(status);
 
 
 -- =============================================
--- 20. NOTIFICATIONS
+-- 20. BUILDER GUITAR TYPES
+-- =============================================
+
+CREATE TABLE builder_guitar_types (
+    guitar_type_code VARCHAR(50) PRIMARY KEY,
+    display_name VARCHAR(100) NOT NULL UNIQUE,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    sort_order SMALLINT NOT NULL DEFAULT 0 CHECK (sort_order >= 0),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+INSERT INTO builder_guitar_types (guitar_type_code, display_name, sort_order) VALUES
+('electric', 'Electric', 1),
+('bass', 'Bass', 2),
+('acoustic', 'Acoustic', 3),
+('ukulele', 'Ukulele', 4)
+ON CONFLICT (guitar_type_code) DO NOTHING;
+
+
+-- =============================================
+-- 21. BUILDER PART CATEGORIES
+-- =============================================
+
+CREATE TABLE builder_part_categories (
+    part_category_code VARCHAR(100) PRIMARY KEY,
+    display_name VARCHAR(120) NOT NULL UNIQUE,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    sort_order SMALLINT NOT NULL DEFAULT 0 CHECK (sort_order >= 0),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+INSERT INTO builder_part_categories (part_category_code, display_name, sort_order) VALUES
+('body', 'Body', 1),
+('neck', 'Neck', 2),
+('fretboard', 'Fretboard', 3),
+('bridge', 'Bridge', 4),
+('pickups', 'Pickups', 5),
+('electronics', 'Electronics', 6),
+('hardware', 'Hardware', 7),
+('tuners', 'Tuners', 8),
+('strings', 'Strings', 9),
+('finish', 'Finish', 10),
+('wood_type', 'Wood Type', 11),
+('pickguard', 'Pickguard', 12),
+('misc', 'Misc', 99)
+ON CONFLICT (part_category_code) DO NOTHING;
+
+
+-- =============================================
+-- 22. BUILDER TYPE-CATEGORY MAP
+-- =============================================
+
+CREATE TABLE builder_type_categories (
+    guitar_type_code VARCHAR(50) NOT NULL,
+    part_category_code VARCHAR(100) NOT NULL,
+    is_required BOOLEAN NOT NULL DEFAULT FALSE,
+    sort_order SMALLINT NOT NULL DEFAULT 0 CHECK (sort_order >= 0),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (guitar_type_code, part_category_code),
+    FOREIGN KEY (guitar_type_code) REFERENCES builder_guitar_types(guitar_type_code) ON DELETE CASCADE,
+    FOREIGN KEY (part_category_code) REFERENCES builder_part_categories(part_category_code) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_builder_type_categories_category ON builder_type_categories(part_category_code);
+
+INSERT INTO builder_type_categories (guitar_type_code, part_category_code, is_required, sort_order) VALUES
+('electric', 'body', true, 1),
+('electric', 'neck', true, 2),
+('electric', 'pickups', true, 3),
+('electric', 'bridge', true, 4),
+('bass', 'body', true, 1),
+('bass', 'neck', true, 2),
+('bass', 'pickups', true, 3),
+('bass', 'bridge', true, 4),
+('acoustic', 'body', true, 1),
+('acoustic', 'neck', true, 2),
+('acoustic', 'fretboard', true, 3),
+('ukulele', 'body', true, 1),
+('ukulele', 'neck', true, 2),
+('ukulele', 'fretboard', true, 3)
+ON CONFLICT (guitar_type_code, part_category_code) DO NOTHING;
+
+
+-- =============================================
+-- 23. GUITAR BUILDER PARTS
+-- =============================================
+
+CREATE TABLE guitar_builder_parts (
+    part_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name VARCHAR(150) NOT NULL,
+    description TEXT,
+    guitar_type VARCHAR(50) NOT NULL DEFAULT 'electric',
+    part_category VARCHAR(100) NOT NULL DEFAULT 'misc',
+    folder_key VARCHAR(120),
+    type_mapping VARCHAR(100) NOT NULL,
+    price NUMERIC(12, 2) NOT NULL DEFAULT 0 CHECK (price >= 0),
+    stock INT NOT NULL DEFAULT 0 CHECK (stock >= 0),
+    image_url TEXT,
+    metadata JSONB DEFAULT '{}'::jsonb,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    FOREIGN KEY (guitar_type) REFERENCES builder_guitar_types(guitar_type_code) ON DELETE RESTRICT,
+    FOREIGN KEY (part_category) REFERENCES builder_part_categories(part_category_code) ON DELETE RESTRICT
+);
+
+CREATE INDEX idx_guitar_builder_parts_type ON guitar_builder_parts(type_mapping);
+CREATE INDEX idx_guitar_builder_parts_active ON guitar_builder_parts(is_active);
+CREATE INDEX idx_guitar_builder_parts_guitar_type ON guitar_builder_parts(guitar_type);
+CREATE INDEX idx_guitar_builder_parts_part_category ON guitar_builder_parts(part_category);
+CREATE INDEX idx_guitar_builder_parts_folder_key ON guitar_builder_parts(folder_key);
+CREATE INDEX idx_guitar_builder_parts_lookup ON guitar_builder_parts(guitar_type, part_category, is_active);
+
+
+-- =============================================
+-- 24. PROJECT TEAM MEMBERS
+-- =============================================
+
+CREATE TABLE project_team_members (
+    project_id UUID NOT NULL,
+    user_id UUID NOT NULL,
+    assigned_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+    PRIMARY KEY (project_id, user_id),
+    FOREIGN KEY (project_id) REFERENCES projects(project_id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_project_team_members_user_id ON project_team_members(user_id);
+
+
+-- =============================================
+-- 25. PROJECT MILESTONES
+-- =============================================
+
+CREATE TABLE project_milestones (
+    milestone_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    project_id UUID NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    description TEXT,
+    order_index INT NOT NULL DEFAULT 0 CHECK (order_index >= 0),
+    status VARCHAR(50) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'in_progress', 'completed', 'blocked')),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+    FOREIGN KEY (project_id) REFERENCES projects(project_id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_project_milestones_project_id ON project_milestones(project_id);
+CREATE INDEX idx_project_milestones_status ON project_milestones(status);
+
+
+-- =============================================
+-- 26. PROJECT SUBTASKS
+-- =============================================
+
+CREATE TABLE project_subtasks (
+    subtask_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    milestone_id UUID NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    is_customer_updatable BOOLEAN NOT NULL DEFAULT FALSE,
+    assigned_user_id UUID,
+    status VARCHAR(50) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'completed')),
+    completed_at TIMESTAMPTZ,
+    completed_by UUID,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+    FOREIGN KEY (milestone_id) REFERENCES project_milestones(milestone_id) ON DELETE CASCADE,
+    FOREIGN KEY (assigned_user_id) REFERENCES users(user_id) ON DELETE SET NULL,
+    FOREIGN KEY (completed_by) REFERENCES users(user_id) ON DELETE SET NULL
+);
+
+CREATE INDEX idx_project_subtasks_milestone_id ON project_subtasks(milestone_id);
+CREATE INDEX idx_project_subtasks_assigned_user_id ON project_subtasks(assigned_user_id);
+CREATE INDEX idx_project_subtasks_status ON project_subtasks(status);
+
+
+-- =============================================
+-- 27. PROJECT ACTIVITY LOGS
+-- =============================================
+
+CREATE TABLE project_activity_logs (
+    log_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    project_id UUID NOT NULL,
+    user_id UUID,
+    action_type VARCHAR(100) NOT NULL,
+    details JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+    FOREIGN KEY (project_id) REFERENCES projects(project_id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE SET NULL
+);
+
+CREATE INDEX idx_project_activity_logs_project_id ON project_activity_logs(project_id);
+CREATE INDEX idx_project_activity_logs_user_id ON project_activity_logs(user_id);
+CREATE INDEX idx_project_activity_logs_action_type ON project_activity_logs(action_type);
+CREATE INDEX idx_project_activity_logs_created_at ON project_activity_logs(created_at DESC);
+
+
+-- =============================================
+-- 28. NOTIFICATIONS
 -- =============================================
 
 CREATE TABLE notifications (
@@ -542,7 +748,7 @@ CREATE INDEX idx_notifications_created_at ON notifications(created_at DESC);
 
 
 -- =============================================
--- 21. OTP CODES
+-- 29. OTP CODES
 -- =============================================
 
 CREATE TABLE otp_codes (
@@ -564,7 +770,7 @@ CREATE INDEX idx_otp_codes_is_used ON otp_codes(is_used);
 
 
 -- =============================================
--- 22. OTP ATTEMPTS
+-- 30. OTP ATTEMPTS
 -- =============================================
 
 CREATE TABLE otp_attempts (
@@ -584,7 +790,7 @@ CREATE INDEX idx_otp_attempts_created_at ON otp_attempts(created_at DESC);
 
 
 -- =============================================
--- 23. ROLES (RBAC)
+-- 31. ROLES (RBAC)
 -- =============================================
 
 CREATE TABLE roles (
@@ -606,7 +812,7 @@ CREATE INDEX idx_roles_parent ON roles(parent_role_id);
 
 
 -- =============================================
--- 24. PERMISSIONS (RBAC)
+-- 32. PERMISSIONS (RBAC)
 -- =============================================
 
 CREATE TABLE permissions (
@@ -622,7 +828,7 @@ CREATE INDEX idx_permissions_category ON permissions(category);
 
 
 -- =============================================
--- 25. ROLE PERMISSIONS (RBAC)
+-- 33. ROLE PERMISSIONS (RBAC)
 -- =============================================
 
 CREATE TABLE role_permissions (
@@ -640,7 +846,7 @@ CREATE INDEX idx_role_permissions_permission ON role_permissions(permission_id);
 
 
 -- =============================================
--- 26. USER ROLES (RBAC)
+-- 34. USER ROLES (RBAC)
 -- =============================================
 
 CREATE TABLE user_roles (
@@ -756,7 +962,7 @@ ON CONFLICT DO NOTHING;
 
 
 -- =============================================
--- INVENTORY & POS MODULE (TABLES 27-31)
+-- INVENTORY & POS MODULE (TABLES 35-39)
 -- =============================================
 
 -- =============================================
@@ -769,7 +975,7 @@ CREATE TYPE pos_sale_status_enum AS ENUM ('pending', 'completed', 'cancelled', '
 
 
 -- =============================================
--- 27. INVENTORY LOGS
+-- 35. INVENTORY LOGS
 -- =============================================
 -- Tracks all inventory movements with reference to source transactions
 
@@ -795,7 +1001,7 @@ CREATE INDEX idx_inventory_logs_change_type ON inventory_logs(change_type);
 
 
 -- =============================================
--- 28. POS SALES (Point of Sale Transactions)
+-- 36. POS SALES (Point of Sale Transactions)
 -- =============================================
 -- Represents a walk-in customer transaction
 
@@ -821,8 +1027,7 @@ CREATE TABLE pos_sales (
     cancelled_by UUID,
     
     FOREIGN KEY (staff_id) REFERENCES users(user_id) ON DELETE RESTRICT,
-    FOREIGN KEY (cancelled_by) REFERENCES users(user_id) ON DELETE SET NULL,
-    UNIQUE(sale_number)
+    FOREIGN KEY (cancelled_by) REFERENCES users(user_id) ON DELETE SET NULL
 );
 
 CREATE INDEX idx_pos_sales_sale_number ON pos_sales(sale_number);
@@ -834,7 +1039,7 @@ CREATE INDEX idx_pos_sales_completed_at ON pos_sales(completed_at DESC);
 
 
 -- =============================================
--- 29. POS SALE ITEMS
+-- 37. POS SALE ITEMS
 -- =============================================
 -- Individual line items in a POS sale
 
@@ -863,7 +1068,7 @@ CREATE INDEX idx_pos_sale_items_service_id ON pos_sale_items(service_id);
 
 
 -- =============================================
--- 30. POS PAYMENTS
+-- 38. POS PAYMENTS
 -- =============================================
 -- Payment tracking for POS sales
 
@@ -891,7 +1096,7 @@ CREATE INDEX idx_pos_payments_created_at ON pos_payments(created_at DESC);
 
 
 -- =============================================
--- 31. LOW STOCK ALERTS (Optional)
+-- 39. LOW STOCK ALERTS (Optional)
 -- =============================================
 -- Tracks low stock alert notifications
 
@@ -948,3 +1153,215 @@ WHERE name IN ('manage_inventory', 'view_inventory', 'adjust_stock', 'view_inven
 ON CONFLICT DO NOTHING;
 
 -- Super Admin: All permissions (already has all)
+
+-- =============================================
+-- SCHEMA HARDENING / PRODUCTION CONVENTIONS
+-- =============================================
+
+-- Keep updated_at consistent across mutable tables.
+CREATE OR REPLACE FUNCTION set_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = now();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_users_set_updated_at ON users;
+CREATE TRIGGER trg_users_set_updated_at
+BEFORE UPDATE ON users
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
+
+DROP TRIGGER IF EXISTS trg_user_identities_set_updated_at ON user_identities;
+CREATE TRIGGER trg_user_identities_set_updated_at
+BEFORE UPDATE ON user_identities
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
+
+DROP TRIGGER IF EXISTS trg_categories_set_updated_at ON categories;
+CREATE TRIGGER trg_categories_set_updated_at
+BEFORE UPDATE ON categories
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
+
+DROP TRIGGER IF EXISTS trg_products_set_updated_at ON products;
+CREATE TRIGGER trg_products_set_updated_at
+BEFORE UPDATE ON products
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
+
+DROP TRIGGER IF EXISTS trg_carts_set_updated_at ON carts;
+CREATE TRIGGER trg_carts_set_updated_at
+BEFORE UPDATE ON carts
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
+
+DROP TRIGGER IF EXISTS trg_cart_items_set_updated_at ON cart_items;
+CREATE TRIGGER trg_cart_items_set_updated_at
+BEFORE UPDATE ON cart_items
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
+
+DROP TRIGGER IF EXISTS trg_customizations_set_updated_at ON customizations;
+CREATE TRIGGER trg_customizations_set_updated_at
+BEFORE UPDATE ON customizations
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
+
+DROP TRIGGER IF EXISTS trg_orders_set_updated_at ON orders;
+CREATE TRIGGER trg_orders_set_updated_at
+BEFORE UPDATE ON orders
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
+
+DROP TRIGGER IF EXISTS trg_payments_set_updated_at ON payments;
+CREATE TRIGGER trg_payments_set_updated_at
+BEFORE UPDATE ON payments
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
+
+DROP TRIGGER IF EXISTS trg_payment_config_set_updated_at ON payment_config;
+CREATE TRIGGER trg_payment_config_set_updated_at
+BEFORE UPDATE ON payment_config
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
+
+DROP TRIGGER IF EXISTS trg_services_set_updated_at ON services;
+CREATE TRIGGER trg_services_set_updated_at
+BEFORE UPDATE ON services
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
+
+DROP TRIGGER IF EXISTS trg_appointments_set_updated_at ON appointments;
+CREATE TRIGGER trg_appointments_set_updated_at
+BEFORE UPDATE ON appointments
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
+
+DROP TRIGGER IF EXISTS trg_projects_set_updated_at ON projects;
+CREATE TRIGGER trg_projects_set_updated_at
+BEFORE UPDATE ON projects
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
+
+DROP TRIGGER IF EXISTS trg_builder_guitar_types_set_updated_at ON builder_guitar_types;
+CREATE TRIGGER trg_builder_guitar_types_set_updated_at
+BEFORE UPDATE ON builder_guitar_types
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
+
+DROP TRIGGER IF EXISTS trg_builder_part_categories_set_updated_at ON builder_part_categories;
+CREATE TRIGGER trg_builder_part_categories_set_updated_at
+BEFORE UPDATE ON builder_part_categories
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
+
+DROP TRIGGER IF EXISTS trg_guitar_builder_parts_set_updated_at ON guitar_builder_parts;
+CREATE TRIGGER trg_guitar_builder_parts_set_updated_at
+BEFORE UPDATE ON guitar_builder_parts
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
+
+-- Backward compatibility: keep supporting inserts that only send type_mapping.
+CREATE OR REPLACE FUNCTION normalize_guitar_builder_part()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.guitar_type = lower(NEW.guitar_type);
+    NEW.part_category = lower(NEW.part_category);
+
+    IF NEW.type_mapping IS NOT NULL AND NEW.type_mapping <> '' THEN
+        IF NEW.part_category = 'misc' AND NEW.type_mapping IN (
+            'body', 'neck', 'fretboard', 'bridge', 'pickups', 'electronics',
+            'hardware', 'tuners', 'strings', 'finish', 'wood_type', 'pickguard'
+        ) THEN
+            NEW.part_category = lower(NEW.type_mapping);
+        END IF;
+    END IF;
+
+    IF NEW.folder_key IS NULL OR btrim(NEW.folder_key) = '' THEN
+        NEW.folder_key = lower(NEW.guitar_type::text || '/' || NEW.part_category::text);
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_guitar_builder_parts_normalize ON guitar_builder_parts;
+CREATE TRIGGER trg_guitar_builder_parts_normalize
+BEFORE INSERT OR UPDATE ON guitar_builder_parts
+FOR EACH ROW
+EXECUTE FUNCTION normalize_guitar_builder_part();
+
+DROP TRIGGER IF EXISTS trg_project_milestones_set_updated_at ON project_milestones;
+CREATE TRIGGER trg_project_milestones_set_updated_at
+BEFORE UPDATE ON project_milestones
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
+
+DROP TRIGGER IF EXISTS trg_project_subtasks_set_updated_at ON project_subtasks;
+CREATE TRIGGER trg_project_subtasks_set_updated_at
+BEFORE UPDATE ON project_subtasks
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
+
+DROP TRIGGER IF EXISTS trg_project_tasks_set_updated_at ON project_tasks;
+CREATE TRIGGER trg_project_tasks_set_updated_at
+BEFORE UPDATE ON project_tasks
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
+
+DROP TRIGGER IF EXISTS trg_roles_set_updated_at ON roles;
+CREATE TRIGGER trg_roles_set_updated_at
+BEFORE UPDATE ON roles
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
+
+DROP TRIGGER IF EXISTS trg_pos_sales_set_updated_at ON pos_sales;
+CREATE TRIGGER trg_pos_sales_set_updated_at
+BEFORE UPDATE ON pos_sales
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
+
+DROP TRIGGER IF EXISTS trg_pos_payments_set_updated_at ON pos_payments;
+CREATE TRIGGER trg_pos_payments_set_updated_at
+BEFORE UPDATE ON pos_payments
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
+
+-- One default shipping address per user.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_addresses_one_default_per_user
+ON addresses(user_id)
+WHERE is_default;
+
+-- One primary image per product.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_product_images_one_primary_per_product
+ON product_images(product_id)
+WHERE is_primary;
+
+-- Currency should be ISO-like uppercase 3-letter code.
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'chk_payments_currency_iso'
+    ) THEN
+        ALTER TABLE payments
+        ADD CONSTRAINT chk_payments_currency_iso
+        CHECK (currency ~ '^[A-Z]{3}$');
+    END IF;
+END $$;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'chk_pos_payments_currency_iso'
+    ) THEN
+        ALTER TABLE pos_payments
+        ADD CONSTRAINT chk_pos_payments_currency_iso
+        CHECK (currency ~ '^[A-Z]{3}$');
+    END IF;
+END $$;
