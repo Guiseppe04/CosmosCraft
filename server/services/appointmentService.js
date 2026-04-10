@@ -159,6 +159,7 @@ exports.listAppointments = async ({
   status,
   date_from,
   date_to,
+  search,
   sort_by = 'scheduled_at',
   sort_order = 'asc',
   limit = 20,
@@ -196,6 +197,12 @@ exports.listAppointments = async ({
   if (date_to) {
     where.push(`a.scheduled_at <= $${idx}`);
     params.push(date_to);
+    idx++;
+  }
+
+  if (search) {
+    where.push(`(u.first_name ILIKE $${idx} OR u.last_name ILIKE $${idx} OR u.email ILIKE $${idx} OR a.notes ILIKE $${idx} OR CAST(a.appointment_id AS TEXT) ILIKE $${idx})`);
+    params.push(`%${search}%`);
     idx++;
   }
 
@@ -248,15 +255,23 @@ exports.getAppointmentsCount = async (filters = {}) => {
   }
 
   if (filters.status) {
-    where.push(`status = $${idx}`);
+    where.push(`a.status = $${idx}`);
     params.push(filters.status);
+    idx++;
+  }
+
+  if (filters.search) {
+    where.push(`(u.first_name ILIKE $${idx} OR u.last_name ILIKE $${idx} OR u.email ILIKE $${idx} OR a.notes ILIKE $${idx} OR CAST(a.appointment_id AS TEXT) ILIKE $${idx})`);
+    params.push(`%${filters.search}%`);
     idx++;
   }
 
   const whereClause = where.length ? `WHERE ${where.join(' AND ')}` : '';
 
   const result = await pool.query(
-    `SELECT COUNT(*) as total FROM appointments ${whereClause}`,
+    `SELECT COUNT(a.*) as total FROM appointments a
+     LEFT JOIN users u ON a.user_id = u.user_id
+     ${whereClause}`,
     params
   );
 

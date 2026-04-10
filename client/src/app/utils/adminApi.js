@@ -118,11 +118,15 @@ export const adminApi = {
 
   // Inventory
   getInventorySummary: () => request('/api/inventory/summary'),
+  getInventoryProducts: (params = {}) => {
+    const qs = new URLSearchParams(params).toString()
+    return request(`/api/inventory/products${qs ? '?' + qs : ''}`)
+  },
   getInventoryLogs: (params = {}) => {
     const qs = new URLSearchParams(params).toString()
     return request(`/api/inventory/logs${qs ? '?' + qs : ''}`)
   },
-  addStock: (body) => request('/api/inventory/stock-in', { method: 'PATCH', body }),
-  deductStock: (body) => request('/api/inventory/stock-out', { method: 'PATCH', body }),
-  adjustStock: (body) => request('/api/inventory/adjust', { method: 'PATCH', body }),
+  addStock: ({ product_id, ...rest }) => request('/api/inventory/stock-in', { method: 'PATCH', body: { productId: product_id, ...rest } }),
+  deductStock: ({ product_id, ...rest }) => request('/api/inventory/stock-out', { method: 'PATCH', body: { productId: product_id, ...rest } }),
+  adjustStock: ({ product_id, ...rest }) => request('/api/inventory/adjust', { method: 'PATCH', body: { productId: product_id, ...rest } }),
 }

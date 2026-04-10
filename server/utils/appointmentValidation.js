@@ -181,6 +181,8 @@ const appointmentValidation = {
         'any.only': 'Invalid appointment type',
       }),
 
+    search: Joi.string().allow('').optional(),
+
     status: Joi.string()
       .valid('pending', 'confirmed', 'in_progress', 'completed', 'ready_for_pickup', 'cancelled')
       .optional(),
