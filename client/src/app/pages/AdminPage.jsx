@@ -9,13 +9,15 @@ import {
   User, Guitar, Layers, Shield, Tag, AlertCircle, DollarSign,
   Save, TrendingUp, TrendingDown, UsersRound, CreditCard, Mail,
 } from 'lucide-react'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, BarChart, Bar, Cell } from 'recharts'
+import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Label, Cell } from 'recharts'
+import ProjectTaskTracker from '../components/projects/ProjectTaskTracker'
 import { useAuth } from '../context/AuthContext'
 import { Topbar } from '../components/admin/Topbar'
 import { MessagePanel } from '../components/admin/MessagePanel'
 import { ProjectProgress, ProgressBadge } from '../components/admin/ProjectProgress'
 import { formatCurrency } from '../utils/formatCurrency'
 import { adminApi } from '../utils/adminApi'
+import { uploadToCloudinary } from '../utils/cloudinary'
 
 const VALID_ROLES = ['customer', 'staff', 'admin', 'super_admin']
 const GUITAR_TYPES = ['acoustic', 'electric', 'bass']
@@ -33,6 +35,10 @@ export function AdminPage() {
   // Modal state
   const [modal, setModal] = useState({ open: false, type: null, data: null })
 
+  // Filters State
+  const [userRoleFilter, setUserRoleFilter] = useState('all')
+  const [userStatusFilter, setUserStatusFilter] = useState('all')
+
   // Data state
   const [products, setProducts] = useState([])
   const [categories, setCategories] = useState([])
@@ -45,69 +51,23 @@ export function AdminPage() {
   const [inventory, setInventory] = useState([])
   const [salesReport, setSalesReport] = useState(null)
 
-  const sampleProducts = [
-    { product_id: 'sample-1', sku: 'STR-001', name: 'Custom Stratocaster Body', category_name: 'Guitar Parts', price: 4500, is_active: true, stock: 16, low_stock_threshold: 8 },
-    { product_id: 'sample-2', sku: 'NEC-002', name: 'Roasted Maple Neck', category_name: 'Guitar Parts', price: 3800, is_active: true, stock: 5, low_stock_threshold: 6 },
-    { product_id: 'sample-3', sku: 'PUP-003', name: 'Vintage Humbucker Set', category_name: 'Pickups', price: 2300, is_active: false, stock: 2, low_stock_threshold: 4 },
-  ]
-
-  const sampleParts = [
-    { part_id: 'part-1', part_name: 'Alnico V Pickup', product_name: 'Vintage Humbucker Set', quantity: 14, price: 1600 },
-    { part_id: 'part-2', part_name: 'Rosewood Fingerboard', product_name: 'Custom Stratocaster Body', quantity: 8, price: 1800 },
-    { part_id: 'part-3', part_name: 'Tremolo Bridge', product_name: 'Custom Stratocaster Body', quantity: 5, price: 950 },
-  ]
-
-  const sampleGuitars = [
-    { customization_id: 'guitar-1', user_name: 'Alden Cruz', user_email: 'alden@example.com', name: 'Midnight Explorer', guitar_type: 'electric', total_price: 68500, is_saved: true },
-    { customization_id: 'guitar-2', user_name: 'Mira Santos', user_email: 'mira@example.com', name: 'Sunburst Voyager', guitar_type: 'acoustic', total_price: 54900, is_saved: false },
-    { customization_id: 'guitar-3', user_name: 'Leo Ramirez', user_email: 'leo@example.com', name: 'Thunderbolt Bass', guitar_type: 'bass', total_price: 71250, is_saved: true },
-  ]
-
-  const sampleCategories = [
-    { category_id: 'cat-1', name: 'Guitar Parts', slug: 'guitar-parts', parent_name: 'Inventory', is_active: true },
-    { category_id: 'cat-2', name: 'Pickups', slug: 'pickups', parent_name: 'Guitar Parts', is_active: true },
-    { category_id: 'cat-3', name: 'Hardware', slug: 'hardware', parent_name: 'Guitar Parts', is_active: false },
-  ]
-
-  const sampleOrders = [
-    { order_id: 'ord-1', order_number: '1001', customer_name: 'Alden Cruz', items: [{ name: 'Custom Strat Body' }, { name: 'Pickup' }], total: 12000, status: 'Pending', created_at: '2026-04-08' },
-    { order_id: 'ord-2', order_number: '1002', customer_name: 'Mira Santos', items: [{ name: 'Roasted Maple Neck' }, { name: 'Bridge' }], total: 18000, status: 'Confirmed', created_at: '2026-04-07' },
-    { order_id: 'ord-3', order_number: '1003', customer_name: 'Leo Ramirez', items: [{ name: 'Thunderbolt Bass' }], total: 24500, status: 'Completed', created_at: '2026-04-05' },
-  ]
-
-  const sampleProjects = [
-    { project_id: 'proj-1', name: 'Amped Strat Build', customer_name: 'Alden Cruz', status: 'In Progress', description: 'Complete custom Strat with premium hardware upgrade and tremolo system.', progress: 65 },
-    { project_id: 'proj-2', name: 'Rosewood Neck Set', customer_name: 'Mira Santos', status: 'Pending', description: 'Finish and install roasted maple necks with custom fretboard inlays.', progress: 25 },
-    { project_id: 'proj-3', name: 'Bass Refit', customer_name: 'Leo Ramirez', status: 'Completed', description: 'Set up Thunderbolt bass with active electronics and new bridge.', progress: 100 },
-  ]
-
-  const sampleAppointments = [
-    { appointment_id: 'apt-1', title: 'Setup Consultation', customer_name: 'Alden Cruz', customer_email: 'alden@example.com', date: '2026-04-09', time: '10:00 AM', status: 'Scheduled', notes: 'Discuss guitar setup options.' },
-    { appointment_id: 'apt-2', title: 'Pickup Order', customer_name: 'Mira Santos', customer_email: 'mira@example.com', date: '2026-04-10', time: '2:30 PM', status: 'Scheduled', notes: 'Customer will collect custom neck.' },
-    { appointment_id: 'apt-3', title: 'Guitar Review', customer_name: 'Leo Ramirez', customer_email: 'leo@example.com', date: '2026-04-12', time: '1:00 PM', status: 'Completed', notes: 'Final check and setup review.' },
-  ]
-
-  const sampleUsers = [
-    { user_id: 'user-1', first_name: 'Alden', last_name: 'Cruz', email: 'alden@example.com', role: 'customer', is_active: true, created_at: '2025-10-12' },
-    { user_id: 'user-2', first_name: 'Mira', last_name: 'Santos', email: 'mira@example.com', role: 'staff', is_active: true, created_at: '2026-01-18' },
-    { user_id: 'user-3', first_name: 'Leo', last_name: 'Ramirez', email: 'leo@example.com', role: 'admin', is_active: false, created_at: '2025-12-05' },
-  ]
-
-  const sampleInventory = [
-    { id: 'inv-1', name: 'Roasted Maple Neck', type: 'Neck', qty: 8, status: 'Healthy' },
-    { id: 'inv-2', name: 'Mahogany Body', type: 'Body', qty: 3, status: 'Critical' },
-    { id: 'inv-3', name: 'Vintage Humbucker Set', type: 'Pickup', qty: 12, status: 'Warning' },
-  ]
-
-  const visibleProducts = products.length > 0 ? products : sampleProducts
-  const visibleParts = parts.length > 0 ? parts : sampleParts
-  const visibleGuitars = guitars.length > 0 ? guitars : sampleGuitars
-  const visibleCategories = categories.length > 0 ? categories : sampleCategories
-  const visibleOrders = orders.length > 0 ? orders : sampleOrders
-  const visibleProjects = projects.length > 0 ? projects : sampleProjects
-  const visibleAppointments = appointments.length > 0 ? appointments : sampleAppointments
-  const visibleUsers = users.length > 0 ? users : sampleUsers
-  const visibleInventory = inventory.length > 0 ? inventory : sampleInventory
+  const visibleProducts = products || []
+  const visibleParts = parts || []
+  const visibleGuitars = guitars || []
+  const visibleCategories = categories || []
+  const visibleOrders = orders || []
+  const visibleProjects = projects || []
+  const visibleAppointments = appointments || []
+  const visibleInventory = inventory || []
+  
+  const visibleUsers = (users || []).filter(u => {
+    if (userRoleFilter !== 'all' && u.role !== userRoleFilter) return false
+    if (userStatusFilter !== 'all') {
+      const active = userStatusFilter === 'active'
+      if (u.is_active !== active) return false
+    }
+    return true
+  })
 
   const inventoryHealthData = (() => {
     const productItems = visibleProducts.map((product) => ({
@@ -155,6 +115,7 @@ export function AdminPage() {
   const [form, setForm] = useState({})
   const [formErrors, setFormErrors] = useState({})
   const [isSaving, setIsSaving] = useState(false)
+  const [isUploading, setIsUploading] = useState(false)
 
   // Message panel
   const [messagePanelOpen, setMessagePanelOpen] = useState(false)
@@ -170,108 +131,63 @@ export function AdminPage() {
   const fetchProducts = useCallback(async () => {
     try {
       const res = await adminApi.getProducts({ search: searchQuery })
-      setProducts(res.data || [])
+      setProducts(Array.isArray(res.data) ? res.data : res.data?.products || [])
     } catch (e) { showToast(e.message, 'error') }
   }, [searchQuery])
 
   const fetchCategories = useCallback(async () => {
     try {
       const res = await adminApi.getCategories()
-      setCategories(res.data || [])
-    } catch {}
+      setCategories(Array.isArray(res.data) ? res.data : res.data?.categories || [])
+    } catch { }
   }, [])
 
   const fetchGuitars = useCallback(async () => {
     try {
       const res = await adminApi.getCustomizations({ search: searchQuery })
-      setGuitars(res.data || [])
+      setGuitars(Array.isArray(res.data) ? res.data : res.data?.customizations || [])
     } catch (e) { showToast(e.message, 'error') }
   }, [searchQuery])
 
   const fetchParts = useCallback(async () => {
     try {
-      const res = await adminApi.getParts()
-      setParts(res.data || [])
+      const res = await adminApi.getBuilderParts()
+      setParts(Array.isArray(res.data) ? res.data : res.data?.parts || [])
     } catch (e) { showToast(e.message, 'error') }
   }, [])
 
   const fetchUsers = useCallback(async () => {
     try {
       const res = await adminApi.getUsers({ search: searchQuery })
-      setUsers(res.data || [])
+      setUsers(Array.isArray(res.data) ? res.data : res.data?.users || [])
     } catch (e) { showToast(e.message, 'error') }
   }, [searchQuery])
 
   const fetchOrders = useCallback(async () => {
     try {
       const res = await adminApi.getOrders({ search: searchQuery })
-      setOrders(res.data || [])
+      setOrders(Array.isArray(res.data) ? res.data : res.data?.orders || [])
     } catch (e) { showToast(e.message, 'error') }
   }, [searchQuery])
 
   const fetchProjects = useCallback(async () => {
     try {
       const res = await adminApi.getProjects({ search: searchQuery })
-      setProjects(res.data || [])
+      setProjects(Array.isArray(res.data) ? res.data : res.data?.projects || [])
     } catch (e) { showToast(e.message, 'error') }
   }, [searchQuery])
 
   const fetchAppointments = useCallback(async () => {
     try {
       const res = await adminApi.getAppointments({ search: searchQuery })
-      setAppointments(res.data || [])
+      setAppointments(Array.isArray(res.data) ? res.data : res.data?.appointments || [])
     } catch (e) { showToast(e.message, 'error') }
   }, [searchQuery])
 
   const fetchSalesReport = useCallback(async () => {
     try {
-      // Mock data for demonstration
-      const mockData = {
-        totalGrossSales: 247850,
-        totalTransactions: 156,
-        averagePerTransaction: 1589.42,
-        customizationOrders: 12,
-        walkInSales: 145670,
-        walkInTransactions: 89,
-        walkInAvg: 1636.85,
-        walkInPercentage: 58.7,
-        onlineSales: 102180,
-        onlineTransactions: 67,
-        onlineAvg: 1525.07,
-        onlinePercentage: 41.3,
-        customizationSales: 45000,
-        customizationTransactions: 12,
-        customizationAvg: 3750.00,
-        customizationPercentage: 18.1,
-        dailySales: 12500,
-        dailyTransactions: 8,
-        weeklySales: 87500,
-        weeklyTransactions: 52,
-        monthlySales: 247850,
-        monthlyTransactions: 156,
-        bestSellingProducts: [
-          { name: 'Custom Stratocaster', units: 15, revenue: 45000, category: 'Custom Guitar' },
-          { name: 'Mahogany Body', units: 23, revenue: 34500, category: 'Guitar Part' },
-          { name: 'Premium Pickups Set', units: 18, revenue: 27000, category: 'Accessories' },
-          { name: 'Rosewood Fingerboard', units: 12, revenue: 18000, category: 'Guitar Part' },
-          { name: 'Tremolo Bridge', units: 8, revenue: 12000, category: 'Hardware' }
-        ],
-        customizationTypes: [
-          { name: 'Full Custom Build', count: 5 },
-          { name: 'Body Only', count: 3 },
-          { name: 'Neck Only', count: 2 },
-          { name: 'Refinishing', count: 1 },
-          { name: 'Hardware Upgrade', count: 1 }
-        ],
-        customizationRevenue: 45000,
-        avgCustomization: 3750.00,
-        walkInConversion: 85,
-        onlineConversion: 72
-      }
-      setSalesReport(mockData)
-      // Uncomment below when server endpoint is ready
-      // const res = await adminApi.getSalesReport()
-      // setSalesReport(res.data || {})
+      const res = await adminApi.getSalesReport()
+      setSalesReport(res.data || {})
     } catch (e) {
       showToast(e.message, 'error')
       // Fallback to mock data on error
@@ -413,11 +329,11 @@ export function AdminPage() {
     setIsSaving(true)
     try {
       if (modal.data?.part_id) {
-        await adminApi.updatePart(modal.data.part_id, form)
-        showToast('Part updated!')
+        await adminApi.updateBuilderPart(modal.data.part_id, form)
+        showToast('Builder Part updated!')
       } else {
-        await adminApi.createPart(form)
-        showToast('Part created!')
+        await adminApi.createBuilderPart(form)
+        showToast('Builder Part created!')
       }
       fetchParts()
       closeModal()
@@ -426,12 +342,28 @@ export function AdminPage() {
   }
 
   const deletePart = async (id) => {
-    if (!confirm('Delete this part?')) return
+    if (!confirm('Deactivate this builder part?')) return
     try {
-      await adminApi.deletePart(id)
-      showToast('Part deleted')
+      await adminApi.deleteBuilderPart(id)
+      showToast('Builder Part deactivated')
       fetchParts()
     } catch (e) { showToast(e.message, 'error') }
+  }
+
+  const handleImageUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setIsUploading(true);
+      const url = await uploadToCloudinary(file);
+      setForm(f => ({ ...f, image_url: url }));
+      showToast('Image uploaded successfully!');
+    } catch (err) {
+      showToast(err.message || 'Image upload failed', 'error');
+    } finally {
+      setIsUploading(false);
+    }
   }
 
   // Customizations
@@ -444,19 +376,20 @@ export function AdminPage() {
     } catch (e) { showToast(e.message, 'error') }
   }
 
-  // Users
-  const changeUserRole = async (userId, role) => {
-    try {
-      await adminApi.updateUserRole(userId, role)
-      showToast('Role updated!')
-      fetchUsers()
-    } catch (e) { showToast(e.message, 'error') }
-  }
+
 
   const toggleUserStatus = async (userId, currentStatus) => {
     try {
       await adminApi.updateUserStatus(userId, !currentStatus)
       showToast(`User ${!currentStatus ? 'activated' : 'deactivated'}`)
+      fetchUsers()
+    } catch (e) { showToast(e.message, 'error') }
+  }
+
+  const changeUserRole = async (userId, newRole) => {
+    try {
+      await adminApi.updateUserRole(userId, newRole)
+      showToast(`User role updated to ${newRole.replace('_', ' ')}`)
       fetchUsers()
     } catch (e) { showToast(e.message, 'error') }
   }
@@ -544,35 +477,14 @@ export function AdminPage() {
   }
 
   const saveInventory = async () => {
-    setIsSaving(true)
     try {
-      const currentInventory = inventory.length > 0 ? inventory : sampleInventory
-      const newItem = {
-        id: modal.data?.id || `inv-${Date.now()}`,
-        name: form.name || 'New Inventory Item',
-        type: form.type || 'Material',
-        qty: Number(form.qty || 0),
-        status: form.status || 'Healthy',
-      }
-
-      if (modal.data?.id) {
-        setInventory(currentInventory.map(item => item.id === modal.data.id ? newItem : item))
-        showToast('Inventory item updated!')
-      } else {
-        setInventory([...currentInventory, newItem])
-        showToast('Inventory item added!')
-      }
-
+      showToast('Inventory creation should be done by adding a Product, or adjusting stock.', 'error')
       closeModal()
     } catch (e) { showToast(e.message, 'error') }
-    finally { setIsSaving(false) }
   }
 
   const deleteInventory = (id) => {
-    if (!confirm('Delete this inventory item?')) return
-    const currentInventory = inventory.length > 0 ? inventory : sampleInventory
-    setInventory(currentInventory.filter(item => item.id !== id))
-    showToast('Inventory item deleted')
+    showToast('Inventory is synced with Products. Delete the Product instead.', 'error')
   }
 
   const deleteAppointment = async (id) => {
@@ -606,16 +518,16 @@ export function AdminPage() {
 
   // ── Tabs ───────────────────────────────────────────────────────────────────
   const tabs = [
-    { id: 'dashboard',  label: 'Dashboard',       icon: BarChart3 },
+    { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
     { id: 'products-parts', label: 'Guitar Parts & Products', icon: Layers },
-    { id: 'categories', label: 'Categories',       icon: Tag },
-    { id: 'guitars',    label: 'Customizations',   icon: Guitar },
-    { id: 'orders',     label: 'Orders',           icon: ShoppingBag },
-    { id: 'inventory',  label: 'Inventory',        icon: Activity },
-    { id: 'sales-report', label: 'Sales Report',   icon: PieChart },
-    { id: 'projects',   label: 'Projects',         icon: Briefcase },
-    { id: 'appointments', label: 'Appointments',   icon: Calendar },
-    { id: 'users',      label: 'Users',             icon: Shield },
+    { id: 'categories', label: 'Categories', icon: Tag },
+    { id: 'guitars', label: 'Customizations', icon: Guitar },
+    { id: 'orders', label: 'Orders', icon: ShoppingBag },
+    { id: 'inventory', label: 'Inventory', icon: Activity },
+    { id: 'sales-report', label: 'Sales Report', icon: PieChart },
+    { id: 'projects', label: 'Projects', icon: Briefcase },
+    { id: 'appointments', label: 'Appointments', icon: Calendar },
+    { id: 'users', label: 'Users', icon: Shield },
   ]
 
   // ── Return JSX ─────────────────────────────────────────────────────────────
@@ -627,11 +539,10 @@ export function AdminPage() {
         {toast && (
           <motion.div
             initial={{ opacity: 0, y: -30 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -30 }}
-            className={`fixed top-24 right-6 z-[200] px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-3 text-sm font-semibold border ${
-              toast.type === 'error'
+            className={`fixed top-24 right-6 z-[200] px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-3 text-sm font-semibold border ${toast.type === 'error'
                 ? 'bg-red-500/10 border-red-500/30 text-red-400'
                 : 'bg-green-500/10 border-green-500/30 text-green-400'
-            }`}
+              }`}
           >
             {toast.type === 'error' ? <AlertCircle className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
             {toast.msg}
@@ -655,11 +566,10 @@ export function AdminPage() {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl font-medium transition-all duration-200 ${
-                  activeTab === tab.id
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl font-medium transition-all duration-200 ${activeTab === tab.id
                     ? 'bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] border-2 border-[var(--gold-primary)] shadow-[0_0_15px_rgba(212,175,55,0.3)]'
                     : 'text-[var(--text-muted)] hover:bg-[var(--bg-primary)] hover:text-white border-2 border-transparent'
-                }`}
+                  }`}
               >
                 <Icon className={`w-5 h-5 flex-shrink-0 ${activeTab === tab.id ? 'text-[var(--text-dark)]' : 'text-[var(--text-muted)]'}`} />
                 {!sidebarCollapsed && (
@@ -713,7 +623,7 @@ export function AdminPage() {
                   <button onClick={handleRefresh} className="p-2 border border-[var(--border)] rounded-lg hover:border-[var(--gold-primary)] hover:bg-[var(--gold-primary)]/10 transition-all">
                     <RefreshCw className={`w-4 h-4 text-[var(--text-muted)] ${isLoading ? 'animate-spin' : ''}`} />
                   </button>
-                  
+
                   <button onClick={() => openModal('product')} className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black rounded-xl font-semibold text-sm hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all">
                     <Plus className="w-4 h-4" /> Add Product
                   </button>
@@ -727,7 +637,7 @@ export function AdminPage() {
                   <button onClick={handleRefresh} className="p-2 border border-[var(--border)] rounded-lg hover:border-[var(--gold-primary)] hover:bg-[var(--gold-primary)]/10 transition-all">
                     <RefreshCw className={`w-4 h-4 text-[var(--text-muted)] ${isLoading ? 'animate-spin' : ''}`} />
                   </button>
-                  
+
                 </>
               )}
               {activeTab === 'users' && (
@@ -735,7 +645,7 @@ export function AdminPage() {
                   <button onClick={handleRefresh} className="p-2 border border-[var(--border)] rounded-lg hover:border-[var(--gold-primary)] hover:bg-[var(--gold-primary)]/10 transition-all">
                     <RefreshCw className={`w-4 h-4 text-[var(--text-muted)] ${isLoading ? 'animate-spin' : ''}`} />
                   </button>
-                  
+
                 </>
               )}
               {activeTab === 'categories' && (
@@ -743,7 +653,7 @@ export function AdminPage() {
                   <button onClick={handleRefresh} className="p-2 border border-[var(--border)] rounded-lg hover:border-[var(--gold-primary)] hover:bg-[var(--gold-primary)]/10 transition-all">
                     <RefreshCw className={`w-4 h-4 text-[var(--text-muted)] ${isLoading ? 'animate-spin' : ''}`} />
                   </button>
-                  
+
                   <button onClick={() => openModal('category')} className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black rounded-xl font-semibold text-sm hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all">
                     <Plus className="w-4 h-4" /> Add Category
                   </button>
@@ -755,7 +665,7 @@ export function AdminPage() {
                   <button onClick={handleRefresh} className="p-2 border border-[var(--border)] rounded-lg hover:border-[var(--gold-primary)] hover:bg-[var(--gold-primary)]/10 transition-all">
                     <RefreshCw className={`w-4 h-4 text-[var(--text-muted)] ${isLoading ? 'animate-spin' : ''}`} />
                   </button>
-                  
+
                   <button onClick={() => openModal('guitar_view')} className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black rounded-xl font-semibold text-sm hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all">
                     <Eye className="w-4 h-4" /> View Customizations
                   </button>
@@ -773,7 +683,7 @@ export function AdminPage() {
                   <button onClick={handleRefresh} className="p-2 border border-[var(--border)] rounded-lg hover:border-[var(--gold-primary)] hover:bg-[var(--gold-primary)]/10 transition-all">
                     <RefreshCw className={`w-4 h-4 text-[var(--text-muted)] ${isLoading ? 'animate-spin' : ''}`} />
                   </button>
-                  
+
                   <button onClick={() => openModal('project')} className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black rounded-xl font-semibold text-sm hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all">
                     <Plus className="w-4 h-4" /> New Project
                   </button>
@@ -787,7 +697,7 @@ export function AdminPage() {
                   <button onClick={handleRefresh} className="p-2 border border-[var(--border)] rounded-lg hover:border-[var(--gold-primary)] hover:bg-[var(--gold-primary)]/10 transition-all">
                     <RefreshCw className={`w-4 h-4 text-[var(--text-muted)] ${isLoading ? 'animate-spin' : ''}`} />
                   </button>
-                  
+
                   <button onClick={() => openModal('appointment')} className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black rounded-xl font-semibold text-sm hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all">
                     <Plus className="w-4 h-4" /> Add Appointment
                   </button>
@@ -839,30 +749,51 @@ export function AdminPage() {
                 </div>
               )}
 
-              {/* Guitar Parts Section */}
-              <h3 className="text-white text-xl font-semibold mb-4 mt-8">Guitar Parts</h3>
+              {/* Guitar Parts Section (Builder Catalog) */}
+              <div className="flex justify-between items-center mb-4 mt-8">
+                <h3 className="text-white text-xl font-semibold">Guitar Parts (Builder Catalog)</h3>
+                <button onClick={() => openModal('part')} className="flex items-center gap-2 bg-[var(--surface-dark)] border border-[var(--border)] text-white px-4 py-2 rounded-xl font-semibold hover:border-[var(--gold-primary)]/50 transition-colors">
+                  <Plus className="w-5 h-5 text-[var(--gold-primary)]" /> Add Builder Part
+                </button>
+              </div>
               <AdminTable
-                columns={['Part Name', 'Linked Product', 'Qty', 'Price', 'Actions']}
+                columns={['Asset', 'Part Name', 'Type (UI Slot)', 'Stock', 'Upgrade Price', 'Status', 'Actions']}
                 rows={visibleParts}
                 renderRow={(part) => (
                   <>
-                    <td className="py-4 px-6 text-white font-semibold">{part.part_name}</td>
-                    <td className="py-4 px-6 text-[var(--text-muted)]">{part.product_name || '—'}</td>
-                    <td className="py-4 px-6 text-white">{part.quantity}</td>
+                    <td className="py-4 px-6">
+                      {part.image_url ? (
+                        <div className="w-12 h-12 relative flex items-center justify-center p-1 bg-black/30 rounded-lg overflow-hidden border border-[var(--border)]">
+                          <img src={part.image_url} alt={part.name} className="max-w-full max-h-full object-contain drop-shadow-md" loading="lazy" />
+                        </div>
+                      ) : (
+                        <div className="w-12 h-12 bg-[var(--bg-primary)] border border-[var(--border)] rounded-lg flex items-center justify-center">
+                          <Guitar className="w-5 h-5 text-[var(--text-muted)]" />
+                        </div>
+                      )}
+                    </td>
+                    <td className="py-4 px-6 text-white font-semibold">{part.name}</td>
+                    <td className="py-4 px-6 text-[var(--text-muted)] capitalize">{part.type_mapping ? part.type_mapping.replace('_', ' ') : '—'}</td>
+                    <td className="py-4 px-6 text-white">{part.stock}</td>
                     <td className="py-4 px-6 text-[var(--gold-primary)] font-bold">{formatCurrency(part.price, true)}</td>
                     <td className="py-4 px-6">
+                      <span className={`px-2 py-1 rounded-full text-xs font-semibold border ${part.is_active ? 'bg-green-500/20 text-green-400 border-green-500/30' : 'bg-gray-500/20 text-gray-400 border-gray-500/30'}`}>
+                        {part.is_active ? 'Active' : 'Inactive'}
+                      </span>
+                    </td>
+                    <td className="py-4 px-6">
                       <div className="flex gap-2">
-                        <button onClick={() => openModal('part', part)} className="p-1.5 hover:bg-[var(--gold-primary)]/10 rounded">
+                        <button onClick={() => openModal('part', part)} className="p-2 hover:bg-[var(--gold-primary)]/10 rounded-lg transition-colors">
                           <Edit className="w-4 h-4 text-[var(--text-muted)]" />
                         </button>
-                        <button onClick={() => deletePart(part.part_id)} className="p-1.5 hover:bg-red-500/10 rounded">
+                        <button onClick={() => deletePart(part.part_id)} className="p-2 hover:bg-red-500/10 rounded-lg transition-colors">
                           <Trash2 className="w-4 h-4 text-red-400" />
                         </button>
                       </div>
                     </td>
                   </>
                 )}
-                empty={<EmptyState icon={Layers} label="No guitar parts yet" action={() => openModal('part')} actionLabel="Add Part" />}
+                empty={<EmptyState icon={Layers} label="No builder parts yet" action={() => openModal('part')} actionLabel="Add Builder Part" />}
               />
             </motion.div>
           )}
@@ -939,7 +870,37 @@ export function AdminPage() {
 
 
           {activeTab === 'users' && (
-            <motion.div key="users" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+            <motion.div key="users" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+              
+              {/* User Filters */}
+              <div className="flex flex-col sm:flex-row gap-4 p-4 bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl">
+                <div className="flex items-center gap-3">
+                  <Filter className="w-5 h-5 text-[var(--gold-primary)]" />
+                  <span className="text-white font-medium">Filters:</span>
+                </div>
+                <div className="flex flex-wrap gap-4">
+                  <select
+                    value={userRoleFilter}
+                    onChange={(e) => setUserRoleFilter(e.target.value)}
+                    className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-[var(--gold-primary)]"
+                  >
+                    <option value="all">All Roles</option>
+                    {VALID_ROLES.map(r => (
+                      <option key={r} value={r}>{r.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={userStatusFilter}
+                    onChange={(e) => setUserStatusFilter(e.target.value)}
+                    className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-[var(--gold-primary)]"
+                  >
+                    <option value="all">All Statuses</option>
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                  </select>
+                </div>
+              </div>
+
               <AdminTable
                 columns={['User', 'Role', 'Status', 'Joined', 'Actions']}
                 rows={visibleUsers}
@@ -971,11 +932,10 @@ export function AdminPage() {
                     <td className="py-4 px-6">
                       <button
                         onClick={() => toggleUserStatus(u.user_id, u.is_active)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                          u.is_active
+                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${u.is_active
                             ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/30'
                             : 'bg-green-500/10 text-green-400 hover:bg-green-500/20 border border-green-500/30'
-                        }`}
+                          }`}
                       >
                         {u.is_active ? 'Deactivate' : 'Activate'}
                       </button>
@@ -1076,14 +1036,19 @@ export function AdminPage() {
                           </div>
                         </div>
                       )}
-                      <div className="flex gap-2 pt-4 border-t border-[var(--border)]">
+                      <div className="flex flex-col gap-2 pt-4 border-t border-[var(--border)]">
+                        <button onClick={() => openModal('project_tasks', project)} className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-[var(--gold-primary)]/10 border border-[var(--gold-primary)]/30 rounded-lg text-[var(--gold-primary)] text-sm hover:bg-[var(--gold-primary)]/20 transition-all">
+                          <Activity className="w-4 h-4" /> Tasks
+                        </button>
+                      </div>
+                      <div className="flex gap-2 pt-2">
                         <button onClick={() => openModal('project', project)} className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-[var(--bg-primary)] border border-[var(--border)] rounded-lg text-white text-sm hover:border-[var(--gold-primary)]/50 transition-all">
                           <Edit className="w-4 h-4" /> Edit
                         </button>
                         <button onClick={() => openModal('project_team', project)} className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-[var(--bg-primary)] border border-[var(--border)] rounded-lg text-white text-sm hover:border-[var(--gold-primary)]/50 transition-all">
                           <Users className="w-4 h-4" /> Team
                         </button>
-                        <button onClick={() => deleteProject(project.project_id)} className="p-2 hover:bg-red-500/10 rounded-lg transition-all">
+                        <button onClick={() => deleteProject(project.project_id)} className="p-2 hover:bg-red-500/10 rounded-lg transition-all border border-transparent">
                           <Trash2 className="w-4 h-4 text-red-400" />
                         </button>
                       </div>
@@ -1094,7 +1059,7 @@ export function AdminPage() {
             </motion.div>
           )}
 
-{/* ── APPOINTMENTS TAB ──────────────────────────────────────────────── */}
+          {/* ── APPOINTMENTS TAB ──────────────────────────────────────────────── */}
           {activeTab === 'appointments' && (
             <motion.div key="appointments" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
               {/* Appointments Table */}
@@ -1235,8 +1200,8 @@ export function AdminPage() {
                         ]}>
                           <defs>
                             <linearGradient id="dashboardTrend" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%" stopColor="#d4af37" stopOpacity={0.25}/>
-                              <stop offset="95%" stopColor="#d4af37" stopOpacity={0}/>
+                              <stop offset="5%" stopColor="#d4af37" stopOpacity={0.25} />
+                              <stop offset="95%" stopColor="#d4af37" stopOpacity={0} />
                             </linearGradient>
                           </defs>
                           <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
@@ -1411,11 +1376,10 @@ export function AdminPage() {
                           <td className="py-4 pr-6 text-[var(--text-muted)]">{item.type}</td>
                           <td className="py-4 pr-6 text-white">{item.qty}</td>
                           <td className="py-4 pr-6">
-                            <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${
-                              item.status === 'Critical' ? 'bg-red-500/15 text-red-400 border border-red-500/20' :
-                              item.status === 'Warning' ? 'bg-amber-500/15 text-amber-400 border border-amber-500/20' :
-                              'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20'
-                            }`}>
+                            <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${item.status === 'Critical' ? 'bg-red-500/15 text-red-400 border border-red-500/20' :
+                                item.status === 'Warning' ? 'bg-amber-500/15 text-amber-400 border border-amber-500/20' :
+                                  'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20'
+                              }`}>
                               {item.status}
                             </span>
                           </td>
@@ -1711,9 +1675,8 @@ export function AdminPage() {
                             <tr key={i} className="hover:bg-[var(--bg-primary)]/50 transition-colors">
                               <td className="py-4 px-6">
                                 <div className="flex items-center gap-3">
-                                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-sm ${
-                                    i === 0 ? 'bg-[var(--gold-primary)]' : i === 1 ? 'bg-gray-400' : i === 2 ? 'bg-orange-600' : 'bg-[var(--bg-primary)]'
-                                  }`}>
+                                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-sm ${i === 0 ? 'bg-[var(--gold-primary)]' : i === 1 ? 'bg-gray-400' : i === 2 ? 'bg-orange-600' : 'bg-[var(--bg-primary)]'
+                                    }`}>
                                     {i + 1}
                                   </div>
                                 </div>
@@ -1856,34 +1819,70 @@ export function AdminPage() {
           >
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-3xl p-8 w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl"
+              className={`bg-[var(--surface-dark)] border border-[var(--border)] rounded-3xl p-8 w-full shadow-2xl overflow-y-auto ${modal.type === 'project_tasks' ? 'max-w-6xl h-[90vh]' : 'max-w-lg max-h-[90vh]'}`}
             >
+              {/* Project Tasks Modal */}
+              {modal.type === 'project_tasks' && modal.data && (
+                <>
+                  <ModalHeader title="Manage Project Tasks" onClose={closeModal} />
+                  <div className="mt-6">
+                    <ProjectTaskTracker projectId={modal.data.project_id} isAdmin={true} />
+                  </div>
+                </>
+              )}
               {/* Product Modal */}
               {(modal.type === 'product') && (
                 <>
                   <ModalHeader title={modal.data ? 'Edit Product' : 'New Product'} onClose={closeModal} />
-                  <div className="space-y-4 mt-6">
-                    <FormField label="SKU *" value={form.sku || ''} onChange={v => setForm(f => ({...f, sku: v}))} placeholder="e.g. GTR-001" />
-                    <FormField label="Product Name *" value={form.name || ''} onChange={v => setForm(f => ({...f, name: v}))} />
-                    <FormField label="Description" value={form.description || ''} onChange={v => setForm(f => ({...f, description: v}))} textarea />
-                    <div className="grid grid-cols-2 gap-4">
-                      <FormField label="Price (₱) *" type="number" value={form.price || ''} onChange={v => setForm(f => ({...f, price: v}))} />
-                      <FormField label="Cost (₱)" type="number" value={form.cost || ''} onChange={v => setForm(f => ({...f, cost: v}))} />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-6">
+                    {/* Left Col: Data */}
+                    <div className="space-y-4">
+                      <FormField label="SKU *" value={form.sku || ''} onChange={v => setForm(f => ({ ...f, sku: v }))} placeholder="e.g. GTR-001" />
+                      <FormField label="Product Name *" value={form.name || ''} onChange={v => setForm(f => ({ ...f, name: v }))} />
+                      <FormField label="Description" value={form.description || ''} onChange={v => setForm(f => ({ ...f, description: v }))} textarea />
+                      <div className="grid grid-cols-2 gap-4">
+                        <FormField label="Price (₱) *" type="number" value={form.price || ''} onChange={v => setForm(f => ({ ...f, price: v }))} />
+                        <FormField label="Cost (₱)" type="number" value={form.cost || ''} onChange={v => setForm(f => ({ ...f, cost: v }))} />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <FormField label="Stock" type="number" value={form.stock ?? ''} onChange={v => setForm(f => ({ ...f, stock: v }))} />
+                        <FormField label="Low Stock Threshold" type="number" value={form.low_stock_threshold ?? ''} onChange={v => setForm(f => ({ ...f, low_stock_threshold: v }))} />
+                      </div>
+                      <div>
+                        <label className={labelCls}>Category</label>
+                        <select value={form.category_id || ''} onChange={e => setForm(f => ({ ...f, category_id: e.target.value }))} className={inputCls}>
+                          <option value="">— None —</option>
+                          {categories.map(c => <option key={c.category_id} value={c.category_id}>{c.name}</option>)}
+                        </select>
+                      </div>
+                      <div className="flex items-center gap-3 mt-4">
+                        <input type="checkbox" id="is_active" checked={form.is_active ?? true} onChange={e => setForm(f => ({ ...f, is_active: e.target.checked }))} className="w-4 h-4" />
+                        <label htmlFor="is_active" className="text-white text-sm">Active (visible in shop)</label>
+                      </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <FormField label="Stock" type="number" value={form.stock ?? ''} onChange={v => setForm(f => ({...f, stock: v}))} />
-                      <FormField label="Low Stock Threshold" type="number" value={form.low_stock_threshold ?? ''} onChange={v => setForm(f => ({...f, low_stock_threshold: v}))} />
-                    </div>
-                    <div>
-                      <label className={labelCls}>Category</label>
-                      <select value={form.category_id || ''} onChange={e => setForm(f => ({...f, category_id: e.target.value}))} className={inputCls}>
-                        <option value="">— None —</option>
-                        {categories.map(c => <option key={c.category_id} value={c.category_id}>{c.name}</option>)}
-                      </select>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <input type="checkbox" id="is_active" checked={form.is_active ?? true} onChange={e => setForm(f => ({...f, is_active: e.target.checked}))} className="w-4 h-4" />
-                      <label htmlFor="is_active" className="text-white text-sm">Active (visible in shop)</label>
+                    {/* Right Col: Cloudinary Media */}
+                    <div className="space-y-4">
+                      <label className={labelCls}>Product Image</label>
+                      <div className="border-2 border-dashed border-[var(--border)] rounded-xl p-8 flex flex-col items-center justify-center text-center hover:bg-[var(--bg-primary)]/50 transition-colors">
+                        {form.image_url ? (
+                          <div className="relative group w-full h-48">
+                            <img src={form.image_url} alt="Preview" className="w-full h-full object-contain rounded-lg" loading="lazy" />
+                            <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity rounded-lg">
+                              <span className="text-white text-sm">Click below to change</span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="w-full h-48 flex items-center justify-center flex-col gap-2">
+                            <div className="p-3 bg-[var(--gold-primary)]/10 rounded-full text-[var(--gold-primary)]"><Plus className="w-6 h-6" /></div>
+                            <p className="text-[var(--text-muted)] text-sm">No image uploaded</p>
+                          </div>
+                        )}
+                        <label className="mt-4 px-4 py-2 bg-[var(--surface-dark)] border border-[var(--border)] hover:border-[var(--gold-primary)]/50 rounded-lg text-white font-medium cursor-pointer transition-colors w-full text-center">
+                          {isUploading ? 'Uploading...' : 'Upload Image (Cloudinary)'}
+                          <input type="file" accept="image/*" className="hidden" disabled={isUploading} onChange={handleImageUpload} />
+                        </label>
+                      </div>
+                      <p className="text-xs text-[var(--text-muted)] text-center">Images are automatically optimized and served via CDN.</p>
                     </div>
                   </div>
                   <ModalFooter onCancel={closeModal} onSave={saveProduct} isSaving={isSaving} />
@@ -1895,40 +1894,78 @@ export function AdminPage() {
                 <>
                   <ModalHeader title={modal.data ? 'Edit Category' : 'New Category'} onClose={closeModal} />
                   <div className="space-y-4 mt-6">
-                    <FormField label="Name *" value={form.name || ''} onChange={v => setForm(f => ({...f, name: v}))} />
-                    <FormField label="Slug *" value={form.slug || ''} onChange={v => setForm(f => ({...f, slug: v}))} placeholder="e.g. custom-builds" />
-                    <FormField label="Description" value={form.description || ''} onChange={v => setForm(f => ({...f, description: v}))} textarea />
+                    <FormField label="Name *" value={form.name || ''} onChange={v => setForm(f => ({ ...f, name: v }))} />
+                    <FormField label="Slug *" value={form.slug || ''} onChange={v => setForm(f => ({ ...f, slug: v }))} placeholder="e.g. custom-builds" />
+                    <FormField label="Description" value={form.description || ''} onChange={v => setForm(f => ({ ...f, description: v }))} textarea />
                     <div>
                       <label className={labelCls}>Parent Category</label>
-                      <select value={form.parent_id || ''} onChange={e => setForm(f => ({...f, parent_id: e.target.value || null}))} className={inputCls}>
+                      <select value={form.parent_id || ''} onChange={e => setForm(f => ({ ...f, parent_id: e.target.value || null }))} className={inputCls}>
                         <option value="">— None —</option>
                         {categories.filter(c => c.category_id !== modal.data?.category_id).map(c => (
                           <option key={c.category_id} value={c.category_id}>{c.name}</option>
                         ))}
                       </select>
                     </div>
-                    <FormField label="Sort Order" type="number" value={form.sort_order ?? 0} onChange={v => setForm(f => ({...f, sort_order: v}))} />
+                    <FormField label="Sort Order" type="number" value={form.sort_order ?? 0} onChange={v => setForm(f => ({ ...f, sort_order: v }))} />
                   </div>
                   <ModalFooter onCancel={closeModal} onSave={saveCategory} isSaving={isSaving} />
                 </>
               )}
 
-              {/* Guitar Part Modal */}
+              {/* Guitar Part Modal (Builder Configurator) */}
               {modal.type === 'part' && (
                 <>
-                  <ModalHeader title={modal.data ? 'Edit Guitar Part' : 'New Guitar Part'} onClose={closeModal} />
-                  <div className="space-y-4 mt-6">
-                    <FormField label="Part Name *" value={form.part_name || ''} onChange={v => setForm(f => ({...f, part_name: v}))} placeholder="e.g. Mahogany Body" />
-                    <div className="grid grid-cols-2 gap-4">
-                      <FormField label="Quantity *" type="number" value={form.quantity || ''} onChange={v => setForm(f => ({...f, quantity: v}))} />
-                      <FormField label="Price (₱) *" type="number" value={form.price || ''} onChange={v => setForm(f => ({...f, price: v}))} />
+                  <ModalHeader title={modal.data ? 'Edit Guitar Part (Catalog)' : 'New Guitar Part (Catalog)'} onClose={closeModal} />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-6">
+                    {/* Left Col: Setup Data */}
+                    <div className="space-y-4">
+                      <FormField label="Part Name *" value={form.name || ''} onChange={v => setForm(f => ({ ...f, name: v }))} placeholder="e.g. Mahogany Body" />
+                      <FormField label="Description" value={form.description || ''} onChange={v => setForm(f => ({ ...f, description: v }))} textarea />
+                      <div>
+                        <label className={labelCls}>Type Mapping (UI Slot) *</label>
+                        <select value={form.type_mapping || ''} onChange={e => setForm(f => ({ ...f, type_mapping: e.target.value }))} className={inputCls}>
+                          <option value="">— Select Type —</option>
+                          <option value="body">Body</option>
+                          <option value="neck">Neck</option>
+                          <option value="fretboard">Fretboard</option>
+                          <option value="pickups">Pickups</option>
+                          <option value="bridge">Bridge</option>
+                          <option value="knobs">Knobs</option>
+                          <option value="tuning_pegs">Tuning Pegs</option>
+                        </select>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <FormField label="Quantity in Stock" type="number" value={form.stock ?? ''} onChange={v => setForm(f => ({ ...f, stock: v }))} />
+                        <FormField label="Upgrade Price (₱)" type="number" value={form.price || ''} onChange={v => setForm(f => ({ ...f, price: v }))} />
+                      </div>
+                      <div className="flex items-center gap-3 pt-2">
+                        <input type="checkbox" id="is_active_part" checked={form.is_active ?? true} onChange={e => setForm(f => ({ ...f, is_active: e.target.checked }))} className="w-4 h-4" />
+                        <label htmlFor="is_active_part" className="text-white text-sm">Active (available in configurator)</label>
+                      </div>
                     </div>
-                    <div>
-                      <label className={labelCls}>Linked Product (optional)</label>
-                      <select value={form.product_id || ''} onChange={e => setForm(f => ({...f, product_id: e.target.value || null}))} className={inputCls}>
-                        <option value="">— None —</option>
-                        {products.map(p => <option key={p.product_id} value={p.product_id}>{p.name}</option>)}
-                      </select>
+                    {/* Right Col: Cloudinary Asset */}
+                    <div className="space-y-4">
+                      <label className={labelCls}>Configurator Asset (Transparent PNG recommended)</label>
+                      <div className="border-2 border-dashed border-[var(--border)] rounded-xl p-8 flex flex-col items-center justify-center text-center hover:bg-[var(--bg-primary)]/50 transition-colors">
+                        {form.image_url ? (
+                          <div className="relative group w-full h-48 flex items-center justify-center p-4 bg-black/20 rounded-lg">
+                            <img src={form.image_url} alt="Preview" className="max-w-full max-h-full object-contain filter drop-shadow-lg" loading="lazy" />
+                            <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity rounded-lg">
+                              <span className="text-white text-sm drop-shadow-md">Click below to change</span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="w-full h-48 flex items-center justify-center flex-col gap-2">
+                            <div className="p-3 bg-[var(--gold-primary)]/10 rounded-full text-[var(--gold-primary)]"><Plus className="w-6 h-6" /></div>
+                            <p className="text-[var(--text-muted)] text-sm">No asset uploaded</p>
+                          </div>
+                        )}
+                        <label className="mt-4 px-4 py-2 bg-[var(--surface-dark)] border border-[var(--border)] hover:border-[var(--gold-primary)]/50 rounded-lg text-white font-medium cursor-pointer transition-colors w-full text-center">
+                          {isUploading ? 'Uploading...' : 'Upload Asset (Cloudinary)'}
+                          <input type="file" accept="image/*" className="hidden" disabled={isUploading} onChange={handleImageUpload} />
+                        </label>
+                      </div>
+                      <p className="text-xs text-[var(--text-muted)] text-center">Configurator assets are dynamically composed on the frontend.</p>
                     </div>
                   </div>
                   <ModalFooter onCancel={closeModal} onSave={savePart} isSaving={isSaving} />
@@ -1940,13 +1977,13 @@ export function AdminPage() {
                 <>
                   <ModalHeader title={modal.data ? 'Edit Inventory Item' : 'Add Stock Item'} onClose={closeModal} />
                   <div className="space-y-4 mt-6">
-                    <FormField label="Item Name *" value={form.name || ''} onChange={v => setForm(f => ({...f, name: v}))} placeholder="e.g. Ebony Fretboard" />
-                    <FormField label="Type" value={form.type || ''} onChange={v => setForm(f => ({...f, type: v}))} placeholder="e.g. Neck, Body, Pickup" />
+                    <FormField label="Item Name *" value={form.name || ''} onChange={v => setForm(f => ({ ...f, name: v }))} placeholder="e.g. Ebony Fretboard" />
+                    <FormField label="Type" value={form.type || ''} onChange={v => setForm(f => ({ ...f, type: v }))} placeholder="e.g. Neck, Body, Pickup" />
                     <div className="grid grid-cols-2 gap-4">
-                      <FormField label="Quantity *" type="number" value={form.qty ?? ''} onChange={v => setForm(f => ({...f, qty: v}))} />
+                      <FormField label="Quantity *" type="number" value={form.qty ?? ''} onChange={v => setForm(f => ({ ...f, qty: v }))} />
                       <div>
                         <label className={labelCls}>Status</label>
-                        <select value={form.status || 'Healthy'} onChange={e => setForm(f => ({...f, status: e.target.value}))} className={inputCls}>
+                        <select value={form.status || 'Healthy'} onChange={e => setForm(f => ({ ...f, status: e.target.value }))} className={inputCls}>
                           <option value="Healthy">Healthy</option>
                           <option value="Warning">Warning</option>
                           <option value="Critical">Critical</option>
@@ -2036,24 +2073,24 @@ export function AdminPage() {
                 <>
                   <ModalHeader title={modal.data ? 'Edit Project' : 'New Project'} onClose={closeModal} />
                   <div className="space-y-4 mt-6">
-                    <FormField label="Project Name *" value={form.name || ''} onChange={v => setForm(f => ({...f, name: v}))} />
-                    <FormField label="Customer Name" value={form.customer_name || ''} onChange={v => setForm(f => ({...f, customer_name: v}))} />
-                    <FormField label="Description" value={form.description || ''} onChange={v => setForm(f => ({...f, description: v}))} textarea />
+                    <FormField label="Project Name *" value={form.name || ''} onChange={v => setForm(f => ({ ...f, name: v }))} />
+                    <FormField label="Customer Name" value={form.customer_name || ''} onChange={v => setForm(f => ({ ...f, customer_name: v }))} />
+                    <FormField label="Description" value={form.description || ''} onChange={v => setForm(f => ({ ...f, description: v }))} textarea />
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <label className={labelCls}>Status</label>
-                        <select value={form.status || 'Pending'} onChange={e => setForm(f => ({...f, status: e.target.value}))} className={inputCls}>
+                        <select value={form.status || 'Pending'} onChange={e => setForm(f => ({ ...f, status: e.target.value }))} className={inputCls}>
                           <option value="Pending">Pending</option>
                           <option value="In Progress">In Progress</option>
                           <option value="Completed">Completed</option>
                           <option value="Cancelled">Cancelled</option>
                         </select>
                       </div>
-                      <FormField label="Progress (%)" type="number" value={form.progress ?? 0} onChange={v => setForm(f => ({...f, progress: v}))} />
+                      <FormField label="Progress (%)" type="number" value={form.progress ?? 0} onChange={v => setForm(f => ({ ...f, progress: v }))} />
                     </div>
-                    <FormField label="Start Date" type="date" value={form.start_date || ''} onChange={v => setForm(f => ({...f, start_date: v}))} />
-                    <FormField label="End Date" type="date" value={form.end_date || ''} onChange={v => setForm(f => ({...f, end_date: v}))} />
-                    <FormField label="Budget" type="number" value={form.budget || ''} onChange={v => setForm(f => ({...f, budget: v}))} />
+                    <FormField label="Start Date" type="date" value={form.start_date || ''} onChange={v => setForm(f => ({ ...f, start_date: v }))} />
+                    <FormField label="End Date" type="date" value={form.end_date || ''} onChange={v => setForm(f => ({ ...f, end_date: v }))} />
+                    <FormField label="Budget" type="number" value={form.budget || ''} onChange={v => setForm(f => ({ ...f, budget: v }))} />
                   </div>
                   <ModalFooter onCancel={closeModal} onSave={saveProject} isSaving={isSaving} />
                 </>
@@ -2068,17 +2105,17 @@ export function AdminPage() {
                     <div className="space-y-2 max-h-60 overflow-y-auto">
                       {users.filter(u => u.role !== 'customer').map(user => (
                         <label key={user.user_id} className="flex items-center gap-3 p-3 bg-[var(--bg-primary)] border border-[var(--border)] rounded-lg cursor-pointer hover:border-[var(--gold-primary)]/50 transition-all">
-                          <input 
-                            type="checkbox" 
+                          <input
+                            type="checkbox"
                             checked={form.team_ids?.includes(user.user_id)}
                             onChange={e => {
                               const current = form.team_ids || []
-                              const updated = e.target.checked 
+                              const updated = e.target.checked
                                 ? [...current, user.user_id]
                                 : current.filter(id => id !== user.user_id)
-                              setForm(f => ({...f, team_ids: updated}))
+                              setForm(f => ({ ...f, team_ids: updated }))
                             }}
-                            className="w-4 h-4" 
+                            className="w-4 h-4"
                           />
                           <div>
                             <p className="text-white text-sm font-medium">{user.first_name} {user.last_name}</p>
@@ -2100,23 +2137,23 @@ export function AdminPage() {
                 <>
                   <ModalHeader title={modal.data ? 'Edit Appointment' : 'Book Appointment'} onClose={closeModal} />
                   <div className="space-y-4 mt-6">
-                    <FormField label="Title *" value={form.title || ''} onChange={v => setForm(f => ({...f, title: v}))} placeholder="e.g. Guitar Setup Consultation" />
-                    <FormField label="Customer Name" value={form.customer_name || ''} onChange={v => setForm(f => ({...f, customer_name: v}))} />
-                    <FormField label="Customer Email" value={form.customer_email || ''} onChange={v => setForm(f => ({...f, customer_email: v}))} />
+                    <FormField label="Title *" value={form.title || ''} onChange={v => setForm(f => ({ ...f, title: v }))} placeholder="e.g. Guitar Setup Consultation" />
+                    <FormField label="Customer Name" value={form.customer_name || ''} onChange={v => setForm(f => ({ ...f, customer_name: v }))} />
+                    <FormField label="Customer Email" value={form.customer_email || ''} onChange={v => setForm(f => ({ ...f, customer_email: v }))} />
                     <div className="grid grid-cols-2 gap-4">
-                      <FormField label="Date *" type="date" value={form.date || ''} onChange={v => setForm(f => ({...f, date: v}))} />
-                      <FormField label="Time" type="time" value={form.time || ''} onChange={v => setForm(f => ({...f, time: v}))} />
+                      <FormField label="Date *" type="date" value={form.date || ''} onChange={v => setForm(f => ({ ...f, date: v }))} />
+                      <FormField label="Time" type="time" value={form.time || ''} onChange={v => setForm(f => ({ ...f, time: v }))} />
                     </div>
                     <div>
                       <label className={labelCls}>Status</label>
-                      <select value={form.status || 'Scheduled'} onChange={e => setForm(f => ({...f, status: e.target.value}))} className={inputCls}>
+                      <select value={form.status || 'Scheduled'} onChange={e => setForm(f => ({ ...f, status: e.target.value }))} className={inputCls}>
                         <option value="Scheduled">Scheduled</option>
                         <option value="Completed">Completed</option>
                         <option value="Cancelled">Cancelled</option>
                         <option value="No Show">No Show</option>
                       </select>
                     </div>
-                    <FormField label="Notes" value={form.notes || ''} onChange={v => setForm(f => ({...f, notes: v}))} textarea placeholder="Any special requirements or notes..." />
+                    <FormField label="Notes" value={form.notes || ''} onChange={v => setForm(f => ({ ...f, notes: v }))} textarea placeholder="Any special requirements or notes..." />
                   </div>
                   <ModalFooter onCancel={closeModal} onSave={saveAppointment} isSaving={isSaving} />
                 </>

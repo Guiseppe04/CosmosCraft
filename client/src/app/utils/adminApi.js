@@ -57,6 +57,15 @@ export const adminApi = {
   updatePart: (id, body) => request(`/api/guitars/parts/${id}`, { method: 'PUT', body }),
   deletePart: (id) => request(`/api/guitars/parts/${id}`, { method: 'DELETE' }),
 
+  // Builder Catalog Parts (for Frontend Guitar Customizer)
+  getBuilderParts: (params = {}) => {
+    const qs = new URLSearchParams(params).toString()
+    return request(`/api/builder-parts${qs ? '?' + qs : ''}`)
+  },
+  createBuilderPart: (body) => request('/api/builder-parts', { method: 'POST', body }),
+  updateBuilderPart: (id, body) => request(`/api/builder-parts/${id}`, { method: 'PUT', body }),
+  deleteBuilderPart: (id) => request(`/api/builder-parts/${id}`, { method: 'DELETE' }),
+
   // Users / RBAC
   getUsers: (params = {}) => {
     const qs = new URLSearchParams(params).toString()
@@ -79,11 +88,20 @@ export const adminApi = {
     const qs = new URLSearchParams(params).toString()
     return request(`/api/projects${qs ? '?' + qs : ''}`)
   },
+  getMyProjects: () => request('/api/projects/my'),
   getProject: (id) => request(`/api/projects/${id}`),
   createProject: (body) => request('/api/projects', { method: 'POST', body }),
   updateProject: (id, body) => request(`/api/projects/${id}`, { method: 'PUT', body }),
   deleteProject: (id) => request(`/api/projects/${id}`, { method: 'DELETE' }),
   assignTeam: (id, userIds) => request(`/api/projects/${id}/team`, { method: 'PUT', body: { user_ids: userIds } }),
+  getProjectHierarchy: (id) => request(`/api/projects/${id}/hierarchy`),
+  getProjectActivity: (id) => request(`/api/projects/${id}/activity`),
+  createMilestone: (projectId, body) => request(`/api/projects/${projectId}/milestones`, { method: 'POST', body }),
+  updateMilestone: (id, body) => request(`/api/projects/milestones/${id}`, { method: 'PUT', body }),
+  deleteMilestone: (id) => request(`/api/projects/milestones/${id}`, { method: 'DELETE' }),
+  createSubtask: (milestoneId, body) => request(`/api/projects/milestones/${milestoneId}/subtasks`, { method: 'POST', body }),
+  updateSubtask: (subtaskId, body) => request(`/api/projects/subtasks/${subtaskId}`, { method: 'PATCH', body }),
+  deleteSubtask: (subtaskId) => request(`/api/projects/subtasks/${subtaskId}`, { method: 'DELETE' }),
 
   // Appointments
   getAppointments: (params = {}) => {
@@ -92,9 +110,19 @@ export const adminApi = {
   },
   getAppointment: (id) => request(`/api/appointments/${id}`),
   createAppointment: (body) => request('/api/appointments', { method: 'POST', body }),
-  updateAppointment: (id, body) => request(`/api/appointments/${id}`, { method: 'PUT', body }),
+  updateAppointment: (id, body) => request(`/api/appointments/${id}`, { method: 'PATCH', body }),
   deleteAppointment: (id) => request(`/api/appointments/${id}`, { method: 'DELETE' }),
 
   // Reports
-  getSalesReport: () => request('/api/reports/sales'),
+  getSalesReport: () => request('/api/reports/dashboard'),
+
+  // Inventory
+  getInventorySummary: () => request('/api/inventory/summary'),
+  getInventoryLogs: (params = {}) => {
+    const qs = new URLSearchParams(params).toString()
+    return request(`/api/inventory/logs${qs ? '?' + qs : ''}`)
+  },
+  addStock: (body) => request('/api/inventory/stock-in', { method: 'PATCH', body }),
+  deductStock: (body) => request('/api/inventory/stock-out', { method: 'PATCH', body }),
+  adjustStock: (body) => request('/api/inventory/adjust', { method: 'PATCH', body }),
 }

@@ -43,8 +43,15 @@ export function LoginModal() {
       setPassword('')
       closeLogin()
 
-      // Redirect to dashboard
-      navigate('/dashboard')
+      // Redirect to dashboard based on role
+      const role = data.data?.user?.role || 'customer'
+      if (role === 'admin' || role === 'super_admin') {
+        navigate('/admin')
+      } else if (role === 'staff') {
+        navigate('/staff')
+      } else {
+        navigate('/dashboard')
+      }
     } catch (error) {
       console.error('Login error:', error)
       setError('Network error. Please check your connection and try again.')

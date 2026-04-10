@@ -80,3 +80,20 @@ exports.getOrder = asyncHandler(async (req, res, next) => {
     data: { order }
   })
 })
+
+exports.getAllOrders = asyncHandler(async (req, res, next) => {
+  const orders = await orderService.getAllOrders(req.query)
+  res.status(200).json({ status: 'success', data: orders })
+})
+
+exports.updateOrder = asyncHandler(async (req, res, next) => {
+  const order = await orderService.updateOrder(req.params.id, req.body)
+  if (!order) throw new AppError('Order not found', 404)
+  res.status(200).json({ status: 'success', data: order })
+})
+
+exports.cancelOrder = asyncHandler(async (req, res, next) => {
+  const order = await orderService.cancelOrder(req.params.id)
+  if (!order) throw new AppError('Order not found', 404)
+  res.status(200).json({ status: 'success', data: order })
+})

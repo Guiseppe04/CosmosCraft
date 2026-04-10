@@ -16,6 +16,7 @@ import { OTPVerificationPage } from './pages/OTPVerificationPage.jsx'
 import { OAuthSuccessPage } from './pages/OAuthSuccessPage.jsx'
 import { OAuthSignupPage } from './pages/OAuthSignupPage.jsx'
 import { FeedbackPage } from './pages/FeedbackPage.jsx'
+import { ProtectedRoute } from './components/auth/ProtectedRoute.jsx'
 
 /**
  * Application routes configuration
@@ -45,16 +46,16 @@ export const router = createBrowserRouter([
       { path: 'auth/signup', Component: OAuthSignupPage },
       
       // Customer routes (authenticated)
-      { path: 'dashboard', Component: DashboardPage },
-      { path: 'cart', Component: CartPage },
-      { path: 'checkout', Component: CheckoutPage },
-      { path: 'feedback', Component: FeedbackPage },
+      { path: 'dashboard', element: <ProtectedRoute><DashboardPage /></ProtectedRoute> },
+      { path: 'cart', element: <ProtectedRoute><CartPage /></ProtectedRoute> },
+      { path: 'checkout', element: <ProtectedRoute><CheckoutPage /></ProtectedRoute> },
+      { path: 'feedback', element: <ProtectedRoute><FeedbackPage /></ProtectedRoute> },
       
       // Staff routes (staff role only)
-      { path: 'staff', Component: StaffDashboard },
+      { path: 'staff', element: <ProtectedRoute allowedRoles={['staff', 'admin', 'super_admin']}><StaffDashboard /></ProtectedRoute> },
       
       // Admin routes (admin role only)
-      { path: 'admin', Component: AdminPage },
+      { path: 'admin', element: <ProtectedRoute allowedRoles={['admin', 'super_admin']}><AdminPage /></ProtectedRoute> },
     ],
   },
 ])

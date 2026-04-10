@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 import { motion, AnimatePresence } from 'motion/react'
-import { User, CreditCard, MapPin, Lock, Settings, Bell, Package, Calendar, ChevronRight, Upload, Save, Wallet, ShoppingBag, ShoppingCart, Trash2, Minus, Plus, MessageSquare, Send, Guitar, Clock, Truck, CheckCircle, XCircle } from 'lucide-react'
+import { User, CreditCard, MapPin, Lock, Settings, Bell, Package, Calendar, ChevronRight, Upload, Save, Wallet, ShoppingBag, ShoppingCart, Trash2, Minus, Plus, MessageSquare, Send, Guitar, Clock, Truck, CheckCircle, XCircle, Briefcase, Activity } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useCart } from '../context/CartContext.jsx'
 import { BASE_PRICE, BODY_OPTIONS, BODY_WOOD_OPTIONS, BODY_FINISH_OPTIONS, NECK_OPTIONS, FRETBOARD_OPTIONS, HEADSTOCK_OPTIONS, HEADSTOCK_WOOD_OPTIONS, INLAY_OPTIONS, BRIDGE_OPTIONS, PICKGUARD_OPTIONS_BY_BODY, KNOB_OPTIONS_BY_BODY, HARDWARE_OPTIONS, PICKUP_OPTIONS } from '../lib/guitarBuilderData.js'
+import { adminApi } from '../utils/adminApi.js'
+import ProjectTaskTracker from '../components/projects/ProjectTaskTracker.jsx'
 
 const getOldConfigData = (key, val, bodyType) => {
     let price;
@@ -65,6 +67,15 @@ export function DashboardPage() {
   const [toastMessage, setToastMessage] = useState(location.state?.message || null)
   const [refreshCounter, setRefreshCounter] = useState(0)
   const [buildToDelete, setBuildToDelete] = useState(null)
+  
+  const [myProjects, setMyProjects] = useState([])
+  const [activeProjectView, setActiveProjectView] = useState(null)
+
+  useEffect(() => {
+    if (activeSection === 'projects' && !activeProjectView) {
+      adminApi.getMyProjects().then(res => setMyProjects(res.data)).catch(console.error)
+    }
+  }, [activeSection, activeProjectView])
 
   const confirmDelete = () => {
     if (!buildToDelete) return;
@@ -174,6 +185,7 @@ export function DashboardPage() {
     { id: 'privacy', label: 'Privacy Settings', icon: Settings, group: 'account' },
     { id: 'notifications', label: 'Notification Settings', icon: Bell, group: 'account' },
     { id: 'my-guitar', label: 'My Guitar', icon: Guitar, group: 'orders' },
+    { id: 'projects', label: 'My Projects', icon: Briefcase, group: 'orders' },
     { id: 'appointments', label: 'My Appointments', icon: Calendar, group: 'orders' },
     { id: 'cart', label: 'My Cart', icon: ShoppingBag, group: 'orders' },
     { id: 'purchases', label: 'My Purchase', icon: Package, group: 'orders' },
@@ -262,6 +274,59 @@ export function DashboardPage() {
       </div>
     </div>
   )
+
+  const renderProjectsContent = () => {
+    if (activeProjectView) {
+      return (
+        <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-8">
+          <button onClick={() => setActiveProjectView(null)} className="mb-6 text-[var(--gold-primary)] hover:underline flex items-center gap-2 text-sm font-semibold">
+            ← Back to My Projects
+          </button>
+          <ProjectTaskTracker projectId={activeProjectView.project_id} isAdmin={false} />
+        </div>
+      );
+    }
+
+    return (
+      <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-8">
+        <h2 className="text-2xl font-bold text-white mb-1">My Projects</h2>
+        <p className="text-sm text-[var(--text-muted)] mb-8">Track progress on your custom builds and repairs</p>
+
+        {myProjects.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-10">
+            <div className="w-16 h-16 rounded-full border-2 border-[var(--border)] flex items-center justify-center mb-6">
+              <Briefcase className="w-8 h-8 text-[var(--text-muted)]" />
+            </div>
+            <p className="text-white font-medium mb-1">No active projects</p>
+            <p className="text-sm text-[var(--text-muted)] mb-6">
+              When you order a custom build or repair, it will appear here.
+            </p>
+          </div>
+        ) : (
+          <div className="grid gap-6">
+            {myProjects.map((project) => (
+              <div key={project.project_id} className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl p-5 hover:border-[var(--gold-primary)]/40 transition-colors flex justify-between items-center">
+                <div>
+                  <h3 className="text-lg font-bold text-white">{project.name}</h3>
+                  <p className="text-[var(--text-muted)] text-sm mt-1">{project.description || 'Custom Build Project'}</p>
+                  <div className="mt-4 flex items-center gap-4">
+                    <span className="px-2 py-0.5 border border-[var(--border)] rounded-full text-xs font-semibold text-white">{project.status}</span>
+                    <span className="text-[var(--gold-primary)] font-bold text-sm">{project.progress}% Complete</span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setActiveProjectView(project)}
+                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-bold shadow-[0_0_10px_rgba(212,175,55,0.3)] hover:shadow-[0_0_15px_rgba(212,175,55,0.5)] transition-all flex items-center gap-2"
+                >
+                  <Activity className="w-4 h-4" /> Track Progress
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   const renderMyGuitarContent = () => {
     const savedGuitarBuilds = JSON.parse(window.localStorage.getItem('cosmoscraft_saved_builds') || '[]').map(b => ({...b, isBass: false}))
@@ -770,6 +835,7 @@ export function DashboardPage() {
             {activeSection === 'profile' && renderProfileContent()}
             {activeSection === 'payment-methods' && renderPaymentMethodsContent()}
             {activeSection === 'my-guitar' && renderMyGuitarContent()}
+            {activeSection === 'projects' && renderProjectsContent()}
             {activeSection === 'appointments' && renderAppointmentsContent()}
             {activeSection === 'cart' && renderCartContent()}
             {activeSection === 'purchases' && renderPurchasesContent()}

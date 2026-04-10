@@ -13,6 +13,7 @@ import {
   Moon,
 } from 'lucide-react'
 import { useTheme } from '../../context/ThemeContext.jsx'
+import { useAuth } from '../../context/AuthContext'
 
 /**
  * Topbar Component for Admin Dashboard
@@ -29,6 +30,7 @@ export function Topbar({
   const [showNotifications, setShowNotifications] = useState(false)
   const [showUserMenu, setShowUserMenu] = useState(false)
   const { theme, toggleTheme, mounted } = useTheme()
+  const { logout } = useAuth()
 
   // Mock notifications
   const notifications = [
@@ -206,6 +208,7 @@ export function Topbar({
                 </div>
                 <div className="p-2 border-t border-[var(--border)]">
                   <button
+                    onClick={logout}
                     className="flex items-center gap-3 w-full px-4 py-3 rounded-xl text-red-400 hover:bg-red-500/10 transition-colors duration-200"
                   >
                     <LogOut className="w-5 h-5" />

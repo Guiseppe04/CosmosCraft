@@ -23,6 +23,8 @@ const reportRoutes = require('./routes/reportRoutes');
 const auditRoutes = require('./routes/auditRoutes');
 const inventoryRoutes = require('./routes/inventoryRoutes');
 const posRoutes = require('./routes/posRoutes');
+const projectRoutes = require('./routes/projectRoutes');
+const builderPartsRoutes = require('./routes/builderPartsRoutes');
 const { errorHandler, notFound } = require('./middleware/errorHandler.js');
 
 const app = express();
@@ -65,6 +67,8 @@ app.use('/api/reports', reportRoutes);
 app.use('/api/audit-logs', auditRoutes);
 app.use('/api/inventory', inventoryRoutes);
 app.use('/api/pos', posRoutes);
+app.use('/api/projects', projectRoutes);
+app.use('/api/builder-parts', builderPartsRoutes);
 // Legacy route alias kept for backwards-compat
 app.use('/user', userRoutes);
 

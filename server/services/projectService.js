@@ -1,0 +1,384 @@
+const { pool } = require('../config/database');
+
+exports.getProjects = async () => {
+  // We need to calculate global progress on the fly or just use the field in projects
+  const result = await pool.query('SELECT * FROM projects ORDER BY created_at DESC');
+  
+  // To get proper progress, we calculate it dynamically for each project
+  for (let p of result.rows) {
+    const stats = await pool.query(`
+      SELECT 
+        COUNT(*) as total, 
+        COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed
+      FROM project_subtasks ps
+      JOIN project_milestones pm ON ps.milestone_id = pm.milestone_id
+      WHERE pm.project_id = $1
+    `, [p.project_id]);
+    
+    const total = parseInt(stats.rows[0].total) || 0;
+    const completed = parseInt(stats.rows[0].completed) || 0;
+    p.progress = total === 0 ? 0 : Math.round((completed / total) * 100);
+  }
+  
+  return result.rows;
+};
+
+exports.getProjectById = async (projectId) => {
+  const result = await pool.query('SELECT * FROM projects WHERE project_id = $1', [projectId]);
+  if (result.rows.length === 0) return null;
+  const project = result.rows[0];
+
+  const stats = await pool.query(`
+    SELECT 
+      COUNT(*) as total, 
+      COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed
+    FROM project_subtasks ps
+    JOIN project_milestones pm ON ps.milestone_id = pm.milestone_id
+    WHERE pm.project_id = $1
+  `, [projectId]);
+  
+  const total = parseInt(stats.rows[0].total) || 0;
+  const completed = parseInt(stats.rows[0].completed) || 0;
+  project.progress = total === 0 ? 0 : Math.round((completed / total) * 100);
+  
+  return project;
+};
+
+exports.getMyProjects = async (userId) => {
+  const result = await pool.query('SELECT * FROM projects WHERE customer_id = $1 ORDER BY created_at DESC', [userId]);
+  for (let p of result.rows) {
+    const stats = await pool.query(`
+      SELECT COUNT(*) as total, COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed
+      FROM project_subtasks ps
+      JOIN project_milestones pm ON ps.milestone_id = pm.milestone_id
+      WHERE pm.project_id = $1
+    `, [p.project_id]);
+    const total = parseInt(stats.rows[0].total) || 0;
+    const completed = parseInt(stats.rows[0].completed) || 0;
+    p.progress = total === 0 ? 0 : Math.round((completed / total) * 100);
+  }
+  return result.rows;
+};
+
+exports.createProject = async (projectData) => {
+  const { name, customer_name, customer_id, status, description } = projectData;
+  const result = await pool.query(
+    'INSERT INTO projects (name, customer_name, customer_id, status, description) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+    [name, customer_name, customer_id || null, status || 'Pending', description]
+  );
+  return result.rows[0];
+};
+
+exports.updateProject = async (projectId, projectData) => {
+  const { name, customer_name, customer_id, status, description } = projectData;
+  const result = await pool.query(
+    `UPDATE projects 
+     SET name = COALESCE($1, name),
+         customer_name = COALESCE($2, customer_name),
+         customer_id = COALESCE($3, customer_id),
+         status = COALESCE($4, status),
+         description = COALESCE($5, description),
+         updated_at = CURRENT_TIMESTAMP
+     WHERE project_id = $6 RETURNING *`,
+    [name, customer_name, customer_id || null, status, description, projectId]
+  );
+  if (result.rows.length === 0) return null;
+  return result.rows[0];
+};
+
+exports.deleteProject = async (projectId) => {
+  const result = await pool.query('DELETE FROM projects WHERE project_id = $1 RETURNING *', [projectId]);
+  if (result.rows.length === 0) return null;
+  return result.rows[0];
+};
+
+exports.assignTeam = async (projectId, userIds) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('DELETE FROM project_team_members WHERE project_id = $1', [projectId]);
+    
+    if (userIds && userIds.length > 0) {
+      for (const userId of userIds) {
+        await client.query(
+          'INSERT INTO project_team_members (project_id, user_id) VALUES ($1, $2)',
+          [projectId, userId]
+        );
+      }
+    }
+    
+    await client.query('COMMIT');
+    return true;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+};
+
+// ─── PROJECT TRACKING & TASKS ───────────────────────────────────────────────
+
+const logActivity = async (client, projectId, userId, actionType, details) => {
+  await client.query(
+    'INSERT INTO project_activity_logs (project_id, user_id, action_type, details) VALUES ($1, $2, $3, $4)',
+    [projectId, userId, actionType, JSON.stringify(details)]
+  );
+};
+
+exports.getProjectHierarchy = async (projectId) => {
+  const client = await pool.connect();
+  try {
+    const pResult = await client.query('SELECT * FROM projects WHERE project_id = $1', [projectId]);
+    if (pResult.rows.length === 0) return null;
+    const project = pResult.rows[0];
+
+    // Fetch team members
+    const teamResult = await client.query(`
+      SELECT ptm.user_id, u.first_name, u.last_name, u.email, u.role
+      FROM project_team_members ptm
+      JOIN users u ON ptm.user_id = u.user_id
+      WHERE ptm.project_id = $1
+    `, [projectId]);
+    project.team = teamResult.rows;
+
+    // Fetch milestones
+    const mResult = await client.query('SELECT * FROM project_milestones WHERE project_id = $1 ORDER BY order_index ASC, created_at ASC', [projectId]);
+    const milestones = mResult.rows;
+
+    // Fetch subtasks
+    const sResult = await client.query(`
+      SELECT s.*, u.first_name as assignee_first, u.last_name as assignee_last
+      FROM project_subtasks s
+      LEFT JOIN users u ON s.assigned_user_id = u.user_id
+      JOIN project_milestones m ON s.milestone_id = m.milestone_id
+      WHERE m.project_id = $1
+      ORDER BY s.created_at ASC
+    `, [projectId]);
+    
+    let totalSubtasks = 0;
+    let completedSubtasks = 0;
+
+    // Group subtasks into milestones
+    const milestoneMap = milestones.reduce((acc, m) => {
+      m.subtasks = [];
+      acc[m.milestone_id] = m;
+      return acc;
+    }, {});
+
+    sResult.rows.forEach(s => {
+      if (milestoneMap[s.milestone_id]) {
+        milestoneMap[s.milestone_id].subtasks.push(s);
+        totalSubtasks++;
+        if (s.status === 'completed') completedSubtasks++;
+      }
+    });
+
+    project.milestones = Object.values(milestoneMap);
+    project.progress = totalSubtasks === 0 ? 0 : Math.round((completedSubtasks / totalSubtasks) * 100);
+    
+    // Auto-update project base status if completed
+    if (totalSubtasks > 0 && totalSubtasks === completedSubtasks && project.status !== 'Completed') {
+       await client.query("UPDATE projects SET status = 'Completed' WHERE project_id = $1", [projectId]);
+       project.status = 'Completed';
+    } else if (completedSubtasks > 0 && totalSubtasks !== completedSubtasks && project.status === 'Pending') {
+       await client.query("UPDATE projects SET status = 'In Progress' WHERE project_id = $1", [projectId]);
+       project.status = 'In Progress';
+    }
+
+    return project;
+  } finally {
+    client.release();
+  }
+};
+
+exports.addMilestone = async (projectId, data, userId) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { title, description, order_index } = data;
+    const res = await client.query(
+      'INSERT INTO project_milestones (project_id, title, description, order_index) VALUES ($1, $2, $3, $4) RETURNING *',
+      [projectId, title, description, order_index || 0]
+    );
+    await logActivity(client, projectId, userId, 'milestone_created', { title });
+    await client.query('COMMIT');
+    return res.rows[0];
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+};
+
+exports.updateMilestone = async (milestoneId, data, userId) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { title, description, order_index, status } = data;
+    const res = await client.query(
+      `UPDATE project_milestones 
+       SET title = COALESCE($1, title), description = COALESCE($2, description), 
+           order_index = COALESCE($3, order_index), status = COALESCE($4, status),
+           updated_at = CURRENT_TIMESTAMP
+       WHERE milestone_id = $5 RETURNING *`,
+      [title, description, order_index, status, milestoneId]
+    );
+    if (res.rows.length === 0) throw new Error('Milestone not found');
+    await logActivity(client, res.rows[0].project_id, userId, 'milestone_updated', { title: res.rows[0].title });
+    await client.query('COMMIT');
+    return res.rows[0];
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+};
+
+exports.deleteMilestone = async (milestoneId, userId) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const res = await client.query('DELETE FROM project_milestones WHERE milestone_id = $1 RETURNING *', [milestoneId]);
+    if (res.rows.length === 0) throw new Error('Milestone not found');
+    await logActivity(client, res.rows[0].project_id, userId, 'milestone_deleted', { title: res.rows[0].title });
+    await client.query('COMMIT');
+    return res.rows[0];
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+};
+
+exports.addSubtask = async (milestoneId, data, userId) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const mRes = await client.query('SELECT project_id FROM project_milestones WHERE milestone_id = $1', [milestoneId]);
+    if (mRes.rows.length === 0) throw new Error('Milestone not found');
+    const projectId = mRes.rows[0].project_id;
+
+    const { title, is_customer_updatable, assigned_user_id } = data;
+    const res = await client.query(
+      'INSERT INTO project_subtasks (milestone_id, title, is_customer_updatable, assigned_user_id) VALUES ($1, $2, $3, $4) RETURNING *',
+      [milestoneId, title, is_customer_updatable || false, assigned_user_id || null]
+    );
+
+    // If milestone was completed, revert to in_progress because a new pending subtask was added
+    await client.query("UPDATE project_milestones SET status = 'in_progress' WHERE milestone_id = $1 AND status = 'completed'", [milestoneId]);
+
+    await logActivity(client, projectId, userId, 'subtask_created', { title });
+    await client.query('COMMIT');
+    return res.rows[0];
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+};
+
+exports.updateSubtaskStatus = async (subtaskId, data, userId, userRole) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const sRes = await client.query(`
+      SELECT s.*, m.project_id FROM project_subtasks s
+      JOIN project_milestones m ON s.milestone_id = m.milestone_id
+      WHERE s.subtask_id = $1
+    `, [subtaskId]);
+    
+    if (sRes.rows.length === 0) throw new Error('Subtask not found');
+    const subtask = sRes.rows[0];
+
+    // Authorization check
+    if (!['super_admin', 'admin', 'staff'].includes(userRole)) {
+      if (!subtask.is_customer_updatable) {
+        throw new Error('Not authorized to update this subtask');
+      }
+    }
+
+    const { status, title, assigned_user_id, is_customer_updatable } = data;
+    let completedAt = subtask.completed_at;
+    let completedBy = subtask.completed_by;
+
+    if (status === 'completed' && subtask.status !== 'completed') {
+      completedAt = new Date();
+      completedBy = userId;
+    } else if (status === 'pending' || status === 'in_progress') {
+      completedAt = null;
+      completedBy = null;
+    }
+
+    const updatedRes = await client.query(
+      `UPDATE project_subtasks 
+       SET status = COALESCE($1, status),
+           title = COALESCE($2, title),
+           assigned_user_id = COALESCE($3, assigned_user_id),
+           is_customer_updatable = COALESCE($4, is_customer_updatable),
+           completed_at = $5,
+           completed_by = $6,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE subtask_id = $7 RETURNING *`,
+      [status || subtask.status, title, assigned_user_id, is_customer_updatable, completedAt, completedBy, subtaskId]
+    );
+
+    const mId = subtask.milestone_id;
+    // Auto-complete milestone logic
+    const pendingCount = await client.query(`SELECT COUNT(*) FROM project_subtasks WHERE milestone_id = $1 AND status != 'completed'`, [mId]);
+    if (parseInt(pendingCount.rows[0].count) === 0) {
+      await client.query(`UPDATE project_milestones SET status = 'completed' WHERE milestone_id = $1`, [mId]);
+    } else {
+      await client.query(`UPDATE project_milestones SET status = 'in_progress' WHERE milestone_id = $1`, [mId]);
+    }
+
+    if (status && status !== subtask.status) {
+      await logActivity(client, subtask.project_id, userId, 'subtask_status_changed', { title: subtask.title, status });
+    }
+
+    await client.query('COMMIT');
+    return updatedRes.rows[0];
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+};
+
+exports.deleteSubtask = async (subtaskId, userId) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const res = await client.query(`
+      DELETE FROM project_subtasks 
+      WHERE subtask_id = $1 
+      RETURNING *, (SELECT project_id FROM project_milestones WHERE milestone_id = project_subtasks.milestone_id) as project_id
+    `, [subtaskId]);
+    
+    if (res.rows.length === 0) throw new Error('Subtask not found');
+    await logActivity(client, res.rows[0].project_id, userId, 'subtask_deleted', { title: res.rows[0].title });
+    await client.query('COMMIT');
+    return res.rows[0];
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+};
+
+exports.getActivityLogs = async (projectId) => {
+  const res = await pool.query(`
+    SELECT l.*, u.first_name, u.last_name, u.email, u.role
+    FROM project_activity_logs l
+    LEFT JOIN users u ON l.user_id = u.user_id
+    WHERE l.project_id = $1
+    ORDER BY l.created_at DESC
+  `, [projectId]);
+  return res.rows;
+};

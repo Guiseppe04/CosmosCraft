@@ -1,7 +1,9 @@
 import { useState } from 'react'
-import { Link } from 'react-router'
+import { Link, useNavigate } from 'react-router'
 import { motion } from 'motion/react'
 import { Mail, Lock, ArrowRight } from 'lucide-react'
+import { useAuth } from '../context/AuthContext'
+import { API } from '../utils/apiConfig'
 
 /**
  * LoginPage - User Authentication
@@ -12,21 +14,53 @@ export function LoginPage() {
   const [password, setPassword] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [rememberMe, setRememberMe] = useState(false)
+  const [error, setError] = useState('')
+
+  const navigate = useNavigate()
+  const { login } = useAuth()
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     setIsLoading(true)
-    // Simulate API call
-    setTimeout(() => {
-      alert(`Logged in as ${email}`)
-      setEmail('')
-      setPassword('')
+    setError('')
+
+    try {
+      const response = await fetch(`${API}/auth/email-login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ email: email.trim(), password }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        setError(data.message || 'Login failed. Please check your credentials.')
+        return
+      }
+
+      if (data.data?.user) {
+        login(data.data.user)
+      }
+
+      const role = data.data?.user?.role || 'customer'
+      if (role === 'admin' || role === 'super_admin') {
+        navigate('/admin')
+      } else if (role === 'staff') {
+        navigate('/staff')
+      } else {
+        navigate('/dashboard')
+      }
+    } catch (err) {
+      console.error('Login error:', err)
+      setError('Network error. Please check your connection and try again.')
+    } finally {
       setIsLoading(false)
-    }, 1000)
+    }
   }
 
   const handleSocialLogin = (provider) => {
-    alert(`Logging in with ${provider}...`)
+    window.location.href = `${API}/auth/${provider.toLowerCase()}`
   }
 
   return (
@@ -54,6 +88,8 @@ export function LoginPage() {
           <h1 className="text-4xl font-bold text-white mb-2">Welcome Back</h1>
           <p className="text-[var(--text-muted)]">Sign in to continue to CosmosCraft</p>
         </motion.div>
+
+        {error && <p className="mb-4 text-sm text-red-500 font-medium bg-red-500/10 p-3 rounded-lg border border-red-500/20">{error}</p>}
 
         {/* Form */}
         <motion.form
@@ -180,35 +216,7 @@ export function LoginPage() {
           </p>
         </motion.div>
 
-        {/* Demo Accounts */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.4 }}
-          className="mt-12 bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6 space-y-6"
-        >
-          <h3 className="font-bold text-white text-lg">DEMO ACCOUNTS</h3>
 
-          <div className="space-y-4">
-            {/* User Account */}
-            <div>
-              <h4 className="font-bold text-white mb-2">User Account</h4>
-              <div className="space-y-1 text-sm text-[var(--text-muted)]">
-                <p>Email: <span className="font-semibold text-white">user@cosmoscraft.com</span></p>
-                <p>Password: <span className="font-semibold text-white">user123</span></p>
-              </div>
-            </div>
-
-            {/* Admin Account */}
-            <div>
-              <h4 className="font-bold text-white mb-2">Admin Account</h4>
-              <div className="space-y-1 text-sm text-[var(--text-muted)]">
-                <p>Email: <span className="font-semibold text-white">admin@cosmoscraft.com</span></p>
-                <p>Password: <span className="font-semibold text-white">admin123</span></p>
-              </div>
-            </div>
-          </div>
-        </motion.div>
 
         {/* Back Link */}
         <motion.div

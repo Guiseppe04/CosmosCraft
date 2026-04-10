@@ -132,3 +132,42 @@ exports.getOrderById = async (orderId, userId) => {
 
   return order
 }
+
+exports.getAllOrders = async (params = {}) => {
+  const { search } = params;
+  let query = 'SELECT * FROM orders';
+  const queryParams = [];
+
+  if (search) {
+    query += ` WHERE order_number ILIKE $1`;
+    queryParams.push(`%${search}%`);
+  }
+
+  query += ' ORDER BY created_at DESC';
+  const res = await pool.query(query, queryParams);
+  return res.rows;
+}
+
+exports.updateOrder = async (orderId, updateData) => {
+  const { status, payment_status, notes } = updateData;
+  const res = await pool.query(
+    `UPDATE orders 
+     SET status = COALESCE($1, status),
+         payment_status = COALESCE($2, payment_status),
+         notes = COALESCE($3, notes),
+         updated_at = CURRENT_TIMESTAMP
+     WHERE order_id = $4 RETURNING *`,
+    [status, payment_status, notes, orderId]
+  );
+  if (res.rows.length === 0) return null;
+  return res.rows[0];
+}
+
+exports.cancelOrder = async (orderId) => {
+  const res = await pool.query(
+    `UPDATE orders SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP WHERE order_id = $1 RETURNING *`,
+    [orderId]
+  );
+  if (res.rows.length === 0) return null;
+  return res.rows[0];
+}
