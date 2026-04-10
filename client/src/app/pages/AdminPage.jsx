@@ -9,7 +9,7 @@ import {
   User, Guitar, Layers, Shield, Tag, AlertCircle, DollarSign,
   Save, TrendingUp, TrendingDown, UsersRound, CreditCard, Mail,
 } from 'lucide-react'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, BarChart, Bar, Cell } from 'recharts'
 import { useAuth } from '../context/AuthContext'
 import { Topbar } from '../components/admin/Topbar'
 import { MessagePanel } from '../components/admin/MessagePanel'
@@ -42,6 +42,114 @@ export function AdminPage() {
   const [orders, setOrders] = useState([])
   const [projects, setProjects] = useState([])
   const [appointments, setAppointments] = useState([])
+  const [inventory, setInventory] = useState([])
+  const [salesReport, setSalesReport] = useState(null)
+
+  const sampleProducts = [
+    { product_id: 'sample-1', sku: 'STR-001', name: 'Custom Stratocaster Body', category_name: 'Guitar Parts', price: 4500, is_active: true, stock: 16, low_stock_threshold: 8 },
+    { product_id: 'sample-2', sku: 'NEC-002', name: 'Roasted Maple Neck', category_name: 'Guitar Parts', price: 3800, is_active: true, stock: 5, low_stock_threshold: 6 },
+    { product_id: 'sample-3', sku: 'PUP-003', name: 'Vintage Humbucker Set', category_name: 'Pickups', price: 2300, is_active: false, stock: 2, low_stock_threshold: 4 },
+  ]
+
+  const sampleParts = [
+    { part_id: 'part-1', part_name: 'Alnico V Pickup', product_name: 'Vintage Humbucker Set', quantity: 14, price: 1600 },
+    { part_id: 'part-2', part_name: 'Rosewood Fingerboard', product_name: 'Custom Stratocaster Body', quantity: 8, price: 1800 },
+    { part_id: 'part-3', part_name: 'Tremolo Bridge', product_name: 'Custom Stratocaster Body', quantity: 5, price: 950 },
+  ]
+
+  const sampleGuitars = [
+    { customization_id: 'guitar-1', user_name: 'Alden Cruz', user_email: 'alden@example.com', name: 'Midnight Explorer', guitar_type: 'electric', total_price: 68500, is_saved: true },
+    { customization_id: 'guitar-2', user_name: 'Mira Santos', user_email: 'mira@example.com', name: 'Sunburst Voyager', guitar_type: 'acoustic', total_price: 54900, is_saved: false },
+    { customization_id: 'guitar-3', user_name: 'Leo Ramirez', user_email: 'leo@example.com', name: 'Thunderbolt Bass', guitar_type: 'bass', total_price: 71250, is_saved: true },
+  ]
+
+  const sampleCategories = [
+    { category_id: 'cat-1', name: 'Guitar Parts', slug: 'guitar-parts', parent_name: 'Inventory', is_active: true },
+    { category_id: 'cat-2', name: 'Pickups', slug: 'pickups', parent_name: 'Guitar Parts', is_active: true },
+    { category_id: 'cat-3', name: 'Hardware', slug: 'hardware', parent_name: 'Guitar Parts', is_active: false },
+  ]
+
+  const sampleOrders = [
+    { order_id: 'ord-1', order_number: '1001', customer_name: 'Alden Cruz', items: [{ name: 'Custom Strat Body' }, { name: 'Pickup' }], total: 12000, status: 'Pending', created_at: '2026-04-08' },
+    { order_id: 'ord-2', order_number: '1002', customer_name: 'Mira Santos', items: [{ name: 'Roasted Maple Neck' }, { name: 'Bridge' }], total: 18000, status: 'Confirmed', created_at: '2026-04-07' },
+    { order_id: 'ord-3', order_number: '1003', customer_name: 'Leo Ramirez', items: [{ name: 'Thunderbolt Bass' }], total: 24500, status: 'Completed', created_at: '2026-04-05' },
+  ]
+
+  const sampleProjects = [
+    { project_id: 'proj-1', name: 'Amped Strat Build', customer_name: 'Alden Cruz', status: 'In Progress', description: 'Complete custom Strat with premium hardware upgrade and tremolo system.', progress: 65 },
+    { project_id: 'proj-2', name: 'Rosewood Neck Set', customer_name: 'Mira Santos', status: 'Pending', description: 'Finish and install roasted maple necks with custom fretboard inlays.', progress: 25 },
+    { project_id: 'proj-3', name: 'Bass Refit', customer_name: 'Leo Ramirez', status: 'Completed', description: 'Set up Thunderbolt bass with active electronics and new bridge.', progress: 100 },
+  ]
+
+  const sampleAppointments = [
+    { appointment_id: 'apt-1', title: 'Setup Consultation', customer_name: 'Alden Cruz', customer_email: 'alden@example.com', date: '2026-04-09', time: '10:00 AM', status: 'Scheduled', notes: 'Discuss guitar setup options.' },
+    { appointment_id: 'apt-2', title: 'Pickup Order', customer_name: 'Mira Santos', customer_email: 'mira@example.com', date: '2026-04-10', time: '2:30 PM', status: 'Scheduled', notes: 'Customer will collect custom neck.' },
+    { appointment_id: 'apt-3', title: 'Guitar Review', customer_name: 'Leo Ramirez', customer_email: 'leo@example.com', date: '2026-04-12', time: '1:00 PM', status: 'Completed', notes: 'Final check and setup review.' },
+  ]
+
+  const sampleUsers = [
+    { user_id: 'user-1', first_name: 'Alden', last_name: 'Cruz', email: 'alden@example.com', role: 'customer', is_active: true, created_at: '2025-10-12' },
+    { user_id: 'user-2', first_name: 'Mira', last_name: 'Santos', email: 'mira@example.com', role: 'staff', is_active: true, created_at: '2026-01-18' },
+    { user_id: 'user-3', first_name: 'Leo', last_name: 'Ramirez', email: 'leo@example.com', role: 'admin', is_active: false, created_at: '2025-12-05' },
+  ]
+
+  const sampleInventory = [
+    { id: 'inv-1', name: 'Roasted Maple Neck', type: 'Neck', qty: 8, status: 'Healthy' },
+    { id: 'inv-2', name: 'Mahogany Body', type: 'Body', qty: 3, status: 'Critical' },
+    { id: 'inv-3', name: 'Vintage Humbucker Set', type: 'Pickup', qty: 12, status: 'Warning' },
+  ]
+
+  const visibleProducts = products.length > 0 ? products : sampleProducts
+  const visibleParts = parts.length > 0 ? parts : sampleParts
+  const visibleGuitars = guitars.length > 0 ? guitars : sampleGuitars
+  const visibleCategories = categories.length > 0 ? categories : sampleCategories
+  const visibleOrders = orders.length > 0 ? orders : sampleOrders
+  const visibleProjects = projects.length > 0 ? projects : sampleProjects
+  const visibleAppointments = appointments.length > 0 ? appointments : sampleAppointments
+  const visibleUsers = users.length > 0 ? users : sampleUsers
+  const visibleInventory = inventory.length > 0 ? inventory : sampleInventory
+
+  const inventoryHealthData = (() => {
+    const productItems = visibleProducts.map((product) => ({
+      stock: Number(product.stock ?? 0),
+      threshold: Number(product.low_stock_threshold ?? 10),
+    }))
+    const partItems = visibleParts.map((part) => ({
+      stock: Number(part.quantity ?? 0),
+      threshold: 10,
+    }))
+    const items = [...productItems, ...partItems]
+
+    if (items.length === 0) {
+      return {
+        value: '0%',
+        status: 'Healthy',
+        statusClass: 'text-emerald-400',
+        iconBg: 'bg-emerald-500/15',
+      }
+    }
+
+    let critical = false
+    let warning = false
+    let healthyCount = 0
+
+    items.forEach(({ stock, threshold }) => {
+      if (stock <= threshold) {
+        critical = true
+      } else if (stock <= threshold * 2) {
+        warning = true
+      } else {
+        healthyCount += 1
+      }
+    })
+
+    const status = critical ? 'Critical' : warning ? 'Warning' : 'Healthy'
+    const statusClass = critical ? 'text-red-400' : warning ? 'text-amber-400' : 'text-emerald-400'
+    const iconBg = critical ? 'bg-red-500/15' : warning ? 'bg-amber-500/15' : 'bg-emerald-500/15'
+    const value = `${Math.round((healthyCount / items.length) * 100)}%`
+
+    return { value, status, statusClass, iconBg }
+  })()
 
   // Form state for modals
   const [form, setForm] = useState({})
@@ -115,21 +223,106 @@ export function AdminPage() {
     } catch (e) { showToast(e.message, 'error') }
   }, [searchQuery])
 
+  const fetchSalesReport = useCallback(async () => {
+    try {
+      // Mock data for demonstration
+      const mockData = {
+        totalGrossSales: 247850,
+        totalTransactions: 156,
+        averagePerTransaction: 1589.42,
+        customizationOrders: 12,
+        walkInSales: 145670,
+        walkInTransactions: 89,
+        walkInAvg: 1636.85,
+        walkInPercentage: 58.7,
+        onlineSales: 102180,
+        onlineTransactions: 67,
+        onlineAvg: 1525.07,
+        onlinePercentage: 41.3,
+        customizationSales: 45000,
+        customizationTransactions: 12,
+        customizationAvg: 3750.00,
+        customizationPercentage: 18.1,
+        dailySales: 12500,
+        dailyTransactions: 8,
+        weeklySales: 87500,
+        weeklyTransactions: 52,
+        monthlySales: 247850,
+        monthlyTransactions: 156,
+        bestSellingProducts: [
+          { name: 'Custom Stratocaster', units: 15, revenue: 45000, category: 'Custom Guitar' },
+          { name: 'Mahogany Body', units: 23, revenue: 34500, category: 'Guitar Part' },
+          { name: 'Premium Pickups Set', units: 18, revenue: 27000, category: 'Accessories' },
+          { name: 'Rosewood Fingerboard', units: 12, revenue: 18000, category: 'Guitar Part' },
+          { name: 'Tremolo Bridge', units: 8, revenue: 12000, category: 'Hardware' }
+        ],
+        customizationTypes: [
+          { name: 'Full Custom Build', count: 5 },
+          { name: 'Body Only', count: 3 },
+          { name: 'Neck Only', count: 2 },
+          { name: 'Refinishing', count: 1 },
+          { name: 'Hardware Upgrade', count: 1 }
+        ],
+        customizationRevenue: 45000,
+        avgCustomization: 3750.00,
+        walkInConversion: 85,
+        onlineConversion: 72
+      }
+      setSalesReport(mockData)
+      // Uncomment below when server endpoint is ready
+      // const res = await adminApi.getSalesReport()
+      // setSalesReport(res.data || {})
+    } catch (e) {
+      showToast(e.message, 'error')
+      // Fallback to mock data on error
+      setSalesReport({
+        totalGrossSales: 0,
+        totalTransactions: 0,
+        averagePerTransaction: 0,
+        customizationOrders: 0,
+        walkInSales: 0,
+        walkInTransactions: 0,
+        walkInAvg: 0,
+        walkInPercentage: 0,
+        onlineSales: 0,
+        onlineTransactions: 0,
+        onlineAvg: 0,
+        onlinePercentage: 0,
+        customizationSales: 0,
+        customizationTransactions: 0,
+        customizationAvg: 0,
+        customizationPercentage: 0,
+        dailySales: 0,
+        dailyTransactions: 0,
+        weeklySales: 0,
+        weeklyTransactions: 0,
+        monthlySales: 0,
+        monthlyTransactions: 0,
+        bestSellingProducts: [],
+        customizationTypes: [],
+        customizationRevenue: 0,
+        avgCustomization: 0,
+        walkInConversion: 0,
+        onlineConversion: 0
+      })
+    }
+  }, [])
+
   // Load data when tab changes
   useEffect(() => {
     setSearchQuery('')
-    if (activeTab === 'products') { fetchProducts(); fetchCategories() }
+    if (activeTab === 'products-parts') { fetchProducts(); fetchCategories(); fetchParts() }
     if (activeTab === 'guitars') fetchGuitars()
-    if (activeTab === 'parts') fetchParts()
     if (activeTab === 'users') fetchUsers()
     if (activeTab === 'orders') fetchOrders()
     if (activeTab === 'projects') fetchProjects()
     if (activeTab === 'appointments') fetchAppointments()
+    if (activeTab === 'sales-report') fetchSalesReport()
   }, [activeTab])
 
   // Re-search on query change
   useEffect(() => {
-    if (activeTab === 'products') fetchProducts()
+    if (activeTab === 'products-parts') { fetchProducts(); fetchParts() }
     if (activeTab === 'guitars') fetchGuitars()
     if (activeTab === 'users') fetchUsers()
     if (activeTab === 'orders') fetchOrders()
@@ -140,13 +333,13 @@ export function AdminPage() {
   const handleRefresh = () => {
     setIsLoading(true)
     const fetchers = {
-      products: () => { fetchProducts(); fetchCategories() },
+      'products-parts': () => { fetchProducts(); fetchCategories(); fetchParts() },
       guitars: fetchGuitars,
-      parts: fetchParts,
       users: fetchUsers,
       orders: fetchOrders,
       projects: fetchProjects,
       appointments: fetchAppointments,
+      'sales-report': fetchSalesReport,
     }
     const fn = fetchers[activeTab]
     if (fn) fn().finally(() => setIsLoading(false))
@@ -350,6 +543,38 @@ export function AdminPage() {
     finally { setIsSaving(false) }
   }
 
+  const saveInventory = async () => {
+    setIsSaving(true)
+    try {
+      const currentInventory = inventory.length > 0 ? inventory : sampleInventory
+      const newItem = {
+        id: modal.data?.id || `inv-${Date.now()}`,
+        name: form.name || 'New Inventory Item',
+        type: form.type || 'Material',
+        qty: Number(form.qty || 0),
+        status: form.status || 'Healthy',
+      }
+
+      if (modal.data?.id) {
+        setInventory(currentInventory.map(item => item.id === modal.data.id ? newItem : item))
+        showToast('Inventory item updated!')
+      } else {
+        setInventory([...currentInventory, newItem])
+        showToast('Inventory item added!')
+      }
+
+      closeModal()
+    } catch (e) { showToast(e.message, 'error') }
+    finally { setIsSaving(false) }
+  }
+
+  const deleteInventory = (id) => {
+    if (!confirm('Delete this inventory item?')) return
+    const currentInventory = inventory.length > 0 ? inventory : sampleInventory
+    setInventory(currentInventory.filter(item => item.id !== id))
+    showToast('Inventory item deleted')
+  }
+
   const deleteAppointment = async (id) => {
     if (!confirm('Cancel this appointment?')) return
     try {
@@ -367,7 +592,7 @@ export function AdminPage() {
       Inactive: 'bg-gray-500/20 text-gray-400 border-gray-500/30',
       Completed: 'bg-green-500/20 text-green-400 border-green-500/30',
       'In Progress': 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-      Pending: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+      Pending: 'bg-[var(--gold-primary)]/20 text-[var(--gold-primary)] border-[var(--gold-primary)]/30',
       Confirmed: 'bg-green-500/20 text-green-400 border-green-500/30',
       Cancelled: 'bg-red-500/20 text-red-400 border-red-500/30',
       'Low Stock': 'bg-orange-500/20 text-orange-400 border-orange-500/30',
@@ -376,20 +601,21 @@ export function AdminPage() {
     return map[status] || 'bg-gray-500/20 text-gray-400 border-gray-500/30'
   }
 
-  const inputCls = 'w-full px-4 py-2.5 bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl text-white placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] text-sm'
-  const labelCls = 'block text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-1.5'
+  const inputCls = 'w-full px-4 py-3 bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl text-[var(--text-light)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] text-sm'
+  const labelCls = 'block text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-2'
 
   // ── Tabs ───────────────────────────────────────────────────────────────────
   const tabs = [
     { id: 'dashboard',  label: 'Dashboard',       icon: BarChart3 },
-    { id: 'products',   label: 'Products',         icon: Package },
+    { id: 'products-parts', label: 'Guitar Parts & Products', icon: Layers },
     { id: 'categories', label: 'Categories',       icon: Tag },
-    { id: 'parts',      label: 'Guitar Parts',     icon: Layers },
     { id: 'guitars',    label: 'Customizations',   icon: Guitar },
     { id: 'orders',     label: 'Orders',           icon: ShoppingBag },
+    { id: 'inventory',  label: 'Inventory',        icon: Activity },
+    { id: 'sales-report', label: 'Sales Report',   icon: PieChart },
     { id: 'projects',   label: 'Projects',         icon: Briefcase },
     { id: 'appointments', label: 'Appointments',   icon: Calendar },
-    { id: 'users',      label: 'Users & RBAC',     icon: Shield },
+    { id: 'users',      label: 'Users',             icon: Shield },
   ]
 
   // ── Return JSX ─────────────────────────────────────────────────────────────
@@ -414,44 +640,46 @@ export function AdminPage() {
       </AnimatePresence>
 
       {/* Sidebar */}
-      <aside className={`fixed left-0 top-0 h-screen bg-[#1E201E] border-r-2 border-[#4A4747] transition-all duration-300 z-40 ${sidebarCollapsed ? 'w-20' : 'w-64'}`}>
+      <aside className={`fixed left-0 top-0 h-screen bg-[#1E201E] border-r border-[#5A5555] transition-all duration-300 z-40 ${sidebarCollapsed ? 'w-20' : 'w-64'}`}>
         <button
           onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-          className="absolute -right-3 top-6 w-6 h-6 bg-[#1E201E] border border-white/30 rounded-full flex items-center justify-center hover:bg-[#FFD700] hover:border-[#FFD700] transition-all"
+          className="absolute -right-3 top-6 w-6 h-6 bg-[#1E201E] border border-[#5A5555] rounded-full flex items-center justify-center hover:bg-[var(--gold-primary)] hover:border-[var(--gold-primary)] transition-all"
         >
-          {sidebarCollapsed ? <ChevronRight className="w-4 h-4 text-white" /> : <ChevronLeft className="w-4 h-4 text-white" />}
+          {sidebarCollapsed ? <ChevronRight className="w-4 h-4 text-[#F5F5F5]" /> : <ChevronLeft className="w-4 h-4 text-[#F5F5F5]" />}
         </button>
 
-        <nav className="p-4 space-y-0 overflow-y-auto max-h-[calc(100vh-10rem)]">
+        <nav className="p-4 space-y-1 overflow-y-auto max-h-[calc(100vh-10rem)]">
           {tabs.map((tab) => {
             const Icon = tab.icon
             return (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-all duration-200 ${
+                className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl font-medium transition-all duration-200 ${
                   activeTab === tab.id
-                    ? 'bg-[#FFD700] text-black font-bold shadow-lg shadow-[#FFD700]/20'
-                    : 'text-white hover:bg-[#4A4747] hover:text-white'
+                    ? 'bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] border-2 border-[var(--gold-primary)] shadow-[0_0_15px_rgba(212,175,55,0.3)]'
+                    : 'text-[var(--text-muted)] hover:bg-[var(--bg-primary)] hover:text-white border-2 border-transparent'
                 }`}
               >
-                <Icon className={`w-5 h-5 flex-shrink-0 ${activeTab === tab.id ? 'text-black' : 'text-white'}`} />
-                {!sidebarCollapsed && <span className={`truncate ${activeTab === tab.id ? 'text-black' : 'text-white'}`}>{tab.label}</span>}
+                <Icon className={`w-5 h-5 flex-shrink-0 ${activeTab === tab.id ? 'text-[var(--text-dark)]' : 'text-[var(--text-muted)]'}`} />
+                {!sidebarCollapsed && (
+                  <span className={`truncate ${activeTab === tab.id ? 'text-[var(--text-dark)]' : 'text-[var(--text-muted)]'}`}>{tab.label}</span>
+                )}
               </button>
             )
           })}
         </nav>
 
         {/* Admin badge */}
-        <div className={`absolute bottom-4 left-0 right-0 px-4`}>
-          <div className={`flex items-center gap-3 p-3 rounded-xl bg-[#1E201E] border border-white/30 ${sidebarCollapsed ? 'justify-center' : ''}`}>
-            <div className="w-9 h-9 rounded-full bg-gradient-to-r from-[#FFD700] to-[#FFD700] flex items-center justify-center flex-shrink-0">
-              <User className="w-4 h-4 text-black" />
+        <div className={`absolute bottom-4 left-0 right-0 px-4 ${sidebarCollapsed ? 'text-center' : ''}`}>
+          <div className={`flex items-center gap-3 p-4 rounded-2xl bg-[#1E201E] border border-[#5A5555] ${sidebarCollapsed ? 'justify-center' : ''}`}>
+            <div className="w-10 h-10 rounded-full bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] flex items-center justify-center flex-shrink-0 border-2 border-white">
+              <User className="w-5 h-5 text-[var(--text-dark)]" />
             </div>
             {!sidebarCollapsed && (
               <div className="flex-1 min-w-0">
-                <p className="text-white font-semibold text-sm truncate">{user?.firstName || 'Admin'}</p>
-                <p className="text-[#FFD700] text-xs capitalize">{user?.role?.replace('_', ' ')}</p>
+                <p className="text-white font-medium text-sm truncate">{user?.firstName || 'Admin'}</p>
+                <p className="text-[var(--gold-primary)] text-xs capitalize">{user?.role?.replace('_', ' ')}</p>
               </div>
             )}
           </div>
@@ -467,7 +695,7 @@ export function AdminPage() {
           {/* Actions bar */}
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
             {/* Search */}
-            {['products', 'guitars', 'users', 'parts', 'categories', 'orders', 'projects', 'appointments'].includes(activeTab) && (
+            {['products-parts', 'guitars', 'users', 'categories', 'orders', 'projects', 'appointments'].includes(activeTab) && (
               <div className="relative max-w-sm w-full">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
                 <input
@@ -475,12 +703,12 @@ export function AdminPage() {
                   placeholder={`Search ${activeTab}...`}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl text-white placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] text-sm"
+                  className="w-full pl-10 pr-4 py-3 bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl text-[var(--text-light)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] text-sm"
                 />
               </div>
             )}
             <div className="flex items-center gap-2 ml-auto">
-              {activeTab === 'products' && (
+              {activeTab === 'products-parts' && (
                 <>
                   <button onClick={handleRefresh} className="p-2 border border-[var(--border)] rounded-lg hover:border-[var(--gold-primary)] hover:bg-[var(--gold-primary)]/10 transition-all">
                     <RefreshCw className={`w-4 h-4 text-[var(--text-muted)] ${isLoading ? 'animate-spin' : ''}`} />
@@ -488,6 +716,9 @@ export function AdminPage() {
                   
                   <button onClick={() => openModal('product')} className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black rounded-xl font-semibold text-sm hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all">
                     <Plus className="w-4 h-4" /> Add Product
+                  </button>
+                  <button onClick={() => openModal('part')} className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black rounded-xl font-semibold text-sm hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all">
+                    <Plus className="w-4 h-4" /> Add Part
                   </button>
                 </>
               )}
@@ -518,17 +749,7 @@ export function AdminPage() {
                   </button>
                 </>
               )}
-              {activeTab === 'parts' && (
-                <>
-                  <button onClick={handleRefresh} className="p-2 border border-[var(--border)] rounded-lg hover:border-[var(--gold-primary)] hover:bg-[var(--gold-primary)]/10 transition-all">
-                    <RefreshCw className={`w-4 h-4 text-[var(--text-muted)] ${isLoading ? 'animate-spin' : ''}`} />
-                  </button>
-                  
-                  <button onClick={() => openModal('part')} className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black rounded-xl font-semibold text-sm hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all">
-                    <Plus className="w-4 h-4" /> Add Part
-                  </button>
-                </>
-              )}
+
               {activeTab === 'guitars' && (
                 <>
                   <button onClick={handleRefresh} className="p-2 border border-[var(--border)] rounded-lg hover:border-[var(--gold-primary)] hover:bg-[var(--gold-primary)]/10 transition-all">
@@ -537,6 +758,13 @@ export function AdminPage() {
                   
                   <button onClick={() => openModal('guitar_view')} className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black rounded-xl font-semibold text-sm hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all">
                     <Eye className="w-4 h-4" /> View Customizations
+                  </button>
+                </>
+              )}
+              {activeTab === 'sales-report' && (
+                <>
+                  <button onClick={handleRefresh} className="p-2 border border-[var(--border)] rounded-lg hover:border-[var(--gold-primary)] hover:bg-[var(--gold-primary)]/10 transition-all">
+                    <RefreshCw className={`w-4 h-4 text-[var(--text-muted)] ${isLoading ? 'animate-spin' : ''}`} />
                   </button>
                 </>
               )}
@@ -568,14 +796,14 @@ export function AdminPage() {
             </div>
           </div>
 
-          {/* ── PRODUCTS TAB ─────────────────────────────────────────────── */}
-          {activeTab === 'products' && (
-            <motion.div key="products" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-              {products.length === 0 ? (
+          {/* ── GUITAR PARTS & PRODUCTS TAB ───────────────────────────────── */}
+          {activeTab === 'products-parts' && (
+            <motion.div key="products-parts" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+              {visibleProducts.length === 0 ? (
                 <EmptyState icon={Package} label="No products found" action={() => openModal('product')} actionLabel="Add First Product" />
               ) : (
                 <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {products.map((p) => (
+                  {visibleProducts.map((p) => (
                     <motion.div key={p.product_id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
                       className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6 hover:border-[var(--gold-primary)]/50 transition-all"
                     >
@@ -598,7 +826,7 @@ export function AdminPage() {
                           <button onClick={() => openModal('product', p)} className="p-1.5 hover:bg-[var(--gold-primary)]/10 rounded transition-colors">
                             <Eye className="w-4 h-4 text-[var(--text-muted)]" />
                           </button>
-                          <button onClick={() => openModal('product_edit', p)} className="p-1.5 hover:bg-[var(--gold-primary)]/10 rounded transition-colors">
+                          <button onClick={() => openModal('product', p)} className="p-1.5 hover:bg-[var(--gold-primary)]/10 rounded transition-colors">
                             <Edit className="w-4 h-4 text-[var(--text-muted)]" />
                           </button>
                           <button onClick={() => deleteProduct(p.product_id)} className="p-1.5 hover:bg-red-500/10 rounded transition-colors">
@@ -610,6 +838,32 @@ export function AdminPage() {
                   ))}
                 </div>
               )}
+
+              {/* Guitar Parts Section */}
+              <h3 className="text-white text-xl font-semibold mb-4 mt-8">Guitar Parts</h3>
+              <AdminTable
+                columns={['Part Name', 'Linked Product', 'Qty', 'Price', 'Actions']}
+                rows={visibleParts}
+                renderRow={(part) => (
+                  <>
+                    <td className="py-4 px-6 text-white font-semibold">{part.part_name}</td>
+                    <td className="py-4 px-6 text-[var(--text-muted)]">{part.product_name || '—'}</td>
+                    <td className="py-4 px-6 text-white">{part.quantity}</td>
+                    <td className="py-4 px-6 text-[var(--gold-primary)] font-bold">{formatCurrency(part.price, true)}</td>
+                    <td className="py-4 px-6">
+                      <div className="flex gap-2">
+                        <button onClick={() => openModal('part', part)} className="p-1.5 hover:bg-[var(--gold-primary)]/10 rounded">
+                          <Edit className="w-4 h-4 text-[var(--text-muted)]" />
+                        </button>
+                        <button onClick={() => deletePart(part.part_id)} className="p-1.5 hover:bg-red-500/10 rounded">
+                          <Trash2 className="w-4 h-4 text-red-400" />
+                        </button>
+                      </div>
+                    </td>
+                  </>
+                )}
+                empty={<EmptyState icon={Layers} label="No guitar parts yet" action={() => openModal('part')} actionLabel="Add Part" />}
+              />
             </motion.div>
           )}
 
@@ -618,7 +872,7 @@ export function AdminPage() {
             <motion.div key="categories" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
               <AdminTable
                 columns={['Name', 'Slug', 'Parent', 'Status', 'Actions']}
-                rows={categories}
+                rows={visibleCategories}
                 renderRow={(cat) => (
                   <>
                     <td className="py-4 px-6 text-white font-semibold">{cat.name}</td>
@@ -649,7 +903,7 @@ export function AdminPage() {
             <motion.div key="guitars" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
               <AdminTable
                 columns={['Customer', 'Guitar', 'Type', 'Price', 'Saved', 'Actions']}
-                rows={guitars}
+                rows={visibleGuitars}
                 renderRow={(g) => (
                   <>
                     <td className="py-4 px-6">
@@ -683,41 +937,12 @@ export function AdminPage() {
             </motion.div>
           )}
 
-          {/* ── GUITAR PARTS TAB ─────────────────────────────────────────── */}
-          {activeTab === 'parts' && (
-            <motion.div key="parts" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-              <AdminTable
-                columns={['Part Name', 'Linked Product', 'Qty', 'Price', 'Actions']}
-                rows={parts}
-                renderRow={(part) => (
-                  <>
-                    <td className="py-4 px-6 text-white font-semibold">{part.part_name}</td>
-                    <td className="py-4 px-6 text-[var(--text-muted)]">{part.product_name || '—'}</td>
-                    <td className="py-4 px-6 text-white">{part.quantity}</td>
-                    <td className="py-4 px-6 text-[var(--gold-primary)] font-bold">{formatCurrency(part.price, true)}</td>
-                    <td className="py-4 px-6">
-                      <div className="flex gap-2">
-                        <button onClick={() => openModal('part', part)} className="p-1.5 hover:bg-[var(--gold-primary)]/10 rounded">
-                          <Edit className="w-4 h-4 text-[var(--text-muted)]" />
-                        </button>
-                        <button onClick={() => deletePart(part.part_id)} className="p-1.5 hover:bg-red-500/10 rounded">
-                          <Trash2 className="w-4 h-4 text-red-400" />
-                        </button>
-                      </div>
-                    </td>
-                  </>
-                )}
-                empty={<EmptyState icon={Layers} label="No guitar parts yet" action={() => openModal('part')} actionLabel="Add Part" />}
-              />
-            </motion.div>
-          )}
 
-          {/* ── USERS & RBAC TAB ─────────────────────────────────────────── */}
           {activeTab === 'users' && (
             <motion.div key="users" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
               <AdminTable
                 columns={['User', 'Role', 'Status', 'Joined', 'Actions']}
-                rows={users}
+                rows={visibleUsers}
                 renderRow={(u) => (
                   <>
                     <td className="py-4 px-6">
@@ -765,11 +990,11 @@ export function AdminPage() {
           {/* ── ORDERS TAB ───────────────────────────────────────────────────── */}
           {activeTab === 'orders' && (
             <motion.div key="orders" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-              {orders.length === 0 ? (
+              {visibleOrders.length === 0 ? (
                 <EmptyState icon={ShoppingBag} label="No orders found" />
               ) : (
                 <div className="space-y-4">
-                  {orders.map((order) => (
+                  {visibleOrders.map((order) => (
                     <motion.div key={order.order_id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
                       className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6 hover:border-[var(--gold-primary)]/50 transition-all"
                     >
@@ -820,11 +1045,11 @@ export function AdminPage() {
           {/* ── PROJECTS TAB ─────────────────────────────────────────────────── */}
           {activeTab === 'projects' && (
             <motion.div key="projects" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-              {projects.length === 0 ? (
+              {visibleProjects.length === 0 ? (
                 <EmptyState icon={Briefcase} label="No projects yet" action={() => openModal('project')} actionLabel="Create Project" />
               ) : (
                 <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {projects.map((project) => (
+                  {visibleProjects.map((project) => (
                     <motion.div key={project.project_id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
                       className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6 hover:border-[var(--gold-primary)]/50 transition-all"
                     >
@@ -873,7 +1098,7 @@ export function AdminPage() {
           {activeTab === 'appointments' && (
             <motion.div key="appointments" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
               {/* Appointments Table */}
-              {appointments.length === 0 ? (
+              {visibleAppointments.length === 0 ? (
                 <EmptyState icon={Calendar} label="No appointments scheduled" action={() => openModal('appointment')} actionLabel="Book Appointment" />
               ) : (
                 <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl overflow-hidden">
@@ -891,7 +1116,7 @@ export function AdminPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {appointments.map((apt, i) => {
+                        {visibleAppointments.map((apt, i) => {
                           const statusColors = {
                             Scheduled: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
                             Completed: 'bg-green-500/20 text-green-400 border-green-500/30',
@@ -941,171 +1166,680 @@ export function AdminPage() {
             </motion.div>
           )}
 
-          {/* ── DASHBOARD TAB (modern analytics layout) ──────────────────────────── */}
+          {/* ── DASHBOARD TAB (professional analytics layout) ─────────────────────── */}
           {activeTab === 'dashboard' && (
             <motion.div key="dashboard" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-              {/* Top Notification Bar */}
-              <div className="mb-6 bg-gradient-to-r from-[var(--gold-primary)]/20 to-[var(--gold-secondary)]/10 border border-[var(--gold-primary)]/30 rounded-xl p-4 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 bg-[var(--gold-primary)]/20 rounded-lg flex items-center justify-center">
-                    <AlertCircle className="w-4 h-4 text-[var(--gold-primary)]" />
+              <div className="space-y-6">
+                <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-3xl p-6">
+                  <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-6">
+                    <div>
+                      <p className="text-[var(--gold-primary)] text-sm font-semibold uppercase tracking-[0.3em] mb-3">Admin Dashboard</p>
+                      <h1 className="text-3xl md:text-4xl font-bold text-white">Welcome back, {user?.firstName || 'Admin'}</h1>
+                      <p className="text-[var(--text-muted)] mt-3 max-w-2xl">Monitor sales performance, inventory health, and customer activity from a clean, modern dashboard layout.</p>
+                    </div>
+                    <div className="flex flex-wrap gap-3 items-center">
+                      <button onClick={() => fetchOrders()} className="inline-flex items-center gap-2 rounded-2xl bg-[var(--gold-primary)] px-4 py-2 text-sm font-semibold text-black hover:bg-[var(--gold-secondary)] transition-all">
+                        <RefreshCw className="w-4 h-4" /> Refresh data
+                      </button>
+                      <button className="inline-flex items-center gap-2 rounded-2xl border border-[var(--border)] px-4 py-2 text-sm font-semibold text-white hover:border-[var(--gold-primary)] transition-all">
+                        New Report
+                      </button>
+                    </div>
                   </div>
-                  <p className="text-white text-sm">Welcome back, <span className="font-semibold">{user?.firstName || 'Admin'}</span>! You have 3 new orders today.</p>
-                </div>
-                <button className="text-[var(--gold-primary)] text-sm font-medium hover:underline">Dismiss</button>
-              </div>
 
-              {/* Profile and Quick Actions Row */}
-              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-8">
-                {/* Profile Section */}
-                <div className="flex items-center gap-4 p-4 bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl">
-                  <div className="w-14 h-14 rounded-full bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] flex items-center justify-center">
-                    <User className="w-6 h-6 text-black" />
-                  </div>
-                  <div>
-                    <h3 className="text-white font-semibold">{user?.firstName} {user?.lastName}</h3>
-                    <p className="text-[var(--gold-primary)] text-sm capitalize">{user?.role?.replace('_', ' ')}</p>
-                    <p className="text-[var(--text-muted)] text-xs">Last login: Just now</p>
-                  </div>
-                </div>
-                {/* Quick Stats Pills */}
-                <div className="flex flex-wrap gap-3">
-                  <div className="px-4 py-2 bg-green-500/10 border border-green-500/30 rounded-full flex items-center gap-2">
-                    <ArrowUpRight className="w-4 h-4 text-green-400" />
-                    <span className="text-green-400 text-sm font-medium">+12%</span>
-                    <span className="text-[var(--text-muted)] text-sm">this month</span>
-                  </div>
-                  <div className="px-4 py-2 bg-[var(--surface-dark)] border border-[var(--border)] rounded-full flex items-center gap-2">
-                    <ShoppingBag className="w-4 h-4 text-[var(--gold-primary)]" />
-                    <span className="text-white text-sm font-medium">{orders.length}</span>
-                    <span className="text-[var(--text-muted)] text-sm">orders</span>
-                  </div>
-                  <div className="px-4 py-2 bg-[var(--surface-dark)] border border-[var(--border)] rounded-full flex items-center gap-2">
-                    <Briefcase className="w-4 h-4 text-[var(--gold-primary)]" />
-                    <span className="text-white text-sm font-medium">{projects.length}</span>
-                    <span className="text-[var(--text-muted)] text-sm">projects</span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mt-8">
+                    <div className="rounded-3xl border border-[var(--border)] bg-[var(--bg-primary)] p-5">
+                      <p className="text-[var(--text-muted)] text-sm">Revenue this month</p>
+                      <p className="mt-3 text-3xl font-bold text-white">₱247,850</p>
+                      <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-green-500/10 px-3 py-1 text-sm text-green-400">+8.2% vs last month</div>
+                    </div>
+                    <div className="rounded-3xl border border-[var(--border)] bg-[var(--bg-primary)] p-5">
+                      <p className="text-[var(--text-muted)] text-sm">Total orders</p>
+                      <p className="mt-3 text-3xl font-bold text-white">{visibleOrders.length}</p>
+                      <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-blue-500/10 px-3 py-1 text-sm text-blue-400">Order volume up</div>
+                    </div>
+                    <div className="rounded-3xl border border-[var(--border)] bg-[var(--bg-primary)] p-5">
+                      <p className="text-[var(--text-muted)] text-sm">Active projects</p>
+                      <p className="mt-3 text-3xl font-bold text-white">{visibleProjects.length}</p>
+                      <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-purple-500/10 px-3 py-1 text-sm text-purple-400">Project pace strong</div>
+                    </div>
+                    <div className="rounded-3xl border border-[var(--border)] bg-[var(--bg-primary)] p-5">
+                      <p className="text-[var(--text-muted)] text-sm">Open appointments</p>
+                      <p className="mt-3 text-3xl font-bold text-white">{visibleAppointments.length}</p>
+                      <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-[var(--gold-primary)]/10 px-3 py-1 text-sm text-[var(--gold-primary)]">Action required</div>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              {/* KPI Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-                {[
-                  { label: 'Total Revenue', value: '₱247,850', trend: '+8.2%', trendUp: true, icon: DollarSign, color: 'green' },
-                  { label: 'Active Subscriptions', value: '12', trend: '+2', trendUp: true, icon: CreditCard, color: 'blue' },
-                  { label: 'Total Sales', value: '156', trend: '+18', trendUp: true, icon: ShoppingBag, color: 'gold' },
-                  { label: 'Active Users', value: '89', trend: '-3', trendUp: false, icon: UsersRound, color: 'purple' },
-                ].map((stat, i) => {
-                  const Icon = stat.icon
-                  const colorMap = {
-                    green: 'bg-green-500/20 text-green-400 border-green-500/30',
-                    blue: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-                    gold: 'bg-[var(--gold-primary)]/20 text-[var(--gold-primary)] border-[var(--gold-primary)]/30',
-                    purple: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
-                  }
-                  return (
-                    <motion.div key={stat.label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }}
-                      className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-5 hover:border-[var(--gold-primary)]/50 transition-all"
-                    >
-                      <div className="flex items-center justify-between mb-3">
-                        <span className="text-[var(--text-muted)] text-sm">{stat.label}</span>
-                        <div className={`w-9 h-9 rounded-lg flex items-center justify-center border ${colorMap[stat.color]}`}>
-                          <Icon className="w-4 h-4" />
+                <div className="grid gap-6 xl:grid-cols-[1.8fr_1.2fr]">
+                  <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-6">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+                      <div>
+                        <h2 className="text-white text-2xl font-semibold">Performance Trends</h2>
+                        <p className="text-[var(--text-muted)] mt-1">Review revenue and order performance across the last six months.</p>
+                      </div>
+                      <div className="flex flex-wrap gap-3 items-center">
+                        <span className="rounded-full border border-[var(--border)] px-3 py-2 text-sm text-[var(--text-muted)]">Last 6 months</span>
+                        <span className="rounded-full bg-[var(--gold-primary)]/10 px-3 py-2 text-sm text-[var(--gold-primary)]">Growth</span>
+                      </div>
+                    </div>
+                    <div className="h-72">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={[
+                          { month: 'Jan', revenue: 42000, orders: 24 },
+                          { month: 'Feb', revenue: 38000, orders: 21 },
+                          { month: 'Mar', revenue: 51000, orders: 28 },
+                          { month: 'Apr', revenue: 47000, orders: 25 },
+                          { month: 'May', revenue: 56000, orders: 32 },
+                          { month: 'Jun', revenue: 62000, orders: 35 },
+                        ]}>
+                          <defs>
+                            <linearGradient id="dashboardTrend" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#d4af37" stopOpacity={0.25}/>
+                              <stop offset="95%" stopColor="#d4af37" stopOpacity={0}/>
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
+                          <XAxis dataKey="month" stroke="#b0b4bc" fontSize={12} />
+                          <YAxis stroke="#b0b4bc" fontSize={12} tickFormatter={(value) => `₱${value / 1000}k`} />
+                          <Tooltip
+                            contentStyle={{ backgroundColor: '#131313', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '14px' }}
+                            labelStyle={{ color: '#f8fafc' }}
+                            itemStyle={{ color: '#d4af37' }}
+                            formatter={(value) => [`₱${value.toLocaleString()}`, 'Revenue']}
+                          />
+                          <Area type="monotone" dataKey="revenue" stroke="#d4af37" strokeWidth={2} fill="url(#dashboardTrend)" />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-6">
+                      <div className="rounded-3xl border border-[var(--border)] bg-[var(--bg-primary)] p-4">
+                        <p className="text-[var(--text-muted)] text-sm">Best month</p>
+                        <p className="mt-2 text-white text-xl font-semibold">Jun</p>
+                      </div>
+                      <div className="rounded-3xl border border-[var(--border)] bg-[var(--bg-primary)] p-4">
+                        <p className="text-[var(--text-muted)] text-sm">Avg order value</p>
+                        <p className="mt-2 text-white text-xl font-semibold">₱1,589</p>
+                      </div>
+                      <div className="rounded-3xl border border-[var(--border)] bg-[var(--bg-primary)] p-4">
+                        <p className="text-[var(--text-muted)] text-sm">New clients</p>
+                        <p className="mt-2 text-white text-xl font-semibold">14</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-6">
+                    <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-6">
+                      <div className="flex items-center justify-between mb-5">
+                        <div>
+                          <h3 className="text-white text-lg font-semibold">Operational Pulse</h3>
+                          <p className="text-[var(--text-muted)] text-sm">Quick measures of sales, inventory and client activity.</p>
                         </div>
+                        <span className="text-[var(--gold-primary)] text-sm font-semibold">Real-time</span>
                       </div>
-                      <p className="text-2xl font-bold text-white mb-1">{stat.value}</p>
-                      <div className={`flex items-center gap-1 text-xs ${stat.trendUp ? 'text-green-400' : 'text-red-400'}`}>
-                        {stat.trendUp ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                        <span>{stat.trend}</span>
-                        <span className="text-[var(--text-muted)]">vs last month</span>
+                      <div className="space-y-4">
+                        {[
+                          {
+                            label: 'Inventory health',
+                            value: inventoryHealthData.value,
+                            status: inventoryHealthData.status,
+                            icon: Activity,
+                            iconBg: inventoryHealthData.iconBg,
+                            statusClass: inventoryHealthData.statusClass,
+                          },
+                          {
+                            label: 'Pending orders',
+                            value: visibleOrders.length,
+                            status: 'Processing',
+                            icon: Package,
+                            statusClass: 'text-blue-400',
+                            iconBg: 'bg-blue-500/15',
+                          },
+                          {
+                            label: 'Appointments',
+                            value: visibleAppointments.length,
+                            status: visibleAppointments.length ? 'Upcoming' : 'None',
+                            icon: Calendar,
+                            statusClass: visibleAppointments.length ? 'text-[var(--gold-primary)]' : 'text-[var(--text-muted)]',
+                            iconBg: visibleAppointments.length ? 'bg-[var(--gold-primary)]/15' : 'bg-[var(--surface-dark)]',
+                          },
+                        ].map((item) => {
+                          const Icon = item.icon
+                          return (
+                            <div key={item.label} className="flex items-center justify-between rounded-3xl border border-[var(--border)] bg-[var(--bg-primary)] p-4">
+                              <div className="flex items-center gap-4">
+                                <div className={`grid h-11 w-11 place-items-center rounded-2xl ${item.iconBg || 'bg-[var(--gold-primary)]/15'}`}>
+                                  <Icon className="w-5 h-5 text-[var(--gold-primary)]" />
+                                </div>
+                                <div>
+                                  <p className="text-white font-semibold">{item.label}</p>
+                                  <p className={`text-sm ${item.statusClass || 'text-[var(--text-muted)]'}`}>{item.status}</p>
+                                </div>
+                              </div>
+                              <p className="text-white text-lg font-semibold">{item.value}</p>
+                            </div>
+                          )
+                        })}
                       </div>
-                    </motion.div>
-                  )
-                })}
-              </div>
+                    </div>
 
-              {/* Line Graph - Monthly Performance */}
-              <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6 mb-8">
-                <div className="flex items-center justify-between mb-6">
-                  <div>
-                    <h3 className="text-white font-semibold text-lg">Monthly Performance</h3>
-                    <p className="text-[var(--text-muted)] text-sm">Revenue and orders over time</p>
+                    <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-6">
+                      <div className="flex items-center justify-between mb-5">
+                        <div>
+                          <h3 className="text-white text-lg font-semibold">Upcoming appointments</h3>
+                          <p className="text-[var(--text-muted)] text-sm">Focus on your next customer meetings.</p>
+                        </div>
+                        <button onClick={() => setActiveTab('appointments')} className="text-[var(--gold-primary)] text-sm font-semibold hover:underline">View all</button>
+                      </div>
+                      {visibleAppointments.length === 0 ? (
+                        <div className="rounded-3xl border border-[var(--border)] bg-[var(--bg-primary)] p-8 text-center text-[var(--text-muted)]">No upcoming appointments.</div>
+                      ) : (
+                        <div className="space-y-3">
+                          {visibleAppointments.slice(0, 4).map((apt) => (
+                            <div key={apt.appointment_id} className="rounded-3xl border border-[var(--border)] bg-[var(--bg-primary)] p-4">
+                              <div className="flex items-start justify-between gap-4">
+                                <div>
+                                  <p className="text-white font-semibold">{apt.title || 'Appointment'}</p>
+                                  <p className="text-[var(--text-muted)] text-sm">{apt.customer_name || apt.user_name || 'Customer'}</p>
+                                </div>
+                                <div className="text-right">
+                                  <p className="text-[var(--gold-primary)] font-semibold">{apt.time || 'TBA'}</p>
+                                  <p className="text-[var(--text-muted)] text-xs">{apt.date ? new Date(apt.date).toLocaleDateString() : '—'}</p>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  <select className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:ring-1 focus:ring-[var(--gold-primary)]">
-                    <option>Last 6 months</option>
-                    <option>Last 12 months</option>
-                    <option>This year</option>
-                  </select>
-                </div>
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={[
-                      { month: 'Jan', revenue: 42000, orders: 24 },
-                      { month: 'Feb', revenue: 38000, orders: 21 },
-                      { month: 'Mar', revenue: 51000, orders: 28 },
-                      { month: 'Apr', revenue: 47000, orders: 25 },
-                      { month: 'May', revenue: 56000, orders: 32 },
-                      { month: 'Jun', revenue: 62000, orders: 35 },
-                    ]}>
-                      <defs>
-                        <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#d4af37" stopOpacity={0.3}/>
-                          <stop offset="95%" stopColor="#d4af37" stopOpacity={0}/>
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
-                      <XAxis dataKey="month" stroke="#b0b4bc" fontSize={12} />
-                      <YAxis stroke="#b0b4bc" fontSize={12} tickFormatter={(v) => `₱${v/1000}k`} />
-                      <Tooltip 
-                        contentStyle={{ backgroundColor: '#1E201E', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px' }}
-                        labelStyle={{ color: '#eff1f3' }}
-                        itemStyle={{ color: '#d4af37' }}
-                        formatter={(value) => [`₱${value.toLocaleString()}`, 'Revenue']}
-                      />
-                      <Area type="monotone" dataKey="revenue" stroke="#d4af37" strokeWidth={2} fillOpacity={1} fill="url(#colorRevenue)" />
-                    </AreaChart>
-                  </ResponsiveContainer>
                 </div>
               </div>
+            </motion.div>
+          )}
 
-              {/* Recent Appointments Section */}
-              <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6">
-                <div className="flex items-center justify-between mb-6">
+          {/* ── INVENTORY TAB ────────────────────────────────────────────────── */}
+          {activeTab === 'inventory' && (
+            <motion.div key="inventory" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+              <div className="space-y-6">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                   <div>
-                    <h3 className="text-white font-semibold text-lg">Recent Appointments</h3>
-                    <p className="text-[var(--text-muted)] text-sm">Upcoming client meetings</p>
+                    <h2 className="text-white text-2xl font-semibold">Inventory Management</h2>
+                    <p className="text-[var(--text-muted)]">Track stock levels for guitars, parts, and materials.</p>
                   </div>
-                  <button onClick={() => setActiveTab('appointments')} className="flex items-center gap-2 px-4 py-2 bg-[var(--bg-primary)] border border-[var(--border)] rounded-lg text-white text-sm hover:border-[var(--gold-primary)]/50 transition-all">
-                    View All <ChevronRight className="w-4 h-4" />
+                  <button onClick={() => openModal('inventory')} className="inline-flex items-center gap-2 rounded-2xl bg-[var(--gold-primary)] px-4 py-2 text-sm font-semibold text-black hover:bg-[var(--gold-secondary)] transition-all">
+                    <Plus className="w-4 h-4" /> Add stock
                   </button>
                 </div>
-                {appointments.length === 0 ? (
-                  <div className="text-center py-8">
-                    <Calendar className="w-12 h-12 text-[var(--text-muted)] mx-auto mb-3" />
-                    <p className="text-[var(--text-muted)]">No upcoming appointments</p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="rounded-3xl border border-[var(--border)] bg-[var(--bg-primary)] p-5">
+                    <p className="text-[var(--text-muted)] text-sm">Total inventory items</p>
+                    <p className="mt-3 text-3xl font-bold text-white">{visibleInventory.length}</p>
                   </div>
-                ) : (
-                  <div className="space-y-3">
-                    {appointments.slice(0, 4).map((apt) => (
-                      <div key={apt.appointment_id} className="flex items-center justify-between p-4 bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl hover:border-[var(--gold-primary)]/50 transition-all">
-                        <div className="flex items-center gap-4">
-                          <div className="w-10 h-10 bg-[var(--gold-primary)]/20 rounded-lg flex items-center justify-center">
-                            <Calendar className="w-5 h-5 text-[var(--gold-primary)]" />
-                          </div>
-                          <div>
-                            <p className="text-white font-medium">{apt.title || 'Appointment'}</p>
-                            <p className="text-[var(--text-muted)] text-sm">{apt.customer_name || apt.user_name || '—'}</p>
-                          </div>
+                  <div className="rounded-3xl border border-[var(--border)] bg-[var(--bg-primary)] p-5">
+                    <p className="text-[var(--text-muted)] text-sm">Critical stock</p>
+                    <p className="mt-3 text-3xl font-bold text-red-400">{visibleInventory.filter(item => item.status === 'Critical').length}</p>
+                  </div>
+                  <div className="rounded-3xl border border-[var(--border)] bg-[var(--bg-primary)] p-5">
+                    <p className="text-[var(--text-muted)] text-sm">Warning stock</p>
+                    <p className="mt-3 text-3xl font-bold text-amber-400">{visibleInventory.filter(item => item.status === 'Warning').length}</p>
+                  </div>
+                </div>
+
+                <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-6 overflow-x-auto">
+                  <div className="flex items-center justify-between mb-6">
+                    <div>
+                      <h3 className="text-white text-xl font-semibold">Current stock overview</h3>
+                      <p className="text-[var(--text-muted)] text-sm">Review the latest component inventory levels and reorder priorities.</p>
+                    </div>
+                    <span className="px-3 py-1 rounded-full bg-[var(--gold-primary)]/10 text-[var(--gold-primary)] text-xs font-semibold">Updated now</span>
+                  </div>
+                  <table className="w-full text-left">
+                    <thead className="border-b border-[var(--border)]/50">
+                      <tr>
+                        <th className="py-4 pr-6 text-[var(--text-muted)] text-xs uppercase tracking-[0.15em]">Item</th>
+                        <th className="py-4 pr-6 text-[var(--text-muted)] text-xs uppercase tracking-[0.15em]">Type</th>
+                        <th className="py-4 pr-6 text-[var(--text-muted)] text-xs uppercase tracking-[0.15em]">Quantity</th>
+                        <th className="py-4 pr-6 text-[var(--text-muted)] text-xs uppercase tracking-[0.15em]">Status</th>
+                        <th className="py-4 pr-6 text-[var(--text-muted)] text-xs uppercase tracking-[0.15em]">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {visibleInventory.map((item) => (
+                        <tr key={item.id} className="border-b border-[var(--border)]/20 hover:bg-[var(--bg-primary)]/50 transition-colors">
+                          <td className="py-4 pr-6 text-white font-semibold">{item.name}</td>
+                          <td className="py-4 pr-6 text-[var(--text-muted)]">{item.type}</td>
+                          <td className="py-4 pr-6 text-white">{item.qty}</td>
+                          <td className="py-4 pr-6">
+                            <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${
+                              item.status === 'Critical' ? 'bg-red-500/15 text-red-400 border border-red-500/20' :
+                              item.status === 'Warning' ? 'bg-amber-500/15 text-amber-400 border border-amber-500/20' :
+                              'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20'
+                            }`}>
+                              {item.status}
+                            </span>
+                          </td>
+                          <td className="py-4 pr-6">
+                            <div className="flex gap-2">
+                              <button onClick={() => openModal('inventory', item)} className="p-2 hover:bg-[var(--gold-primary)]/10 rounded-lg transition-colors">
+                                <Edit className="w-4 h-4 text-[var(--text-muted)]" />
+                              </button>
+                              <button onClick={() => deleteInventory(item.id)} className="p-2 hover:bg-red-500/10 rounded-lg transition-colors">
+                                <Trash2 className="w-4 h-4 text-red-400" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {/* ── SALES REPORT TAB ────────────────────────────────────────────── */}
+          {activeTab === 'sales-report' && (
+            <motion.div key="sales-report" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+              {salesReport ? (
+                <div className="space-y-8">
+                  {/* Report Header */}
+                  <div className="text-center border-b border-[var(--border)] pb-6">
+                    <h1 className="text-white text-3xl font-bold mb-2">Sales Performance Report</h1>
+                    <p className="text-[var(--text-muted)] text-lg">Comprehensive analysis of sales data and customer behavior</p>
+                    <p className="text-[var(--text-muted)] text-sm mt-2">Report generated on {new Date().toLocaleDateString()}</p>
+                  </div>
+
+                  {/* Key Metrics Overview */}
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                    <div className="bg-gradient-to-br from-[var(--gold-primary)]/10 to-[var(--gold-secondary)]/5 border border-[var(--gold-primary)]/30 rounded-2xl p-6 text-center">
+                      <DollarSign className="w-8 h-8 text-[var(--gold-primary)] mx-auto mb-3" />
+                      <h3 className="text-white text-sm font-medium mb-1">Total Gross Sales</h3>
+                      <p className="text-[var(--gold-primary)] text-2xl font-bold">{formatCurrency(salesReport.totalGrossSales || 0, true)}</p>
+                    </div>
+                    <div className="bg-gradient-to-br from-blue-500/10 to-blue-600/5 border border-blue-500/30 rounded-2xl p-6 text-center">
+                      <ShoppingBag className="w-8 h-8 text-blue-400 mx-auto mb-3" />
+                      <h3 className="text-white text-sm font-medium mb-1">Total Transactions</h3>
+                      <p className="text-blue-400 text-2xl font-bold">{salesReport.totalTransactions || 0}</p>
+                    </div>
+                    <div className="bg-gradient-to-br from-green-500/10 to-green-600/5 border border-green-500/30 rounded-2xl p-6 text-center">
+                      <TrendingUp className="w-8 h-8 text-green-400 mx-auto mb-3" />
+                      <h3 className="text-white text-sm font-medium mb-1">Avg per Transaction</h3>
+                      <p className="text-green-400 text-2xl font-bold">{formatCurrency(salesReport.averagePerTransaction || 0, true)}</p>
+                    </div>
+                    <div className="bg-gradient-to-br from-purple-500/10 to-purple-600/5 border border-purple-500/30 rounded-2xl p-6 text-center">
+                      <BarChart3 className="w-8 h-8 text-purple-400 mx-auto mb-3" />
+                      <h3 className="text-white text-sm font-medium mb-1">Customization Orders</h3>
+                      <p className="text-purple-400 text-2xl font-bold">{salesReport.customizationOrders || 0}</p>
+                    </div>
+                  </div>
+
+                  {/* Sales Comparison Chart */}
+                  <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6">
+                    <h2 className="text-white text-xl font-semibold mb-6 text-center">Sales Breakdown by Category</h2>
+                    <div className="h-80 mb-6">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart
+                          data={[
+                            {
+                              category: 'Walk-in Sales',
+                              amount: salesReport.walkInSales || 0,
+                              transactions: salesReport.walkInTransactions || 0,
+                              color: '#10B981'
+                            },
+                            {
+                              category: 'Online Sales',
+                              amount: salesReport.onlineSales || 0,
+                              transactions: salesReport.onlineTransactions || 0,
+                              color: '#3B82F6'
+                            },
+                            {
+                              category: 'Customization',
+                              amount: salesReport.customizationSales || 0,
+                              transactions: salesReport.customizationTransactions || 0,
+                              color: '#8B5CF6'
+                            }
+                          ]}
+                          margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                          <XAxis
+                            dataKey="category"
+                            stroke="var(--text-muted)"
+                            fontSize={12}
+                            tick={{ fill: 'var(--text-muted)' }}
+                          />
+                          <YAxis
+                            stroke="var(--text-muted)"
+                            fontSize={12}
+                            tick={{ fill: 'var(--text-muted)' }}
+                            tickFormatter={(value) => `₱${(value / 1000).toFixed(0)}k`}
+                          />
+                          <Tooltip
+                            contentStyle={{
+                              backgroundColor: 'var(--surface-dark)',
+                              border: '1px solid var(--border)',
+                              borderRadius: '8px',
+                              color: 'white'
+                            }}
+                            formatter={(value, name) => [
+                              name === 'amount' ? formatCurrency(value, true) : value,
+                              name === 'amount' ? 'Revenue' : 'Transactions'
+                            ]}
+                          />
+                          <Bar dataKey="amount" radius={[4, 4, 0, 0]}>
+                            {[
+                              { color: '#10B981' },
+                              { color: '#3B82F6' },
+                              { color: '#8B5CF6' }
+                            ].map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={entry.color} />
+                            ))}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
+                      <div className="p-4 bg-green-500/10 border border-green-500/30 rounded-lg">
+                        <p className="text-green-400 font-semibold">Walk-in Sales</p>
+                        <p className="text-white text-lg">{formatCurrency(salesReport.walkInSales || 0, true)}</p>
+                        <p className="text-[var(--text-muted)] text-sm">{salesReport.walkInTransactions || 0} transactions</p>
+                      </div>
+                      <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+                        <p className="text-blue-400 font-semibold">Online Sales</p>
+                        <p className="text-white text-lg">{formatCurrency(salesReport.onlineSales || 0, true)}</p>
+                        <p className="text-[var(--text-muted)] text-sm">{salesReport.onlineTransactions || 0} transactions</p>
+                      </div>
+                      <div className="p-4 bg-purple-500/10 border border-purple-500/30 rounded-lg">
+                        <p className="text-purple-400 font-semibold">Customization</p>
+                        <p className="text-white text-lg">{formatCurrency(salesReport.customizationSales || 0, true)}</p>
+                        <p className="text-[var(--text-muted)] text-sm">{salesReport.customizationTransactions || 0} transactions</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Detailed Sales Breakdown Table */}
+                  <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6">
+                    <h2 className="text-white text-xl font-semibold mb-6">Detailed Sales Analysis</h2>
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead className="bg-[var(--bg-primary)] border-b border-[var(--border)]">
+                          <tr>
+                            <th className="text-left py-4 px-6 text-[var(--text-muted)] font-semibold uppercase text-xs tracking-wider">Sales Category</th>
+                            <th className="text-left py-4 px-6 text-[var(--text-muted)] font-semibold uppercase text-xs tracking-wider">Total Revenue</th>
+                            <th className="text-left py-4 px-6 text-[var(--text-muted)] font-semibold uppercase text-xs tracking-wider">Transactions</th>
+                            <th className="text-left py-4 px-6 text-[var(--text-muted)] font-semibold uppercase text-xs tracking-wider">Avg per Transaction</th>
+                            <th className="text-left py-4 px-6 text-[var(--text-muted)] font-semibold uppercase text-xs tracking-wider">% of Total Sales</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[var(--border)]">
+                          <tr className="hover:bg-[var(--bg-primary)]/50 transition-colors">
+                            <td className="py-4 px-6">
+                              <div className="flex items-center gap-3">
+                                <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                                <span className="text-white font-medium">Walk-in Customers</span>
+                              </div>
+                            </td>
+                            <td className="py-4 px-6 text-[var(--gold-primary)] font-bold text-lg">{formatCurrency(salesReport.walkInSales || 0, true)}</td>
+                            <td className="py-4 px-6 text-white font-medium">{salesReport.walkInTransactions || 0}</td>
+                            <td className="py-4 px-6 text-white">{formatCurrency(salesReport.walkInAvg || 0, true)}</td>
+                            <td className="py-4 px-6">
+                              <span className="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-sm font-medium">
+                                {salesReport.walkInPercentage || 0}%
+                              </span>
+                            </td>
+                          </tr>
+                          <tr className="hover:bg-[var(--bg-primary)]/50 transition-colors">
+                            <td className="py-4 px-6">
+                              <div className="flex items-center gap-3">
+                                <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+                                <span className="text-white font-medium">Online Customers</span>
+                              </div>
+                            </td>
+                            <td className="py-4 px-6 text-[var(--gold-primary)] font-bold text-lg">{formatCurrency(salesReport.onlineSales || 0, true)}</td>
+                            <td className="py-4 px-6 text-white font-medium">{salesReport.onlineTransactions || 0}</td>
+                            <td className="py-4 px-6 text-white">{formatCurrency(salesReport.onlineAvg || 0, true)}</td>
+                            <td className="py-4 px-6">
+                              <span className="px-3 py-1 bg-blue-500/20 text-blue-400 rounded-full text-sm font-medium">
+                                {salesReport.onlinePercentage || 0}%
+                              </span>
+                            </td>
+                          </tr>
+                          <tr className="hover:bg-[var(--bg-primary)]/50 transition-colors">
+                            <td className="py-4 px-6">
+                              <div className="flex items-center gap-3">
+                                <div className="w-3 h-3 bg-purple-500 rounded-full"></div>
+                                <span className="text-white font-medium">Customization Sales</span>
+                              </div>
+                            </td>
+                            <td className="py-4 px-6 text-[var(--gold-primary)] font-bold text-lg">{formatCurrency(salesReport.customizationSales || 0, true)}</td>
+                            <td className="py-4 px-6 text-white font-medium">{salesReport.customizationTransactions || 0}</td>
+                            <td className="py-4 px-6 text-white">{formatCurrency(salesReport.customizationAvg || 0, true)}</td>
+                            <td className="py-4 px-6">
+                              <span className="px-3 py-1 bg-purple-500/20 text-purple-400 rounded-full text-sm font-medium">
+                                {salesReport.customizationPercentage || 0}%
+                              </span>
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Time Period Analysis */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6">
+                      <div className="flex items-center gap-3 mb-4">
+                        <Clock className="w-6 h-6 text-[var(--gold-primary)]" />
+                        <h3 className="text-white text-lg font-semibold">Daily Performance</h3>
+                      </div>
+                      <div className="space-y-3">
+                        <div className="flex justify-between items-center py-2 border-b border-[var(--border)]">
+                          <span className="text-[var(--text-muted)]">Today's Sales</span>
+                          <span className="text-[var(--gold-primary)] font-bold">{formatCurrency(salesReport.dailySales || 0, true)}</span>
                         </div>
-                        <div className="text-right">
-                          <p className="text-white text-sm">{apt.date ? new Date(apt.date).toLocaleDateString() : '—'}</p>
-                          <p className="text-[var(--text-muted)] text-xs">{apt.time || ''}</p>
+                        <div className="flex justify-between items-center py-2 border-b border-[var(--border)]">
+                          <span className="text-[var(--text-muted)]">Transactions</span>
+                          <span className="text-white font-medium">{salesReport.dailyTransactions || 0}</span>
+                        </div>
+                        <div className="flex justify-between items-center py-2">
+                          <span className="text-[var(--text-muted)]">Avg Transaction</span>
+                          <span className="text-white">{formatCurrency((salesReport.dailySales || 0) / (salesReport.dailyTransactions || 1), true)}</span>
                         </div>
                       </div>
-                    ))}
+                    </div>
+
+                    <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6">
+                      <div className="flex items-center gap-3 mb-4">
+                        <Calendar className="w-6 h-6 text-blue-400" />
+                        <h3 className="text-white text-lg font-semibold">Weekly Performance</h3>
+                      </div>
+                      <div className="space-y-3">
+                        <div className="flex justify-between items-center py-2 border-b border-[var(--border)]">
+                          <span className="text-[var(--text-muted)]">This Week's Sales</span>
+                          <span className="text-[var(--gold-primary)] font-bold">{formatCurrency(salesReport.weeklySales || 0, true)}</span>
+                        </div>
+                        <div className="flex justify-between items-center py-2 border-b border-[var(--border)]">
+                          <span className="text-[var(--text-muted)]">Transactions</span>
+                          <span className="text-white font-medium">{salesReport.weeklyTransactions || 0}</span>
+                        </div>
+                        <div className="flex justify-between items-center py-2">
+                          <span className="text-[var(--text-muted)]">Avg Transaction</span>
+                          <span className="text-white">{formatCurrency((salesReport.weeklySales || 0) / (salesReport.weeklyTransactions || 1), true)}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6">
+                      <div className="flex items-center gap-3 mb-4">
+                        <BarChart3 className="w-6 h-6 text-green-400" />
+                        <h3 className="text-white text-lg font-semibold">Monthly Performance</h3>
+                      </div>
+                      <div className="space-y-3">
+                        <div className="flex justify-between items-center py-2 border-b border-[var(--border)]">
+                          <span className="text-[var(--text-muted)]">This Month's Sales</span>
+                          <span className="text-[var(--gold-primary)] font-bold">{formatCurrency(salesReport.monthlySales || 0, true)}</span>
+                        </div>
+                        <div className="flex justify-between items-center py-2 border-b border-[var(--border)]">
+                          <span className="text-[var(--text-muted)]">Transactions</span>
+                          <span className="text-white font-medium">{salesReport.monthlyTransactions || 0}</span>
+                        </div>
+                        <div className="flex justify-between items-center py-2">
+                          <span className="text-[var(--text-muted)]">Avg Transaction</span>
+                          <span className="text-white">{formatCurrency((salesReport.monthlySales || 0) / (salesReport.monthlyTransactions || 1), true)}</span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                )}
-              </div>
+
+                  {/* Best-Selling Products */}
+                  <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6">
+                    <h2 className="text-white text-xl font-semibold mb-6">Top Performing Products & Services</h2>
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead className="bg-[var(--bg-primary)] border-b border-[var(--border)]">
+                          <tr>
+                            <th className="text-left py-4 px-6 text-[var(--text-muted)] font-semibold uppercase text-xs tracking-wider">Rank</th>
+                            <th className="text-left py-4 px-6 text-[var(--text-muted)] font-semibold uppercase text-xs tracking-wider">Product/Service</th>
+                            <th className="text-left py-4 px-6 text-[var(--text-muted)] font-semibold uppercase text-xs tracking-wider">Units Sold</th>
+                            <th className="text-left py-4 px-6 text-[var(--text-muted)] font-semibold uppercase text-xs tracking-wider">Revenue Generated</th>
+                            <th className="text-left py-4 px-6 text-[var(--text-muted)] font-semibold uppercase text-xs tracking-wider">Category</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[var(--border)]">
+                          {(salesReport.bestSellingProducts || []).map((product, i) => (
+                            <tr key={i} className="hover:bg-[var(--bg-primary)]/50 transition-colors">
+                              <td className="py-4 px-6">
+                                <div className="flex items-center gap-3">
+                                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-sm ${
+                                    i === 0 ? 'bg-[var(--gold-primary)]' : i === 1 ? 'bg-gray-400' : i === 2 ? 'bg-orange-600' : 'bg-[var(--bg-primary)]'
+                                  }`}>
+                                    {i + 1}
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="py-4 px-6 text-white font-medium">{product.name}</td>
+                              <td className="py-4 px-6 text-white font-medium">{product.units}</td>
+                              <td className="py-4 px-6 text-[var(--gold-primary)] font-bold">{formatCurrency(product.revenue, true)}</td>
+                              <td className="py-4 px-6">
+                                <span className="px-3 py-1 bg-[var(--gold-primary)]/20 text-[var(--gold-primary)] rounded-full text-sm">
+                                  {product.category}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Customization Services Analysis */}
+                  <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6">
+                    <h2 className="text-white text-xl font-semibold mb-6">Customization Services Overview</h2>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                      <div>
+                        <h3 className="text-white text-lg font-medium mb-4">Service Distribution</h3>
+                        <div className="space-y-3">
+                          {(salesReport.customizationTypes || []).map((type, i) => (
+                            <div key={i} className="flex items-center justify-between p-4 bg-[var(--bg-primary)] border border-[var(--border)] rounded-lg hover:border-[var(--gold-primary)]/50 transition-colors">
+                              <div className="flex items-center gap-3">
+                                <div className="w-3 h-3 bg-purple-500 rounded-full"></div>
+                                <span className="text-white font-medium">{type.name}</span>
+                              </div>
+                              <div className="text-right">
+                                <span className="text-[var(--gold-primary)] font-bold text-lg">{type.count}</span>
+                                <span className="text-[var(--text-muted)] text-sm ml-1">orders</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <h3 className="text-white text-lg font-medium mb-4">Revenue Metrics</h3>
+                        <div className="space-y-4">
+                          <div className="p-4 bg-gradient-to-r from-purple-500/10 to-purple-600/5 border border-purple-500/30 rounded-lg">
+                            <div className="flex justify-between items-center mb-2">
+                              <span className="text-[var(--text-muted)]">Total Customization Revenue</span>
+                              <span className="text-purple-400 font-bold text-lg">{formatCurrency(salesReport.customizationRevenue || 0, true)}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-[var(--text-muted)]">Average per Order</span>
+                              <span className="text-white font-medium">{formatCurrency(salesReport.avgCustomization || 0, true)}</span>
+                            </div>
+                          </div>
+                          <div className="p-4 bg-[var(--bg-primary)] border border-[var(--border)] rounded-lg">
+                            <div className="flex justify-between items-center">
+                              <span className="text-[var(--text-muted)]">Contribution to Total Sales</span>
+                              <span className="text-[var(--gold-primary)] font-bold">{salesReport.customizationPercentage || 0}%</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Performance Insights */}
+                  <div className="bg-gradient-to-r from-[var(--bg-primary)] to-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6">
+                    <h2 className="text-white text-xl font-semibold mb-6">Key Performance Insights</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="space-y-4">
+                        <div className="p-4 bg-green-500/10 border border-green-500/30 rounded-lg">
+                          <div className="flex items-center gap-3 mb-3">
+                            <ArrowUpRight className="w-5 h-5 text-green-400" />
+                            <h4 className="text-green-400 font-semibold">Walk-in Customer Strength</h4>
+                          </div>
+                          <p className="text-white text-sm mb-2">Walk-in customers show higher average transaction values, indicating premium product preferences.</p>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-[var(--text-muted)]">Conversion Rate:</span>
+                            <span className="text-green-400 font-medium">{salesReport.walkInConversion || 0}%</span>
+                          </div>
+                        </div>
+                        <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+                          <div className="flex items-center gap-3 mb-3">
+                            <TrendingUp className="w-5 h-5 text-blue-400" />
+                            <h4 className="text-blue-400 font-semibold">Online Growth Potential</h4>
+                          </div>
+                          <p className="text-white text-sm mb-2">Online sales demonstrate strong volume potential with consistent transaction flow.</p>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-[var(--text-muted)]">Conversion Rate:</span>
+                            <span className="text-blue-400 font-medium">{salesReport.onlineConversion || 0}%</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="space-y-4">
+                        <div className="p-4 bg-purple-500/10 border border-purple-500/30 rounded-lg">
+                          <div className="flex items-center gap-3 mb-3">
+                            <BarChart3 className="w-5 h-5 text-purple-400" />
+                            <h4 className="text-purple-400 font-semibold">Customization Value</h4>
+                          </div>
+                          <p className="text-white text-sm mb-2">Custom orders provide significant revenue contribution with high-value transactions.</p>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-[var(--text-muted)]">Avg Order Value:</span>
+                            <span className="text-purple-400 font-medium">{formatCurrency(salesReport.customizationAvg || 0, true)}</span>
+                          </div>
+                        </div>
+                        <div className="p-4 bg-[var(--gold-primary)]/10 border border-[var(--gold-primary)]/30 rounded-lg">
+                          <div className="flex items-center gap-3 mb-3">
+                            <DollarSign className="w-5 h-5 text-[var(--gold-primary)]" />
+                            <h4 className="text-[var(--gold-primary)] font-semibold">Revenue Optimization</h4>
+                          </div>
+                          <p className="text-white text-sm mb-2">Focus on high-margin products and premium customization services for maximum profitability.</p>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-[var(--text-muted)]">Top Product Margin:</span>
+                            <span className="text-[var(--gold-primary)] font-medium">35%</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <BarChart3 className="w-16 h-16 text-[var(--gold-primary)] mx-auto mb-4" />
+                  <h2 className="text-white text-xl font-semibold mb-2">Loading Sales Report...</h2>
+                  <p className="text-[var(--text-muted)]">Fetching comprehensive sales analytics data.</p>
+                </div>
+              )}
             </motion.div>
           )}
 
@@ -1198,6 +1932,29 @@ export function AdminPage() {
                     </div>
                   </div>
                   <ModalFooter onCancel={closeModal} onSave={savePart} isSaving={isSaving} />
+                </>
+              )}
+
+              {/* Inventory Modal */}
+              {modal.type === 'inventory' && (
+                <>
+                  <ModalHeader title={modal.data ? 'Edit Inventory Item' : 'Add Stock Item'} onClose={closeModal} />
+                  <div className="space-y-4 mt-6">
+                    <FormField label="Item Name *" value={form.name || ''} onChange={v => setForm(f => ({...f, name: v}))} placeholder="e.g. Ebony Fretboard" />
+                    <FormField label="Type" value={form.type || ''} onChange={v => setForm(f => ({...f, type: v}))} placeholder="e.g. Neck, Body, Pickup" />
+                    <div className="grid grid-cols-2 gap-4">
+                      <FormField label="Quantity *" type="number" value={form.qty ?? ''} onChange={v => setForm(f => ({...f, qty: v}))} />
+                      <div>
+                        <label className={labelCls}>Status</label>
+                        <select value={form.status || 'Healthy'} onChange={e => setForm(f => ({...f, status: e.target.value}))} className={inputCls}>
+                          <option value="Healthy">Healthy</option>
+                          <option value="Warning">Warning</option>
+                          <option value="Critical">Critical</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                  <ModalFooter onCancel={closeModal} onSave={saveInventory} isSaving={isSaving} />
                 </>
               )}
 

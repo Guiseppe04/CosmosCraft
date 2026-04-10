@@ -59,26 +59,26 @@
 
 :root {
   /* ─── Base Color Palette ───────────────────────────────────────────────── */
-  --color-gold: #d4af37;        /* Primary brand color — CTAs, links, highlights */
-  --color-gold-light: #e8c547;  /* Hover state for gold elements */
-  --color-gold-dark: #b8941d;   /* Active/pressed state for gold elements */
-  --color-dark: #231f20;        /* Primary dark — bg, text on light surfaces */
+  --color-gold: #FFD700;        /* Primary brand color — CTAs, links, highlights */
+  --color-gold-light: #FFED4E;  /* Hover state for gold elements */
+  --color-gold-dark: #E6C200;   /* Active/pressed state for gold elements */
+  --color-dark: #1E201E;        /* Sidebar dark — primary dark surface */
   --color-dark-light: #3d3a3b;  /* Elevated dark surface — cards, modals */
-  --color-light: #eff1f3;       /* Primary light — bg on dark themes, light text */
-  --color-light-dark: #d4d7dc;  /* Muted light — borders, dividers, scrollbar track */
+  --color-light: #F5F5F5;       /* Primary light — bg on dark themes, light text */
+  --color-light-dark: #D0D0D0;  /* Muted light — borders, dividers, scrollbar track */
 
   /* ─── Figma Theme Tokens ───────────────────────────────────────────────── */
   --gold-primary: #FFD700;      /* Main gold — buttons, icons, accents (bright yellow) */
-  --gold-secondary: #FFD700;    /* Deeper gold — hover/active on primary gold */
-  --gold-accent: #FFD700;       /* Lightest gold — subtle highlights, badges */
+  --gold-secondary: #FFED4E;    /* Lighter gold — hover/active on primary gold */
+  --gold-accent: #FFF44F;       /* Lightest gold — subtle highlights, badges */
   --black-deep: #454040;        /* Deepest dark — page background, footers */
-  --surface-dark: #454040;      /* Default dark surface — base layer bg */
-  --surface-elevated: #2d2d2d;  /* Raised dark surface — cards, dropdowns */
-  --text-light: #eff1f3;        /* Primary text on dark backgrounds */
-  --text-muted: #b0b4bc;        /* Secondary/placeholder text on dark backgrounds */
+  --surface-dark: #3A3737;      /* Default dark surface — base layer bg (darker than bg-primary) */
+  --surface-elevated: #5A5555;  /* Raised dark surface — cards, dropdowns (lighter for elevation) */
+  --text-light: #F5F5F5;        /* Primary text on dark backgrounds (brighter for visibility) */
+  --text-muted: #C8C8C8;        /* Secondary/placeholder text on dark backgrounds (lighter for contrast) */
   --text-dark: #454040;         /* Primary text on light backgrounds */
   --bg-primary: #454040;        /* Root page background color */
-  --border: #4A4747;           /* Subtle lighter gray borders */
+  --border: #5A5555;            /* Subtle lighter gray borders (more visible) */
 
   /* ─── Neutrals ─────────────────────────────────────────────────────────── */
   --color-white: #ffffff;       /* Pure white — overlays, cards on dark bg */

@@ -25,6 +25,10 @@ import {
   Plus,
   Edit,
   Save,
+  RotateCw,
+  Package,
+  ShoppingBag,
+  Guitar,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { Topbar } from '../components/admin/Topbar'
@@ -86,6 +90,25 @@ const mockAppointments = [
   { id: 'APT-003', customer: 'Lisa Martinez', service: 'Custom Order Discussion', date: '2024-03-22', time: '11:30 AM', status: 'Confirmed' },
 ]
 
+const mockInventoryItems = [
+  { id: 'INV-001', name: 'Roasted Maple Necks', qty: 8, status: 'In Stock' },
+  { id: 'INV-002', name: 'Mahogany Bodies', qty: 4, status: 'Low Stock' },
+  { id: 'INV-003', name: 'Premium Pickups', qty: 12, status: 'In Stock' },
+  { id: 'INV-004', name: 'Rosewood Fingerboards', qty: 2, status: 'Low Stock' },
+]
+
+const mockStaffOrders = [
+  { id: 'ORD-101', customer: 'Michael Chen', due: '2024-04-15', status: 'In Progress' },
+  { id: 'ORD-102', customer: 'David Kim', due: '2024-04-01', status: 'Painting' },
+  { id: 'ORD-103', customer: 'Emily Thompson', due: '2024-03-25', status: 'Design' },
+]
+
+const mockCustomizations = [
+  { id: 'CUS-201', name: 'Custom Les Paul', stage: 'Assembly', assignedStaff: 'Juan dela Cruz' },
+  { id: 'CUS-202', name: 'Custom Telecaster', stage: 'Painting', assignedStaff: 'Juan dela Cruz' },
+  { id: 'CUS-203', name: 'Refret Service', stage: 'Design', assignedStaff: 'Juan dela Cruz' },
+]
+
 /**
  * StaffDashboard - Limited access dashboard for staff members
  * Features:
@@ -140,6 +163,19 @@ export function StaffDashboard() {
       )
     )
     setShowStageSelector(false)
+  }
+
+  // Get stage color based on stage number
+  const getStageColor = (stage) => {
+    const stageColors = [
+      'from-purple-500 to-purple-600',   // 0: Design
+      'from-amber-500 to-amber-600',     // 1: Wood Selection
+      'from-blue-500 to-blue-600',       // 2: Assembly
+      'from-pink-500 to-pink-600',       // 3: Painting
+      'from-cyan-500 to-cyan-600',       // 4: Setup
+      'from-green-500 to-green-600',     // 5: Completed
+    ]
+    return stageColors[stage] || stageColors[0]
   }
 
   // Open create project modal
@@ -220,8 +256,11 @@ export function StaffDashboard() {
   const staffNavItems = [
     { id: 'mytasks', label: 'My Tasks', icon: BarChart3, path: '/staff' },
     { id: 'myprojects', label: 'My Projects', icon: Briefcase, path: '/staff/projects' },
-    { id: 'messages', label: 'Messages', icon: MessageSquare, path: '/staff/messages', badge: unreadMessages || null },
-    { id: 'schedule', label: 'Schedule', icon: Calendar, path: '/staff/schedule' },
+    { id: 'inventory', label: 'Inventory', icon: Package, path: '/staff/inventory' },
+    { id: 'orders', label: 'Orders', icon: ShoppingBag, path: '/staff/orders' },
+    { id: 'customization', label: 'Customization', icon: Guitar, path: '/staff/customization' },
+    { id: 'appointments', label: 'Appointments', icon: Calendar, path: '/staff/appointments' },
+    { id: 'schedule', label: 'Schedule', icon: Clock, path: '/staff/schedule' },
   ]
 
   return (
@@ -324,7 +363,7 @@ export function StaffDashboard() {
               transition={{ duration: 0.3 }}
             >
               {/* Quick Stats */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+              <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
                 <div className="bg-[var(--surface-dark)] border-2 border-[var(--border)] rounded-2xl p-4 hover:border-[var(--gold-primary)] hover:shadow-[0_0_15px_rgba(212,175,55,0.2)] transition-all duration-200 cursor-pointer">
                   <div className="flex items-center justify-between mb-2">
                     <p className="text-[var(--text-muted)] text-sm">Total Projects</p>
@@ -345,13 +384,6 @@ export function StaffDashboard() {
                     <CheckCircle2 className="w-5 h-5 text-green-400" />
                   </div>
                   <p className="text-3xl font-bold text-white">{completedProjects}</p>
-                </div>
-                <div className="bg-[var(--surface-dark)] border-2 border-[var(--border)] rounded-2xl p-4 hover:border-yellow-400 hover:shadow-[0_0_15px_rgba(234,179,8,0.2)] transition-all duration-200 cursor-pointer">
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-[var(--text-muted)] text-sm">Unread Messages</p>
-                    <MessageSquare className="w-5 h-5 text-yellow-400" />
-                  </div>
-                  <p className="text-3xl font-bold text-white">{unreadMessages}</p>
                 </div>
               </div>
 
@@ -435,7 +467,7 @@ export function StaffDashboard() {
                         <div className="flex items-center gap-2">
                           <div className="w-24 h-2 bg-[var(--surface-dark)] rounded-full overflow-hidden">
                             <div
-                              className="h-full bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] rounded-full"
+                              className={`h-full bg-gradient-to-r ${getStageColor(project.stage)} rounded-full`}
                               style={{ width: `${((project.stage + 1) / 6) * 100}%` }}
                             />
                           </div>
@@ -509,6 +541,180 @@ export function StaffDashboard() {
                     onStageChange={(stage) => handleStageChange(project.id, stage)}
                   />
                 ))}
+              </div>
+            </motion.div>
+          )}
+
+          {/* Inventory Tab */}
+          {activeTab === 'inventory' && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.3 }}
+            >
+              <div className="space-y-6">
+                <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-6">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+                    <div>
+                      <h2 className="text-2xl font-bold text-white">Inventory</h2>
+                      <p className="text-[var(--text-muted)] text-sm">Review stock levels and material status for assigned work.</p>
+                    </div>
+                    <button className="inline-flex items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-2 text-sm font-semibold text-white hover:border-[var(--gold-primary)]/50 transition-all">
+                      <RotateCw className="w-4 h-4 text-[var(--gold-primary)]" /> Refresh Inventory
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                    {mockInventoryItems.map((item) => (
+                      <div key={item.id} className="rounded-3xl border border-[var(--border)] bg-[var(--bg-primary)] p-5 hover:border-[var(--gold-primary)]/50 transition-colors">
+                        <div className="flex items-start justify-between gap-4">
+                          <div>
+                            <p className="text-[var(--text-muted)] text-xs font-mono">{item.id}</p>
+                            <h3 className="text-white text-lg font-semibold">{item.name}</h3>
+                          </div>
+                          <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${item.status === 'In Stock' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                            {item.status}
+                          </span>
+                        </div>
+                        <p className="mt-4 text-[var(--text-muted)]">Quantity remaining</p>
+                        <p className="text-white text-2xl font-semibold">{item.qty}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {/* Orders Tab */}
+          {activeTab === 'orders' && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.3 }}
+            >
+              <div className="space-y-6">
+                <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-6">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+                    <div>
+                      <h2 className="text-2xl font-bold text-white">Orders</h2>
+                      <p className="text-[var(--text-muted)] text-sm">Track the progress of orders currently assigned to you.</p>
+                    </div>
+                    <button className="inline-flex items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-2 text-sm font-semibold text-white hover:border-[var(--gold-primary)]/50 transition-all">
+                      <RotateCw className="w-4 h-4 text-[var(--gold-primary)]" /> Refresh Orders
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-4">
+                    {mockStaffOrders.map((order) => (
+                      <div key={order.id} className="rounded-3xl border border-[var(--border)] bg-[var(--bg-primary)] p-5 hover:border-[var(--gold-primary)]/50 transition-colors">
+                        <div className="flex items-start justify-between gap-4">
+                          <div>
+                            <p className="text-[var(--text-muted)] text-xs font-mono">{order.id}</p>
+                            <h3 className="text-white text-lg font-semibold">{order.customer}</h3>
+                            <p className="text-[var(--text-muted)] text-sm">Due {order.due}</p>
+                          </div>
+                          <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${order.status === 'In Progress' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>
+                            {order.status}
+                          </span>
+                        </div>
+                        <div className="mt-4 flex items-center justify-between gap-3 text-sm text-[var(--text-muted)]">
+                          <span>Order status</span>
+                          <span className="font-semibold text-white">{order.status}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {/* Customization Tab */}
+          {activeTab === 'customization' && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.3 }}
+            >
+              <div className="space-y-6">
+                <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-6">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+                    <div>
+                      <h2 className="text-2xl font-bold text-white">Customization</h2>
+                      <p className="text-[var(--text-muted)] text-sm">Monitor active custom guitar builds and stage progress.</p>
+                    </div>
+                    <button className="inline-flex items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-2 text-sm font-semibold text-white hover:border-[var(--gold-primary)]/50 transition-all">
+                      <RotateCw className="w-4 h-4 text-[var(--gold-primary)]" /> Refresh Customizations
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-4">
+                    {mockCustomizations.map((item) => (
+                      <div key={item.id} className="rounded-3xl border border-[var(--border)] bg-[var(--bg-primary)] p-5 hover:border-[var(--gold-primary)]/50 transition-colors">
+                        <div className="flex items-start justify-between gap-4">
+                          <div>
+                            <p className="text-[var(--text-muted)] text-xs font-mono">{item.id}</p>
+                            <h3 className="text-white text-lg font-semibold">{item.name}</h3>
+                            <p className="text-[var(--text-muted)] text-sm">Assigned to {item.assignedStaff}</p>
+                          </div>
+                          <span className="inline-flex items-center rounded-full bg-violet-100 px-3 py-1 text-xs font-semibold text-violet-700">
+                            {item.stage}
+                          </span>
+                        </div>
+                        <p className="mt-4 text-[var(--text-muted)]">Current phase of the customization workflow.</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {/* Appointments Tab */}
+          {activeTab === 'appointments' && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.3 }}
+            >
+              <div className="space-y-6">
+                <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-6">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+                    <div>
+                      <h2 className="text-2xl font-bold text-white">Appointments</h2>
+                      <p className="text-[var(--text-muted)] text-sm">View upcoming appointment schedules and status.</p>
+                    </div>
+                    <button className="inline-flex items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-2 text-sm font-semibold text-white hover:border-[var(--gold-primary)]/50 transition-all">
+                      <RotateCw className="w-4 h-4 text-[var(--gold-primary)]" /> Refresh Schedule
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-4">
+                    {mockAppointments.map((apt) => (
+                      <div key={apt.id} className="rounded-3xl border border-[var(--border)] bg-[var(--bg-primary)] p-5 hover:border-[var(--gold-primary)]/50 transition-colors">
+                        <div className="flex items-start justify-between gap-4">
+                          <div>
+                            <p className="text-[var(--text-muted)] text-xs font-mono">{apt.id}</p>
+                            <h3 className="text-white text-lg font-semibold">{apt.service}</h3>
+                            <p className="text-[var(--text-muted)] text-sm">{apt.customer}</p>
+                          </div>
+                          <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${apt.status === 'Confirmed' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                            {apt.status}
+                          </span>
+                        </div>
+                        <div className="mt-4 flex flex-wrap gap-3 text-sm text-[var(--text-muted)]">
+                          <span>{apt.date}</span>
+                          <span>{apt.time}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
             </motion.div>
           )}
