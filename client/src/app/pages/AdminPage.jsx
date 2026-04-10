@@ -15,6 +15,7 @@ import {
 } from 'recharts'
 import ProjectTaskTracker from '../components/projects/ProjectTaskTracker'
 import { useAuth } from '../context/AuthContext'
+import { useNavigate } from 'react-router'
 import { Topbar } from '../components/admin/Topbar'
 import { MessagePanel } from '../components/admin/MessagePanel'
 import { ProjectProgress, ProgressBadge } from '../components/admin/ProjectProgress'
@@ -26,6 +27,14 @@ import { useDebounce } from '../hooks/useDebounce'
 import { useSmartPolling } from '../hooks/useSmartPolling'
 
 const VALID_ROLES = ['customer', 'staff', 'admin', 'super_admin']
+
+function updateIfChanged(currentData, newData, setter) {
+  const currentStr = JSON.stringify(currentData)
+  const newStr = JSON.stringify(newData)
+  if (currentStr !== newStr) {
+    setter(newData)
+  }
+}
 
 // ── Validation helpers ───────────────────────────────────────────────────────
 function validate(rules, form) {
@@ -86,8 +95,15 @@ const APPOINTMENT_RULES = {
 const PAGE_SIZE_OPTIONS = [10, 25, 50]
 
 export function AdminPage() {
-  const { user } = useAuth()
+  const { user, isAuthenticated } = useAuth()
+  const navigate = useNavigate()
   const isSuperAdmin = user?.role === 'super_admin'
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      navigate('/login', { replace: true })
+    }
+  }, [isAuthenticated, navigate])
 
   const [activeTab, setActiveTab] = useState('dashboard')
   const [searchQuery, setSearchQuery] = useState('')
@@ -228,25 +244,27 @@ export function AdminPage() {
         search: debouncedSearch,
         ...productQuery,
       })
-      setProducts(res.data || [])
+      updateIfChanged(products, res.data || [], setProducts)
       setProductsPagination(res.pagination || { page: 1, pageSize: 10, total: 0, totalPages: 1 })
     } catch (e) { showToast(e.message, 'error') }
     finally { setProductsLoading(false) }
-  }, [debouncedSearch, productQuery, showToast])
+  }, [debouncedSearch, productQuery, showToast, products])
 
   const fetchCategories = useCallback(async () => {
     try {
       const res = await adminApi.getCategories()
-      setCategories(Array.isArray(res.data) ? res.data : res.data?.categories || [])
+      const newData = Array.isArray(res.data) ? res.data : res.data?.categories || []
+      updateIfChanged(categories, newData, setCategories)
     } catch { }
-  }, [])
+  }, [categories])
 
   const fetchGuitars = useCallback(async () => {
     try {
       const res = await adminApi.getCustomizations({ search: debouncedSearch })
-      setGuitars(Array.isArray(res.data) ? res.data : res.data?.customizations || [])
+      const newData = Array.isArray(res.data) ? res.data : res.data?.customizations || []
+      updateIfChanged(guitars, newData, setGuitars)
     } catch (e) { showToast(e.message, 'error') }
-  }, [debouncedSearch, showToast])
+  }, [debouncedSearch, showToast, guitars])
 
   const fetchParts = useCallback(async () => {
     setPartsLoading(true)
@@ -255,53 +273,58 @@ export function AdminPage() {
         search: debouncedSearch,
         ...partQuery,
       })
-      setParts(res.data || [])
+      updateIfChanged(parts, res.data || [], setParts)
       setPartsPagination(res.pagination || { page: 1, pageSize: 10, total: 0, totalPages: 1 })
     } catch (e) { showToast(e.message, 'error') }
     finally { setPartsLoading(false) }
-  }, [debouncedSearch, partQuery, showToast])
+  }, [debouncedSearch, partQuery, showToast, parts])
 
   const fetchUsers = useCallback(async () => {
     try {
       const res = await adminApi.getUsers({ search: debouncedSearch })
-      setUsers(Array.isArray(res.data) ? res.data : res.data?.users || [])
+      const newData = Array.isArray(res.data) ? res.data : res.data?.users || []
+      updateIfChanged(users, newData, setUsers)
     } catch (e) { showToast(e.message, 'error') }
-  }, [debouncedSearch, showToast])
+  }, [debouncedSearch, showToast, users])
 
   const fetchOrders = useCallback(async () => {
     try {
       const res = await adminApi.getOrders({ search: debouncedSearch })
-      setOrders(Array.isArray(res.data) ? res.data : res.data?.orders || [])
+      const newData = Array.isArray(res.data) ? res.data : res.data?.orders || []
+      updateIfChanged(orders, newData, setOrders)
     } catch (e) { showToast(e.message, 'error') }
-  }, [debouncedSearch, showToast])
+  }, [debouncedSearch, showToast, orders])
 
   const fetchProjects = useCallback(async () => {
     try {
       const res = await adminApi.getProjects({ search: debouncedSearch })
-      setProjects(Array.isArray(res.data) ? res.data : res.data?.projects || [])
+      const newData = Array.isArray(res.data) ? res.data : res.data?.projects || []
+      updateIfChanged(projects, newData, setProjects)
     } catch (e) { showToast(e.message, 'error') }
-  }, [debouncedSearch, showToast])
+  }, [debouncedSearch, showToast, projects])
 
   const fetchAppointments = useCallback(async () => {
     try {
       const res = await adminApi.getAppointments({ search: debouncedSearch })
-      setAppointments(Array.isArray(res.data) ? res.data : res.data?.appointments || [])
+      const newData = Array.isArray(res.data) ? res.data : res.data?.appointments || []
+      updateIfChanged(appointments, newData, setAppointments)
     } catch (e) { showToast(e.message, 'error') }
-  }, [debouncedSearch, showToast])
+  }, [debouncedSearch, showToast, appointments])
 
   const fetchInventory = useCallback(async () => {
     try {
       const statsRes = await adminApi.getInventorySummary()
-      setInventoryStats(statsRes.data || {})
+      updateIfChanged(inventoryStats, statsRes.data || {}, setInventoryStats)
       const prodsRes = await adminApi.getInventoryProducts()
-      setInventory(Array.isArray(prodsRes.data) ? prodsRes.data : prodsRes.data?.products || [])
+      const newData = Array.isArray(prodsRes.data) ? prodsRes.data : prodsRes.data?.products || []
+      updateIfChanged(inventory, newData, setInventory)
     } catch (e) { showToast(e.message, 'error') }
-  }, [showToast])
+  }, [showToast, inventoryStats, inventory])
 
   const fetchSalesReport = useCallback(async () => {
     try {
       const res = await adminApi.getSalesReport()
-      setSalesReport(res.data || {})
+      updateIfChanged(salesReport, res.data || {}, setSalesReport)
     } catch (e) {
       showToast(e.message, 'error')
       setSalesReport({
@@ -314,7 +337,7 @@ export function AdminPage() {
         customizationRevenue: 0, avgCustomization: 0, walkInConversion: 0, onlineConversion: 0,
       })
     }
-  }, [showToast])
+  }, [showToast, salesReport])
 
   // ── Initial data load on tab change ─────────────────────────────────────
   useEffect(() => {
@@ -1020,28 +1043,12 @@ export function AdminPage() {
                     <option value="created_at:asc">Oldest first</option>
                     <option value="name:asc">Name A-Z</option>
                     <option value="name:desc">Name Z-A</option>
-                    <option value="price:asc">Price low-high</option>
-                    <option value="price:desc">Price high-low</option>
+                    <option value="price:asc">Price: Low to High</option>
+                    <option value="price:desc">Price: High to Low</option>
                   </select>
                   <select aria-label="Products page size" value={productQuery.pageSize} onChange={(e) => setProductQuery((prev) => ({ ...prev, page: 1, pageSize: Number(e.target.value) }))} className={inputCls}>
                     {PAGE_SIZE_OPTIONS.map((n) => <option key={n} value={n}>{n} per page</option>)}
                   </select>
-                  <input
-                    type="number"
-                    aria-label="Minimum product price"
-                    placeholder="Min price"
-                    value={productQuery.min_price}
-                    onChange={(e) => setProductQuery((prev) => ({ ...prev, page: 1, min_price: e.target.value }))}
-                    className={inputCls}
-                  />
-                  <input
-                    type="number"
-                    aria-label="Maximum product price"
-                    placeholder="Max price"
-                    value={productQuery.max_price}
-                    onChange={(e) => setProductQuery((prev) => ({ ...prev, page: 1, max_price: e.target.value }))}
-                    className={inputCls}
-                  />
                 </div>
               </div>
 
@@ -1068,8 +1075,16 @@ export function AdminPage() {
                           {p.is_active ? 'Active' : 'Inactive'}
                         </span>
                       </div>
-                      <div className="flex items-center justify-between mt-4 pt-4 border-t border-[var(--border)]">
-                        <span className="text-[var(--gold-primary)] font-bold">{formatCurrency(p.price, true)}</span>
+                      {p.description && (
+                        <p className="text-[var(--text-muted)] text-sm line-clamp-2 mb-3">{p.description}</p>
+                      )}
+                      <div className="flex items-center justify-between mt-2 pt-3 border-t border-[var(--border)]">
+                        <div className="flex flex-col">
+                          <span className="text-[var(--gold-primary)] font-bold text-lg">{formatCurrency(p.price, true)}</span>
+                          <span className={`text-xs ${p.stock > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                            {p.stock > 0 ? `${p.stock} in stock` : 'Out of stock'}
+                          </span>
+                        </div>
                         <div className="flex gap-2">
                           <button onClick={() => openModal('product', p)} className="p-1.5 hover:bg-[var(--gold-primary)]/10 rounded transition-colors" title="View" aria-label={`View ${p.name}`}>
                             <Eye className="w-4 h-4 text-[var(--text-muted)]" />
@@ -1133,28 +1148,12 @@ export function AdminPage() {
                     <option value="created_at:asc">Oldest first</option>
                     <option value="name:asc">Name A-Z</option>
                     <option value="name:desc">Name Z-A</option>
-                    <option value="price:asc">Price low-high</option>
-                    <option value="price:desc">Price high-low</option>
+                    <option value="price:asc">Price: Low to High</option>
+                    <option value="price:desc">Price: High to Low</option>
                   </select>
                   <select aria-label="Parts page size" value={partQuery.pageSize} onChange={(e) => setPartQuery((prev) => ({ ...prev, page: 1, pageSize: Number(e.target.value) }))} className={inputCls}>
                     {PAGE_SIZE_OPTIONS.map((n) => <option key={n} value={n}>{n} per page</option>)}
                   </select>
-                  <input
-                    type="number"
-                    aria-label="Minimum part price"
-                    placeholder="Min price"
-                    value={partQuery.min_price}
-                    onChange={(e) => setPartQuery((prev) => ({ ...prev, page: 1, min_price: e.target.value }))}
-                    className={inputCls}
-                  />
-                  <input
-                    type="number"
-                    aria-label="Maximum part price"
-                    placeholder="Max price"
-                    value={partQuery.max_price}
-                    onChange={(e) => setPartQuery((prev) => ({ ...prev, page: 1, max_price: e.target.value }))}
-                    className={inputCls}
-                  />
                 </div>
               </div>
               {partsLoading ? (
@@ -1179,8 +1178,10 @@ export function AdminPage() {
                       <td className="py-4 px-6 text-white font-semibold">{part.name}</td>
                       <td className="py-4 px-6 text-[var(--text-muted)] capitalize">{part.guitar_type || '—'}</td>
                       <td className="py-4 px-6 text-[var(--text-muted)] capitalize">{(part.part_category || part.type_mapping || '—').replace('_', ' ')}</td>
-                      <td className="py-4 px-6 text-white">{part.stock}</td>
-                      <td className="py-4 px-6 text-[var(--gold-primary)] font-bold">{formatCurrency(part.price, true)}</td>
+                      <td className="py-4 px-6">
+                        <span className={part.stock > 0 ? 'text-green-400' : 'text-red-400'}>{part.stock}</span>
+                      </td>
+                      <td className="py-4 px-6 text-[var(--gold-primary)] font-bold text-lg">{formatCurrency(part.price, true)}</td>
                       <td className="py-4 px-6">
                         <span className={`px-2 py-1 rounded-full text-xs font-semibold border ${part.is_active ? 'bg-green-500/20 text-green-400 border-green-500/30' : 'bg-gray-500/20 text-gray-400 border-gray-500/30'}`}>
                           {part.is_active ? 'Active' : 'Inactive'}
