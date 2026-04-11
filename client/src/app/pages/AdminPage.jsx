@@ -4,7 +4,7 @@ import {
   Users, Package, ShoppingBag, Calendar, Search,
   Filter, Edit, Trash2, Eye, BarChart3,
   PieChart, Activity, ArrowUpRight,
-  CheckCircle, XCircle, Plus, RefreshCw, X,
+  CheckCircle, Check, Info, XCircle, Plus, RefreshCw, X,
   MessageSquare, Briefcase, ChevronLeft, ChevronRight,
   User, Guitar, Layers, Shield, Tag, AlertCircle, DollarSign,
   Save, TrendingUp, UsersRound, Clock, Loader2, Grid3X3, List, MoreHorizontal,
@@ -1931,7 +1931,7 @@ export function AdminPage() {
           >
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className={`bg-[var(--surface-dark)] border border-[var(--border)] rounded-3xl p-8 w-full shadow-2xl overflow-y-auto ${modal.type === 'project_tasks' ? 'max-w-6xl h-[90vh]' : 'max-w-lg max-h-[90vh]'}`}
+              className={`bg-[var(--surface-dark)] border border-[var(--border)] rounded-3xl p-8 w-full shadow-2xl overflow-y-auto ${modal.type === 'project_tasks' ? 'max-w-6xl h-[90vh]' : modal.type === 'part' ? 'max-h-[90vh] max-w-[min(92vw,72rem)]' : 'max-w-lg max-h-[90vh]'}`}
             >
 
               {/* Project Tasks */}
@@ -1951,158 +1951,348 @@ export function AdminPage() {
               )}
 
               {/* Product Modal - Industry Redesign Wizard */}
-              {modal.type === 'product' && (
-                <>
-                  <ModalHeader title={modal.data ? 'Edit Product' : 'New Product'} onClose={closeModal} />
-                  
-                  {/* Wizard Tabs Navigation */}
-                  <div className="mt-4 flex border-b border-[var(--border)] mb-6 overflow-x-auto scrollbar-hide">
-                    {['basic', 'inventory', 'media'].map(tab => (
-                      <button key={tab}
-                        onClick={() => setWizardTab(tab)}
-                        className={`pb-3 px-6 text-sm font-medium transition-all whitespace-nowrap ${wizardTab === tab ? 'text-[var(--gold-primary)] border-b-2 border-[var(--gold-primary)]' : 'text-[var(--text-muted)] hover:text-white'}`}
-                      >
-                        {tab === 'basic' ? 'Basic Info' : tab === 'media' ? 'Media & Assets' : 'Pricing & Stock'}
-                      </button>
-                    ))}
-                  </div>
+              {modal.type === 'product' && (() => {
+                const productStep1Complete = Boolean(String(form.name || '').trim() && String(form.category_id || '').trim())
+                const sellingN = parseFloat(form.price)
+                const productStep2Complete = Boolean(String(form.sku || '').trim() && !Number.isNaN(sellingN) && sellingN > 0)
+                const productStep3Complete = Boolean(form.image_url || form.preview_url || form.image_file)
+                const productTabs = [
+                  { id: 'basic', step: 1, label: 'Basic Info', done: productStep1Complete },
+                  { id: 'inventory', step: 2, label: 'Pricing & Stock', done: productStep2Complete },
+                  { id: 'media', step: 3, label: 'Media & Assets', done: productStep3Complete },
+                ]
+                const sellingPrice = parseFloat(form.price)
+                const costPrice = parseFloat(form.cost_price) || 0
+                const hasValidSelling = !Number.isNaN(sellingPrice)
+                const profitAmount = hasValidSelling ? sellingPrice - costPrice : NaN
+                const marginPct = hasValidSelling && sellingPrice > 0 ? (profitAmount / sellingPrice) * 100 : null
+                const marginHealthy = marginPct != null && marginPct >= 20
+                const marginWarn = marginPct != null && marginPct < 20
+                const fieldBase = 'w-full px-4 py-2.5 bg-[var(--bg-primary)] rounded-xl text-white placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 text-sm transition-colors'
+                const fieldOk = `${fieldBase} border border-[var(--border)] focus:ring-[var(--gold-primary)]`
+                const fieldErr = `${fieldBase} border border-[var(--border)] border-l-4 border-l-red-500 focus:ring-red-500/40`
+                const selErr = `${inputCls} border-l-4 border-l-red-500`
+                const selOk = inputCls
+                return (
+                  <>
+                    <div className="sticky top-0 z-20 -mx-8 px-8 pt-0 pb-4 mb-1 bg-[var(--surface-dark)] border-b border-[var(--border)]">
+                      <ModalHeader title={modal.data ? 'Edit Product' : 'New Product'} onClose={closeModal} />
+                      <div className="mt-5 flex w-full items-center">
+                        {productTabs.map((tab, idx) => (
+                          <div key={tab.id} className="flex min-w-0 flex-1 items-center">
+                            <button
+                              type="button"
+                              onClick={() => setWizardTab(tab.id)}
+                              className="flex w-full min-w-0 flex-col items-center gap-2"
+                            >
+                              <div
+                                className={`relative z-[1] flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 text-sm font-bold transition-colors ${
+                                  wizardTab === tab.id
+                                    ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)]/20 text-[var(--gold-primary)]'
+                                    : tab.done
+                                      ? 'border-emerald-500/70 bg-emerald-500/15 text-emerald-400'
+                                      : 'border-[var(--border)] bg-[var(--bg-primary)] text-[var(--text-muted)]'
+                                }`}
+                              >
+                                {tab.done ? <Check className="h-4 w-4" strokeWidth={2.5} /> : tab.step}
+                              </div>
+                              <span className={`text-center text-[10px] font-semibold uppercase leading-tight tracking-wide sm:text-xs ${wizardTab === tab.id ? 'text-[var(--gold-primary)]' : 'text-[var(--text-muted)]'}`}>
+                                {tab.label}
+                              </span>
+                            </button>
+                            {idx < productTabs.length - 1 && (
+                              <div className="mx-1 h-0.5 min-w-[1rem] flex-1 shrink rounded-full bg-[var(--border)] sm:mx-2" aria-hidden />
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
 
-                  <div className="min-h-[350px]">
-                    {/* Pane 1: Basic Info */}
-                    {wizardTab === 'basic' && (
-                      <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} className="space-y-5">
-                        <FormField label="Product Name *" value={form.name || ''} onChange={v => setForm(f => ({ ...f, name: v }))} error={formErrors.name} placeholder="Classic Stratocaster" />
-                        <FormField label="Product Description" value={form.description || ''} onChange={v => setForm(f => ({ ...f, description: v }))} textarea placeholder="Write a compelling description..." />
-                        
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="min-h-[350px]">
+                      {wizardTab === 'basic' && (
+                        <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} className="space-y-5">
                           <div>
-                            <label className={`${labelCls} ${formErrors.category_id ? 'text-red-400' : ''}`}>Category *</label>
-                            <select value={form.category_id || ''} onChange={e => setForm(f => ({ ...f, category_id: e.target.value }))} className={formErrors.category_id ? inputErrCls : inputCls}>
-                              <option value="">— Select Category —</option>
-                              {categories.map(c => <option key={c.category_id} value={c.category_id}>{c.name}</option>)}
-                            </select>
-                            {formErrors.category_id && <p className="text-red-400 text-xs mt-1">{formErrors.category_id}</p>}
+                            <label className={`block text-xs font-semibold uppercase tracking-wider mb-1.5 ${formErrors.name ? 'text-red-400' : 'text-[var(--text-muted)]'}`}>Product Name *</label>
+                            <input
+                              value={form.name || ''}
+                              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                              placeholder="Classic Stratocaster"
+                              className={formErrors.name ? fieldErr : fieldOk}
+                            />
+                            {formErrors.name && <p className="mt-1 text-xs text-red-400">{formErrors.name}</p>}
                           </div>
-                          
-                          <div className="flex flex-col justify-end pb-2">
-                            <div className="flex items-center gap-3">
-                              <input type="checkbox" id="is_active" checked={form.is_active ?? true} onChange={e => setForm(f => ({ ...f, is_active: e.target.checked }))} className="w-5 h-5 rounded border-gray-600 bg-gray-800 text-[var(--gold-primary)] focus:ring-[var(--gold-primary)] focus:ring-offset-gray-900" />
-                              <label htmlFor="is_active" className="text-white font-medium cursor-pointer">Active Product</label>
+                          <div>
+                            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Product Description</label>
+                            <textarea
+                              rows={3}
+                              value={form.description || ''}
+                              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+                              placeholder="Write a compelling description..."
+                              className={fieldOk}
+                            />
+                            <p className="mt-1.5 text-xs text-[var(--text-muted)]">Shown on the product page and in search previews.</p>
+                          </div>
+                          <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]/60 p-4 sm:p-5">
+                            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-5">
+                              <div>
+                                <label className={`${labelCls} ${formErrors.category_id ? 'text-red-400' : ''}`}>Category *</label>
+                                <select
+                                  value={form.category_id || ''}
+                                  onChange={(e) => setForm((f) => ({ ...f, category_id: e.target.value }))}
+                                  className={formErrors.category_id ? selErr : selOk}
+                                >
+                                  <option value="">— Select Category —</option>
+                                  {categories.map((c) => (
+                                    <option key={c.category_id} value={c.category_id}>
+                                      {c.name}
+                                    </option>
+                                  ))}
+                                </select>
+                                {formErrors.category_id && <p className="mt-1 text-xs text-red-400">{formErrors.category_id}</p>}
+                                <p className="mt-1.5 text-xs text-[var(--text-muted)]">Groups this product in the shop catalog.</p>
+                              </div>
+                              <div className="flex flex-col justify-end pb-0.5 md:pb-1">
+                                <div className="flex items-center gap-3">
+                                  <input
+                                    type="checkbox"
+                                    id="is_active"
+                                    checked={form.is_active ?? true}
+                                    onChange={(e) => setForm((f) => ({ ...f, is_active: e.target.checked }))}
+                                    className="h-5 w-5 rounded border-gray-600 bg-gray-800 text-[var(--gold-primary)] focus:ring-[var(--gold-primary)] focus:ring-offset-gray-900"
+                                  />
+                                  <label htmlFor="is_active" className="cursor-pointer font-medium text-white">
+                                    Active Product
+                                  </label>
+                                </div>
+                                <p className="ml-8 mt-1 text-xs text-[var(--text-muted)]">When off, the product is hidden from the storefront.</p>
+                              </div>
                             </div>
-                            <span className="text-[var(--text-muted)] text-xs ml-8">Visible and purchasable in the shop.</span>
                           </div>
-                        </div>
-                      </motion.div>
-                    )}
+                        </motion.div>
+                      )}
 
-                    {/* Pane 2: Pricing & Stock */}
-                    {wizardTab === 'inventory' && (
-                      <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
-                        <div className="flex items-start gap-3">
-                          <div className="flex-1">
-                            <FormField label="Stock Keeping Unit (SKU) *" value={form.sku || ''} onChange={v => setForm(f => ({ ...f, sku: v }))} placeholder="e.g. GTR-STR-001" error={formErrors.sku} />
+                      {wizardTab === 'inventory' && (
+                        <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} className="space-y-5">
+                          <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+                            <div className="min-w-0 flex-1">
+                              <label className={`block text-xs font-semibold uppercase tracking-wider mb-1.5 ${formErrors.sku ? 'text-red-400' : 'text-[var(--text-muted)]'}`}>Stock Keeping Unit (SKU) *</label>
+                              <input
+                                value={form.sku || ''}
+                                onChange={(e) => setForm((f) => ({ ...f, sku: e.target.value }))}
+                                placeholder="e.g. GTR-STR-001"
+                                className={formErrors.sku ? fieldErr : fieldOk}
+                              />
+                              {formErrors.sku && <p className="mt-1 text-xs text-red-400">{formErrors.sku}</p>}
+                              <p className="mt-1.5 text-xs text-[var(--text-muted)]">Used for inventory tracking and order fulfillment.</p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const prefix = 'GTR'
+                                const timestamp = Date.now().toString(36).toUpperCase()
+                                const random = Math.random().toString(36).substring(2, 5).toUpperCase()
+                                setForm((f) => ({ ...f, sku: `${prefix}-${timestamp}-${random}` }))
+                              }}
+                              className="shrink-0 self-start rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-3 py-2.5 text-xs text-[var(--text-muted)] transition-colors hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)] sm:mt-7"
+                            >
+                              Auto-generate
+                            </button>
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const prefix = 'GTR'
-                              const timestamp = Date.now().toString(36).toUpperCase()
-                              const random = Math.random().toString(36).substring(2, 5).toUpperCase()
-                              setForm(f => ({ ...f, sku: `${prefix}-${timestamp}-${random}` }))
+
+                          <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]/60 p-4 sm:p-5">
+                            <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Pricing</p>
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5">
+                              <div>
+                                <label className={`block text-xs font-semibold uppercase tracking-wider mb-1.5 ${formErrors.price ? 'text-red-400' : 'text-[var(--text-muted)]'}`}>Selling Price (₱) *</label>
+                                <input
+                                  type="number"
+                                  value={form.price || ''}
+                                  onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))}
+                                  placeholder="e.g. 50000"
+                                  className={formErrors.price ? fieldErr : fieldOk}
+                                />
+                                {formErrors.price && <p className="mt-1 text-xs text-red-400">{formErrors.price}</p>}
+                              </div>
+                              <div>
+                                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Cost Price (₱)</label>
+                                <input
+                                  type="number"
+                                  value={form.cost_price || ''}
+                                  onChange={(e) => setForm((f) => ({ ...f, cost_price: e.target.value }))}
+                                  placeholder="e.g. 30000"
+                                  className={fieldOk}
+                                />
+                                <p className="mt-1.5 text-xs text-[var(--text-muted)]">Your landed cost per unit (optional, for margin math).</p>
+                              </div>
+                            </div>
+                          </div>
+
+                          {form.price !== '' && form.price !== null && form.price !== undefined && (
+                            <div
+                              className={`rounded-xl border p-4 sm:p-5 ${
+                                marginWarn
+                                  ? 'border-amber-500/40 bg-amber-500/10'
+                                  : marginHealthy
+                                    ? 'border-emerald-500/35 bg-emerald-500/10'
+                                    : 'border-[var(--border)] bg-[var(--bg-primary)]/50'
+                              }`}
+                            >
+                              <p className="mb-3 text-sm font-semibold text-white">Profit preview</p>
+                              <div className="grid grid-cols-2 gap-3 text-sm">
+                                <div className="rounded-lg border border-[var(--border)]/80 bg-black/20 px-3 py-2.5">
+                                  <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Selling price</p>
+                                  <p className="mt-1 font-semibold text-white">{hasValidSelling ? formatCurrency(sellingPrice, false) : '—'}</p>
+                                </div>
+                                <div className="rounded-lg border border-[var(--border)]/80 bg-black/20 px-3 py-2.5">
+                                  <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Cost price</p>
+                                  <p className="mt-1 font-semibold text-white">{formatCurrency(costPrice, false)}</p>
+                                </div>
+                                <div className="rounded-lg border border-[var(--border)]/80 bg-black/20 px-3 py-2.5">
+                                  <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Profit amount</p>
+                                  <p className={`mt-1 font-semibold ${Number.isNaN(profitAmount) ? 'text-[var(--text-muted)]' : profitAmount >= 0 ? 'text-emerald-300' : 'text-red-300'}`}>
+                                    {hasValidSelling && !Number.isNaN(profitAmount) ? formatCurrency(profitAmount, false) : '—'}
+                                  </p>
+                                </div>
+                                <div className="rounded-lg border border-[var(--border)]/80 bg-black/20 px-3 py-2.5">
+                                  <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Margin %</p>
+                                  <p className={`mt-1 font-semibold ${marginPct == null ? 'text-[var(--text-muted)]' : marginHealthy ? 'text-emerald-300' : 'text-amber-200'}`}>
+                                    {marginPct != null ? `${Math.round(marginPct)}%` : '—'}
+                                  </p>
+                                </div>
+                              </div>
+                              {marginWarn && marginPct != null && (
+                                <p className="mt-3 flex items-center gap-1.5 text-xs text-amber-200/90">
+                                  <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                                  Margin is below 20%. Consider adjusting price or cost.
+                                </p>
+                              )}
+                              {marginHealthy && marginPct != null && (
+                                <p className="mt-3 text-xs text-emerald-300/90">Healthy margin at or above 20%.</p>
+                              )}
+                            </div>
+                          )}
+
+                          <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]/60 p-4 sm:p-5">
+                            <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Stock levels</p>
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5">
+                              <div>
+                                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Initial Stock Quantity</label>
+                                <input
+                                  type="number"
+                                  value={form.stock ?? ''}
+                                  onChange={(e) => setForm((f) => ({ ...f, stock: e.target.value }))}
+                                  placeholder="0"
+                                  className={fieldOk}
+                                />
+                                <p className="mt-1.5 text-xs text-[var(--text-muted)]">On-hand count when creating the product.</p>
+                              </div>
+                              <div>
+                                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Low Stock Alert Threshold</label>
+                                <input
+                                  type="number"
+                                  value={form.low_stock_threshold ?? ''}
+                                  onChange={(e) => setForm((f) => ({ ...f, low_stock_threshold: e.target.value }))}
+                                  placeholder="10"
+                                  className={fieldOk}
+                                />
+                                <p className="mt-1.5 text-xs text-[var(--text-muted)]">You&apos;ll be alerted when stock drops to this level.</p>
+                              </div>
+                            </div>
+                          </div>
+                        </motion.div>
+                      )}
+
+                      {wizardTab === 'media' && (
+                        <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} className="space-y-4">
+                          <motion.div
+                            whileHover={{
+                              boxShadow: '0 0 0 2px rgba(212, 175, 55, 0.22)',
+                              borderColor: 'rgba(212, 175, 55, 0.45)',
                             }}
-                            className="mt-8 px-3 py-2 text-xs bg-[var(--bg-primary)] border border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--gold-primary)] hover:border-[var(--gold-primary)] rounded-lg transition-colors"
+                            transition={{ type: 'spring', stiffness: 420, damping: 28 }}
+                            className="rounded-2xl border-2 border-dashed border-[var(--border)] bg-[var(--bg-primary)]/40 p-4 sm:p-5"
                           >
-                            Auto-generate
-                          </button>
-                        </div>
-                        
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-[var(--bg-primary)] p-5 rounded-2xl border border-[var(--border)]">
-                          <FormField label="Selling Price (₱) *" type="number" value={form.price || ''} onChange={v => setForm(f => ({ ...f, price: v }))} error={formErrors.price} placeholder="e.g. 50000" />
-                          <FormField label="Cost Price (₱)" type="number" value={form.cost_price || ''} onChange={v => setForm(f => ({ ...f, cost_price: v }))} placeholder="e.g. 30000" />
-                        </div>
-                        
-                        {form.price !== '' && form.price !== null && form.price !== undefined && (
-                          <div className="bg-[var(--gold-primary)]/10 border border-[var(--gold-primary)]/30 p-4 rounded-xl">
-                            <p className="text-[var(--text-muted)] text-sm">Estimated Profit per Unit</p>
-                            <div className="flex items-baseline gap-3">
-                              <p className="text-[var(--gold-primary)] font-bold text-2xl">
-                                {(() => {
-                                  const sellingPrice = parseFloat(form.price)
-                                  const costPrice = parseFloat(form.cost_price) || 0
-                                  
-                                  if (isNaN(sellingPrice)) return '₱0.00'
-                                  
-                                  const profitAmount = sellingPrice - costPrice
-                                  return formatCurrency(profitAmount, false)
-                                })()}
-                              </p>
-                              <p className="text-[var(--text-muted)] text-xs">
-                                ({(() => {
-                                  const sellingPrice = parseFloat(form.price)
-                                  const costPrice = parseFloat(form.cost_price) || 0
-                                  
-                                  if (isNaN(sellingPrice) || sellingPrice <= 0) return '0% margin'
-                                  
-                                  const profitAmount = sellingPrice - costPrice
-                                  const marginPercent = Math.round((profitAmount / sellingPrice) * 100)
-                                  return `${marginPercent}% margin`
-                                })()})
-                              </p>
+                            <ImageUploadWidget
+                              label="Primary Main Image"
+                              imageUrl={form.image_url}
+                              previewUrl={form.preview_url}
+                              isUploading={isUploading}
+                              onUpload={handleImageUpload}
+                              hint="High-quality transparent PNGs or JPGs work best for optimal catalog display."
+                            />
+                          </motion.div>
+                          {(form.image_file || form.preview_url || form.image_url) && (
+                            <div className="flex flex-col gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]/50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                              <div className="min-w-0 text-sm">
+                                <p className="truncate font-medium text-white">
+                                  {form.image_file?.name || (form.image_url ? 'Current catalog image' : 'Selected image')}
+                                </p>
+                                <p className="text-xs text-[var(--text-muted)]">
+                                  {form.image_file ? `${(form.image_file.size / 1024).toFixed(form.image_file.size >= 102400 ? 0 : 1)} KB` : form.image_url ? 'Replace below or remove to clear.' : ''}
+                                </p>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setForm((f) => ({
+                                    ...f,
+                                    image_file: undefined,
+                                    preview_url: undefined,
+                                    image_url: '',
+                                  }))
+                                }
+                                className="shrink-0 rounded-lg border border-red-500/40 px-3 py-1.5 text-xs font-medium text-red-300 transition-colors hover:bg-red-500/10"
+                              >
+                                Remove image
+                              </button>
                             </div>
-                          </div>
-                        )}
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 bg-[var(--bg-primary)] p-5 rounded-2xl border border-[var(--border)]">
-                          <FormField label="Initial Stock Quantity" type="number" value={form.stock ?? ''} onChange={v => setForm(f => ({ ...f, stock: v }))} placeholder="0" />
-                          <FormField label="Low Stock Alert Threshold" type="number" value={form.low_stock_threshold ?? ''} onChange={v => setForm(f => ({ ...f, low_stock_threshold: v }))} placeholder="10" />
-                        </div>
-                      </motion.div>
-                    )}
-
-                    {/* Pane 3: Media */}
-                    {wizardTab === 'media' && (
-                      <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} className="space-y-4">
-                        <div className="bg-[var(--bg-primary)] p-6 rounded-2xl border border-[var(--border)] border-dashed text-center">
-                          <ImageUploadWidget
-                            label="Primary Main Image"
-                            imageUrl={form.image_url}
-                            previewUrl={form.preview_url}
-                            isUploading={isUploading}
-                            onUpload={handleImageUpload}
-                            hint="High-quality transparent PNGs or JPGs work best for optimal catalog display."
-                          />
-                        </div>
-                      </motion.div>
-                    )}
-                  </div>
-
-                  <div className="mt-8 pt-5 border-t border-[var(--border)] flex justify-between items-center bg-[var(--surface-dark)] -mx-8 -mb-8 px-8 pb-8 rounded-b-2xl">
-                    <div className="flex gap-2 text-sm">
-                      <button onClick={() => setWizardTab(wizardTab === 'inventory' ? 'basic' : wizardTab === 'media' ? 'inventory' : 'basic')} className={`px-4 py-2 rounded-lg text-white font-medium hover:bg-[var(--bg-primary)] border border-[var(--border)] ${wizardTab === 'basic' ? 'invisible' : 'visible'}`}>Back</button>
+                          )}
+                        </motion.div>
+                      )}
                     </div>
-                    <div className="flex gap-3">
-                      <button onClick={closeModal} className="px-4 py-2 text-[var(--text-muted)] hover:text-white transition-colors font-medium">Cancel</button>
-                      <button 
-                        onClick={async () => {
-                          if (await validateAndSave(PRODUCT_RULES, async () => {
-                            await saveProduct()
-                            setForm({})
-                            setWizardTab('basic')
-                            showToast('Product saved! Add another.')
-                          })()) {}
-                        }} 
-                        disabled={isSaving} 
-                        className="px-4 py-2 border border-[var(--gold-primary)] text-[var(--gold-primary)] hover:bg-[var(--gold-primary)]/10 rounded-lg font-medium transition-colors"
-                      >
-                        Save & Add Another
-                      </button>
-                      <button onClick={validateAndSave(PRODUCT_RULES, saveProduct)} disabled={isSaving} className="px-6 py-2 bg-[var(--gold-primary)] text-black font-semibold rounded-lg hover:bg-[var(--gold-secondary)] transition-all flex items-center gap-2 shadow-lg shadow-[var(--gold-primary)]/20">
-                        {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save Product'}
-                      </button>
+
+                    <div className="mt-8 flex items-center justify-between border-t border-[var(--border)] bg-[var(--surface-dark)] -mx-8 -mb-8 rounded-b-2xl px-8 pb-8 pt-5">
+                      <div className="flex gap-2 text-sm">
+                        <button
+                          type="button"
+                          onClick={() => setWizardTab(wizardTab === 'inventory' ? 'basic' : wizardTab === 'media' ? 'inventory' : 'basic')}
+                          className={`rounded-lg border border-[var(--border)] px-4 py-2 font-medium text-white hover:bg-[var(--bg-primary)] ${wizardTab === 'basic' ? 'invisible' : 'visible'}`}
+                        >
+                          Back
+                        </button>
+                      </div>
+                      <div className="flex gap-3">
+                        <button type="button" onClick={closeModal} className="px-4 py-2 font-medium text-[var(--text-muted)] transition-colors hover:text-white">
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            await validateAndSave(PRODUCT_RULES, async () => {
+                              await saveProduct()
+                              setForm({})
+                              setWizardTab('basic')
+                              showToast('Product saved! Add another.')
+                            })()
+                          }}
+                          disabled={isSaving}
+                          className="rounded-lg border border-[var(--gold-primary)] px-4 py-2 font-medium text-[var(--gold-primary)] transition-colors hover:bg-[var(--gold-primary)]/10"
+                        >
+                          Save & Add Another
+                        </button>
+                        <button
+                          type="button"
+                          onClick={validateAndSave(PRODUCT_RULES, saveProduct)}
+                          disabled={isSaving}
+                          className="flex items-center gap-2 rounded-lg bg-[var(--gold-primary)] px-6 py-2 font-semibold text-black shadow-lg shadow-[var(--gold-primary)]/20 transition-all hover:bg-[var(--gold-secondary)]"
+                        >
+                          {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save Product'}
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                </>
-              )}
+                  </>
+                )
+              })()}
 
               {/* Category Modal */}
               {modal.type === 'category' && (
@@ -2128,103 +2318,283 @@ export function AdminPage() {
               )}
 
               {/* Builder Part Modal */}
-              {modal.type === 'part' && (
-                <>
-                  <ModalHeader title={modal.data ? 'Edit Guitar Part' : 'New Guitar Part'} onClose={closeModal} />
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-6">
-                    <div className="space-y-4">
-                      <FormField label="Part Name *" value={form.name || ''} onChange={v => setForm(f => ({ ...f, name: v }))} placeholder="e.g. Mahogany Body" error={formErrors.name} />
-                      <FormField label="Description" value={form.description || ''} onChange={v => setForm(f => ({ ...f, description: v }))} textarea />
-                      <div>
-                        <label className={labelCls}>Builder Category (Customize Page)</label>
-                        <select
-                          value={form.builder_category || ''}
-                          onChange={e => {
-                            const builderCategory = e.target.value
-                            const firstSlot = BUILDER_CATEGORY_MAP[builderCategory]?.[0] || ''
-                            setForm(f => ({
-                              ...f,
-                              builder_category: builderCategory,
-                              type_mapping: firstSlot || f.type_mapping || '',
-                              part_category: SLOT_TO_PART_CATEGORY[firstSlot] || f.part_category || 'misc',
-                            }))
-                          }}
-                          className={inputCls}
-                        >
-                          <option value="">— Select Category —</option>
-                          <option value="body">Body</option>
-                          <option value="neck">Neck & Headstock</option>
-                          <option value="hardware">Hardware</option>
-                          <option value="electronics">Electronics</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className={`${labelCls} ${formErrors.type_mapping ? 'text-red-400' : ''}`}>Type Mapping (UI Slot) *</label>
-                        <select
-                          value={form.type_mapping || ''}
-                          onChange={e => {
-                            const typeMapping = e.target.value
-                            setForm(f => ({
-                              ...f,
-                              type_mapping: typeMapping,
-                              part_category: SLOT_TO_PART_CATEGORY[typeMapping] || f.part_category || 'misc',
-                            }))
-                          }}
-                          className={formErrors.type_mapping ? inputErrCls : inputCls}
-                        >
-                          <option value="">— Select Type —</option>
-                          {(
-                            form.builder_category
-                              ? BUILDER_CATEGORY_MAP[form.builder_category] || []
-                              : Object.values(BUILDER_CATEGORY_MAP).flat()
-                          ).map((t) => (
-                            <option key={t} value={t}>{t.replace(/([A-Z])/g, ' $1').replace('_', ' ').replace(/\b\w/g, (l) => l.toUpperCase())}</option>
-                          ))}
-                        </select>
-                        {formErrors.type_mapping && <p className="text-red-400 text-xs mt-1">{formErrors.type_mapping}</p>}
-                        <p className="text-[var(--text-muted)] text-xs mt-1">Slots follow `CustomizePage` field names to keep admin parts aligned with builder logic.</p>
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
+              {modal.type === 'part' && (() => {
+                const partFieldBase =
+                  'w-full min-h-[2.875rem] px-4 py-3 bg-[var(--bg-primary)] rounded-2xl text-white placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 text-sm transition-colors box-border'
+                const partFieldOk = `${partFieldBase} border border-[var(--border)] focus:ring-[var(--gold-primary)]`
+                const partFieldErr = `${partFieldBase} border border-[var(--border)] border-l-4 border-l-red-500 focus:ring-red-500/40`
+                const partSelErr = `${inputCls} border-l-4 border-l-red-500`
+                const partHint = (text, tone = 'muted') => (
+                  <p
+                    className={`mt-1.5 flex gap-2 text-xs leading-relaxed ${
+                      tone === 'gold' ? 'text-[var(--gold-primary)]/95' : 'text-[var(--text-muted)]'
+                    }`}
+                  >
+                    <Info
+                      className={`mt-0.5 h-3.5 w-3.5 shrink-0 ${tone === 'gold' ? 'text-[var(--gold-primary)]' : 'text-[var(--text-muted)]'}`}
+                      aria-hidden
+                    />
+                    <span className="min-w-0 flex-1">{text}</span>
+                  </p>
+                )
+                const partTextareaOk =
+                  'w-full min-h-[5.5rem] resize-y px-4 py-3 box-border bg-[var(--bg-primary)] rounded-2xl border border-[var(--border)] text-white placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] text-sm transition-colors'
+                const slotHints = {
+                  body: 'Controls the guitar body shape and wood.',
+                  bodyWood: 'Controls body wood species and grain for the configurator.',
+                  bodyFinish: 'Controls finish color and treatment on the body.',
+                  pickguard: 'Sets pickguard style and material on the body.',
+                  neck: 'Controls neck profile and construction options.',
+                  fretboard: 'Sets the fretboard material and inlay style.',
+                  headstock: 'Controls headstock shape and branding placement.',
+                  headstockWood: 'Sets headstock wood and contrast details.',
+                  inlays: 'Controls fretboard inlay pattern and markers.',
+                  hardware: 'Groups general hardware options on the build.',
+                  bridge: 'Controls bridge type, routing, and string anchoring.',
+                  knobs: 'Sets control knob style and layout.',
+                  pickups: 'Determines pickup configuration and sound.',
+                }
+                const slotHint = form.type_mapping ? slotHints[form.type_mapping] : null
+                const previewGuitarType = (form.guitar_type || 'electric').replace(/\b\w/g, (l) => l.toUpperCase())
+                const previewPartCat = (form.part_category || form.type_mapping || 'misc').replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase())
+                const previewPrice = form.price !== '' && form.price != null && !Number.isNaN(Number(form.price)) ? formatCurrency(Number(form.price), false) : '—'
+                return (
+                  <>
+                    <div className="sticky top-0 z-20 -mx-8 mb-4 border-b border-[var(--border)] bg-[var(--surface-dark)] px-8 pb-4 pt-0">
+                      <ModalHeader title={modal.data ? 'Edit Guitar Part' : 'New Guitar Part'} onClose={closeModal} />
+                    </div>
+                    <div className="mt-0 grid grid-cols-1 gap-8 md:grid-cols-2 md:gap-0">
+                      <div className="min-w-0 space-y-5 md:pr-8">
                         <div>
-                          <label className={labelCls}>Guitar Type</label>
-                          <select value={form.guitar_type || 'electric'} onChange={e => setForm(f => ({ ...f, guitar_type: e.target.value }))} className={inputCls}>
-                            {['electric', 'bass', 'acoustic', 'ukulele'].map(t => (
-                              <option key={t} value={t}>{t.replace(/\b\w/g, l => l.toUpperCase())}</option>
-                            ))}
-                          </select>
+                          <label className={`${labelCls} ${formErrors.name ? 'text-red-400' : ''}`}>Part Name *</label>
+                          <input
+                            value={form.name || ''}
+                            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                            placeholder="e.g. Mahogany Body"
+                            className={formErrors.name ? partFieldErr : partFieldOk}
+                          />
+                          {formErrors.name && <p className="mt-1 text-xs text-red-400">{formErrors.name}</p>}
+                          {partHint('This label appears in the builder catalog and admin lists.')}
                         </div>
                         <div>
-                          <label className={labelCls}>Part Category</label>
-                          <select value={form.part_category || form.type_mapping || 'misc'} onChange={e => setForm(f => ({ ...f, part_category: e.target.value }))} className={inputCls}>
-                            {['body', 'neck', 'fretboard', 'pickups', 'bridge', 'electronics', 'hardware', 'tuners', 'strings', 'finish', 'wood_type', 'pickguard', 'misc'].map(t => (
-                              <option key={t} value={t}>{t.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}</option>
-                            ))}
-                          </select>
+                          <label className={labelCls}>Description</label>
+                          <textarea
+                            rows={3}
+                            value={form.description || ''}
+                            onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+                            className={partTextareaOk}
+                          />
+                          {partHint('Optional notes for staff; not always shown to customers.')}
+                        </div>
+                        <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]/60 p-4 sm:p-5">
+                          <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Builder placement</p>
+                          <div className="space-y-4">
+                            <div>
+                              <label className={labelCls}>Builder Category (Customize Page)</label>
+                              <select
+                                value={form.builder_category || ''}
+                                onChange={(e) => {
+                                  const builderCategory = e.target.value
+                                  const firstSlot = BUILDER_CATEGORY_MAP[builderCategory]?.[0] || ''
+                                  setForm((f) => ({
+                                    ...f,
+                                    builder_category: builderCategory,
+                                    type_mapping: firstSlot || f.type_mapping || '',
+                                    part_category: SLOT_TO_PART_CATEGORY[firstSlot] || f.part_category || 'misc',
+                                  }))
+                                }}
+                                className={inputCls}
+                              >
+                                <option value="">— Select Category —</option>
+                                <option value="body">Body</option>
+                                <option value="neck">Neck & Headstock</option>
+                                <option value="hardware">Hardware</option>
+                                <option value="electronics">Electronics</option>
+                              </select>
+                              {partHint('High-level section in the customizer sidebar.')}
+                            </div>
+                            <div>
+                              <label className={`${labelCls} ${formErrors.type_mapping ? 'text-red-400' : ''}`}>Type Mapping (UI Slot) *</label>
+                              <select
+                                value={form.type_mapping || ''}
+                                onChange={(e) => {
+                                  const typeMapping = e.target.value
+                                  setForm((f) => ({
+                                    ...f,
+                                    type_mapping: typeMapping,
+                                    part_category: SLOT_TO_PART_CATEGORY[typeMapping] || f.part_category || 'misc',
+                                  }))
+                                }}
+                                className={formErrors.type_mapping ? partSelErr : inputCls}
+                              >
+                                <option value="">— Select Type —</option>
+                                {(form.builder_category ? BUILDER_CATEGORY_MAP[form.builder_category] || [] : Object.values(BUILDER_CATEGORY_MAP).flat()).map((t) => (
+                                  <option key={t} value={t}>
+                                    {t.replace(/([A-Z])/g, ' $1').replace('_', ' ').replace(/\b\w/g, (l) => l.toUpperCase())}
+                                  </option>
+                                ))}
+                              </select>
+                              {formErrors.type_mapping && <p className="mt-1 text-xs text-red-400">{formErrors.type_mapping}</p>}
+                              {slotHint ? partHint(slotHint, 'gold') : null}
+                              {partHint(
+                                'Slots follow CustomizePage field names to keep admin parts aligned with builder logic.',
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]/60 p-4 sm:p-5">
+                          <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Catalog metadata</p>
+                          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5">
+                            <div>
+                              <label className={labelCls}>Guitar Type</label>
+                              <select value={form.guitar_type || 'electric'} onChange={(e) => setForm((f) => ({ ...f, guitar_type: e.target.value }))} className={inputCls}>
+                                {['electric', 'bass', 'acoustic', 'ukulele'].map((t) => (
+                                  <option key={t} value={t}>
+                                    {t.replace(/\b\w/g, (l) => l.toUpperCase())}
+                                  </option>
+                                ))}
+                              </select>
+                              {partHint('Which instrument line this part belongs to.')}
+                            </div>
+                            <div>
+                              <label className={labelCls}>Part Category</label>
+                              <select value={form.part_category || form.type_mapping || 'misc'} onChange={(e) => setForm((f) => ({ ...f, part_category: e.target.value }))} className={inputCls}>
+                                {['body', 'neck', 'fretboard', 'pickups', 'bridge', 'electronics', 'hardware', 'tuners', 'strings', 'finish', 'wood_type', 'pickguard', 'misc'].map((t) => (
+                                  <option key={t} value={t}>
+                                    {t.replace('_', ' ').replace(/\b\w/g, (l) => l.toUpperCase())}
+                                  </option>
+                                ))}
+                              </select>
+                              {partHint('Used for filtering and inventory grouping.')}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]/60 p-4 sm:p-5">
+                          <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Stock & pricing</p>
+                          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5">
+                            <div>
+                              <label className={labelCls}>Qty in Stock</label>
+                              <input
+                                type="number"
+                                value={form.stock ?? ''}
+                                onChange={(e) => setForm((f) => ({ ...f, stock: e.target.value }))}
+                                className={partFieldOk}
+                              />
+                              {partHint('How many units are available for builds.')}
+                            </div>
+                            <div>
+                              <label className={labelCls}>Upgrade Price (₱)</label>
+                              <input
+                                type="number"
+                                value={form.price || ''}
+                                onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))}
+                                className={partFieldOk}
+                              />
+                              {partHint('Added cost when the customer selects this option.')}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-start gap-3 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]/40 px-4 py-3.5">
+                          <input
+                            type="checkbox"
+                            id="is_active_part"
+                            checked={form.is_active ?? true}
+                            onChange={(e) => setForm((f) => ({ ...f, is_active: e.target.checked }))}
+                            className="mt-0.5 h-5 w-5 shrink-0 cursor-pointer rounded border-gray-600 bg-[var(--surface-dark)] text-[var(--gold-primary)] accent-[var(--gold-primary)] focus:ring-2 focus:ring-[var(--gold-primary)] focus:ring-offset-0 focus:ring-offset-transparent"
+                          />
+                          <label htmlFor="is_active_part" className="cursor-pointer select-none text-sm leading-snug text-white">
+                            <span className="font-medium">Active</span>
+                            <span className="mt-0.5 block text-xs font-normal leading-relaxed text-[var(--text-muted)]">
+                              Available in the configurator when checked.
+                            </span>
+                          </label>
                         </div>
                       </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <FormField label="Qty in Stock" type="number" value={form.stock ?? ''} onChange={v => setForm(f => ({ ...f, stock: v }))} />
-                        <FormField label="Upgrade Price (₱)" type="number" value={form.price || ''} onChange={v => setForm(f => ({ ...f, price: v }))} />
-                      </div>
-                      <div className="flex items-center gap-3 pt-2">
-                        <input type="checkbox" id="is_active_part" checked={form.is_active ?? true} onChange={e => setForm(f => ({ ...f, is_active: e.target.checked }))} className="w-4 h-4" />
-                        <label htmlFor="is_active_part" className="text-white text-sm">Active (available in configurator)</label>
+                      <div className="min-w-0 border-[var(--border)] md:border-l md:pl-8">
+                        <div className="space-y-5">
+                          <motion.div
+                            whileHover={{
+                              boxShadow: '0 0 0 2px rgba(212, 175, 55, 0.22)',
+                              borderColor: 'rgba(212, 175, 55, 0.45)',
+                            }}
+                            transition={{ type: 'spring', stiffness: 420, damping: 28 }}
+                            className="rounded-2xl border-2 border-dashed border-[var(--border)] bg-[var(--bg-primary)]/40 p-4 sm:p-5"
+                          >
+                            <ImageUploadWidget
+                              label="Configurator Asset (Transparent PNG recommended)"
+                              imageUrl={form.image_url}
+                              previewUrl={form.preview_url}
+                              isUploading={isUploading}
+                              onUpload={handleImageUpload}
+                              hint="Configurator assets are dynamically composed on the frontend."
+                            />
+                          </motion.div>
+                          {(form.image_file || form.preview_url || form.image_url) && (
+                            <div className="flex flex-col gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]/50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                              <div className="min-w-0 text-sm">
+                                <p className="truncate font-medium text-white">
+                                  {form.image_file?.name || (form.image_url ? 'Current configurator asset' : 'Selected image')}
+                                </p>
+                                <p className="text-xs text-[var(--text-muted)]">
+                                  {form.image_file ? `${(form.image_file.size / 1024).toFixed(form.image_file.size >= 102400 ? 0 : 1)} KB` : form.image_url ? 'Replace below or remove to clear.' : ''}
+                                </p>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setForm((f) => ({
+                                    ...f,
+                                    image_file: undefined,
+                                    preview_url: undefined,
+                                    image_url: '',
+                                  }))
+                                }
+                                className="shrink-0 rounded-lg border border-red-500/40 px-3 py-1.5 text-xs font-medium text-red-300 transition-colors hover:bg-red-500/10"
+                              >
+                                Remove image
+                              </button>
+                            </div>
+                          )}
+                          <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]/70 p-4 shadow-inner sm:p-5">
+                            <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Catalog preview</p>
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+                              <div className="flex h-20 w-full shrink-0 items-center justify-center overflow-hidden rounded-lg border border-[var(--border)] bg-black/25 sm:h-24 sm:w-28">
+                                {form.preview_url || form.image_url ? (
+                                  <img src={form.preview_url || form.image_url} alt="" className="max-h-full max-w-full object-contain" loading="lazy" />
+                                ) : (
+                                  <span className="px-2 text-center text-[10px] text-[var(--text-muted)]">No image yet</span>
+                                )}
+                              </div>
+                              <div className="min-w-0 flex-1 space-y-2">
+                                <p className="truncate text-base font-semibold text-white">{form.name?.trim() || 'Part name'}</p>
+                                <div className="flex flex-wrap gap-2">
+                                  <span className="rounded-md border border-[var(--gold-primary)]/35 bg-[var(--gold-primary)]/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--gold-primary)]">
+                                    {previewGuitarType}
+                                  </span>
+                                  <span className="rounded-md border border-[var(--border)] bg-[var(--surface-dark)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                                    {previewPartCat}
+                                  </span>
+                                  <span
+                                    className={`rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                                      form.is_active ?? true ? 'border border-emerald-500/40 bg-emerald-500/15 text-emerald-300' : 'border border-[var(--border)] bg-black/20 text-[var(--text-muted)]'
+                                    }`}
+                                  >
+                                    {form.is_active ?? true ? 'Active' : 'Inactive'}
+                                  </span>
+                                </div>
+                                <p className="text-sm text-[var(--text-muted)]">
+                                  Upgrade: <span className="font-semibold text-[var(--gold-primary)]">{previewPrice}</span>
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     </div>
-                    <div className="space-y-4">
-                      <ImageUploadWidget
-                        label="Configurator Asset (Transparent PNG recommended)"
-                        imageUrl={form.image_url}
-                        previewUrl={form.preview_url}
-                        isUploading={isUploading}
-                        onUpload={handleImageUpload}
-                        hint="Configurator assets are dynamically composed on the frontend."
-                      />
-                    </div>
-                  </div>
-                  <ModalFooter onCancel={closeModal} onSave={validateAndSave(PART_RULES, savePart)} isSaving={isSaving} />
-                </>
-              )}
+                    <ModalFooter onCancel={closeModal} onSave={validateAndSave(PART_RULES, savePart)} isSaving={isSaving} />
+                  </>
+                )
+              })()}
 
               {/* Inventory Adjust Modal */}
               {modal.type === 'inventory' && (
