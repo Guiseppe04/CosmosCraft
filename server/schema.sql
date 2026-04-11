@@ -1365,3 +1365,5 @@ BEGIN
         CHECK (currency ~ '^[A-Z]{3}$');
     END IF;
 END $$;
+C R E A T E   T A B L E   p r o d u c t _ r a t i n g s   ( r a t i n g _ i d   U U I D   P R I M A R Y   K E Y   D E F A U L T   g e n _ r a n d o m _ u u i d ( ) ,   p r o d u c t _ i d   U U I D   N O T   N U L L ,   u s e r _ i d   U U I D ,   r a t i n g   S M A L L I N T   N O T   N U L L   C H E C K   ( r a t i n g   > =   1   A N D   r a t i n g   < =   5 ) ,   r e v i e w _ t e x t   T E X T ,   c r e a t e d _ a t   T I M E S T A M P T Z   N O T   N U L L   D E F A U L T   n o w ( ) ,   F O R E I G N   K E Y   ( p r o d u c t _ i d )   R E F E R E N C E S   p r o d u c t s ( p r o d u c t _ i d )   O N   D E L E T E   C A S C A D E ,   F O R E I G N   K E Y   ( u s e r _ i d )   R E F E R E N C E S   u s e r s ( u s e r _ i d )   O N   D E L E T E   S E T   N U L L ,   U N I Q U E ( p r o d u c t _ i d ,   u s e r _ i d ) ) ;  
+ 

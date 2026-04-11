@@ -94,7 +94,7 @@ export function CartPage() {
 
                 {/* Subtotal */}
                 <div className="w-24 text-right">
-                  <p className="text-lg font-bold text-[var(--gold-primary)]">${(item.price * item.quantity).toLocaleString()}</p>
+                  <p className="text-lg font-bold text-[var(--gold-primary)]">₱{(item.price * item.quantity).toLocaleString('en-PH')}</p>
                 </div>
 
                 {/* Remove */}
@@ -121,22 +121,22 @@ export function CartPage() {
             <div className="space-y-3 border-t border-[var(--border)] pt-6">
               <div className="flex justify-between">
                 <span className="text-[var(--text-muted)]">Subtotal</span>
-                <span className="font-bold text-white">${getTotalPrice().toLocaleString()}</span>
+                <span className="font-bold text-white">₱{getTotalPrice().toLocaleString('en-PH')}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-[var(--text-muted)]">Shipping</span>
-                <span className="font-bold text-white">$0</span>
+                <span className="font-bold text-white">₱0</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-[var(--text-muted)]">Tax</span>
-                <span className="font-bold text-white">${(getTotalPrice() * 0.1).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                <span className="font-bold text-white">₱{(getTotalPrice() * 0.1).toLocaleString('en-PH', { maximumFractionDigits: 2 })}</span>
               </div>
             </div>
 
             <div className="border-t border-[var(--border)] pt-6 flex justify-between items-center">
               <span className="text-xl font-bold text-white">Total</span>
               <span className="text-3xl font-bold bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] bg-clip-text text-transparent">
-                ${(getTotalPrice() * 1.1).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                ₱{(getTotalPrice() * 1.1).toLocaleString('en-PH', { maximumFractionDigits: 2 })}
               </span>
             </div>
 

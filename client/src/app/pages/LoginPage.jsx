@@ -85,6 +85,9 @@ export function LoginPage() {
           transition={{ duration: 0.5, delay: 0.1 }}
           className="mb-6"
         >
+          <div className="flex justify-start mb-6">
+            <img src="/logo-cosmos.png" alt="CosmosCraft Logo" className="h-16 w-auto" />
+          </div>
           <h1 className="text-4xl font-bold text-white mb-2">Welcome Back</h1>
           <p className="text-[var(--text-muted)]">Sign in to continue to CosmosCraft</p>
         </motion.div>

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { CheckCircle, Circle, ChevronDown, ChevronRight, Plus, Trash2, Edit, User, Clock, AlertCircle } from 'lucide-react';
+import { useNavigate } from 'react-router';
+import { CheckCircle, Circle, ChevronDown, ChevronRight, Plus, Trash2, Edit, User, Clock, AlertCircle, Calendar } from 'lucide-react';
 import { adminApi } from '../../utils/adminApi';
 
 const API_URL = import.meta.env.VITE_API_URL;
@@ -13,6 +14,7 @@ export default function ProjectTaskTracker({ projectId, isAdmin = false }) {
 
   // Exanded state for accordions
   const [expandedMilestones, setExpandedMilestones] = useState(new Set());
+  const navigate = useNavigate();
 
   // Form states for Admin
   const [isAddingMilestone, setIsAddingMilestone] = useState(false);
@@ -147,8 +149,41 @@ export default function ProjectTaskTracker({ projectId, isAdmin = false }) {
                className="h-full bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)]" 
              />
           </div>
-          <p className="text-[var(--text-muted)] text-xs text-right mt-1">Total Completion</p>
+          <div className="flex items-center justify-between mt-4">
+            <p className="text-[var(--text-muted)] text-xs">Total Completion</p>
+            
+            {/* Customer Book Appointment Action */}
+            {!isAdmin && (
+              <button
+                onClick={() => navigate('/appointments')}
+                disabled={hierarchy.progress !== 100}
+                className={`py-2 px-6 rounded-lg font-bold text-sm flex items-center gap-2 transition-all ${
+                  hierarchy.progress === 100 
+                    ? 'bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] shadow-[0_0_15px_rgba(212,175,55,0.4)] hover:shadow-[0_0_20px_rgba(212,175,55,0.6)]'
+                    : 'bg-[var(--surface-elevated)] text-[var(--text-muted)] cursor-not-allowed opacity-60'
+                }`}
+              >
+                <Calendar className="w-4 h-4" />
+                Book Appointment
+              </button>
+            )}
+          </div>
         </div>
+
+        {/* Finished Notification */}
+        {!isAdmin && hierarchy.progress === 100 && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="p-4 bg-green-500/10 border border-green-500/30 rounded-xl flex items-start gap-3"
+          >
+            <CheckCircle className="w-5 h-5 text-green-400 shrink-0 mt-0.5" />
+            <div>
+              <h4 className="text-green-400 font-bold mb-1">Your Project is Finished!</h4>
+              <p className="text-sm text-green-400/80">We have completed your build. You can now book an appointment to finalize the details and arrange for pickup or delivery.</p>
+            </div>
+          </motion.div>
+        )}
 
         {/* Milestones Accordion */}
         <div className="space-y-4">
