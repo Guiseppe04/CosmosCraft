@@ -7,15 +7,20 @@ const { addAddressSchema, updateAddressSchema, updateProfileSchema } = require('
  */
 exports.getCurrentUser = asyncHandler(async (req, res, next) => {
   const user = await userService.getUserById(req.user.id);
+  
+  const { pool } = require('../config/database');
+  const addressesRes = await pool.query('SELECT * FROM addresses WHERE user_id = $1', [user.user_id]);
 
   res.status(200).json({
     status: 'success',
     data: {
       user: {
         id: user.user_id,
-        name: { firstName: user.first_name, lastName: user.last_name },
+        name: { firstName: user.first_name, middleName: user.middle_name, lastName: user.last_name },
         email: user.email,
         phone: user.phone,
+        birthDate: user.birth_date,
+        addresses: addressesRes.rows,
         role: user.role,
         isProfileComplete: !!user.first_name, // fallback
       },
@@ -40,15 +45,15 @@ exports.updateProfile = asyncHandler(async (req, res, next) => {
   const updateData = {};
 
   if (value.firstName || value.lastName) {
-    updateData.name = {
-      firstName: value.firstName || undefined,
-      middleName: value.middleName || undefined,
-      lastName: value.lastName || undefined,
-    };
+    if (value.firstName) updateData.first_name = value.firstName;
+    if (value.middleName !== undefined) updateData.middle_name = value.middleName;
+    if (value.lastName) updateData.last_name = value.lastName;
   }
 
   if (value.phone) updateData.phone = value.phone;
   if (value.bio !== undefined) updateData['profile.bio'] = value.bio;
+  if (value.birthDate !== undefined) updateData.birth_date = value.birthDate;
+  if (value.avatarUrl !== undefined) updateData.avatar_url = value.avatarUrl;
 
   const user = await userService.updateProfile(req.user.id, updateData);
 

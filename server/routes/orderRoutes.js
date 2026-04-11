@@ -14,6 +14,9 @@ router.post('/', authenticateToken, orderController.createOrder)
 // Get user's orders (requires authentication)
 router.get('/my-orders', authenticateToken, orderController.getUserOrders)
 
+// Cancel user's own order (requires authentication)
+router.post('/:id/cancel-my-order', authenticateToken, orderController.cancelMyOrder)
+
 // Get single order (requires authentication)
 router.get('/:orderId', authenticateToken, orderController.getOrder)
 

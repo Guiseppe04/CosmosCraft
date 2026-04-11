@@ -1,4 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { CheckCircle } from 'lucide-react'
 
 /**
  * CartContext - Global state management for shopping cart
@@ -7,6 +9,8 @@ import React, { createContext, useContext, useState, useCallback, useEffect } fr
 const CartContext = createContext()
 
 export function CartProvider({ children }) {
+  const [globalToast, setGlobalToast] = useState(null)
+
   const [cart, setCart] = useState(() => {
     try {
       const saved = localStorage.getItem('cosmos_cart')
@@ -75,9 +79,11 @@ export function CartProvider({ children }) {
     
     if (added) {
       setItemAddedStates(prev => ({ ...prev, [product.id]: true }))
+      setGlobalToast(`Added ${quantity > 1 ? quantity + ' ' : ''}${product.name || 'item'} to cart!`)
       setTimeout(() => {
         setItemAddedStates(prev => ({ ...prev, [product.id]: false }))
       }, 1500)
+      setTimeout(() => setGlobalToast(null), 3000)
     }
     
     return added
@@ -170,6 +176,19 @@ export function CartProvider({ children }) {
   return (
     <CartContext.Provider value={value}>
       {children}
+      <AnimatePresence>
+        {globalToast && (
+          <motion.div
+            initial={{ opacity: 0, y: -20, x: '-50%' }}
+            animate={{ opacity: 1, y: 0, x: '-50%' }}
+            exit={{ opacity: 0, y: -20, x: '-50%' }}
+            className="fixed top-24 left-1/2 z-[100] bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] px-6 py-3 rounded-xl font-bold shadow-[0_0_20px_rgba(212,175,55,0.4)] flex items-center gap-2 pointer-events-none"
+          >
+            <CheckCircle className="w-5 h-5" />
+            {globalToast}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </CartContext.Provider>
   )
 }

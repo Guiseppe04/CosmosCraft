@@ -276,6 +276,20 @@ exports.updateProfileSchema = Joi.object({
     .messages({
       'string.max': 'Bio must not exceed 500 characters',
     }),
+  birthDate: Joi.date()
+    .iso()
+    .optional()
+    .allow(null, '')
+    .messages({
+      'date.format': 'Birth date must be a valid ISO date',
+    }),
+  avatarUrl: Joi.string()
+    .uri()
+    .optional()
+    .allow(null, '')
+    .messages({
+      'string.uri': 'Avatar URL must be a valid URI',
+    }),
 });
 
 // Change Password

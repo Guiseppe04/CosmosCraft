@@ -47,6 +47,12 @@ async function request(path, options = {}) {
 
 // ─── Products ────────────────────────────────────────────────────────────────
 export const adminApi = {
+  // Users & Profile
+  updateProfile: (body) => request('/api/users/profile', { method: 'PUT', body }),
+  addAddress: (body) => request('/api/users/addresses', { method: 'POST', body }),
+  updateAddress: (id, body) => request(`/api/users/addresses/${id}`, { method: 'PUT', body }),
+  changePassword: (body) => request('/api/users/change-password', { method: 'POST', body }),
+
   // Products
   getProducts: (params = {}) => {
     const qs = buildQueryString(params)
@@ -107,9 +113,11 @@ export const adminApi = {
     const qs = buildQueryString(params)
     return request(`/api/orders${qs ? '?' + qs : ''}`)
   },
+  getMyOrders: () => request('/api/orders/my-orders').then(res => res.data.orders ? res.data.orders : []),
   getOrder: (id) => request(`/api/orders/${id}`),
   updateOrder: (id, body) => request(`/api/orders/${id}`, { method: 'PUT', body }),
   cancelOrder: (id) => request(`/api/orders/${id}/cancel`, { method: 'POST' }),
+  cancelMyOrder: (id) => request(`/api/orders/${id}/cancel-my-order`, { method: 'POST' }),
 
   // Projects
   getProjects: (params = {}) => {

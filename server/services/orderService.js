@@ -171,3 +171,23 @@ exports.cancelOrder = async (orderId) => {
   if (res.rows.length === 0) return null;
   return res.rows[0];
 }
+
+exports.cancelMyOrder = async (orderId, userId) => {
+  const checkRes = await pool.query(
+    `SELECT status FROM orders WHERE order_id = $1 AND user_id = $2`,
+    [orderId, userId]
+  );
+  if (checkRes.rows.length === 0) {
+    throw new Error('Order not found');
+  }
+  const status = checkRes.rows[0].status;
+  if (status !== 'pending') {
+    throw new Error('Only pending orders can be cancelled');
+  }
+
+  const res = await pool.query(
+    `UPDATE orders SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP WHERE order_id = $1 AND user_id = $2 RETURNING *`,
+    [orderId, userId]
+  );
+  return res.rows[0];
+}

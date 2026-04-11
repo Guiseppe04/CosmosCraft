@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 import { motion, AnimatePresence } from 'motion/react'
-import { User, CreditCard, MapPin, Lock, Settings, Bell, Package, Calendar, ChevronRight, Upload, Save, Wallet, ShoppingBag, ShoppingCart, Trash2, Minus, Plus, MessageSquare, Send, Guitar, Clock, Truck, CheckCircle, XCircle, Briefcase, Activity } from 'lucide-react'
+import { User, CreditCard, MapPin, Lock, Settings, Bell, Package, Calendar, ChevronRight, Upload, Save, Wallet, ShoppingBag, ShoppingCart, Trash2, Minus, Plus, MessageSquare, Send, Guitar, Clock, Truck, CheckCircle, XCircle, Briefcase, Activity, Star } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useCart } from '../context/CartContext.jsx'
 import { BASE_PRICE, BODY_OPTIONS, BODY_WOOD_OPTIONS, BODY_FINISH_OPTIONS, NECK_OPTIONS, FRETBOARD_OPTIONS, HEADSTOCK_OPTIONS, HEADSTOCK_WOOD_OPTIONS, INLAY_OPTIONS, BRIDGE_OPTIONS, PICKGUARD_OPTIONS_BY_BODY, KNOB_OPTIONS_BY_BODY, HARDWARE_OPTIONS, PICKUP_OPTIONS } from '../lib/guitarBuilderData.js'
@@ -70,6 +70,13 @@ export function DashboardPage() {
   
   const [myProjects, setMyProjects] = useState([])
   const [activeProjectView, setActiveProjectView] = useState(null)
+  
+  const [myOrders, setMyOrders] = useState([])
+  const [activePurchaseTab, setActivePurchaseTab] = useState('All')
+  
+  const [ratingModalOrderId, setRatingModalOrderId] = useState(null)
+  const [rating, setRating] = useState(0)
+  const [ratingText, setRatingText] = useState('')
 
   useEffect(() => {
     if (activeSection === 'projects' && !activeProjectView) {
@@ -77,9 +84,59 @@ export function DashboardPage() {
     }
   }, [activeSection, activeProjectView])
 
+  useEffect(() => {
+    if (activeSection === 'purchases') {
+      fetchMyOrders()
+    }
+  }, [activeSection])
+
+  const fetchMyOrders = () => {
+    adminApi.getMyOrders().then(orders => setMyOrders(orders)).catch(console.error)
+  }
+
   const fetchMyProjects = () => {
     adminApi.getMyProjects().then(res => setMyProjects(res.data)).catch(console.error)
   }
+
+  const submitRating = () => {
+    setToastMessage('Thank you for rating this product!');
+    setRatingModalOrderId(null);
+    setRating(0);
+    setRatingText('');
+  };
+
+  const handleBuyAgain = async (orderId) => {
+    try {
+      const res = await adminApi.getOrder(orderId);
+      const items = res.data.order.items;
+      if (items && items.length > 0) {
+        items.forEach(item => {
+          addToCart({
+            id: item.product_id || item.product_sku || `prod-${Date.now()}`,
+            name: item.product_name || 'Item',
+            price: Number(item.unit_price),
+            category: 'Shop',
+            image: 'https://images.unsplash.com/photo-1564186763535-ebb21ef5277f?w=800&q=80',
+          }, item.quantity);
+        });
+        setToastMessage('Items added to cart!');
+        navigate('/cart');
+      }
+    } catch (err) {
+      alert("Failed to buy again: " + err.message);
+    }
+  };
+
+  const handleCancelOrder = async (orderId) => {
+    if (!window.confirm("Are you sure you want to cancel this order?")) return;
+    try {
+      await adminApi.cancelMyOrder(orderId);
+      setToastMessage('Order has been cancelled.');
+      fetchMyOrders();
+    } catch (err) {
+      alert("Failed to cancel order: " + err.message);
+    }
+  };
 
   const handleCancelProject = async (projectId) => {
     if (!window.confirm("Are you sure you want to cancel this project? This will stop the building progress.")) return;
@@ -150,29 +207,46 @@ export function DashboardPage() {
 
   const [profileData, setProfileData] = useState({
     username: '',
-    name: '',
+    firstName: '',
+    middleName: '',
+    lastName: '',
     email: '',
     phone: '',
     gender: 'male',
-    dobDay: '15',
-    dobMonth: 'June',
-    dobYear: '1990',
+    birthDate: '',
   })
+  
+  const [passwordData, setPasswordData] = useState({
+    oldPassword: '',
+    newPassword: '',
+    confirmPassword: '',
+  })
+  
+  const [addressData, setAddressData] = useState({
+    streetLine1: '',
+    streetLine2: '',
+    city: '',
+    stateProvince: '',
+    postalZipCode: '',
+    country: 'Philippines',
+    isDefault: true
+  })
+  const [isAddingAddress, setIsAddingAddress] = useState(false)
+  
+  const [isEditingProfile, setIsEditingProfile] = useState(false)
 
   // Initialize profile data from authenticated user
   useEffect(() => {
     if (user) {
       setProfileData({
         username: user.email || '',
-        name: user.name
-          ? `${user.name.firstName || ''} ${user.name.lastName || ''}`.trim()
-          : '',
+        firstName: user.name?.firstName || '',
+        middleName: user.name?.middleName || '',
+        lastName: user.name?.lastName || '',
         email: user.email || '',
         phone: user.phone || '',
         gender: 'male',
-        dobDay: '15',
-        dobMonth: 'June',
-        dobYear: '1990',
+        birthDate: user.birthDate ? String(user.birthDate).split('T')[0] : '',
       })
     }
   }, [user])
@@ -208,46 +282,131 @@ export function DashboardPage() {
 
 
 
-  const renderPurchasesContent = () => (
-    <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-8">
-      <h2 className="text-2xl font-bold text-white mb-1">My Purchase</h2>
-      <p className="text-sm text-[var(--text-muted)] mb-8">Track and manage your orders</p>
+  const renderPurchasesContent = () => {
+    const filteredOrders = myOrders.filter(order => {
+      if (activePurchaseTab === 'All') return true;
+      if (activePurchaseTab === 'To Pay' && order.payment_status === 'pending') return true;
+      if (activePurchaseTab === 'To Ship' && order.status === 'processing') return true;
+      if (activePurchaseTab === 'To Receive' && order.status === 'shipped') return true;
+      if (activePurchaseTab === 'Completed' && (order.status === 'delivered' || order.status === 'completed')) return true;
+      if (activePurchaseTab === 'Cancelled' && order.status === 'cancelled') return true;
+      if (activePurchaseTab === 'Refund' && order.status === 'refunded') return true;
+      return false;
+    });
 
-      {/* Tabs */}
-      <div className="flex flex-wrap gap-4 text-sm font-medium border-b border-[var(--border)] pb-3 mb-10">
-        {['All', 'To Pay', 'To Ship', 'To Receive', 'Completed', 'Cancelled', 'Refund'].map(label => (
-          <button
-            key={label}
-            className={`pb-2 transition-colors duration-200 ${
-              label === 'All'
-                ? 'border-b-2 border-[var(--gold-primary)] text-[var(--gold-primary)]'
-                : 'border-transparent text-[var(--text-muted)] hover:text-white'
-            }`}
-            type="button"
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+    return (
+      <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-8">
+        <h2 className="text-2xl font-bold text-white mb-1">My Purchase</h2>
+        <p className="text-sm text-[var(--text-muted)] mb-8">Track and manage your orders</p>
 
-      <div className="flex flex-col items-center justify-center py-10">
-        <div className="w-16 h-16 rounded-full border-2 border-[var(--border)] flex items-center justify-center mb-6">
-          <Package className="w-8 h-8 text-[var(--text-muted)]" />
+        {/* Tabs */}
+        <div className="flex flex-wrap gap-4 text-sm font-medium border-b border-[var(--border)] pb-3 mb-10 overflow-x-auto">
+          {['All', 'To Pay', 'To Ship', 'To Receive', 'Completed', 'Cancelled', 'Refund'].map(label => (
+            <button
+              key={label}
+              onClick={() => setActivePurchaseTab(label)}
+              className={`pb-2 transition-colors duration-200 whitespace-nowrap ${
+                label === activePurchaseTab
+                  ? 'border-b-2 border-[var(--gold-primary)] text-[var(--gold-primary)]'
+                  : 'border-transparent text-[var(--text-muted)] hover:text-white border-b-2'
+              }`}
+              type="button"
+            >
+              {label}
+            </button>
+          ))}
         </div>
-        <p className="text-white font-medium mb-1">No orders yet</p>
-        <p className="text-sm text-[var(--text-muted)] mb-6">
-          Start shopping to see your orders here
-        </p>
-        <button
-          type="button"
-          onClick={() => navigate('/shop')}
-          className="px-6 py-2.5 rounded-full bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-sm font-semibold text-[var(--text-dark)] hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition"
-        >
-          Browse Shop
-        </button>
+
+        {myOrders.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-10">
+            <div className="w-16 h-16 rounded-full border-2 border-[var(--border)] flex items-center justify-center mb-6">
+              <Package className="w-8 h-8 text-[var(--text-muted)]" />
+            </div>
+            <p className="text-white font-medium mb-1">No orders yet</p>
+            <p className="text-sm text-[var(--text-muted)] mb-6">
+              Start shopping to see your orders here
+            </p>
+            <button
+              type="button"
+              onClick={() => navigate('/shop')}
+              className="px-6 py-2.5 rounded-full bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-sm font-semibold text-[var(--text-dark)] hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition"
+            >
+              Browse Shop
+            </button>
+          </div>
+        ) : filteredOrders.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-10">
+            <p className="text-white font-medium mb-1">No orders found</p>
+            <p className="text-sm text-[var(--text-muted)]">
+              You don't have any orders with this status.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {filteredOrders.map(order => (
+              <div key={order.order_id} className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl p-5 hover:border-[var(--gold-primary)]/40 transition-colors">
+                <div className="flex justify-between items-center mb-4 border-b border-[var(--border)] pb-4">
+                  <div>
+                    <h3 className="font-bold text-white text-lg">{order.order_number}</h3>
+                    <p className="text-xs text-[var(--text-muted)] mt-1">{new Date(order.created_at).toLocaleDateString()} {new Date(order.created_at).toLocaleTimeString()}</p>
+                  </div>
+                  <div className="text-right">
+                    <span className="inline-block px-3 py-1 bg-[var(--surface-light)] border border-[var(--border)] rounded-full text-xs font-semibold text-white capitalize mr-2">
+                       {order.status}
+                    </span>
+                    <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold capitalize ${
+                       order.payment_status === 'paid' ? 'bg-green-500/10 text-green-400 border border-green-500/30' : 'bg-yellow-500/10 text-yellow-500 border border-yellow-500/30'
+                    }`}>
+                       {order.payment_status}
+                    </span>
+                  </div>
+                </div>
+                
+                <div className="flex justify-between items-end mt-4">
+                   <div className="text-sm text-[var(--text-muted)]">
+                      <span className="block">Shipping: ₱{Number(order.shipping_cost || 0).toLocaleString('en-PH')}</span>
+                      <span className="block mt-1">Tax: ₱{Number(order.tax_amount || 0).toLocaleString('en-PH')}</span>
+                   </div>
+                   <div className="text-right items-end flex flex-col">
+                     <span className="text-sm text-[var(--text-muted)] mb-1">Total Amount</span>
+                     <span className="text-xl font-bold text-[var(--gold-primary)] block">₱{Number(order.total_amount || 0).toLocaleString('en-PH')}</span>
+                   </div>
+                </div>
+                {order.status === 'pending' && (
+                  <div className="mt-4 pt-4 border-t border-[var(--border)] flex justify-end">
+                    <button
+                      onClick={() => handleCancelOrder(order.order_id)}
+                      className="px-4 py-2 border border-red-500/30 text-red-500 hover:bg-red-500/10 transition-colors rounded-lg text-sm font-semibold"
+                    >
+                      Cancel Order
+                    </button>
+                  </div>
+                )}
+                {(order.status === 'delivered' || order.status === 'completed') && (
+                  <div className="mt-4 pt-4 border-t border-[var(--border)] flex justify-end gap-3">
+                    <button
+                      onClick={() => setRatingModalOrderId(order.order_id)}
+                      className="px-4 py-2 border border-[var(--border)] text-white hover:bg-white/5 transition-colors rounded-lg text-sm font-semibold flex items-center gap-2"
+                    >
+                      <Star className="w-4 h-4 text-[var(--gold-primary)]" />
+                      Rate Product
+                    </button>
+                    <button
+                      onClick={() => handleBuyAgain(order.order_id)}
+                      className="px-4 py-2 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] hover:shadow-[0_0_15px_rgba(212,175,55,0.4)] transition-all rounded-lg text-sm font-bold flex items-center gap-2"
+                    >
+                      <ShoppingBag className="w-4 h-4" />
+                      Buy Again
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
-    </div>
-  )
+    )
+  }
 
   const renderAppointmentsContent = () => (
     <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-8">
@@ -575,6 +734,46 @@ export function DashboardPage() {
     )
   }
 
+  const handleSaveProfile = async () => {
+    try {
+      await adminApi.updateProfile({
+        firstName: profileData.firstName,
+        middleName: profileData.middleName,
+        lastName: profileData.lastName,
+        phone: profileData.phone,
+        birthDate: profileData.birthDate || null,
+        avatarUrl: profileImage && profileImage.startsWith('data:') ? profileImage : undefined
+      })
+      setToastMessage('Profile updated successfully!')
+      setIsEditingProfile(false)
+    } catch (err) {
+      alert("Failed to update profile: " + err.message)
+    }
+  }
+
+  const handleChangePassword = async () => {
+    try {
+      await adminApi.changePassword(passwordData)
+      setToastMessage('Password updated successfully!')
+      setPasswordData({ oldPassword: '', newPassword: '', confirmPassword: '' })
+    } catch (err) {
+      alert(err.message)
+    }
+  }
+
+  const handleSaveAddress = async () => {
+    try {
+      await adminApi.addAddress(addressData)
+      setToastMessage('Address added successfully!')
+      setIsAddingAddress(false)
+      setAddressData({ streetLine1: '', streetLine2: '', city: '', stateProvince: '', postalZipCode: '', country: 'Philippines', isDefault: true })
+      // The auth context 'user' needs a refresh to show the new address
+      window.location.reload(); 
+    } catch (err) {
+      alert("Failed to add address: " + err.message)
+    }
+  }
+
   const renderProfileContent = () => (
     <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-8">
       <h2 className="text-2xl font-bold text-white mb-1">My Profile</h2>
@@ -585,12 +784,21 @@ export function DashboardPage() {
           <img src={profileImage} alt="Profile" className="w-full h-full object-cover" />
         </div>
         <div>
-          <p className="text-sm font-semibold text-white mb-1">{profileData.username}</p>
-          <label className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-[var(--border)] text-xs font-semibold text-[var(--text-muted)] hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)] cursor-pointer transition-colors">
-            <Upload className="w-3.5 h-3.5" />
-            Edit Profile
-            <input type="file" accept="image/*" onChange={handleImageChange} className="hidden" />
-          </label>
+          <p className="text-sm font-semibold text-white mb-2">{profileData.username}</p>
+          <div className="flex gap-2">
+             <label className={`inline-flex items-center gap-2 px-4 py-2 rounded-full border border-[var(--border)] text-xs font-semibold text-[var(--text-muted)] hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)] cursor-pointer transition-colors ${!isEditingProfile && 'opacity-50 pointer-events-none'}`}>
+               <Upload className="w-3.5 h-3.5" />
+               Photo
+               <input type="file" accept="image/*" onChange={handleImageChange} disabled={!isEditingProfile} className="hidden" />
+             </label>
+             <button
+                type="button"
+                onClick={() => setIsEditingProfile(!isEditingProfile)}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-[var(--border)] text-xs font-semibold text-[var(--text-muted)] hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)] transition-colors"
+             >
+                {isEditingProfile ? 'Cancel Edit' : 'Edit Profile'}
+             </button>
+          </div>
         </div>
       </div>
 
@@ -606,12 +814,34 @@ export function DashboardPage() {
           <p className="mt-1 text-[11px] text-[var(--text-muted)]">Username can only be changed once.</p>
         </div>
         <div>
-          <label className="block text-xs font-semibold text-[var(--text-muted)] mb-2">Full Name</label>
+          <label className="block text-xs font-semibold text-[var(--text-muted)] mb-2">First Name</label>
           <input
             type="text"
-            value={profileData.name}
-            onChange={e => handleInputChange('name', e.target.value)}
-            className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
+            value={profileData.firstName}
+            onChange={e => handleInputChange('firstName', e.target.value)}
+            disabled={!isEditingProfile}
+            className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] disabled:opacity-50"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-[var(--text-muted)] mb-2">Last Name</label>
+          <input
+            type="text"
+            value={profileData.lastName}
+            onChange={e => handleInputChange('lastName', e.target.value)}
+            disabled={!isEditingProfile}
+            className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] disabled:opacity-50"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-[var(--text-muted)] mb-2">Middle Initial (Optional)</label>
+          <input
+            type="text"
+            value={profileData.middleName}
+            maxLength={1}
+            onChange={e => handleInputChange('middleName', e.target.value)}
+            disabled={!isEditingProfile}
+            className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] disabled:opacity-50"
           />
         </div>
         <div>
@@ -619,8 +849,8 @@ export function DashboardPage() {
           <input
             type="email"
             value={profileData.email}
-            onChange={e => handleInputChange('email', e.target.value)}
-            className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
+            disabled
+            className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] disabled:opacity-50"
           />
         </div>
         <div>
@@ -629,7 +859,8 @@ export function DashboardPage() {
             type="tel"
             value={profileData.phone}
             onChange={e => handleInputChange('phone', e.target.value)}
-            className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
+            disabled={!isEditingProfile}
+            className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] disabled:opacity-50"
           />
         </div>
         <div>
@@ -657,67 +888,26 @@ export function DashboardPage() {
         </div>
         <div>
           <label className="block text-xs font-semibold text-[var(--text-muted)] mb-2">Date of birth</label>
-          <div className="grid grid-cols-3 gap-2">
-            <select
-              value={profileData.dobDay}
-              onChange={e => handleInputChange('dobDay', e.target.value)}
-              className="px-3 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
-            >
-              {Array.from({ length: 31 }).map((_, i) => (
-                <option key={i + 1} value={String(i + 1)}>
-                  {i + 1}
-                </option>
-              ))}
-            </select>
-            <select
-              value={profileData.dobMonth}
-              onChange={e => handleInputChange('dobMonth', e.target.value)}
-              className="px-3 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
-            >
-              {[
-                'January',
-                'February',
-                'March',
-                'April',
-                'May',
-                'June',
-                'July',
-                'August',
-                'September',
-                'October',
-                'November',
-                'December',
-              ].map(m => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
-              ))}
-            </select>
-            <select
-              value={profileData.dobYear}
-              onChange={e => handleInputChange('dobYear', e.target.value)}
-              className="px-3 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
-            >
-              {Array.from({ length: 70 }).map((_, i) => {
-                const year = 2005 - i
-                return (
-                  <option key={year} value={String(year)}>
-                    {year}
-                  </option>
-                )
-              })}
-            </select>
-          </div>
+          <input
+            type="date"
+            value={profileData.birthDate}
+            onChange={e => handleInputChange('birthDate', e.target.value)}
+            disabled={!isEditingProfile}
+            className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-[var(--text-muted)] bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] disabled:opacity-50"
+          />
         </div>
       </div>
 
-      <button
-        type="button"
-        className="mt-8 inline-flex items-center gap-2 px-6 py-2.5 rounded-full bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-sm font-semibold text-[var(--text-dark)] hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition"
-      >
-        <Save className="w-4 h-4" />
-        Save Changes
-      </button>
+      {isEditingProfile && (
+        <button
+          type="button"
+          onClick={handleSaveProfile}
+          className="mt-8 inline-flex items-center gap-2 px-6 py-2.5 rounded-full bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-sm font-semibold text-[var(--text-dark)] hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition"
+        >
+          <Save className="w-4 h-4" />
+          Save Changes
+        </button>
+      )}
     </div>
   )
 
@@ -725,6 +915,80 @@ export function DashboardPage() {
     <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-8 text-center">
       <h2 className="text-2xl font-bold text-white mb-2">{title}</h2>
       <p className="text-sm text-[var(--text-muted)]">{description}</p>
+    </div>
+  )
+
+  const renderAddressesContent = () => (
+    <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-8">
+      <div className="flex justify-between items-center mb-6">
+        <div>
+          <h2 className="text-2xl font-bold text-white mb-1">My Addresses</h2>
+          <p className="text-sm text-[var(--text-muted)]">Manage your shipping addresses</p>
+        </div>
+        {!isAddingAddress && (
+          <button
+            onClick={() => setIsAddingAddress(true)}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-[var(--gold-primary)] text-sm font-semibold text-[var(--gold-primary)] hover:bg-[var(--gold-primary)] hover:text-[var(--text-dark)] transition-colors"
+          >
+            + Add New Address
+          </button>
+        )}
+      </div>
+
+      {!isAddingAddress ? (
+        <div className="space-y-4">
+          {user?.addresses && user.addresses.length > 0 ? (
+            user.addresses.map((addr, i) => (
+              <div key={i} className="p-4 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] flex justify-between items-start">
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="font-semibold text-white">Address {i + 1}</span>
+                    {addr.is_default && <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[var(--gold-primary)] text-[var(--text-dark)]">Default</span>}
+                  </div>
+                  <p className="text-sm text-[var(--text-muted)]">{addr.line1} {addr.line2}</p>
+                  <p className="text-sm text-[var(--text-muted)]">{addr.city}, {addr.province} {addr.postal_code}</p>
+                  <p className="text-sm text-[var(--text-muted)]">{addr.country}</p>
+                </div>
+              </div>
+            ))
+          ) : (
+            <p className="text-[var(--text-muted)] text-sm">No addresses saved yet.</p>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-4 max-w-xl">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="col-span-2">
+               <label className="block text-xs font-semibold text-[var(--text-muted)] mb-2">Street Line 1</label>
+               <input type="text" value={addressData.streetLine1} onChange={e => setAddressData(p => ({...p, streetLine1: e.target.value}))} className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]" />
+            </div>
+            <div className="col-span-2">
+               <label className="block text-xs font-semibold text-[var(--text-muted)] mb-2">Street Line 2 (Optional)</label>
+               <input type="text" value={addressData.streetLine2} onChange={e => setAddressData(p => ({...p, streetLine2: e.target.value}))} className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]" />
+            </div>
+            <div>
+               <label className="block text-xs font-semibold text-[var(--text-muted)] mb-2">City</label>
+               <input type="text" value={addressData.city} onChange={e => setAddressData(p => ({...p, city: e.target.value}))} className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]" />
+            </div>
+            <div>
+               <label className="block text-xs font-semibold text-[var(--text-muted)] mb-2">State / Province</label>
+               <input type="text" value={addressData.stateProvince} onChange={e => setAddressData(p => ({...p, stateProvince: e.target.value}))} className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]" />
+            </div>
+            <div>
+               <label className="block text-xs font-semibold text-[var(--text-muted)] mb-2">Postal / Zip Code</label>
+               <input type="text" value={addressData.postalZipCode} onChange={e => setAddressData(p => ({...p, postalZipCode: e.target.value}))} className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]" />
+            </div>
+            <div>
+               <label className="block text-xs font-semibold text-[var(--text-muted)] mb-2">Country</label>
+               <input type="text" value={addressData.country} onChange={e => setAddressData(p => ({...p, country: e.target.value}))} className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]" />
+            </div>
+          </div>
+          <div className="flex gap-4 mt-6">
+            <button onClick={handleSaveAddress} className="flex-1 py-2.5 rounded-full bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-bold shadow-[0_0_15px_rgba(212,175,55,0.3)]">Save Address</button>
+            <button onClick={() => setIsAddingAddress(false)} className="px-6 py-2.5 rounded-full border border-[var(--border)] text-white hover:bg-white/5 transition-all">Cancel</button>
+          </div>
+        </div>
+      )}
     </div>
   )
 
@@ -858,11 +1122,7 @@ export function DashboardPage() {
             {activeSection === 'cart' && renderCartContent()}
             {activeSection === 'purchases' && renderPurchasesContent()}
 
-            {activeSection === 'addresses' &&
-              renderPlaceholderSection(
-                'Addresses',
-                'Save your shipping and billing addresses to checkout faster.',
-              )}
+            {activeSection === 'addresses' && renderAddressesContent()}
             {activeSection === 'password' && (
               <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-8">
                 <h2 className="text-2xl font-bold text-white mb-1">Change Password</h2>
@@ -876,6 +1136,8 @@ export function DashboardPage() {
                     </label>
                     <input
                       type="password"
+                      value={passwordData.oldPassword}
+                      onChange={e => setPasswordData(prev => ({ ...prev, oldPassword: e.target.value }))}
                       className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
                     />
                   </div>
@@ -885,6 +1147,8 @@ export function DashboardPage() {
                     </label>
                     <input
                       type="password"
+                      value={passwordData.newPassword}
+                      onChange={e => setPasswordData(prev => ({ ...prev, newPassword: e.target.value }))}
                       className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
                     />
                   </div>
@@ -894,12 +1158,15 @@ export function DashboardPage() {
                     </label>
                     <input
                       type="password"
+                      value={passwordData.confirmPassword}
+                      onChange={e => setPasswordData(prev => ({ ...prev, confirmPassword: e.target.value }))}
                       className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
                     />
                   </div>
                 </div>
                 <button
                   type="button"
+                  onClick={handleChangePassword}
                   className="mt-6 inline-flex items-center gap-2 px-6 py-2.5 rounded-full bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-sm font-semibold text-[var(--text-dark)] hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition"
                 >
                   Update Password
@@ -947,6 +1214,65 @@ export function DashboardPage() {
           </motion.main>
         </div>
       </div>
+
+      {/* Rating Modal */}
+      {ratingModalOrderId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
+          <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6 w-full max-w-md relative">
+            <h2 className="text-xl font-bold text-white mb-2">Rate Product</h2>
+            <p className="text-sm text-[var(--text-muted)] mb-6">How was your experience with this order?</p>
+            
+            <div className="flex justify-center gap-2 mb-6">
+              {[1, 2, 3, 4, 5].map((star) => (
+                <button 
+                  key={star} 
+                  type="button"
+                  onClick={() => setRating(star)}
+                  className="p-1 transition-transform hover:scale-110"
+                >
+                  <Star 
+                    className={`w-8 h-8 ${star <= rating ? 'fill-[var(--gold-primary)] text-[var(--gold-primary)]' : 'text-[var(--border)]'}`} 
+                  />
+                </button>
+              ))}
+            </div>
+
+            <textarea
+              value={ratingText}
+              onChange={(e) => setRatingText(e.target.value)}
+              placeholder="Leave a review (optional)..."
+              rows={3}
+              className="w-full px-4 py-3 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] text-sm text-[var(--text-light)] placeholder-[var(--text-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--gold-primary)] resize-none mb-6"
+            />
+
+            <div className="flex gap-3">
+              <button 
+                type="button" 
+                onClick={() => {
+                  setRatingModalOrderId(null);
+                  setRating(0);
+                  setRatingText('');
+                }} 
+                className="flex-1 py-2.5 rounded-xl border border-[var(--border)] text-white hover:bg-white/5 transition-colors font-medium text-sm"
+              >
+                Cancel
+              </button>
+              <button 
+                type="button" 
+                onClick={submitRating}
+                disabled={rating === 0}
+                className={`flex-1 py-2.5 rounded-xl text-[var(--text-dark)] transition-all font-bold text-sm ${
+                  rating === 0 
+                    ? 'bg-[var(--surface-light)] text-[var(--text-muted)] cursor-not-allowed' 
+                    : 'bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] hover:shadow-[0_0_15px_rgba(212,175,55,0.4)]'
+                }`}
+              >
+                Submit Rating
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Select Instrument Modal */}
       {showSelectInstrumentModal && (

@@ -97,3 +97,16 @@ exports.cancelOrder = asyncHandler(async (req, res, next) => {
   if (!order) throw new AppError('Order not found', 404)
   res.status(200).json({ status: 'success', data: order })
 })
+
+exports.cancelMyOrder = asyncHandler(async (req, res, next) => {
+  const userId = req.user?.id;
+  if (!userId) {
+    throw new AppError('You must be logged in', 401);
+  }
+  try {
+    const order = await orderService.cancelMyOrder(req.params.id, userId);
+    res.status(200).json({ status: 'success', data: order });
+  } catch (error) {
+    throw new AppError(error.message, 400);
+  }
+})
