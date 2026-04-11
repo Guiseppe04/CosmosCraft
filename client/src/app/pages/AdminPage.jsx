@@ -161,6 +161,8 @@ export function AdminPage() {
 
   const [wizardTab, setWizardTab] = useState('basic')
   const [inventorySubTab, setInventorySubTab] = useState('products')
+  const [optimisticStock, setOptimisticStock] = useState({})
+  const [adjustPopover, setAdjustPopover] = useState({ open: false, itemId: null, amount: 0, reason: '', name: '' })
   const [form, setForm] = useState({})
   const [formErrors, setFormErrors] = useState({})
   const [isSaving, setIsSaving] = useState(false)
@@ -1303,7 +1305,7 @@ export function AdminPage() {
                       <td className="py-4 px-6">
                         <span className={part.stock > 0 ? 'text-green-400' : 'text-red-400'}>{part.stock}</span>
                       </td>
-                      <td className="py-4 px-6 text-[var(--gold-primary)] font-bold text-lg">{formatCurrency(part.price, true)}</td>
+                      <td className="py-4 px-6 text-[var(--gold-primary)] font-bold text-lg">{formatCurrency(part.price)}</td>
                       <td className="py-4 px-6">
                         <span className={`px-2 py-1 rounded-full text-xs font-semibold border ${part.is_active ? 'bg-green-500/20 text-green-400 border-green-500/30' : 'bg-gray-500/20 text-gray-400 border-gray-500/30'}`}>
                           {part.is_active ? 'Active' : 'Inactive'}
@@ -1379,7 +1381,7 @@ export function AdminPage() {
                     <td className="py-4 px-6">
                       <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-[var(--gold-primary)]/20 text-[var(--gold-primary)] border border-[var(--gold-primary)]/30 capitalize">{g.guitar_type}</span>
                     </td>
-                    <td className="py-4 px-6 text-[var(--gold-primary)] font-bold">{formatCurrency(g.total_price, true)}</td>
+                    <td className="py-4 px-6 text-[var(--gold-primary)] font-bold">{formatCurrency(g.total_price)}</td>
                     <td className="py-4 px-6"><StatusBadge active={g.is_saved} trueLabel="Saved" falseLabel="Draft" /></td>
                     <td className="py-4 px-6">
                       <div className="flex gap-2">
@@ -2275,7 +2277,7 @@ export function AdminPage() {
                       ['Pickups', modal.data.pickups],
                       ['Color', modal.data.color],
                       ['Finish', modal.data.finish_type],
-                      ['Total Price', formatCurrency(modal.data.total_price, true)],
+                      ['Total Price', formatCurrency(modal.data.total_price)],
                     ].map(([key, val]) => val ? (
                       <div key={key} className="flex justify-between gap-4 border-b border-[var(--border)] pb-2">
                         <span className="text-[var(--text-muted)]">{key}</span>
@@ -2313,7 +2315,7 @@ export function AdminPage() {
                                 <span className="text-white text-sm">{item.product_name || item.name || 'Item'}</span>
                                 <span className="text-[var(--text-muted)] text-xs">Qty: {item.quantity || 1}</span>
                               </div>
-                              <span className="text-[var(--gold-primary)] text-sm">{formatCurrency(item.unit_price || item.price, true)}</span>
+                              <span className="text-[var(--gold-primary)] text-sm">{formatCurrency(item.unit_price || item.price)}</span>
                             </div>
                           ))}
                         </div>
