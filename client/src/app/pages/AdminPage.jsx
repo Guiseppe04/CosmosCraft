@@ -6,8 +6,10 @@ import {
   PieChart, Activity, ArrowUpRight,
   CheckCircle, Check, Info, XCircle, Plus, RefreshCw, X,
   MessageSquare, Briefcase, ChevronLeft, ChevronRight,
-  User, Guitar, Layers, Shield, Tag, AlertCircle, DollarSign,
-  Save, TrendingUp, UsersRound, Clock, Loader2, Grid3X3, List, MoreHorizontal,
+  ChevronDown, ChevronUp, ArrowUpDown, ArrowUp, ArrowDown,
+  Printer, Mail, FileText, CreditCard, RotateCcw, Copy, Truck, MapPin,
+  UserCheck, Clock10, PackageCheck, CircleCheck,
+  Layers, User, Tag, AlertCircle, DollarSign, Save, TrendingUp, UsersRound, Clock, Loader2, Grid3X3, List, MoreHorizontal, Guitar, Shield,
 } from 'lucide-react'
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis,
@@ -161,6 +163,20 @@ export function AdminPage() {
 
   const [wizardTab, setWizardTab] = useState('basic')
   const [inventorySubTab, setInventorySubTab] = useState('products')
+
+  // Orders tab state
+  const [expandedOrderIds, setExpandedOrderIds] = useState(new Set())
+  const [orderStatusFilter, setOrderStatusFilter] = useState('all')
+  const [orderSort, setOrderSort] = useState('newest')
+  const [orderPage, setOrderPage] = useState(1)
+  const ORDERS_PAGE_SIZE = 10
+
+  // Inventory tab state
+  const [expandedInventoryIds, setExpandedInventoryIds] = useState(new Set())
+  const [inventoryStatusFilter, setInventoryStatusFilter] = useState('all')
+  const [inventorySort, setInventorySort] = useState('name')
+  const [inventoryPage, setInventoryPage] = useState(1)
+  const INVENTORY_PAGE_SIZE = 10
   const [optimisticStock, setOptimisticStock] = useState({})
   const [adjustPopover, setAdjustPopover] = useState({ open: false, itemId: null, amount: 0, reason: '', name: '' })
   const [form, setForm] = useState({})
@@ -199,6 +215,85 @@ export function AdminPage() {
     () => Array.from(new Set((parts || []).map((p) => p.part_category).filter(Boolean))).sort(),
     [parts]
   )
+
+  // Filtered and sorted orders
+  const filteredOrders = useMemo(() => {
+    let result = [...visibleOrders]
+    if (orderStatusFilter !== 'all') {
+      result = result.filter(o => o.status === orderStatusFilter)
+    }
+    result.sort((a, b) => {
+      const aVal = a.created_at ? new Date(a.created_at).getTime() : 0
+      const bVal = b.created_at ? new Date(b.created_at).getTime() : 0
+      if (orderSort === 'newest') return bVal - aVal
+      if (orderSort === 'oldest') return aVal - bVal
+      const aAmt = a.total || a.total_amount || 0
+      const bAmt = b.total || b.total_amount || 0
+      if (orderSort === 'highest') return bAmt - aAmt
+      if (orderSort === 'lowest') return aAmt - bAmt
+      return 0
+    })
+    return result
+  }, [visibleOrders, orderStatusFilter, orderSort])
+
+  const paginatedOrders = useMemo(() => {
+    const start = (orderPage - 1) * ORDERS_PAGE_SIZE
+    return filteredOrders.slice(start, start + ORDERS_PAGE_SIZE)
+  }, [filteredOrders, orderPage])
+
+  const orderStats = useMemo(() => {
+    const now = new Date()
+    const thisMonth = now.getMonth()
+    const thisYear = now.getFullYear()
+    const monthOrders = visibleOrders.filter(o => {
+      const d = o.created_at ? new Date(o.created_at) : null
+      return d && d.getMonth() === thisMonth && d.getFullYear() === thisYear
+    })
+    const revenue = monthOrders.reduce((sum, o) => sum + (o.total || o.total_amount || 0), 0)
+    const pendingCount = visibleOrders.filter(o => o.status === 'pending').length
+    return {
+      revenue,
+      orderCount: monthOrders.length,
+      avgValue: monthOrders.length ? revenue / monthOrders.length : 0,
+      pendingCount,
+    }
+  }, [visibleOrders])
+
+  // Combined inventory items (products + parts)
+  const inventoryItems = useMemo(() => {
+    const prods = visibleInventory.map(p => ({ ...p, type: 'product', stock: p.stock, name: p.name, sku: p.sku, low_stock_threshold: p.low_stock_threshold, part_id: p.product_id }))
+    const pts = visibleParts.map(p => ({ ...p, type: 'part', stock: p.quantity, name: p.name, sku: p.type_mapping, low_stock_threshold: 10 }))
+    return [...prods, ...pts]
+  }, [visibleInventory, visibleParts])
+
+  const filteredInventory = useMemo(() => {
+    let result = [...inventoryItems]
+    if (inventoryStatusFilter !== 'all') {
+      result = result.filter(item => {
+        const stock = Number(item.stock ?? 0)
+        const threshold = item.type === 'product' ? Number(item.low_stock_threshold ?? 10) : 10
+        if (inventoryStatusFilter === 'out_of_stock') return stock === 0
+        if (inventoryStatusFilter === 'critical') return stock > 0 && stock <= threshold
+        if (inventoryStatusFilter === 'warning') return stock > threshold && stock <= threshold * 2
+        if (inventoryStatusFilter === 'healthy') return stock > threshold * 2
+        return true
+      })
+    }
+    result.sort((a, b) => {
+      if (inventorySort === 'name') return (a.name || '').localeCompare(b.name || '')
+      if (inventorySort === 'sku') return (a.sku || '').localeCompare(b.sku || '')
+      if (inventorySort === 'stock_low') return Number(a.stock || 0) - Number(b.stock || 0)
+      if (inventorySort === 'stock_high') return Number(b.stock || 0) - Number(a.stock || 0)
+      return 0
+    })
+    return result
+  }, [inventoryItems, inventoryStatusFilter, inventorySort])
+
+  const paginatedInventory = useMemo(() => {
+    const start = (inventoryPage - 1) * INVENTORY_PAGE_SIZE
+    return filteredInventory.slice(start, start + INVENTORY_PAGE_SIZE)
+  }, [filteredInventory, inventoryPage])
+
   const guitarTypeOptions = useMemo(
     () => Array.from(new Set((parts || []).map((p) => p.guitar_type).filter(Boolean))).sort(),
     [parts]
@@ -1464,53 +1559,289 @@ export function AdminPage() {
           {/* ── ORDERS ─────────────────────────────────────────────────────── */}
           {activeTab === 'orders' && (
             <motion.div key="orders" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-              {visibleOrders.length === 0 ? (
+              {/* Filters & Sort */}
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+                <div className="flex flex-wrap gap-2">
+                  {['all', 'pending', 'processing', 'completed', 'cancelled'].map((status) => {
+                    const isActive = orderStatusFilter === status
+                    const chipStyles = {
+                      all: isActive ? 'bg-[var(--gold-primary)] text-black' : 'bg-[var(--surface-dark)] text-[var(--text-muted)] hover:text-white',
+                      pending: isActive ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' : 'bg-[var(--surface-dark)] text-[var(--text-muted)] hover:text-amber-400',
+                      processing: isActive ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 'bg-[var(--surface-dark)] text-[var(--text-muted)] hover:text-blue-400',
+                      completed: isActive ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'bg-[var(--surface-dark)] text-[var(--text-muted)] hover:text-green-400',
+                      cancelled: isActive ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-[var(--surface-dark)] text-[var(--text-muted)] hover:text-red-400',
+                    }
+                    return (
+                      <button
+                        key={status}
+                        onClick={() => { setOrderStatusFilter(status); setOrderPage(1) }}
+                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${chipStyles[status]}`}
+                      >
+                        {status.charAt(0).toUpperCase() + status.slice(1)}
+                      </button>
+                    )
+                  })}
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[var(--text-muted)] text-sm">Sort:</span>
+                  <select
+                    value={orderSort}
+                    onChange={(e) => setOrderSort(e.target.value)}
+                    className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
+                  >
+                    <option value="newest">Newest first</option>
+                    <option value="oldest">Oldest first</option>
+                    <option value="highest">Highest value</option>
+                    <option value="lowest">Lowest value</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Orders List */}
+              {filteredOrders.length === 0 ? (
                 <EmptyState icon={ShoppingBag} label="No orders found" />
               ) : (
-                <div className="space-y-4">
-                  {visibleOrders.map((order) => (
-                    <motion.div key={order.order_id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-                      className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6 hover:border-[var(--gold-primary)]/50 transition-all"
-                    >
-                      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
-                        <div>
-                          <div className="flex items-center gap-3 mb-1">
-                            <p className="text-white font-semibold">Order #{order.order_number || order.order_id?.slice(0, 8)}</p>
-                            <span className={`px-2 py-0.5 rounded-full text-xs font-semibold border ${getStatusBadge(order.status)}`}>
-                              {order.status || 'Pending'}
+                <div className="space-y-2">
+                  {paginatedOrders.map((order) => {
+                    const isExpanded = expandedOrderIds.has(order.order_id)
+                    const toggleExpand = () => {
+                      setExpandedOrderIds(prev => {
+                        const next = new Set(prev)
+                        if (next.has(order.order_id)) next.delete(order.order_id)
+                        else next.add(order.order_id)
+                        return next
+                      })
+                    }
+                    const statusDotColors = {
+                      pending: 'bg-amber-400',
+                      processing: 'bg-blue-400',
+                      completed: 'bg-green-400',
+                      cancelled: 'bg-gray-400',
+                    }
+                    const statusBgColors = {
+                      pending: 'bg-amber-400/10 text-amber-400',
+                      processing: 'bg-blue-400/10 text-blue-400',
+                      completed: 'bg-green-400/10 text-green-400',
+                      cancelled: 'bg-gray-400/10 text-gray-400',
+                    }
+                    const orderStatus = order.status || 'pending'
+                    const itemCount = order.items?.length || 0
+
+                    return (
+                      <motion.div
+                        key={order.order_id}
+                        initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                        className={`bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl overflow-hidden ${orderStatus === 'cancelled' ? 'opacity-60' : ''}`}
+                      >
+                        {/* Collapsed Row */}
+                        <div
+                          className="flex items-center gap-4 px-5 py-4 cursor-pointer hover:bg-white/5 transition-colors"
+                          onClick={toggleExpand}
+                        >
+                          <div className="w-32 flex-shrink-0">
+                            <p className="text-white font-mono text-sm font-semibold">#{order.order_number || order.order_id?.slice(0, 8)}</p>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-white text-sm font-medium truncate">{order.customer_name || order.user_name || 'Customer'}</p>
+                            <p className="text-[var(--text-muted)] text-xs truncate">{order.customer_email || order.email || ''}</p>
+                          </div>
+                          <div className="w-16 text-center text-[var(--text-muted)] text-sm">{itemCount} items</div>
+                          <div className="w-24 text-right text-[var(--text-muted)] text-sm">{order.created_at ? new Date(order.created_at).toLocaleDateString() : '—'}</div>
+                          <div className="w-32 flex-shrink-0">
+                            <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold ${statusBgColors[orderStatus]}`}>
+                              <span className={`w-1.5 h-1.5 rounded-full ${statusDotColors[orderStatus]}`}></span>
+                              {orderStatus.charAt(0).toUpperCase() + orderStatus.slice(1)}
                             </span>
                           </div>
-                          <p className="text-[var(--text-muted)] text-sm">
-                            {order.customer_name || order.user_name || 'Customer'} • {order.items?.length || 0} items
-                          </p>
+                          <div className={`w-28 text-right font-bold text-sm ${orderStatus === 'cancelled' ? 'text-gray-500' : 'text-[var(--gold-primary)]'}`}>
+                            {formatCurrency(order.total || order.total_amount, true)}
+                          </div>
+                          <button className="p-1 text-[var(--text-muted)] hover:text-white transition-colors">
+                            {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                          </button>
                         </div>
-                        <div className="text-right">
-                          <p className="text-[var(--gold-primary)] font-bold text-lg">{formatCurrency(order.total || order.total_amount, true)}</p>
-                          <p className="text-[var(--text-muted)] text-xs">{order.created_at ? new Date(order.created_at).toLocaleDateString() : '—'}</p>
-                        </div>
-                      </div>
-                      <div className="flex flex-wrap gap-2 pt-4 border-t border-[var(--border)]">
-                        <button onClick={() => openModal('order_view', order)} className="flex items-center gap-2 px-4 py-2 bg-[var(--bg-primary)] border border-[var(--border)] rounded-lg text-white text-sm hover:border-[var(--gold-primary)]/50 transition-all">
-                          <Eye className="w-4 h-4" /> View
-                        </button>
-                        {order.status === 'pending' && (
-                          <button onClick={() => updateOrderStatus(order.order_id, 'processing')} className="flex items-center gap-2 px-4 py-2 bg-green-500/10 border border-green-500/30 rounded-lg text-green-400 text-sm hover:bg-green-500/20 transition-all">
-                            <CheckCircle className="w-4 h-4" /> Confirm
-                          </button>
-                        )}
-                        {order.status === 'processing' && (
-                          <button onClick={() => updateOrderStatus(order.order_id, 'completed')} className="flex items-center gap-2 px-4 py-2 bg-blue-500/10 border border-blue-500/30 rounded-lg text-blue-400 text-sm hover:bg-blue-500/20 transition-all">
-                            <CheckCircle className="w-4 h-4" /> Complete
-                          </button>
-                        )}
-                        {order.status !== 'cancelled' && order.status !== 'completed' && (
-                          <button onClick={() => cancelOrder(order.order_id, order.order_number)} className="flex items-center gap-2 px-4 py-2 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm hover:bg-red-500/20 transition-all">
-                            <XCircle className="w-4 h-4" /> Cancel
-                          </button>
-                        )}
-                      </div>
-                    </motion.div>
-                  ))}
+
+                        {/* Expanded Details */}
+                        <AnimatePresence>
+                          {isExpanded && (
+                            <motion.div
+                              initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
+                              className="border-t border-[var(--border)] bg-[var(--bg-primary)]/50"
+                            >
+                              <div className="p-5 space-y-6">
+                                {/* Metadata Row */}
+                                <div className="flex flex-wrap gap-6 text-sm">
+                                  <div className="flex items-center gap-2 text-[var(--text-muted)]">
+                                    <CreditCard className="w-4 h-4" />
+                                    <span>{order.channel || 'Online'} • {order.payment_method || 'Card'} • {order.payment_status || 'Paid'}</span>
+                                  </div>
+                                  <div className="flex items-center gap-2 text-[var(--text-muted)]">
+                                    <Truck className="w-4 h-4" />
+                                    <span>{order.shipping_method || 'Standard'} • {order.shipping_address || 'See details'}</span>
+                                  </div>
+                                </div>
+
+                                {/* Items Table */}
+                                {itemCount > 0 ? (
+                                  <div className="overflow-x-auto">
+                                    <table className="w-full text-left">
+                                      <thead className="border-b border-[var(--border)]">
+                                        <tr>
+                                          <th className="py-3 pr-4 text-[var(--text-muted)] text-xs font-semibold uppercase tracking-wider">Product</th>
+                                          <th className="py-3 px-4 text-[var(--text-muted)] text-xs font-semibold uppercase tracking-wider text-center">Qty</th>
+                                          <th className="py-3 px-4 text-[var(--text-muted)] text-xs font-semibold uppercase tracking-wider text-right">Unit Price</th>
+                                          <th className="py-3 pl-4 text-[var(--text-muted)] text-xs font-semibold uppercase tracking-wider text-right">Subtotal</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {order.items.map((item, idx) => (
+                                          <tr key={idx} className="border-b border-[var(--border)]/30">
+                                            <td className="py-3 pr-4">
+                                              <div className="flex items-center gap-3">
+                                                {item.image_url && (
+                                                  <img src={item.image_url} alt="" className="w-10 h-10 rounded-lg object-cover bg-[var(--surface-dark)]" />
+                                                )}
+                                                <div>
+                                                  <p className="text-white text-sm font-medium">{item.name || item.product_name || 'Product'}</p>
+                                                  {item.subtitle && <p className="text-[var(--text-muted)] text-xs">{item.subtitle}</p>}
+                                                </div>
+                                              </div>
+                                            </td>
+                                            <td className="py-3 px-4 text-center text-white">{item.quantity || item.qty || 1}</td>
+                                            <td className="py-3 px-4 text-right text-white">{formatCurrency(item.price || item.unit_price, true)}</td>
+                                            <td className="py-3 pl-4 text-right text-[var(--gold-primary)] font-semibold">{formatCurrency((item.price || item.unit_price || 0) * (item.quantity || item.qty || 1), true)}</td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                ) : (
+                                  <p className="text-[var(--text-muted)] text-sm text-center py-4">No items details available</p>
+                                )}
+
+                                {/* Order Timeline */}
+                                <div>
+                                  <p className="text-[var(--text-muted)] text-xs font-semibold uppercase tracking-wider mb-3">Order Timeline</p>
+                                  <div className="flex items-center gap-2">
+                                    {[
+                                      { step: 'placed', label: 'Order Placed', time: order.created_at },
+                                      { step: 'confirmed', label: 'Awaiting Confirmation', time: orderStatus !== 'pending' ? order.created_at : null },
+                                      { step: 'processing', label: 'Processing', time: orderStatus === 'processing' || orderStatus === 'completed' || orderStatus === 'shipped' || orderStatus === 'delivered' ? order.updated_at : null },
+                                      { step: 'shipped', label: 'Shipped', time: orderStatus === 'shipped' || orderStatus === 'delivered' ? order.shipped_at : null },
+                                      { step: 'delivered', label: 'Delivered', time: orderStatus === 'delivered' ? order.delivered_at : null },
+                                    ].map((item, idx, arr) => {
+                                      const isCompleted = arr.slice(0, idx + 1).some(s => orderStatus === s.step || (s.step !== 'placed' && orderStatus === 'cancelled') || (orderStatus !== 'pending' && s.step === 'confirmed'))
+                                      const isActive = orderStatus === item.step || (orderStatus === 'pending' && item.step === 'confirmed')
+                                      const dotClass = isCompleted ? 'bg-green-400' : isActive ? 'bg-blue-400' : 'border border-[var(--border)]'
+                                      return (
+                                        <div key={item.step} className="flex items-center gap-2">
+                                          <div className={`w-3 h-3 rounded-full ${dotClass}`}></div>
+                                          <span className={`text-xs ${isActive ? 'text-blue-400 font-medium' : isCompleted ? 'text-white' : 'text-[var(--text-muted)]'}`}>
+                                            {isCompleted && item.time ? new Date(item.time).toLocaleDateString() : isActive ? 'Now' : '—'}
+                                          </span>
+                                          {idx < arr.length - 1 && <div className={`w-8 h-px ${isCompleted ? 'bg-green-400/50' : 'bg-[var(--border)]'}`}></div>}
+                                        </div>
+                                      )
+                                    })}
+                                  </div>
+                                </div>
+
+                                {/* Contextual Actions */}
+                                <div className="flex flex-wrap gap-2 pt-4 border-t border-[var(--border)]">
+                                  {orderStatus === 'pending' && (
+                                    <>
+                                      <button onClick={(e) => { e.stopPropagation(); updateOrderStatus(order.order_id, 'processing') }} className="flex items-center gap-2 px-4 py-2 bg-green-500/10 text-green-400 rounded-lg text-sm hover:bg-green-500/20 transition-all">
+                                        <UserCheck className="w-4 h-4" /> Confirm Order
+                                      </button>
+                                      <button onClick={(e) => e.stopPropagation()} className="flex items-center gap-2 px-4 py-2 bg-[var(--surface-dark)] text-white rounded-lg text-sm border border-[var(--border)] hover:border-[var(--gold-primary)]/50 transition-all">
+                                        <Printer className="w-4 h-4" /> Print Slip
+                                      </button>
+                                      <button onClick={(e) => e.stopPropagation()} className="flex items-center gap-2 px-4 py-2 bg-[var(--surface-dark)] text-white rounded-lg text-sm border border-[var(--border)] hover:border-[var(--gold-primary)]/50 transition-all">
+                                        <Mail className="w-4 h-4" /> Email Customer
+                                      </button>
+                                      <button onClick={(e) => { e.stopPropagation(); cancelOrder(order.order_id, order.order_number) }} className="flex items-center gap-2 px-4 py-2 bg-red-500/10 text-red-400 rounded-lg text-sm hover:bg-red-500/20 transition-all">
+                                        <XCircle className="w-4 h-4" /> Cancel
+                                      </button>
+                                    </>
+                                  )}
+                                  {orderStatus === 'processing' && (
+                                    <>
+                                      <button onClick={(e) => { e.stopPropagation(); updateOrderStatus(order.order_id, 'completed') }} className="flex items-center gap-2 px-4 py-2 bg-blue-500/10 text-blue-400 rounded-lg text-sm hover:bg-blue-500/20 transition-all">
+                                        <PackageCheck className="w-4 h-4" /> Mark Complete
+                                      </button>
+                                      <button onClick={(e) => e.stopPropagation()} className="flex items-center gap-2 px-4 py-2 bg-[var(--surface-dark)] text-white rounded-lg text-sm border border-[var(--border)] hover:border-[var(--gold-primary)]/50 transition-all">
+                                        <Printer className="w-4 h-4" /> Print Slip
+                                      </button>
+                                      <button onClick={(e) => e.stopPropagation()} className="flex items-center gap-2 px-4 py-2 bg-[var(--surface-dark)] text-white rounded-lg text-sm border border-[var(--border)] hover:border-[var(--gold-primary)]/50 transition-all">
+                                        <MessageSquare className="w-4 h-4" /> Add Note
+                                      </button>
+                                    </>
+                                  )}
+                                  {orderStatus === 'completed' && (
+                                    <>
+                                      <button onClick={(e) => e.stopPropagation()} className="flex items-center gap-2 px-4 py-2 bg-[var(--surface-dark)] text-white rounded-lg text-sm border border-[var(--border)] hover:border-[var(--gold-primary)]/50 transition-all">
+                                        <FileText className="w-4 h-4" /> Export Receipt
+                                      </button>
+                                      <button onClick={(e) => e.stopPropagation()} className="flex items-center gap-2 px-4 py-2 bg-orange-500/10 text-orange-400 rounded-lg text-sm hover:bg-orange-500/20 transition-all">
+                                        <RotateCcw className="w-4 h-4" /> Refund/Return
+                                      </button>
+                                    </>
+                                  )}
+                                  {orderStatus === 'cancelled' && (
+                                    <>
+                                      <button onClick={(e) => e.stopPropagation()} className="flex items-center gap-2 px-4 py-2 bg-[var(--surface-dark)] text-white rounded-lg text-sm border border-[var(--border)] hover:border-[var(--gold-primary)]/50 transition-all">
+                                        <CreditCard className="w-4 h-4" /> Process Refund
+                                      </button>
+                                      <button onClick={(e) => e.stopPropagation()} className="flex items-center gap-2 px-4 py-2 bg-[var(--surface-dark)] text-white rounded-lg text-sm border border-[var(--border)] hover:border-[var(--gold-primary)]/50 transition-all">
+                                        <Copy className="w-4 h-4" /> Duplicate Order
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </motion.div>
+                    )
+                  })}
+                </div>
+              )}
+
+              {/* Pagination */}
+              {filteredOrders.length > 0 && (
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mt-6 pt-4 border-t border-[var(--border)]">
+                  <p className="text-[var(--text-muted)] text-sm">
+                    Showing {(orderPage - 1) * ORDERS_PAGE_SIZE + 1}–{Math.min(orderPage * ORDERS_PAGE_SIZE, filteredOrders.length)} of {filteredOrders.length} orders
+                  </p>
+                  <div className="flex items-center gap-1 mt-4 sm:mt-0">
+                    <button
+                      onClick={() => setOrderPage(p => Math.max(1, p - 1))}
+                      disabled={orderPage === 1}
+                      className="p-2 rounded-lg border border-[var(--border)] text-[var(--text-muted)] hover:text-white hover:border-[var(--gold-primary)] disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    {Array.from({ length: Math.ceil(filteredOrders.length / ORDERS_PAGE_SIZE) }, (_, i) => i + 1).slice(
+                      Math.max(0, orderPage - 3),
+                      Math.min(Math.ceil(filteredOrders.length / ORDERS_PAGE_SIZE), orderPage + 2)
+                    ).map(page => (
+                      <button
+                        key={page}
+                        onClick={() => setOrderPage(page)}
+                        className={`w-10 h-10 rounded-lg text-sm font-medium transition-all ${orderPage === page ? 'bg-[var(--gold-primary)] text-black' : 'border border-[var(--border)] text-[var(--text-muted)] hover:text-white hover:border-[var(--gold-primary)]'}`}
+                      >
+                        {page}
+                      </button>
+                    ))}
+                    <button
+                      onClick={() => setOrderPage(p => Math.min(Math.ceil(filteredOrders.length / ORDERS_PAGE_SIZE), p + 1))}
+                      disabled={orderPage >= Math.ceil(filteredOrders.length / ORDERS_PAGE_SIZE)}
+                      className="p-2 rounded-lg border border-[var(--border)] text-[var(--text-muted)] hover:text-white hover:border-[var(--gold-primary)] disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               )}
             </motion.div>
@@ -1645,145 +1976,260 @@ export function AdminPage() {
           {/* ── INVENTORY ──────────────────────────────────────────────────── */}
           {activeTab === 'inventory' && (
             <motion.div key="inventory" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-              <div className="space-y-6">
-                
-                {/* Visual Stats Row */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {/* Filters & Sort */}
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+                <div className="flex flex-wrap gap-2">
                   {[
-                    { label: 'Total Tracked Products', value: (inventoryStats?.total_products || 0) + visibleParts.length, cls: 'text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.3)]' },
-                    { label: 'Out of Stock Items', value: (inventoryStats?.out_of_stock_count || 0) + visibleParts.filter(p => !p.stock).length, cls: 'text-red-400 drop-shadow-[0_0_8px_rgba(248,113,113,0.5)]' },
-                    { label: 'Low Stock Assets', value: (inventoryStats?.low_stock_count || 0) + visibleParts.filter(p => p.stock > 0 && p.stock <= 5).length, cls: 'text-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.5)]' },
-                  ].map(stat => (
-                    <div key={stat.label} className="rounded-2xl border border-[var(--border)] bg-gradient-to-tr from-[var(--surface-dark)] to-[var(--bg-primary)] p-5 relative overflow-hidden">
-                      <div className="absolute top-0 right-0 w-24 h-24 bg-white/5 rounded-full -mr-8 -mt-8" />
-                      <p className="text-[var(--text-muted)] text-sm font-semibold tracking-wide uppercase">{stat.label}</p>
-                      <p className={`mt-3 text-4xl font-bold ${stat.cls}`}>{stat.value}</p>
-                    </div>
-                  ))}
+                    { id: 'all', label: 'All' },
+                    { id: 'healthy', label: 'Healthy', cls: 'text-green-400' },
+                    { id: 'warning', label: 'Warning', cls: 'text-amber-400' },
+                    { id: 'critical', label: 'Critical', cls: 'text-orange-400' },
+                    { id: 'out_of_stock', label: 'Out of Stock', cls: 'text-red-400' },
+                  ].map((status) => {
+                    const isActive = inventoryStatusFilter === status.id
+                    return (
+                      <button
+                        key={status.id}
+                        onClick={() => { setInventoryStatusFilter(status.id); setInventoryPage(1) }}
+                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                          isActive
+                            ? status.id === 'all' ? 'bg-[var(--gold-primary)] text-black'
+                              : status.id === 'healthy' ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                              : status.id === 'warning' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                              : status.id === 'critical' ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30'
+                              : 'bg-red-500/20 text-red-400 border border-red-500/30'
+                            : 'bg-[var(--surface-dark)] text-[var(--text-muted)] hover:text-white'
+                        }`}
+                      >
+                        {status.label}
+                      </button>
+                    )
+                  })}
                 </div>
-
-                {/* Main Data View */}
-                <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] flex flex-col">
-                  
-                  {/* Modern Tab Bar */}
-                  <div className="flex border-b border-[var(--border)] pt-2 px-4 gap-4">
-                     {['products', 'parts'].map(tab => (
-                        <button key={tab}
-                          onClick={() => setInventorySubTab(tab)}
-                          className={`px-4 py-3 text-sm font-semibold uppercase tracking-wider transition-all relative ${inventorySubTab === tab ? 'text-[var(--gold-primary)]' : 'text-[var(--text-muted)] hover:text-white'}`}
-                        >
-                          {tab === 'products' ? 'Standard Products' : 'Custom Builder Parts'}
-                          {inventorySubTab === tab && (
-                            <motion.div layoutId="inv-tab-indicator" className="absolute bottom-0 left-0 right-0 h-[2px] bg-[var(--gold-primary)]" />
-                          )}
-                        </button>
-                      ))}
-                  </div>
-
-                  {/* Stock Tables */}
-                  <div className="p-6 overflow-x-auto">
-                    {((inventorySubTab === 'products' && visibleInventory.length === 0) || (inventorySubTab === 'parts' && visibleParts.length === 0)) ? (
-                      <div className="text-center py-16 text-[var(--text-muted)]">
-                        <Package className="w-12 h-12 mx-auto mb-4 opacity-20" />
-                        <p className="font-semibold text-lg">No inventory items tracked.</p>
-                      </div>
-                    ) : (
-                      <table className="w-full text-left">
-                        <thead className="border-b border-[var(--border)]/50">
-                          <tr>
-                            {['Item Description', 'SKU / Type', 'Capacity', 'Metric', 'Status', 'Manage'].map(c => (
-                              <th key={c} className="py-4 pr-6 text-[var(--text-muted)] text-[10px] font-bold uppercase tracking-[0.2em]">{c}</th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {(inventorySubTab === 'products' ? visibleInventory : visibleParts).map((item, i) => {
-                            const isProduct = inventorySubTab === 'products'
-                            const itemName = item.name
-                            const sku = item.sku || (item.type_mapping ? item.type_mapping.replace('_', ' ').toUpperCase() : '—')
-                            const stock = Number(item.stock ?? item.qty ?? 0)
-                            const threshold = Number(item.low_stock_threshold ?? 10)
-                            const isCritical = stock <= (isProduct ? threshold : 5)
-                            const isWarning = !isCritical && stock <= (isProduct ? threshold * 2 : 15)
-                            const statusLabel = stock === 0 ? 'Out of Stock' : isCritical ? 'Critical' : isWarning ? 'Warning' : 'Healthy'
-                            const statusCls = stock === 0 
-                              ? 'bg-red-500/10 text-red-500 border border-red-500/20 shadow-[0_0_10px_rgba(239,68,68,0.2)]'
-                              : isCritical
-                                ? 'bg-orange-500/10 text-orange-400 border border-orange-500/20 drop-shadow'
-                                : isWarning
-                                  ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                                  : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-
-                            // Capacity Bar calc
-                            const maxCapacity = Math.max(stock * 2, threshold * 4, 20)
-                            const pct = Math.min((stock / maxCapacity) * 100, 100)
-
-                            // Quick adjust handlers
-                            const handleQuickAdjust = async (amount) => {
-                               if (isProduct) {
-                                  await adminApi.adjustStock({ product_id: item.product_id, quantity: amount, notes: 'Quick adjustment from table' })
-                                  fetchInventory()
-                               } else {
-                                  await adminApi.updateBuilderPart(item.part_id, { ...item, stock: stock + amount })
-                                  fetchParts()
-                               }
-                            }
-
-                            return (
-                              <tr key={item.product_id || item.part_id || i} className="border-b border-[var(--border)]/30 hover:bg-white/5 transition-colors group">
-                                <td className="py-5 pr-6 text-white font-medium">{itemName}</td>
-                                <td className="py-5 pr-6 text-[var(--text-muted)] font-mono text-xs">{sku}</td>
-                                
-                                {/* Capacity Bar */}
-                                <td className="py-5 pr-6 w-48">
-                                  <div className="flex items-center gap-3">
-                                    <div className="flex-1 h-1.5 bg-gray-800 rounded-full overflow-hidden">
-                                      <div className={`h-full rounded-full ${stock === 0 ? 'bg-red-500' : isCritical ? 'bg-orange-400' : isWarning ? 'bg-amber-400' : 'bg-emerald-400'}`} style={{ width: `${pct}%` }} />
-                                    </div>
-                                    <span className={`text-xs font-mono font-bold ${stock === 0 ? 'text-red-500' : 'text-white'}`}>{stock}</span>
-                                  </div>
-                                </td>
-
-                                <td className="py-5 pr-6 text-[var(--text-muted)] text-sm font-mono">{isProduct ? threshold : 'n/a'}</td>
-                                
-                                <td className="py-5 pr-6">
-                                  <span className={`inline-flex items-center rounded-lg px-2.5 py-1 text-[10px] uppercase font-bold tracking-wider ${statusCls}`}>{statusLabel}</span>
-                                </td>
-                                
-                                <td className="py-5 pr-6">
-                                  <div className="flex items-center gap-1 opacity-50 group-hover:opacity-100 transition-opacity">
-                                    <button 
-                                      onClick={() => handleQuickAdjust(-1)}
-                                      disabled={stock === 0}
-                                      className="w-7 h-7 flex items-center justify-center rounded bg-[var(--surface-dark)] border border-[var(--border)] text-white hover:text-red-400 hover:border-red-500/50 transition-colors disabled:opacity-50"
-                                    >
-                                      -
-                                    </button>
-                                    <button 
-                                      onClick={() => handleQuickAdjust(1)}
-                                      className="w-7 h-7 flex items-center justify-center rounded bg-[var(--surface-dark)] border border-[var(--border)] text-white hover:text-emerald-400 hover:border-emerald-500/50 transition-colors"
-                                    >
-                                      +
-                                    </button>
-                                    {isProduct && (
-                                     <button
-                                       onClick={() => openModal('inventory', { product_id: item.product_id, name: item.name })}
-                                       className="ml-2 w-7 h-7 flex items-center justify-center rounded bg-[var(--gold-primary)]/10 border border-[var(--gold-primary)]/30 text-[var(--gold-primary)] hover:bg-[var(--gold-primary)]/20 transition-all"
-                                     >
-                                       <Edit className="w-3.5 h-3.5" />
-                                     </button>
-                                    )}
-                                  </div>
-                                </td>
-                              </tr>
-                            )
-                          })}
-                        </tbody>
-                      </table>
-                    )}
-                  </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[var(--text-muted)] text-sm">Sort:</span>
+                  <select
+                    value={inventorySort}
+                    onChange={(e) => setInventorySort(e.target.value)}
+                    className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
+                  >
+                    <option value="name">Name (A-Z)</option>
+                    <option value="sku">SKU</option>
+                    <option value="stock_low">Stock (Low to High)</option>
+                    <option value="stock_high">Stock (High to Low)</option>
+                  </select>
                 </div>
               </div>
+
+              {/* Inventory List */}
+              {filteredInventory.length === 0 ? (
+                <div className="text-center py-16 text-[var(--text-muted)]">
+                  <Package className="w-12 h-12 mx-auto mb-4 opacity-20" />
+                  <p className="font-semibold text-lg">No inventory items found.</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {paginatedInventory.map((item) => {
+                    const isExpanded = expandedInventoryIds.has(item.product_id || item.part_id)
+                    const toggleExpand = () => {
+                      setExpandedInventoryIds(prev => {
+                        const next = new Set(prev)
+                        const id = item.product_id || item.part_id
+                        if (next.has(id)) next.delete(id)
+                        else next.add(id)
+                        return next
+                      })
+                    }
+                    const stock = Number(item.stock ?? 0)
+                    const threshold = item.type === 'product' ? Number(item.low_stock_threshold ?? 10) : 10
+                    const isCritical = stock <= threshold && stock > 0
+                    const isWarning = !isCritical && stock <= threshold * 2 && stock > threshold
+                    const isOutOfStock = stock === 0
+                    const statusLabel = isOutOfStock ? 'Out of Stock' : isCritical ? 'Critical' : isWarning ? 'Warning' : 'Healthy'
+                    const statusDotColors = {
+                      'Healthy': 'bg-green-400',
+                      'Warning': 'bg-amber-400',
+                      'Critical': 'bg-orange-400',
+                      'Out of Stock': 'bg-red-400',
+                    }
+                    const statusBgColors = {
+                      'Healthy': 'bg-green-400/10 text-green-400',
+                      'Warning': 'bg-amber-400/10 text-amber-400',
+                      'Critical': 'bg-orange-400/10 text-orange-400',
+                      'Out of Stock': 'bg-red-400/10 text-red-400',
+                    }
+                    const maxCapacity = Math.max(stock * 2, threshold * 4, 20)
+                    const pct = Math.min((stock / maxCapacity) * 100, 100)
+
+                    const handleQuickAdjust = async (amount) => {
+                      if (item.type === 'product') {
+                        await adminApi.adjustStock({ product_id: item.product_id, quantity: amount, notes: 'Quick adjustment from table' })
+                        fetchInventory()
+                      } else {
+                        await adminApi.updateBuilderPart(item.part_id, { ...item, stock: stock + amount })
+                        fetchParts()
+                      }
+                    }
+
+                    return (
+                      <motion.div
+                        key={item.product_id || item.part_id}
+                        initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                        className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl overflow-hidden"
+                      >
+                        {/* Collapsed Row */}
+                        <div
+                          className="flex items-center gap-4 px-5 py-4 cursor-pointer hover:bg-white/5 transition-colors"
+                          onClick={toggleExpand}
+                        >
+                          <div className="w-8 flex-shrink-0">
+                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${item.type === 'product' ? 'bg-blue-500/10 text-blue-400' : 'bg-purple-500/10 text-purple-400'}`}>
+                              <Package className="w-4 h-4" />
+                            </div>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-white text-sm font-medium truncate">{item.name}</p>
+                            <p className="text-[var(--text-muted)] text-xs truncate">{item.type === 'product' ? 'Product' : 'Part'} • {item.sku || '—'}</p>
+                          </div>
+                          <div className="w-32 flex-shrink-0">
+                            <div className="flex items-center gap-2">
+                              <div className="flex-1 h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                                <div className={`h-full rounded-full ${isOutOfStock ? 'bg-red-500' : isCritical ? 'bg-orange-400' : isWarning ? 'bg-amber-400' : 'bg-emerald-400'}`} style={{ width: `${pct}%` }} />
+                              </div>
+                            </div>
+                          </div>
+                          <div className="w-24 text-center">
+                            <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold ${statusBgColors[statusLabel]}`}>
+                              <span className={`w-1.5 h-1.5 rounded-full ${statusDotColors[statusLabel]}`}></span>
+                              {statusLabel}
+                            </span>
+                          </div>
+                          <div className="w-16 text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleQuickAdjust(-1) }}
+                                disabled={stock === 0}
+                                className="w-6 h-6 flex items-center justify-center rounded bg-[var(--bg-primary)] border border-[var(--border)] text-white hover:text-red-400 hover:border-red-500/50 transition-colors disabled:opacity-50"
+                              >
+                                -
+                              </button>
+                              <span className="text-white text-sm font-mono w-8 text-center">{stock}</span>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleQuickAdjust(1) }}
+                                className="w-6 h-6 flex items-center justify-center rounded bg-[var(--bg-primary)] border border-[var(--border)] text-white hover:text-emerald-400 hover:border-emerald-500/50 transition-colors"
+                              >
+                                +
+                              </button>
+                            </div>
+                          </div>
+                          {item.type === 'product' && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); openModal('inventory', { product_id: item.product_id, name: item.name }) }}
+                              className="p-2 hover:bg-[var(--gold-primary)]/10 rounded transition-colors"
+                            >
+                              <Edit className="w-4 h-4 text-[var(--text-muted)] hover:text-[var(--gold-primary)]" />
+                            </button>
+                          )}
+                          <button className="p-1 text-[var(--text-muted)] hover:text-white transition-colors">
+                            {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                          </button>
+                        </div>
+
+                        {/* Expanded Details */}
+                        <AnimatePresence>
+                          {isExpanded && (
+                            <motion.div
+                              initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
+                              className="border-t border-[var(--border)] bg-[var(--bg-primary)]/50"
+                            >
+                              <div className="p-5 space-y-4">
+                                {/* Metadata Row */}
+                                <div className="flex flex-wrap gap-6 text-sm">
+                                  <div className="flex items-center gap-2 text-[var(--text-muted)]">
+                                    <span className="text-xs uppercase tracking-wider">Type:</span>
+                                    <span className="text-white">{item.type === 'product' ? 'Standard Product' : 'Custom Builder Part'}</span>
+                                  </div>
+                                  <div className="flex items-center gap-2 text-[var(--text-muted)]">
+                                    <span className="text-xs uppercase tracking-wider">SKU:</span>
+                                    <span className="text-white font-mono text-xs">{item.sku || '—'}</span>
+                                  </div>
+                                  <div className="flex items-center gap-2 text-[var(--text-muted)]">
+                                    <span className="text-xs uppercase tracking-wider">Threshold:</span>
+                                    <span className="text-white">{threshold}</span>
+                                  </div>
+                                  {item.type === 'product' && item.primary_image && (
+                                    <div className="flex items-center gap-2">
+                                      <img src={item.primary_image} alt="" className="w-12 h-12 rounded-lg object-cover bg-[var(--surface-dark)]" />
+                                    </div>
+                                  )}
+                                  {item.type === 'part' && item.image_url && (
+                                    <div className="flex items-center gap-2">
+                                      <img src={item.image_url} alt="" className="w-12 h-12 rounded-lg object-cover bg-[var(--surface-dark)]" />
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Stock Details */}
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4 border-t border-[var(--border)]">
+                                  <div className="bg-[var(--surface-dark)] rounded-lg p-4">
+                                    <p className="text-[var(--text-muted)] text-xs uppercase tracking-wider mb-1">Current Stock</p>
+                                    <p className={`text-2xl font-bold ${isOutOfStock ? 'text-red-400' : isCritical ? 'text-orange-400' : isWarning ? 'text-amber-400' : 'text-white'}`}>{stock}</p>
+                                  </div>
+                                  <div className="bg-[var(--surface-dark)] rounded-lg p-4">
+                                    <p className="text-[var(--text-muted)] text-xs uppercase tracking-wider mb-1">Low Stock Threshold</p>
+                                    <p className="text-white text-2xl font-bold">{threshold}</p>
+                                  </div>
+                                  <div className="bg-[var(--surface-dark)] rounded-lg p-4">
+                                    <p className="text-[var(--text-muted)] text-xs uppercase tracking-wider mb-1">Capacity</p>
+                                    <p className="text-white text-2xl font-bold">{Math.round(pct)}%</p>
+                                  </div>
+                                </div>
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </motion.div>
+                    )
+                  })}
+                </div>
+              )}
+
+              {/* Pagination */}
+              {filteredInventory.length > 0 && (
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mt-6 pt-4 border-t border-[var(--border)]">
+                  <p className="text-[var(--text-muted)] text-sm">
+                    Showing {(inventoryPage - 1) * INVENTORY_PAGE_SIZE + 1}–{Math.min(inventoryPage * INVENTORY_PAGE_SIZE, filteredInventory.length)} of {filteredInventory.length} items
+                  </p>
+                  <div className="flex items-center gap-1 mt-4 sm:mt-0">
+                    <button
+                      onClick={() => setInventoryPage(p => Math.max(1, p - 1))}
+                      disabled={inventoryPage === 1}
+                      className="p-2 rounded-lg border border-[var(--border)] text-[var(--text-muted)] hover:text-white hover:border-[var(--gold-primary)] disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    {Array.from({ length: Math.ceil(filteredInventory.length / INVENTORY_PAGE_SIZE) }, (_, i) => i + 1).slice(
+                      Math.max(0, inventoryPage - 3),
+                      Math.min(Math.ceil(filteredInventory.length / INVENTORY_PAGE_SIZE), inventoryPage + 2)
+                    ).map(page => (
+                      <button
+                        key={page}
+                        onClick={() => setInventoryPage(page)}
+                        className={`w-10 h-10 rounded-lg text-sm font-medium transition-all ${inventoryPage === page ? 'bg-[var(--gold-primary)] text-black' : 'border border-[var(--border)] text-[var(--text-muted)] hover:text-white hover:border-[var(--gold-primary)]'}`}
+                      >
+                        {page}
+                      </button>
+                    ))}
+                    <button
+                      onClick={() => setInventoryPage(p => Math.min(Math.ceil(filteredInventory.length / INVENTORY_PAGE_SIZE), p + 1))}
+                      disabled={inventoryPage >= Math.ceil(filteredInventory.length / INVENTORY_PAGE_SIZE)}
+                      className="p-2 rounded-lg border border-[var(--border)] text-[var(--text-muted)] hover:text-white hover:border-[var(--gold-primary)] disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
             </motion.div>
           )}
 
