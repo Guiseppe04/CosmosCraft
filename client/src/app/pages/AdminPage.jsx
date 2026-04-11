@@ -7,7 +7,7 @@ import {
   CheckCircle, XCircle, Plus, RefreshCw, X,
   MessageSquare, Briefcase, ChevronLeft, ChevronRight,
   User, Guitar, Layers, Shield, Tag, AlertCircle, DollarSign,
-  Save, TrendingUp, UsersRound, Clock, Loader2,
+  Save, TrendingUp, UsersRound, Clock, Loader2, Grid3X3, List, MoreHorizontal,
 } from 'lucide-react'
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis,
@@ -111,6 +111,7 @@ export function AdminPage() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [toast, setToast] = useState(null)
+  const [productViewMode, setProductViewMode] = useState('grid') // grid | table
 
   // Modal state
   const [modal, setModal] = useState({ open: false, type: null, data: null })
@@ -397,7 +398,8 @@ export function AdminPage() {
     return map[activeTab]?.()
   }, [activeTab, fetchProducts, fetchParts, fetchCategories, fetchGuitars, fetchUsers, fetchOrders, fetchProjects, fetchAppointments, fetchInventory, fetchSalesReport])
 
-  useSmartPolling(pollingFn, { interval: 5000, maxInterval: 60000, backoffFactor: 1.5, enabled: true })
+  const pollingEnabled = ['dashboard', 'orders', 'inventory', 'projects', 'appointments'].includes(activeTab)
+  useSmartPolling(pollingFn, { interval: 5000, maxInterval: 60000, backoffFactor: 1.5, enabled: pollingEnabled })
 
   const handleRefresh = () => {
     setIsLoading(true)
@@ -837,6 +839,24 @@ export function AdminPage() {
                 </button>
               )}
               {activeTab === 'products-parts' && (
+                <div className="flex rounded-lg border border-[var(--border)] overflow-hidden">
+                  <button
+                    onClick={() => setProductViewMode('grid')}
+                    className={`p-2 ${productViewMode === 'grid' ? 'bg-[var(--gold-primary)] text-black' : 'bg-[var(--surface-dark)] text-[var(--text-muted)] hover:text-white'} transition-colors`}
+                    title="Grid View"
+                  >
+                    <Grid3X3 className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setProductViewMode('table')}
+                    className={`p-2 ${productViewMode === 'table' ? 'bg-[var(--gold-primary)] text-black' : 'bg-[var(--surface-dark)] text-[var(--text-muted)] hover:text-white'} transition-colors`}
+                    title="Table View"
+                  >
+                    <List className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+              {activeTab === 'products-parts' && (
                 <>
                   <button onClick={() => openModal('product')} className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black rounded-xl font-semibold text-sm hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all">
                     <Plus className="w-4 h-4" /> Add Product
@@ -1056,45 +1076,104 @@ export function AdminPage() {
                 <SectionLoader label="Loading products..." />
               ) : visibleProducts.length === 0 ? (
                 <EmptyState icon={Package} label={debouncedSearch ? 'No products match your search/filters' : 'No products found'} action={() => openModal('product')} actionLabel="Add First Product" />
+              ) : productViewMode === 'table' ? (
+                <AdminTable
+                  columns={['Image', 'Product', 'SKU', 'Category', 'Price', 'Stock', 'Status', 'Actions']}
+                  rows={visibleProducts}
+                  renderRow={(p) => (
+                    <>
+                      <td className="py-4 px-6">
+                        {p.primary_image ? (
+                          <img src={p.primary_image} alt={p.name} className="w-12 h-12 object-cover rounded-lg border border-[var(--border)]" loading="lazy" />
+                        ) : (
+                          <div className="w-12 h-12 bg-[var(--bg-primary)] border border-[var(--border)] rounded-lg flex items-center justify-center">
+                            <Package className="w-5 h-5 text-[var(--text-muted)]" />
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-4 px-6">
+                        <p className="text-white font-semibold">{p.name}</p>
+                        {p.description && <p className="text-[var(--text-muted)] text-xs line-clamp-1 mt-1">{p.description}</p>}
+                      </td>
+                      <td className="py-4 px-6 text-[var(--text-muted)] font-mono text-sm">{p.sku || '—'}</td>
+                      <td className="py-4 px-6 text-[var(--text-muted)]">{p.category_name || '—'}</td>
+                      <td className="py-4 px-6 text-[var(--gold-primary)] font-bold">{formatCurrency(p.price, true)}</td>
+                      <td className="py-4 px-6">
+                        <div className="flex items-center gap-2">
+                          <span className={`w-2 h-2 rounded-full ${p.stock > (p.low_stock_threshold || 10) ? 'bg-green-400' : p.stock > 0 ? 'bg-yellow-400' : 'bg-red-400'}`} />
+                          <span className={`${p.stock > (p.low_stock_threshold || 10) ? 'text-green-400' : p.stock > 0 ? 'text-yellow-400' : 'text-red-400'}`}>
+                            {p.stock > 0 ? `${p.stock}` : 'Out of stock'}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="py-4 px-6">
+                        <span className={`px-2 py-1 rounded-full text-xs font-semibold border ${p.is_active ? 'bg-green-500/20 text-green-400 border-green-500/30' : 'bg-gray-500/20 text-gray-400 border-gray-500/30'}`}>
+                          {p.is_active ? 'Active' : 'Inactive'}
+                        </span>
+                      </td>
+                      <td className="py-4 px-6">
+                        <div className="flex items-center gap-2">
+                          <button onClick={() => openModal('product', p)} className="p-2 hover:bg-[var(--gold-primary)]/10 rounded-lg transition-colors" title="Edit">
+                            <Edit className="w-4 h-4 text-[var(--text-muted)]" />
+                          </button>
+                          <button onClick={() => deleteProduct(p.product_id, p.name)} className="p-2 hover:bg-red-500/10 rounded-lg transition-colors" title="Deactivate">
+                            <Trash2 className="w-4 h-4 text-red-400" />
+                          </button>
+                        </div>
+                      </td>
+                    </>
+                  )}
+                  empty={<EmptyState icon={Package} label="No products found" action={() => openModal('product')} actionLabel="Add Product" />}
+                />
               ) : (
                 <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {visibleProducts.map((p) => (
                     <motion.div key={p.product_id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-                      className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6 hover:border-[var(--gold-primary)]/50 hover:-translate-y-0.5 transition-all"
+                      className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl overflow-hidden hover:border-[var(--gold-primary)]/50 hover:-translate-y-1 transition-all group"
                     >
-                      {p.primary_image && (
-                        <img src={p.primary_image} alt={p.name} className="w-full h-36 object-cover rounded-xl mb-4 border border-white/5" loading="lazy" />
-                      )}
-                      <div className="flex items-start justify-between mb-2">
-                        <div>
-                          <p className="text-[var(--text-muted)] text-xs font-mono">{p.sku}</p>
-                          <h3 className="text-white font-semibold line-clamp-1">{p.name}</h3>
-                          <p className="text-[var(--text-muted)] text-xs">{p.category_name || 'Uncategorised'}</p>
-                        </div>
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-semibold border ${p.is_active ? 'bg-green-500/20 text-green-400 border-green-500/30' : 'bg-gray-500/20 text-gray-400 border-gray-500/30'}`}>
-                          {p.is_active ? 'Active' : 'Inactive'}
-                        </span>
-                      </div>
-                      {p.description && (
-                        <p className="text-[var(--text-muted)] text-sm line-clamp-2 mb-3">{p.description}</p>
-                      )}
-                      <div className="flex items-center justify-between mt-2 pt-3 border-t border-[var(--border)]">
-                        <div className="flex flex-col">
-                          <span className="text-[var(--gold-primary)] font-bold text-lg">{formatCurrency(p.price, true)}</span>
-                          <span className={`text-xs ${p.stock > 0 ? 'text-green-400' : 'text-red-400'}`}>
-                            {p.stock > 0 ? `${p.stock} in stock` : 'Out of stock'}
+                      <div className="relative h-44 overflow-hidden bg-[var(--bg-primary)]">
+                        {p.primary_image ? (
+                          <img src={p.primary_image} alt={p.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300" loading="lazy" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <Package className="w-16 h-16 text-[var(--text-muted)]/30" />
+                          </div>
+                        )}
+                        <div className="absolute top-3 right-3">
+                          <span className={`px-2 py-1 rounded-full text-xs font-semibold border ${p.is_active ? 'bg-green-500/80 text-white border-green-400' : 'bg-gray-500/80 text-white border-gray-400'}`}>
+                            {p.is_active ? 'Active' : 'Inactive'}
                           </span>
                         </div>
-                        <div className="flex gap-2">
-                          <button onClick={() => openModal('product', p)} className="p-1.5 hover:bg-[var(--gold-primary)]/10 rounded transition-colors" title="View" aria-label={`View ${p.name}`}>
-                            <Eye className="w-4 h-4 text-[var(--text-muted)]" />
-                          </button>
-                          <button onClick={() => openModal('product', p)} className="p-1.5 hover:bg-[var(--gold-primary)]/10 rounded transition-colors" title="Edit">
-                            <Edit className="w-4 h-4 text-[var(--text-muted)]" />
-                          </button>
-                          <button onClick={() => deleteProduct(p.product_id, p.name)} className="p-1.5 hover:bg-red-500/10 rounded transition-colors" title="Deactivate">
-                            <Trash2 className="w-4 h-4 text-red-400" />
-                          </button>
+                      </div>
+                      <div className="p-5">
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[var(--gold-primary)] text-xs font-mono">{p.sku || 'No SKU'}</p>
+                            <h3 className="text-white font-semibold text-lg truncate">{p.name}</h3>
+                            <p className="text-[var(--text-muted)] text-sm">{p.category_name || 'Uncategorized'}</p>
+                          </div>
+                        </div>
+                        {p.description && (
+                          <p className="text-[var(--text-muted)] text-sm line-clamp-2 mb-3">{p.description}</p>
+                        )}
+                        <div className="flex items-center justify-between mt-4 pt-4 border-t border-[var(--border)]">
+                          <div className="flex flex-col">
+                            <span className="text-white font-bold text-xl">{formatCurrency(p.price, true)}</span>
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className={`w-2 h-2 rounded-full ${p.stock > (p.low_stock_threshold || 10) ? 'bg-green-400' : p.stock > 0 ? 'bg-yellow-400' : 'bg-red-400'}`} />
+                              <span className={`text-xs ${p.stock > (p.low_stock_threshold || 10) ? 'text-green-400' : p.stock > 0 ? 'text-yellow-400' : 'text-red-400'}`}>
+                                {p.stock > 0 ? `${p.stock} in stock` : 'Out of stock'}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="flex gap-1">
+                            <button onClick={() => openModal('product', p)} className="p-2 bg-[var(--bg-primary)] hover:bg-[var(--gold-primary)]/20 rounded-lg transition-colors" title="Edit">
+                              <Edit className="w-4 h-4 text-[var(--text-muted)]" />
+                            </button>
+                            <button onClick={() => deleteProduct(p.product_id, p.name)} className="p-2 bg-[var(--bg-primary)] hover:bg-red-500/20 rounded-lg transition-colors" title="Delete">
+                              <Trash2 className="w-4 h-4 text-red-400" />
+                            </button>
+                          </div>
                         </div>
                       </div>
                     </motion.div>
@@ -1844,11 +1923,12 @@ export function AdminPage() {
                         
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div>
-                            <label className={labelCls}>Category</label>
-                            <select value={form.category_id || ''} onChange={e => setForm(f => ({ ...f, category_id: e.target.value }))} className={inputCls}>
-                              <option value="">— None —</option>
+                            <label className={`${labelCls} ${formErrors.category_id ? 'text-red-400' : ''}`}>Category *</label>
+                            <select value={form.category_id || ''} onChange={e => setForm(f => ({ ...f, category_id: e.target.value }))} className={formErrors.category_id ? inputErrCls : inputCls}>
+                              <option value="">— Select Category —</option>
                               {categories.map(c => <option key={c.category_id} value={c.category_id}>{c.name}</option>)}
                             </select>
+                            {formErrors.category_id && <p className="text-red-400 text-xs mt-1">{formErrors.category_id}</p>}
                           </div>
                           
                           <div className="flex flex-col justify-end pb-2">
@@ -1865,12 +1945,41 @@ export function AdminPage() {
                     {/* Pane 2: Pricing & Stock */}
                     {wizardTab === 'inventory' && (
                       <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
-                        <FormField label="Stock Keeping Unit (SKU) *" value={form.sku || ''} onChange={v => setForm(f => ({ ...f, sku: v }))} placeholder="e.g. GTR-STR-001" error={formErrors.sku} />
-                        
-                        <div className="bg-[var(--bg-primary)] p-5 rounded-2xl border border-[var(--border)]">
-                          <FormField label="Price (₱) *" type="number" value={form.price || ''} onChange={v => setForm(f => ({ ...f, price: v }))} error={formErrors.price} placeholder="e.g. 50000" />
+                        <div className="flex items-start gap-3">
+                          <div className="flex-1">
+                            <FormField label="Stock Keeping Unit (SKU) *" value={form.sku || ''} onChange={v => setForm(f => ({ ...f, sku: v }))} placeholder="e.g. GTR-STR-001" error={formErrors.sku} />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const prefix = 'GTR'
+                              const timestamp = Date.now().toString(36).toUpperCase()
+                              const random = Math.random().toString(36).substring(2, 5).toUpperCase()
+                              setForm(f => ({ ...f, sku: `${prefix}-${timestamp}-${random}` }))
+                            }}
+                            className="mt-8 px-3 py-2 text-xs bg-[var(--bg-primary)] border border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--gold-primary)] hover:border-[var(--gold-primary)] rounded-lg transition-colors"
+                          >
+                            Auto-generate
+                          </button>
                         </div>
                         
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-[var(--bg-primary)] p-5 rounded-2xl border border-[var(--border)]">
+                          <FormField label="Selling Price (₱) *" type="number" value={form.price || ''} onChange={v => setForm(f => ({ ...f, price: v }))} error={formErrors.price} placeholder="e.g. 50000" />
+                          <FormField label="Cost Price (₱)" type="number" value={form.cost_price || ''} onChange={v => setForm(f => ({ ...f, cost_price: v }))} placeholder="e.g. 30000" />
+                        </div>
+                        
+                        {form.price && form.cost_price && (
+                          <div className="bg-[var(--gold-primary)]/10 border border-[var(--gold-primary)]/30 p-4 rounded-xl">
+                            <p className="text-[var(--text-muted)] text-sm">Estimated Profit</p>
+                            <p className="text-[var(--gold-primary)] font-bold text-2xl">
+                              {formatCurrency(Number(form.price) - Number(form.cost_price), true)}
+                            </p>
+                            <p className="text-[var(--text-muted)] text-xs mt-1">
+                              {Math.round(((Number(form.price) - Number(form.cost_price)) / Number(form.price)) * 100)}% margin
+                            </p>
+                          </div>
+                        )}
+
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 bg-[var(--bg-primary)] p-5 rounded-2xl border border-[var(--border)]">
                           <FormField label="Initial Stock Quantity" type="number" value={form.stock ?? ''} onChange={v => setForm(f => ({ ...f, stock: v }))} placeholder="0" />
                           <FormField label="Low Stock Alert Threshold" type="number" value={form.low_stock_threshold ?? ''} onChange={v => setForm(f => ({ ...f, low_stock_threshold: v }))} placeholder="10" />
@@ -1901,6 +2010,20 @@ export function AdminPage() {
                     </div>
                     <div className="flex gap-3">
                       <button onClick={closeModal} className="px-4 py-2 text-[var(--text-muted)] hover:text-white transition-colors font-medium">Cancel</button>
+                      <button 
+                        onClick={async () => {
+                          if (await validateAndSave(PRODUCT_RULES, async () => {
+                            await saveProduct()
+                            setForm({})
+                            setWizardTab('basic')
+                            showToast('Product saved! Add another.')
+                          })()) {}
+                        }} 
+                        disabled={isSaving} 
+                        className="px-4 py-2 border border-[var(--gold-primary)] text-[var(--gold-primary)] hover:bg-[var(--gold-primary)]/10 rounded-lg font-medium transition-colors"
+                      >
+                        Save & Add Another
+                      </button>
                       <button onClick={validateAndSave(PRODUCT_RULES, saveProduct)} disabled={isSaving} className="px-6 py-2 bg-[var(--gold-primary)] text-black font-semibold rounded-lg hover:bg-[var(--gold-secondary)] transition-all flex items-center gap-2 shadow-lg shadow-[var(--gold-primary)]/20">
                         {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save Product'}
                       </button>
@@ -2110,14 +2233,17 @@ export function AdminPage() {
                         <span className="text-white font-medium">{val}</span>
                       </div>
                     ))}
-                    {modal.data.items && modal.data.items.length > 0 && (
+                      {modal.data.items && modal.data.items.length > 0 && (
                       <div className="mt-4">
                         <p className="text-[var(--text-muted)] text-xs uppercase tracking-wider mb-2">Items</p>
                         <div className="space-y-2">
                           {modal.data.items.map((item, idx) => (
                             <div key={idx} className="flex justify-between bg-[var(--bg-primary)] p-3 rounded-lg">
-                              <span className="text-white text-sm">{item.product_name || item.name || 'Item'}</span>
-                              <span className="text-[var(--gold-primary)] text-sm">{formatCurrency(item.price, true)}</span>
+                              <div className="flex flex-col">
+                                <span className="text-white text-sm">{item.product_name || item.name || 'Item'}</span>
+                                <span className="text-[var(--text-muted)] text-xs">Qty: {item.quantity || 1}</span>
+                              </div>
+                              <span className="text-[var(--gold-primary)] text-sm">{formatCurrency(item.unit_price || item.price, true)}</span>
                             </div>
                           ))}
                         </div>

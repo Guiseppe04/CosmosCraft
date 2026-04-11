@@ -23,7 +23,7 @@ exports.googleCallback = asyncHandler(async (req, res, next) => {
 
   const cookieOptions = {
     httpOnly: true,
-    maxAge: 15 * 60 * 1000,
+    maxAge: 7 * 24 * 60 * 60 * 1000,
     ...(process.env.NODE_ENV === 'production' ? {
       secure: true,
       sameSite: 'none'
@@ -48,7 +48,7 @@ exports.facebookCallback = asyncHandler(async (req, res, next) => {
 
   const cookieOptions = {
     httpOnly: true,
-    maxAge: 15 * 60 * 1000,
+    maxAge: 7 * 24 * 60 * 60 * 1000,
     ...(process.env.NODE_ENV === 'production' ? {
       secure: true,
       sameSite: 'none'
@@ -90,7 +90,7 @@ exports.oauthSignup = asyncHandler(async (req, res, next) => {
 
   const cookieOptions = {
     httpOnly: true,
-    maxAge: 15 * 60 * 1000,
+    maxAge: 7 * 24 * 60 * 60 * 1000,
     ...(process.env.NODE_ENV === 'production' ? {
       secure: true,
       sameSite: 'none'
@@ -132,7 +132,7 @@ exports.emailSignup = asyncHandler(async (req, res, next) => {
 
     const cookieOptions = {
       httpOnly: true,
-      maxAge: 15 * 60 * 1000,
+      maxAge: 7 * 24 * 60 * 60 * 1000,
       ...(process.env.NODE_ENV === 'production' ? {
         secure: true,
         sameSite: 'none'
@@ -190,7 +190,7 @@ exports.emailLogin = asyncHandler(async (req, res, next) => {
 
   const cookieOptions = {
     httpOnly: true,
-    maxAge: 15 * 60 * 1000,
+    maxAge: 7 * 24 * 60 * 60 * 1000,
     ...(process.env.NODE_ENV === 'production' ? {
       secure: true,
       sameSite: 'none'
@@ -228,7 +228,7 @@ exports.refreshAccessToken = asyncHandler(async (req, res, next) => {
 
   const cookieOptions = {
     httpOnly: true,
-    maxAge: 15 * 60 * 1000,
+    maxAge: 7 * 24 * 60 * 60 * 1000,
     ...(process.env.NODE_ENV === 'production' ? {
       secure: true,
       sameSite: 'none'

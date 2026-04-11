@@ -420,7 +420,7 @@ exports.getInventorySummary = async () => {
       SUM(stock) as total_units,
       COUNT(DISTINCT CASE WHEN stock <= low_stock_threshold THEN product_id END) as low_stock_count,
       COUNT(DISTINCT CASE WHEN stock = 0 THEN product_id END) as out_of_stock_count,
-      SUM(stock * cost) as total_inventory_value
+      SUM(stock * price) as total_inventory_value
      FROM products 
      WHERE is_active = true`
   );
