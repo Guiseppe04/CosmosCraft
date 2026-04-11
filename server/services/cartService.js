@@ -34,7 +34,7 @@ async function getCartWithItems(userId) {
       p.name AS product_name,
       p.description AS product_description,
       p.price AS product_base_price,
-      p.stock,
+      i.stock,
       p.is_active AS product_is_active,
       (SELECT pi.image_url FROM product_images pi WHERE pi.product_id = p.product_id AND pi.is_primary = true LIMIT 1) AS product_image,
       c.customization_id,
@@ -50,6 +50,7 @@ async function getCartWithItems(userId) {
       c.total_price AS customization_price
     FROM cart_items ci
     LEFT JOIN products p ON ci.product_id = p.product_id
+    LEFT JOIN inventory i ON p.product_id = i.product_id
     LEFT JOIN customizations c ON ci.customization_id = c.customization_id
     WHERE ci.cart_id = $1
     ORDER BY ci.created_at DESC`,
@@ -120,7 +121,9 @@ async function addItemToCart(userId, { product_id, customization_id, quantity = 
 
   if (product_id) {
     const productResult = await pool.query(
-      'SELECT price, stock, is_active FROM products WHERE product_id = $1',
+      `SELECT p.price, p.is_active, i.stock FROM products p
+       LEFT JOIN inventory i ON p.product_id = i.product_id
+       WHERE p.product_id = $1`,
       [product_id]
     );
 
@@ -166,7 +169,8 @@ async function addItemToCart(userId, { product_id, customization_id, quantity = 
 
     if (product_id) {
       const productResult = await pool.query(
-        'SELECT stock FROM products WHERE product_id = $1',
+        `SELECT i.stock FROM inventory i WHERE i.product_id = $1`,
+       
         [product_id]
       );
       if (productResult.rows[0].stock < newQuantity) {
@@ -195,9 +199,10 @@ async function updateCartItem(userId, cartItemId, { quantity }) {
   const cart = await getOrCreateCart(userId);
 
   const itemResult = await pool.query(
-    `SELECT ci.*, p.stock, p.is_active AS product_active
+    `SELECT ci.*, i.stock, p.is_active AS product_active
      FROM cart_items ci
      LEFT JOIN products p ON ci.product_id = p.product_id
+     LEFT JOIN inventory i ON p.product_id = i.product_id
      WHERE ci.cart_item_id = $1 AND ci.cart_id = $2`,
     [cartItemId, cart.cart_id]
   );
@@ -357,7 +362,7 @@ async function convertCartToOrder(userId, { shipping_address_id, notes, payment_
 
       if (item.product) {
         await client.query(
-          'UPDATE products SET stock = stock - $1, updated_at = now() WHERE product_id = $2',
+          'UPDATE inventory SET stock = stock - $1, updated_at = now() WHERE product_id = $2',
           [item.quantity, item.product.product_id]
         );
       }

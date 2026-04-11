@@ -224,7 +224,9 @@ exports.addProductItem = async (saleId, productId, quantity, { discount = 0, not
 
     // Get product
     const productRes = await client.query(
-      'SELECT product_id, name, sku, price, stock FROM products WHERE product_id = $1',
+      `SELECT p.product_id, p.name, p.sku, p.price, i.stock FROM products p
+       LEFT JOIN inventory i ON p.product_id = i.product_id
+       WHERE p.product_id = $1`,
       [productId]
     );
     if (!productRes.rows[0]) {
@@ -454,7 +456,7 @@ exports.checkoutSale = async (
     // Validate and deduct inventory
     for (const item of items) {
       const stock = await client.query(
-        'SELECT stock FROM products WHERE product_id = $1 FOR UPDATE',
+        `SELECT i.stock FROM inventory i WHERE i.product_id = $1 FOR UPDATE`,
         [item.product_id]
       );
 
@@ -471,7 +473,7 @@ exports.checkoutSale = async (
 
       // Deduct stock
       await client.query(
-        'UPDATE products SET stock = stock - $1, updated_at = now() WHERE product_id = $2',
+        'UPDATE inventory SET stock = stock - $1, updated_at = now() WHERE product_id = $2',
         [item.quantity, item.product_id]
       );
 

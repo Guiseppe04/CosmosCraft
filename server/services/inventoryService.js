@@ -13,7 +13,10 @@ const { AppError } = require('../middleware/errorHandler');
  */
 exports.getProductStock = async (productId) => {
   const res = await pool.query(
-    'SELECT product_id, name, sku, stock, low_stock_threshold, is_active FROM products WHERE product_id = $1',
+    `SELECT p.product_id, p.name, p.sku, p.is_active, i.stock, i.low_stock_threshold, i.cost_price
+     FROM products p
+     LEFT JOIN inventory i ON p.product_id = i.product_id
+     WHERE p.product_id = $1`,
     [productId]
   );
   return res.rows[0] || null;
@@ -38,7 +41,7 @@ exports.getProductsWithStock = async ({ search, category_id, low_stock_only } = 
     idx++;
   }
   if (low_stock_only === true || low_stock_only === 'true') {
-    where.push(`p.stock <= COALESCE(p.low_stock_threshold, 10)`);
+    where.push(`i.stock <= COALESCE(i.low_stock_threshold, 10)`);
   }
   where.push(`p.is_active = true`);
 
@@ -46,15 +49,16 @@ exports.getProductsWithStock = async ({ search, category_id, low_stock_only } = 
 
   const res = await pool.query(
     `SELECT 
-      p.product_id, p.sku, p.name, p.description, p.price, p.cost,
-      p.stock, p.low_stock_threshold, p.is_active,
+      p.product_id, p.sku, p.name, p.description, p.price,
+      i.cost_price, i.stock, i.low_stock_threshold, i.inventory_id,
       c.name AS category_name,
-      (p.stock <= COALESCE(p.low_stock_threshold, 10)) AS is_low_stock,
+      (i.stock <= COALESCE(i.low_stock_threshold, 10)) AS is_low_stock,
       (SELECT COUNT(*) FROM inventory_logs WHERE product_id = p.product_id) AS total_movements
      FROM products p
      LEFT JOIN categories c ON p.category_id = c.category_id
+     LEFT JOIN inventory i ON p.product_id = i.product_id
      ${condition}
-     ORDER BY p.stock ASC, p.name ASC`,
+     ORDER BY i.stock ASC, p.name ASC`,
     params
   );
   return res.rows;
@@ -75,21 +79,32 @@ exports.addStock = async (productId, quantity, { notes = null, createdBy = null 
   try {
     await client.query('BEGIN');
 
-    // Get product
-    const productRes = await client.query(
-      'SELECT stock FROM products WHERE product_id = $1 FOR UPDATE',
+    // Get inventory lock for atomicity
+    const inventoryRes = await client.query(
+      'SELECT product_id, stock FROM inventory WHERE product_id = $1 FOR UPDATE',
       [productId]
     );
-    if (!productRes.rows[0]) {
-      throw new AppError('Product not found', 404);
+    
+    if (!inventoryRes.rows[0]) {
+      // Create inventory record if it doesn't exist
+      await client.query(
+        'INSERT INTO inventory (product_id, stock) VALUES ($1, $2)',
+        [productId, quantity]
+      );
     }
 
-    // Update stock
+    // Update stock in inventory table
     const updateRes = await client.query(
-      `UPDATE products SET stock = stock + $1, updated_at = now() 
+      `UPDATE inventory SET stock = stock + $1, updated_at = now() 
        WHERE product_id = $2 
-       RETURNING product_id, stock, name, sku`,
+       RETURNING product_id, stock`,
       [quantity, productId]
+    );
+
+    // Get product info for response
+    const productRes = await client.query(
+      'SELECT product_id, name, sku FROM products WHERE product_id = $1',
+      [productId]
     );
 
     // Create log
@@ -103,7 +118,7 @@ exports.addStock = async (productId, quantity, { notes = null, createdBy = null 
     await client.query('COMMIT');
 
     return {
-      product: updateRes.rows[0],
+      product: { ...productRes.rows[0], stock: updateRes.rows[0].stock },
       log: logRes.rows[0]
     };
   } catch (err) {
@@ -137,16 +152,17 @@ exports.deductStock = async (
   try {
     await client.query('BEGIN');
 
-    // Get product and validate sufficient stock
-    const productRes = await client.query(
-      'SELECT stock FROM products WHERE product_id = $1 FOR UPDATE',
+    // Get inventory and validate sufficient stock
+    const inventoryRes = await client.query(
+      'SELECT stock FROM inventory WHERE product_id = $1 FOR UPDATE',
       [productId]
     );
-    if (!productRes.rows[0]) {
-      throw new AppError('Product not found', 404);
+    
+    if (!inventoryRes.rows[0]) {
+      throw new AppError('Product inventory not found', 404);
     }
 
-    const currentStock = productRes.rows[0].stock;
+    const currentStock = inventoryRes.rows[0].stock;
     if (currentStock < quantity) {
       throw new AppError(
         `Insufficient stock. Available: ${currentStock}, Requested: ${quantity}`,
@@ -154,12 +170,18 @@ exports.deductStock = async (
       );
     }
 
-    // Update stock
+    // Update stock in inventory table
     const updateRes = await client.query(
-      `UPDATE products SET stock = stock - $1, updated_at = now() 
+      `UPDATE inventory SET stock = stock - $1, updated_at = now() 
        WHERE product_id = $2 
-       RETURNING product_id, stock, name, sku`,
+       RETURNING product_id, stock`,
       [quantity, productId]
+    );
+
+    // Get product info for response
+    const productRes = await client.query(
+      'SELECT product_id, name, sku FROM products WHERE product_id = $1',
+      [productId]
     );
 
     // Create log
@@ -173,7 +195,7 @@ exports.deductStock = async (
     // Check for low stock alert
     const newStock = updateRes.rows[0].stock;
     const thresholdRes = await client.query(
-      'SELECT low_stock_threshold FROM products WHERE product_id = $1',
+      'SELECT low_stock_threshold FROM inventory WHERE product_id = $1',
       [productId]
     );
     const threshold = thresholdRes.rows[0]?.low_stock_threshold || 10;
@@ -189,7 +211,7 @@ exports.deductStock = async (
     await client.query('COMMIT');
 
     return {
-      product: updateRes.rows[0],
+      product: { ...productRes.rows[0], stock: updateRes.rows[0].stock },
       log: logRes.rows[0]
     };
   } catch (err) {
@@ -215,29 +237,36 @@ exports.adjustStock = async (productId, quantity, { notes = null, createdBy = nu
   try {
     await client.query('BEGIN');
 
-    // Get product
-    const productRes = await client.query(
-      'SELECT stock FROM products WHERE product_id = $1 FOR UPDATE',
+    // Get inventory
+    const inventoryRes = await client.query(
+      'SELECT stock FROM inventory WHERE product_id = $1 FOR UPDATE',
       [productId]
     );
-    if (!productRes.rows[0]) {
-      throw new AppError('Product not found', 404);
+    
+    if (!inventoryRes.rows[0]) {
+      throw new AppError('Product inventory not found', 404);
     }
 
-    const newStock = productRes.rows[0].stock + quantity;
+    const newStock = inventoryRes.rows[0].stock + quantity;
     if (newStock < 0) {
       throw new AppError(
-        `Adjustment would result in negative stock. Current: ${productRes.rows[0].stock}, Adjustment: ${quantity}`,
+        `Adjustment would result in negative stock. Current: ${inventoryRes.rows[0].stock}, Adjustment: ${quantity}`,
         400
       );
     }
 
-    // Update stock
+    // Update stock in inventory table
     const updateRes = await client.query(
-      `UPDATE products SET stock = stock + $1, updated_at = now() 
+      `UPDATE inventory SET stock = stock + $1, updated_at = now() 
        WHERE product_id = $2 
-       RETURNING product_id, stock, name, sku`,
+       RETURNING product_id, stock`,
       [quantity, productId]
+    );
+
+    // Get product info for response
+    const productRes = await client.query(
+      'SELECT product_id, name, sku FROM products WHERE product_id = $1',
+      [productId]
     );
 
     // Create log
@@ -251,7 +280,7 @@ exports.adjustStock = async (productId, quantity, { notes = null, createdBy = nu
     await client.query('COMMIT');
 
     return {
-      product: updateRes.rows[0],
+      product: { ...productRes.rows[0], stock: updateRes.rows[0].stock },
       log: logRes.rows[0]
     };
   } catch (err) {
@@ -416,13 +445,14 @@ exports.markAlertAsRead = async (alertId) => {
 exports.getInventorySummary = async () => {
   const res = await pool.query(
     `SELECT 
-      COUNT(DISTINCT product_id) as total_products,
-      SUM(stock) as total_units,
-      COUNT(DISTINCT CASE WHEN stock <= low_stock_threshold THEN product_id END) as low_stock_count,
-      COUNT(DISTINCT CASE WHEN stock = 0 THEN product_id END) as out_of_stock_count,
-      SUM(stock * price) as total_inventory_value
-     FROM products 
-     WHERE is_active = true`
+      COUNT(DISTINCT p.product_id) as total_products,
+      SUM(i.stock) as total_units,
+      COUNT(DISTINCT CASE WHEN i.stock <= i.low_stock_threshold THEN p.product_id END) as low_stock_count,
+      COUNT(DISTINCT CASE WHEN i.stock = 0 THEN p.product_id END) as out_of_stock_count,
+      SUM(i.stock * p.price) as total_inventory_value
+     FROM products p
+     LEFT JOIN inventory i ON p.product_id = i.product_id
+     WHERE p.is_active = true`
   );
   
   return res.rows[0] || {
@@ -446,11 +476,21 @@ exports.updateProductStock = async (productId, newStock) => {
   }
 
   const res = await pool.query(
-    `UPDATE products SET stock = $1, updated_at = now() 
+    `UPDATE inventory SET stock = $1, updated_at = now() 
      WHERE product_id = $2 
-     RETURNING product_id, stock, name, sku`,
+     RETURNING product_id, stock`,
     [newStock, productId]
   );
 
-  return res.rows[0] || null;
+  if (!res.rows[0]) {
+    throw new AppError('Product inventory not found', 404);
+  }
+
+  // Get product info for response
+  const productRes = await pool.query(
+    'SELECT product_id, name, sku FROM products WHERE product_id = $1',
+    [productId]
+  );
+
+  return { ...productRes.rows[0], stock: res.rows[0].stock } || null;
 };

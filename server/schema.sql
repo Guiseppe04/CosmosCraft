@@ -184,10 +184,7 @@ CREATE TABLE products (
     name VARCHAR(150) NOT NULL,
     description TEXT,
     price NUMERIC(12, 2) NOT NULL CHECK (price >= 0),
-    cost NUMERIC(12, 2) CHECK (cost >= 0),
     category_id INT,
-    stock INT NOT NULL DEFAULT 0 CHECK (stock >= 0),
-    low_stock_threshold INT DEFAULT 10,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -198,6 +195,26 @@ CREATE TABLE products (
 CREATE INDEX idx_products_sku ON products(sku);
 CREATE INDEX idx_products_category_id ON products(category_id);
 CREATE INDEX idx_products_is_active ON products(is_active);
+
+
+-- =============================================
+-- 7A. INVENTORY (Product Stock & Cost)
+-- =============================================
+
+CREATE TABLE inventory (
+    inventory_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    product_id UUID NOT NULL UNIQUE,
+    cost_price NUMERIC(12, 2) CHECK (cost_price >= 0),
+    stock INT NOT NULL DEFAULT 0 CHECK (stock >= 0),
+    low_stock_threshold INT DEFAULT 10,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    
+    FOREIGN KEY (product_id) REFERENCES products(product_id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_inventory_product_id ON inventory(product_id);
+CREATE INDEX idx_inventory_stock ON inventory(stock);
 
 
 -- =============================================

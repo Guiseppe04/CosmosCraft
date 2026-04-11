@@ -112,9 +112,11 @@ export function AdminPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [toast, setToast] = useState(null)
   const [productViewMode, setProductViewMode] = useState('grid') // grid | table
+  const [productActiveTab, setProductActiveTab] = useState('active') // all | active | inactive
 
   // Modal state
   const [modal, setModal] = useState({ open: false, type: null, data: null })
+  const [showGuitarTypeSelector, setShowGuitarTypeSelector] = useState(false)
 
   // Confirm dialog state
   const [confirm, setConfirm] = useState({ open: false, title: '', description: '', onConfirm: null, isBusy: false, variant: 'danger' })
@@ -436,7 +438,16 @@ export function AdminPage() {
       if (form.image_file) {
         finalImageUrl = await uploadToCloudinary(form.image_file)
       }
-      const payload = { ...form, image_url: finalImageUrl }
+      
+      // Ensure numbers are properly converted
+      const payload = {
+        ...form,
+        image_url: finalImageUrl,
+        price: Number(form.price),
+        cost_price: form.cost_price ? Number(form.cost_price) : null,
+        stock: form.stock ? Number(form.stock) : 0,
+        low_stock_threshold: form.low_stock_threshold ? Number(form.low_stock_threshold) : 10,
+      }
       delete payload.image_file
       delete payload.preview_url
 
@@ -872,7 +883,7 @@ export function AdminPage() {
                 </button>
               )}
               {activeTab === 'projects' && (
-                <button onClick={() => openModal('project')} className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black rounded-xl font-semibold text-sm hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all">
+                <button onClick={() => setShowGuitarTypeSelector(true)} className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black rounded-xl font-semibold text-sm hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all">
                   <Plus className="w-4 h-4" /> New Project
                 </button>
               )}
@@ -1038,22 +1049,44 @@ export function AdminPage() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => setProductQuery({ page: 1, pageSize: productQuery.pageSize, sortBy: 'created_at', sortDir: 'desc', category_id: '', is_active: '', min_price: '', max_price: '' })}
+                  onClick={() => {
+                    setProductActiveTab('active')
+                    setProductQuery({ page: 1, pageSize: productQuery.pageSize, sortBy: 'created_at', sortDir: 'desc', category_id: '', is_active: 'true', min_price: '', max_price: '' })
+                  }}
                   className="px-3 py-2 rounded-lg border border-[var(--border)] text-sm text-[var(--text-muted)] hover:text-white hover:border-[var(--gold-primary)] transition-colors"
                 >
                   Clear product filters
                 </button>
               </div>
+              {/* Product Activity Tabs */}
+              <div className="flex border-b border-[var(--border)] mb-6 gap-4 pb-0">
+                {[{ id: 'all', label: 'All Products' }, { id: 'active', label: 'Active' }, { id: 'inactive', label: 'Inactive' }].map(tab => {
+                  const tabIsActive = productActiveTab === tab.id
+                  const tabCount = tab.id === 'all' ? productsPagination.total : tab.id === 'active' ? (visibleProducts.filter(p => p.is_active).length) : (visibleProducts.filter(p => !p.is_active).length)
+                  return (
+                    <button key={tab.id}
+                      onClick={() => {
+                        setProductActiveTab(tab.id)
+                        const isActiveValue = tab.id === 'all' ? '' : tab.id === 'active' ? 'true' : 'false'
+                        setProductQuery((prev) => ({ ...prev, page: 1, is_active: isActiveValue }))
+                      }}
+                      className={`px-4 py-3 text-sm font-semibold uppercase tracking-wider transition-all relative ${tabIsActive ? 'text-[var(--gold-primary)]' : 'text-[var(--text-muted)] hover:text-white'}`}
+                    >
+                      {tab.label}
+                      {tabIsActive && (
+                        <motion.div layoutId="product-tab-indicator" className="absolute bottom-0 left-0 right-0 h-[2px] bg-[var(--gold-primary)]" />
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+
+              {/* Product Filter Bar */}
               <div className="mb-6 p-4 rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)]/70 backdrop-blur-sm">
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3">
                   <select aria-label="Filter products by category" value={productQuery.category_id} onChange={(e) => setProductQuery((prev) => ({ ...prev, page: 1, category_id: e.target.value }))} className={inputCls}>
                     <option value="">All categories</option>
                     {visibleCategories.map((c) => <option key={c.category_id} value={c.category_id}>{c.name}</option>)}
-                  </select>
-                  <select aria-label="Filter products by status" value={productQuery.is_active} onChange={(e) => setProductQuery((prev) => ({ ...prev, page: 1, is_active: e.target.value }))} className={inputCls}>
-                    <option value="">All statuses</option>
-                    <option value="true">Active</option>
-                    <option value="false">Inactive</option>
                   </select>
                   <select aria-label="Sort products" value={`${productQuery.sortBy}:${productQuery.sortDir}`} onChange={(e) => {
                     const [sortBy, sortDir] = e.target.value.split(':')
@@ -1078,7 +1111,7 @@ export function AdminPage() {
                 <EmptyState icon={Package} label={debouncedSearch ? 'No products match your search/filters' : 'No products found'} action={() => openModal('product')} actionLabel="Add First Product" />
               ) : productViewMode === 'table' ? (
                 <AdminTable
-                  columns={['Image', 'Product', 'SKU', 'Category', 'Price', 'Stock', 'Status', 'Actions']}
+                  columns={['Image', 'Product', 'SKU', 'Price', 'Cost', 'Stock Status', 'Actions']}
                   rows={visibleProducts}
                   renderRow={(p) => (
                     <>
@@ -1093,23 +1126,17 @@ export function AdminPage() {
                       </td>
                       <td className="py-4 px-6">
                         <p className="text-white font-semibold">{p.name}</p>
-                        {p.description && <p className="text-[var(--text-muted)] text-xs line-clamp-1 mt-1">{p.description}</p>}
                       </td>
                       <td className="py-4 px-6 text-[var(--text-muted)] font-mono text-sm">{p.sku || '—'}</td>
-                      <td className="py-4 px-6 text-[var(--text-muted)]">{p.category_name || '—'}</td>
-                      <td className="py-4 px-6 text-[var(--gold-primary)] font-bold">{formatCurrency(p.price, true)}</td>
+                      <td className="py-4 px-6 text-[var(--gold-primary)] font-bold">{formatCurrency(p.price)}</td>
+                      <td className="py-4 px-6 text-[var(--text-muted)] text-sm">{p.cost_price ? formatCurrency(p.cost_price) : '—'}</td>
                       <td className="py-4 px-6">
-                        <div className="flex items-center gap-2">
-                          <span className={`w-2 h-2 rounded-full ${p.stock > (p.low_stock_threshold || 10) ? 'bg-green-400' : p.stock > 0 ? 'bg-yellow-400' : 'bg-red-400'}`} />
-                          <span className={`${p.stock > (p.low_stock_threshold || 10) ? 'text-green-400' : p.stock > 0 ? 'text-yellow-400' : 'text-red-400'}`}>
-                            {p.stock > 0 ? `${p.stock}` : 'Out of stock'}
+                        <div className="flex items-center gap-2" title={`Stock: ${p.stock}`}>
+                          <span className={`w-2 h-2 rounded-full ${p.stock > (p.low_stock_threshold || 10) ? 'bg-green-400' : p.stock > 0 ? 'bg-amber-400' : 'bg-red-400'}`} />
+                          <span className={`text-sm font-semibold ${p.stock > (p.low_stock_threshold || 10) ? 'text-green-400' : p.stock > 0 ? 'text-amber-400' : 'text-red-400'}`}>
+                            {p.stock > (p.low_stock_threshold || 10) ? 'In Stock' : p.stock > 0 ? 'Low Stock' : 'Out of Stock'}
                           </span>
                         </div>
-                      </td>
-                      <td className="py-4 px-6">
-                        <span className={`px-2 py-1 rounded-full text-xs font-semibold border ${p.is_active ? 'bg-green-500/20 text-green-400 border-green-500/30' : 'bg-gray-500/20 text-gray-400 border-gray-500/30'}`}>
-                          {p.is_active ? 'Active' : 'Inactive'}
-                        </span>
                       </td>
                       <td className="py-4 px-6">
                         <div className="flex items-center gap-2">
@@ -1127,57 +1154,73 @@ export function AdminPage() {
                 />
               ) : (
                 <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {visibleProducts.map((p) => (
-                    <motion.div key={p.product_id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-                      className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl overflow-hidden hover:border-[var(--gold-primary)]/50 hover:-translate-y-1 transition-all group"
-                    >
-                      <div className="relative h-44 overflow-hidden bg-[var(--bg-primary)]">
-                        {p.primary_image ? (
-                          <img src={p.primary_image} alt={p.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300" loading="lazy" />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center">
-                            <Package className="w-16 h-16 text-[var(--text-muted)]/30" />
-                          </div>
-                        )}
-                        <div className="absolute top-3 right-3">
-                          <span className={`px-2 py-1 rounded-full text-xs font-semibold border ${p.is_active ? 'bg-green-500/80 text-white border-green-400' : 'bg-gray-500/80 text-white border-gray-400'}`}>
-                            {p.is_active ? 'Active' : 'Inactive'}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="p-5">
-                        <div className="flex items-start justify-between mb-2">
-                          <div className="min-w-0 flex-1">
-                            <p className="text-[var(--gold-primary)] text-xs font-mono">{p.sku || 'No SKU'}</p>
-                            <h3 className="text-white font-semibold text-lg truncate">{p.name}</h3>
-                            <p className="text-[var(--text-muted)] text-sm">{p.category_name || 'Uncategorized'}</p>
+                  {visibleProducts.map((p) => {
+                    const profitMargin = p.price && p.cost_price && p.cost_price > 0 && p.cost_price < p.price 
+                      ? Math.round(((p.price - p.cost_price) / p.price) * 100)
+                      : null
+                    const hasNoMargin = p.price && p.cost_price && p.cost_price >= p.price
+                    
+                    return (
+                      <motion.div key={p.product_id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+                        className={`bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl overflow-hidden hover:border-[var(--gold-primary)]/50 hover:-translate-y-1 transition-all group ${!p.is_active ? 'opacity-60 filter grayscale-[0.4]' : ''}`}
+                      >
+                        <div className="relative h-44 overflow-hidden bg-[var(--bg-primary)]">
+                          {p.primary_image ? (
+                            <img src={p.primary_image} alt={p.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300" loading="lazy" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center">
+                              <Package className="w-16 h-16 text-[var(--text-muted)]/30" />
+                            </div>
+                          )}
+                          <div className="absolute top-3 right-3">
+                            <span className={`px-2 py-1 rounded-full text-xs font-semibold border ${p.is_active ? 'bg-green-500/80 text-white border-green-400' : 'bg-gray-500/80 text-white border-gray-400'}`}>
+                              {p.is_active ? 'Active' : 'Inactive'}
+                            </span>
                           </div>
                         </div>
-                        {p.description && (
-                          <p className="text-[var(--text-muted)] text-sm line-clamp-2 mb-3">{p.description}</p>
-                        )}
-                        <div className="flex items-center justify-between mt-4 pt-4 border-t border-[var(--border)]">
-                          <div className="flex flex-col">
-                            <span className="text-white font-bold text-xl">{formatCurrency(p.price, true)}</span>
-                            <div className="flex items-center gap-2 mt-1">
-                              <span className={`w-2 h-2 rounded-full ${p.stock > (p.low_stock_threshold || 10) ? 'bg-green-400' : p.stock > 0 ? 'bg-yellow-400' : 'bg-red-400'}`} />
-                              <span className={`text-xs ${p.stock > (p.low_stock_threshold || 10) ? 'text-green-400' : p.stock > 0 ? 'text-yellow-400' : 'text-red-400'}`}>
-                                {p.stock > 0 ? `${p.stock} in stock` : 'Out of stock'}
-                              </span>
+                        <div className="p-5">
+                          <div className="flex items-start justify-between mb-3">
+                            <div className="min-w-0 flex-1">
+                              <p className="text-[var(--gold-primary)] text-xs font-mono">{p.sku || 'No SKU'}</p>
+                              <h3 className="text-white font-semibold text-lg truncate">{p.name}</h3>
                             </div>
                           </div>
-                          <div className="flex gap-1">
-                            <button onClick={() => openModal('product', p)} className="p-2 bg-[var(--bg-primary)] hover:bg-[var(--gold-primary)]/20 rounded-lg transition-colors" title="Edit">
-                              <Edit className="w-4 h-4 text-[var(--text-muted)]" />
-                            </button>
-                            <button onClick={() => deleteProduct(p.product_id, p.name)} className="p-2 bg-[var(--bg-primary)] hover:bg-red-500/20 rounded-lg transition-colors" title="Delete">
-                              <Trash2 className="w-4 h-4 text-red-400" />
-                            </button>
+
+                          <div className="flex items-center justify-between mt-4 pt-4 border-t border-[var(--border)]">
+                            <div className="flex flex-col gap-1">
+                              <div className="flex items-center gap-2">
+                                <span className="text-white font-bold text-xl">{formatCurrency(p.price)}</span>
+                                {profitMargin !== null && !hasNoMargin && (
+                                  <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 text-xs font-semibold rounded-full">
+                                    +{profitMargin}% margin
+                                  </span>
+                                )}
+                                {hasNoMargin && (
+                                  <span className="px-2 py-0.5 bg-red-500/10 text-red-400 text-xs font-semibold rounded-full">
+                                    No margin
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className={`w-2 h-2 rounded-full ${p.stock > (p.low_stock_threshold || 10) ? 'bg-green-400' : p.stock > 0 ? 'bg-amber-400' : 'bg-red-400'}`} />
+                                <span className={`text-xs font-semibold ${p.stock > (p.low_stock_threshold || 10) ? 'text-green-400' : p.stock > 0 ? 'text-amber-400' : 'text-red-400'}`}>
+                                  {p.stock > (p.low_stock_threshold || 10) ? 'In Stock' : p.stock > 0 ? 'Low Stock' : 'Out of Stock'}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="flex gap-1">
+                              <button onClick={() => openModal('product', p)} className="p-2 bg-[var(--bg-primary)] hover:bg-[var(--gold-primary)]/20 rounded-lg transition-colors" title="Edit">
+                                <Edit className="w-4 h-4 text-[var(--text-muted)]" />
+                              </button>
+                              <button onClick={() => deleteProduct(p.product_id, p.name)} className="p-2 bg-[var(--bg-primary)] hover:bg-red-500/20 rounded-lg transition-colors" title="Delete">
+                                <Trash2 className="w-4 h-4 text-red-400" />
+                              </button>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </motion.div>
-                  ))}
+                      </motion.div>
+                    )
+                  })}
                 </div>
               )}
               <PaginationBar
@@ -1507,7 +1550,7 @@ export function AdminPage() {
                       )}
                       <div className="flex flex-col gap-2 pt-4 border-t border-[var(--border)]">
                         <button onClick={() => openModal('project_tasks', project)} className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-[var(--gold-primary)]/10 border border-[var(--gold-primary)]/30 rounded-lg text-[var(--gold-primary)] text-sm hover:bg-[var(--gold-primary)]/20 transition-all">
-                          <Activity className="w-4 h-4" /> Tasks
+                          <Activity className="w-4 h-4" /> Tasks & Parts
                         </button>
                       </div>
                       <div className="flex gap-2 pt-2">
@@ -1892,8 +1935,16 @@ export function AdminPage() {
               {/* Project Tasks */}
               {modal.type === 'project_tasks' && modal.data && (
                 <>
-                  <ModalHeader title="Manage Project Tasks" onClose={closeModal} />
-                  <div className="mt-6"><ProjectTaskTracker projectId={modal.data.project_id} isAdmin={true} /></div>
+                  <ModalHeader title="Project Tasks & Parts" onClose={closeModal} />
+                  <div className="mt-6">
+                    <ProjectTaskTracker 
+                      projectId={modal.data.project_id} 
+                      projectName={modal.data.name || modal.data.title}
+                      isAdmin={true}
+                      parts={visibleParts}
+                      projectData={modal.data}
+                    />
+                  </div>
                 </>
               )}
 
@@ -1968,15 +2019,34 @@ export function AdminPage() {
                           <FormField label="Cost Price (₱)" type="number" value={form.cost_price || ''} onChange={v => setForm(f => ({ ...f, cost_price: v }))} placeholder="e.g. 30000" />
                         </div>
                         
-                        {form.price && form.cost_price && (
+                        {form.price !== '' && form.price !== null && form.price !== undefined && (
                           <div className="bg-[var(--gold-primary)]/10 border border-[var(--gold-primary)]/30 p-4 rounded-xl">
-                            <p className="text-[var(--text-muted)] text-sm">Estimated Profit</p>
-                            <p className="text-[var(--gold-primary)] font-bold text-2xl">
-                              {formatCurrency(Number(form.price) - Number(form.cost_price), true)}
-                            </p>
-                            <p className="text-[var(--text-muted)] text-xs mt-1">
-                              {Math.round(((Number(form.price) - Number(form.cost_price)) / Number(form.price)) * 100)}% margin
-                            </p>
+                            <p className="text-[var(--text-muted)] text-sm">Estimated Profit per Unit</p>
+                            <div className="flex items-baseline gap-3">
+                              <p className="text-[var(--gold-primary)] font-bold text-2xl">
+                                {(() => {
+                                  const sellingPrice = parseFloat(form.price)
+                                  const costPrice = parseFloat(form.cost_price) || 0
+                                  
+                                  if (isNaN(sellingPrice)) return '₱0.00'
+                                  
+                                  const profitAmount = sellingPrice - costPrice
+                                  return formatCurrency(profitAmount, false)
+                                })()}
+                              </p>
+                              <p className="text-[var(--text-muted)] text-xs">
+                                ({(() => {
+                                  const sellingPrice = parseFloat(form.price)
+                                  const costPrice = parseFloat(form.cost_price) || 0
+                                  
+                                  if (isNaN(sellingPrice) || sellingPrice <= 0) return '0% margin'
+                                  
+                                  const profitAmount = sellingPrice - costPrice
+                                  const marginPercent = Math.round((profitAmount / sellingPrice) * 100)
+                                  return `${marginPercent}% margin`
+                                })()})
+                              </p>
+                            </div>
                           </div>
                         )}
 
@@ -2339,6 +2409,89 @@ export function AdminPage() {
                 </>
               )}
 
+            </motion.div>
+          </motion.div>
+        )}
+
+        {/* Guitar Type Selector Modal */}
+        {showGuitarTypeSelector && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+            onClick={(e) => { if (e.target === e.currentTarget) setShowGuitarTypeSelector(false) }}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-3xl p-8 w-full max-w-2xl shadow-2xl"
+            >
+              <div className="mb-6">
+                <h2 className="text-2xl font-bold text-white mb-2">Select Guitar Type</h2>
+                <p className="text-[var(--text-muted)]">Choose the guitar type you want to customize</p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Electric */}
+                <button
+                  onClick={() => {
+                    setShowGuitarTypeSelector(false)
+                    navigate('/customize?type=electric')
+                  }}
+                  className="p-6 rounded-2xl border-2 border-[var(--border)] hover:border-[var(--gold-primary)] bg-[var(--bg-primary)] hover:bg-[var(--gold-primary)]/5 transition-all group"
+                >
+                  <Guitar className="w-8 h-8 text-[var(--gold-primary)] mb-3 group-hover:scale-110 transition-transform" />
+                  <h3 className="text-white font-semibold text-lg mb-1">Electric</h3>
+                  <p className="text-[var(--text-muted)] text-sm">Build your custom electric guitar</p>
+                </button>
+
+                {/* Bass */}
+                <button
+                  onClick={() => {
+                    setShowGuitarTypeSelector(false)
+                    navigate('/customize-bass')
+                  }}
+                  className="p-6 rounded-2xl border-2 border-[var(--border)] hover:border-[var(--gold-primary)] bg-[var(--bg-primary)] hover:bg-[var(--gold-primary)]/5 transition-all group"
+                >
+                  <Guitar className="w-8 h-8 text-[var(--gold-primary)] mb-3 group-hover:scale-110 transition-transform" />
+                  <h3 className="text-white font-semibold text-lg mb-1">Bass</h3>
+                  <p className="text-[var(--text-muted)] text-sm">Design your custom bass guitar</p>
+                </button>
+
+                {/* Ukulele */}
+                <button
+                  onClick={() => {
+                    setShowGuitarTypeSelector(false)
+                    navigate('/customize?type=ukulele')
+                  }}
+                  className="p-6 rounded-2xl border-2 border-[var(--border)] hover:border-[var(--gold-primary)] bg-[var(--bg-primary)] hover:bg-[var(--gold-primary)]/5 transition-all group"
+                >
+                  <Guitar className="w-8 h-8 text-[var(--gold-primary)] mb-3 group-hover:scale-110 transition-transform" />
+                  <h3 className="text-white font-semibold text-lg mb-1">Ukulele</h3>
+                  <p className="text-[var(--text-muted)] text-sm">Create your unique ukulele</p>
+                </button>
+
+                {/* Acoustic */}
+                <button
+                  onClick={() => {
+                    setShowGuitarTypeSelector(false)
+                    navigate('/customize?type=acoustic')
+                  }}
+                  className="p-6 rounded-2xl border-2 border-[var(--border)] opacity-50 cursor-not-allowed bg-[var(--bg-primary)]"
+                  disabled
+                >
+                  <Guitar className="w-8 h-8 text-[var(--text-muted)] mb-3" />
+                  <h3 className="text-[var(--text-muted)] font-semibold text-lg mb-1">Acoustic</h3>
+                  <p className="text-[var(--text-muted)] text-sm text-xs">Coming soon</p>
+                </button>
+              </div>
+
+              <div className="mt-6 flex justify-end">
+                <button
+                  onClick={() => setShowGuitarTypeSelector(false)}
+                  className="px-4 py-2 rounded-lg border border-[var(--border)] text-[var(--text-muted)] hover:text-white transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
             </motion.div>
           </motion.div>
         )}
