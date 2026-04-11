@@ -263,6 +263,9 @@ export function SignupPage() {
           transition={{ duration: 0.5 }}
           className="mb-10 text-center"
         >
+          <div className="flex justify-center mb-6">
+            <img src="/logo-cosmos.png" alt="CosmosCraft Logo" className="h-20 w-auto object-contain" />
+          </div>
           <h1 className="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-white to-[var(--text-muted)] tracking-tight mb-3">
             Join CosmosCraft
           </h1>

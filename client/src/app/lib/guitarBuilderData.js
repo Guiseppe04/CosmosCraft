@@ -31,6 +31,7 @@ export const BODY_OPTIONS = {
     note: 'Balanced bolt-on body',
     bodySrc: asset('rs/bodies/front/masks/bodymask.png'),
     price: 0,
+    specs: { size: '', dimensions: '', material: '', notes: '' },
     types: ['electric'],
   },
   solo: {
@@ -38,6 +39,7 @@ export const BODY_OPTIONS = {
     note: 'Modern singlecut body',
     bodySrc: asset('solo/bodies/front/masks/bv-bodymask.png'),
     price: 150,
+    specs: { size: '', dimensions: '', material: '', notes: '' },
     types: ['electric'],
   },
   dc: {
@@ -45,6 +47,7 @@ export const BODY_OPTIONS = {
     note: 'Double-cut access',
     bodySrc: asset('dc/bodies/front/masks/bodymask.png'),
     price: 180,
+    specs: { size: '', dimensions: '', material: '', notes: '' },
     types: ['electric'],
   },
   delos: {
@@ -52,6 +55,7 @@ export const BODY_OPTIONS = {
     note: 'Contoured body build',
     bodySrc: asset('delos/bodies/front/masks/bodymask.png'),
     price: 220,
+    specs: { size: '', dimensions: '', material: '', notes: '' },
     types: ['electric'],
   },
   precision: {
@@ -59,6 +63,7 @@ export const BODY_OPTIONS = {
     note: 'Classic precision bass',
     bodySrc: asset('rs/bodies/front/masks/bodymask.png'),
     price: 0,
+    specs: { size: '', dimensions: '', material: '', notes: '' },
     types: ['bass'],
   },
   jazz: {
@@ -66,6 +71,7 @@ export const BODY_OPTIONS = {
     note: 'Modern jazz bass',
     bodySrc: asset('solo/bodies/front/masks/bv-bodymask.png'),
     price: 150,
+    specs: { size: '', dimensions: '', material: '', notes: '' },
     types: ['bass'],
   },
 }
@@ -75,31 +81,31 @@ export const BODY_WOOD_OPTIONS = {
     label: 'Maple',
     note: 'Bright even grain',
     texture: woodAsset('maple.jpg'),
-    price: 0,
+    price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
   rosewood: {
     label: 'Rosewood',
     note: 'Warm dark grain',
     texture: woodAsset('rosewood.jpg'),
-    price: 0,
+    price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
   ebony: {
     label: 'Ebony',
     note: 'Deep dark grain',
     texture: woodAsset('ebony.jpg'),
-    price: 0,
+    price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
   pauFerro: {
     label: 'Pau Ferro',
     note: 'Balanced brown grain',
     texture: woodAsset('pau-ferro.jpg'),
-    price: 0,
+    price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
   indianLaurel: {
     label: 'Indian Laurel',
     note: 'Subtle mid-brown grain',
     texture: woodAsset('indian-laurel.jpg'),
-    price: 0,
+    price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
 }
 
@@ -108,48 +114,48 @@ export const BODY_FINISH_OPTIONS = {
     label: 'None',
     note: 'Raw wood texture',
     texture: null,
-    price: 0,
+    price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
   black: {
     label: 'Jet Black',
     note: 'Opaque black finish',
     texture: asset('all-models/woods-colors/colors/solids/black.png'),
     color: '#1a1a1a',
-    price: 25,
+    price: 25, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
   white: {
     label: 'Classic White',
     note: 'Clean opaque finish',
     texture: asset('all-models/woods-colors/colors/solids/white-white.png'),
     color: '#f5f5f5',
-    price: 25,
+    price: 25, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
   transBlack: {
     label: 'Trans Black',
     note: 'Tinted translucent finish',
     texture: asset('all-models/woods-colors/colors/transluscents/trans-black.png'),
-    price: 35,
+    price: 35, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
   red: {
     label: 'Vintage Red',
     note: 'Classic red finish',
     texture: null,
     color: '#b91c1c',
-    price: 30,
+    price: 30, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
   blue: {
     label: 'Ocean Blue',
     note: 'Deep blue finish',
     texture: null,
     color: '#1e40af',
-    price: 30,
+    price: 30, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
   green: {
     label: 'Forest Green',
     note: 'Rich green finish',
     texture: null,
     color: '#166534',
-    price: 30,
+    price: 30, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
 }
 
@@ -159,6 +165,7 @@ export const NECK_OPTIONS = {
     note: 'Bright neck feel',
     src: asset('all-models/woods-colors/neck-woods/plain-maple.png'),
     price: 0,
+    specs: { size: '', dimensions: '', material: '', notes: '' },
     filter: 'none',
   },
   roasted: {
@@ -166,6 +173,7 @@ export const NECK_OPTIONS = {
     note: 'Dark roasted finish',
     src: asset('all-models/woods-colors/neck-woods/plain-maple.png'),
     price: 75,
+    specs: { size: '', dimensions: '', material: '', notes: '' },
     filter: 'sepia(0.65) saturate(1.15) brightness(0.82) contrast(1.05)',
   },
   walnut: {
@@ -173,6 +181,7 @@ export const NECK_OPTIONS = {
     note: 'Warm darker neck',
     src: asset('all-models/woods-colors/neck-woods/plain-maple.png'),
     price: 95,
+    specs: { size: '', dimensions: '', material: '', notes: '' },
     filter: 'sepia(0.9) saturate(1.15) brightness(0.55) contrast(1.08)',
   },
 }
@@ -182,19 +191,19 @@ export const FRETBOARD_OPTIONS = {
     label: 'Maple',
     note: 'Clean and bright',
     src: asset('all-models/woods-colors/fingerboard-woods/maple.png'),
-    price: 0,
+    price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
   rosewood: {
     label: 'Rosewood',
     note: 'Classic dark board',
     src: asset('all-models/woods-colors/fingerboard-woods/rosewood.png'),
-    price: 60,
+    price: 60, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
   ebony: {
     label: 'Ebony',
     note: 'Snappy premium board',
     src: asset('all-models/woods-colors/fingerboard-woods/ebony.png'),
-    price: 80,
+    price: 80, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
 }
 
@@ -213,13 +222,13 @@ export const HEADSTOCK_WOOD_OPTIONS = {
     label: 'Rosewood',
     note: 'Warm headstock wood',
     texture: asset('all-models/woods-colors/headstock-woods/rosewood.png'),
-    price: 0,
+    price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
   ebony: {
     label: 'Ebony',
     note: 'Dark premium wood',
     texture: asset('all-models/woods-colors/headstock-woods/ebony.png'),
-    price: 20,
+    price: 20, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
 }
 
@@ -228,19 +237,19 @@ export const INLAY_OPTIONS = {
     label: 'White Pearl',
     note: 'Classic dot inlays',
     src: asset('all-models/necks/6-string/front/24-fret-front/standard/inlays/id/idwhite-pearl.png'),
-    price: 0,
+    price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
   black: {
     label: 'Black',
     note: 'Subtle black dots',
     src: asset('all-models/necks/6-string/front/24-fret-front/standard/inlays/id/idblack.png'),
-    price: 0,
+    price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
   luminlay: {
     label: 'Luminlay',
     note: 'Glow-in-the-dark dots',
     src: asset('all-models/necks/6-string/front/24-fret-front/standard/inlays/id/idluminlay.png'),
-    price: 35,
+    price: 35, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
 }
 
@@ -253,7 +262,7 @@ export const BRIDGE_OPTIONS = {
       black: asset('all-models/bridges/6/standard/hipshot-hardtail/hipshot-hardtail-black.png'),
       gold: asset('all-models/bridges/6/standard/hipshot-hardtail/hipshot-hardtail-gold.png'),
     },
-    price: 45,
+    price: 45, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
   hipshotTremolo: {
     label: 'Hipshot Tremolo',
@@ -263,7 +272,7 @@ export const BRIDGE_OPTIONS = {
       black: asset('all-models/bridges/6/standard/hipshot-trem/hipshot-trem-black.png'),
       gold: asset('all-models/bridges/6/standard/hipshot-trem/hipshot-trem-chrome.png'),
     },
-    price: 75,
+    price: 75, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
   floydRoseTremolo: {
     label: 'Floyd Rose Tremolo',
@@ -273,73 +282,73 @@ export const BRIDGE_OPTIONS = {
       black: asset('all-models/bridges/6/standard/floyd-rose/black.png'),
       gold: asset('all-models/bridges/6/standard/floyd-rose/gold.png'),
     },
-    price: 90,
+    price: 90, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
 }
 
 export const PICKGUARD_OPTIONS_BY_BODY = {
   strat: {
-    none: { label: 'None', note: 'No pickguard', src: null, price: 0 },
+    none: { label: 'None', note: 'No pickguard', src: null, price: 0, specs: { size: '', dimensions: '', material: '', notes: '' } },
     white: {
       label: 'White',
       note: 'Classic white guard',
       src: asset('rs/bodies/front/pickguard/white.png'),
-      price: 0,
+      price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     pearloid: {
       label: 'Pearloid',
       note: 'Bright pearloid finish',
       src: asset('rs/bodies/front/pickguard/white-pearloid.png'),
-      price: 20,
+      price: 20, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     black: {
       label: 'Black',
       note: 'Dark contrasting guard',
       src: asset('rs/bodies/front/pickguard/black.png'),
-      price: 0,
+      price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     tortoise: {
       label: 'Tortoise',
       note: 'Red tortoise shell',
       src: asset('rs/bodies/front/pickguard/red-tortoise.png'),
-      price: 25,
+      price: 25, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
   },
   delos: {
-    none: { label: 'None', note: 'No pickguard', src: null, price: 0 },
+    none: { label: 'None', note: 'No pickguard', src: null, price: 0, specs: { size: '', dimensions: '', material: '', notes: '' } },
     white: {
       label: 'White',
       note: 'Clean white guard',
       src: asset('delos/bodies/front/pickguard/white.png'),
-      price: 0,
+      price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     pearloid: {
       label: 'Pearloid',
       note: 'White pearloid guard',
       src: asset('delos/bodies/front/pickguard/white-pearloid.png'),
-      price: 20,
+      price: 20, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     black: {
       label: 'Black',
       note: 'Satin black guard',
       src: asset('delos/bodies/front/pickguard/black.png'),
-      price: 0,
+      price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     satinBlack: {
       label: 'Satin Black',
       note: 'Low-key satin finish',
       src: asset('delos/bodies/front/pickguard/satin-black.png'),
-      price: 15,
+      price: 15, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     tortoise: {
       label: 'Tortoise',
       note: 'Red tortoise shell',
       src: asset('delos/bodies/front/pickguard/red-tortoise.png'),
-      price: 25,
+      price: 25, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
   },
-  solo: { none: { label: 'None', note: 'No pickguard', src: null, price: 0 } },
-  dc: { none: { label: 'None', note: 'No pickguard', src: null, price: 0 } },
+  solo: { none: { label: 'None', note: 'No pickguard', src: null, price: 0, specs: { size: '', dimensions: '', material: '', notes: '' } } },
+  dc: { none: { label: 'None', note: 'No pickguard', src: null, price: 0, specs: { size: '', dimensions: '', material: '', notes: '' } } },
 }
 
 export const KNOB_OPTIONS_BY_BODY = {
@@ -348,25 +357,25 @@ export const KNOB_OPTIONS_BY_BODY = {
       label: 'Black',
       note: 'Standard black knobs',
       src: asset('rs/bodies/front/knobs/black.png'),
-      price: 0,
+      price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     tamarind: {
       label: 'Tamarind',
       note: 'Warm wood-look knobs',
       src: asset('rs/bodies/front/knobs/tamarind.png'),
-      price: 15,
+      price: 15, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     pearl: {
       label: 'Pearl Inlay',
       note: 'White pearl inlay knobs',
       src: asset('rs/bodies/front/knobs/white-pearl-inlay.png'),
-      price: 20,
+      price: 20, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     abalone: {
       label: 'Abalone',
       note: 'Premium abalone inlay',
       src: asset('rs/bodies/front/knobs/abalone-inlay.png'),
-      price: 30,
+      price: 30, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
   },
   solo: {
@@ -374,25 +383,25 @@ export const KNOB_OPTIONS_BY_BODY = {
       label: 'Black',
       note: 'Standard black knobs',
       src: asset('solo/bodies/front/knobs/black.png'),
-      price: 0,
+      price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     blackPlastic: {
       label: 'Black Plastic',
       note: 'Smooth black plastic',
       src: asset('solo/bodies/front/knobs/black-plastic.png'),
-      price: 10,
+      price: 10, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     whitePlastic: {
       label: 'White Plastic',
       note: 'Bright white plastic',
       src: asset('solo/bodies/front/knobs/white-plastic.png'),
-      price: 10,
+      price: 10, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     chrome: {
       label: 'Chrome',
       note: 'Shiny chrome finish',
       src: asset('solo/bodies/front/knobs/chrome.png'),
-      price: 20,
+      price: 20, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
   },
   dc: {
@@ -400,31 +409,31 @@ export const KNOB_OPTIONS_BY_BODY = {
       label: 'Black',
       note: 'Standard black knobs',
       src: asset('dc/bodies/front/knobs/black.png'),
-      price: 0,
+      price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     dtmv: {
       label: 'Black DTMV',
       note: 'Modern black DTMV',
       src: asset('dc/bodies/front/knobs/black-dtmv.png'),
-      price: 15,
+      price: 15, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     dtc: {
       label: 'Black DTC',
       note: 'Modern black DTC',
       src: asset('dc/bodies/front/knobs/black-dtc.png'),
-      price: 15,
+      price: 15, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     plasticBlack: {
       label: 'Plastic Black',
       note: 'Plain black plastic',
       src: asset('dc/bodies/front/knobs/plasticblack.png'),
-      price: 10,
+      price: 10, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     plasticWhite: {
       label: 'Plastic White',
       note: 'Plain white plastic',
       src: asset('dc/bodies/front/knobs/plasticwhite.png'),
-      price: 10,
+      price: 10, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
   },
   delos: {
@@ -432,25 +441,25 @@ export const KNOB_OPTIONS_BY_BODY = {
       label: 'Black',
       note: 'Standard black knobs',
       src: asset('delos/bodies/front/knobs/black-dtmv.png'),
-      price: 0,
+      price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     blackPlastic: {
       label: 'Black Plastic',
       note: 'Black plastic DTMV',
       src: asset('delos/bodies/front/knobs/black-plastic-dtmv.png'),
-      price: 10,
+      price: 10, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     whitePlastic: {
       label: 'White Plastic',
       note: 'White plastic DTMV',
       src: asset('delos/bodies/front/knobs/white-plastic-dtmv.png'),
-      price: 10,
+      price: 10, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     pearl: {
       label: 'Pearl Inlay',
       note: 'White pearl inlay DTMV',
       src: asset('delos/bodies/front/knobs/white-pearl-inlay-dtmv.png'),
-      price: 20,
+      price: 20, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
   },
 }
@@ -468,7 +477,7 @@ export const HEADSTOCK_OPTIONS = {
     },
     strings: asset('all-models/headstocks/6/string-overlays/standard/gt6.png'),
     trussCover: asset('all-models/headstocks/6/truss-cover/black.png'),
-    price: 0,
+    price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
   gt6r: {
     label: 'GT6R',
@@ -481,7 +490,7 @@ export const HEADSTOCK_OPTIONS = {
     },
     strings: asset('all-models/headstocks/6/string-overlays/standard/gt6r.png'),
     trussCover: asset('all-models/headstocks/6/truss-cover/black.png'),
-    price: 20,
+    price: 20, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
   h33: {
     label: 'H33',
@@ -495,7 +504,7 @@ export const HEADSTOCK_OPTIONS = {
     },
     strings: asset('all-models/headstocks/6/string-overlays/standard/h33.png'),
     trussCover: asset('all-models/headstocks/6/truss-cover/black.png'),
-    price: 45,
+    price: 45, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
   h33r: {
     label: 'H33R',
@@ -507,7 +516,7 @@ export const HEADSTOCK_OPTIONS = {
     },
     strings: asset('all-models/headstocks/6/string-overlays/standard/hr33.png'),
     trussCover: asset('all-models/headstocks/6/truss-cover/black.png'),
-    price: 55,
+    price: 55, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
 }
 
@@ -516,18 +525,21 @@ export const HARDWARE_OPTIONS = {
     label: 'Chrome',
     note: 'Standard bright hardware',
     price: 0,
+    specs: { size: '', dimensions: '', material: '', notes: '' },
     color: 'chrome',
   },
   black: {
     label: 'Black',
     note: 'Stealth hardware',
     price: 35,
+    specs: { size: '', dimensions: '', material: '', notes: '' },
     color: 'black',
   },
   gold: {
     label: 'Gold',
     note: 'Premium gold finish',
     price: 60,
+    specs: { size: '', dimensions: '', material: '', notes: '' },
     color: 'gold',
   },
 }
@@ -536,27 +548,27 @@ export const PICKUP_OPTIONS = {
   sss: {
     label: 'SSS',
     note: 'Three single coils',
-    price: 0,
+    price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
   hss: {
     label: 'HSS',
     note: 'Bridge humbucker, singles',
-    price: 110,
+    price: 110, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
   hh: {
     label: 'HH',
     note: 'Dual humbuckers',
-    price: 135,
+    price: 135, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
   p90: {
     label: 'P90',
     note: 'P90 bridge and neck set',
-    price: 125,
+    price: 125, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
   fluence: {
     label: 'Fluence',
     note: 'Modern active set',
-    price: 185,
+    price: 185, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
 }
 

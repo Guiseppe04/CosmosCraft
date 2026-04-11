@@ -68,10 +68,12 @@ export function Header() {
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
           <Link to="/" className="flex items-center gap-2 group">
-            <div className="p-2 bg-gradient-to-br from-[var(--gold-primary)] to-[var(--gold-secondary)] rounded-lg group-hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all duration-200">
-              <Guitar className="w-5 h-5 text-[var(--text-dark)]" />
-            </div>
-            <span className="text-xl font-semibold bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-accent)] bg-clip-text text-transparent">
+            <img 
+              src="/logo-cosmos.png" 
+              alt="CosmosCraft Logo" 
+              className="h-10 w-auto group-hover:scale-105 transition-transform duration-200" 
+            />
+            <span className="text-xl font-semibold bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-accent)] bg-clip-text text-transparent hidden sm:block">
               CosmosCraft
             </span>
           </Link>

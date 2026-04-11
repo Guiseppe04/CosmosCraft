@@ -48,7 +48,7 @@ export default function OptionGroup({
                       }
                     : { backgroundColor: '#f3f4f6' }
 
-              const priceLabel = option.price > 0 ? `+$${option.price}` : null
+              const priceLabel = option.price > 0 ? `+₱${option.price.toLocaleString('en-PH')}` : null
               const shapeClass = chipShape === 'circle' ? 'rounded-full' : 'rounded-2xl'
               const previewClass =
                 chipShape === 'circle'
@@ -61,7 +61,7 @@ export default function OptionGroup({
                   type="button"
                   onClick={() => onChange(option.value)}
                   className={[
-                    'border p-3 text-left transition-all duration-200',
+                    'group relative border p-3 text-left transition-all duration-200',
                     dark ? 'bg-white/6 hover:bg-white/10 shadow-none' : 'bg-white/85 hover:bg-white shadow-sm',
                     shapeClass,
                     active ? 'border-[#d4af37] ring-2 ring-[#d4af37]/25' : dark ? 'border-white/10' : 'border-[#e5e7eb]',
@@ -100,6 +100,17 @@ export default function OptionGroup({
                         <div className={`text-xs ${dark ? 'text-white/60' : 'text-[#6b7280]'}`}>{option.note}</div>
                         {priceLabel && <div className={`mt-1 text-xs font-semibold ${dark ? 'text-[#28b6ff]' : 'text-[#14a8f5]'}`}>{priceLabel}</div>}
                       </div>
+                    </div>
+                  )}
+                  {option.specs && (
+                    <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-full z-50 mb-2 hidden group-hover:block w-48 p-2.5 text-xs bg-[#111] leading-relaxed text-white border border-white/20 rounded-lg shadow-[0_0_15px_rgba(0,0,0,0.5)] pointer-events-none text-left">
+                      {option.specs.size ? <div><span className="text-[#a1a1a1] font-medium font-mono">SIZE:</span> {option.specs.size}</div> : null}
+                      {option.specs.dimensions ? <div><span className="text-[#a1a1a1] font-medium font-mono">DIM:</span> {option.specs.dimensions}</div> : null}
+                      {option.specs.material ? <div><span className="text-[#a1a1a1] font-medium font-mono">MAT:</span> {option.specs.material}</div> : null}
+                      {option.specs.notes ? <div className="mt-1 pt-1 border-t border-white/10 italic text-white/70">{option.specs.notes}</div> : null}
+                      {(!option.specs.size && !option.specs.dimensions && !option.specs.material && !option.specs.notes) && <div className="text-white/40 italic">Pending specifications...</div>}
+                      {/* Triangle pointer */}
+                      <div className="absolute left-1/2 bottom-[-5px] -translate-x-1/2 w-2 h-2 bg-[#111] border-b border-r border-white/20 rotate-45"></div>
                     </div>
                   )}
                 </button>

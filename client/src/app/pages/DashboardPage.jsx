@@ -73,9 +73,24 @@ export function DashboardPage() {
 
   useEffect(() => {
     if (activeSection === 'projects' && !activeProjectView) {
-      adminApi.getMyProjects().then(res => setMyProjects(res.data)).catch(console.error)
+      fetchMyProjects()
     }
   }, [activeSection, activeProjectView])
+
+  const fetchMyProjects = () => {
+    adminApi.getMyProjects().then(res => setMyProjects(res.data)).catch(console.error)
+  }
+
+  const handleCancelProject = async (projectId) => {
+    if (!window.confirm("Are you sure you want to cancel this project? This will stop the building progress.")) return;
+    try {
+      await adminApi.updateProject(projectId, { status: 'Cancelled' });
+      setToastMessage('Project has been cancelled.');
+      fetchMyProjects();
+    } catch (err) {
+      alert("Failed to cancel project: " + err.message);
+    }
+  };
 
   const confirmDelete = () => {
     if (!buildToDelete) return;
@@ -179,38 +194,19 @@ export function DashboardPage() {
 
   const menuItems = [
     { id: 'profile', label: 'Profile', icon: User, group: 'account' },
-    { id: 'payment-methods', label: 'Payment Methods', icon: Wallet, group: 'account' },
     { id: 'addresses', label: 'Addresses', icon: MapPin, group: 'account' },
     { id: 'password', label: 'Change Password', icon: Lock, group: 'account' },
     { id: 'privacy', label: 'Privacy Settings', icon: Settings, group: 'account' },
     { id: 'notifications', label: 'Notification Settings', icon: Bell, group: 'account' },
     { id: 'my-guitar', label: 'My Guitar', icon: Guitar, group: 'orders' },
-    { id: 'projects', label: 'My Projects', icon: Briefcase, group: 'orders' },
+    { id: 'projects', label: 'Build Projects', icon: Briefcase, group: 'orders' },
     { id: 'appointments', label: 'My Appointments', icon: Calendar, group: 'orders' },
     { id: 'cart', label: 'My Cart', icon: ShoppingBag, group: 'orders' },
     { id: 'purchases', label: 'My Purchase', icon: Package, group: 'orders' },
     { id: 'logout', label: 'Logout', icon: User, group: 'orders' },
   ]
 
-  const renderPaymentMethodsContent = () => (
-    <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-8">
-      <h2 className="text-2xl font-bold text-white mb-1">Payment Methods</h2>
-      <p className="text-sm text-[var(--text-muted)] mb-10">Manage your payment methods</p>
 
-      <div className="flex flex-col items-center justify-center py-10">
-        <div className="w-16 h-16 rounded-full border-2 border-[var(--border)] flex items-center justify-center mb-6">
-          <Wallet className="w-8 h-8 text-[var(--gold-primary)]" />
-        </div>
-        <p className="text-white font-medium mb-1">No payment methods added yet</p>
-        <p className="text-sm text-[var(--text-muted)] mb-6">
-          Add a payment method to checkout faster
-        </p>
-        <button className="px-6 py-2.5 rounded-full bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-sm font-semibold text-[var(--text-dark)] hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition">
-          Add Payment Method
-        </button>
-      </div>
-    </div>
-  )
 
   const renderPurchasesContent = () => (
     <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-8">
@@ -280,7 +276,7 @@ export function DashboardPage() {
       return (
         <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-8">
           <button onClick={() => setActiveProjectView(null)} className="mb-6 text-[var(--gold-primary)] hover:underline flex items-center gap-2 text-sm font-semibold">
-            ← Back to My Projects
+            ← Back to Build Projects
           </button>
           <ProjectTaskTracker projectId={activeProjectView.project_id} isAdmin={false} />
         </div>
@@ -289,7 +285,7 @@ export function DashboardPage() {
 
     return (
       <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-8">
-        <h2 className="text-2xl font-bold text-white mb-1">My Projects</h2>
+        <h2 className="text-2xl font-bold text-white mb-1">Build Projects</h2>
         <p className="text-sm text-[var(--text-muted)] mb-8">Track progress on your custom builds and repairs</p>
 
         {myProjects.length === 0 ? (
@@ -305,21 +301,44 @@ export function DashboardPage() {
         ) : (
           <div className="grid gap-6">
             {myProjects.map((project) => (
-              <div key={project.project_id} className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl p-5 hover:border-[var(--gold-primary)]/40 transition-colors flex justify-between items-center">
-                <div>
-                  <h3 className="text-lg font-bold text-white">{project.name}</h3>
-                  <p className="text-[var(--text-muted)] text-sm mt-1">{project.description || 'Custom Build Project'}</p>
-                  <div className="mt-4 flex items-center gap-4">
-                    <span className="px-2 py-0.5 border border-[var(--border)] rounded-full text-xs font-semibold text-white">{project.status}</span>
-                    <span className="text-[var(--gold-primary)] font-bold text-sm">{project.progress}% Complete</span>
+              <div key={project.project_id} className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl p-5 hover:border-[var(--gold-primary)]/40 transition-colors">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <h3 className="text-lg font-bold text-white">{project.name}</h3>
+                    <p className="text-[var(--text-muted)] text-sm mt-1">{project.description || 'Custom Build Project'}</p>
+                    <div className="mt-4 flex items-center gap-4">
+                      <span className="px-2 py-0.5 border border-[var(--border)] rounded-full text-xs font-semibold text-white">{project.status}</span>
+                      <span className="text-[var(--gold-primary)] font-bold text-sm">{project.progress}% Complete</span>
+                    </div>
                   </div>
+                  <button
+                    onClick={() => setActiveProjectView(project)}
+                    className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-bold shadow-[0_0_10px_rgba(212,175,55,0.3)] hover:shadow-[0_0_15px_rgba(212,175,55,0.5)] transition-all flex items-center gap-2"
+                  >
+                    <Activity className="w-4 h-4" /> Track Progress
+                  </button>
                 </div>
-                <button
-                  onClick={() => setActiveProjectView(project)}
-                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-bold shadow-[0_0_10px_rgba(212,175,55,0.3)] hover:shadow-[0_0_15px_rgba(212,175,55,0.5)] transition-all flex items-center gap-2"
-                >
-                  <Activity className="w-4 h-4" /> Track Progress
-                </button>
+                <div className="flex gap-2 mt-4 pt-4 border-t border-[var(--border)]">
+                  {project.progress < 80 && project.status !== 'Cancelled' && (
+                    <button
+                      onClick={() => handleCancelProject(project.project_id)}
+                      className="px-4 py-2 rounded-lg border border-red-500/30 text-red-500 hover:bg-red-500/10 transition-colors text-sm font-semibold"
+                    >
+                      Cancel Project
+                    </button>
+                  )}
+                  {project.progress < 80 && project.status !== 'Cancelled' && (
+                    <button
+                      onClick={() => {
+                          // Edit specs logic
+                          alert("Inline Edit Specs coming soon");
+                      }}
+                      className="px-4 py-2 rounded-lg border border-blue-500/30 text-blue-400 hover:bg-blue-500/10 transition-colors text-sm font-semibold"
+                    >
+                      Edit Project
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -497,7 +516,7 @@ export function DashboardPage() {
                       <h4 className="font-semibold text-white truncate">{item.name}</h4>
                       <p className="text-xs text-[var(--text-muted)] mt-0.5">{item.category}</p>
                       <p className="text-lg font-bold text-[var(--gold-primary)] mt-1">
-                        ${item.price.toLocaleString()}
+                        ₱{item.price.toLocaleString()}
                       </p>
                     </div>
                     <button
@@ -530,7 +549,7 @@ export function DashboardPage() {
                       </button>
                     </div>
                     <span className="text-sm text-[var(--text-muted)]">
-                      Subtotal: <span className="text-white font-medium">${(item.price * item.quantity).toLocaleString()}</span>
+                      Subtotal: <span className="text-white font-medium">₱{(item.price * item.quantity).toLocaleString()}</span>
                     </span>
                   </div>
                 </div>
@@ -540,7 +559,7 @@ export function DashboardPage() {
             <div className="mt-6 pt-6 border-t border-[var(--border)]">
               <div className="flex items-center justify-between mb-6">
                 <span className="text-lg text-[var(--text-muted)]">Total:</span>
-                <span className="text-2xl font-bold text-[var(--gold-primary)]">${cartTotal.toLocaleString()}</span>
+                <span className="text-2xl font-bold text-[var(--gold-primary)]">₱{cartTotal.toLocaleString()}</span>
               </div>
               <button
                 type="button"
@@ -833,7 +852,6 @@ export function DashboardPage() {
             className="space-y-4"
           >
             {activeSection === 'profile' && renderProfileContent()}
-            {activeSection === 'payment-methods' && renderPaymentMethodsContent()}
             {activeSection === 'my-guitar' && renderMyGuitarContent()}
             {activeSection === 'projects' && renderProjectsContent()}
             {activeSection === 'appointments' && renderAppointmentsContent()}

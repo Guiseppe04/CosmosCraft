@@ -100,7 +100,7 @@ export function LandingPage() {
       description:
         'Complete guitar care including setups, cleaning, and preventative maintenance to keep your instrument in peak condition.',
       image:
-        'https://images.unsplash.com/photo-1713347071877-f02f8b4e8642?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w0&w=1080',
+        '/assets/landing/615157658_1389213549667905_4695629074825690570_n.jpg',
       link: '/appointments',
     },
     {
@@ -108,7 +108,7 @@ export function LandingPage() {
       description:
         "Expert restoration and refinishing services that bring vintage instruments back to their original glory with master craftsmanship.",
       image:
-        'https://images.unsplash.com/photo-1654870936782-36ab0bc090ee?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w0&w=1080',
+        '/assets/landing/499948200_1197883048800957_5172319103702371821_n.jpg',
       link: '/appointments',
     },
     {
@@ -116,7 +116,7 @@ export function LandingPage() {
       description:
         'Precision electronics upgrades and modifications designed for optimal tone and performance customization.',
       image:
-        'https://images.unsplash.com/photo-1772617614070-d3e8d6cc392a?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w0&w=1080',
+        '/assets/landing/481122269_1131061208816475_4924982718443286146_n.jpg',
       link: '/customize',
     },
   ]
@@ -128,7 +128,7 @@ export function LandingPage() {
         {/* Background Image */}
         <div className="absolute inset-0 z-0">
           <ImageWithFallback
-            src="https://images.unsplash.com/photo-1695727036766-4d06ac90d7f3?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=1080"
+            src="/assets/landing/481276950_1131367962119133_3906163079916357258_n.jpg"
             alt="Guitar Workshop"
             className="w-full h-full object-cover"
           />
@@ -192,7 +192,7 @@ export function LandingPage() {
             >
               <div className="relative aspect-video rounded-2xl overflow-hidden border border-[var(--border)] bg-[var(--surface-dark)]">
                 <ImageWithFallback
-                  src="https://images.unsplash.com/photo-1510915361894-db8b60106cb1?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&w=1080"
+                  src="/assets/landing/481265622_1131056792150250_2911954095556621856_n.jpg"
                   alt="Guitar Customization Tool"
                   className="w-full h-full object-cover"
                 />

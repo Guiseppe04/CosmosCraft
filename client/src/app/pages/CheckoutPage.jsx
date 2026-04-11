@@ -7,7 +7,7 @@ import {
   ArrowLeft, ShoppingCart, CreditCard, Truck, ShieldCheck,
   Plus, Minus, MessageSquare, Package, Guitar,
   ChevronDown, ChevronUp, MapPin, FileText, Check,
-  Banknote, Building2, Smartphone, Upload, X, Edit3, CheckCircle
+  Banknote, Building2, Smartphone, Upload, X, Edit3, CheckCircle, Trash2
 } from 'lucide-react'
 import { API } from '../utils/apiConfig'
 
@@ -367,10 +367,97 @@ export function CheckoutPage() {
           </motion.div>
         )}
 
-        <div className="grid lg:grid-cols-5 gap-6">
-          {/* Left Column - Order Details */}
-          <div className="lg:col-span-3 space-y-4">
-            {/* Address Section */}
+        <div className="grid lg:grid-cols-3 gap-8">
+          {/* Left Column - Shopping Cart */}
+          <div className="lg:col-span-2 space-y-6">
+            <div className="bg-[var(--surface-dark)] border border-white/5 rounded-2xl p-6">
+              <h2 className="text-xl font-bold text-white mb-6">Shopping Cart</h2>
+              <div className="flex flex-col gap-4">
+                {checkoutItems.map((item, index) => (
+                  <motion.div
+                    key={item.id}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.05 }}
+                    className="flex flex-col sm:flex-row items-center gap-4 p-4 bg-[var(--surface-elevated)] border border-[var(--border)] rounded-xl"
+                  >
+                    <div className="w-20 h-20 rounded-lg bg-[var(--bg-primary)] border border-white/5 flex items-center justify-center overflow-hidden flex-shrink-0">
+                      {item.image ? (
+                        <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <Guitar className="w-8 h-8 text-[var(--gold-primary)]" />
+                      )}
+                    </div>
+
+                    <div className="flex-grow min-w-0 flex flex-col sm:flex-row sm:items-center justify-between w-full">
+                      <div className="mb-3 sm:mb-0">
+                        <h3 className="font-semibold text-[var(--text-light)] truncate max-w-[200px]">{item.name}</h3>
+                        <p className="text-xs text-[var(--text-muted)] mt-1 tracking-wide uppercase">{item.category}</p>
+                      </div>
+
+                      <div className="flex items-center gap-6">
+                        {/* Qty Controls */}
+                        {!isCustomBuild ? (
+                          <div className="flex items-center gap-3 bg-[var(--bg-primary)] border border-white/10 rounded-full px-3 py-1">
+                            <button
+                              onClick={() => updateQuantity(item.id, -1)}
+                              className="text-[var(--text-muted)] hover:text-white p-1 transition-colors"
+                            >
+                              <Minus className="w-3.5 h-3.5" />
+                            </button>
+                            <span className="text-sm font-semibold w-4 text-center text-white">{item.quantity}</span>
+                            <button
+                              onClick={() => updateQuantity(item.id, 1)}
+                              className="text-[var(--text-muted)] hover:text-[var(--gold-primary)] p-1 transition-colors"
+                              disabled={item.quantity >= item.stock}
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="text-sm text-[var(--text-muted)]">Qty: 1</div>
+                        )}
+
+                        {/* Price */}
+                        <div className="w-24 text-right">
+                          <p className="font-bold text-white tracking-tight">
+                            ₱{(item.price * item.quantity).toLocaleString('en-PH')}
+                          </p>
+                        </div>
+
+                        {/* Remove */}
+                        {!isCustomBuild && (
+                          <button
+                            onClick={() => updateQuantity(item.id, -item.quantity)}
+                            className="p-2 text-[var(--text-muted)] hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+
+              <div className="mt-8 pt-6 border-t border-white/5 flex items-center justify-between">
+                <Link to="/shop" className="text-sm font-semibold text-[var(--text-muted)] hover:text-white transition-colors">
+                  &lt; Back to Shop
+                </Link>
+                {!isCustomBuild && (
+                  <button 
+                    onClick={() => { clearCart(); navigate('/shop'); }}
+                    className="px-6 py-2.5 bg-red-500/10 text-red-500 font-bold rounded-lg hover:bg-red-500 hover:text-white transition-colors"
+                  >
+                    Cancel Order
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Right Column - Forms & Summary */}
+          <div className="space-y-6">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -433,60 +520,7 @@ export function CheckoutPage() {
               )}
             </motion.div>
 
-            {/* Cart Items */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl overflow-hidden"
-            >
-              <button
-                onClick={() => toggleSection('items')}
-                className="w-full flex items-center justify-between p-4 border-b border-[var(--border)]"
-              >
-                <div className="flex items-center gap-3">
-                  <Package className="w-5 h-5 text-[var(--gold-primary)]" />
-                  <h2 className="text-lg font-bold text-[var(--text-light)]">Order Items ({checkoutItems.length})</h2>
-                </div>
-                {expandedSections.items ? (
-                  <ChevronUp className="w-4 h-4 text-[var(--text-muted)]" />
-                ) : (
-                  <ChevronDown className="w-4 h-4 text-[var(--text-muted)]" />
-                )}
-              </button>
 
-              {expandedSections.items && (
-                <div className="p-4 space-y-3 max-h-64 overflow-y-auto">
-                  {checkoutItems.map((item, index) => (
-                    <motion.div
-                      key={item.id}
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: index * 0.05 }}
-                      className="flex gap-3 p-3 bg-[var(--surface-elevated)] border border-[var(--border)] rounded-lg"
-                    >
-                      <div className="w-16 h-16 rounded-lg bg-[var(--bg-primary)] border border-[var(--border)] flex items-center justify-center overflow-hidden flex-shrink-0">
-                        {item.image ? (
-                          <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
-                        ) : (
-                          <Guitar className="w-6 h-6 text-[var(--gold-primary)]" />
-                        )}
-                      </div>
-
-                      <div className="flex-grow min-w-0">
-                        <h3 className="text-sm font-semibold text-[var(--text-light)] truncate">{item.name}</h3>
-                        <p className="text-xs text-[var(--text-muted)]">Qty: {item.quantity}</p>
-                      </div>
-
-                      <div className="text-right flex-shrink-0">
-                        <p className="text-sm font-bold text-[var(--gold-primary)]">
-                          ₱{(item.price * item.quantity).toLocaleString('en-PH')}
-                        </p>
-                      </div>
-                    </motion.div>
-                  ))}
-                </div>
-              )}
-            </motion.div>
 
             {/* Shipping Options */}
             <motion.div
@@ -563,14 +597,11 @@ export function CheckoutPage() {
                 className="w-full px-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--text-light)] placeholder-[var(--text-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--gold-primary)] resize-none text-sm"
               />
             </motion.div>
-          </div>
-
-          {/* Right Column - Order Summary */}
-          <div className="lg:col-span-2">
+            {/* Order Summary & Actions */}
             <motion.div
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
-              className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl p-4 sticky top-20 space-y-4"
+              className="bg-[var(--surface-dark)] border border-white/5 rounded-2xl p-6 space-y-5 shadow-lg"
             >
               <h2 className="text-xl font-bold text-[var(--text-light)]">Order Summary</h2>
 
