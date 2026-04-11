@@ -253,13 +253,14 @@ async function getProductReport(filters = {}) {
     `SELECT p.product_id, p.name, p.sku, p.price, c.name as category_name,
             SUM(oi.quantity) as total_sold,
             SUM(oi.quantity * oi.unit_price) as total_revenue,
-            p.stock as current_stock
+            i.stock as current_stock
      FROM products p
+     LEFT JOIN inventory i ON p.product_id = i.product_id
      LEFT JOIN order_items oi ON p.product_id = oi.product_id
      LEFT JOIN orders o ON oi.order_id = o.order_id
      LEFT JOIN categories c ON p.category_id = c.category_id
      ${whereClause}
-     GROUP BY p.product_id, p.name, p.sku, p.price, c.name, p.stock
+     GROUP BY p.product_id, p.name, p.sku, p.price, c.name, i.stock
      ORDER BY total_sold DESC
      LIMIT $${baseIdx}`,
     [...params, parseInt(limit)]
@@ -268,9 +269,10 @@ async function getProductReport(filters = {}) {
   const summaryResult = await pool.query(
     `SELECT 
         COUNT(DISTINCT p.product_id) as total_products,
-        SUM(p.stock) as total_stock,
+        SUM(i.stock) as total_stock,
         COALESCE(SUM(oi.quantity * oi.unit_price), 0) as total_revenue
      FROM products p
+     LEFT JOIN inventory i ON p.product_id = i.product_id
      LEFT JOIN order_items oi ON p.product_id = oi.product_id
      LEFT JOIN orders o ON oi.order_id = o.order_id
      ${whereClause}`,

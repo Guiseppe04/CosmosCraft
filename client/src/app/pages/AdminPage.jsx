@@ -4,10 +4,10 @@ import {
   Users, Package, ShoppingBag, Calendar, Search,
   Filter, Edit, Trash2, Eye, BarChart3,
   PieChart, Activity, ArrowUpRight,
-  CheckCircle, XCircle, Plus, RefreshCw, X,
+  CheckCircle, Check, Info, XCircle, Plus, RefreshCw, X,
   MessageSquare, Briefcase, ChevronLeft, ChevronRight,
   User, Guitar, Layers, Shield, Tag, AlertCircle, DollarSign,
-  Save, TrendingUp, UsersRound, Clock, Loader2,
+  Save, TrendingUp, UsersRound, Clock, Loader2, Grid3X3, List, MoreHorizontal,
 } from 'lucide-react'
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis,
@@ -15,6 +15,7 @@ import {
 } from 'recharts'
 import ProjectTaskTracker from '../components/projects/ProjectTaskTracker'
 import { useAuth } from '../context/AuthContext'
+import { useNavigate } from 'react-router'
 import { Topbar } from '../components/admin/Topbar'
 import { MessagePanel } from '../components/admin/MessagePanel'
 import { ProjectProgress, ProgressBadge } from '../components/admin/ProjectProgress'
@@ -26,6 +27,14 @@ import { useDebounce } from '../hooks/useDebounce'
 import { useSmartPolling } from '../hooks/useSmartPolling'
 
 const VALID_ROLES = ['customer', 'staff', 'admin', 'super_admin']
+
+function updateIfChanged(currentData, newData, setter) {
+  const currentStr = JSON.stringify(currentData)
+  const newStr = JSON.stringify(newData)
+  if (currentStr !== newStr) {
+    setter(newData)
+  }
+}
 
 // ── Validation helpers ───────────────────────────────────────────────────────
 function validate(rules, form) {
@@ -86,8 +95,15 @@ const APPOINTMENT_RULES = {
 const PAGE_SIZE_OPTIONS = [10, 25, 50]
 
 export function AdminPage() {
-  const { user } = useAuth()
+  const { user, isAuthenticated } = useAuth()
+  const navigate = useNavigate()
   const isSuperAdmin = user?.role === 'super_admin'
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      navigate('/login', { replace: true })
+    }
+  }, [isAuthenticated, navigate])
 
   const [activeTab, setActiveTab] = useState('dashboard')
   const [searchQuery, setSearchQuery] = useState('')
@@ -95,9 +111,12 @@ export function AdminPage() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [toast, setToast] = useState(null)
+  const [productViewMode, setProductViewMode] = useState('grid') // grid | table
+  const [productActiveTab, setProductActiveTab] = useState('active') // all | active | inactive
 
   // Modal state
   const [modal, setModal] = useState({ open: false, type: null, data: null })
+  const [showGuitarTypeSelector, setShowGuitarTypeSelector] = useState(false)
 
   // Confirm dialog state
   const [confirm, setConfirm] = useState({ open: false, title: '', description: '', onConfirm: null, isBusy: false, variant: 'danger' })
@@ -142,6 +161,8 @@ export function AdminPage() {
 
   const [wizardTab, setWizardTab] = useState('basic')
   const [inventorySubTab, setInventorySubTab] = useState('products')
+  const [optimisticStock, setOptimisticStock] = useState({})
+  const [adjustPopover, setAdjustPopover] = useState({ open: false, itemId: null, amount: 0, reason: '', name: '' })
   const [form, setForm] = useState({})
   const [formErrors, setFormErrors] = useState({})
   const [isSaving, setIsSaving] = useState(false)
@@ -228,25 +249,27 @@ export function AdminPage() {
         search: debouncedSearch,
         ...productQuery,
       })
-      setProducts(res.data || [])
+      updateIfChanged(products, res.data || [], setProducts)
       setProductsPagination(res.pagination || { page: 1, pageSize: 10, total: 0, totalPages: 1 })
     } catch (e) { showToast(e.message, 'error') }
     finally { setProductsLoading(false) }
-  }, [debouncedSearch, productQuery, showToast])
+  }, [debouncedSearch, productQuery, showToast, products])
 
   const fetchCategories = useCallback(async () => {
     try {
       const res = await adminApi.getCategories()
-      setCategories(Array.isArray(res.data) ? res.data : res.data?.categories || [])
+      const newData = Array.isArray(res.data) ? res.data : res.data?.categories || []
+      updateIfChanged(categories, newData, setCategories)
     } catch { }
-  }, [])
+  }, [categories])
 
   const fetchGuitars = useCallback(async () => {
     try {
       const res = await adminApi.getCustomizations({ search: debouncedSearch })
-      setGuitars(Array.isArray(res.data) ? res.data : res.data?.customizations || [])
+      const newData = Array.isArray(res.data) ? res.data : res.data?.customizations || []
+      updateIfChanged(guitars, newData, setGuitars)
     } catch (e) { showToast(e.message, 'error') }
-  }, [debouncedSearch, showToast])
+  }, [debouncedSearch, showToast, guitars])
 
   const fetchParts = useCallback(async () => {
     setPartsLoading(true)
@@ -255,53 +278,58 @@ export function AdminPage() {
         search: debouncedSearch,
         ...partQuery,
       })
-      setParts(res.data || [])
+      updateIfChanged(parts, res.data || [], setParts)
       setPartsPagination(res.pagination || { page: 1, pageSize: 10, total: 0, totalPages: 1 })
     } catch (e) { showToast(e.message, 'error') }
     finally { setPartsLoading(false) }
-  }, [debouncedSearch, partQuery, showToast])
+  }, [debouncedSearch, partQuery, showToast, parts])
 
   const fetchUsers = useCallback(async () => {
     try {
       const res = await adminApi.getUsers({ search: debouncedSearch })
-      setUsers(Array.isArray(res.data) ? res.data : res.data?.users || [])
+      const newData = Array.isArray(res.data) ? res.data : res.data?.users || []
+      updateIfChanged(users, newData, setUsers)
     } catch (e) { showToast(e.message, 'error') }
-  }, [debouncedSearch, showToast])
+  }, [debouncedSearch, showToast, users])
 
   const fetchOrders = useCallback(async () => {
     try {
       const res = await adminApi.getOrders({ search: debouncedSearch })
-      setOrders(Array.isArray(res.data) ? res.data : res.data?.orders || [])
+      const newData = Array.isArray(res.data) ? res.data : res.data?.orders || []
+      updateIfChanged(orders, newData, setOrders)
     } catch (e) { showToast(e.message, 'error') }
-  }, [debouncedSearch, showToast])
+  }, [debouncedSearch, showToast, orders])
 
   const fetchProjects = useCallback(async () => {
     try {
       const res = await adminApi.getProjects({ search: debouncedSearch })
-      setProjects(Array.isArray(res.data) ? res.data : res.data?.projects || [])
+      const newData = Array.isArray(res.data) ? res.data : res.data?.projects || []
+      updateIfChanged(projects, newData, setProjects)
     } catch (e) { showToast(e.message, 'error') }
-  }, [debouncedSearch, showToast])
+  }, [debouncedSearch, showToast, projects])
 
   const fetchAppointments = useCallback(async () => {
     try {
       const res = await adminApi.getAppointments({ search: debouncedSearch })
-      setAppointments(Array.isArray(res.data) ? res.data : res.data?.appointments || [])
+      const newData = Array.isArray(res.data) ? res.data : res.data?.appointments || []
+      updateIfChanged(appointments, newData, setAppointments)
     } catch (e) { showToast(e.message, 'error') }
-  }, [debouncedSearch, showToast])
+  }, [debouncedSearch, showToast, appointments])
 
   const fetchInventory = useCallback(async () => {
     try {
       const statsRes = await adminApi.getInventorySummary()
-      setInventoryStats(statsRes.data || {})
+      updateIfChanged(inventoryStats, statsRes.data || {}, setInventoryStats)
       const prodsRes = await adminApi.getInventoryProducts()
-      setInventory(Array.isArray(prodsRes.data) ? prodsRes.data : prodsRes.data?.products || [])
+      const newData = Array.isArray(prodsRes.data) ? prodsRes.data : prodsRes.data?.products || []
+      updateIfChanged(inventory, newData, setInventory)
     } catch (e) { showToast(e.message, 'error') }
-  }, [showToast])
+  }, [showToast, inventoryStats, inventory])
 
   const fetchSalesReport = useCallback(async () => {
     try {
       const res = await adminApi.getSalesReport()
-      setSalesReport(res.data || {})
+      updateIfChanged(salesReport, res.data || {}, setSalesReport)
     } catch (e) {
       showToast(e.message, 'error')
       setSalesReport({
@@ -314,7 +342,7 @@ export function AdminPage() {
         customizationRevenue: 0, avgCustomization: 0, walkInConversion: 0, onlineConversion: 0,
       })
     }
-  }, [showToast])
+  }, [showToast, salesReport])
 
   // ── Initial data load on tab change ─────────────────────────────────────
   useEffect(() => {
@@ -374,7 +402,8 @@ export function AdminPage() {
     return map[activeTab]?.()
   }, [activeTab, fetchProducts, fetchParts, fetchCategories, fetchGuitars, fetchUsers, fetchOrders, fetchProjects, fetchAppointments, fetchInventory, fetchSalesReport])
 
-  useSmartPolling(pollingFn, { interval: 5000, maxInterval: 60000, backoffFactor: 1.5, enabled: true })
+  const pollingEnabled = ['dashboard', 'orders', 'inventory', 'projects', 'appointments'].includes(activeTab)
+  useSmartPolling(pollingFn, { interval: 5000, maxInterval: 60000, backoffFactor: 1.5, enabled: pollingEnabled })
 
   const handleRefresh = () => {
     setIsLoading(true)
@@ -411,7 +440,16 @@ export function AdminPage() {
       if (form.image_file) {
         finalImageUrl = await uploadToCloudinary(form.image_file)
       }
-      const payload = { ...form, image_url: finalImageUrl }
+      
+      // Ensure numbers are properly converted
+      const payload = {
+        ...form,
+        image_url: finalImageUrl,
+        price: Number(form.price),
+        cost_price: form.cost_price ? Number(form.cost_price) : null,
+        stock: form.stock ? Number(form.stock) : 0,
+        low_stock_threshold: form.low_stock_threshold ? Number(form.low_stock_threshold) : 10,
+      }
       delete payload.image_file
       delete payload.preview_url
 
@@ -814,6 +852,24 @@ export function AdminPage() {
                 </button>
               )}
               {activeTab === 'products-parts' && (
+                <div className="flex rounded-lg border border-[var(--border)] overflow-hidden">
+                  <button
+                    onClick={() => setProductViewMode('grid')}
+                    className={`p-2 ${productViewMode === 'grid' ? 'bg-[var(--gold-primary)] text-black' : 'bg-[var(--surface-dark)] text-[var(--text-muted)] hover:text-white'} transition-colors`}
+                    title="Grid View"
+                  >
+                    <Grid3X3 className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setProductViewMode('table')}
+                    className={`p-2 ${productViewMode === 'table' ? 'bg-[var(--gold-primary)] text-black' : 'bg-[var(--surface-dark)] text-[var(--text-muted)] hover:text-white'} transition-colors`}
+                    title="Table View"
+                  >
+                    <List className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+              {activeTab === 'products-parts' && (
                 <>
                   <button onClick={() => openModal('product')} className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black rounded-xl font-semibold text-sm hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all">
                     <Plus className="w-4 h-4" /> Add Product
@@ -829,7 +885,7 @@ export function AdminPage() {
                 </button>
               )}
               {activeTab === 'projects' && (
-                <button onClick={() => openModal('project')} className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black rounded-xl font-semibold text-sm hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all">
+                <button onClick={() => setShowGuitarTypeSelector(true)} className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black rounded-xl font-semibold text-sm hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all">
                   <Plus className="w-4 h-4" /> New Project
                 </button>
               )}
@@ -995,22 +1051,44 @@ export function AdminPage() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => setProductQuery({ page: 1, pageSize: productQuery.pageSize, sortBy: 'created_at', sortDir: 'desc', category_id: '', is_active: '', min_price: '', max_price: '' })}
+                  onClick={() => {
+                    setProductActiveTab('active')
+                    setProductQuery({ page: 1, pageSize: productQuery.pageSize, sortBy: 'created_at', sortDir: 'desc', category_id: '', is_active: 'true', min_price: '', max_price: '' })
+                  }}
                   className="px-3 py-2 rounded-lg border border-[var(--border)] text-sm text-[var(--text-muted)] hover:text-white hover:border-[var(--gold-primary)] transition-colors"
                 >
                   Clear product filters
                 </button>
               </div>
+              {/* Product Activity Tabs */}
+              <div className="flex border-b border-[var(--border)] mb-6 gap-4 pb-0">
+                {[{ id: 'all', label: 'All Products' }, { id: 'active', label: 'Active' }, { id: 'inactive', label: 'Inactive' }].map(tab => {
+                  const tabIsActive = productActiveTab === tab.id
+                  const tabCount = tab.id === 'all' ? productsPagination.total : tab.id === 'active' ? (visibleProducts.filter(p => p.is_active).length) : (visibleProducts.filter(p => !p.is_active).length)
+                  return (
+                    <button key={tab.id}
+                      onClick={() => {
+                        setProductActiveTab(tab.id)
+                        const isActiveValue = tab.id === 'all' ? '' : tab.id === 'active' ? 'true' : 'false'
+                        setProductQuery((prev) => ({ ...prev, page: 1, is_active: isActiveValue }))
+                      }}
+                      className={`px-4 py-3 text-sm font-semibold uppercase tracking-wider transition-all relative ${tabIsActive ? 'text-[var(--gold-primary)]' : 'text-[var(--text-muted)] hover:text-white'}`}
+                    >
+                      {tab.label}
+                      {tabIsActive && (
+                        <motion.div layoutId="product-tab-indicator" className="absolute bottom-0 left-0 right-0 h-[2px] bg-[var(--gold-primary)]" />
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+
+              {/* Product Filter Bar */}
               <div className="mb-6 p-4 rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)]/70 backdrop-blur-sm">
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3">
                   <select aria-label="Filter products by category" value={productQuery.category_id} onChange={(e) => setProductQuery((prev) => ({ ...prev, page: 1, category_id: e.target.value }))} className={inputCls}>
                     <option value="">All categories</option>
                     {visibleCategories.map((c) => <option key={c.category_id} value={c.category_id}>{c.name}</option>)}
-                  </select>
-                  <select aria-label="Filter products by status" value={productQuery.is_active} onChange={(e) => setProductQuery((prev) => ({ ...prev, page: 1, is_active: e.target.value }))} className={inputCls}>
-                    <option value="">All statuses</option>
-                    <option value="true">Active</option>
-                    <option value="false">Inactive</option>
                   </select>
                   <select aria-label="Sort products" value={`${productQuery.sortBy}:${productQuery.sortDir}`} onChange={(e) => {
                     const [sortBy, sortDir] = e.target.value.split(':')
@@ -1020,28 +1098,12 @@ export function AdminPage() {
                     <option value="created_at:asc">Oldest first</option>
                     <option value="name:asc">Name A-Z</option>
                     <option value="name:desc">Name Z-A</option>
-                    <option value="price:asc">Price low-high</option>
-                    <option value="price:desc">Price high-low</option>
+                    <option value="price:asc">Price: Low to High</option>
+                    <option value="price:desc">Price: High to Low</option>
                   </select>
                   <select aria-label="Products page size" value={productQuery.pageSize} onChange={(e) => setProductQuery((prev) => ({ ...prev, page: 1, pageSize: Number(e.target.value) }))} className={inputCls}>
                     {PAGE_SIZE_OPTIONS.map((n) => <option key={n} value={n}>{n} per page</option>)}
                   </select>
-                  <input
-                    type="number"
-                    aria-label="Minimum product price"
-                    placeholder="Min price"
-                    value={productQuery.min_price}
-                    onChange={(e) => setProductQuery((prev) => ({ ...prev, page: 1, min_price: e.target.value }))}
-                    className={inputCls}
-                  />
-                  <input
-                    type="number"
-                    aria-label="Maximum product price"
-                    placeholder="Max price"
-                    value={productQuery.max_price}
-                    onChange={(e) => setProductQuery((prev) => ({ ...prev, page: 1, max_price: e.target.value }))}
-                    className={inputCls}
-                  />
                 </div>
               </div>
 
@@ -1049,41 +1111,118 @@ export function AdminPage() {
                 <SectionLoader label="Loading products..." />
               ) : visibleProducts.length === 0 ? (
                 <EmptyState icon={Package} label={debouncedSearch ? 'No products match your search/filters' : 'No products found'} action={() => openModal('product')} actionLabel="Add First Product" />
-              ) : (
-                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {visibleProducts.map((p) => (
-                    <motion.div key={p.product_id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-                      className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6 hover:border-[var(--gold-primary)]/50 hover:-translate-y-0.5 transition-all"
-                    >
-                      {p.primary_image && (
-                        <img src={p.primary_image} alt={p.name} className="w-full h-36 object-cover rounded-xl mb-4 border border-white/5" loading="lazy" />
-                      )}
-                      <div className="flex items-start justify-between mb-2">
-                        <div>
-                          <p className="text-[var(--text-muted)] text-xs font-mono">{p.sku}</p>
-                          <h3 className="text-white font-semibold line-clamp-1">{p.name}</h3>
-                          <p className="text-[var(--text-muted)] text-xs">{p.category_name || 'Uncategorised'}</p>
+              ) : productViewMode === 'table' ? (
+                <AdminTable
+                  columns={['Image', 'Product', 'SKU', 'Price', 'Cost', 'Stock Status', 'Actions']}
+                  rows={visibleProducts}
+                  renderRow={(p) => (
+                    <>
+                      <td className="py-4 px-6">
+                        {p.primary_image ? (
+                          <img src={p.primary_image} alt={p.name} className="w-12 h-12 object-cover rounded-lg border border-[var(--border)]" loading="lazy" />
+                        ) : (
+                          <div className="w-12 h-12 bg-[var(--bg-primary)] border border-[var(--border)] rounded-lg flex items-center justify-center">
+                            <Package className="w-5 h-5 text-[var(--text-muted)]" />
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-4 px-6">
+                        <p className="text-white font-semibold">{p.name}</p>
+                      </td>
+                      <td className="py-4 px-6 text-[var(--text-muted)] font-mono text-sm">{p.sku || '—'}</td>
+                      <td className="py-4 px-6 text-[var(--gold-primary)] font-bold">{formatCurrency(p.price)}</td>
+                      <td className="py-4 px-6 text-[var(--text-muted)] text-sm">{p.cost_price ? formatCurrency(p.cost_price) : '—'}</td>
+                      <td className="py-4 px-6">
+                        <div className="flex items-center gap-2" title={`Stock: ${p.stock}`}>
+                          <span className={`w-2 h-2 rounded-full ${p.stock > (p.low_stock_threshold || 10) ? 'bg-green-400' : p.stock > 0 ? 'bg-amber-400' : 'bg-red-400'}`} />
+                          <span className={`text-sm font-semibold ${p.stock > (p.low_stock_threshold || 10) ? 'text-green-400' : p.stock > 0 ? 'text-amber-400' : 'text-red-400'}`}>
+                            {p.stock > (p.low_stock_threshold || 10) ? 'In Stock' : p.stock > 0 ? 'Low Stock' : 'Out of Stock'}
+                          </span>
                         </div>
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-semibold border ${p.is_active ? 'bg-green-500/20 text-green-400 border-green-500/30' : 'bg-gray-500/20 text-gray-400 border-gray-500/30'}`}>
-                          {p.is_active ? 'Active' : 'Inactive'}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between mt-4 pt-4 border-t border-[var(--border)]">
-                        <span className="text-[var(--gold-primary)] font-bold">{formatCurrency(p.price, true)}</span>
-                        <div className="flex gap-2">
-                          <button onClick={() => openModal('product', p)} className="p-1.5 hover:bg-[var(--gold-primary)]/10 rounded transition-colors" title="View" aria-label={`View ${p.name}`}>
-                            <Eye className="w-4 h-4 text-[var(--text-muted)]" />
-                          </button>
-                          <button onClick={() => openModal('product', p)} className="p-1.5 hover:bg-[var(--gold-primary)]/10 rounded transition-colors" title="Edit">
+                      </td>
+                      <td className="py-4 px-6">
+                        <div className="flex items-center gap-2">
+                          <button onClick={() => openModal('product', p)} className="p-2 hover:bg-[var(--gold-primary)]/10 rounded-lg transition-colors" title="Edit">
                             <Edit className="w-4 h-4 text-[var(--text-muted)]" />
                           </button>
-                          <button onClick={() => deleteProduct(p.product_id, p.name)} className="p-1.5 hover:bg-red-500/10 rounded transition-colors" title="Deactivate">
+                          <button onClick={() => deleteProduct(p.product_id, p.name)} className="p-2 hover:bg-red-500/10 rounded-lg transition-colors" title="Deactivate">
                             <Trash2 className="w-4 h-4 text-red-400" />
                           </button>
                         </div>
-                      </div>
-                    </motion.div>
-                  ))}
+                      </td>
+                    </>
+                  )}
+                  empty={<EmptyState icon={Package} label="No products found" action={() => openModal('product')} actionLabel="Add Product" />}
+                />
+              ) : (
+                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {visibleProducts.map((p) => {
+                    const profitMargin = p.price && p.cost_price && p.cost_price > 0 && p.cost_price < p.price 
+                      ? Math.round(((p.price - p.cost_price) / p.price) * 100)
+                      : null
+                    const hasNoMargin = p.price && p.cost_price && p.cost_price >= p.price
+                    
+                    return (
+                      <motion.div key={p.product_id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+                        className={`bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl overflow-hidden hover:border-[var(--gold-primary)]/50 hover:-translate-y-1 transition-all group ${!p.is_active ? 'opacity-60 filter grayscale-[0.4]' : ''}`}
+                      >
+                        <div className="relative h-44 overflow-hidden bg-[var(--bg-primary)]">
+                          {p.primary_image ? (
+                            <img src={p.primary_image} alt={p.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300" loading="lazy" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center">
+                              <Package className="w-16 h-16 text-[var(--text-muted)]/30" />
+                            </div>
+                          )}
+                          <div className="absolute top-3 right-3">
+                            <span className={`px-2 py-1 rounded-full text-xs font-semibold border ${p.is_active ? 'bg-green-500/80 text-white border-green-400' : 'bg-gray-500/80 text-white border-gray-400'}`}>
+                              {p.is_active ? 'Active' : 'Inactive'}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="p-5">
+                          <div className="flex items-start justify-between mb-3">
+                            <div className="min-w-0 flex-1">
+                              <p className="text-[var(--gold-primary)] text-xs font-mono">{p.sku || 'No SKU'}</p>
+                              <h3 className="text-white font-semibold text-lg truncate">{p.name}</h3>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center justify-between mt-4 pt-4 border-t border-[var(--border)]">
+                            <div className="flex flex-col gap-1">
+                              <div className="flex items-center gap-2">
+                                <span className="text-white font-bold text-xl">{formatCurrency(p.price)}</span>
+                                {profitMargin !== null && !hasNoMargin && (
+                                  <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 text-xs font-semibold rounded-full">
+                                    +{profitMargin}% margin
+                                  </span>
+                                )}
+                                {hasNoMargin && (
+                                  <span className="px-2 py-0.5 bg-red-500/10 text-red-400 text-xs font-semibold rounded-full">
+                                    No margin
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className={`w-2 h-2 rounded-full ${p.stock > (p.low_stock_threshold || 10) ? 'bg-green-400' : p.stock > 0 ? 'bg-amber-400' : 'bg-red-400'}`} />
+                                <span className={`text-xs font-semibold ${p.stock > (p.low_stock_threshold || 10) ? 'text-green-400' : p.stock > 0 ? 'text-amber-400' : 'text-red-400'}`}>
+                                  {p.stock > (p.low_stock_threshold || 10) ? 'In Stock' : p.stock > 0 ? 'Low Stock' : 'Out of Stock'}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="flex gap-1">
+                              <button onClick={() => openModal('product', p)} className="p-2 bg-[var(--bg-primary)] hover:bg-[var(--gold-primary)]/20 rounded-lg transition-colors" title="Edit">
+                                <Edit className="w-4 h-4 text-[var(--text-muted)]" />
+                              </button>
+                              <button onClick={() => deleteProduct(p.product_id, p.name)} className="p-2 bg-[var(--bg-primary)] hover:bg-red-500/20 rounded-lg transition-colors" title="Delete">
+                                <Trash2 className="w-4 h-4 text-red-400" />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </motion.div>
+                    )
+                  })}
                 </div>
               )}
               <PaginationBar
@@ -1133,28 +1272,12 @@ export function AdminPage() {
                     <option value="created_at:asc">Oldest first</option>
                     <option value="name:asc">Name A-Z</option>
                     <option value="name:desc">Name Z-A</option>
-                    <option value="price:asc">Price low-high</option>
-                    <option value="price:desc">Price high-low</option>
+                    <option value="price:asc">Price: Low to High</option>
+                    <option value="price:desc">Price: High to Low</option>
                   </select>
                   <select aria-label="Parts page size" value={partQuery.pageSize} onChange={(e) => setPartQuery((prev) => ({ ...prev, page: 1, pageSize: Number(e.target.value) }))} className={inputCls}>
                     {PAGE_SIZE_OPTIONS.map((n) => <option key={n} value={n}>{n} per page</option>)}
                   </select>
-                  <input
-                    type="number"
-                    aria-label="Minimum part price"
-                    placeholder="Min price"
-                    value={partQuery.min_price}
-                    onChange={(e) => setPartQuery((prev) => ({ ...prev, page: 1, min_price: e.target.value }))}
-                    className={inputCls}
-                  />
-                  <input
-                    type="number"
-                    aria-label="Maximum part price"
-                    placeholder="Max price"
-                    value={partQuery.max_price}
-                    onChange={(e) => setPartQuery((prev) => ({ ...prev, page: 1, max_price: e.target.value }))}
-                    className={inputCls}
-                  />
                 </div>
               </div>
               {partsLoading ? (
@@ -1179,8 +1302,10 @@ export function AdminPage() {
                       <td className="py-4 px-6 text-white font-semibold">{part.name}</td>
                       <td className="py-4 px-6 text-[var(--text-muted)] capitalize">{part.guitar_type || '—'}</td>
                       <td className="py-4 px-6 text-[var(--text-muted)] capitalize">{(part.part_category || part.type_mapping || '—').replace('_', ' ')}</td>
-                      <td className="py-4 px-6 text-white">{part.stock}</td>
-                      <td className="py-4 px-6 text-[var(--gold-primary)] font-bold">{formatCurrency(part.price, true)}</td>
+                      <td className="py-4 px-6">
+                        <span className={part.stock > 0 ? 'text-green-400' : 'text-red-400'}>{part.stock}</span>
+                      </td>
+                      <td className="py-4 px-6 text-[var(--gold-primary)] font-bold text-lg">{formatCurrency(part.price)}</td>
                       <td className="py-4 px-6">
                         <span className={`px-2 py-1 rounded-full text-xs font-semibold border ${part.is_active ? 'bg-green-500/20 text-green-400 border-green-500/30' : 'bg-gray-500/20 text-gray-400 border-gray-500/30'}`}>
                           {part.is_active ? 'Active' : 'Inactive'}
@@ -1256,7 +1381,7 @@ export function AdminPage() {
                     <td className="py-4 px-6">
                       <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-[var(--gold-primary)]/20 text-[var(--gold-primary)] border border-[var(--gold-primary)]/30 capitalize">{g.guitar_type}</span>
                     </td>
-                    <td className="py-4 px-6 text-[var(--gold-primary)] font-bold">{formatCurrency(g.total_price, true)}</td>
+                    <td className="py-4 px-6 text-[var(--gold-primary)] font-bold">{formatCurrency(g.total_price)}</td>
                     <td className="py-4 px-6"><StatusBadge active={g.is_saved} trueLabel="Saved" falseLabel="Draft" /></td>
                     <td className="py-4 px-6">
                       <div className="flex gap-2">
@@ -1427,7 +1552,7 @@ export function AdminPage() {
                       )}
                       <div className="flex flex-col gap-2 pt-4 border-t border-[var(--border)]">
                         <button onClick={() => openModal('project_tasks', project)} className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-[var(--gold-primary)]/10 border border-[var(--gold-primary)]/30 rounded-lg text-[var(--gold-primary)] text-sm hover:bg-[var(--gold-primary)]/20 transition-all">
-                          <Activity className="w-4 h-4" /> Tasks
+                          <Activity className="w-4 h-4" /> Tasks & Parts
                         </button>
                       </div>
                       <div className="flex gap-2 pt-2">
@@ -1806,107 +1931,368 @@ export function AdminPage() {
           >
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className={`bg-[var(--surface-dark)] border border-[var(--border)] rounded-3xl p-8 w-full shadow-2xl overflow-y-auto ${modal.type === 'project_tasks' ? 'max-w-6xl h-[90vh]' : 'max-w-lg max-h-[90vh]'}`}
+              className={`bg-[var(--surface-dark)] border border-[var(--border)] rounded-3xl p-8 w-full shadow-2xl overflow-y-auto ${modal.type === 'project_tasks' ? 'max-w-6xl h-[90vh]' : modal.type === 'part' ? 'max-h-[90vh] max-w-[min(92vw,72rem)]' : 'max-w-lg max-h-[90vh]'}`}
             >
 
               {/* Project Tasks */}
               {modal.type === 'project_tasks' && modal.data && (
                 <>
-                  <ModalHeader title="Manage Project Tasks" onClose={closeModal} />
-                  <div className="mt-6"><ProjectTaskTracker projectId={modal.data.project_id} isAdmin={true} /></div>
+                  <ModalHeader title="Project Tasks & Parts" onClose={closeModal} />
+                  <div className="mt-6">
+                    <ProjectTaskTracker 
+                      projectId={modal.data.project_id} 
+                      projectName={modal.data.name || modal.data.title}
+                      isAdmin={true}
+                      parts={visibleParts}
+                      projectData={modal.data}
+                    />
+                  </div>
                 </>
               )}
 
               {/* Product Modal - Industry Redesign Wizard */}
-              {modal.type === 'product' && (
-                <>
-                  <ModalHeader title={modal.data ? 'Edit Product' : 'New Product'} onClose={closeModal} />
-                  
-                  {/* Wizard Tabs Navigation */}
-                  <div className="mt-4 flex border-b border-[var(--border)] mb-6 overflow-x-auto scrollbar-hide">
-                    {['basic', 'inventory', 'media'].map(tab => (
-                      <button key={tab}
-                        onClick={() => setWizardTab(tab)}
-                        className={`pb-3 px-6 text-sm font-medium transition-all whitespace-nowrap ${wizardTab === tab ? 'text-[var(--gold-primary)] border-b-2 border-[var(--gold-primary)]' : 'text-[var(--text-muted)] hover:text-white'}`}
-                      >
-                        {tab === 'basic' ? 'Basic Info' : tab === 'media' ? 'Media & Assets' : 'Pricing & Stock'}
-                      </button>
-                    ))}
-                  </div>
+              {modal.type === 'product' && (() => {
+                const productStep1Complete = Boolean(String(form.name || '').trim() && String(form.category_id || '').trim())
+                const sellingN = parseFloat(form.price)
+                const productStep2Complete = Boolean(String(form.sku || '').trim() && !Number.isNaN(sellingN) && sellingN > 0)
+                const productStep3Complete = Boolean(form.image_url || form.preview_url || form.image_file)
+                const productTabs = [
+                  { id: 'basic', step: 1, label: 'Basic Info', done: productStep1Complete },
+                  { id: 'inventory', step: 2, label: 'Pricing & Stock', done: productStep2Complete },
+                  { id: 'media', step: 3, label: 'Media & Assets', done: productStep3Complete },
+                ]
+                const sellingPrice = parseFloat(form.price)
+                const costPrice = parseFloat(form.cost_price) || 0
+                const hasValidSelling = !Number.isNaN(sellingPrice)
+                const profitAmount = hasValidSelling ? sellingPrice - costPrice : NaN
+                const marginPct = hasValidSelling && sellingPrice > 0 ? (profitAmount / sellingPrice) * 100 : null
+                const marginHealthy = marginPct != null && marginPct >= 20
+                const marginWarn = marginPct != null && marginPct < 20
+                const fieldBase = 'w-full px-4 py-2.5 bg-[var(--bg-primary)] rounded-xl text-white placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 text-sm transition-colors'
+                const fieldOk = `${fieldBase} border border-[var(--border)] focus:ring-[var(--gold-primary)]`
+                const fieldErr = `${fieldBase} border border-[var(--border)] border-l-4 border-l-red-500 focus:ring-red-500/40`
+                const selErr = `${inputCls} border-l-4 border-l-red-500`
+                const selOk = inputCls
+                return (
+                  <>
+                    <div className="sticky top-0 z-20 -mx-8 px-8 pt-0 pb-4 mb-1 bg-[var(--surface-dark)] border-b border-[var(--border)]">
+                      <ModalHeader title={modal.data ? 'Edit Product' : 'New Product'} onClose={closeModal} />
+                      <div className="mt-5 flex w-full items-center">
+                        {productTabs.map((tab, idx) => (
+                          <div key={tab.id} className="flex min-w-0 flex-1 items-center">
+                            <button
+                              type="button"
+                              onClick={() => setWizardTab(tab.id)}
+                              className="flex w-full min-w-0 flex-col items-center gap-2"
+                            >
+                              <div
+                                className={`relative z-[1] flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 text-sm font-bold transition-colors ${
+                                  wizardTab === tab.id
+                                    ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)]/20 text-[var(--gold-primary)]'
+                                    : tab.done
+                                      ? 'border-emerald-500/70 bg-emerald-500/15 text-emerald-400'
+                                      : 'border-[var(--border)] bg-[var(--bg-primary)] text-[var(--text-muted)]'
+                                }`}
+                              >
+                                {tab.done ? <Check className="h-4 w-4" strokeWidth={2.5} /> : tab.step}
+                              </div>
+                              <span className={`text-center text-[10px] font-semibold uppercase leading-tight tracking-wide sm:text-xs ${wizardTab === tab.id ? 'text-[var(--gold-primary)]' : 'text-[var(--text-muted)]'}`}>
+                                {tab.label}
+                              </span>
+                            </button>
+                            {idx < productTabs.length - 1 && (
+                              <div className="mx-1 h-0.5 min-w-[1rem] flex-1 shrink rounded-full bg-[var(--border)] sm:mx-2" aria-hidden />
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
 
-                  <div className="min-h-[350px]">
-                    {/* Pane 1: Basic Info */}
-                    {wizardTab === 'basic' && (
-                      <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} className="space-y-5">
-                        <FormField label="Product Name *" value={form.name || ''} onChange={v => setForm(f => ({ ...f, name: v }))} error={formErrors.name} placeholder="Classic Stratocaster" />
-                        <FormField label="Product Description" value={form.description || ''} onChange={v => setForm(f => ({ ...f, description: v }))} textarea placeholder="Write a compelling description..." />
-                        
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="min-h-[350px]">
+                      {wizardTab === 'basic' && (
+                        <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} className="space-y-5">
                           <div>
-                            <label className={labelCls}>Category</label>
-                            <select value={form.category_id || ''} onChange={e => setForm(f => ({ ...f, category_id: e.target.value }))} className={inputCls}>
-                              <option value="">— None —</option>
-                              {categories.map(c => <option key={c.category_id} value={c.category_id}>{c.name}</option>)}
-                            </select>
+                            <label className={`block text-xs font-semibold uppercase tracking-wider mb-1.5 ${formErrors.name ? 'text-red-400' : 'text-[var(--text-muted)]'}`}>Product Name *</label>
+                            <input
+                              value={form.name || ''}
+                              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                              placeholder="Classic Stratocaster"
+                              className={formErrors.name ? fieldErr : fieldOk}
+                            />
+                            {formErrors.name && <p className="mt-1 text-xs text-red-400">{formErrors.name}</p>}
                           </div>
-                          
-                          <div className="flex flex-col justify-end pb-2">
-                            <div className="flex items-center gap-3">
-                              <input type="checkbox" id="is_active" checked={form.is_active ?? true} onChange={e => setForm(f => ({ ...f, is_active: e.target.checked }))} className="w-5 h-5 rounded border-gray-600 bg-gray-800 text-[var(--gold-primary)] focus:ring-[var(--gold-primary)] focus:ring-offset-gray-900" />
-                              <label htmlFor="is_active" className="text-white font-medium cursor-pointer">Active Product</label>
+                          <div>
+                            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Product Description</label>
+                            <textarea
+                              rows={3}
+                              value={form.description || ''}
+                              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+                              placeholder="Write a compelling description..."
+                              className={fieldOk}
+                            />
+                            <p className="mt-1.5 text-xs text-[var(--text-muted)]">Shown on the product page and in search previews.</p>
+                          </div>
+                          <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]/60 p-4 sm:p-5">
+                            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-5">
+                              <div>
+                                <label className={`${labelCls} ${formErrors.category_id ? 'text-red-400' : ''}`}>Category *</label>
+                                <select
+                                  value={form.category_id || ''}
+                                  onChange={(e) => setForm((f) => ({ ...f, category_id: e.target.value }))}
+                                  className={formErrors.category_id ? selErr : selOk}
+                                >
+                                  <option value="">— Select Category —</option>
+                                  {categories.map((c) => (
+                                    <option key={c.category_id} value={c.category_id}>
+                                      {c.name}
+                                    </option>
+                                  ))}
+                                </select>
+                                {formErrors.category_id && <p className="mt-1 text-xs text-red-400">{formErrors.category_id}</p>}
+                                <p className="mt-1.5 text-xs text-[var(--text-muted)]">Groups this product in the shop catalog.</p>
+                              </div>
+                              <div className="flex flex-col justify-end pb-0.5 md:pb-1">
+                                <div className="flex items-center gap-3">
+                                  <input
+                                    type="checkbox"
+                                    id="is_active"
+                                    checked={form.is_active ?? true}
+                                    onChange={(e) => setForm((f) => ({ ...f, is_active: e.target.checked }))}
+                                    className="h-5 w-5 rounded border-gray-600 bg-gray-800 text-[var(--gold-primary)] focus:ring-[var(--gold-primary)] focus:ring-offset-gray-900"
+                                  />
+                                  <label htmlFor="is_active" className="cursor-pointer font-medium text-white">
+                                    Active Product
+                                  </label>
+                                </div>
+                                <p className="ml-8 mt-1 text-xs text-[var(--text-muted)]">When off, the product is hidden from the storefront.</p>
+                              </div>
                             </div>
-                            <span className="text-[var(--text-muted)] text-xs ml-8">Visible and purchasable in the shop.</span>
                           </div>
-                        </div>
-                      </motion.div>
-                    )}
+                        </motion.div>
+                      )}
 
-                    {/* Pane 2: Pricing & Stock */}
-                    {wizardTab === 'inventory' && (
-                      <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
-                        <FormField label="Stock Keeping Unit (SKU) *" value={form.sku || ''} onChange={v => setForm(f => ({ ...f, sku: v }))} placeholder="e.g. GTR-STR-001" error={formErrors.sku} />
-                        
-                        <div className="bg-[var(--bg-primary)] p-5 rounded-2xl border border-[var(--border)]">
-                          <FormField label="Price (₱) *" type="number" value={form.price || ''} onChange={v => setForm(f => ({ ...f, price: v }))} error={formErrors.price} placeholder="e.g. 50000" />
-                        </div>
-                        
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 bg-[var(--bg-primary)] p-5 rounded-2xl border border-[var(--border)]">
-                          <FormField label="Initial Stock Quantity" type="number" value={form.stock ?? ''} onChange={v => setForm(f => ({ ...f, stock: v }))} placeholder="0" />
-                          <FormField label="Low Stock Alert Threshold" type="number" value={form.low_stock_threshold ?? ''} onChange={v => setForm(f => ({ ...f, low_stock_threshold: v }))} placeholder="10" />
-                        </div>
-                      </motion.div>
-                    )}
+                      {wizardTab === 'inventory' && (
+                        <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} className="space-y-5">
+                          <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+                            <div className="min-w-0 flex-1">
+                              <label className={`block text-xs font-semibold uppercase tracking-wider mb-1.5 ${formErrors.sku ? 'text-red-400' : 'text-[var(--text-muted)]'}`}>Stock Keeping Unit (SKU) *</label>
+                              <input
+                                value={form.sku || ''}
+                                onChange={(e) => setForm((f) => ({ ...f, sku: e.target.value }))}
+                                placeholder="e.g. GTR-STR-001"
+                                className={formErrors.sku ? fieldErr : fieldOk}
+                              />
+                              {formErrors.sku && <p className="mt-1 text-xs text-red-400">{formErrors.sku}</p>}
+                              <p className="mt-1.5 text-xs text-[var(--text-muted)]">Used for inventory tracking and order fulfillment.</p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const prefix = 'GTR'
+                                const timestamp = Date.now().toString(36).toUpperCase()
+                                const random = Math.random().toString(36).substring(2, 5).toUpperCase()
+                                setForm((f) => ({ ...f, sku: `${prefix}-${timestamp}-${random}` }))
+                              }}
+                              className="shrink-0 self-start rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-3 py-2.5 text-xs text-[var(--text-muted)] transition-colors hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)] sm:mt-7"
+                            >
+                              Auto-generate
+                            </button>
+                          </div>
 
-                    {/* Pane 3: Media */}
-                    {wizardTab === 'media' && (
-                      <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} className="space-y-4">
-                        <div className="bg-[var(--bg-primary)] p-6 rounded-2xl border border-[var(--border)] border-dashed text-center">
-                          <ImageUploadWidget
-                            label="Primary Main Image"
-                            imageUrl={form.image_url}
-                            previewUrl={form.preview_url}
-                            isUploading={isUploading}
-                            onUpload={handleImageUpload}
-                            hint="High-quality transparent PNGs or JPGs work best for optimal catalog display."
-                          />
-                        </div>
-                      </motion.div>
-                    )}
-                  </div>
+                          <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]/60 p-4 sm:p-5">
+                            <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Pricing</p>
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5">
+                              <div>
+                                <label className={`block text-xs font-semibold uppercase tracking-wider mb-1.5 ${formErrors.price ? 'text-red-400' : 'text-[var(--text-muted)]'}`}>Selling Price (₱) *</label>
+                                <input
+                                  type="number"
+                                  value={form.price || ''}
+                                  onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))}
+                                  placeholder="e.g. 50000"
+                                  className={formErrors.price ? fieldErr : fieldOk}
+                                />
+                                {formErrors.price && <p className="mt-1 text-xs text-red-400">{formErrors.price}</p>}
+                              </div>
+                              <div>
+                                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Cost Price (₱)</label>
+                                <input
+                                  type="number"
+                                  value={form.cost_price || ''}
+                                  onChange={(e) => setForm((f) => ({ ...f, cost_price: e.target.value }))}
+                                  placeholder="e.g. 30000"
+                                  className={fieldOk}
+                                />
+                                <p className="mt-1.5 text-xs text-[var(--text-muted)]">Your landed cost per unit (optional, for margin math).</p>
+                              </div>
+                            </div>
+                          </div>
 
-                  <div className="mt-8 pt-5 border-t border-[var(--border)] flex justify-between items-center bg-[var(--surface-dark)] -mx-8 -mb-8 px-8 pb-8 rounded-b-2xl">
-                    <div className="flex gap-2 text-sm">
-                      <button onClick={() => setWizardTab(wizardTab === 'inventory' ? 'basic' : wizardTab === 'media' ? 'inventory' : 'basic')} className={`px-4 py-2 rounded-lg text-white font-medium hover:bg-[var(--bg-primary)] border border-[var(--border)] ${wizardTab === 'basic' ? 'invisible' : 'visible'}`}>Back</button>
+                          {form.price !== '' && form.price !== null && form.price !== undefined && (
+                            <div
+                              className={`rounded-xl border p-4 sm:p-5 ${
+                                marginWarn
+                                  ? 'border-amber-500/40 bg-amber-500/10'
+                                  : marginHealthy
+                                    ? 'border-emerald-500/35 bg-emerald-500/10'
+                                    : 'border-[var(--border)] bg-[var(--bg-primary)]/50'
+                              }`}
+                            >
+                              <p className="mb-3 text-sm font-semibold text-white">Profit preview</p>
+                              <div className="grid grid-cols-2 gap-3 text-sm">
+                                <div className="rounded-lg border border-[var(--border)]/80 bg-black/20 px-3 py-2.5">
+                                  <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Selling price</p>
+                                  <p className="mt-1 font-semibold text-white">{hasValidSelling ? formatCurrency(sellingPrice, false) : '—'}</p>
+                                </div>
+                                <div className="rounded-lg border border-[var(--border)]/80 bg-black/20 px-3 py-2.5">
+                                  <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Cost price</p>
+                                  <p className="mt-1 font-semibold text-white">{formatCurrency(costPrice, false)}</p>
+                                </div>
+                                <div className="rounded-lg border border-[var(--border)]/80 bg-black/20 px-3 py-2.5">
+                                  <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Profit amount</p>
+                                  <p className={`mt-1 font-semibold ${Number.isNaN(profitAmount) ? 'text-[var(--text-muted)]' : profitAmount >= 0 ? 'text-emerald-300' : 'text-red-300'}`}>
+                                    {hasValidSelling && !Number.isNaN(profitAmount) ? formatCurrency(profitAmount, false) : '—'}
+                                  </p>
+                                </div>
+                                <div className="rounded-lg border border-[var(--border)]/80 bg-black/20 px-3 py-2.5">
+                                  <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Margin %</p>
+                                  <p className={`mt-1 font-semibold ${marginPct == null ? 'text-[var(--text-muted)]' : marginHealthy ? 'text-emerald-300' : 'text-amber-200'}`}>
+                                    {marginPct != null ? `${Math.round(marginPct)}%` : '—'}
+                                  </p>
+                                </div>
+                              </div>
+                              {marginWarn && marginPct != null && (
+                                <p className="mt-3 flex items-center gap-1.5 text-xs text-amber-200/90">
+                                  <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                                  Margin is below 20%. Consider adjusting price or cost.
+                                </p>
+                              )}
+                              {marginHealthy && marginPct != null && (
+                                <p className="mt-3 text-xs text-emerald-300/90">Healthy margin at or above 20%.</p>
+                              )}
+                            </div>
+                          )}
+
+                          <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]/60 p-4 sm:p-5">
+                            <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Stock levels</p>
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5">
+                              <div>
+                                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Initial Stock Quantity</label>
+                                <input
+                                  type="number"
+                                  value={form.stock ?? ''}
+                                  onChange={(e) => setForm((f) => ({ ...f, stock: e.target.value }))}
+                                  placeholder="0"
+                                  className={fieldOk}
+                                />
+                                <p className="mt-1.5 text-xs text-[var(--text-muted)]">On-hand count when creating the product.</p>
+                              </div>
+                              <div>
+                                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Low Stock Alert Threshold</label>
+                                <input
+                                  type="number"
+                                  value={form.low_stock_threshold ?? ''}
+                                  onChange={(e) => setForm((f) => ({ ...f, low_stock_threshold: e.target.value }))}
+                                  placeholder="10"
+                                  className={fieldOk}
+                                />
+                                <p className="mt-1.5 text-xs text-[var(--text-muted)]">You&apos;ll be alerted when stock drops to this level.</p>
+                              </div>
+                            </div>
+                          </div>
+                        </motion.div>
+                      )}
+
+                      {wizardTab === 'media' && (
+                        <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} className="space-y-4">
+                          <motion.div
+                            whileHover={{
+                              boxShadow: '0 0 0 2px rgba(212, 175, 55, 0.22)',
+                              borderColor: 'rgba(212, 175, 55, 0.45)',
+                            }}
+                            transition={{ type: 'spring', stiffness: 420, damping: 28 }}
+                            className="rounded-2xl border-2 border-dashed border-[var(--border)] bg-[var(--bg-primary)]/40 p-4 sm:p-5"
+                          >
+                            <ImageUploadWidget
+                              label="Primary Main Image"
+                              imageUrl={form.image_url}
+                              previewUrl={form.preview_url}
+                              isUploading={isUploading}
+                              onUpload={handleImageUpload}
+                              hint="High-quality transparent PNGs or JPGs work best for optimal catalog display."
+                            />
+                          </motion.div>
+                          {(form.image_file || form.preview_url || form.image_url) && (
+                            <div className="flex flex-col gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]/50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                              <div className="min-w-0 text-sm">
+                                <p className="truncate font-medium text-white">
+                                  {form.image_file?.name || (form.image_url ? 'Current catalog image' : 'Selected image')}
+                                </p>
+                                <p className="text-xs text-[var(--text-muted)]">
+                                  {form.image_file ? `${(form.image_file.size / 1024).toFixed(form.image_file.size >= 102400 ? 0 : 1)} KB` : form.image_url ? 'Replace below or remove to clear.' : ''}
+                                </p>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setForm((f) => ({
+                                    ...f,
+                                    image_file: undefined,
+                                    preview_url: undefined,
+                                    image_url: '',
+                                  }))
+                                }
+                                className="shrink-0 rounded-lg border border-red-500/40 px-3 py-1.5 text-xs font-medium text-red-300 transition-colors hover:bg-red-500/10"
+                              >
+                                Remove image
+                              </button>
+                            </div>
+                          )}
+                        </motion.div>
+                      )}
                     </div>
-                    <div className="flex gap-3">
-                      <button onClick={closeModal} className="px-4 py-2 text-[var(--text-muted)] hover:text-white transition-colors font-medium">Cancel</button>
-                      <button onClick={validateAndSave(PRODUCT_RULES, saveProduct)} disabled={isSaving} className="px-6 py-2 bg-[var(--gold-primary)] text-black font-semibold rounded-lg hover:bg-[var(--gold-secondary)] transition-all flex items-center gap-2 shadow-lg shadow-[var(--gold-primary)]/20">
-                        {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save Product'}
-                      </button>
+
+                    <div className="mt-8 flex items-center justify-between border-t border-[var(--border)] bg-[var(--surface-dark)] -mx-8 -mb-8 rounded-b-2xl px-8 pb-8 pt-5">
+                      <div className="flex gap-2 text-sm">
+                        <button
+                          type="button"
+                          onClick={() => setWizardTab(wizardTab === 'inventory' ? 'basic' : wizardTab === 'media' ? 'inventory' : 'basic')}
+                          className={`rounded-lg border border-[var(--border)] px-4 py-2 font-medium text-white hover:bg-[var(--bg-primary)] ${wizardTab === 'basic' ? 'invisible' : 'visible'}`}
+                        >
+                          Back
+                        </button>
+                      </div>
+                      <div className="flex gap-3">
+                        <button type="button" onClick={closeModal} className="px-4 py-2 font-medium text-[var(--text-muted)] transition-colors hover:text-white">
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            await validateAndSave(PRODUCT_RULES, async () => {
+                              await saveProduct()
+                              setForm({})
+                              setWizardTab('basic')
+                              showToast('Product saved! Add another.')
+                            })()
+                          }}
+                          disabled={isSaving}
+                          className="rounded-lg border border-[var(--gold-primary)] px-4 py-2 font-medium text-[var(--gold-primary)] transition-colors hover:bg-[var(--gold-primary)]/10"
+                        >
+                          Save & Add Another
+                        </button>
+                        <button
+                          type="button"
+                          onClick={validateAndSave(PRODUCT_RULES, saveProduct)}
+                          disabled={isSaving}
+                          className="flex items-center gap-2 rounded-lg bg-[var(--gold-primary)] px-6 py-2 font-semibold text-black shadow-lg shadow-[var(--gold-primary)]/20 transition-all hover:bg-[var(--gold-secondary)]"
+                        >
+                          {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save Product'}
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                </>
-              )}
+                  </>
+                )
+              })()}
 
               {/* Category Modal */}
               {modal.type === 'category' && (
@@ -1932,103 +2318,283 @@ export function AdminPage() {
               )}
 
               {/* Builder Part Modal */}
-              {modal.type === 'part' && (
-                <>
-                  <ModalHeader title={modal.data ? 'Edit Guitar Part' : 'New Guitar Part'} onClose={closeModal} />
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-6">
-                    <div className="space-y-4">
-                      <FormField label="Part Name *" value={form.name || ''} onChange={v => setForm(f => ({ ...f, name: v }))} placeholder="e.g. Mahogany Body" error={formErrors.name} />
-                      <FormField label="Description" value={form.description || ''} onChange={v => setForm(f => ({ ...f, description: v }))} textarea />
-                      <div>
-                        <label className={labelCls}>Builder Category (Customize Page)</label>
-                        <select
-                          value={form.builder_category || ''}
-                          onChange={e => {
-                            const builderCategory = e.target.value
-                            const firstSlot = BUILDER_CATEGORY_MAP[builderCategory]?.[0] || ''
-                            setForm(f => ({
-                              ...f,
-                              builder_category: builderCategory,
-                              type_mapping: firstSlot || f.type_mapping || '',
-                              part_category: SLOT_TO_PART_CATEGORY[firstSlot] || f.part_category || 'misc',
-                            }))
-                          }}
-                          className={inputCls}
-                        >
-                          <option value="">— Select Category —</option>
-                          <option value="body">Body</option>
-                          <option value="neck">Neck & Headstock</option>
-                          <option value="hardware">Hardware</option>
-                          <option value="electronics">Electronics</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className={`${labelCls} ${formErrors.type_mapping ? 'text-red-400' : ''}`}>Type Mapping (UI Slot) *</label>
-                        <select
-                          value={form.type_mapping || ''}
-                          onChange={e => {
-                            const typeMapping = e.target.value
-                            setForm(f => ({
-                              ...f,
-                              type_mapping: typeMapping,
-                              part_category: SLOT_TO_PART_CATEGORY[typeMapping] || f.part_category || 'misc',
-                            }))
-                          }}
-                          className={formErrors.type_mapping ? inputErrCls : inputCls}
-                        >
-                          <option value="">— Select Type —</option>
-                          {(
-                            form.builder_category
-                              ? BUILDER_CATEGORY_MAP[form.builder_category] || []
-                              : Object.values(BUILDER_CATEGORY_MAP).flat()
-                          ).map((t) => (
-                            <option key={t} value={t}>{t.replace(/([A-Z])/g, ' $1').replace('_', ' ').replace(/\b\w/g, (l) => l.toUpperCase())}</option>
-                          ))}
-                        </select>
-                        {formErrors.type_mapping && <p className="text-red-400 text-xs mt-1">{formErrors.type_mapping}</p>}
-                        <p className="text-[var(--text-muted)] text-xs mt-1">Slots follow `CustomizePage` field names to keep admin parts aligned with builder logic.</p>
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
+              {modal.type === 'part' && (() => {
+                const partFieldBase =
+                  'w-full min-h-[2.875rem] px-4 py-3 bg-[var(--bg-primary)] rounded-2xl text-white placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 text-sm transition-colors box-border'
+                const partFieldOk = `${partFieldBase} border border-[var(--border)] focus:ring-[var(--gold-primary)]`
+                const partFieldErr = `${partFieldBase} border border-[var(--border)] border-l-4 border-l-red-500 focus:ring-red-500/40`
+                const partSelErr = `${inputCls} border-l-4 border-l-red-500`
+                const partHint = (text, tone = 'muted') => (
+                  <p
+                    className={`mt-1.5 flex gap-2 text-xs leading-relaxed ${
+                      tone === 'gold' ? 'text-[var(--gold-primary)]/95' : 'text-[var(--text-muted)]'
+                    }`}
+                  >
+                    <Info
+                      className={`mt-0.5 h-3.5 w-3.5 shrink-0 ${tone === 'gold' ? 'text-[var(--gold-primary)]' : 'text-[var(--text-muted)]'}`}
+                      aria-hidden
+                    />
+                    <span className="min-w-0 flex-1">{text}</span>
+                  </p>
+                )
+                const partTextareaOk =
+                  'w-full min-h-[5.5rem] resize-y px-4 py-3 box-border bg-[var(--bg-primary)] rounded-2xl border border-[var(--border)] text-white placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] text-sm transition-colors'
+                const slotHints = {
+                  body: 'Controls the guitar body shape and wood.',
+                  bodyWood: 'Controls body wood species and grain for the configurator.',
+                  bodyFinish: 'Controls finish color and treatment on the body.',
+                  pickguard: 'Sets pickguard style and material on the body.',
+                  neck: 'Controls neck profile and construction options.',
+                  fretboard: 'Sets the fretboard material and inlay style.',
+                  headstock: 'Controls headstock shape and branding placement.',
+                  headstockWood: 'Sets headstock wood and contrast details.',
+                  inlays: 'Controls fretboard inlay pattern and markers.',
+                  hardware: 'Groups general hardware options on the build.',
+                  bridge: 'Controls bridge type, routing, and string anchoring.',
+                  knobs: 'Sets control knob style and layout.',
+                  pickups: 'Determines pickup configuration and sound.',
+                }
+                const slotHint = form.type_mapping ? slotHints[form.type_mapping] : null
+                const previewGuitarType = (form.guitar_type || 'electric').replace(/\b\w/g, (l) => l.toUpperCase())
+                const previewPartCat = (form.part_category || form.type_mapping || 'misc').replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase())
+                const previewPrice = form.price !== '' && form.price != null && !Number.isNaN(Number(form.price)) ? formatCurrency(Number(form.price), false) : '—'
+                return (
+                  <>
+                    <div className="sticky top-0 z-20 -mx-8 mb-4 border-b border-[var(--border)] bg-[var(--surface-dark)] px-8 pb-4 pt-0">
+                      <ModalHeader title={modal.data ? 'Edit Guitar Part' : 'New Guitar Part'} onClose={closeModal} />
+                    </div>
+                    <div className="mt-0 grid grid-cols-1 gap-8 md:grid-cols-2 md:gap-0">
+                      <div className="min-w-0 space-y-5 md:pr-8">
                         <div>
-                          <label className={labelCls}>Guitar Type</label>
-                          <select value={form.guitar_type || 'electric'} onChange={e => setForm(f => ({ ...f, guitar_type: e.target.value }))} className={inputCls}>
-                            {['electric', 'bass', 'acoustic', 'ukulele'].map(t => (
-                              <option key={t} value={t}>{t.replace(/\b\w/g, l => l.toUpperCase())}</option>
-                            ))}
-                          </select>
+                          <label className={`${labelCls} ${formErrors.name ? 'text-red-400' : ''}`}>Part Name *</label>
+                          <input
+                            value={form.name || ''}
+                            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                            placeholder="e.g. Mahogany Body"
+                            className={formErrors.name ? partFieldErr : partFieldOk}
+                          />
+                          {formErrors.name && <p className="mt-1 text-xs text-red-400">{formErrors.name}</p>}
+                          {partHint('This label appears in the builder catalog and admin lists.')}
                         </div>
                         <div>
-                          <label className={labelCls}>Part Category</label>
-                          <select value={form.part_category || form.type_mapping || 'misc'} onChange={e => setForm(f => ({ ...f, part_category: e.target.value }))} className={inputCls}>
-                            {['body', 'neck', 'fretboard', 'pickups', 'bridge', 'electronics', 'hardware', 'tuners', 'strings', 'finish', 'wood_type', 'pickguard', 'misc'].map(t => (
-                              <option key={t} value={t}>{t.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}</option>
-                            ))}
-                          </select>
+                          <label className={labelCls}>Description</label>
+                          <textarea
+                            rows={3}
+                            value={form.description || ''}
+                            onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+                            className={partTextareaOk}
+                          />
+                          {partHint('Optional notes for staff; not always shown to customers.')}
+                        </div>
+                        <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]/60 p-4 sm:p-5">
+                          <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Builder placement</p>
+                          <div className="space-y-4">
+                            <div>
+                              <label className={labelCls}>Builder Category (Customize Page)</label>
+                              <select
+                                value={form.builder_category || ''}
+                                onChange={(e) => {
+                                  const builderCategory = e.target.value
+                                  const firstSlot = BUILDER_CATEGORY_MAP[builderCategory]?.[0] || ''
+                                  setForm((f) => ({
+                                    ...f,
+                                    builder_category: builderCategory,
+                                    type_mapping: firstSlot || f.type_mapping || '',
+                                    part_category: SLOT_TO_PART_CATEGORY[firstSlot] || f.part_category || 'misc',
+                                  }))
+                                }}
+                                className={inputCls}
+                              >
+                                <option value="">— Select Category —</option>
+                                <option value="body">Body</option>
+                                <option value="neck">Neck & Headstock</option>
+                                <option value="hardware">Hardware</option>
+                                <option value="electronics">Electronics</option>
+                              </select>
+                              {partHint('High-level section in the customizer sidebar.')}
+                            </div>
+                            <div>
+                              <label className={`${labelCls} ${formErrors.type_mapping ? 'text-red-400' : ''}`}>Type Mapping (UI Slot) *</label>
+                              <select
+                                value={form.type_mapping || ''}
+                                onChange={(e) => {
+                                  const typeMapping = e.target.value
+                                  setForm((f) => ({
+                                    ...f,
+                                    type_mapping: typeMapping,
+                                    part_category: SLOT_TO_PART_CATEGORY[typeMapping] || f.part_category || 'misc',
+                                  }))
+                                }}
+                                className={formErrors.type_mapping ? partSelErr : inputCls}
+                              >
+                                <option value="">— Select Type —</option>
+                                {(form.builder_category ? BUILDER_CATEGORY_MAP[form.builder_category] || [] : Object.values(BUILDER_CATEGORY_MAP).flat()).map((t) => (
+                                  <option key={t} value={t}>
+                                    {t.replace(/([A-Z])/g, ' $1').replace('_', ' ').replace(/\b\w/g, (l) => l.toUpperCase())}
+                                  </option>
+                                ))}
+                              </select>
+                              {formErrors.type_mapping && <p className="mt-1 text-xs text-red-400">{formErrors.type_mapping}</p>}
+                              {slotHint ? partHint(slotHint, 'gold') : null}
+                              {partHint(
+                                'Slots follow CustomizePage field names to keep admin parts aligned with builder logic.',
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]/60 p-4 sm:p-5">
+                          <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Catalog metadata</p>
+                          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5">
+                            <div>
+                              <label className={labelCls}>Guitar Type</label>
+                              <select value={form.guitar_type || 'electric'} onChange={(e) => setForm((f) => ({ ...f, guitar_type: e.target.value }))} className={inputCls}>
+                                {['electric', 'bass', 'acoustic', 'ukulele'].map((t) => (
+                                  <option key={t} value={t}>
+                                    {t.replace(/\b\w/g, (l) => l.toUpperCase())}
+                                  </option>
+                                ))}
+                              </select>
+                              {partHint('Which instrument line this part belongs to.')}
+                            </div>
+                            <div>
+                              <label className={labelCls}>Part Category</label>
+                              <select value={form.part_category || form.type_mapping || 'misc'} onChange={(e) => setForm((f) => ({ ...f, part_category: e.target.value }))} className={inputCls}>
+                                {['body', 'neck', 'fretboard', 'pickups', 'bridge', 'electronics', 'hardware', 'tuners', 'strings', 'finish', 'wood_type', 'pickguard', 'misc'].map((t) => (
+                                  <option key={t} value={t}>
+                                    {t.replace('_', ' ').replace(/\b\w/g, (l) => l.toUpperCase())}
+                                  </option>
+                                ))}
+                              </select>
+                              {partHint('Used for filtering and inventory grouping.')}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]/60 p-4 sm:p-5">
+                          <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Stock & pricing</p>
+                          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5">
+                            <div>
+                              <label className={labelCls}>Qty in Stock</label>
+                              <input
+                                type="number"
+                                value={form.stock ?? ''}
+                                onChange={(e) => setForm((f) => ({ ...f, stock: e.target.value }))}
+                                className={partFieldOk}
+                              />
+                              {partHint('How many units are available for builds.')}
+                            </div>
+                            <div>
+                              <label className={labelCls}>Upgrade Price (₱)</label>
+                              <input
+                                type="number"
+                                value={form.price || ''}
+                                onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))}
+                                className={partFieldOk}
+                              />
+                              {partHint('Added cost when the customer selects this option.')}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-start gap-3 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]/40 px-4 py-3.5">
+                          <input
+                            type="checkbox"
+                            id="is_active_part"
+                            checked={form.is_active ?? true}
+                            onChange={(e) => setForm((f) => ({ ...f, is_active: e.target.checked }))}
+                            className="mt-0.5 h-5 w-5 shrink-0 cursor-pointer rounded border-gray-600 bg-[var(--surface-dark)] text-[var(--gold-primary)] accent-[var(--gold-primary)] focus:ring-2 focus:ring-[var(--gold-primary)] focus:ring-offset-0 focus:ring-offset-transparent"
+                          />
+                          <label htmlFor="is_active_part" className="cursor-pointer select-none text-sm leading-snug text-white">
+                            <span className="font-medium">Active</span>
+                            <span className="mt-0.5 block text-xs font-normal leading-relaxed text-[var(--text-muted)]">
+                              Available in the configurator when checked.
+                            </span>
+                          </label>
                         </div>
                       </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <FormField label="Qty in Stock" type="number" value={form.stock ?? ''} onChange={v => setForm(f => ({ ...f, stock: v }))} />
-                        <FormField label="Upgrade Price (₱)" type="number" value={form.price || ''} onChange={v => setForm(f => ({ ...f, price: v }))} />
-                      </div>
-                      <div className="flex items-center gap-3 pt-2">
-                        <input type="checkbox" id="is_active_part" checked={form.is_active ?? true} onChange={e => setForm(f => ({ ...f, is_active: e.target.checked }))} className="w-4 h-4" />
-                        <label htmlFor="is_active_part" className="text-white text-sm">Active (available in configurator)</label>
+                      <div className="min-w-0 border-[var(--border)] md:border-l md:pl-8">
+                        <div className="space-y-5">
+                          <motion.div
+                            whileHover={{
+                              boxShadow: '0 0 0 2px rgba(212, 175, 55, 0.22)',
+                              borderColor: 'rgba(212, 175, 55, 0.45)',
+                            }}
+                            transition={{ type: 'spring', stiffness: 420, damping: 28 }}
+                            className="rounded-2xl border-2 border-dashed border-[var(--border)] bg-[var(--bg-primary)]/40 p-4 sm:p-5"
+                          >
+                            <ImageUploadWidget
+                              label="Configurator Asset (Transparent PNG recommended)"
+                              imageUrl={form.image_url}
+                              previewUrl={form.preview_url}
+                              isUploading={isUploading}
+                              onUpload={handleImageUpload}
+                              hint="Configurator assets are dynamically composed on the frontend."
+                            />
+                          </motion.div>
+                          {(form.image_file || form.preview_url || form.image_url) && (
+                            <div className="flex flex-col gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]/50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                              <div className="min-w-0 text-sm">
+                                <p className="truncate font-medium text-white">
+                                  {form.image_file?.name || (form.image_url ? 'Current configurator asset' : 'Selected image')}
+                                </p>
+                                <p className="text-xs text-[var(--text-muted)]">
+                                  {form.image_file ? `${(form.image_file.size / 1024).toFixed(form.image_file.size >= 102400 ? 0 : 1)} KB` : form.image_url ? 'Replace below or remove to clear.' : ''}
+                                </p>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setForm((f) => ({
+                                    ...f,
+                                    image_file: undefined,
+                                    preview_url: undefined,
+                                    image_url: '',
+                                  }))
+                                }
+                                className="shrink-0 rounded-lg border border-red-500/40 px-3 py-1.5 text-xs font-medium text-red-300 transition-colors hover:bg-red-500/10"
+                              >
+                                Remove image
+                              </button>
+                            </div>
+                          )}
+                          <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]/70 p-4 shadow-inner sm:p-5">
+                            <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Catalog preview</p>
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+                              <div className="flex h-20 w-full shrink-0 items-center justify-center overflow-hidden rounded-lg border border-[var(--border)] bg-black/25 sm:h-24 sm:w-28">
+                                {form.preview_url || form.image_url ? (
+                                  <img src={form.preview_url || form.image_url} alt="" className="max-h-full max-w-full object-contain" loading="lazy" />
+                                ) : (
+                                  <span className="px-2 text-center text-[10px] text-[var(--text-muted)]">No image yet</span>
+                                )}
+                              </div>
+                              <div className="min-w-0 flex-1 space-y-2">
+                                <p className="truncate text-base font-semibold text-white">{form.name?.trim() || 'Part name'}</p>
+                                <div className="flex flex-wrap gap-2">
+                                  <span className="rounded-md border border-[var(--gold-primary)]/35 bg-[var(--gold-primary)]/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--gold-primary)]">
+                                    {previewGuitarType}
+                                  </span>
+                                  <span className="rounded-md border border-[var(--border)] bg-[var(--surface-dark)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                                    {previewPartCat}
+                                  </span>
+                                  <span
+                                    className={`rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                                      form.is_active ?? true ? 'border border-emerald-500/40 bg-emerald-500/15 text-emerald-300' : 'border border-[var(--border)] bg-black/20 text-[var(--text-muted)]'
+                                    }`}
+                                  >
+                                    {form.is_active ?? true ? 'Active' : 'Inactive'}
+                                  </span>
+                                </div>
+                                <p className="text-sm text-[var(--text-muted)]">
+                                  Upgrade: <span className="font-semibold text-[var(--gold-primary)]">{previewPrice}</span>
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     </div>
-                    <div className="space-y-4">
-                      <ImageUploadWidget
-                        label="Configurator Asset (Transparent PNG recommended)"
-                        imageUrl={form.image_url}
-                        previewUrl={form.preview_url}
-                        isUploading={isUploading}
-                        onUpload={handleImageUpload}
-                        hint="Configurator assets are dynamically composed on the frontend."
-                      />
-                    </div>
-                  </div>
-                  <ModalFooter onCancel={closeModal} onSave={validateAndSave(PART_RULES, savePart)} isSaving={isSaving} />
-                </>
-              )}
+                    <ModalFooter onCancel={closeModal} onSave={validateAndSave(PART_RULES, savePart)} isSaving={isSaving} />
+                  </>
+                )
+              })()}
 
               {/* Inventory Adjust Modal */}
               {modal.type === 'inventory' && (
@@ -2081,7 +2647,7 @@ export function AdminPage() {
                       ['Pickups', modal.data.pickups],
                       ['Color', modal.data.color],
                       ['Finish', modal.data.finish_type],
-                      ['Total Price', formatCurrency(modal.data.total_price, true)],
+                      ['Total Price', formatCurrency(modal.data.total_price)],
                     ].map(([key, val]) => val ? (
                       <div key={key} className="flex justify-between gap-4 border-b border-[var(--border)] pb-2">
                         <span className="text-[var(--text-muted)]">{key}</span>
@@ -2109,14 +2675,17 @@ export function AdminPage() {
                         <span className="text-white font-medium">{val}</span>
                       </div>
                     ))}
-                    {modal.data.items && modal.data.items.length > 0 && (
+                      {modal.data.items && modal.data.items.length > 0 && (
                       <div className="mt-4">
                         <p className="text-[var(--text-muted)] text-xs uppercase tracking-wider mb-2">Items</p>
                         <div className="space-y-2">
                           {modal.data.items.map((item, idx) => (
                             <div key={idx} className="flex justify-between bg-[var(--bg-primary)] p-3 rounded-lg">
-                              <span className="text-white text-sm">{item.product_name || item.name || 'Item'}</span>
-                              <span className="text-[var(--gold-primary)] text-sm">{formatCurrency(item.price, true)}</span>
+                              <div className="flex flex-col">
+                                <span className="text-white text-sm">{item.product_name || item.name || 'Item'}</span>
+                                <span className="text-[var(--text-muted)] text-xs">Qty: {item.quantity || 1}</span>
+                              </div>
+                              <span className="text-[var(--gold-primary)] text-sm">{formatCurrency(item.unit_price || item.price)}</span>
                             </div>
                           ))}
                         </div>
@@ -2212,6 +2781,89 @@ export function AdminPage() {
                 </>
               )}
 
+            </motion.div>
+          </motion.div>
+        )}
+
+        {/* Guitar Type Selector Modal */}
+        {showGuitarTypeSelector && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+            onClick={(e) => { if (e.target === e.currentTarget) setShowGuitarTypeSelector(false) }}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-3xl p-8 w-full max-w-2xl shadow-2xl"
+            >
+              <div className="mb-6">
+                <h2 className="text-2xl font-bold text-white mb-2">Select Guitar Type</h2>
+                <p className="text-[var(--text-muted)]">Choose the guitar type you want to customize</p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Electric */}
+                <button
+                  onClick={() => {
+                    setShowGuitarTypeSelector(false)
+                    navigate('/customize?type=electric')
+                  }}
+                  className="p-6 rounded-2xl border-2 border-[var(--border)] hover:border-[var(--gold-primary)] bg-[var(--bg-primary)] hover:bg-[var(--gold-primary)]/5 transition-all group"
+                >
+                  <Guitar className="w-8 h-8 text-[var(--gold-primary)] mb-3 group-hover:scale-110 transition-transform" />
+                  <h3 className="text-white font-semibold text-lg mb-1">Electric</h3>
+                  <p className="text-[var(--text-muted)] text-sm">Build your custom electric guitar</p>
+                </button>
+
+                {/* Bass */}
+                <button
+                  onClick={() => {
+                    setShowGuitarTypeSelector(false)
+                    navigate('/customize-bass')
+                  }}
+                  className="p-6 rounded-2xl border-2 border-[var(--border)] hover:border-[var(--gold-primary)] bg-[var(--bg-primary)] hover:bg-[var(--gold-primary)]/5 transition-all group"
+                >
+                  <Guitar className="w-8 h-8 text-[var(--gold-primary)] mb-3 group-hover:scale-110 transition-transform" />
+                  <h3 className="text-white font-semibold text-lg mb-1">Bass</h3>
+                  <p className="text-[var(--text-muted)] text-sm">Design your custom bass guitar</p>
+                </button>
+
+                {/* Ukulele */}
+                <button
+                  onClick={() => {
+                    setShowGuitarTypeSelector(false)
+                    navigate('/customize?type=ukulele')
+                  }}
+                  className="p-6 rounded-2xl border-2 border-[var(--border)] hover:border-[var(--gold-primary)] bg-[var(--bg-primary)] hover:bg-[var(--gold-primary)]/5 transition-all group"
+                >
+                  <Guitar className="w-8 h-8 text-[var(--gold-primary)] mb-3 group-hover:scale-110 transition-transform" />
+                  <h3 className="text-white font-semibold text-lg mb-1">Ukulele</h3>
+                  <p className="text-[var(--text-muted)] text-sm">Create your unique ukulele</p>
+                </button>
+
+                {/* Acoustic */}
+                <button
+                  onClick={() => {
+                    setShowGuitarTypeSelector(false)
+                    navigate('/customize?type=acoustic')
+                  }}
+                  className="p-6 rounded-2xl border-2 border-[var(--border)] opacity-50 cursor-not-allowed bg-[var(--bg-primary)]"
+                  disabled
+                >
+                  <Guitar className="w-8 h-8 text-[var(--text-muted)] mb-3" />
+                  <h3 className="text-[var(--text-muted)] font-semibold text-lg mb-1">Acoustic</h3>
+                  <p className="text-[var(--text-muted)] text-sm text-xs">Coming soon</p>
+                </button>
+              </div>
+
+              <div className="mt-6 flex justify-end">
+                <button
+                  onClick={() => setShowGuitarTypeSelector(false)}
+                  className="px-4 py-2 rounded-lg border border-[var(--border)] text-[var(--text-muted)] hover:text-white transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
             </motion.div>
           </motion.div>
         )}

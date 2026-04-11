@@ -11,6 +11,7 @@ import { staffApi } from '../utils/staffApi'
 import { formatCurrency } from '../utils/formatCurrency'
 import { ConfirmModal } from '../components/ui/ConfirmModal'
 import { useSmartPolling } from '../hooks/useSmartPolling'
+import { useDebounce } from '../hooks/useDebounce'
 import ProjectTaskTracker from '../components/projects/ProjectTaskTracker'
 
 // ── Skeleton Loader ──────────────────────────────────────────────────────────
@@ -82,6 +83,8 @@ export function StaffDashboard() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [toast, setToast] = useState(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const debouncedSearch = useDebounce(searchQuery, 300)
 
   // Data
   const [projects, setProjects] = useState([])

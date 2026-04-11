@@ -1,16 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { useNavigate } from 'react-router';
-import { CheckCircle, Circle, ChevronDown, ChevronRight, Plus, Trash2, Edit, User, Clock, AlertCircle, Calendar } from 'lucide-react';
+import { CheckCircle, Circle, ChevronDown, ChevronRight, Plus, Trash2, Edit, User, Clock, AlertCircle, Guitar, Package, Search } from 'lucide-react';
 import { adminApi } from '../../utils/adminApi';
+import { formatCurrency } from '../../utils/formatCurrency';
 
 const API_URL = import.meta.env.VITE_API_URL;
 
-export default function ProjectTaskTracker({ projectId, isAdmin = false }) {
+export default function ProjectTaskTracker({ projectId, projectName, isAdmin = false, parts = [], projectData = null }) {
   const [hierarchy, setHierarchy] = useState(null);
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  // Parts panel state
+  const [partsSearchQuery, setPartsSearchQuery] = useState('');
+  const [expandedPartCategories, setExpandedPartCategories] = useState(new Set());
 
   // Exanded state for accordions
   const [expandedMilestones, setExpandedMilestones] = useState(new Set());
@@ -55,6 +59,51 @@ export default function ProjectTaskTracker({ projectId, isAdmin = false }) {
       else next.add(mId);
       return next;
     });
+  };
+
+  const togglePartCategory = (category) => {
+    setExpandedPartCategories(prev => {
+      const next = new Set(prev);
+      if (next.has(category)) next.delete(category);
+      else next.add(category);
+      return next;
+    });
+  };
+
+  // Group parts by category
+  const groupedParts = parts.reduce((groups, part) => {
+    const category = part.type_mapping || part.part_category || 'Other';
+    if (!groups[category]) {
+      groups[category] = [];
+    }
+    groups[category].push(part);
+    return groups;
+  }, {});
+
+  // Filter parts based on search query
+  const getFilteredParts = () => {
+    const filtered = {};
+    Object.entries(groupedParts).forEach(([category, categoryParts]) => {
+      const filteredCategoryParts = categoryParts.filter(part =>
+        part.name.toLowerCase().includes(partsSearchQuery.toLowerCase())
+      );
+      if (filteredCategoryParts.length > 0) {
+        filtered[category] = filteredCategoryParts;
+      }
+    });
+    return filtered;
+  };
+
+  const getStockColor = (stock) => {
+    if (stock === 0) return 'text-red-400';
+    if (stock <= 5) return 'text-amber-400';
+    return 'text-emerald-400';
+  };
+
+  const getStockDot = (stock) => {
+    if (stock === 0) return 'bg-red-500';
+    if (stock <= 5) return 'bg-amber-500';
+    return 'bg-emerald-500';
   };
 
   // User Actions
@@ -353,33 +402,159 @@ export default function ProjectTaskTracker({ projectId, isAdmin = false }) {
         </div>
       </div>
 
-      {/* ── ACTIVITY LOG SIDEBAR ── */}
-      <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-5 flex flex-col h-[600px]">
-        <div className="flex items-center gap-2 mb-6">
-          <Clock className="w-5 h-5 text-[var(--gold-primary)]" />
-          <h3 className="text-white font-bold text-lg">Activity History</h3>
+      {/* ── GUITAR PARTS PANEL ── */}
+      <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-5 flex flex-col">
+        <div className="flex items-center gap-2 mb-4">
+          <Guitar className="w-5 h-5 text-[var(--gold-primary)]" />
+          <h3 className="text-white font-bold text-lg">Project Parts</h3>
+          <span className="ml-auto px-2 py-0.5 bg-[var(--gold-primary)]/20 text-[var(--gold-primary)] text-xs font-bold rounded-full">
+            {parts.length}
+          </span>
         </div>
-        <div className="flex-1 overflow-y-auto pr-2 space-y-5 custom-scrollbar">
-          {logs.length === 0 ? (
-            <p className="text-[var(--text-muted)] text-sm italic text-center mt-10">No activity recorded yet.</p>
+
+        {/* Search Input */}
+        <div className="mb-4 relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
+          <input
+            type="text"
+            placeholder="Filter parts..."
+            value={partsSearchQuery}
+            onChange={(e) => setPartsSearchQuery(e.target.value)}
+            className="w-full pl-10 pr-4 py-2.5 bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl text-white placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] text-sm"
+          />
+        </div>
+
+        {/* Parts List */}
+        <div className="flex-1 overflow-y-auto pr-2 space-y-3 custom-scrollbar">
+          {parts.length === 0 ? (
+            <div className="text-center py-12 flex flex-col items-center justify-center">
+              <Guitar className="w-12 h-12 text-[var(--text-muted)]/30 mb-3" />
+              <p className="text-[var(--text-muted)] text-sm font-semibold">No parts linked to this project yet.</p>
+            </div>
+          ) : Object.keys(getFilteredParts()).length === 0 ? (
+            <div className="text-center py-8">
+              <Package className="w-8 h-8 text-[var(--text-muted)]/30 mx-auto mb-2" />
+              <p className="text-[var(--text-muted)] text-xs">No parts match your search.</p>
+            </div>
           ) : (
-            logs.map((log, i) => (
-              <div key={log.log_id} className="relative pl-5 before:absolute before:left-[7px] before:top-2 before:bottom-[-20px] before:w-[2px] before:bg-white/10 last:before:hidden">
-                <div className="absolute left-0 top-1.5 w-4 h-4 rounded-full bg-[var(--surface-dark)] border-2 border-[var(--gold-primary)] z-10" />
-                <p className="text-white text-sm">
-                  <span className="font-semibold text-[var(--gold-primary)]">{log.first_name || 'System'}</span>
-                  {' '}
-                  {log.action_type === 'subtask_completed' && 'completed subtask '}
-                  {log.action_type === 'subtask_status_changed' && 'changed subtask status '}
-                  {log.action_type === 'milestone_created' && 'created milestone '}
-                  {log.action_type === 'subtask_created' && 'added task '}
-                  <span className="font-medium text-gray-300">"{log.details?.title}"</span>
-                </p>
-                <span className="text-[var(--text-muted)] text-[10px] uppercase font-mono mt-1 block tracking-wider">
-                  {new Date(log.created_at).toLocaleString()}
-                </span>
-              </div>
-            ))
+            Object.entries(getFilteredParts()).map(([category, categoryParts]) => {
+              const isExpanded = expandedPartCategories.has(category) || Object.keys(getFilteredParts()).length === 1;
+              
+              return (
+                <div key={category} className="overflow-hidden">
+                  {/* Category Header */}
+                  <button
+                    onClick={() => togglePartCategory(category)}
+                    className="w-full flex items-center justify-between p-3 bg-[var(--bg-primary)]/60 border-l-2 border-[var(--gold-primary)] hover:bg-[var(--bg-primary)] transition-colors rounded-lg"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-white font-semibold text-sm capitalize">{category}</span>
+                      <span className="px-2 py-0.5 bg-[var(--gold-primary)]/20 text-[var(--gold-primary)] text-xs font-bold rounded-full">
+                        {categoryParts.length}
+                      </span>
+                    </div>
+                    <motion.div
+                      initial={false}
+                      animate={{ rotate: isExpanded ? 180 : 0 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      <ChevronDown className="w-4 h-4 text-[var(--text-muted)]" />
+                    </motion.div>
+                  </button>
+
+                  {/* Parts Cards (Collapsible) */}
+                  <AnimatePresence>
+                    {isExpanded && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="space-y-2 mt-2"
+                      >
+                        {categoryParts.map((part) => {
+                          const stock = Number(part.stock ?? 0);
+                          const isLowStock = stock > 0 && stock <= 5;
+                          const isOutOfStock = stock === 0;
+
+                          return (
+                            <div
+                              key={part.part_id}
+                              className="p-3 bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl hover:border-[var(--gold-primary)]/30 transition-all"
+                            >
+                              {/* Part Header */}
+                              <div className="flex gap-3 mb-2">
+                                {/* Image */}
+                                <div className="w-10 h-10 flex-shrink-0 rounded-lg bg-black/30 overflow-hidden border border-[var(--border)] flex items-center justify-center">
+                                  {part.image_url ? (
+                                    <img
+                                      src={part.image_url}
+                                      alt={part.name}
+                                      className="w-full h-full object-contain"
+                                    />
+                                  ) : (
+                                    <Guitar className="w-5 h-5 text-[var(--text-muted)]/50" />
+                                  )}
+                                </div>
+
+                                {/* Info */}
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-white font-semibold text-xs line-clamp-1">{part.name}</p>
+                                  <div className="flex flex-wrap gap-1 mt-1">
+                                    <span className="px-1.5 py-0.5 bg-[var(--gold-primary)]/20 text-[var(--gold-primary)] text-[10px] font-bold uppercase rounded">
+                                      {category}
+                                    </span>
+                                    {part.guitar_type && (
+                                      <span className="px-1.5 py-0.5 bg-gray-500/20 text-gray-400 text-[10px] font-medium rounded capitalize">
+                                        {part.guitar_type}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Stock & Price */}
+                              <div className="flex items-center justify-between pt-2 border-t border-[var(--border)]/30">
+                                <div className="flex items-center gap-1">
+                                  <span className={`w-2 h-2 rounded-full ${getStockDot(stock)}`} />
+                                  <span className={`text-xs font-semibold ${getStockColor(stock)}`}>
+                                    {isOutOfStock
+                                      ? 'Out of stock'
+                                      : isLowStock
+                                      ? `Low: ${stock}`
+                                      : `${stock} in stock`}
+                                  </span>
+                                </div>
+                                {part.price && (
+                                  <span className="text-[var(--gold-primary)] font-bold text-xs">
+                                    {formatCurrency(part.price, true)}
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Active Badge */}
+                              {part.is_active !== undefined && (
+                                <div className="mt-2 flex justify-end">
+                                  <span
+                                    className={`px-2 py-0.5 text-[10px] font-semibold rounded-full border ${
+                                      part.is_active
+                                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                                        : 'bg-gray-500/10 text-gray-400 border-gray-500/30'
+                                    }`}
+                                  >
+                                    {part.is_active ? 'Active' : 'Inactive'}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              );
+            })
           )}
         </div>
       </div>

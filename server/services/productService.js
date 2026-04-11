@@ -98,7 +98,7 @@ exports.getAllProducts = async ({
     created_at: 'p.created_at',
     name: 'p.name',
     price: 'p.price',
-    stock: 'p.stock',
+    stock: 'i.stock',
   };
   const orderColumn = sortableColumns[sortBy] || sortableColumns.created_at;
   const orderDirection = String(sortDir).toLowerCase() === 'asc' ? 'ASC' : 'DESC';
@@ -110,6 +110,7 @@ exports.getAllProducts = async ({
   const countRes = await pool.query(
     `SELECT COUNT(*)::int AS total
      FROM products p
+     LEFT JOIN inventory i ON p.product_id = i.product_id
      ${condition}`,
     params
   );
@@ -117,9 +118,11 @@ exports.getAllProducts = async ({
 
   const res = await pool.query(
     `SELECT p.*, c.name AS category_name,
+            i.cost_price, i.stock, i.low_stock_threshold,
             (SELECT image_url FROM product_images WHERE product_id = p.product_id AND is_primary = true LIMIT 1) AS primary_image
      FROM products p
      LEFT JOIN categories c ON p.category_id = c.category_id
+     LEFT JOIN inventory i ON p.product_id = i.product_id
      ${condition}
      ORDER BY ${orderColumn} ${orderDirection}
      LIMIT $${idx} OFFSET $${idx + 1}`,
@@ -140,12 +143,14 @@ exports.getAllProducts = async ({
 exports.getProductById = async (id) => {
   const res = await pool.query(
     `SELECT p.*, c.name AS category_name,
+            i.cost_price, i.stock, i.low_stock_threshold, i.inventory_id,
             (SELECT image_url
              FROM product_images
              WHERE product_id = p.product_id AND is_primary = true
              LIMIT 1) AS primary_image
      FROM products p
      LEFT JOIN categories c ON p.category_id = c.category_id
+     LEFT JOIN inventory i ON p.product_id = i.product_id
      WHERE p.product_id = $1`,
     [id]
   );
@@ -158,34 +163,110 @@ exports.getProductById = async (id) => {
   return { ...res.rows[0], images: images.rows };
 };
 
-exports.createProduct = async ({ sku, name, description, price, cost, category_id, stock, low_stock_threshold, is_active }) => {
-  const res = await pool.query(
-    `INSERT INTO products (sku, name, description, price, cost, category_id, stock, low_stock_threshold, is_active)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-     RETURNING *`,
-    [sku, name, description || null, price, cost || null, category_id || null, stock ?? 0, low_stock_threshold ?? 10, is_active ?? true]
-  );
-  return res.rows[0];
+exports.createProduct = async ({ sku, name, description, price, cost_price, category_id, stock, low_stock_threshold, is_active }) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    
+    // Create product record
+    const productRes = await client.query(
+      `INSERT INTO products (sku, name, description, price, category_id, is_active)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING *`,
+      [sku, name, description || null, price, category_id || null, is_active ?? true]
+    );
+    const product = productRes.rows[0];
+    
+    // Create inventory record
+    await client.query(
+      `INSERT INTO inventory (product_id, cost_price, stock, low_stock_threshold)
+       VALUES ($1, $2, $3, $4)`,
+      [product.product_id, cost_price || null, stock ?? 0, low_stock_threshold ?? 10]
+    );
+    
+    await client.query('COMMIT');
+    
+    // Return product with inventory data
+    return {
+      ...product,
+      cost_price: cost_price || null,
+      stock: stock ?? 0,
+      low_stock_threshold: low_stock_threshold ?? 10
+    };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 };
 
-exports.updateProduct = async (id, { sku, name, description, price, cost, category_id, stock, low_stock_threshold, is_active }) => {
-  const res = await pool.query(
-    `UPDATE products SET
-       sku                = COALESCE($1, sku),
-       name               = COALESCE($2, name),
-       description        = COALESCE($3, description),
-       price              = COALESCE($4, price),
-       cost               = COALESCE($5, cost),
-       category_id        = COALESCE($6, category_id),
-       stock              = COALESCE($7, stock),
-       low_stock_threshold= COALESCE($8, low_stock_threshold),
-       is_active          = COALESCE($9, is_active),
-       updated_at         = now()
-     WHERE product_id = $10
-     RETURNING *`,
-    [sku, name, description, price, cost, category_id, stock, low_stock_threshold, is_active, id]
-  );
-  return res.rows[0] || null;
+exports.updateProduct = async (id, { sku, name, description, price, cost_price, category_id, stock, low_stock_threshold, is_active }) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    
+    // Update product record
+    const productRes = await client.query(
+      `UPDATE products SET
+         sku                = COALESCE($1, sku),
+         name               = COALESCE($2, name),
+         description        = COALESCE($3, description),
+         price              = COALESCE($4, price),
+         category_id        = COALESCE($5, category_id),
+         is_active          = COALESCE($6, is_active),
+         updated_at         = now()
+       WHERE product_id = $7
+       RETURNING *`,
+      [sku, name, description, price, category_id, is_active, id]
+    );
+    
+    if (!productRes.rows[0]) {
+      await client.query('ROLLBACK');
+      return null;
+    }
+    
+    // Update or create inventory record
+    const inventoryRes = await client.query(
+      `SELECT inventory_id FROM inventory WHERE product_id = $1`,
+      [id]
+    );
+    
+    if (inventoryRes.rows.length > 0) {
+      // Update existing inventory record
+      await client.query(
+        `UPDATE inventory SET
+           cost_price           = COALESCE($1, cost_price),
+           stock                = COALESCE($2, stock),
+           low_stock_threshold  = COALESCE($3, low_stock_threshold),
+           updated_at           = now()
+         WHERE product_id = $4`,
+        [cost_price, stock, low_stock_threshold, id]
+      );
+    } else {
+      // Create new inventory record if it doesn't exist
+      await client.query(
+        `INSERT INTO inventory (product_id, cost_price, stock, low_stock_threshold)
+         VALUES ($1, $2, $3, $4)`,
+        [id, cost_price || null, stock ?? 0, low_stock_threshold ?? 10]
+      );
+    }
+    
+    await client.query('COMMIT');
+    
+    const product = productRes.rows[0];
+    return {
+      ...product,
+      cost_price,
+      stock,
+      low_stock_threshold
+    };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 };
 
 exports.deleteProduct = async (id) => {
