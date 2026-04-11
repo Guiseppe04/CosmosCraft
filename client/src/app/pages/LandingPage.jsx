@@ -108,7 +108,7 @@ export function LandingPage() {
       description:
         "Expert restoration and refinishing services that bring vintage instruments back to their original glory with master craftsmanship.",
       image:
-        '/assets/landing/481006070_1131367368785859_5010367721067878408_n.jpg',
+        '/assets/landing/499948200_1197883048800957_5172319103702371821_n.jpg',
       link: '/appointments',
     },
     {
@@ -116,7 +116,7 @@ export function LandingPage() {
       description:
         'Precision electronics upgrades and modifications designed for optimal tone and performance customization.',
       image:
-        '/assets/landing/480692297_1131061212149808_7300796434822753967_n.jpg',
+        '/assets/landing/481122269_1131061208816475_4924982718443286146_n.jpg',
       link: '/customize',
     },
   ]
@@ -192,7 +192,7 @@ export function LandingPage() {
             >
               <div className="relative aspect-video rounded-2xl overflow-hidden border border-[var(--border)] bg-[var(--surface-dark)]">
                 <ImageWithFallback
-                  src="/assets/landing/481447234_1131367952119134_4042649922426111342_n.jpg"
+                  src="/assets/landing/481265622_1131056792150250_2911954095556621856_n.jpg"
                   alt="Guitar Customization Tool"
                   className="w-full h-full object-cover"
                 />
