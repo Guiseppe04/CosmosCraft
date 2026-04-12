@@ -152,7 +152,6 @@ export function AdminPage() {
   // Data state
   const [products, setProducts] = useState([])
   const [categories, setCategories] = useState([])
-  const [guitars, setGuitars] = useState([])
   const [parts, setParts] = useState([])
   const [users, setUsers] = useState([])
   const [orders, setOrders] = useState([])
@@ -196,7 +195,6 @@ export function AdminPage() {
   // ── Derived / filtered views ─────────────────────────────────────────────
   const visibleProducts = products || []
   const visibleParts = parts || []
-  const visibleGuitars = guitars || []
   const visibleCategories = categories || []
   const visibleOrders = orders || []
   const visibleProjects = projects || []
@@ -359,14 +357,6 @@ export function AdminPage() {
     } catch { }
   }, [categories])
 
-  const fetchGuitars = useCallback(async () => {
-    try {
-      const res = await adminApi.getCustomizations({ search: debouncedSearch })
-      const newData = Array.isArray(res.data) ? res.data : res.data?.customizations || []
-      updateIfChanged(guitars, newData, setGuitars)
-    } catch (e) { showToast(e.message, 'error') }
-  }, [debouncedSearch, showToast, guitars])
-
   const fetchParts = useCallback(async () => {
     setPartsLoading(true)
     try {
@@ -447,7 +437,6 @@ export function AdminPage() {
     const loaders = {
       'products-parts': () => { fetchProducts(); fetchCategories(); fetchParts() },
       'categories': () => { fetchCategories(); },
-      'guitars': fetchGuitars,
       'users': fetchUsers,
       'orders': fetchOrders,
       'projects': fetchProjects,
@@ -465,7 +454,6 @@ export function AdminPage() {
       setProductQuery((prev) => ({ ...prev, page: 1 }))
       setPartQuery((prev) => ({ ...prev, page: 1 }))
     }
-    if (activeTab === 'guitars') fetchGuitars()
     if (activeTab === 'users') fetchUsers()
     if (activeTab === 'orders') fetchOrders()
     if (activeTab === 'projects') fetchProjects()
@@ -486,7 +474,6 @@ export function AdminPage() {
     const map = {
       'products-parts': async () => { await fetchProducts(); await fetchParts() },
       'categories': fetchCategories,
-      'guitars': fetchGuitars,
       'users': fetchUsers,
       'orders': fetchOrders,
       'projects': fetchProjects,
@@ -496,7 +483,7 @@ export function AdminPage() {
       'dashboard': async () => { await fetchOrders(); await fetchProjects(); await fetchAppointments() },
     }
     return map[activeTab]?.()
-  }, [activeTab, fetchProducts, fetchParts, fetchCategories, fetchGuitars, fetchUsers, fetchOrders, fetchProjects, fetchAppointments, fetchInventory, fetchSalesReport])
+  }, [activeTab, fetchProducts, fetchParts, fetchCategories, fetchUsers, fetchOrders, fetchProjects, fetchAppointments, fetchInventory, fetchSalesReport])
 
   const pollingEnabled = ['dashboard', 'orders', 'inventory', 'projects', 'appointments'].includes(activeTab)
   useSmartPolling(pollingFn, { interval: 5000, maxInterval: 60000, backoffFactor: 1.5, enabled: pollingEnabled })
@@ -655,20 +642,6 @@ export function AdminPage() {
 
     const previewUrl = URL.createObjectURL(file)
     setForm(f => ({ ...f, image_file: file, preview_url: previewUrl }))
-  }
-
-  // ── CRUD: Guitar Customizations ──────────────────────────────────────────
-  const deleteGuitar = (id) => {
-    openConfirm({
-      title: 'Delete Customization?',
-      description: 'This will permanently delete the customer\'s saved guitar configuration. This cannot be undone.',
-      variant: 'danger',
-      onConfirm: async () => {
-        await adminApi.deleteCustomization(id)
-        showToast('Customization deleted')
-        fetchGuitars()
-      },
-    })
   }
 
   // ── CRUD: Users ──────────────────────────────────────────────────────────
@@ -930,7 +903,7 @@ export function AdminPage() {
 
           {/* Actions bar */}
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
-            {['products-parts', 'guitars', 'users', 'categories', 'orders', 'projects', 'appointments'].includes(activeTab) && (
+            {['products-parts', 'users', 'categories', 'orders', 'projects', 'appointments'].includes(activeTab) && (
               <div className="relative max-w-sm w-full">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
                 <input
@@ -1470,43 +1443,6 @@ export function AdminPage() {
                   </>
                 )}
                 empty={<EmptyState icon={Tag} label="No categories yet" action={() => openModal('category')} actionLabel="Add Category" />}
-              />
-            </motion.div>
-          )}
-
-          {/* ── GUITAR CUSTOMIZATIONS ──────────────────────────────────────── */}
-          {activeTab === 'guitars' && (
-            <motion.div key="guitars" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-              <AdminTable
-                columns={['Customer', 'Guitar', 'Type', 'Price', 'Saved', 'Actions']}
-                rows={visibleGuitars}
-                renderRow={(g) => (
-                  <>
-                    <td className="py-4 px-6">
-                      <p className="text-white font-semibold">{g.user_name || '—'}</p>
-                      <p className="text-[var(--text-muted)] text-xs">{g.user_email || '—'}</p>
-                    </td>
-                    <td className="py-4 px-6 text-white">{g.name || 'Untitled'}</td>
-                    <td className="py-4 px-6">
-                      <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-[var(--gold-primary)]/20 text-[var(--gold-primary)] border border-[var(--gold-primary)]/30 capitalize">{g.guitar_type}</span>
-                    </td>
-                    <td className="py-4 px-6 text-[var(--gold-primary)] font-bold">{formatCurrency(g.total_price)}</td>
-                    <td className="py-4 px-6"><StatusBadge active={g.is_saved} trueLabel="Saved" falseLabel="Draft" /></td>
-                    <td className="py-4 px-6">
-                      <div className="flex gap-2">
-                        <button onClick={() => openModal('guitar_view', g)} className="p-1.5 hover:bg-[var(--gold-primary)]/10 rounded">
-                          <Eye className="w-4 h-4 text-[var(--text-muted)]" />
-                        </button>
-                        {isSuperAdmin && (
-                          <button onClick={() => deleteGuitar(g.customization_id)} className="p-1.5 hover:bg-red-500/10 rounded">
-                            <Trash2 className="w-4 h-4 text-red-400" />
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </>
-                )}
-                empty={<EmptyState icon={Guitar} label="No customizations yet" />}
               />
             </motion.div>
           )}
