@@ -294,8 +294,8 @@ export function AdminPage() {
   }, [filteredInventory, inventoryPage])
 
   const guitarTypeOptions = useMemo(
-    () => Array.from(new Set((parts || []).map((p) => p.guitar_type).filter(Boolean))).sort(),
-    [parts]
+    () => ['electric', 'bass', 'acoustic', 'ukulele'].sort(),
+    []
   )
 
   const inventoryHealthData = (() => {
