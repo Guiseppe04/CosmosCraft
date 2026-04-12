@@ -57,7 +57,9 @@ export function CheckoutPage() {
   const { isAuthenticated, user } = useAuth()
   
   const isCustomBuild = location.state?.isCustomBuild || false
+  const isBuyNow = location.state?.isBuyNow || false
   const customBuildItem = location.state?.checkoutItem || null
+  const buyNowItem = isBuyNow ? location.state?.checkoutItem : null
   
   useEffect(() => {
     console.log('[Checkout] Cart state on mount:', cart)
@@ -119,7 +121,10 @@ export function CheckoutPage() {
   let customAdditionalPartsTotal = 0;
   let checkoutItems = cart;
 
-  if (isCustomBuild && customBuildItem) {
+  if (isBuyNow && buyNowItem) {
+    checkoutItems = [buyNowItem]
+    customSubtotal = Number(buyNowItem.price) || 0
+  } else if (isCustomBuild && customBuildItem) {
     customBuildPrice = Number(customBuildItem.price) || 0;
     customAdditionalPartsTotal = (customBuildItem.additionalParts || []).reduce((sum, p) => sum + (Number(p.price) * p.quantity), 0);
     customSubtotal = customBuildPrice + customAdditionalPartsTotal;
@@ -137,7 +142,7 @@ export function CheckoutPage() {
     ]
   }
 
-  const subtotal = isCustomBuild ? customSubtotal : getTotalPrice()
+  const subtotal = isCustomBuild || isBuyNow ? customSubtotal : getTotalPrice()
   const shippingCost = shippingMethod === 'express' ? 500 : 0
   const tax = subtotal * 0.1
   
@@ -305,7 +310,7 @@ export function CheckoutPage() {
     }
   }
 
-  if (!isCustomBuild && cart.length === 0) {
+  if (!isCustomBuild && !isBuyNow && cart.length === 0) {
     return (
       <div className="min-h-screen bg-[var(--bg-primary)] pt-24">
         <div className="page text-center space-y-6">
@@ -397,17 +402,17 @@ export function CheckoutPage() {
 
                       <div className="flex items-center gap-6">
                         {/* Qty Controls */}
-                        {!isCustomBuild ? (
+                        {!isCustomBuild && !isBuyNow ? (
                           <div className="flex items-center gap-3 bg-[var(--bg-primary)] border border-white/10 rounded-full px-3 py-1">
                             <button
-                              onClick={() => updateQuantity(item.id, -1)}
+                              onClick={() => updateQuantity(item.id, Math.max(1, item.quantity - 1))}
                               className="text-[var(--text-muted)] hover:text-white p-1 transition-colors"
                             >
                               <Minus className="w-3.5 h-3.5" />
                             </button>
                             <span className="text-sm font-semibold w-4 text-center text-white">{item.quantity}</span>
                             <button
-                              onClick={() => updateQuantity(item.id, 1)}
+                              onClick={() => updateQuantity(item.id, item.quantity + 1)}
                               className="text-[var(--text-muted)] hover:text-[var(--gold-primary)] p-1 transition-colors"
                               disabled={item.quantity >= item.stock}
                             >
@@ -426,7 +431,7 @@ export function CheckoutPage() {
                         </div>
 
                         {/* Remove */}
-                        {!isCustomBuild && (
+                        {!isCustomBuild && !isBuyNow && (
                           <button
                             onClick={() => updateQuantity(item.id, -item.quantity)}
                             className="p-2 text-[var(--text-muted)] hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
@@ -444,7 +449,7 @@ export function CheckoutPage() {
                 <Link to="/shop" className="text-sm font-semibold text-[var(--text-muted)] hover:text-white transition-colors">
                   &lt; Back to Shop
                 </Link>
-                {!isCustomBuild && (
+                {!isCustomBuild && !isBuyNow && (
                   <button 
                     onClick={() => { clearCart(); navigate('/shop'); }}
                     className="px-6 py-2.5 bg-red-500/10 text-red-500 font-bold rounded-lg hover:bg-red-500 hover:text-white transition-colors"

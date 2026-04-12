@@ -46,8 +46,9 @@ export function ShopPage() {
           category: p.category_name || p.category || 'Uncategorized',
           brand: p.brand,
           description: p.description,
-          stock: p.stock || 0
-        }))
+          stock: p.stock || 0,
+          is_active: p.is_active
+        })).filter(p => p.is_active !== false)
 
         // Handle case where categories might be directly an array or inside .data
         const fetchedCategories = Array.isArray(categoriesRes) ? categoriesRes : (categoriesRes.data || [])
@@ -104,8 +105,21 @@ export function ShopPage() {
 
   const performBuyNow = product => {
     if (isOutOfStock(product.id)) return
-    addToCart({ ...product, type: 'product' })
-    navigate('/checkout')
+    navigate('/checkout', {
+      state: {
+        isBuyNow: true,
+        checkoutItem: {
+          id: product.id,
+          name: product.name,
+          price: product.price,
+          image: product.image,
+          category: product.category,
+          type: 'product',
+          stock: product.stock,
+          quantity: 1
+        }
+      }
+    })
   }
 
   const handleBuyNow = product => {
