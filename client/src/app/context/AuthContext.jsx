@@ -105,24 +105,41 @@ export function AuthProvider({ children }) {
       if (response.ok) {
         const data = await response.json()
         if (data.data.isAuthenticated && data.data.user) {
+          // If auth check doesn't include addresses, fetch profile for full data
+          let userData = data.data.user
+          
+          // Fetch full profile which includes addresses
+          try {
+            const profileResponse = await fetch(`${API}/api/users/profile`, {
+              method: 'GET',
+              credentials: 'include',
+            })
+            if (profileResponse.ok) {
+              const profileData = await profileResponse.json()
+              if (profileData.data?.user) {
+                userData = profileData.data.user
+              }
+            }
+          } catch (profileErr) {
+            console.warn('Could not fetch full profile, using auth data')
+          }
+          
           setIsAuthenticated(true)
-          setUser(data.data.user)
+          setUser(userData)
           // Store full user data in localStorage
           window.localStorage.setItem(
             'cosmoscraft_auth',
-            JSON.stringify(data.data.user)
+            JSON.stringify(userData)
           )
-          return data.data.user
+          return userData
         }
       } else if (response.status === 401) {
-        // Token explicitly invalid or expired
         setIsAuthenticated(false)
         setUser(null)
         window.localStorage.removeItem('cosmoscraft_auth')
       }
     } catch (error) {
       console.error('Failed to fetch user:', error)
-      // Don't clear auth on network error - keep user logged in optimistically
     } finally {
       setIsLoadingUser(false)
     }
@@ -194,6 +211,15 @@ export function AuthProvider({ children }) {
     window.localStorage.removeItem('cosmoscraft_auth')
   }, [])
 
+  // Update user data (e.g., after adding address)
+  const updateUser = useCallback((updates) => {
+    setUser(prev => {
+      const updated = { ...prev, ...updates }
+      window.localStorage.setItem('cosmoscraft_auth', JSON.stringify(updated))
+      return updated
+    })
+  }, [])
+
   // Role checking helpers
   const getUserRole = useCallback(() => {
     if (!user) return null
@@ -240,6 +266,7 @@ export function AuthProvider({ children }) {
         login,
         logout,
         fetchUser,
+        updateUser,
         isLoadingUser,
         // Role helpers
         getUserRole,
