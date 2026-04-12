@@ -70,7 +70,7 @@ export default function useBassConfig() {
       (BASS_INLAY_OPTIONS[config.inlays]?.price ?? 0) +
       (BASS_LOGO_OPTIONS[config.logo]?.price ?? 0) +
       (BASS_BACKPLATE_OPTIONS[config.backplate]?.price ?? 0) +
-      (BASS_PICKUP_SCREW_OPTIONS[config.pickupScrews]?.price ?? 0) +
+      (BASS_PICKUP_SCREW_OPTIONS[config.bassType]?.[config.pickupScrews]?.price ?? 0) +
       (BASS_CONTROL_PLATE_OPTIONS[config.controlPlate]?.price ?? 0) +
       (BASS_BRIDGE_OPTIONS[config.bridge]?.price ?? 0) +
       (BASS_PICKGUARD_OPTIONS[config.bassType]?.[config.pickguard]?.price ?? 0) +
@@ -95,7 +95,7 @@ export default function useBassConfig() {
       inlays: BASS_INLAY_OPTIONS[config.inlays]?.label ?? config.inlays,
       logo: BASS_LOGO_OPTIONS[config.logo]?.label ?? config.logo,
       backplate: BASS_BACKPLATE_OPTIONS[config.backplate]?.label ?? config.backplate,
-      pickupScrews: BASS_PICKUP_SCREW_OPTIONS[config.pickupScrews]?.label ?? config.pickupScrews,
+      pickupScrews: BASS_PICKUP_SCREW_OPTIONS[config.bassType]?.[config.pickupScrews]?.label ?? config.pickupScrews,
       controlPlate: BASS_CONTROL_PLATE_OPTIONS[config.controlPlate]?.label ?? config.controlPlate,
       bridge: BASS_BRIDGE_OPTIONS[config.bridge]?.label ?? config.bridge,
       pickguard: BASS_PICKGUARD_OPTIONS[config.bassType]?.[config.pickguard]?.label ?? config.pickguard,
@@ -205,8 +205,8 @@ export default function useBassConfig() {
     [],
   )
   const pickupScrewOptions = useMemo(
-    () => Object.entries(BASS_PICKUP_SCREW_OPTIONS).map(([value, option]) => ({ value, ...option })),
-    [],
+    () => Object.entries(BASS_PICKUP_SCREW_OPTIONS[config.bassType] ?? BASS_PICKUP_SCREW_OPTIONS.vader).map(([value, option]) => ({ value, ...option })),
+    [config.bassType],
   )
   const controlPlateOptions = useMemo(
     () => Object.entries(BASS_CONTROL_PLATE_OPTIONS).map(([value, option]) => ({ value, ...option })),

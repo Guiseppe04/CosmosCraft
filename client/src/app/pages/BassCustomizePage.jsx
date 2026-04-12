@@ -455,11 +455,12 @@ export function BassCustomizePage() {
                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Bass Model</h3>
                     <div className="grid grid-cols-2 gap-2">
                       {options.bodyOptions?.map((opt) => (
-                        <OptionButton
+                        <VisualCard
                           key={opt.value}
                           option={opt}
                           isSelected={config.bassType === opt.value}
                           onClick={() => updateConfig({ bassType: opt.value })}
+                          previewImage={opt.bodySrc}
                         />
                       ))}
                     </div>

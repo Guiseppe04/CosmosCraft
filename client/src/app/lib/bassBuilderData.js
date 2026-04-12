@@ -230,8 +230,8 @@ export const BASS_BODY_FINISH_OPTIONS = {
     texture: bassAsset('all-models/woods-colors/colors/solids/british-racing-green.png'),
     price: 2400, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
-  kieselOrange: {
-    label: 'Kiesel Orange',
+  cosmosOrange: {
+    label: 'Cosmos Orange',
     note: 'Racing orange finish',
     texture: bassAsset('all-models/woods-colors/colors/solids/kiesel-racing-orange.png'),
     price: 2400, specs: { size: '', dimensions: '', material: '', notes: '' }
@@ -549,24 +549,51 @@ export const BASS_BACKPLATE_OPTIONS = {
 
 // Pickup Screw Options
 export const BASS_PICKUP_SCREW_OPTIONS = {
-  black: {
-    label: 'Black Screws',
-    note: 'Black pickup mounting screws',
-    src: bassAsset('bass/jb/front/pickguard/screws-black.png'),
-    price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
+  vader: {
+    black: { label: 'Black Screws', src: null, price: 0, specs: { size: '', dimensions: '', material: '', notes: '' } },
+    chrome: { label: 'Chrome Screws', src: null, price: 0, specs: { size: '', dimensions: '', material: '', notes: '' } },
+    gold: { label: 'Gold Screws', src: null, price: 0, specs: { size: '', dimensions: '', material: '', notes: '' } },
   },
-  chrome: {
-    label: 'Chrome Screws',
-    note: 'Chrome pickup mounting screws',
-    src: bassAsset('bass/jb/front/pickguard/screws-chrome.png'),
-    price: 10, specs: { size: '', dimensions: '', material: '', notes: '' }
+  pb: {
+    black: {
+      label: 'Black Screws',
+      note: 'Black pickup mounting screws',
+      src: bassAsset('bass/pb/front/pickguard/screws-black.png'),
+      price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
+    },
+    chrome: {
+      label: 'Chrome Screws',
+      note: 'Chrome pickup mounting screws',
+      src: bassAsset('bass/pb/front/pickguard/screws-chrome.png'),
+      price: 10, specs: { size: '', dimensions: '', material: '', notes: '' }
+    },
+    gold: {
+      label: 'Gold Screws',
+      note: 'Gold pickup mounting screws',
+      src: bassAsset('bass/pb/front/pickguard/screws-gold.png'),
+      price: 15, specs: { size: '', dimensions: '', material: '', notes: '' }
+    },
   },
-  gold: {
-    label: 'Gold Screws',
-    note: 'Gold pickup mounting screws',
-    src: bassAsset('bass/jb/front/pickguard/screws-gold.png'),
-    price: 15, specs: { size: '', dimensions: '', material: '', notes: '' }
-  },
+  jb: {
+    black: {
+      label: 'Black Screws',
+      note: 'Black pickup mounting screws',
+      src: bassAsset('bass/jb/front/pickguard/screws-black.png'),
+      price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
+    },
+    chrome: {
+      label: 'Chrome Screws',
+      note: 'Chrome pickup mounting screws',
+      src: bassAsset('bass/jb/front/pickguard/screws-chrome.png'),
+      price: 10, specs: { size: '', dimensions: '', material: '', notes: '' }
+    },
+    gold: {
+      label: 'Gold Screws',
+      note: 'Gold pickup mounting screws',
+      src: bassAsset('bass/jb/front/pickguard/screws-gold.png'),
+      price: 15, specs: { size: '', dimensions: '', material: '', notes: '' }
+    },
+  }
 }
 
 // Control Plate Options
@@ -625,13 +652,13 @@ export const BASS_BRIDGE_OPTIONS = {
     },
   },
   jb: {
-    kiesel: {
-      label: 'Kiesel',
-      note: 'Custom kiesel bridge',
+    cosmos: {
+      label: 'Cosmos',
+      note: 'Custom Cosmos bridge',
       assets: {
-        chrome: bassAsset('bass/jb/front/bridges/kiesel/chrome.png'),
-        black: bassAsset('bass/jb/front/bridges/kiesel/black.png'),
-        gold: bassAsset('bass/jb/front/bridges/kiesel/gold.png'),
+        chrome: bassAsset('bass/jb/front/bridges/kiesel/4/chrome.png'),
+        black: bassAsset('bass/jb/front/bridges/kiesel/4/black.png'),
+        gold: bassAsset('bass/jb/front/bridges/kiesel/4/gold.png'),
       },
       price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
@@ -1008,8 +1035,9 @@ export const BASS_BODY_LAYER_ASSETS = {
       black: bassAsset('bass/vader/front/strap buttons/standard/black.png'),
       gold: bassAsset('bass/vader/front/strap buttons/standard/gold.png'),
     },
-    pickups: bassAsset('bass/vader/front/pickups/hb/standard/'),
-    shadows: bassAsset('bass/vader/front/shadows_highlights/'),
+    pickups: bassAsset('bass/vader/front/pickups/hb/standard/4/bridge-black.png'),
+    shadows: bassAsset('bass/vader/front/shadows_highlights/edge-shadow.png'),
+    gloss: bassAsset('bass/vader/front/shadows_highlights/gloss.png'),
     pickguard: null,
   },
   pb: {
@@ -1024,8 +1052,9 @@ export const BASS_BODY_LAYER_ASSETS = {
       black: bassAsset('bass/pb/front/strap buttons/standard/black.png'),
       gold: bassAsset('bass/pb/front/strap buttons/standard/gold.png'),
     },
-    pickups: bassAsset('all-models/pickups/bass/p/'),
-    shadows: bassAsset('bass/pb/front/shadows_highlights/'),
+    pickups: bassAsset('all-models/pickups/bass/p/neck-black.png'),
+    shadows: bassAsset('bass/pb/front/shadows_highlights/edge-shadow.png'),
+    gloss: bassAsset('bass/pb/front/shadows_highlights/gloss.png'),
     pickguard: {
       chrome: bassAsset('bass/pb/front/pickguard/black.png'),
       black: bassAsset('bass/pb/front/pickguard/black.png'),
@@ -1033,7 +1062,7 @@ export const BASS_BODY_LAYER_ASSETS = {
     },
   },
   jb: {
-    bridge: BASS_BRIDGE_OPTIONS.jb.kiesel.assets,
+    bridge: BASS_BRIDGE_OPTIONS.jb.cosmos.assets,
     knobs: {
       chrome: bassAsset('bass/jb/front/knobs/chrome.png'),
       black: bassAsset('bass/jb/front/knobs/black.png'),
@@ -1044,8 +1073,9 @@ export const BASS_BODY_LAYER_ASSETS = {
       black: bassAsset('bass/jb/front/strap buttons/standard/black.png'),
       gold: bassAsset('bass/jb/front/strap buttons/standard/gold.png'),
     },
-    pickups: bassAsset('all-models/pickups/bass/j/4/'),
-    shadows: bassAsset('bass/jb/front/shadows_highlights/'),
+    pickups: bassAsset('all-models/pickups/bass/j/4/bridge-black.png'),
+    shadows: bassAsset('bass/jb/front/shadows_highlights/edge-shadow.png'),
+    gloss: bassAsset('bass/jb/front/shadows_highlights/gloss.png'),
     pickguard: null,
   },
 }
