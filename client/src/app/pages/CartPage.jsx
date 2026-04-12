@@ -1,6 +1,7 @@
-import { Link } from 'react-router'
+import { Link, useNavigate } from 'react-router'
 import { motion } from 'motion/react'
 import { useCart } from '../context/CartContext.jsx'
+import { useAuth } from '../context/AuthContext.jsx'
 import { Trash2, Plus, Minus, ArrowRight, ShoppingBag } from 'lucide-react'
 
 /**
@@ -9,6 +10,13 @@ import { Trash2, Plus, Minus, ArrowRight, ShoppingBag } from 'lucide-react'
  */
 export function CartPage() {
   const { cart, removeFromCart, updateQuantity, getTotalPrice } = useCart()
+  const { isAuthenticated, openLogin } = useAuth()
+  const navigate = useNavigate()
+
+  const handleCheckout = () => {
+    if (!isAuthenticated) openLogin(() => navigate('/checkout'))
+    else navigate('/checkout')
+  }
 
   if (cart.length === 0) {
     return (
@@ -140,12 +148,12 @@ export function CartPage() {
               </span>
             </div>
 
-            <Link 
-              to="/checkout" 
+            <button 
+              onClick={handleCheckout} 
               className="block w-full px-8 py-4 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] rounded-xl font-semibold hover:shadow-[0_0_30px_rgba(212,175,55,0.5)] transition-all duration-200 text-center"
             >
               Proceed to Checkout
-            </Link>
+            </button>
 
             <Link 
               to="/shop" 

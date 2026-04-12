@@ -430,6 +430,58 @@ export const uploadAPI = {
   },
 }
 
+// ============================================
+// CART API
+// ============================================
+export const cartAPI = {
+  getCart: () => {
+    return fetchAPI('/cart')
+  },
+
+  getCartItemCount: () => {
+    return fetchAPI('/cart/count')
+  },
+
+  addItem: (itemData) => {
+    return fetchAPI('/cart/items', {
+      method: 'POST',
+      body: JSON.stringify(itemData),
+    })
+  },
+
+  updateItem: (id, updateData) => {
+    return fetchAPI(`/cart/items/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(updateData),
+    })
+  },
+
+  removeItem: (id) => {
+    return fetchAPI(`/cart/items/${id}`, {
+      method: 'DELETE',
+    })
+  },
+
+  clearCart: () => {
+    return fetchAPI('/cart', {
+      method: 'DELETE',
+    })
+  },
+
+  prepareCheckout: () => {
+    return fetchAPI('/cart/prepare-checkout', {
+      method: 'POST',
+    })
+  },
+
+  checkout: (checkoutData) => {
+    return fetchAPI('/cart/checkout', {
+      method: 'POST',
+      body: JSON.stringify(checkoutData),
+    })
+  },
+}
+
 export default {
   auth: authAPI,
   users: usersAPI,
@@ -439,4 +491,5 @@ export default {
   appointments: appointmentsAPI,
   analytics: analyticsAPI,
   upload: uploadAPI,
+  cart: cartAPI,
 }

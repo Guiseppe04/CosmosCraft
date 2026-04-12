@@ -1,11 +1,11 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { Filter, Search, ShoppingCart, Zap, Check, X, Star, Heart, ChevronDown } from 'lucide-react'
-import { mockProducts } from '../data/products.js'
 import { useCart } from '../context/CartContext.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useNavigate } from 'react-router'
 import { ProductRatingModal } from '../components/ProductRatingModal.jsx'
+import { adminApi } from '../utils/adminApi.js'
 
 export function ShopPage() {
   const [selectedCategory, setSelectedCategory] = useState('all')
@@ -18,31 +18,68 @@ export function ShopPage() {
   const navigate = useNavigate()
   const { isAuthenticated, openLogin } = useAuth()
 
+  const [products, setProducts] = useState([])
+  const [categories, setCategories] = useState([{ value: 'all', label: 'All Products' }])
+  const [brands, setBrands] = useState([{ value: 'all', label: 'All Brands' }])
+  const [loading, setLoading] = useState(true)
+
   const isInCart = (productId) => cart.some(item => item.id === productId)
-  const getProductStock = (productId) => mockProducts.find(p => p.id === productId)?.stock || 0
+  const getProductStock = (productId) => products.find(p => p.id === productId)?.stock || 0
   const isOutOfStock = (productId) => getProductStock(productId) === 0
   const isAtMaxLimit = (productId) => isItemAtMaxQuantity(productId)
   const isItemJustAdded = (productId) => getItemAddedState(productId)
 
-  const categories = [
-    { value: 'all', label: 'All Products' },
-    { value: 'Electric Guitars', label: 'Electric Guitars' },
-    { value: 'Acoustic Guitars', label: 'Acoustic Guitars' },
-    { value: 'Bass Guitars', label: 'Bass Guitars' },
-    { value: 'Accessories', label: 'Accessories' },
-    { value: 'Parts', label: 'Parts' },
-  ]
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true)
+        const [productsRes, categoriesRes] = await Promise.all([
+          adminApi.getProducts({ limit: 1000 }),
+          adminApi.getCategories()
+        ])
 
-  // Extract unique brands from products
-  const brands = ['all', ...new Set(mockProducts.map(p => p.brand).filter(Boolean))].map(b => ({
-    value: b,
-    label: b === 'all' ? 'All Brands' : b
-  }))
+        const fetchedProducts = (productsRes.data || []).map(p => ({
+          id: p.product_id || p.id,
+          name: p.name,
+          price: Number(p.price),
+          image: p.primary_image || p.image || '/assets/placeholder.jpg',
+          category: p.category_name || p.category || 'Uncategorized',
+          brand: p.brand,
+          description: p.description,
+          stock: p.stock || 0
+        }))
 
-  const filteredProducts = mockProducts.filter(product => {
+        // Handle case where categories might be directly an array or inside .data
+        const fetchedCategories = Array.isArray(categoriesRes) ? categoriesRes : (categoriesRes.data || [])
+        
+        setProducts(fetchedProducts)
+
+        const catOptions = fetchedCategories.map(c => ({
+          value: c.name,
+          label: c.name
+        }))
+        
+        setCategories([{ value: 'all', label: 'All Products' }, ...catOptions])
+
+        const uniqueBrands = ['all', ...new Set(fetchedProducts.map(p => p.brand).filter(Boolean))]
+        setBrands(uniqueBrands.map(b => ({
+          value: b,
+          label: b === 'all' ? 'All Brands' : b
+        })))
+
+      } catch (err) {
+        console.error("Failed to fetch shop data", err)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchData()
+  }, [])
+
+  const filteredProducts = products.filter(product => {
     const matchesCategory = selectedCategory === 'all' || product.category === selectedCategory
     const matchesBrand = selectedBrand === 'all' || product.brand === selectedBrand
-    const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase()) || product.description.toLowerCase().includes(searchQuery.toLowerCase())
+    const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase()) || (product.description || '').toLowerCase().includes(searchQuery.toLowerCase())
     return matchesCategory && matchesSearch && matchesBrand
   })
 

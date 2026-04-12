@@ -1,15 +1,18 @@
 import { AnimatePresence, motion } from 'motion/react'
 import { useNavigate } from 'react-router'
 import { useCart } from '../../context/CartContext.jsx'
+import { useAuth } from '../../context/AuthContext.jsx'
 import { Trash2, Plus, Minus } from 'lucide-react'
 
 export function CartDrawer() {
   const { cart, isOpen, setIsOpen, updateQuantity, removeFromCart, getTotalPrice } = useCart()
+  const { isAuthenticated, openLogin } = useAuth()
   const navigate = useNavigate()
 
   const handleCheckout = () => {
     setIsOpen(false)
-    navigate('/checkout')
+    if (!isAuthenticated) openLogin(() => navigate('/checkout'))
+    else navigate('/checkout')
   }
 
   return (

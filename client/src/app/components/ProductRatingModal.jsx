@@ -81,9 +81,20 @@ export function ProductRatingModal({ product, isOpen, onClose, onBuyNow, onAddTo
               {product.name}
             </h2>
             
-            <p className="text-2xl font-mono font-bold text-white mb-6">
-              ₱{product.price.toLocaleString('en-PH')}
-            </p>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-6 relative">
+              <p className="text-2xl font-mono font-bold text-white">
+                ₱{product.price.toLocaleString('en-PH')}
+              </p>
+              
+              {product.category && !product.category.toLowerCase().includes('guitar') && (
+                <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-sm shadow-inner mt-2 sm:mt-0">
+                  <span className="font-semibold text-white/50 uppercase tracking-widest text-[10px]">Stock</span>
+                  <span className={`font-bold ${outOfStock ? 'text-red-400' : 'text-[var(--gold-primary)]'}`}>
+                    {outOfStock ? 'Out of Stock' : `${product.stock || 0} Available`}
+                  </span>
+                </div>
+              )}
+            </div>
             
             {/* Interactive Rating Component */}
             <div className="mb-8 p-5 bg-white/5 rounded-xl border border-white/5">
