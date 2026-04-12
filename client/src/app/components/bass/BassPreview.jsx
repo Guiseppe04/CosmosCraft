@@ -61,7 +61,6 @@ function BassLayer({ src, maskSrc, style, className = '', layerName = '' }) {
 
 function BassPreview({ config, view, onViewChange }) {
   const previewRef = useRef(null)
-  const [renderDebug, setRenderDebug] = useState(DEBUG)
 
   // ===== CONFIG VALIDATION & RESOLUTION =====
   const resolvedConfig = useMemo(() => {
@@ -105,7 +104,7 @@ function BassPreview({ config, view, onViewChange }) {
       hardware: bassBuilder.HARDWARE_OPTIONS[resolvedConfig.hardware],
       bridge: bassBuilder.BRIDGE_OPTIONS[resolvedConfig.bassType]?.[resolvedConfig.bridge],
       inlay: bassBuilder.INLAY_OPTIONS[resolvedConfig.inlays],
-      backplate: bassBuilder.BACKPLATE_OPTIONS[resolvedConfig.backplate],
+      backplate: bassBuilder.BACKPLATE_OPTIONS[resolvedConfig.bassType]?.[resolvedConfig.backplate] || bassBuilder.BACKPLATE_OPTIONS.pb?.[resolvedConfig.backplate] || bassBuilder.BACKPLATE_OPTIONS.standard,
       controlPlate: bassBuilder.CONTROL_PLATE_OPTIONS[resolvedConfig.controlPlate],
       bodyAssets: bassBuilder.BODY_LAYER_ASSETS[resolvedConfig.bassType],
     }
@@ -356,12 +355,35 @@ function BassPreview({ config, view, onViewChange }) {
     // Body base
     if (assets.bodyModel?.bodySrc && assets.bodyWood?.texture) {
       layers.push({
-        name: 'rear-body',
+        name: 'rear-body-wood',
         maskSrc: assets.bodyModel.bodySrc,
         style: {
           backgroundImage: `url(${assets.bodyWood.texture})`,
           opacity: 1,
           zIndex: 1,
+        },
+      })
+    }
+
+    if (assets.bodyFinish?.texture) {
+      layers.push({
+        name: 'rear-body-finish-texture',
+        maskSrc: assets.bodyModel?.bodySrc,
+        style: {
+          backgroundImage: `url(${assets.bodyFinish.texture})`,
+          opacity: 1,
+          mixBlendMode: 'normal',
+          zIndex: 2,
+        },
+      })
+    } else if (assets.bodyFinish?.color) {
+      layers.push({
+        name: 'rear-body-finish-color',
+        maskSrc: assets.bodyModel?.bodySrc,
+        style: {
+          backgroundColor: assets.bodyFinish.color,
+          opacity: 1,
+          zIndex: 2,
         },
       })
     }
@@ -394,8 +416,10 @@ function BassPreview({ config, view, onViewChange }) {
       })
     }
 
+    const isHeadless = resolvedConfig.bassType === 'vader';
+
     // Headstock wood - rear view
-    if (assets.headstockWood?.texture && BASS_NECK_MASK) {
+    if (!isHeadless && assets.headstockWood?.texture && BASS_NECK_MASK) {
       layers.push({
         name: 'rear-headstock-wood',
         maskSrc: BASS_NECK_MASK,
@@ -405,6 +429,12 @@ function BassPreview({ config, view, onViewChange }) {
           zIndex: 4,
         },
       })
+    } else if (isHeadless && assets.bodyAssets?.rearNeckCap) {
+      layers.push({
+        name: 'rear-neck-cap',
+        src: assets.bodyAssets.rearNeckCap,
+        style: { zIndex: 4, opacity: 0.95, transform: 'scaleX(-1)' },
+      })
     }
 
     // Backplate
@@ -412,7 +442,7 @@ function BassPreview({ config, view, onViewChange }) {
       layers.push({
         name: 'backplate',
         src: assets.backplate.src,
-        style: { zIndex: 5, opacity: 0.95 },
+        style: { zIndex: 5, opacity: 0.95, transform: 'scaleX(-1)' },
       })
     } else if (DEBUG) {
       console.warn('[REAR] Backplate asset missing')
@@ -451,35 +481,6 @@ function BassPreview({ config, view, onViewChange }) {
 
   return (
     <div className="w-full" ref={previewRef}>
-      {/* DEBUG OVERLAY */}
-      {renderDebug && (
-        <div
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            zIndex: 9999,
-            backgroundColor: 'rgba(0,0,0,0.8)',
-            color: '#0f0',
-            padding: '8px',
-            fontSize: '11px',
-            fontFamily: 'monospace',
-            maxWidth: '250px',
-            maxHeight: '200px',
-            overflow: 'auto',
-            borderRadius: '4px',
-          }}
-        >
-          <div>VIEW: {view}</div>
-          <div>BASS: {resolvedConfig.bassType}</div>
-          <div>PICKGUARD: {resolvedConfig.pickguard}</div>
-          <div>FINISH: {resolvedConfig.bodyFinish}</div>
-          <div onClick={() => setRenderDebug(false)} style={{ cursor: 'pointer', marginTop: '4px', color: '#f00' }}>
-            [close]
-          </div>
-        </div>
-      )}
-
       <div className="relative mx-auto w-full">
         <div className="relative overflow-hidden rounded-xl">
           <div className="absolute inset-0 bg-gradient-to-b from-[#1a1a1a] via-[#0f0f0f] to-[#0a0a0a]" />

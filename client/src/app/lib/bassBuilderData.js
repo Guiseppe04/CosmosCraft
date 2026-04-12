@@ -43,17 +43,18 @@ export const BASS_BODY_OPTIONS = {
   },
   pb: {
     label: 'Precision',
-    note: 'Classic P-bass style',
+    note: 'Classic precision shape',
     bodySrc: bassAsset('bass/pb/front/masks/bodymask.png'),
-    price: 5999, specs: { size: '', dimensions: '', material: '', notes: '' }
+    price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
   jb: {
     label: 'Jazz',
-    note: 'Modern J-bass style',
+    note: 'Modern jazz shape',
     bodySrc: bassAsset('bass/jb/front/masks/bodymask.png'),
-    price: 8999, specs: { size: '', dimensions: '', material: '', notes: '' }
+    price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
 }
+
 
 export const BASS_BODY_WOOD_OPTIONS = {
   maple: {
@@ -533,18 +534,42 @@ export const BASS_LOGO_OPTIONS = {
 
 // Backplate Options - Back customization
 export const BASS_BACKPLATE_OPTIONS = {
-  standard: {
-    label: 'Standard',
-    note: 'Standard back panel',
-    src: bassAsset('bass/pb/back/backplates/battery-compartment.png'),
-    price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
+  vader: {
+    standard: {
+      label: 'Standard',
+      note: 'Standard back panel',
+      src: bassAsset('bass/vader/back/backplates/battery-compartment.png'),
+      price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
+    },
   },
-  extended: {
-    label: 'Extended 5-String',
-    note: 'Extended 5-string back panel',
-    src: bassAsset('bass/pb/back/backplates/battery-compartment-5.png'),
-    price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
+  pb: {
+    standard: {
+      label: 'Standard',
+      note: 'Standard back panel',
+      src: bassAsset('bass/pb/back/backplates/battery-compartment.png'),
+      price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
+    },
+    extended: {
+      label: 'Extended 5-String',
+      note: 'Extended 5-string back panel',
+      src: bassAsset('bass/pb/back/backplates/battery-compartment-5.png'),
+      price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
+    },
   },
+  jb: {
+    standard: {
+      label: 'Standard',
+      note: 'Standard back panel',
+      src: bassAsset('bass/jb/back/backplates/battery-compartment.png'),
+      price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
+    },
+    extended: {
+      label: 'Extended 5-String',
+      note: 'Extended 5-string back panel',
+      src: bassAsset('bass/jb/back/backplates/battery-compartment-5.png'),
+      price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
+    },
+  }
 }
 
 // Pickup Screw Options
@@ -1039,6 +1064,7 @@ export const BASS_BODY_LAYER_ASSETS = {
     shadows: bassAsset('bass/vader/front/shadows_highlights/edge-shadow.png'),
     gloss: bassAsset('bass/vader/front/shadows_highlights/gloss.png'),
     pickguard: null,
+    rearNeckCap: bassAsset('bass/vader/back/neck-cap.png'),
   },
   pb: {
     bridge: BASS_BRIDGE_OPTIONS.pb.standard4.assets,
