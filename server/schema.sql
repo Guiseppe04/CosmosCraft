@@ -184,6 +184,7 @@ CREATE TABLE products (
     name VARCHAR(150) NOT NULL,
     description TEXT,
     price NUMERIC(12, 2) NOT NULL CHECK (price >= 0),
+    brand VARCHAR(100),
     category_id INT,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -193,6 +194,7 @@ CREATE TABLE products (
 );
 
 CREATE INDEX idx_products_sku ON products(sku);
+CREATE INDEX idx_products_brand ON products(brand);
 CREATE INDEX idx_products_category_id ON products(category_id);
 CREATE INDEX idx_products_is_active ON products(is_active);
 

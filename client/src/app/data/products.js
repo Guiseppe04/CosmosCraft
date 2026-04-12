@@ -2,6 +2,7 @@ export const mockProducts = [
   {
     id: 'prod-001',
     name: 'Electric Guitar – Strat Style',
+    brand: 'Fender',
     category: 'Electric Guitars',
     price: 12000,
     stock: 15,
@@ -12,6 +13,7 @@ export const mockProducts = [
   {
     id: 'prod-002',
     name: 'Acoustic Guitar – Mahogany Body',
+    brand: 'Gibson',
     category: 'Acoustic Guitars',
     price: 9500,
     stock: 12,
@@ -22,6 +24,7 @@ export const mockProducts = [
   {
     id: 'prod-003',
     name: 'Guitar Strings Set',
+    brand: 'Ernie Ball',
     category: 'Accessories',
     price: 350,
     stock: 50,
@@ -32,6 +35,7 @@ export const mockProducts = [
   {
     id: 'prod-004',
     name: 'Guitar Strap – Premium Leather',
+    brand: 'Levy\'s',
     category: 'Accessories',
     price: 450,
     stock: 30,
@@ -42,6 +46,7 @@ export const mockProducts = [
   {
     id: 'prod-005',
     name: 'Bridge Pickup – Humbucker',
+    brand: 'Seymour Duncan',
     category: 'Parts',
     price: 850,
     stock: 20,
@@ -52,6 +57,7 @@ export const mockProducts = [
   {
     id: 'prod-006',
     name: 'Guitar Case – Hard Shell',
+    brand: 'Gator Cases',
     category: 'Accessories',
     price: 1200,
     stock: 25,

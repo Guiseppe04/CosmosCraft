@@ -9,7 +9,7 @@ import {
   ChevronDown, ChevronUp, ArrowUpDown, ArrowUp, ArrowDown,
   Printer, Mail, FileText, CreditCard, RotateCcw, Copy, Truck, MapPin,
   UserCheck, Clock10, PackageCheck, CircleCheck,
-  Layers, User, Tag, AlertCircle, DollarSign, Save, TrendingUp, UsersRound, Clock, Loader2, Grid3X3, List, MoreHorizontal, Guitar, Shield,
+  Layers, User, Tag, AlertCircle, DollarSign, Save, TrendingUp, UsersRound, Clock, Loader2, Grid3X3, List, MoreHorizontal, Shield, Settings,
 } from 'lucide-react'
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis,
@@ -132,6 +132,7 @@ export function AdminPage() {
     sortBy: 'created_at',
     sortDir: 'desc',
     category_id: '',
+    brand: '',
     is_active: '',
     min_price: '',
     max_price: '',
@@ -151,7 +152,6 @@ export function AdminPage() {
   // Data state
   const [products, setProducts] = useState([])
   const [categories, setCategories] = useState([])
-  const [guitars, setGuitars] = useState([])
   const [parts, setParts] = useState([])
   const [users, setUsers] = useState([])
   const [orders, setOrders] = useState([])
@@ -195,7 +195,6 @@ export function AdminPage() {
   // ── Derived / filtered views ─────────────────────────────────────────────
   const visibleProducts = products || []
   const visibleParts = parts || []
-  const visibleGuitars = guitars || []
   const visibleCategories = categories || []
   const visibleOrders = orders || []
   const visibleProjects = projects || []
@@ -358,14 +357,6 @@ export function AdminPage() {
     } catch { }
   }, [categories])
 
-  const fetchGuitars = useCallback(async () => {
-    try {
-      const res = await adminApi.getCustomizations({ search: debouncedSearch })
-      const newData = Array.isArray(res.data) ? res.data : res.data?.customizations || []
-      updateIfChanged(guitars, newData, setGuitars)
-    } catch (e) { showToast(e.message, 'error') }
-  }, [debouncedSearch, showToast, guitars])
-
   const fetchParts = useCallback(async () => {
     setPartsLoading(true)
     try {
@@ -446,7 +437,6 @@ export function AdminPage() {
     const loaders = {
       'products-parts': () => { fetchProducts(); fetchCategories(); fetchParts() },
       'categories': () => { fetchCategories(); },
-      'guitars': fetchGuitars,
       'users': fetchUsers,
       'orders': fetchOrders,
       'projects': fetchProjects,
@@ -464,7 +454,6 @@ export function AdminPage() {
       setProductQuery((prev) => ({ ...prev, page: 1 }))
       setPartQuery((prev) => ({ ...prev, page: 1 }))
     }
-    if (activeTab === 'guitars') fetchGuitars()
     if (activeTab === 'users') fetchUsers()
     if (activeTab === 'orders') fetchOrders()
     if (activeTab === 'projects') fetchProjects()
@@ -485,7 +474,6 @@ export function AdminPage() {
     const map = {
       'products-parts': async () => { await fetchProducts(); await fetchParts() },
       'categories': fetchCategories,
-      'guitars': fetchGuitars,
       'users': fetchUsers,
       'orders': fetchOrders,
       'projects': fetchProjects,
@@ -495,7 +483,7 @@ export function AdminPage() {
       'dashboard': async () => { await fetchOrders(); await fetchProjects(); await fetchAppointments() },
     }
     return map[activeTab]?.()
-  }, [activeTab, fetchProducts, fetchParts, fetchCategories, fetchGuitars, fetchUsers, fetchOrders, fetchProjects, fetchAppointments, fetchInventory, fetchSalesReport])
+  }, [activeTab, fetchProducts, fetchParts, fetchCategories, fetchUsers, fetchOrders, fetchProjects, fetchAppointments, fetchInventory, fetchSalesReport])
 
   const pollingEnabled = ['dashboard', 'orders', 'inventory', 'projects', 'appointments'].includes(activeTab)
   useSmartPolling(pollingFn, { interval: 5000, maxInterval: 60000, backoffFactor: 1.5, enabled: pollingEnabled })
@@ -654,20 +642,6 @@ export function AdminPage() {
 
     const previewUrl = URL.createObjectURL(file)
     setForm(f => ({ ...f, image_file: file, preview_url: previewUrl }))
-  }
-
-  // ── CRUD: Guitar Customizations ──────────────────────────────────────────
-  const deleteGuitar = (id) => {
-    openConfirm({
-      title: 'Delete Customization?',
-      description: 'This will permanently delete the customer\'s saved guitar configuration. This cannot be undone.',
-      variant: 'danger',
-      onConfirm: async () => {
-        await adminApi.deleteCustomization(id)
-        showToast('Customization deleted')
-        fetchGuitars()
-      },
-    })
   }
 
   // ── CRUD: Users ──────────────────────────────────────────────────────────
@@ -833,13 +807,13 @@ export function AdminPage() {
     { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
     { id: 'products-parts', label: 'Guitar Parts & Products', icon: Layers },
     { id: 'categories', label: 'Categories', icon: Tag },
-    { id: 'guitars', label: 'Customizations', icon: Guitar },
     { id: 'orders', label: 'Orders', icon: ShoppingBag },
     { id: 'inventory', label: 'Inventory', icon: Activity },
     { id: 'sales-report', label: 'Sales Report', icon: PieChart },
     { id: 'projects', label: 'Projects', icon: Briefcase },
     { id: 'appointments', label: 'Appointments', icon: Calendar },
     { id: 'users', label: 'Users', icon: Shield },
+    { id: 'settings', label: 'Settings', icon: Settings },
   ]
 
   // ── JSX ──────────────────────────────────────────────────────────────────
@@ -874,15 +848,30 @@ export function AdminPage() {
       />
 
       {/* Sidebar */}
-      <aside className={`fixed left-0 top-0 h-screen bg-[#1E201E] border-r border-[#5A5555] transition-all duration-300 z-40 ${sidebarCollapsed ? 'w-20' : 'w-64'}`}>
-        <button
-          onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-          className="absolute -right-3 top-6 w-6 h-6 bg-[#1E201E] border border-[#5A5555] rounded-full flex items-center justify-center hover:bg-[var(--gold-primary)] hover:border-[var(--gold-primary)] transition-all"
-        >
-          {sidebarCollapsed ? <ChevronRight className="w-4 h-4 text-[#F5F5F5]" /> : <ChevronLeft className="w-4 h-4 text-[#F5F5F5]" />}
-        </button>
+      <aside className={`fixed left-0 top-0 h-screen bg-[#1E201E] border-r border-[#5A5555] transition-all duration-300 z-40 flex flex-col ${sidebarCollapsed ? 'w-20' : 'w-64'}`}>
+        {/* Header with CosmosCraft branding */}
+        <div className="h-24 px-4 py-4 border-b border-[#5A5555] flex items-center justify-between relative">
+          <button
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            className="absolute -right-3 top-6 w-6 h-6 bg-[#1E201E] border border-[#5A5555] rounded-full flex items-center justify-center hover:bg-[var(--gold-primary)] hover:border-[var(--gold-primary)] transition-all"
+          >
+            {sidebarCollapsed ? <ChevronRight className="w-4 h-4 text-[#F5F5F5]" /> : <ChevronLeft className="w-4 h-4 text-[#F5F5F5]" />}
+          </button>
 
-        <nav className="p-4 space-y-1 overflow-y-auto max-h-[calc(100vh-10rem)]">
+          {!sidebarCollapsed && (
+            <div className="flex items-center gap-3">
+              <img src="/favicon.png" alt="CosmosCraft" className="w-10 h-10 flex-shrink-0" />
+              <div className="min-w-0">
+                <p className="text-white font-black text-lg tracking-tight">CosmosCraft</p>
+              </div>
+            </div>
+          )}
+          {sidebarCollapsed && (
+            <img src="/favicon.png" alt="CosmosCraft" className="w-10 h-10 flex-shrink-0 mx-auto" />
+          )}
+        </div>
+
+        <nav className="p-4 space-y-1 overflow-y-auto flex-1">
           {tabs.map((tab) => {
             const Icon = tab.icon
             return (
@@ -903,19 +892,7 @@ export function AdminPage() {
           })}
         </nav>
 
-        <div className={`absolute bottom-4 left-0 right-0 px-4 ${sidebarCollapsed ? 'text-center' : ''}`}>
-          <div className={`flex items-center gap-3 p-4 rounded-2xl bg-[#1E201E] border border-[#5A5555] ${sidebarCollapsed ? 'justify-center' : ''}`}>
-            <div className="w-10 h-10 rounded-full bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] flex items-center justify-center flex-shrink-0 border-2 border-white">
-              <User className="w-5 h-5 text-[var(--text-dark)]" />
-            </div>
-            {!sidebarCollapsed && (
-              <div className="flex-1 min-w-0">
-                <p className="text-white font-medium text-sm truncate">{user?.firstName || 'Admin'}</p>
-                <p className="text-[var(--gold-primary)] text-xs capitalize">{user?.role?.replace('_', ' ')}</p>
-              </div>
-            )}
-          </div>
-        </div>
+       
       </aside>
 
       {/* Main content */}
@@ -926,7 +903,7 @@ export function AdminPage() {
 
           {/* Actions bar */}
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
-            {['products-parts', 'guitars', 'users', 'categories', 'orders', 'projects', 'appointments'].includes(activeTab) && (
+            {['products-parts', 'users', 'categories', 'orders', 'projects', 'appointments'].includes(activeTab) && (
               <div className="relative max-w-sm w-full">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
                 <input
@@ -1185,6 +1162,14 @@ export function AdminPage() {
                     <option value="">All categories</option>
                     {visibleCategories.map((c) => <option key={c.category_id} value={c.category_id}>{c.name}</option>)}
                   </select>
+                  <input 
+                    type="text"
+                    aria-label="Filter products by brand" 
+                    placeholder="Filter by brand..."
+                    value={productQuery.brand} 
+                    onChange={(e) => setProductQuery((prev) => ({ ...prev, page: 1, brand: e.target.value }))} 
+                    className={inputCls}
+                  />
                   <select aria-label="Sort products" value={`${productQuery.sortBy}:${productQuery.sortDir}`} onChange={(e) => {
                     const [sortBy, sortDir] = e.target.value.split(':')
                     setProductQuery((prev) => ({ ...prev, page: 1, sortBy, sortDir }))
@@ -1208,7 +1193,7 @@ export function AdminPage() {
                 <EmptyState icon={Package} label={debouncedSearch ? 'No products match your search/filters' : 'No products found'} action={() => openModal('product')} actionLabel="Add First Product" />
               ) : productViewMode === 'table' ? (
                 <AdminTable
-                  columns={['Image', 'Product', 'SKU', 'Price', 'Cost', 'Stock Status', 'Actions']}
+                  columns={['Image', 'Product', 'Brand', 'SKU', 'Price', 'Cost', 'Stock Status', 'Actions']}
                   rows={visibleProducts}
                   renderRow={(p) => (
                     <>
@@ -1224,6 +1209,7 @@ export function AdminPage() {
                       <td className="py-4 px-6">
                         <p className="text-white font-semibold">{p.name}</p>
                       </td>
+                      <td className="py-4 px-6 text-[var(--text-muted)] font-semibold">{p.brand || '—'}</td>
                       <td className="py-4 px-6 text-[var(--text-muted)] font-mono text-sm">{p.sku || '—'}</td>
                       <td className="py-4 px-6 text-[var(--gold-primary)] font-bold">{formatCurrency(p.price)}</td>
                       <td className="py-4 px-6 text-[var(--text-muted)] text-sm">{p.cost_price ? formatCurrency(p.cost_price) : '—'}</td>
@@ -1280,6 +1266,7 @@ export function AdminPage() {
                             <div className="min-w-0 flex-1">
                               <p className="text-[var(--gold-primary)] text-xs font-mono">{p.sku || 'No SKU'}</p>
                               <h3 className="text-white font-semibold text-lg truncate">{p.name}</h3>
+                              {p.brand && <p className="text-[var(--text-muted)] text-sm mt-1">Brand: <span className="text-white font-medium">{p.brand}</span></p>}
                             </div>
                           </div>
 
@@ -1460,43 +1447,6 @@ export function AdminPage() {
             </motion.div>
           )}
 
-          {/* ── GUITAR CUSTOMIZATIONS ──────────────────────────────────────── */}
-          {activeTab === 'guitars' && (
-            <motion.div key="guitars" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-              <AdminTable
-                columns={['Customer', 'Guitar', 'Type', 'Price', 'Saved', 'Actions']}
-                rows={visibleGuitars}
-                renderRow={(g) => (
-                  <>
-                    <td className="py-4 px-6">
-                      <p className="text-white font-semibold">{g.user_name || '—'}</p>
-                      <p className="text-[var(--text-muted)] text-xs">{g.user_email || '—'}</p>
-                    </td>
-                    <td className="py-4 px-6 text-white">{g.name || 'Untitled'}</td>
-                    <td className="py-4 px-6">
-                      <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-[var(--gold-primary)]/20 text-[var(--gold-primary)] border border-[var(--gold-primary)]/30 capitalize">{g.guitar_type}</span>
-                    </td>
-                    <td className="py-4 px-6 text-[var(--gold-primary)] font-bold">{formatCurrency(g.total_price)}</td>
-                    <td className="py-4 px-6"><StatusBadge active={g.is_saved} trueLabel="Saved" falseLabel="Draft" /></td>
-                    <td className="py-4 px-6">
-                      <div className="flex gap-2">
-                        <button onClick={() => openModal('guitar_view', g)} className="p-1.5 hover:bg-[var(--gold-primary)]/10 rounded">
-                          <Eye className="w-4 h-4 text-[var(--text-muted)]" />
-                        </button>
-                        {isSuperAdmin && (
-                          <button onClick={() => deleteGuitar(g.customization_id)} className="p-1.5 hover:bg-red-500/10 rounded">
-                            <Trash2 className="w-4 h-4 text-red-400" />
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </>
-                )}
-                empty={<EmptyState icon={Guitar} label="No customizations yet" />}
-              />
-            </motion.div>
-          )}
-
           {/* ── USERS ──────────────────────────────────────────────────────── */}
           {activeTab === 'users' && (
             <motion.div key="users" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
@@ -1553,6 +1503,67 @@ export function AdminPage() {
                 )}
                 empty={<EmptyState icon={Users} label="No users found" />}
               />
+            </motion.div>
+          )}
+
+          {/* ── SETTINGS ───────────────────────────────────────────────────── */}
+          {activeTab === 'settings' && (
+            <motion.div key="settings" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="max-w-2xl">
+              <div className="space-y-6">
+                {/* General Settings Section */}
+                <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6">
+                  <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-3">
+                    <Settings className="w-5 h-5 text-[var(--gold-primary)]" />
+                    General Settings
+                  </h3>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-[var(--text-muted)] mb-2">Dashboard Theme</label>
+                      <p className="text-white text-sm">Light mode is the default. You can switch to dark mode using the theme toggle in the top bar.</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* System Information */}
+                <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6">
+                  <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-3">
+                    <Info className="w-5 h-5 text-[var(--gold-primary)]" />
+                    System Information
+                  </h3>
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[var(--text-muted)]">System Version</span>
+                      <span className="text-white font-mono">v1.0.0</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-[var(--text-muted)]">Last Updated</span>
+                      <span className="text-white font-mono">{new Date().toLocaleDateString()}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-[var(--text-muted)]">Admin Role</span>
+                      <span className="text-white font-mono capitalize">{user?.role?.replace('_', ' ')}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* User Account */}
+                <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6">
+                  <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-3">
+                    <User className="w-5 h-5 text-[var(--gold-primary)]" />
+                    Your Account
+                  </h3>
+                  <div className="space-y-3">
+                    <div>
+                      <span className="text-[var(--text-muted)] text-sm">Email</span>
+                      <p className="text-white font-mono">{user?.email || 'Not available'}</p>
+                    </div>
+                    <div>
+                      <span className="text-[var(--text-muted)] text-sm">Name</span>
+                      <p className="text-white font-mono">{user?.firstName && user?.lastName ? `${user.firstName} ${user.lastName}` : user?.firstName || 'Admin'}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </motion.div>
           )}
 
@@ -2481,6 +2492,17 @@ export function AdminPage() {
                           <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]/60 p-4 sm:p-5">
                             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-5">
                               <div>
+                                <label className={`${labelCls} ${formErrors.brand ? 'text-red-400' : ''}`}>Brand</label>
+                                <input
+                                  value={form.brand || ''}
+                                  onChange={(e) => setForm((f) => ({ ...f, brand: e.target.value }))}
+                                  placeholder="e.g. Fender, Gibson, Ibanez"
+                                  className={formErrors.brand ? fieldErr : fieldOk}
+                                />
+                                {formErrors.brand && <p className="mt-1 text-xs text-red-400">{formErrors.brand}</p>}
+                                <p className="mt-1.5 text-xs text-[var(--text-muted)]">Manufacturer or brand name for product identification.</p>
+                              </div>
+                              <div>
                                 <label className={`${labelCls} ${formErrors.category_id ? 'text-red-400' : ''}`}>Category *</label>
                                 <select
                                   value={form.category_id || ''}
@@ -2497,22 +2519,23 @@ export function AdminPage() {
                                 {formErrors.category_id && <p className="mt-1 text-xs text-red-400">{formErrors.category_id}</p>}
                                 <p className="mt-1.5 text-xs text-[var(--text-muted)]">Groups this product in the shop catalog.</p>
                               </div>
-                              <div className="flex flex-col justify-end pb-0.5 md:pb-1">
-                                <div className="flex items-center gap-3">
-                                  <input
-                                    type="checkbox"
-                                    id="is_active"
-                                    checked={form.is_active ?? true}
-                                    onChange={(e) => setForm((f) => ({ ...f, is_active: e.target.checked }))}
-                                    className="h-5 w-5 rounded border-gray-600 bg-gray-800 text-[var(--gold-primary)] focus:ring-[var(--gold-primary)] focus:ring-offset-gray-900"
-                                  />
-                                  <label htmlFor="is_active" className="cursor-pointer font-medium text-white">
-                                    Active Product
-                                  </label>
-                                </div>
-                                <p className="ml-8 mt-1 text-xs text-[var(--text-muted)]">When off, the product is hidden from the storefront.</p>
-                              </div>
                             </div>
+                          </div>
+
+                          <div className="flex flex-col justify-start pb-0.5 md:pb-1">
+                            <div className="flex items-center gap-3">
+                              <input
+                                type="checkbox"
+                                id="is_active"
+                                checked={form.is_active ?? true}
+                                onChange={(e) => setForm((f) => ({ ...f, is_active: e.target.checked }))}
+                                className="h-5 w-5 rounded border-gray-600 bg-gray-800 text-[var(--gold-primary)] focus:ring-[var(--gold-primary)] focus:ring-offset-gray-900"
+                              />
+                              <label htmlFor="is_active" className="cursor-pointer font-medium text-white">
+                                Active Product
+                              </label>
+                            </div>
+                            <p className="ml-8 mt-1 text-xs text-[var(--text-muted)]">When off, the product is hidden from the storefront.</p>
                           </div>
                         </motion.div>
                       )}
@@ -2741,27 +2764,107 @@ export function AdminPage() {
               })()}
 
               {/* Category Modal */}
-              {modal.type === 'category' && (
-                <>
-                  <ModalHeader title={modal.data ? 'Edit Category' : 'New Category'} onClose={closeModal} />
-                  <div className="space-y-4 mt-6">
-                    <FormField label="Name *" value={form.name || ''} onChange={v => setForm(f => ({ ...f, name: v, slug: f.slug || v.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') }))} error={formErrors.name} />
-                    <FormField label="Slug *" value={form.slug || ''} onChange={v => setForm(f => ({ ...f, slug: v }))} placeholder="e.g. custom-builds" error={formErrors.slug} />
-                    <FormField label="Description" value={form.description || ''} onChange={v => setForm(f => ({ ...f, description: v }))} textarea />
-                    <div>
-                      <label className={labelCls}>Parent Category</label>
-                      <select value={form.parent_id || ''} onChange={e => setForm(f => ({ ...f, parent_id: e.target.value || null }))} className={inputCls}>
-                        <option value="">— None —</option>
-                        {categories.filter(c => c.category_id !== modal.data?.category_id).map(c => (
-                          <option key={c.category_id} value={c.category_id}>{c.name}</option>
-                        ))}
-                      </select>
+              {modal.type === 'category' && (() => {
+                const fieldBase = 'w-full px-4 py-2.5 bg-[var(--bg-primary)] rounded-xl text-white placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 text-sm transition-colors'
+                const fieldOk = `${fieldBase} border border-[var(--border)] focus:ring-[var(--gold-primary)]`
+                const fieldErr = `${fieldBase} border border-[var(--border)] border-l-4 border-l-red-500 focus:ring-red-500/40`
+                const selErr = `${inputCls} border-l-4 border-l-red-500`
+                const selOk = inputCls
+                return (
+                  <>
+                    <ModalHeader title={modal.data ? 'Edit Category' : 'New Category'} onClose={closeModal} />
+                    <div className="space-y-5 mt-6">
+                      {/* Basic Information */}
+                      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-5">
+                        <div>
+                          <label className={`block text-xs font-semibold uppercase tracking-wider mb-1.5 ${formErrors.name ? 'text-red-400' : 'text-[var(--text-muted)]'}`}>Category Name *</label>
+                          <input
+                            value={form.name || ''}
+                            onChange={(e) => {
+                              const nameVal = e.target.value
+                              setForm(f => ({ ...f, name: nameVal, slug: f.slug || nameVal.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') }))
+                            }}
+                            placeholder="e.g. Custom Builds, Acoustic Guitars"
+                            className={formErrors.name ? fieldErr : fieldOk}
+                          />
+                          {formErrors.name && <p className="mt-1 text-xs text-red-400">{formErrors.name}</p>}
+                          <p className="mt-1.5 text-xs text-[var(--text-muted)]">The display name for this category.</p>
+                        </div>
+
+                        <div>
+                          <label className={`block text-xs font-semibold uppercase tracking-wider mb-1.5 ${formErrors.slug ? 'text-red-400' : 'text-[var(--text-muted)]'}`}>URL Slug *</label>
+                          <input
+                            value={form.slug || ''}
+                            onChange={(e) => setForm(f => ({ ...f, slug: e.target.value }))}
+                            placeholder="e.g. custom-builds"
+                            className={formErrors.slug ? fieldErr : fieldOk}
+                          />
+                          {formErrors.slug && <p className="mt-1 text-xs text-red-400">{formErrors.slug}</p>}
+                          <p className="mt-1.5 text-xs text-[var(--text-muted)]">URL-friendly identifier. Auto-generated from name but can be customized.</p>
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5 text-[var(--text-muted)]">Description</label>
+                          <textarea
+                            rows={3}
+                            value={form.description || ''}
+                            onChange={(e) => setForm(f => ({ ...f, description: e.target.value }))}
+                            placeholder="Write a brief description for this category..."
+                            className={fieldOk}
+                          />
+                          <p className="mt-1.5 text-xs text-[var(--text-muted)]">Optional. Displayed on category pages for context.</p>
+                        </div>
+                      </motion.div>
+
+                      {/* Organization */}
+                      <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]/60 p-4 sm:p-5">
+                        <p className="mb-4 text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Organization</p>
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-5">
+                          <div>
+                            <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5 text-[var(--text-muted)]">Parent Category</label>
+                            <select value={form.parent_id || ''} onChange={e => setForm(f => ({ ...f, parent_id: e.target.value || null }))} className={selOk}>
+                              <option value="">— None (Top Level) —</option>
+                              {categories.filter(c => c.category_id !== modal.data?.category_id).map(c => (
+                                <option key={c.category_id} value={c.category_id}>{c.name}</option>
+                              ))}
+                            </select>
+                            <p className="mt-1.5 text-xs text-[var(--text-muted)]">Create subcategories by selecting a parent.</p>
+                          </div>
+                          <div>
+                            <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5 text-[var(--text-muted)]">Sort Order</label>
+                            <input
+                              type="number"
+                              value={form.sort_order ?? 0}
+                              onChange={(v) => setForm(f => ({ ...f, sort_order: v }))}
+                              placeholder="0"
+                              className={fieldOk}
+                            />
+                            <p className="mt-1.5 text-xs text-[var(--text-muted)]">Controls display order. Lower numbers appear first.</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Status */}
+                      <div className="flex flex-col justify-start pb-0.5 md:pb-1">
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="checkbox"
+                            id="category_is_active"
+                            checked={form.is_active ?? true}
+                            onChange={(e) => setForm((f) => ({ ...f, is_active: e.target.checked }))}
+                            className="h-5 w-5 rounded border-gray-600 bg-gray-800 text-[var(--gold-primary)] focus:ring-[var(--gold-primary)] focus:ring-offset-gray-900"
+                          />
+                          <label htmlFor="category_is_active" className="cursor-pointer font-medium text-white">
+                            Active Category
+                          </label>
+                        </div>
+                        <p className="ml-8 mt-1 text-xs text-[var(--text-muted)]">When unchecked, this category will be hidden from the storefront.</p>
+                      </div>
                     </div>
-                    <FormField label="Sort Order" type="number" value={form.sort_order ?? 0} onChange={v => setForm(f => ({ ...f, sort_order: v }))} />
-                  </div>
-                  <ModalFooter onCancel={closeModal} onSave={validateAndSave(CATEGORY_RULES, saveCategory)} isSaving={isSaving} />
-                </>
-              )}
+                    <ModalFooter onCancel={closeModal} onSave={validateAndSave(CATEGORY_RULES, saveCategory)} isSaving={isSaving} />
+                  </>
+                )
+              })()}
 
               {/* Builder Part Modal */}
               {modal.type === 'part' && (() => {
