@@ -1,12 +1,13 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 import { motion, AnimatePresence } from 'motion/react'
-import { User, CreditCard, MapPin, Lock, Settings, Bell, Package, Calendar, ChevronRight, Upload, Save, Wallet, ShoppingBag, ShoppingCart, Trash2, Minus, Plus, MessageSquare, Send, Guitar, Clock, Truck, CheckCircle, XCircle, Briefcase, Activity, Star } from 'lucide-react'
+import { User, CreditCard, MapPin, Lock, Settings, Bell, Package, Calendar, ChevronRight, Upload, Save, Wallet, ShoppingBag, ShoppingCart, Trash2, Minus, Plus, MessageSquare, Send, Guitar, Clock, Truck, CheckCircle, XCircle, Briefcase, Activity, Star, Loader2, Edit } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useCart } from '../context/CartContext.jsx'
 import { BASE_PRICE, BODY_OPTIONS, BODY_WOOD_OPTIONS, BODY_FINISH_OPTIONS, NECK_OPTIONS, FRETBOARD_OPTIONS, HEADSTOCK_OPTIONS, HEADSTOCK_WOOD_OPTIONS, INLAY_OPTIONS, BRIDGE_OPTIONS, PICKGUARD_OPTIONS_BY_BODY, KNOB_OPTIONS_BY_BODY, HARDWARE_OPTIONS, PICKUP_OPTIONS } from '../lib/guitarBuilderData.js'
 import { adminApi } from '../utils/adminApi.js'
 import ProjectTaskTracker from '../components/projects/ProjectTaskTracker.jsx'
+import { getAllProvinces, getMunicipalitiesByProvince, getBarangaysByMunicipality } from '@aivangogh/ph-address'
 
 const getOldConfigData = (key, val, bodyType) => {
     let price;
@@ -25,6 +26,34 @@ const getOldConfigData = (key, val, bodyType) => {
     else if (key === 'hardware') { price = HARDWARE_OPTIONS[val]?.price; label = HARDWARE_OPTIONS[val]?.label; }
     else if (key === 'pickups') { price = PICKUP_OPTIONS[val]?.price; label = PICKUP_OPTIONS[val]?.label; }
     return { price, label: label || val };
+}
+
+const formatAddress = (addr) => {
+  if (!addr) return 'Address'
+  const parts = []
+  if (addr.street_line1) parts.push(addr.street_line1)
+  if (addr.street_line2) parts.push(addr.street_line2)
+  if (addr.barangay) parts.push(addr.barangay)
+  if (addr.city) parts.push(addr.city)
+  if (addr.province) parts.push(addr.province)
+  if (addr.postal_code) parts.push(addr.postal_code)
+  if (addr.country) parts.push(addr.country)
+  return parts.length > 0 ? parts.join(', ') : 'Address'
+}
+
+const formatAddressFull = (addr) => {
+  if (!addr) return null
+  const lines = []
+  if (addr.street_line1) lines.push(addr.street_line1)
+  if (addr.street_line2) lines.push(addr.street_line2)
+  const locationParts = []
+  if (addr.barangay) locationParts.push(addr.barangay)
+  if (addr.city) locationParts.push(addr.city)
+  if (addr.province) locationParts.push(addr.province)
+  if (addr.postal_code) locationParts.push(addr.postal_code)
+  if (locationParts.length > 0) lines.push(locationParts.join(', '))
+  if (addr.country) lines.push(addr.country)
+  return lines
 }
 
 function NotificationRow({ setting }) {
@@ -61,7 +90,7 @@ export function DashboardPage() {
   const { cart, addToCart, removeFromCart, updateQuantity, getTotalPrice, getCartCount } = useCart()
   const initialSection = location.state?.section || 'profile'
   const [activeSection, setActiveSection] = useState(initialSection)
-  const [profileImage, setProfileImage] = useState('https://i.pravatar.cc/150?img=68')
+  const [profileImage, setProfileImage] = useState('')
   const [showSelectInstrumentModal, setShowSelectInstrumentModal] = useState(false)
   const [viewingBuild, setViewingBuild] = useState(null)
   const [toastMessage, setToastMessage] = useState(location.state?.message || null)
@@ -225,31 +254,112 @@ export function DashboardPage() {
   const [addressData, setAddressData] = useState({
     streetLine1: '',
     streetLine2: '',
+    province: '',
     city: '',
-    stateProvince: '',
+    barangay: '',
     postalZipCode: '',
     country: 'Philippines',
     isDefault: true
   })
   const [isAddingAddress, setIsAddingAddress] = useState(false)
+  const [addresses, setAddresses] = useState([])
+  const [addressesLoading, setAddressesLoading] = useState(false)
+  const [editingAddressId, setEditingAddressId] = useState(null)
+
+  const [locationData, setLocationData] = useState({
+    provinces: [],
+    cities: [],
+    barangays: []
+  })
   
   const [isEditingProfile, setIsEditingProfile] = useState(false)
+  const [profileLoading, setProfileLoading] = useState(false)
 
-  // Initialize profile data from authenticated user
+  // Fetch profile data from API
   useEffect(() => {
-    if (user) {
-      setProfileData({
-        username: user.email || '',
-        firstName: user.name?.firstName || '',
-        middleName: user.name?.middleName || '',
-        lastName: user.name?.lastName || '',
-        email: user.email || '',
-        phone: user.phone || '',
-        gender: 'male',
-        birthDate: user.birthDate ? String(user.birthDate).split('T')[0] : '',
-      })
+    const fetchProfile = async () => {
+      setProfileLoading(true)
+      try {
+        const res = await adminApi.getProfile()
+        if (res?.data?.user) {
+          const u = res.data.user
+          setProfileData({
+            username: u.email?.split('@')[0] || '',
+            firstName: u.name?.firstName || '',
+            middleName: u.name?.middleName || '',
+            lastName: u.name?.lastName || '',
+            email: u.email || '',
+            phone: u.phone || '',
+            gender: 'male',
+            birthDate: u.birthDate ? String(u.birthDate).split('T')[0] : '',
+          })
+          if (u.avatar) setProfileImage(u.avatar)
+        }
+      } catch (err) {
+        console.error('Failed to load profile:', err)
+      } finally {
+        setProfileLoading(false)
+      }
     }
-  }, [user])
+    fetchProfile()
+  }, [])
+
+  // Fetch addresses from API
+  useEffect(() => {
+    const fetchAddresses = async () => {
+      setAddressesLoading(true)
+      try {
+        const res = await adminApi.getProfile()
+        if (res?.data?.user?.addresses) {
+          setAddresses(res.data.user.addresses)
+        }
+      } catch (err) {
+        console.error('Failed to load addresses:', err)
+      } finally {
+        setAddressesLoading(false)
+      }
+    }
+    fetchAddresses()
+  }, [])
+
+  useEffect(() => {
+    try {
+      const provinces = getAllProvinces()
+      setLocationData(prev => ({ ...prev, provinces }))
+    } catch (err) {
+      console.error('Failed to load provinces:', err)
+    }
+  }, [])
+
+  const handleProvinceChange = (provinceCode, provinceName) => {
+    setAddressData(prev => ({ ...prev, province: provinceCode, city: '', barangay: '' }))
+    setLocationData(prev => ({ ...prev, cities: [], barangays: [] }))
+    if (provinceCode) {
+      try {
+        const cities = getMunicipalitiesByProvince(provinceCode)
+        setLocationData(prev => ({ ...prev, cities }))
+      } catch (err) {
+        console.error('Failed to load cities:', err)
+      }
+    }
+  }
+
+  const handleCityChange = (cityCode, cityName) => {
+    setAddressData(prev => ({ ...prev, city: cityCode, barangay: '' }))
+    setLocationData(prev => ({ ...prev, barangays: [] }))
+    if (cityCode) {
+      try {
+        const barangays = getBarangaysByMunicipality(cityCode)
+        setLocationData(prev => ({ ...prev, barangays }))
+      } catch (err) {
+        console.error('Failed to load barangays:', err)
+      }
+    }
+  }
+
+  const handleBarangayChange = (barangayCode) => {
+    setAddressData(prev => ({ ...prev, barangay: barangayCode }))
+  }
 
   const handleImageChange = e => {
     const file = e.target.files?.[0]
@@ -763,153 +873,120 @@ export function DashboardPage() {
 
   const handleSaveAddress = async () => {
     try {
-      await adminApi.addAddress(addressData)
-      setToastMessage('Address added successfully!')
-      setIsAddingAddress(false)
-      setAddressData({ streetLine1: '', streetLine2: '', city: '', stateProvince: '', postalZipCode: '', country: 'Philippines', isDefault: true })
-      // The auth context 'user' needs a refresh to show the new address
-      window.location.reload(); 
+      const provinceLabel = locationData.provinces.find(p => p.province_code === addressData.province)?.province_name || addressData.province
+      const cityLabel = locationData.cities.find(c => c.municipality_code === addressData.city)?.municipality_name || addressData.city
+      
+      const addressPayload = {
+        streetLine1: addressData.streetLine1,
+        streetLine2: addressData.streetLine2,
+        city: cityLabel || addressData.city,
+        stateProvince: provinceLabel || addressData.province,
+        postalZipCode: addressData.postalZipCode,
+        country: addressData.country,
+        isDefault: addressData.isDefault,
+      }
+      if (editingAddressId) {
+        await adminApi.updateAddress(editingAddressId, addressPayload)
+        setToastMessage('Address updated successfully!')
+        setEditingAddressId(null)
+      } else {
+        await adminApi.addAddress(addressPayload)
+        setToastMessage('Address added successfully!')
+        setIsAddingAddress(false)
+      }
+      const res = await adminApi.getProfile()
+      if (res?.data?.user?.addresses) {
+        setAddresses(res.data.user.addresses)
+      }
+      setAddressData({ streetLine1: '', streetLine2: '', province: '', city: '', barangay: '', postalZipCode: '', country: 'Philippines', isDefault: true })
+      setLocationData(prev => ({ ...prev, cities: [], barangays: [] }))
     } catch (err) {
-      alert("Failed to add address: " + err.message)
+      alert("Failed to save address: " + err.message)
     }
   }
 
-  const renderProfileContent = () => (
-    <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-8">
-      <h2 className="text-2xl font-bold text-white mb-1">My Profile</h2>
-      <p className="text-sm text-[var(--text-muted)] mb-10">Manage and protect your account</p>
-
-      <div className="flex items-center gap-6 mb-10 pb-8 border-b border-[var(--border)]">
-        <div className="w-20 h-20 rounded-full overflow-hidden bg-[var(--bg-primary)] border-2 border-[var(--gold-primary)]">
-          <img src={profileImage} alt="Profile" className="w-full h-full object-cover" />
-        </div>
-        <div>
-          <p className="text-sm font-semibold text-white mb-2">{profileData.username}</p>
-          <div className="flex gap-2">
-             <label className={`inline-flex items-center gap-2 px-4 py-2 rounded-full border border-[var(--border)] text-xs font-semibold text-[var(--text-muted)] hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)] cursor-pointer transition-colors ${!isEditingProfile && 'opacity-50 pointer-events-none'}`}>
-               <Upload className="w-3.5 h-3.5" />
-               Photo
-               <input type="file" accept="image/*" onChange={handleImageChange} disabled={!isEditingProfile} className="hidden" />
-             </label>
-             <button
-                type="button"
-                onClick={() => setIsEditingProfile(!isEditingProfile)}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-[var(--border)] text-xs font-semibold text-[var(--text-muted)] hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)] transition-colors"
-             >
-                {isEditingProfile ? 'Cancel Edit' : 'Edit Profile'}
-             </button>
+  const renderProfileContent = () => {
+    const fullName = [profileData.firstName, profileData.middleName, profileData.lastName].filter(Boolean).join(' ') || 'User'
+    if (profileLoading) {
+      return (
+        <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-8">
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="w-6 h-6 text-[var(--gold-primary)] animate-spin" />
           </div>
         </div>
-      </div>
-
-      <div className="grid md:grid-cols-2 gap-6">
-        <div>
-          <label className="block text-xs font-semibold text-[var(--text-muted)] mb-1">Username</label>
-          <input
-            type="text"
-            value={profileData.username}
-            disabled
-            className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-[var(--text-muted)] bg-[var(--bg-primary)]"
-          />
-          <p className="mt-1 text-[11px] text-[var(--text-muted)]">Username can only be changed once.</p>
-        </div>
-        <div>
-          <label className="block text-xs font-semibold text-[var(--text-muted)] mb-2">First Name</label>
-          <input
-            type="text"
-            value={profileData.firstName}
-            onChange={e => handleInputChange('firstName', e.target.value)}
-            disabled={!isEditingProfile}
-            className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] disabled:opacity-50"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-semibold text-[var(--text-muted)] mb-2">Last Name</label>
-          <input
-            type="text"
-            value={profileData.lastName}
-            onChange={e => handleInputChange('lastName', e.target.value)}
-            disabled={!isEditingProfile}
-            className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] disabled:opacity-50"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-semibold text-[var(--text-muted)] mb-2">Middle Initial (Optional)</label>
-          <input
-            type="text"
-            value={profileData.middleName}
-            maxLength={1}
-            onChange={e => handleInputChange('middleName', e.target.value)}
-            disabled={!isEditingProfile}
-            className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] disabled:opacity-50"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-semibold text-[var(--text-muted)] mb-2">Email</label>
-          <input
-            type="email"
-            value={profileData.email}
-            disabled
-            className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] disabled:opacity-50"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-semibold text-[var(--text-muted)] mb-2">Phone Number</label>
-          <input
-            type="tel"
-            value={profileData.phone}
-            onChange={e => handleInputChange('phone', e.target.value)}
-            disabled={!isEditingProfile}
-            className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] disabled:opacity-50"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-semibold text-[var(--text-muted)] mb-2">Gender</label>
-          <div className="flex items-center gap-4 text-sm text-[var(--text-muted)]">
-            {['male', 'female', 'other'].map(value => (
-              <label key={value} className="inline-flex items-center gap-2 cursor-pointer">
-                <span
-                  className={`w-4 h-4 rounded-full border-2 ${
-                    profileData.gender === value ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)]' : 'border-[var(--border)]'
-                  } flex items-center justify-center`}
-                >
-                  {profileData.gender === value && <span className="w-1.5 h-1.5 rounded-full bg-[var(--text-dark)]" />}
-                </span>
-                <span className="capitalize">{value}</span>
-                <input
-                  type="radio"
-                  className="hidden"
-                  checked={profileData.gender === value}
-                  onChange={() => handleInputChange('gender', value)}
-                />
+      )
+    }
+    return (
+      <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-8">
+        <h2 className="text-2xl font-bold text-white mb-6">My Profile</h2>
+        <div className="flex items-center gap-6 mb-10 pb-8 border-b border-[var(--border)]">
+          <div className="w-20 h-20 rounded-full overflow-hidden bg-[var(--bg-primary)] border-2 border-[var(--gold-primary)]">
+            <img src={profileImage || `https://ui-avatars.com/api/?name=${encodeURIComponent([profileData.firstName, profileData.lastName].filter(Boolean).join(' '))}&background=D4AF55&color=1a1a1a&bold=true`} alt="Profile" className="w-full h-full object-cover" />
+          </div>
+          <div>
+            <p className="text-xl font-bold text-white mb-1">{fullName}</p>
+            <p className="text-sm text-[var(--text-muted)] mb-3">{profileData.email}</p>
+            <div className="flex gap-2">
+              <label className={`inline-flex items-center gap-2 px-4 py-2 rounded-full border border-[var(--border)] text-xs font-semibold text-[var(--text-muted)] hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)] cursor-pointer transition-colors ${!isEditingProfile && 'opacity-50 pointer-events-none'}`}>
+                <Upload className="w-3.5 h-3.5" />
+                Photo
+                <input type="file" accept="image/*" onChange={handleImageChange} disabled={!isEditingProfile} className="hidden" />
               </label>
-            ))}
+              <button type="button" onClick={() => setIsEditingProfile(!isEditingProfile)} className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-[var(--border)] text-xs font-semibold text-[var(--text-muted)] hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)] transition-colors">
+                {isEditingProfile ? 'Cancel Edit' : 'Edit Profile'}
+              </button>
+            </div>
           </div>
         </div>
-        <div>
-          <label className="block text-xs font-semibold text-[var(--text-muted)] mb-2">Date of birth</label>
-          <input
-            type="date"
-            value={profileData.birthDate}
-            onChange={e => handleInputChange('birthDate', e.target.value)}
-            disabled={!isEditingProfile}
-            className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-[var(--text-muted)] bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] disabled:opacity-50"
-          />
+        <div className="grid md:grid-cols-2 gap-6">
+          <div>
+            <label className="block text-xs font-semibold text-[var(--text-muted)] mb-2">First Name</label>
+            <input type="text" value={profileData.firstName} onChange={e => handleInputChange('firstName', e.target.value)} disabled={!isEditingProfile} className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] disabled:opacity-50" />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-[var(--text-muted)] mb-2">Last Name</label>
+            <input type="text" value={profileData.lastName} onChange={e => handleInputChange('lastName', e.target.value)} disabled={!isEditingProfile} className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] disabled:opacity-50" />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-[var(--text-muted)] mb-2">Middle Initial (Optional)</label>
+            <input type="text" value={profileData.middleName} maxLength={1} onChange={e => handleInputChange('middleName', e.target.value)} disabled={!isEditingProfile} className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] disabled:opacity-50" />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-[var(--text-muted)] mb-2">Email</label>
+            <input type="email" value={profileData.email} disabled className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] disabled:opacity-50" />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-[var(--text-muted)] mb-2">Phone Number</label>
+            <input type="tel" value={profileData.phone} onChange={e => handleInputChange('phone', e.target.value)} disabled={!isEditingProfile} className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] disabled:opacity-50" />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-[var(--text-muted)] mb-2">Gender</label>
+            <div className={`flex items-center gap-4 text-sm ${isEditingProfile ? 'text-[var(--text-muted)]' : 'text-[var(--text-muted)] opacity-50'}`}>
+              {['male', 'female', 'other'].map(value => (
+                <label key={value} className={`inline-flex items-center gap-2 ${isEditingProfile ? 'cursor-pointer' : 'cursor-not-allowed'}`}>
+                  <span className={`w-4 h-4 rounded-full border-2 ${profileData.gender === value ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)]' : 'border-[var(--border)]'} flex items-center justify-center`}>
+                    {profileData.gender === value && <span className="w-1.5 h-1.5 rounded-full bg-[var(--text-dark)]" />}
+                  </span>
+                  <span className="capitalize">{value}</span>
+                  <input type="radio" className="hidden" checked={profileData.gender === value} onChange={() => isEditingProfile && handleInputChange('gender', value)} disabled={!isEditingProfile} />
+                </label>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-[var(--text-muted)] mb-2">Date of birth</label>
+            <input type="date" value={profileData.birthDate} onChange={e => handleInputChange('birthDate', e.target.value)} disabled={!isEditingProfile} className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-[var(--text-muted)] bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] disabled:opacity-50" />
+          </div>
         </div>
+        {isEditingProfile && (
+          <button type="button" onClick={handleSaveProfile} className="mt-8 inline-flex items-center gap-2 px-6 py-2.5 rounded-full bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-sm font-semibold text-[var(--text-dark)] hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition">
+            <Save className="w-4 h-4" />
+            Save Changes
+          </button>
+        )}
       </div>
-
-      {isEditingProfile && (
-        <button
-          type="button"
-          onClick={handleSaveProfile}
-          className="mt-8 inline-flex items-center gap-2 px-6 py-2.5 rounded-full bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-sm font-semibold text-[var(--text-dark)] hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition"
-        >
-          <Save className="w-4 h-4" />
-          Save Changes
-        </button>
-      )}
-    </div>
-  )
+    )
+  }
 
   const renderPlaceholderSection = (title, description) => (
     <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-8 text-center">
@@ -918,7 +995,17 @@ export function DashboardPage() {
     </div>
   )
 
-  const renderAddressesContent = () => (
+  const renderAddressesContent = () => {
+    if (addressesLoading) {
+      return (
+        <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-8">
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="w-6 h-6 text-[var(--gold-primary)] animate-spin" />
+          </div>
+        </div>
+      )
+    }
+    return (
     <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-8">
       <div className="flex justify-between items-center mb-6">
         <div>
@@ -935,28 +1022,14 @@ export function DashboardPage() {
         )}
       </div>
 
-      {!isAddingAddress ? (
-        <div className="space-y-4">
-          {user?.addresses && user.addresses.length > 0 ? (
-            user.addresses.map((addr, i) => (
-              <div key={i} className="p-4 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] flex justify-between items-start">
-                <div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="font-semibold text-white">Address {i + 1}</span>
-                    {addr.is_default && <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[var(--gold-primary)] text-[var(--text-dark)]">Default</span>}
-                  </div>
-                  <p className="text-sm text-[var(--text-muted)]">{addr.line1} {addr.line2}</p>
-                  <p className="text-sm text-[var(--text-muted)]">{addr.city}, {addr.province} {addr.postal_code}</p>
-                  <p className="text-sm text-[var(--text-muted)]">{addr.country}</p>
-                </div>
-              </div>
-            ))
-          ) : (
-            <p className="text-[var(--text-muted)] text-sm">No addresses saved yet.</p>
-          )}
-        </div>
-      ) : (
+      {isAddingAddress || editingAddressId ? (
         <div className="space-y-4 max-w-xl">
+          <div className="flex items-center gap-2 mb-4">
+            <button onClick={() => { setIsAddingAddress(false); setEditingAddressId(null); setAddressData({ streetLine1: '', streetLine2: '', province: '', city: '', barangay: '', postalZipCode: '', country: 'Philippines', isDefault: true }); setLocationData(prev => ({ ...prev, cities: [], barangays: [] })) }} className="text-[var(--gold-primary)] hover:underline text-sm font-semibold flex items-center gap-1">
+              ← Back
+            </button>
+            <span className="text-white font-semibold">{editingAddressId ? 'Edit Address' : 'Add New Address'}</span>
+          </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="col-span-2">
                <label className="block text-xs font-semibold text-[var(--text-muted)] mb-2">Street Line 1</label>
@@ -966,13 +1039,52 @@ export function DashboardPage() {
                <label className="block text-xs font-semibold text-[var(--text-muted)] mb-2">Street Line 2 (Optional)</label>
                <input type="text" value={addressData.streetLine2} onChange={e => setAddressData(p => ({...p, streetLine2: e.target.value}))} className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]" />
             </div>
-            <div>
-               <label className="block text-xs font-semibold text-[var(--text-muted)] mb-2">City</label>
-               <input type="text" value={addressData.city} onChange={e => setAddressData(p => ({...p, city: e.target.value}))} className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]" />
+<div className="col-span-2 md:col-span-1">
+              <label className="block text-xs font-semibold text-[var(--text-muted)] mb-2">Province</label>
+              <select 
+                value={addressData.province}
+                onChange={(e) => {
+                  const opt = locationData.provinces.find(p => p.psgcCode === e.target.value)
+                  handleProvinceChange(e.target.value, opt?.name || '')
+                }}
+                className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
+              >
+                <option value="" className="bg-[var(--surface-dark)]">Select Province</option>
+                {locationData.provinces.map(p => (
+                  <option key={p.psgcCode} value={p.psgcCode} className="bg-[var(--surface-dark)]">{p.name}</option>
+                ))}
+              </select>
             </div>
-            <div>
-               <label className="block text-xs font-semibold text-[var(--text-muted)] mb-2">State / Province</label>
-               <input type="text" value={addressData.stateProvince} onChange={e => setAddressData(p => ({...p, stateProvince: e.target.value}))} className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]" />
+            <div className="col-span-2 md:col-span-1">
+              <label className="block text-xs font-semibold text-[var(--text-muted)] mb-2">City / Municipality</label>
+              <select 
+                value={addressData.city}
+                onChange={(e) => {
+                  const opt = locationData.cities.find(c => c.psgcCode === e.target.value)
+                  handleCityChange(e.target.value, opt?.name || '')
+                }}
+                disabled={!addressData.province}
+                className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] disabled:opacity-50"
+              >
+                <option value="" className="bg-[var(--surface-dark)]">{addressData.province ? 'Select City' : 'Select a province first'}</option>
+                {locationData.cities.map(c => (
+                  <option key={c.psgcCode} value={c.psgcCode} className="bg-[var(--surface-dark)]">{c.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="col-span-2">
+              <label className="block text-xs font-semibold text-[var(--text-muted)] mb-2">Barangay</label>
+              <select 
+                value={addressData.barangay}
+                onChange={(e) => handleBarangayChange(e.target.value)}
+                disabled={!addressData.city}
+                className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] disabled:opacity-50"
+              >
+                <option value="" className="bg-[var(--surface-dark)]">{addressData.city ? 'Select Barangay' : 'Select a city first'}</option>
+                {locationData.barangays.map(b => (
+                  <option key={b.psgcCode} value={b.name} className="bg-[var(--surface-dark)]">{b.name}</option>
+                ))}
+              </select>
             </div>
             <div>
                <label className="block text-xs font-semibold text-[var(--text-muted)] mb-2">Postal / Zip Code</label>
@@ -984,13 +1096,81 @@ export function DashboardPage() {
             </div>
           </div>
           <div className="flex gap-4 mt-6">
-            <button onClick={handleSaveAddress} className="flex-1 py-2.5 rounded-full bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-bold shadow-[0_0_15px_rgba(212,175,55,0.3)]">Save Address</button>
-            <button onClick={() => setIsAddingAddress(false)} className="px-6 py-2.5 rounded-full border border-[var(--border)] text-white hover:bg-white/5 transition-all">Cancel</button>
+            <button onClick={handleSaveAddress} className="flex-1 py-2.5 rounded-full bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-bold shadow-[0_0_15px_rgba(212,175,55,0.3)]">{editingAddressId ? 'Update Address' : 'Save Address'}</button>
+            <button onClick={() => { setIsAddingAddress(false); setEditingAddressId(null); setAddressData({ streetLine1: '', streetLine2: '', province: '', city: '', barangay: '', postalZipCode: '', country: 'Philippines', isDefault: true }); setLocationData(prev => ({ ...prev, cities: [], barangays: [] })) }} className="px-6 py-2.5 rounded-full border border-[var(--border)] text-white hover:bg-white/5 transition-all">Cancel</button>
           </div>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {addresses && addresses.length > 0 ? (
+            addresses.map((addr) => (
+              <div key={addr.address_id} className="p-4 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-white">
+                      {formatAddress(addr)}
+                    </span>
+                    {addr.is_default && <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[var(--gold-primary)] text-[var(--text-dark)]">Default</span>}
+                  </div>
+                  <button onClick={() => { 
+                    setEditingAddressId(addr.address_id)
+                    setAddressData({ 
+                      streetLine1: addr.street_line1 || '', 
+                      streetLine2: addr.street_line2 || '', 
+                      province: addr.province || '',
+                      city: addr.city || '', 
+                      barangay: addr.barangay || '',
+                      postalZipCode: addr.postal_code || '', 
+                      country: addr.country || 'Philippines', 
+                      isDefault: addr.is_default || false 
+                    })
+                    const loadCascade = async () => {
+                      try {
+                        const provinces = getAllProvinces()
+                        setLocationData(prev => ({ ...prev, provinces }))
+                        if (addr.province) {
+                          const province = provinces.find(p => p.name === addr.province || p.psgcCode === addr.province)
+                          if (province) {
+                            const cities = getMunicipalitiesByProvince(province.psgcCode)
+                            setLocationData(prev => ({ ...prev, cities }))
+                          }
+                        }
+                        if (addr.city) {
+                          const cities = locationData.cities.length > 0 ? locationData.cities : (addr.province ? getMunicipalitiesByProvince(addr.province) : [])
+                          const city = cities.find(c => c.name === addr.city || c.psgcCode === addr.city)
+                          if (city) {
+                            const barangays = getBarangaysByMunicipality(city.psgcCode)
+                            setLocationData(prev => ({ ...prev, barangays }))
+                          }
+                        }
+                      } catch (e) {
+                        console.error('Failed to load cascade:', e)
+                      }
+                    }
+                    loadCascade()
+                  }} className="p-2 hover:bg-[var(--gold-primary)]/10 rounded-lg transition-colors">
+                    <Edit className="w-4 h-4 text-[var(--text-muted)]" />
+                  </button>
+                </div>
+                <div className="text-sm text-[var(--text-muted)] space-y-1">
+                  {formatAddressFull(addr)?.map((line, idx) => (
+                    <p key={idx}>{line}</p>
+                  ))}
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="text-center py-8">
+              <MapPin className="w-12 h-12 text-[var(--text-muted)] mx-auto mb-3 opacity-50" />
+              <p className="text-[var(--text-muted)] text-sm">No address added yet</p>
+              <p className="text-[var(--text-muted)] text-xs mt-1">Add an address to streamline your checkout process</p>
+            </div>
+          )}
         </div>
       )}
     </div>
-  )
+    )
+  }
 
   const currentMenu = menuItems.find(item => item.id === activeSection)
 
@@ -1019,19 +1199,13 @@ export function DashboardPage() {
           >
             <div className="px-6 py-5 border-b border-white/20 flex items-center gap-3">
               <div className="w-10 h-10 rounded-full overflow-hidden bg-[var(--bg-primary)] border-2 border-white flex-shrink-0">
-                <img src={profileImage} alt="User" className="w-full h-full object-cover" />
+                <img src={profileImage || `https://ui-avatars.com/api/?name=${encodeURIComponent([profileData.firstName, profileData.lastName].filter(Boolean).join(' '))}&background=D4AF55&color=1a1a1a&bold=true`} alt="User" className="w-full h-full object-cover" />
               </div>
               <div>
-                <p className="text-sm font-semibold text-white">
-                  {profileData.username}
+                <p className="text-sm font-bold text-white">
+                  {[profileData.firstName, profileData.lastName].filter(Boolean).join(' ') || 'User'}
                 </p>
-                <button
-                  type="button"
-                  className="text-xs text-white/70 hover:text-white inline-flex items-center gap-1 transition-colors"
-                >
-                  <User className="w-3.5 h-3.5" />
-                  Edit Profile
-                </button>
+                <p className="text-xs text-white/60">{profileData.email}</p>
               </div>
             </div>
 

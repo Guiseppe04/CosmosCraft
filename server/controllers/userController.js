@@ -10,6 +10,17 @@ exports.getCurrentUser = asyncHandler(async (req, res, next) => {
   
   const { pool } = require('../config/database');
   const addressesRes = await pool.query('SELECT * FROM addresses WHERE user_id = $1', [user.user_id]);
+  const addresses = addressesRes.rows.map(addr => ({
+    address_id: addr.address_id,
+    street_line1: addr.line1,
+    street_line2: addr.line2,
+    city: addr.city,
+    province: addr.province,
+    postal_code: addr.postal_code,
+    country: addr.country,
+    is_default: addr.is_default,
+    label: addr.label,
+  }));
 
   res.status(200).json({
     status: 'success',
@@ -20,7 +31,7 @@ exports.getCurrentUser = asyncHandler(async (req, res, next) => {
         email: user.email,
         phone: user.phone,
         birthDate: user.birth_date,
-        addresses: addressesRes.rows,
+        addresses,
         role: user.role,
         isProfileComplete: !!user.first_name, // fallback
       },

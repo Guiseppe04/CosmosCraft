@@ -48,6 +48,7 @@ async function request(path, options = {}) {
 // ─── Products ────────────────────────────────────────────────────────────────
 export const adminApi = {
   // Users & Profile
+  getProfile: () => request('/api/users/profile'),
   updateProfile: (body) => request('/api/users/profile', { method: 'PUT', body }),
   addAddress: (body) => request('/api/users/addresses', { method: 'POST', body }),
   updateAddress: (id, body) => request(`/api/users/addresses/${id}`, { method: 'PUT', body }),
