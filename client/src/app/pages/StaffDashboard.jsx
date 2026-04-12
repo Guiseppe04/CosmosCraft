@@ -457,7 +457,7 @@ export function StaffDashboard() {
                           <div key={a.appointment_id} className="p-4 rounded-xl bg-[var(--bg-primary)] border border-[var(--border)]">
                             <div className="flex items-start justify-between">
                               <div>
-                                <p className="text-white font-medium">{a.title || a.service_name || 'Appointment'}</p>
+                                <p className="text-white font-medium">{a.guitar_details ? `${a.guitar_details.brand} ${a.guitar_details.model}` : (a.title || a.service_name || 'Appointment')}</p>
                                 <p className="text-[var(--text-muted)] text-sm">{a.customer_name || a.user_name || 'Customer'}</p>
                               </div>
                               <div className="text-right">
@@ -790,7 +790,7 @@ export function StaffDashboard() {
                           return (
                             <tr key={apt.appointment_id} className="border-b border-[var(--border)]/50 hover:bg-[var(--bg-primary)]/50 transition-colors">
                               <td className="py-4 px-6">
-                                <p className="text-white font-medium">{apt.title || apt.service_name || 'Appointment'}</p>
+                                <p className="text-white font-medium">{apt.guitar_details ? `${apt.guitar_details.brand} ${apt.guitar_details.model}` : (apt.title || apt.service_name || 'Appointment')}</p>
                                 {apt.notes && <p className="text-[var(--text-muted)] text-xs truncate max-w-xs">{apt.notes}</p>}
                               </td>
                               <td className="py-4 px-6">
@@ -801,7 +801,9 @@ export function StaffDashboard() {
                                 <p className="text-white">{d ? new Date(d).toLocaleDateString() : '—'}</p>
                                 <p className="text-[var(--text-muted)] text-sm">{d ? new Date(d).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}</p>
                               </td>
-                              <td className="py-4 px-6 text-[var(--text-muted)]">{apt.service_name || 'Consultation'}</td>
+                              <td className="py-4 px-6 text-[var(--text-muted)] capitalize">
+                                {Array.isArray(apt.services) ? apt.services.map(s => s.replace(/-/g, ' ')).join(', ') : (apt.service_name || 'Consultation')}
+                              </td>
                               <td className="py-4 px-6">
                                 <StatusBadge label={apt.status || 'pending'} variant={statusVariant(apt.status)} />
                               </td>

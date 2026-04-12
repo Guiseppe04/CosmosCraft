@@ -571,7 +571,7 @@ export function CheckoutPage() {
                     <p className="text-sm font-medium text-[var(--text-light)]">Express</p>
                     <p className="text-xs text-[var(--text-muted)]">2-3 days</p>
                   </div>
-                  <span className="ml-auto text-sm font-bold text-[var(--gold-primary)]">₱500</span>
+                  <span className="ml-auto text-sm font-bold text-[var(--gold-primary)]"></span>
                 </label>
               </div>
             </motion.div>
@@ -609,7 +609,7 @@ export function CheckoutPage() {
               <div className="space-y-2 text-sm border-t border-[var(--border)] pt-4">
                 <div className="flex justify-between">
                   <span className="text-[var(--text-muted)]">Subtotal ({checkoutItems.reduce((a, b) => a + b.quantity, 0)} items)</span>
-                  <span className="text-[var(--text-light)]">₱{subtotal.toLocaleString('en-PH')}</span>
+                  <span className="text-[var(--text-light)]">${subtotal.toLocaleString('en-PH')}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-[var(--text-muted)]">Shipping</span>
@@ -617,7 +617,7 @@ export function CheckoutPage() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-[var(--text-muted)]">Tax</span>
-                  <span className="text-[var(--text-light)]">₱{tax.toLocaleString('en-PH', { maximumFractionDigits: 2 })}</span>
+                  <span className="text-[var(--text-light)]">${tax.toLocaleString('en-PH', { maximumFractionDigits: 2 })}</span>
                 </div>
               </div>
 
@@ -625,7 +625,7 @@ export function CheckoutPage() {
               <div className="flex justify-between items-center border-t border-[var(--border)] pt-4">
                 <span className="font-bold text-[var(--text-light)]">Total</span>
                 <span className="text-2xl font-bold text-[var(--gold-primary)]">
-                  ₱{total.toLocaleString('en-PH', { maximumFractionDigits: 2 })}
+                  ${total.toLocaleString('en-PH', { maximumFractionDigits: 2 })}
                 </span>
               </div>
 
@@ -764,7 +764,7 @@ export function CheckoutPage() {
                       />
                       <span className="font-semibold text-white">Full Payment</span>
                     </div>
-                    <span className="text-sm text-[var(--text-muted)] mt-1 ml-7">₱{fullPaymentTotal.toLocaleString('en-PH', { maximumFractionDigits: 2 })}</span>
+                    <span className="text-sm text-[var(--text-muted)] mt-1 ml-7">${fullPaymentTotal.toLocaleString('en-PH', { maximumFractionDigits: 2 })}</span>
                   </label>
 
                   <label className={`flex flex-col p-3 rounded-lg border cursor-pointer transition-all duration-200 ${
@@ -783,7 +783,7 @@ export function CheckoutPage() {
                       />
                       <span className="font-semibold text-white">50% Down Payment</span>
                     </div>
-                    <span className="text-sm text-[var(--text-muted)] mt-1 ml-7">₱{downPaymentTotal.toLocaleString('en-PH', { maximumFractionDigits: 2 })}</span>
+                    <span className="text-sm text-[var(--text-muted)] mt-1 ml-7">${downPaymentTotal.toLocaleString('en-PH', { maximumFractionDigits: 2 })}</span>
                   </label>
                 </div>
               </div>
