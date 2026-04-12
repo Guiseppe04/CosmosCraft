@@ -55,6 +55,7 @@ exports.deleteCategory = async (id) => {
 exports.getAllProducts = async ({
   search,
   category_id,
+  brand,
   is_active,
   min_price,
   max_price,
@@ -68,13 +69,18 @@ exports.getAllProducts = async ({
   let idx = 1;
 
   if (search) {
-    where.push(`(p.name ILIKE $${idx} OR p.sku ILIKE $${idx})`);
+    where.push(`(p.name ILIKE $${idx} OR p.sku ILIKE $${idx} OR p.brand ILIKE $${idx})`);
     params.push(`%${search}%`);
     idx++;
   }
   if (category_id) {
     where.push(`p.category_id = $${idx}`);
     params.push(category_id);
+    idx++;
+  }
+  if (brand) {
+    where.push(`p.brand ILIKE $${idx}`);
+    params.push(`%${brand}%`);
     idx++;
   }
   if (is_active !== undefined) {
@@ -163,17 +169,17 @@ exports.getProductById = async (id) => {
   return { ...res.rows[0], images: images.rows };
 };
 
-exports.createProduct = async ({ sku, name, description, price, cost_price, category_id, stock, low_stock_threshold, is_active }) => {
+exports.createProduct = async ({ sku, name, description, price, brand, cost_price, category_id, stock, low_stock_threshold, is_active }) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     
     // Create product record
     const productRes = await client.query(
-      `INSERT INTO products (sku, name, description, price, category_id, is_active)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO products (sku, name, description, price, brand, category_id, is_active)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING *`,
-      [sku, name, description || null, price, category_id || null, is_active ?? true]
+      [sku, name, description || null, price, brand || null, category_id || null, is_active ?? true]
     );
     const product = productRes.rows[0];
     
@@ -201,7 +207,7 @@ exports.createProduct = async ({ sku, name, description, price, cost_price, cate
   }
 };
 
-exports.updateProduct = async (id, { sku, name, description, price, cost_price, category_id, stock, low_stock_threshold, is_active }) => {
+exports.updateProduct = async (id, { sku, name, description, price, brand, cost_price, category_id, stock, low_stock_threshold, is_active }) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -213,12 +219,13 @@ exports.updateProduct = async (id, { sku, name, description, price, cost_price, 
          name               = COALESCE($2, name),
          description        = COALESCE($3, description),
          price              = COALESCE($4, price),
-         category_id        = COALESCE($5, category_id),
-         is_active          = COALESCE($6, is_active),
+         brand              = COALESCE($5, brand),
+         category_id        = COALESCE($6, category_id),
+         is_active          = COALESCE($7, is_active),
          updated_at         = now()
-       WHERE product_id = $7
+       WHERE product_id = $8
        RETURNING *`,
-      [sku, name, description, price, category_id, is_active, id]
+      [sku, name, description, price, brand, category_id, is_active, id]
     );
     
     if (!productRes.rows[0]) {

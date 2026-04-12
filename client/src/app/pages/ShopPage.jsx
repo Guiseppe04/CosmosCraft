@@ -9,6 +9,7 @@ import { ProductRatingModal } from '../components/ProductRatingModal.jsx'
 
 export function ShopPage() {
   const [selectedCategory, setSelectedCategory] = useState('all')
+  const [selectedBrand, setSelectedBrand] = useState('all')
   const [searchQuery, setSearchQuery] = useState('')
   const [notification, setNotification] = useState(null)
   const [selectedProduct, setSelectedProduct] = useState(null)
@@ -32,10 +33,17 @@ export function ShopPage() {
     { value: 'Parts', label: 'Parts' },
   ]
 
+  // Extract unique brands from products
+  const brands = ['all', ...new Set(mockProducts.map(p => p.brand).filter(Boolean))].map(b => ({
+    value: b,
+    label: b === 'all' ? 'All Brands' : b
+  }))
+
   const filteredProducts = mockProducts.filter(product => {
     const matchesCategory = selectedCategory === 'all' || product.category === selectedCategory
+    const matchesBrand = selectedBrand === 'all' || product.brand === selectedBrand
     const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase()) || product.description.toLowerCase().includes(searchQuery.toLowerCase())
-    return matchesCategory && matchesSearch
+    return matchesCategory && matchesSearch && matchesBrand
   })
 
   const handleAddToCart = product => {
@@ -151,18 +159,29 @@ export function ShopPage() {
         {/* Horizontal Filter Bar */}
         <section id="shop-collection" className="flex flex-col xl:flex-row xl:items-center justify-between gap-6 mb-8 pt-6">
           <div className="flex flex-wrap items-center gap-3">
-             <div className="px-5 py-2 bg-[var(--surface-dark)] border border-[var(--border)] hover:border-white/20 rounded-full flex items-center justify-between min-w-[150px] text-xs font-semibold text-white transition-colors cursor-pointer shadow-sm">
-                <span>Category Form</span>
-                <ChevronDown className="w-3.5 h-3.5 text-[var(--text-muted)]" />
+             <div className="px-5 py-2 bg-[var(--surface-dark)] border border-[var(--border)] hover:border-white/20 rounded-full flex items-center justify-between min-w-[150px] text-xs font-semibold text-white transition-colors cursor-pointer shadow-sm group relative">
+                <span>Category</span>
+                <ChevronDown className="w-3.5 h-3.5 text-[var(--text-muted)] group-hover:rotate-180 transition-transform" />
+                <div className="hidden group-hover:flex absolute top-full mt-1 left-0 flex-col bg-[var(--surface-dark)] border border-[var(--border)] rounded-lg shadow-lg z-10 min-w-max">
+                  {categories.slice(1, 3).map(cat => (
+                    <button key={cat.value} onClick={() => setSelectedCategory(cat.value)} className="px-4 py-2 text-left text-xs hover:bg-[var(--gold-primary)]/10 text-[var(--text-muted)] hover:text-white">
+                      {cat.label}
+                    </button>
+                  ))}
+                </div>
              </div>
              <div className="hidden sm:flex px-5 py-2 bg-[var(--surface-dark)] border border-[var(--border)] hover:border-white/20 rounded-full items-center gap-2 text-xs font-semibold text-white/70 hover:text-white transition-colors cursor-pointer">
                 Price <ChevronDown className="w-3.5 h-3.5 opacity-50" />
              </div>
-             <div className="hidden sm:flex px-5 py-2 bg-[var(--surface-dark)] border border-[var(--border)] hover:border-white/20 rounded-full items-center gap-2 text-xs font-semibold text-white/70 hover:text-white transition-colors cursor-pointer">
-                Color <ChevronDown className="w-3.5 h-3.5 opacity-50" />
-             </div>
-             <div className="hidden lg:flex px-5 py-2 bg-[var(--surface-dark)] border border-[var(--border)] hover:border-white/20 rounded-full items-center gap-2 text-xs font-semibold text-white/70 hover:text-white transition-colors cursor-pointer">
-                Brand <ChevronDown className="w-3.5 h-3.5 opacity-50" />
+             <div className="hidden lg:flex px-5 py-2 bg-[var(--surface-dark)] border border-[var(--border)] hover:border-white/20 rounded-full items-center gap-2 text-xs font-semibold text-white transition-colors cursor-pointer shadow-sm group relative">
+                {selectedBrand === 'all' ? 'Brand' : selectedBrand} <ChevronDown className="w-3.5 h-3.5 group-hover:rotate-180 transition-transform" />
+                <div className="hidden group-hover:flex absolute top-full mt-1 left-0 flex-col bg-[var(--surface-dark)] border border-[var(--border)] rounded-lg shadow-lg z-10 min-w-max max-h-48 overflow-y-auto">
+                  {brands.map(brand => (
+                    <button key={brand.value} onClick={() => setSelectedBrand(brand.value)} className={`px-4 py-2 text-left text-xs ${selectedBrand === brand.value ? 'bg-[var(--gold-primary)]/20 text-[var(--gold-primary)]' : 'text-[var(--text-muted)] hover:text-white hover:bg-[var(--gold-primary)]/10'}`}>
+                      {brand.label}
+                    </button>
+                  ))}
+                </div>
              </div>
              <div className="px-5 py-2 border border-[var(--gold-primary)]/30 text-[var(--gold-primary)] bg-[var(--gold-primary)]/5 rounded-full flex items-center gap-2 text-xs font-bold tracking-wide cursor-pointer hover:bg-[var(--gold-primary)]/10 transition-colors">
                 <Filter className="w-3.5 h-3.5" /> All Filters
@@ -262,6 +281,11 @@ export function ShopPage() {
                   
                   <div className="px-4 pb-4 pt-2 flex flex-col flex-1 relative bg-transparent">
                     <p className="text-[12px] text-[var(--text-muted)] font-medium mb-1 tracking-wide">{product.category}</p>
+                    {product.brand && (
+                      <p className="text-[11px] text-[var(--gold-primary)] font-semibold mb-1.5 tracking-wide uppercase">
+                        {product.brand}
+                      </p>
+                    )}
                     <h3 className="font-bold text-white text-[15px] leading-snug mb-2 group-hover:text-[var(--gold-primary)] transition-colors line-clamp-1">{product.name}</h3>
 
                     <div className="flex items-center gap-2 mb-2">

@@ -9,7 +9,7 @@ import {
   ChevronDown, ChevronUp, ArrowUpDown, ArrowUp, ArrowDown,
   Printer, Mail, FileText, CreditCard, RotateCcw, Copy, Truck, MapPin,
   UserCheck, Clock10, PackageCheck, CircleCheck,
-  Layers, User, Tag, AlertCircle, DollarSign, Save, TrendingUp, UsersRound, Clock, Loader2, Grid3X3, List, MoreHorizontal, Guitar, Shield,
+  Layers, User, Tag, AlertCircle, DollarSign, Save, TrendingUp, UsersRound, Clock, Loader2, Grid3X3, List, MoreHorizontal, Guitar, Shield, Settings,
 } from 'lucide-react'
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis,
@@ -132,6 +132,7 @@ export function AdminPage() {
     sortBy: 'created_at',
     sortDir: 'desc',
     category_id: '',
+    brand: '',
     is_active: '',
     min_price: '',
     max_price: '',
@@ -840,6 +841,7 @@ export function AdminPage() {
     { id: 'projects', label: 'Projects', icon: Briefcase },
     { id: 'appointments', label: 'Appointments', icon: Calendar },
     { id: 'users', label: 'Users', icon: Shield },
+    { id: 'settings', label: 'Settings', icon: Settings },
   ]
 
   // ── JSX ──────────────────────────────────────────────────────────────────
@@ -874,15 +876,30 @@ export function AdminPage() {
       />
 
       {/* Sidebar */}
-      <aside className={`fixed left-0 top-0 h-screen bg-[#1E201E] border-r border-[#5A5555] transition-all duration-300 z-40 ${sidebarCollapsed ? 'w-20' : 'w-64'}`}>
-        <button
-          onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-          className="absolute -right-3 top-6 w-6 h-6 bg-[#1E201E] border border-[#5A5555] rounded-full flex items-center justify-center hover:bg-[var(--gold-primary)] hover:border-[var(--gold-primary)] transition-all"
-        >
-          {sidebarCollapsed ? <ChevronRight className="w-4 h-4 text-[#F5F5F5]" /> : <ChevronLeft className="w-4 h-4 text-[#F5F5F5]" />}
-        </button>
+      <aside className={`fixed left-0 top-0 h-screen bg-[#1E201E] border-r border-[#5A5555] transition-all duration-300 z-40 flex flex-col ${sidebarCollapsed ? 'w-20' : 'w-64'}`}>
+        {/* Header with CosmosCraft branding */}
+        <div className="h-24 px-4 py-4 border-b border-[#5A5555] flex items-center justify-between relative">
+          <button
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            className="absolute -right-3 top-6 w-6 h-6 bg-[#1E201E] border border-[#5A5555] rounded-full flex items-center justify-center hover:bg-[var(--gold-primary)] hover:border-[var(--gold-primary)] transition-all"
+          >
+            {sidebarCollapsed ? <ChevronRight className="w-4 h-4 text-[#F5F5F5]" /> : <ChevronLeft className="w-4 h-4 text-[#F5F5F5]" />}
+          </button>
 
-        <nav className="p-4 space-y-1 overflow-y-auto max-h-[calc(100vh-10rem)]">
+          {!sidebarCollapsed && (
+            <div className="flex items-center gap-3">
+              <img src="/favicon.png" alt="CosmosCraft" className="w-10 h-10 flex-shrink-0" />
+              <div className="min-w-0">
+                <p className="text-white font-black text-lg tracking-tight">CosmosCraft</p>
+              </div>
+            </div>
+          )}
+          {sidebarCollapsed && (
+            <img src="/favicon.png" alt="CosmosCraft" className="w-10 h-10 flex-shrink-0 mx-auto" />
+          )}
+        </div>
+
+        <nav className="p-4 space-y-1 overflow-y-auto flex-1">
           {tabs.map((tab) => {
             const Icon = tab.icon
             return (
@@ -903,19 +920,7 @@ export function AdminPage() {
           })}
         </nav>
 
-        <div className={`absolute bottom-4 left-0 right-0 px-4 ${sidebarCollapsed ? 'text-center' : ''}`}>
-          <div className={`flex items-center gap-3 p-4 rounded-2xl bg-[#1E201E] border border-[#5A5555] ${sidebarCollapsed ? 'justify-center' : ''}`}>
-            <div className="w-10 h-10 rounded-full bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] flex items-center justify-center flex-shrink-0 border-2 border-white">
-              <User className="w-5 h-5 text-[var(--text-dark)]" />
-            </div>
-            {!sidebarCollapsed && (
-              <div className="flex-1 min-w-0">
-                <p className="text-white font-medium text-sm truncate">{user?.firstName || 'Admin'}</p>
-                <p className="text-[var(--gold-primary)] text-xs capitalize">{user?.role?.replace('_', ' ')}</p>
-              </div>
-            )}
-          </div>
-        </div>
+       
       </aside>
 
       {/* Main content */}
@@ -1185,6 +1190,14 @@ export function AdminPage() {
                     <option value="">All categories</option>
                     {visibleCategories.map((c) => <option key={c.category_id} value={c.category_id}>{c.name}</option>)}
                   </select>
+                  <input 
+                    type="text"
+                    aria-label="Filter products by brand" 
+                    placeholder="Filter by brand..."
+                    value={productQuery.brand} 
+                    onChange={(e) => setProductQuery((prev) => ({ ...prev, page: 1, brand: e.target.value }))} 
+                    className={inputCls}
+                  />
                   <select aria-label="Sort products" value={`${productQuery.sortBy}:${productQuery.sortDir}`} onChange={(e) => {
                     const [sortBy, sortDir] = e.target.value.split(':')
                     setProductQuery((prev) => ({ ...prev, page: 1, sortBy, sortDir }))
@@ -1208,7 +1221,7 @@ export function AdminPage() {
                 <EmptyState icon={Package} label={debouncedSearch ? 'No products match your search/filters' : 'No products found'} action={() => openModal('product')} actionLabel="Add First Product" />
               ) : productViewMode === 'table' ? (
                 <AdminTable
-                  columns={['Image', 'Product', 'SKU', 'Price', 'Cost', 'Stock Status', 'Actions']}
+                  columns={['Image', 'Product', 'Brand', 'SKU', 'Price', 'Cost', 'Stock Status', 'Actions']}
                   rows={visibleProducts}
                   renderRow={(p) => (
                     <>
@@ -1224,6 +1237,7 @@ export function AdminPage() {
                       <td className="py-4 px-6">
                         <p className="text-white font-semibold">{p.name}</p>
                       </td>
+                      <td className="py-4 px-6 text-[var(--text-muted)] font-semibold">{p.brand || '—'}</td>
                       <td className="py-4 px-6 text-[var(--text-muted)] font-mono text-sm">{p.sku || '—'}</td>
                       <td className="py-4 px-6 text-[var(--gold-primary)] font-bold">{formatCurrency(p.price)}</td>
                       <td className="py-4 px-6 text-[var(--text-muted)] text-sm">{p.cost_price ? formatCurrency(p.cost_price) : '—'}</td>
@@ -1280,6 +1294,7 @@ export function AdminPage() {
                             <div className="min-w-0 flex-1">
                               <p className="text-[var(--gold-primary)] text-xs font-mono">{p.sku || 'No SKU'}</p>
                               <h3 className="text-white font-semibold text-lg truncate">{p.name}</h3>
+                              {p.brand && <p className="text-[var(--text-muted)] text-sm mt-1">Brand: <span className="text-white font-medium">{p.brand}</span></p>}
                             </div>
                           </div>
 
@@ -1553,6 +1568,67 @@ export function AdminPage() {
                 )}
                 empty={<EmptyState icon={Users} label="No users found" />}
               />
+            </motion.div>
+          )}
+
+          {/* ── SETTINGS ───────────────────────────────────────────────────── */}
+          {activeTab === 'settings' && (
+            <motion.div key="settings" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="max-w-2xl">
+              <div className="space-y-6">
+                {/* General Settings Section */}
+                <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6">
+                  <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-3">
+                    <Settings className="w-5 h-5 text-[var(--gold-primary)]" />
+                    General Settings
+                  </h3>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-[var(--text-muted)] mb-2">Dashboard Theme</label>
+                      <p className="text-white text-sm">Light mode is the default. You can switch to dark mode using the theme toggle in the top bar.</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* System Information */}
+                <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6">
+                  <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-3">
+                    <Info className="w-5 h-5 text-[var(--gold-primary)]" />
+                    System Information
+                  </h3>
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[var(--text-muted)]">System Version</span>
+                      <span className="text-white font-mono">v1.0.0</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-[var(--text-muted)]">Last Updated</span>
+                      <span className="text-white font-mono">{new Date().toLocaleDateString()}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-[var(--text-muted)]">Admin Role</span>
+                      <span className="text-white font-mono capitalize">{user?.role?.replace('_', ' ')}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* User Account */}
+                <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6">
+                  <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-3">
+                    <User className="w-5 h-5 text-[var(--gold-primary)]" />
+                    Your Account
+                  </h3>
+                  <div className="space-y-3">
+                    <div>
+                      <span className="text-[var(--text-muted)] text-sm">Email</span>
+                      <p className="text-white font-mono">{user?.email || 'Not available'}</p>
+                    </div>
+                    <div>
+                      <span className="text-[var(--text-muted)] text-sm">Name</span>
+                      <p className="text-white font-mono">{user?.firstName && user?.lastName ? `${user.firstName} ${user.lastName}` : user?.firstName || 'Admin'}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </motion.div>
           )}
 
@@ -2481,6 +2557,17 @@ export function AdminPage() {
                           <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]/60 p-4 sm:p-5">
                             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-5">
                               <div>
+                                <label className={`${labelCls} ${formErrors.brand ? 'text-red-400' : ''}`}>Brand</label>
+                                <input
+                                  value={form.brand || ''}
+                                  onChange={(e) => setForm((f) => ({ ...f, brand: e.target.value }))}
+                                  placeholder="e.g. Fender, Gibson, Ibanez"
+                                  className={formErrors.brand ? fieldErr : fieldOk}
+                                />
+                                {formErrors.brand && <p className="mt-1 text-xs text-red-400">{formErrors.brand}</p>}
+                                <p className="mt-1.5 text-xs text-[var(--text-muted)]">Manufacturer or brand name for product identification.</p>
+                              </div>
+                              <div>
                                 <label className={`${labelCls} ${formErrors.category_id ? 'text-red-400' : ''}`}>Category *</label>
                                 <select
                                   value={form.category_id || ''}
@@ -2497,22 +2584,23 @@ export function AdminPage() {
                                 {formErrors.category_id && <p className="mt-1 text-xs text-red-400">{formErrors.category_id}</p>}
                                 <p className="mt-1.5 text-xs text-[var(--text-muted)]">Groups this product in the shop catalog.</p>
                               </div>
-                              <div className="flex flex-col justify-end pb-0.5 md:pb-1">
-                                <div className="flex items-center gap-3">
-                                  <input
-                                    type="checkbox"
-                                    id="is_active"
-                                    checked={form.is_active ?? true}
-                                    onChange={(e) => setForm((f) => ({ ...f, is_active: e.target.checked }))}
-                                    className="h-5 w-5 rounded border-gray-600 bg-gray-800 text-[var(--gold-primary)] focus:ring-[var(--gold-primary)] focus:ring-offset-gray-900"
-                                  />
-                                  <label htmlFor="is_active" className="cursor-pointer font-medium text-white">
-                                    Active Product
-                                  </label>
-                                </div>
-                                <p className="ml-8 mt-1 text-xs text-[var(--text-muted)]">When off, the product is hidden from the storefront.</p>
-                              </div>
                             </div>
+                          </div>
+
+                          <div className="flex flex-col justify-start pb-0.5 md:pb-1">
+                            <div className="flex items-center gap-3">
+                              <input
+                                type="checkbox"
+                                id="is_active"
+                                checked={form.is_active ?? true}
+                                onChange={(e) => setForm((f) => ({ ...f, is_active: e.target.checked }))}
+                                className="h-5 w-5 rounded border-gray-600 bg-gray-800 text-[var(--gold-primary)] focus:ring-[var(--gold-primary)] focus:ring-offset-gray-900"
+                              />
+                              <label htmlFor="is_active" className="cursor-pointer font-medium text-white">
+                                Active Product
+                              </label>
+                            </div>
+                            <p className="ml-8 mt-1 text-xs text-[var(--text-muted)]">When off, the product is hidden from the storefront.</p>
                           </div>
                         </motion.div>
                       )}
