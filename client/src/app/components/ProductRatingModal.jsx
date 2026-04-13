@@ -83,7 +83,7 @@ export function ProductRatingModal({ product, isOpen, onClose, onBuyNow, onAddTo
             
             <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-6 relative">
               <p className="text-2xl font-mono font-bold text-white">
-                ${product.price.toLocaleString('en-PH')}
+                ₱{product.price.toLocaleString('en-PH')}
               </p>
               
               {product.category && !product.category.toLowerCase().includes('guitar') && (

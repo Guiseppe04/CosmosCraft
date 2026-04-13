@@ -69,7 +69,7 @@ export function CartPage() {
               >
                 <div className="flex-grow">
                   <h3 className="text-xl font-bold text-white">{item.name}</h3>
-                  <p className="text-[var(--text-muted)] mt-1">${item.price.toLocaleString('en-PH')}</p>
+                  <p className="text-[var(--text-muted)] mt-1">₱{item.price.toLocaleString('en-PH')}</p>
                   {item.metadata && (
                     <div className="mt-3 flex flex-wrap gap-2">
                       {Object.entries(item.metadata).map(([k, v]) => 
@@ -129,7 +129,7 @@ export function CartPage() {
             <div className="space-y-3 border-t border-[var(--border)] pt-6">
               <div className="flex justify-between">
                 <span className="text-[var(--text-muted)]">Subtotal</span>
-                <span className="font-bold text-white">${getTotalPrice().toLocaleString('en-PH')}</span>
+                <span className="font-bold text-white">₱{getTotalPrice().toLocaleString('en-PH')}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-[var(--text-muted)]">Shipping</span>

@@ -21,7 +21,7 @@ export function PricePanel({ totalPrice, estimatedDays }) {
                 transition={{ duration: 0.3 }}
                 className="text-2xl font-bold text-[var(--text-light)]"
               >
-                ${totalPrice.toLocaleString('en-PH')}
+                ₱{totalPrice.toLocaleString('en-PH')}
               </motion.p>
             </div>
           </div>

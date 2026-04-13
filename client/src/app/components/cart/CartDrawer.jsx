@@ -54,7 +54,7 @@ export function CartDrawer() {
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-[var(--text-light)] truncate">{item.name}</p>
                       <p className="text-xs text-[var(--text-muted)] mt-0.5">
-                        ${item.price.toLocaleString('en-PH')} each
+                        ₱{item.price.toLocaleString('en-PH')} each
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
@@ -98,7 +98,7 @@ export function CartDrawer() {
               <div className="flex justify-between text-sm">
                 <span className="text-[var(--text-muted)]">Subtotal</span>
                 <span className="font-semibold text-[var(--text-light)]">
-                  ${getTotalPrice().toLocaleString('en-PH')}
+                  ₱{getTotalPrice().toLocaleString('en-PH')}
                 </span>
               </div>
               <button

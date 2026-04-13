@@ -4,7 +4,7 @@ export default function SummaryCard({ price, rows, onAddToCart }) {
       <div className="flex items-center justify-between gap-3 border-b border-white/10 pb-3">
         <div>
           <p className="text-[11px] uppercase tracking-[0.2em] text-white/45">Current Total</p>
-          <p className="mt-1 text-3xl font-semibold tracking-tight">${price.toLocaleString('en-PH')}</p>
+          <p className="mt-1 text-3xl font-semibold tracking-tight">₱{price.toLocaleString('en-PH')}</p>
         </div>
         <button
           type="button"

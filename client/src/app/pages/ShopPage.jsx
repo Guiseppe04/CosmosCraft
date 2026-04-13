@@ -354,7 +354,7 @@ export function ShopPage() {
 
                     <div className="mt-auto flex flex-wrap items-center justify-between gap-y-3 pt-1">
                       <p className="text-lg font-bold text-white tracking-tight">
-                        ${product.price.toLocaleString('en-PH')}
+                        ₱{product.price.toLocaleString('en-PH')}
                       </p>
 
                       <div className="flex items-center gap-2 ml-auto">
