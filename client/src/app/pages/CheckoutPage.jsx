@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router'
 import { motion, AnimatePresence } from 'motion/react'
 import { useCart } from '../context/CartContext.jsx'
@@ -7,8 +7,9 @@ import {
   ArrowLeft, ShoppingCart, CreditCard, Truck, ShieldCheck,
   Plus, Minus, MessageSquare, Package, Guitar,
   ChevronDown, ChevronUp, MapPin, FileText, Check,
-  Banknote, Building2, Smartphone, Upload, X, Edit3, CheckCircle, Trash2, Home, Building, PlusCircle
+  X, CheckCircle, Trash2, Home, Building, PlusCircle
 } from 'lucide-react'
+import { PaymentModal } from '../components/PaymentModal.jsx'
 import { API } from '../utils/apiConfig'
 
 // ==================== REUSABLE COMPONENTS ====================
@@ -31,7 +32,14 @@ function CartItemCard({ item, onUpdateQuantity, onRemove, isCustomBuild, isBuyNo
       <div className="flex-1 min-w-0 flex items-center justify-between gap-4">
         <div className="min-w-0 flex-1">
           <h3 className="font-semibold text-[var(--text-light)] truncate">{item.name}</h3>
-          <p className="text-xs text-[var(--text-muted)] mt-0.5 tracking-wide uppercase">{item.category}</p>
+          <div className="flex items-center gap-2 mt-1">
+            <p className="text-xs text-[var(--text-muted)] tracking-wide uppercase">{item.category}</p>
+            {isCustomBuild && (
+              <span className="px-2 py-0.5 text-xs font-medium bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] rounded-full">
+                Custom Build
+              </span>
+            )}
+          </div>
         </div>
 
         <div className="flex items-center gap-4 flex-shrink-0">
@@ -590,35 +598,17 @@ export function CheckoutPage() {
   const customBuildItem = location.state?.checkoutItem || null
   const buyNowItem = isBuyNow ? location.state?.checkoutItem : null
   
-  const fileInputRef = useRef(null)
-  
   const [isProcessing, setIsProcessing] = useState(false)
   const [orderError, setOrderError] = useState(null)
   const [orderNotes, setOrderNotes] = useState('')
   const [shippingMethod, setShippingMethod] = useState('standard')
-  const [paymentMethod, setPaymentMethod] = useState('cash')
-  const [paymentErrors, setPaymentErrors] = useState({})
-  
   const [selectedAddressId, setSelectedAddressId] = useState(null)
   const [addressError, setAddressError] = useState(false)
-  
-  const [bankDetails, setBankDetails] = useState({
-    bankName: '',
-    accountName: '',
-    accountNumber: '',
-    referenceNumber: '',
-    notes: ''
-  })
-  
-  const [gcashReceipt, setGcashReceipt] = useState(null)
   const [showAddAddressModal, setShowAddAddressModal] = useState(false)
   const [isSavingAddress, setIsSavingAddress] = useState(false)
   
   const [showSuccessModal, setShowSuccessModal] = useState(false)
-  const [showTCModal, setShowTCModal] = useState(false)
-  const [tcAccepted, setTcAccepted] = useState(false)
   const [showPaymentModal, setShowPaymentModal] = useState(false)
-  const [paymentTerms, setPaymentTerms] = useState('full')
 
   const userAddresses = user?.addresses || []
 
@@ -662,23 +652,8 @@ export function CheckoutPage() {
   const tax = subtotal * 0.1
   
   const fullPaymentTotal = subtotal + shippingCost + tax
-  const downPaymentTotal = isCustomBuild ? ((customBuildPrice * 0.5) + customAdditionalPartsTotal) + shippingCost + tax : (fullPaymentTotal / 2)
-  const total = paymentTerms === 'down' ? downPaymentTotal : fullPaymentTotal
+  const total = fullPaymentTotal
   const itemCount = checkoutItems.reduce((a, b) => a + b.quantity, 0)
-
-  const handleFileSelect = (e) => {
-    const file = e.target.files[0]
-    if (file) {
-      const reader = new FileReader()
-      reader.onloadend = () => setGcashReceipt(reader.result)
-      reader.readAsDataURL(file)
-    }
-  }
-
-  const removeReceipt = () => {
-    setGcashReceipt(null)
-    if (fileInputRef.current) fileInputRef.current.value = ''
-  }
 
   const handleSelectAddress = (addressId) => {
     setSelectedAddressId(addressId)
@@ -736,17 +711,12 @@ export function CheckoutPage() {
     }
   }
 
-  const validatePayment = () => {
-    const errors = {}
-    if (!paymentMethod) errors.payment = 'Payment method is required'
-    if (paymentMethod === 'bank') {
-      if (!bankDetails.bankName?.trim()) errors.bankName = 'Bank name is required'
-      if (!bankDetails.accountName?.trim()) errors.accountName = 'Account name is required'
-      if (!bankDetails.accountNumber?.trim()) errors.accountNumber = 'Account number is required'
+  const validatePayment = (paymentMethod, receipt) => {
+    if (!paymentMethod) return false
+    if (paymentMethod === 'gcash' || paymentMethod === 'bank') {
+      return !!receipt
     }
-    if (paymentMethod === 'gcash' && !gcashReceipt) errors.gcash = 'GCash receipt is required'
-    setPaymentErrors(errors)
-    return Object.keys(errors).length === 0
+    return true
   }
 
   const handlePlaceOrderClick = () => {
@@ -758,17 +728,11 @@ export function CheckoutPage() {
       setAddressError(true)
       return
     }
-    setShowTCModal(true)
-  }
-
-  const handleTCAccept = () => {
-    setTcAccepted(true)
-    setShowTCModal(false)
     setShowPaymentModal(true)
   }
 
-  const handleFinalSubmit = async () => {
-    if (!validatePayment()) return
+  const handlePaymentSubmit = async (paymentMethod, receipt) => {
+    if (!validatePayment(paymentMethod, receipt)) return
 
     setIsProcessing(true)
     
@@ -783,11 +747,6 @@ export function CheckoutPage() {
     }
 
     let additionalNotes = orderNotes
-    additionalNotes += `\n\nPayment Terms: ${paymentTerms === 'full' ? 'Full Payment' : 'Down Payment'}`
-    
-    if (paymentMethod === 'bank') {
-      additionalNotes += `\nBank Transfer Details:\nBank: ${bankDetails.bankName}\nAccount Name: ${bankDetails.accountName}\nAccount Number: ${bankDetails.accountNumber}\nReference: ${bankDetails.referenceNumber}\n${bankDetails.notes ? 'Notes: ' + bankDetails.notes : ''}`
-    }
     
     try {
       setOrderError(null)
@@ -806,6 +765,7 @@ export function CheckoutPage() {
           notes: additionalNotes,
           shippingMethod,
           paymentMethod,
+          paymentTerms: 'full',
           billingAddress: finalAddress
         })
       })
@@ -988,305 +948,15 @@ export function CheckoutPage() {
         isSaving={isSavingAddress}
       />
 
-      {/* T&C Modal */}
-      <AnimatePresence>
-        {showTCModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
-          >
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 20 }}
-              className="w-full max-w-lg bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl overflow-hidden flex flex-col max-h-[80vh]"
-            >
-              <div className="p-6 border-b border-[var(--border)]">
-                <h3 className="text-xl font-bold text-white">Terms and Conditions</h3>
-              </div>
-              <div className="p-6 overflow-y-auto flex-1 text-sm text-[var(--text-muted)] space-y-4">
-                <p>Welcome to CosmosCraft. By placing an order, you agree to the following terms and conditions:</p>
-                <h4 className="font-semibold text-white mt-4">1. Custom Builds</h4>
-                <p>All custom builds require a minimum 50% non-refundable down payment to commence production. Full payment must be completed before shipment. Lead times are estimates and may vary due to material availability.</p>
-                <h4 className="font-semibold text-white mt-4">2. Returns and Refunds</h4>
-                <p>Custom instruments are built to your specific requirements and cannot be returned or refunded unless there is a confirmed manufacturing defect. Standard catalogue items may be returned within 14 days of receipt, subject to a 10% restocking fee.</p>
-                <h4 className="font-semibold text-white mt-4">3. Warranties</h4>
-                <p>All instruments come with a 2-year limited warranty covering manufacturing defects. Modifications made by unauthorized personnel will void this warranty.</p>
-              </div>
-              <div className="p-6 border-t border-[var(--border)] space-y-4">
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={tcAccepted}
-                    onChange={(e) => setTcAccepted(e.target.checked)}
-                    className="w-5 h-5 rounded border-[var(--border)] text-[var(--gold-primary)] focus:ring-[var(--gold-primary)] cursor-pointer"
-                  />
-                  <span className="text-sm font-medium text-white">I agree to the Terms and Conditions</span>
-                </label>
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => setShowTCModal(false)}
-                    className="flex-1 py-3 rounded-xl border border-[var(--border)] text-[var(--text-light)] font-medium hover:bg-white/5 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleTCAccept}
-                    disabled={!tcAccepted}
-                    className={`flex-1 py-3 rounded-xl font-medium transition-all ${
-                      tcAccepted 
-                      ? 'bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] hover:shadow-[0_0_15px_rgba(212,175,55,0.4)]'
-                      : 'bg-[var(--surface-elevated)] text-[var(--text-muted)] cursor-not-allowed'
-                    }`}
-                  >
-                    Confirm & Continue
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Payment Options Modal */}
-      <AnimatePresence>
-        {showPaymentModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
-          >
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 20 }}
-              className="w-full max-w-lg bg-[var(--surface-dark)] border border-[var(--gold-primary)] rounded-2xl overflow-hidden flex flex-col max-h-[90vh]"
-            >
-              <div className="p-6 border-b border-[var(--border)] flex items-center justify-between">
-                <h3 className="text-xl font-bold text-white flex items-center gap-2">
-                  <CreditCard className="w-5 h-5 text-[var(--gold-primary)]" />
-                  Payment Details
-                </h3>
-                <button onClick={() => setShowPaymentModal(false)} className="p-2 hover:bg-[var(--surface-elevated)] rounded-lg transition-colors">
-                  <X className="w-5 h-5 text-[var(--text-muted)]" />
-                </button>
-              </div>
-              
-              <div className="p-6 overflow-y-auto space-y-6">
-                {paymentErrors.payment && (
-                  <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm font-medium">
-                    {paymentErrors.payment}
-                  </div>
-                )}
-
-                <div>
-                  <h4 className="text-sm font-semibold text-white mb-3">Payment Terms</h4>
-                  <div className="grid grid-cols-2 gap-3">
-                    <label className={`flex flex-col p-4 rounded-xl border cursor-pointer transition-all duration-200 ${
-                      paymentTerms === 'full' 
-                        ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)]/10' 
-                        : 'border-[var(--border)] hover:border-[var(--gold-primary)]/50'
-                    }`}>
-                      <div className="flex items-center">
-                        <input 
-                          type="radio" 
-                          name="paymentTerms" 
-                          value="full"
-                          checked={paymentTerms === 'full'}
-                          onChange={() => setPaymentTerms('full')}
-                          className="w-4 h-4 text-[var(--gold-primary)] mr-3"
-                        />
-                        <span className="font-semibold text-white">Full Payment</span>
-                      </div>
-                      <span className="text-sm text-[var(--text-muted)] mt-2 ml-7">₱{fullPaymentTotal.toLocaleString('en-PH', { maximumFractionDigits: 2 })}</span>
-                    </label>
-
-                    <label className={`flex flex-col p-4 rounded-xl border cursor-pointer transition-all duration-200 ${
-                      paymentTerms === 'down' 
-                        ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)]/10' 
-                        : 'border-[var(--border)] hover:border-[var(--gold-primary)]/50'
-                    }`}>
-                      <div className="flex items-center">
-                        <input 
-                          type="radio" 
-                          name="paymentTerms" 
-                          value="down"
-                          checked={paymentTerms === 'down'}
-                          onChange={() => setPaymentTerms('down')}
-                          className="w-4 h-4 text-[var(--gold-primary)] mr-3"
-                        />
-                        <span className="font-semibold text-white">50% Down</span>
-                      </div>
-                      <span className="text-sm text-[var(--text-muted)] mt-2 ml-7">₱{downPaymentTotal.toLocaleString('en-PH', { maximumFractionDigits: 2 })}</span>
-                    </label>
-                  </div>
-                </div>
-
-                <div>
-                  <h4 className="text-sm font-semibold text-white mb-3">Payment Method</h4>
-                  <div className="space-y-3">
-                    <label className={`flex items-center p-4 rounded-xl border cursor-pointer transition-all duration-200 ${
-                      paymentMethod === 'bank' 
-                        ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)]/10' 
-                        : 'border-[var(--border)] hover:border-[var(--gold-primary)]/50'
-                    }`}>
-                      <input 
-                        type="radio" 
-                        name="payment" 
-                        value="bank"
-                        checked={paymentMethod === 'bank'}
-                        onChange={() => { setPaymentMethod('bank'); setPaymentErrors({}) }}
-                        className="w-4 h-4 text-[var(--gold-primary)] mr-3"
-                      />
-                      <Building2 className="w-5 h-5 text-[var(--gold-primary)] mr-2" />
-                      <span className="font-medium text-[var(--text-light)]">Bank Transfer</span>
-                    </label>
-                    
-                    {paymentMethod === 'bank' && (
-                      <div className="p-4 bg-[var(--surface-elevated)] border border-[var(--border)] rounded-xl space-y-4 ml-7">
-                        <div className="grid sm:grid-cols-2 gap-4">
-                          <div>
-                            <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Bank Name *</label>
-                            <input
-                              type="text"
-                              value={bankDetails.bankName}
-                              onChange={(e) => setBankDetails(prev => ({ ...prev, bankName: e.target.value }))}
-                              className="w-full px-4 py-2.5 text-sm rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] text-[var(--text-light)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]/20 focus:border-[var(--gold-primary)]"
-                              placeholder="BDO, BPI, etc."
-                            />
-                            {paymentErrors.bankName && <p className="text-xs text-red-400 mt-1.5">{paymentErrors.bankName}</p>}
-                          </div>
-                          <div>
-                            <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Account Name *</label>
-                            <input
-                              type="text"
-                              value={bankDetails.accountName}
-                              onChange={(e) => setBankDetails(prev => ({ ...prev, accountName: e.target.value }))}
-                              className="w-full px-4 py-2.5 text-sm rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] text-[var(--text-light)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]/20 focus:border-[var(--gold-primary)]"
-                              placeholder="Account holder name"
-                            />
-                            {paymentErrors.accountName && <p className="text-xs text-red-400 mt-1.5">{paymentErrors.accountName}</p>}
-                          </div>
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Account Number *</label>
-                          <input
-                            type="text"
-                            value={bankDetails.accountNumber}
-                            onChange={(e) => setBankDetails(prev => ({ ...prev, accountNumber: e.target.value }))}
-                            className="w-full px-4 py-2.5 text-sm rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] text-[var(--text-light)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]/20 focus:border-[var(--gold-primary)]"
-                            placeholder="Enter account number"
-                          />
-                          {paymentErrors.accountNumber && <p className="text-xs text-red-400 mt-1.5">{paymentErrors.accountNumber}</p>}
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">Reference Number</label>
-                          <input
-                            type="text"
-                            value={bankDetails.referenceNumber}
-                            onChange={(e) => setBankDetails(prev => ({ ...prev, referenceNumber: e.target.value }))}
-                            className="w-full px-4 py-2.5 text-sm rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] text-[var(--text-light)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]/20 focus:border-[var(--gold-primary)]"
-                            placeholder="Transaction reference"
-                          />
-                        </div>
-                      </div>
-                    )}
-
-                    <label className={`flex items-center p-4 rounded-xl border cursor-pointer transition-all duration-200 ${
-                      paymentMethod === 'gcash' 
-                        ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)]/10' 
-                        : 'border-[var(--border)] hover:border-[var(--gold-primary)]/50'
-                    }`}>
-                      <input 
-                        type="radio" 
-                        name="payment" 
-                        value="gcash"
-                        checked={paymentMethod === 'gcash'}
-                        onChange={() => { setPaymentMethod('gcash'); setPaymentErrors({}) }}
-                        className="w-4 h-4 text-[var(--gold-primary)] mr-3"
-                      />
-                      <Smartphone className="w-5 h-5 text-[var(--gold-primary)] mr-2" />
-                      <span className="font-medium text-[var(--text-light)]">GCash</span>
-                    </label>
-
-                    {paymentMethod === 'gcash' && (
-                      <div className="p-4 bg-[var(--surface-elevated)] border border-[var(--border)] rounded-xl ml-7">
-                        {gcashReceipt ? (
-                          <div className="relative inline-block">
-                            <img src={gcashReceipt} alt="GCash Receipt" className="max-h-40 rounded-xl border border-[var(--border)]" />
-                            <button
-                              onClick={removeReceipt}
-                              className="absolute -top-3 -right-3 p-2 bg-red-500 text-white rounded-full hover:bg-red-600 shadow-lg transition-colors"
-                            >
-                              <X className="w-4 h-4" />
-                            </button>
-                          </div>
-                        ) : (
-                          <div 
-                            onClick={() => fileInputRef.current?.click()}
-                            className="border-2 border-dashed border-[var(--border)] rounded-xl p-8 text-center cursor-pointer hover:border-[var(--gold-primary)] hover:bg-[var(--gold-primary)]/5 transition-all"
-                          >
-                            <Upload className="w-8 h-8 text-[var(--text-muted)] mx-auto mb-3" />
-                            <p className="text-sm text-[var(--text-muted)]">Click to upload GCash receipt</p>
-                          </div>
-                        )}
-                        <input
-                          ref={fileInputRef}
-                          type="file"
-                          accept="image/*"
-                          onChange={handleFileSelect}
-                          className="hidden"
-                        />
-                        {paymentErrors.gcash && <p className="text-sm text-red-400 mt-3">{paymentErrors.gcash}</p>}
-                      </div>
-                    )}
-
-                    <label className={`flex items-center p-4 rounded-xl border cursor-pointer transition-all duration-200 ${
-                      paymentMethod === 'cash' 
-                        ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)]/10' 
-                        : 'border-[var(--border)] hover:border-[var(--gold-primary)]/50'
-                    }`}>
-                      <input 
-                        type="radio" 
-                        name="payment" 
-                        value="cash"
-                        checked={paymentMethod === 'cash'}
-                        onChange={() => { setPaymentMethod('cash'); setPaymentErrors({}) }}
-                        className="w-4 h-4 text-[var(--gold-primary)] mr-3"
-                      />
-                      <Banknote className="w-5 h-5 text-[var(--gold-primary)] mr-2" />
-                      <span className="font-medium text-[var(--text-light)]">Cash on Delivery</span>
-                    </label>
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-6 border-t border-[var(--border)]">
-                <button
-                  onClick={handleFinalSubmit}
-                  disabled={isProcessing}
-                  className="w-full py-4 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-bold rounded-xl hover:shadow-[0_0_25px_rgba(212,175,55,0.5)] transition-all duration-200 disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                  {isProcessing ? (
-                    <>
-                      <div className="w-5 h-5 border-2 border-[var(--text-dark)] border-t-transparent rounded-full animate-spin" />
-                      Processing Payment...
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle className="w-5 h-5" />
-                      Place Order — ₱{total.toLocaleString('en-PH', { maximumFractionDigits: 2 })}
-                    </>
-                  )}
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Payment Modal */}
+      <PaymentModal
+        isOpen={showPaymentModal}
+        onClose={() => setShowPaymentModal(false)}
+        onSubmit={handlePaymentSubmit}
+        total={total}
+        isProcessing={isProcessing}
+        isCustomBuild={isCustomBuild}
+      />
 
       <SuccessModal isOpen={showSuccessModal} onClose={handleSuccessModalClose} />
     </>
