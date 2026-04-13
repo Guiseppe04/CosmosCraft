@@ -810,7 +810,29 @@ CREATE INDEX idx_otp_attempts_created_at ON otp_attempts(created_at DESC);
 
 
 -- =============================================
--- 31. ROLES (RBAC)
+-- 31. PASSWORD RESET TOKENS
+-- =============================================
+
+CREATE TABLE password_reset_tokens (
+    token_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL,
+    token VARCHAR(255) NOT NULL,
+    new_password_hash VARCHAR(255) NOT NULL,
+    expires_at TIMESTAMPTZ NOT NULL,
+    is_used BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    UNIQUE(user_id, token)
+);
+
+CREATE INDEX idx_password_reset_tokens_user_id ON password_reset_tokens(user_id);
+CREATE INDEX idx_password_reset_tokens_token ON password_reset_tokens(token);
+CREATE INDEX idx_password_reset_tokens_expires_at ON password_reset_tokens(expires_at);
+
+
+-- =============================================
+-- 32. ROLES (RBAC)
 -- =============================================
 
 CREATE TABLE roles (

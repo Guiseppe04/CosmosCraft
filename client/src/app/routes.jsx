@@ -16,6 +16,7 @@ import { OTPVerificationPage } from './pages/OTPVerificationPage.jsx'
 import { OAuthSuccessPage } from './pages/OAuthSuccessPage.jsx'
 import { OAuthSignupPage } from './pages/OAuthSignupPage.jsx'
 import { FeedbackPage } from './pages/FeedbackPage.jsx'
+import { ResetPasswordPage } from './pages/ResetPasswordPage.jsx'
 import { ProtectedRoute } from './components/auth/ProtectedRoute.jsx'
 
 /**
@@ -44,6 +45,7 @@ export const router = createBrowserRouter([
       { path: 'verify-otp', Component: OTPVerificationPage },
       { path: 'auth/success', Component: OAuthSuccessPage },
       { path: 'auth/signup', Component: OAuthSignupPage },
+      { path: 'reset-password', Component: ResetPasswordPage },
       
       // Customer routes (authenticated)
       { path: 'dashboard', element: <ProtectedRoute><DashboardPage /></ProtectedRoute> },

@@ -243,6 +243,79 @@ exports.updatePassword = async (userId, oldPassword, newPassword) => {
   return { message: 'Password updated successfully' };
 };
 
+const crypto = require('crypto');
+
+exports.createPasswordResetToken = async (userId, newPassword) => {
+  const isMatch = await exports.verifyPassword(userId, newPassword);
+  if (isMatch) throw new Error('New password must be different from current password');
+  
+  const existingRes = await pool.query(
+    'DELETE FROM password_reset_tokens WHERE user_id = $1 OR expires_at < now()',
+    [userId]
+  );
+  
+  const token = crypto.randomBytes(32).toString('hex');
+  const newPasswordHash = await bcrypt.hash(newPassword, 12);
+  const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+  
+  await pool.query(
+    `INSERT INTO password_reset_tokens (user_id, token, new_password_hash, expires_at)
+     VALUES ($1, $2, $3, $4)`,
+    [userId, token, newPasswordHash, expiresAt]
+  );
+  
+  return { token, expiresAt };
+};
+
+exports.verifyPasswordResetToken = async (userId, token) => {
+  const res = await pool.query(
+    `SELECT * FROM password_reset_tokens 
+     WHERE user_id = $1 AND token = $2 AND is_used = false AND expires_at > now()`,
+    [userId, token]
+  );
+  
+  if (res.rows.length === 0) {
+    throw new Error('Invalid or expired token');
+  }
+  
+  const tokenRecord = res.rows[0];
+  
+  await pool.query(
+    'UPDATE password_reset_tokens SET is_used = true WHERE token_id = $1',
+    [tokenRecord.token_id]
+  );
+  
+  await pool.query(
+    'UPDATE users SET password_hash = $1, updated_at = now() WHERE user_id = $2',
+    [tokenRecord.new_password_hash, userId]
+  );
+  
+  await pool.query(
+    'DELETE FROM password_reset_tokens WHERE user_id = $1',
+    [userId]
+  );
+  
+  return { message: 'Password updated successfully' };
+};
+
+exports.requestPasswordChange = async (userId, oldPassword, newPassword) => {
+  const isMatch = await exports.verifyPassword(userId, oldPassword);
+  if (!isMatch) throw new Error('Current password is incorrect');
+  
+  if (newPassword.length < 8) {
+    throw new Error('Password must be at least 8 characters');
+  }
+  
+  if (newPassword.length < 8 || !/[A-Z]/.test(newPassword) || !/[0-9]/.test(newPassword)) {
+    throw new Error('Password must be at least 8 characters with uppercase and numbers');
+  }
+  
+  const isSameAsOld = await exports.verifyPassword(userId, newPassword);
+  if (isSameAsOld) throw new Error('New password must be different from current password');
+  
+  return exports.createPasswordResetToken(userId, newPassword);
+};
+
 exports.deactivateAccount = async (userId) => {
   await pool.query('UPDATE users SET is_active = false, updated_at = now() WHERE user_id = $1', [userId]);
   return exports.getUserById(userId);

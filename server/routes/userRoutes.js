@@ -15,7 +15,8 @@ router.put('/addresses/:addressId', authenticateToken, validate(updateAddressSch
 router.delete('/addresses/:addressId', authenticateToken, userController.removeAddress);
 
 // Password management
-router.post('/change-password', authenticateToken, validate(changePasswordSchema), userController.changePassword);
+router.post('/change-password', authenticateToken, validate(changePasswordSchema), userController.requestPasswordChange);
+router.post('/verify-password-reset-token', userController.verifyPasswordResetToken);
 
 // Account management
 router.post('/deactivate', authenticateToken, userController.deactivateAccount);
