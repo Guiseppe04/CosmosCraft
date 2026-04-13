@@ -94,15 +94,21 @@ function GuitarPreview({ config, view, onViewChange }) {
     const strapSrc = resolveVariant(bodyAssets.strap, colorKey)
     const switchSrc = resolveVariant(bodyAssets.switch, colorKey)
     return [
-      { src: bridgeSrc, className: 'opacity-95' },
       { src: switchSrc, className: 'opacity-90' },
       { src: strapSrc, className: 'opacity-95' },
       { src: knobAsset, className: 'opacity-95' },
-      { src: pickguardAsset, className: 'opacity-95' },
+      { src: bridgeSrc, className: 'opacity-95' },
     ].filter(layer => Boolean(layer.src))
-  }, [bodyAssets, bridge.assets, colorKey, knobAsset, pickguardAsset])
+  }, [bodyAssets, bridge.assets, colorKey, knobAsset])
 
-  const neckLayers = useMemo(() => {
+  const overlayLayers = useMemo(() => {
+    return [
+      bodyAssets.shadows ? { src: bodyAssets.shadows, style: { opacity: 0.8, mixBlendMode: 'multiply' } } : null,
+      bodyAssets.gloss ? { src: bodyAssets.gloss, style: { opacity: 0.8, mixBlendMode: 'screen' } } : null,
+    ].filter(Boolean)
+  }, [bodyAssets])
+
+  const frontNeckLayers = useMemo(() => {
     const headstockTuners = resolveVariant(headstock.tuners, colorKey)
 
     return [
@@ -149,7 +155,6 @@ function GuitarPreview({ config, view, onViewChange }) {
           mixBlendMode: 'multiply',
         },
       },
-      { src: headstock.strings, className: 'opacity-95' },
       { src: NECK_FRETS[config.pickups === 'hh' ? 'gold' : 'stainless'], className: 'opacity-85' },
       { src: inlay.src, className: 'opacity-95' },
       { src: NECK_NUT[hardware.color === 'black' ? 'black' : 'white'], className: 'opacity-90' },
@@ -160,11 +165,72 @@ function GuitarPreview({ config, view, onViewChange }) {
           opacity: 0.95,
         },
       },
-      { src: headstock.logo, className: 'opacity-95' },
       { src: headstock.trussCover, className: 'opacity-95' },
       { src: headstockTuners, className: 'opacity-95' },
     ].filter(Boolean)
   }, [bodyFinish.texture, bodyFinish.color, bodyWood.texture, colorKey, config.body, config.pickups, fretboard.src, headstock, headstockWood.texture, inlay.src, neck.filter, neck.src, hardware.color])
+  
+  const rearNeckLayers = useMemo(() => {
+    const headstockTuners = resolveVariant(headstock.tuners, colorKey)
+
+    return [
+      {
+        maskSrc: model.bodySrc,
+        style: {
+          backgroundImage: `url(${bodyWood.texture})`,
+          opacity: 1,
+          mixBlendMode: 'normal',
+        },
+      },
+      bodyFinish.texture
+        ? {
+            maskSrc: model.bodySrc,
+            style: {
+              backgroundImage: `url(${bodyFinish.texture})`,
+              opacity: 1,
+              mixBlendMode: 'normal',
+            },
+          }
+        : bodyFinish.color
+        ? {
+            maskSrc: model.bodySrc,
+            style: {
+              backgroundColor: bodyFinish.color,
+              opacity: 1,
+              mixBlendMode: 'normal',
+            },
+          }
+        : null,
+      {
+        maskSrc: NECK_MASK,
+        style: {
+          backgroundImage: `url(${neck.src})`,
+          filter: neck.filter,
+          opacity: 0.98,
+        },
+      },
+      {
+        maskSrc: NECK_MASK,
+        style: {
+          backgroundImage: `url(${fretboard.src})`,
+          opacity: 0.94,
+          mixBlendMode: 'multiply',
+        },
+      },
+      {
+        maskSrc: headstock.mask,
+        style: {
+          backgroundImage: `url(${headstockWood.texture})`,
+          opacity: 0.95,
+        },
+      },
+      { src: headstockTuners, className: 'opacity-95' },
+    ].filter(Boolean)
+  }, [bodyFinish.texture, bodyFinish.color, bodyWood.texture, colorKey, fretboard.src, headstock, headstockWood.texture, model.bodySrc, neck.filter, neck.src])
+  
+  const stringLayer = useMemo(() => {
+    return headstock.strings ? { src: headstock.strings, className: 'opacity-95' } : null
+  }, [headstock.strings])
 
   return (
     <div className="w-full">
@@ -191,21 +257,48 @@ function GuitarPreview({ config, view, onViewChange }) {
                 transformOrigin: '50% 50%',
               }}
             >
-              {neckLayers.map((layer, index) => (
-                <GuitarLayer
-                  key={`${layer.src ?? layer.maskSrc ?? 'layer'}-${index}`}
-                  src={layer.src}
-                  maskSrc={layer.maskSrc}
-                  style={layer.style}
-                  className={layer.className}
-                />
-              ))}
-              {hardwareLayers.map((layer, index) => (
-                <GuitarLayer key={`${layer.src}-${index}`} src={layer.src} className={layer.className} />
-              ))}
-              {pickupLayers.map((layer, index) => (
-                <GuitarLayer key={`${layer.src}-${index}`} src={layer.src} className={layer.className} />
-              ))}
+              {view === 'front' ? (
+                <>
+                  {frontNeckLayers.map((layer, index) => (
+                    <GuitarLayer
+                      key={`${layer.src ?? layer.maskSrc ?? 'layer'}-${index}`}
+                      src={layer.src}
+                      maskSrc={layer.maskSrc}
+                      style={layer.style}
+                      className={layer.className}
+                    />
+                  ))}
+                  {pickguardAsset && <GuitarLayer src={pickguardAsset} className="opacity-95" />}
+                  {pickupLayers.map((layer, index) => (
+                    <GuitarLayer key={`${layer.src}-${index}`} src={layer.src} className={layer.className} />
+                  ))}
+                  {hardwareLayers.map((layer, index) => (
+                    <GuitarLayer key={`${layer.src}-${index}`} src={layer.src} className={layer.className} />
+                  ))}
+                  {stringLayer && <GuitarLayer src={stringLayer.src} className={stringLayer.className} />}
+                  {overlayLayers.map((layer, index) => (
+                    <GuitarLayer key={`overlay-${index}`} src={layer.src} style={layer.style} />
+                  ))}
+                </>
+              ) : (
+                <>
+                  {rearNeckLayers.map((layer, index) => (
+                    <GuitarLayer
+                      key={`${layer.src ?? layer.maskSrc ?? 'layer'}-${index}`}
+                      src={layer.src}
+                      maskSrc={layer.maskSrc}
+                      style={layer.style}
+                      className={layer.className}
+                    />
+                  ))}
+                  {resolveVariant(bodyAssets.strap, colorKey) && (
+                    <GuitarLayer src={resolveVariant(bodyAssets.strap, colorKey)} className="opacity-95" />
+                  )}
+                  {overlayLayers.map((layer, index) => (
+                    <GuitarLayer key={`overlay-${index}`} src={layer.src} style={layer.style} />
+                  ))}
+                </>
+              )}
             </div>
           </div>
           

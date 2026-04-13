@@ -598,6 +598,8 @@ export const BODY_LAYER_ASSETS = {
       black: asset('rs/bodies/front/pickguard/black.png'),
       gold: asset('rs/bodies/front/pickguard/red-tortoise.png'),
     },
+    shadows: asset('rs/shadows_highlights/edge-shadow.png'),
+    gloss: asset('rs/shadows_highlights/gloss.png'),
   },
   solo: {
     bridge: BRIDGE_OPTIONS.hipshotFixed.assets,
@@ -613,6 +615,8 @@ export const BODY_LAYER_ASSETS = {
     },
     switch: asset('solo/bodies/front/switches/blade/black.png'),
     pickguard: null,
+    shadows: asset('solo/shadows_highlights/edge-shadow.png'),
+    gloss: asset('solo/shadows_highlights/gloss.png'),
   },
   dc: {
     bridge: BRIDGE_OPTIONS.floydRoseTremolo.assets,
@@ -628,6 +632,8 @@ export const BODY_LAYER_ASSETS = {
     },
     switch: asset('dc/bodies/front/switches/blade/black.png'),
     pickguard: null,
+    shadows: asset('dc/shadows_highlights/edge-shadow.png'),
+    gloss: asset('dc/shadows_highlights/gloss.png'),
   },
   delos: {
     bridge: BRIDGE_OPTIONS.hipshotTremolo.assets,
@@ -643,6 +649,8 @@ export const BODY_LAYER_ASSETS = {
     },
     switch: asset('delos/bodies/front/switches/blade/black.png'),
     pickguard: asset('delos/bodies/front/pickguard/white.png'),
+    shadows: asset('delos/shadows_highlights/edge-shadow.png'),
+    gloss: asset('delos/shadows_highlights/gloss.png'),
   },
 }
 

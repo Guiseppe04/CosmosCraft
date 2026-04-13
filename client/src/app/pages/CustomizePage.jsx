@@ -73,7 +73,7 @@ function AnimatedPrice({ price }) {
           price > 0 ? 'text-transparent bg-clip-text bg-gradient-to-r from-[#d4af37] via-[#f4d03f] to-[#d4af37]' : 'text-white/30'
         }`}
       >
-        ₱{displayPrice}
+        ${displayPrice}
       </span>
     </div>
   )
@@ -113,7 +113,7 @@ function OptionButton({ option, isSelected, onClick }) {
           <div className={`text-xs font-semibold ${
             isSelected ? 'text-[#d4af37]' : 'text-[#d4af37]/70'
           }`}>
-            +₱{toPHP(option.price, true).toLocaleString('en-PH')}
+            +${toPHP(option.price, true).toLocaleString('en-PH')}
           </div>
         )}
       </div>
@@ -166,7 +166,7 @@ function VisualCard({ option, isSelected, onClick, previewImage }) {
           <div className={`text-[10px] font-medium ${
             isSelected ? 'text-[#d4af37]' : 'text-[#d4af37]/70'
           }`}>
-            +₱{toPHP(option.price, true).toLocaleString('en-PH')}
+            +${toPHP(option.price, true).toLocaleString('en-PH')}
           </div>
         )}
       </div>
@@ -716,7 +716,7 @@ export function CustomizePage() {
                 <div>
                   <p className="text-xs uppercase tracking-[0.2em] text-white/40">Your Build Total</p>
                   <AnimatedPrice price={price} />
-                  <p className="mt-1 text-xs text-white/30">Base price: ₱{toPHP(1299, true).toLocaleString('en-PH')}</p>
+                  <p className="mt-1 text-xs text-white/30">Base price: ${toPHP(1299, true).toLocaleString('en-PH')}</p>
                 </div>
                 
                 <div className="flex flex-col sm:flex-row gap-3">

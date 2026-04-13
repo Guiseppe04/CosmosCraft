@@ -102,6 +102,11 @@ export function DashboardPage() {
   
   const [myOrders, setMyOrders] = useState([])
   const [activePurchaseTab, setActivePurchaseTab] = useState('All')
+
+  const [myAppointments, setMyAppointments] = useState([])
+  const [reschedulingAptId, setReschedulingAptId] = useState(null)
+  const [rescheduleDate, setRescheduleDate] = useState('')
+  const [rescheduleTime, setRescheduleTime] = useState('')
   
   const [ratingModalOrderId, setRatingModalOrderId] = useState(null)
   const [rating, setRating] = useState(0)
@@ -118,6 +123,18 @@ export function DashboardPage() {
       fetchMyOrders()
     }
   }, [activeSection])
+
+  useEffect(() => {
+    if (activeSection === 'appointments') {
+      fetchMyAppointments()
+    }
+  }, [activeSection])
+
+  const fetchMyAppointments = () => {
+    adminApi.getAppointments()
+      .then(res => setMyAppointments(res.data?.appointments || []))
+      .catch(console.error)
+  }
 
   const fetchMyOrders = () => {
     adminApi.getMyOrders().then(orders => setMyOrders(orders)).catch(console.error)
@@ -175,6 +192,25 @@ export function DashboardPage() {
       fetchMyProjects();
     } catch (err) {
       alert("Failed to cancel project: " + err.message);
+    }
+  };
+
+  const handleRescheduleSubmit = async (aptId) => {
+    if (!rescheduleDate || !rescheduleTime) {
+      setToastMessage('Please select both date and time to reschedule.');
+      return;
+    }
+    try {
+      // type="time" provides HH:MM (24-hour)
+      const scheduledAt = new Date(`${rescheduleDate}T${rescheduleTime}:00`);
+      await adminApi.updateAppointment(aptId, { scheduled_at: scheduledAt.toISOString(), time: rescheduleTime, status: 'approved' });
+      setToastMessage('Appointment successfully rescheduled!');
+      setReschedulingAptId(null);
+      setRescheduleDate('');
+      setRescheduleTime('');
+      fetchMyAppointments();
+    } catch(err) {
+      alert("Failed to reschedule: " + err.message);
     }
   };
 
@@ -474,12 +510,12 @@ export function DashboardPage() {
                 
                 <div className="flex justify-between items-end mt-4">
                    <div className="text-sm text-[var(--text-muted)]">
-                      <span className="block">Shipping: ₱{Number(order.shipping_cost || 0).toLocaleString('en-PH')}</span>
-                      <span className="block mt-1">Tax: ₱{Number(order.tax_amount || 0).toLocaleString('en-PH')}</span>
+                      <span className="block">Shipping: ${Number(order.shipping_cost || 0).toLocaleString('en-PH')}</span>
+                      <span className="block mt-1">Tax: ${Number(order.tax_amount || 0).toLocaleString('en-PH')}</span>
                    </div>
                    <div className="text-right items-end flex flex-col">
                      <span className="text-sm text-[var(--text-muted)] mb-1">Total Amount</span>
-                     <span className="text-xl font-bold text-[var(--gold-primary)] block">₱{Number(order.total_amount || 0).toLocaleString('en-PH')}</span>
+                     <span className="text-xl font-bold text-[var(--gold-primary)] block">${Number(order.total_amount || 0).toLocaleString('en-PH')}</span>
                    </div>
                 </div>
                 {order.status === 'pending' && (
@@ -520,23 +556,123 @@ export function DashboardPage() {
 
   const renderAppointmentsContent = () => (
     <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-8">
-      <h2 className="text-2xl font-bold text-white mb-1">My Appointments</h2>
-      <p className="text-sm text-[var(--text-muted)] mb-6">View and manage your service appointments</p>
-
-      <div className="flex flex-col items-center justify-center py-10">
-        <div className="w-16 h-16 rounded-full border-2 border-[var(--border)] flex items-center justify-center mb-6">
-          <Calendar className="w-8 h-8 text-[var(--text-muted)]" />
+      <div className="flex justify-between items-center mb-6">
+        <div>
+          <h2 className="text-2xl font-bold text-white mb-1">My Appointments</h2>
+          <p className="text-sm text-[var(--text-muted)]">View and manage your service appointments</p>
         </div>
-        <p className="text-white font-medium mb-1">No appointments yet</p>
-        <p className="text-sm text-[var(--text-muted)] mb-6">Book a service appointment to see it here</p>
         <button
-          type="button"
           onClick={() => navigate('/appointments')}
-          className="px-6 py-2.5 rounded-full bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-sm font-semibold text-[var(--text-dark)] hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition"
+          className="px-4 py-2 rounded-lg bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-semibold text-sm hover:shadow-[0_0_15px_rgba(212,175,55,0.4)] transition-all flex items-center gap-2"
         >
+          <Calendar className="w-4 h-4" />
           Book Appointment
         </button>
       </div>
+
+      {myAppointments.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-10">
+          <div className="w-16 h-16 rounded-full border-2 border-[var(--border)] flex items-center justify-center mb-6">
+            <Calendar className="w-8 h-8 text-[var(--text-muted)]" />
+          </div>
+          <p className="text-white font-medium mb-1">No appointments yet</p>
+          <p className="text-sm text-[var(--text-muted)] mb-6">Book a service appointment to see it here</p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {myAppointments.map(apt => {
+            const apptDate = apt.scheduled_at || apt.date;
+            
+            // Check if past current time and not completed/cancelled
+            const isPast = apptDate && new Date(apptDate) < new Date();
+            const needsReschedule = isPast && apt.status !== 'completed' && apt.status !== 'cancelled';
+            const isReschedulingThis = reschedulingAptId === (apt.appointment_id || apt.id);
+
+            return (
+              <div key={apt.appointment_id || apt.id} className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl p-5 hover:border-[var(--gold-primary)]/40 transition-colors">
+                <div className="flex justify-between items-start mb-4">
+                  <div>
+                    <h3 className="font-bold text-white text-lg">{apt.guitar_details ? `${apt.guitar_details.brand} ${apt.guitar_details.model}` : (apt.title || apt.service_name || 'Appointment')}</h3>
+                    <p className="text-xs text-[var(--text-muted)] mt-1 capitalize">
+                      {Array.isArray(apt.services) ? apt.services.map(s => s.replace(/-/g, ' ')).join(', ') : (apt.service_name || 'Consultation')}
+                    </p>
+                  </div>
+                  <span className={`px-3 py-1 rounded-full text-xs font-semibold capitalize border ${
+                    apt.status === 'approved' ? 'bg-green-500/10 text-green-400 border-green-500/30' : 
+                    apt.status === 'completed' ? 'bg-blue-500/10 text-blue-400 border-blue-500/30' : 
+                    apt.status === 'cancelled' ? 'bg-red-500/10 text-red-500 border-red-500/30' :
+                    'bg-yellow-500/10 text-yellow-500 border-yellow-500/30'
+                  }`}>
+                    {apt.status || 'Pending'}
+                  </span>
+                </div>
+                
+                {isReschedulingThis ? (
+                  <div className="mt-4 pt-4 border-t border-[var(--border)] bg-[var(--surface-dark)] p-4 rounded-xl">
+                    <p className="text-white font-semibold mb-3">Select New Schedule</p>
+                    <div className="grid sm:grid-cols-2 gap-4 mb-4">
+                      <div>
+                        <label className="block text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-1">New Date</label>
+                        <input type="date" min={new Date().toISOString().split('T')[0]} value={rescheduleDate} onChange={(e) => setRescheduleDate(e.target.value)} className="w-full px-4 py-2.5 bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl text-white text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-1">New Time</label>
+                        <input type="time" value={rescheduleTime} onChange={(e) => setRescheduleTime(e.target.value)} className="w-full px-4 py-2.5 bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl text-white text-sm" />
+                      </div>
+                    </div>
+                    <div className="flex justify-end gap-2">
+                       <button onClick={() => setReschedulingAptId(null)} className="px-4 py-2 rounded-lg text-[var(--text-muted)] text-sm font-semibold hover:text-white transition">Cancel</button>
+                       <button onClick={() => handleRescheduleSubmit(apt.appointment_id || apt.id)} className="px-4 py-2 rounded-lg bg-[var(--gold-primary)] text-black text-sm font-semibold hover:bg-[var(--gold-secondary)] transition">Confirm Reschedule</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid sm:grid-cols-2 gap-4 text-sm mt-4 pt-4 border-t border-[var(--border)] relative">
+                    <div>
+                      <span className="block text-[var(--text-muted)] mb-1">Date & Time</span>
+                      <span className="text-white">
+                        {apptDate ? new Date(apptDate).toLocaleDateString() : '—'} at {apt.time || (apptDate ? new Date(apptDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—')}
+                      </span>
+                    </div>
+                    {apt.location_id && (
+                      <div>
+                        <span className="block text-[var(--text-muted)] mb-1">Branch</span>
+                        <span className="text-white capitalize">{apt.location_id}</span>
+                      </div>
+                    )}
+                    {apt.notes && (
+                      <div className="sm:col-span-2 mt-2">
+                         <span className="block text-[var(--text-muted)] mb-1">Notes</span>
+                         <span className="text-white">{apt.notes}</span>
+                      </div>
+                    )}
+                    
+                    {needsReschedule && (
+                      <div className="sm:col-span-2 mt-4 pt-4 border-t border-[var(--border)] flex items-center justify-between bg-orange-500/10 p-4 rounded-xl border border-orange-500/20">
+                         <div className="flex items-center gap-3">
+                           <AlertCircle className="w-5 h-5 text-orange-400" />
+                           <div>
+                             <p className="text-orange-400 font-semibold text-sm">Action Required</p>
+                             <p className="text-orange-400/80 text-xs mt-0.5">This appointment is past due. Please reschedule it.</p>
+                           </div>
+                         </div>
+                         <button 
+                           onClick={() => {
+                             setReschedulingAptId(apt.appointment_id || apt.id);
+                             setRescheduleDate(new Date().toISOString().split('T')[0]);
+                           }} 
+                           className="px-4 py-2 rounded-lg bg-orange-500 text-white font-semibold text-xs hover:bg-orange-600 transition"
+                         >
+                           Reschedule
+                         </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   )
 
@@ -665,7 +801,7 @@ export function DashboardPage() {
                     <p className="text-xs text-[var(--text-muted)] mt-1">Saved on {new Date(build.savedAt || new Date()).toLocaleDateString()}</p>
                   </div>
                   <div className="text-right">
-                    <span className="text-lg font-bold text-[var(--gold-primary)] block">₱{grandTotal.toLocaleString('en-PH')}</span>
+                    <span className="text-lg font-bold text-[var(--gold-primary)] block">${grandTotal.toLocaleString('en-PH')}</span>
                     {additionalPartsTotal > 0 && <span className="text-xs text-[var(--text-muted)]">Includes Add-ons</span>}
                   </div>
                 </div>
@@ -785,7 +921,7 @@ export function DashboardPage() {
                       <h4 className="font-semibold text-white truncate">{item.name}</h4>
                       <p className="text-xs text-[var(--text-muted)] mt-0.5">{item.category}</p>
                       <p className="text-lg font-bold text-[var(--gold-primary)] mt-1">
-                        ₱{item.price.toLocaleString()}
+                        ${item.price.toLocaleString()}
                       </p>
                     </div>
                     <button
@@ -828,7 +964,7 @@ export function DashboardPage() {
             <div className="mt-6 pt-6 border-t border-[var(--border)]">
               <div className="flex items-center justify-between mb-6">
                 <span className="text-lg text-[var(--text-muted)]">Total:</span>
-                <span className="text-2xl font-bold text-[var(--gold-primary)]">₱{cartTotal.toLocaleString()}</span>
+                <span className="text-2xl font-bold text-[var(--gold-primary)]">${cartTotal.toLocaleString()}</span>
               </div>
               <button
                 type="button"
@@ -1520,11 +1656,11 @@ export function DashboardPage() {
                    return (
                      <div key={key} className="flex justify-between items-center text-sm pb-2 border-b border-[var(--border)]">
                        <div className="truncate pr-4">
-                           <span className="block text-xs text-[var(--text-muted)] capitalize mb-0.5">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
+                           <span className="block text-xs text-[var(--text-muted)] capitalize mb-0.5">{key.replace(/([A-Z])/g, ' ').trim()}</span>
                            <span className="block font-medium text-white truncate">{label}</span>
                        </div>
                        {price > 0 && (
-                         <span className="text-gray-300 shrink-0 font-mono text-right">₱{price.toLocaleString('en-PH')}</span>
+                         <span className="text-gray-300 shrink-0 font-mono text-right">${price.toLocaleString('en-PH')}</span>
                        )}
                      </div>
                    )
@@ -1535,7 +1671,7 @@ export function DashboardPage() {
                            <span className="block text-xs text-[var(--text-muted)] capitalize mb-0.5">Base Model</span>
                            <span className="block font-medium text-white truncate">Standard Build</span>
                        </div>
-                       <span className="text-gray-300 shrink-0 font-mono text-right">₱{BASE_PRICE.toLocaleString('en-PH')}</span>
+                       <span className="text-gray-300 shrink-0 font-mono text-right">${BASE_PRICE.toLocaleString('en-PH')}</span>
                      </div>
                      {Object.entries(viewingBuild.config || {}).map(([key, val]) => {
                        if (!val || typeof val !== 'string') return null;
@@ -1543,11 +1679,11 @@ export function DashboardPage() {
                        return (
                          <div key={key} className="flex justify-between items-center text-sm pb-2 border-b border-[var(--border)]">
                            <div className="truncate pr-4">
-                               <span className="block text-xs text-[var(--text-muted)] capitalize mb-0.5">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
+                               <span className="block text-xs text-[var(--text-muted)] capitalize mb-0.5">{key.replace(/([A-Z])/g, ' ').trim()}</span>
                                <span className="block font-medium text-white truncate">{label}</span>
                            </div>
                            {price > 0 && (
-                             <span className="text-gray-300 shrink-0 font-mono text-right">₱{price.toLocaleString('en-PH')}</span>
+                             <span className="text-gray-300 shrink-0 font-mono text-right">${price.toLocaleString('en-PH')}</span>
                            )}
                          </div>
                        )
@@ -1561,7 +1697,7 @@ export function DashboardPage() {
               <div className="bg-[var(--bg-primary)] rounded-xl p-5 border border-[var(--border)] mb-6">
                 <h3 className="text-lg font-bold text-white mb-4 border-b border-[var(--border)] pb-2 flex justify-between">
                   <span>Additional Parts</span>
-                  <span className="text-[var(--gold-primary)]">₱{viewingBuild.additionalParts.reduce((sum, p) => sum + (p.price * p.quantity), 0).toLocaleString('en-PH')}</span>
+                  <span className="text-[var(--gold-primary)]">${viewingBuild.additionalParts.reduce((sum, p) => sum + (p.price * p.quantity), 0).toLocaleString('en-PH')}</span>
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3">
                   {viewingBuild.additionalParts.map((part, idx) => (

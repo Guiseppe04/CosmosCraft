@@ -61,7 +61,6 @@ function BassLayer({ src, maskSrc, style, className = '', layerName = '' }) {
 
 function BassPreview({ config, view, onViewChange }) {
   const previewRef = useRef(null)
-  const [renderDebug, setRenderDebug] = useState(DEBUG)
 
   // ===== CONFIG VALIDATION & RESOLUTION =====
   const resolvedConfig = useMemo(() => {
@@ -105,8 +104,7 @@ function BassPreview({ config, view, onViewChange }) {
       hardware: bassBuilder.HARDWARE_OPTIONS[resolvedConfig.hardware],
       bridge: bassBuilder.BRIDGE_OPTIONS[resolvedConfig.bassType]?.[resolvedConfig.bridge],
       inlay: bassBuilder.INLAY_OPTIONS[resolvedConfig.inlays],
-      backplate: bassBuilder.BACKPLATE_OPTIONS[resolvedConfig.backplate],
-      pickupScrews: bassBuilder.PICKUP_SCREW_OPTIONS[resolvedConfig.pickupScrews],
+      backplate: bassBuilder.BACKPLATE_OPTIONS[resolvedConfig.bassType]?.[resolvedConfig.backplate] || bassBuilder.BACKPLATE_OPTIONS.pb?.[resolvedConfig.backplate] || bassBuilder.BACKPLATE_OPTIONS.standard,
       controlPlate: bassBuilder.CONTROL_PLATE_OPTIONS[resolvedConfig.controlPlate],
       bodyAssets: bassBuilder.BODY_LAYER_ASSETS[resolvedConfig.bassType],
     }
@@ -125,6 +123,11 @@ function BassPreview({ config, view, onViewChange }) {
     const logosByModel = bassBuilder.LOGO_OPTIONS[resolvedConfig.bassType]
     if (logosByModel) {
       resolvedAssets.logo = logosByModel[resolvedConfig.logo]
+    }
+
+    const pickupScrewsByModel = bassBuilder.PICKUP_SCREW_OPTIONS[resolvedConfig.bassType]
+    if (pickupScrewsByModel) {
+      resolvedAssets.pickupScrews = pickupScrewsByModel[resolvedConfig.pickupScrews]
     }
 
     if (DEBUG) console.log('[ASSET RESOLUTION]', resolvedAssets)
@@ -247,22 +250,32 @@ function BassPreview({ config, view, onViewChange }) {
       console.warn('[HEADSTOCK] Missing headstock asset')
     }
 
-    // Logo - only for Vader
-    if (assets.logo?.src) {
+    // Logo - Removed as per instructions
+    // if (assets.logo?.src) {
+    //   layers.push({
+    //     name: 'logo',
+    //     src: assets.logo.src,
+    //     style: { zIndex: 8.5, opacity: 0.95 },
+    //   })
+    // }
+
+    // Pickguard - directly on body
+    if (resolvedConfig.pickguard !== 'none' && assets.pickguard?.src) {
       layers.push({
-        name: 'logo',
-        src: assets.logo.src,
-        style: { zIndex: 8.5, opacity: 0.95 },
+        name: 'pickguard',
+        src: assets.pickguard.src,
+        style: { zIndex: 9, opacity: 0.95 },
       })
+    } else if (resolvedConfig.pickguard !== 'none' && DEBUG) {
+      console.warn(`[PICKGUARD] Asset not found for ${resolvedConfig.pickguard}`)
     }
 
-    // Hardware
-    const bridgeSrc = resolveBassVariant(assets.bridge?.assets, colorKey)
-    if (bridgeSrc) {
+    // Pickup screws
+    if (resolvedConfig.pickguard !== 'none' && assets.pickupScrews?.src) {
       layers.push({
-        name: 'bridge',
-        src: bridgeSrc,
-        style: { zIndex: 9, opacity: 0.95 },
+        name: 'pickup-screws',
+        src: assets.pickupScrews.src,
+        style: { zIndex: 10, opacity: 0.9 },
       })
     }
 
@@ -271,63 +284,63 @@ function BassPreview({ config, view, onViewChange }) {
       layers.push({
         name: 'pickups',
         src: assets.bodyAssets.pickups,
-        style: { zIndex: 9.5, opacity: 0.9 },
+        style: { zIndex: 11, opacity: 0.9 },
       })
     }
 
+    // Control plate - under the knobs, on top of pickguard, only for JB
+    if (resolvedConfig.bassType === 'jb' && assets.controlPlate?.src) {
+      layers.push({
+        name: 'control-plate',
+        src: assets.controlPlate.src,
+        style: { zIndex: 12, opacity: 0.9 },
+      })
+    }
+
+    // Knobs - above pickguard/control plate
     if (assets.knobs?.src) {
       layers.push({
         name: 'knobs',
         src: assets.knobs.src,
-        style: { zIndex: 11, opacity: 0.95 },
+        style: { zIndex: 13, opacity: 0.95 },
       })
     }
 
-    // Control plate - under the knobs
-    if (assets.controlPlate?.src) {
+    // Bridge and Strings - TOPMOST over pickguard, pickups, knobs
+    const bridgeSrc = resolveBassVariant(assets.bridge?.assets, colorKey)
+    if (bridgeSrc) {
       layers.push({
-        name: 'control-plate',
-        src: assets.controlPlate.src,
-        style: { zIndex: 10, opacity: 0.9 },
+        name: 'bridge',
+        src: bridgeSrc,
+        style: { zIndex: 14, opacity: 0.95 },
       })
     }
 
-    // Pickguard - STRICT CONDITIONAL
-    if (resolvedConfig.pickguard !== 'none' && assets.pickguard?.src) {
-      layers.push({
-        name: 'pickguard',
-        src: assets.pickguard.src,
-        style: { zIndex: 12, opacity: 0.95 },
-      })
-    } else if (resolvedConfig.pickguard !== 'none' && DEBUG) {
-      console.warn(`[PICKGUARD] Asset not found for ${resolvedConfig.pickguard}`)
-    }
-
-    // Strap/Strings - above the pickguard
+    // Strap/Buttons
     const strapSrc = resolveBassVariant(assets.bodyAssets?.strap, colorKey)
     if (strapSrc) {
       layers.push({
         name: 'strap',
         src: strapSrc,
-        style: { zIndex: 13, opacity: 0.95 },
+        style: { zIndex: 15, opacity: 0.95 },
       })
     }
 
-    // Pickup screws - only show if pickguard is selected
-    if (resolvedConfig.pickguard !== 'none' && assets.pickupScrews?.src) {
-      layers.push({
-        name: 'pickup-screws',
-        src: assets.pickupScrews.src,
-        style: { zIndex: 14, opacity: 0.9 },
-      })
-    }
-
-    // Shadow/Highlight effects - applied last for depth
+    // Shadow effects - applied last for depth
     if (assets.bodyAssets?.shadows) {
       layers.push({
-        name: 'shadows-highlights',
+        name: 'shadows',
         src: assets.bodyAssets.shadows,
-        style: { zIndex: 20, opacity: 0.6, mixBlendMode: 'multiply' },
+        style: { zIndex: 20, opacity: 1, mixBlendMode: 'multiply' },
+      })
+    }
+
+    // Gloss/Highlight effects
+    if (assets.bodyAssets?.gloss) {
+      layers.push({
+        name: 'gloss',
+        src: assets.bodyAssets.gloss,
+        style: { zIndex: 21, opacity: 0.9, mixBlendMode: 'screen' },
       })
     }
 
@@ -342,12 +355,35 @@ function BassPreview({ config, view, onViewChange }) {
     // Body base
     if (assets.bodyModel?.bodySrc && assets.bodyWood?.texture) {
       layers.push({
-        name: 'rear-body',
+        name: 'rear-body-wood',
         maskSrc: assets.bodyModel.bodySrc,
         style: {
           backgroundImage: `url(${assets.bodyWood.texture})`,
           opacity: 1,
           zIndex: 1,
+        },
+      })
+    }
+
+    if (assets.bodyFinish?.texture) {
+      layers.push({
+        name: 'rear-body-finish-texture',
+        maskSrc: assets.bodyModel?.bodySrc,
+        style: {
+          backgroundImage: `url(${assets.bodyFinish.texture})`,
+          opacity: 1,
+          mixBlendMode: 'normal',
+          zIndex: 2,
+        },
+      })
+    } else if (assets.bodyFinish?.color) {
+      layers.push({
+        name: 'rear-body-finish-color',
+        maskSrc: assets.bodyModel?.bodySrc,
+        style: {
+          backgroundColor: assets.bodyFinish.color,
+          opacity: 1,
+          zIndex: 2,
         },
       })
     }
@@ -380,8 +416,10 @@ function BassPreview({ config, view, onViewChange }) {
       })
     }
 
+    const isHeadless = resolvedConfig.bassType === 'vader';
+
     // Headstock wood - rear view
-    if (assets.headstockWood?.texture && BASS_NECK_MASK) {
+    if (!isHeadless && assets.headstockWood?.texture && BASS_NECK_MASK) {
       layers.push({
         name: 'rear-headstock-wood',
         maskSrc: BASS_NECK_MASK,
@@ -391,6 +429,12 @@ function BassPreview({ config, view, onViewChange }) {
           zIndex: 4,
         },
       })
+    } else if (isHeadless && assets.bodyAssets?.rearNeckCap) {
+      layers.push({
+        name: 'rear-neck-cap',
+        src: assets.bodyAssets.rearNeckCap,
+        style: { zIndex: 4, opacity: 0.95, transform: 'scaleX(-1)' },
+      })
     }
 
     // Backplate
@@ -398,18 +442,27 @@ function BassPreview({ config, view, onViewChange }) {
       layers.push({
         name: 'backplate',
         src: assets.backplate.src,
-        style: { zIndex: 5, opacity: 0.95 },
+        style: { zIndex: 5, opacity: 0.95, transform: 'scaleX(-1)' },
       })
     } else if (DEBUG) {
       console.warn('[REAR] Backplate asset missing')
     }
 
-    // Shadow/Highlight effects - rear view
+    // Shadow effects - rear view
     if (assets.bodyAssets?.shadows) {
       layers.push({
-        name: 'rear-shadows-highlights',
+        name: 'rear-shadows',
         src: assets.bodyAssets.shadows,
         style: { zIndex: 20, opacity: 0.6, mixBlendMode: 'multiply' },
+      })
+    }
+
+    // Gloss effects - rear view
+    if (assets.bodyAssets?.gloss) {
+      layers.push({
+        name: 'rear-gloss',
+        src: assets.bodyAssets.gloss,
+        style: { zIndex: 21, opacity: 0.7, mixBlendMode: 'screen' },
       })
     }
 
@@ -428,35 +481,6 @@ function BassPreview({ config, view, onViewChange }) {
 
   return (
     <div className="w-full" ref={previewRef}>
-      {/* DEBUG OVERLAY */}
-      {renderDebug && (
-        <div
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            zIndex: 9999,
-            backgroundColor: 'rgba(0,0,0,0.8)',
-            color: '#0f0',
-            padding: '8px',
-            fontSize: '11px',
-            fontFamily: 'monospace',
-            maxWidth: '250px',
-            maxHeight: '200px',
-            overflow: 'auto',
-            borderRadius: '4px',
-          }}
-        >
-          <div>VIEW: {view}</div>
-          <div>BASS: {resolvedConfig.bassType}</div>
-          <div>PICKGUARD: {resolvedConfig.pickguard}</div>
-          <div>FINISH: {resolvedConfig.bodyFinish}</div>
-          <div onClick={() => setRenderDebug(false)} style={{ cursor: 'pointer', marginTop: '4px', color: '#f00' }}>
-            [close]
-          </div>
-        </div>
-      )}
-
       <div className="relative mx-auto w-full">
         <div className="relative overflow-hidden rounded-xl">
           <div className="absolute inset-0 bg-gradient-to-b from-[#1a1a1a] via-[#0f0f0f] to-[#0a0a0a]" />
