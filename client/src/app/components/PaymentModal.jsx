@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+﻿import { useState, useRef } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 
 const GCASH_QR_CODE = '/images/payment/gcash-qr.png'
@@ -23,12 +23,12 @@ function ReceiptUpload({ onUpload, onRemove, image, label }) {
 
   if (image) {
     return (
-      <div className="relative inline-block">
-        <img src={image} alt="Receipt" className="max-h-48 rounded-lg border border-[var(--border)]" />
+      <div className="relative rounded-lg overflow-hidden border border-slate-200 bg-white shadow-sm">
+        <img src={image} alt="Receipt" className="w-full h-52 object-cover" />
         <button
           type="button"
           onClick={onRemove}
-          className="absolute -top-2 -right-2 px-3 py-1.5 bg-red-500 text-white text-sm font-medium rounded-lg hover:bg-red-600 transition-colors"
+          className="absolute top-3 right-3 rounded-full bg-black/70 px-3 py-1 text-xs text-white hover:bg-black/80"
         >
           Remove
         </button>
@@ -37,11 +37,13 @@ function ReceiptUpload({ onUpload, onRemove, image, label }) {
   }
 
   return (
-    <div>
+    <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-center">
+      <p className="text-sm font-semibold text-slate-900 mb-2">{label || 'Upload receipt'}</p>
+      <p className="text-xs text-slate-500 mb-4">PNG, JPG, or JPEG • max 10MB</p>
       <button
         type="button"
         onClick={() => fileInputRef.current?.click()}
-        className="px-6 py-3 border border-[var(--border)] text-[var(--text-light)] font-medium rounded-lg hover:border-[var(--gold-primary)] hover:bg-[var(--gold-primary)]/5 transition-all"
+        className="rounded-md bg-yellow-400 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-yellow-300"
       >
         Upload Receipt
       </button>
@@ -56,35 +58,30 @@ function ReceiptUpload({ onUpload, onRemove, image, label }) {
   )
 }
 
-export function PaymentModal({ isOpen, onClose, onSubmit, total, isProcessing, isCustomBuild }) {
+export function PaymentModal({ isOpen, onClose, onSubmit, total, isProcessing }) {
   const [paymentMethod, setPaymentMethod] = useState('bank')
   const [receipt, setReceipt] = useState(null)
   const [error, setError] = useState('')
 
   const handleMethodChange = (method) => {
     setPaymentMethod(method)
+    setReceipt(null)
     setError('')
   }
 
   const canSubmit = () => {
     if (paymentMethod === 'gcash' || paymentMethod === 'bank') {
-      return !!receipt
+      return Boolean(receipt)
     }
     return true
   }
 
   const handleSubmit = () => {
     if (!canSubmit()) {
-      setError('Please upload your payment receipt to continue')
+      setError('Please upload your payment receipt before continuing.')
       return
     }
     onSubmit(paymentMethod, receipt)
-  }
-
-  const getMethodLabel = () => {
-    if (paymentMethod === 'gcash') return 'GCash'
-    if (paymentMethod === 'bank') return 'Bank Transfer'
-    return 'Cash on Delivery'
   }
 
   if (!isOpen) return null
@@ -95,207 +92,122 @@ export function PaymentModal({ isOpen, onClose, onSubmit, total, isProcessing, i
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
       >
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: 20 }}
-          className="w-full max-w-md bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl overflow-hidden"
+          initial={{ y: 16, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: 16, opacity: 0 }}
+          className="w-full max-w-xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl"
         >
-          <div className="p-5 border-b border-[var(--border)]">
-            <div className="flex items-center justify-between">
-              <h2 className="text-xl font-bold text-[var(--text-light)]">Payment</h2>
+          <div className="border-b border-slate-200 px-6 py-5">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-500">Payment</p>
+                <h2 className="mt-2 text-xl font-semibold text-slate-900">Checkout</h2>
+              </div>
               <button
                 onClick={onClose}
-                className="p-2 text-[var(--text-muted)] hover:text-white hover:bg-[var(--surface-elevated)] rounded-lg transition-colors"
+                className="rounded-full border border-slate-200 bg-slate-100 px-3 py-2 text-slate-500 hover:bg-slate-200"
               >
                 ✕
               </button>
             </div>
+
+            <div className="mt-4 rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
+              Total payment due
+              <div className="mt-2 text-lg font-semibold text-slate-900">₱{total.toLocaleString('en-PH', { maximumFractionDigits: 2 })}</div>
+            </div>
           </div>
 
-          <div className="p-5 space-y-5">
+          <div className="space-y-5 px-6 py-6">
             {error && (
-              <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
+              <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                 {error}
               </div>
             )}
 
-            <div>
-              <p className="text-sm font-semibold text-[var(--text-light)] mb-3">Select Payment Method</p>
-              <div className="space-y-2">
-                <label className={`flex items-center p-3 rounded-lg border cursor-pointer transition-all ${
-                  paymentMethod === 'gcash'
-                    ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)]/10'
-                    : 'border-[var(--border)] hover:border-[var(--gold-primary)]/50'
-                }`}>
-                  <input
-                    type="radio"
-                    name="paymentMethod"
-                    value="gcash"
-                    checked={paymentMethod === 'gcash'}
-                    onChange={() => handleMethodChange('gcash')}
-                    className="w-4 h-4 text-[var(--gold-primary)] mr-3"
-                  />
-                  <span className="font-medium text-[var(--text-light)]">GCash</span>
-                </label>
-
-                <label className={`flex items-center p-3 rounded-lg border cursor-pointer transition-all ${
-                  paymentMethod === 'bank'
-                    ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)]/10'
-                    : 'border-[var(--border)] hover:border-[var(--gold-primary)]/50'
-                }`}>
-                  <input
-                    type="radio"
-                    name="paymentMethod"
-                    value="bank"
-                    checked={paymentMethod === 'bank'}
-                    onChange={() => handleMethodChange('bank')}
-                    className="w-4 h-4 text-[var(--gold-primary)] mr-3"
-                  />
-                  <span className="font-medium text-[var(--text-light)]">Bank Transfer</span>
-                </label>
-
-                <label className={`flex items-center p-3 rounded-lg border cursor-pointer transition-all ${
-                  paymentMethod === 'cod'
-                    ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)]/10'
-                    : 'border-[var(--border)] hover:border-[var(--gold-primary)]/50'
-                }`}>
-                  <input
-                    type="radio"
-                    name="paymentMethod"
-                    value="cod"
-                    checked={paymentMethod === 'cod'}
-                    onChange={() => handleMethodChange('cod')}
-                    className="w-4 h-4 text-[var(--gold-primary)] mr-3"
-                  />
-                  <span className="font-medium text-[var(--text-light)]">Cash on Delivery</span>
-                </label>
+            <div className="space-y-3">
+              <p className="text-sm font-semibold text-slate-900">Payment method</p>
+              <div className="grid gap-3 sm:grid-cols-3">
+                {[
+                  { value: 'gcash', title: 'GCash', subtitle: 'Upload receipt' },
+                  { value: 'bank', title: 'Bank Transfer', subtitle: 'BDO account' },
+                  { value: 'cod', title: 'Cash on Delivery', subtitle: 'Pay on delivery' }
+                ].map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => handleMethodChange(option.value)}
+                    className={`rounded-2xl border p-4 text-left transition ${
+                      paymentMethod === option.value
+                        ? 'border-yellow-400 bg-yellow-50 shadow-sm'
+                        : 'border-slate-200 bg-slate-50 hover:border-slate-300'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900">{option.title}</p>
+                        <p className="mt-1 text-xs text-slate-500">{option.subtitle}</p>
+                      </div>
+                      <span className={`inline-flex h-5 w-5 items-center justify-center rounded-full border ${paymentMethod === option.value ? 'border-yellow-500 bg-yellow-500 text-white' : 'border-slate-300 bg-white text-slate-300'}`}>
+                        ✓
+                      </span>
+                    </div>
+                  </button>
+                ))}
               </div>
             </div>
 
-            <AnimatePresence mode="wait">
-              {paymentMethod === 'gcash' && (
-                <motion.div
-                  key="gcash"
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="space-y-4"
-                >
-                  <div className="p-4 bg-[var(--surface-elevated)] rounded-lg border border-[var(--border)]">
-                    <p className="text-sm font-semibold text-[var(--text-light)] mb-3 text-center">Scan to Pay</p>
-                    <div className="flex justify-center mb-4">
-                      <div className="w-48 h-48 bg-white rounded-lg flex items-center justify-center">
-                        <img src={GCASH_QR_CODE} alt="GCash QR Code" className="w-full h-full object-contain" />
-                      </div>
-                    </div>
-                    <p className="text-center text-lg font-bold text-[var(--gold-primary)] mb-3">
-                      Total: ₱{total.toLocaleString('en-PH', { maximumFractionDigits: 2 })}
-                    </p>
-                  </div>
+            {paymentMethod === 'gcash' && (
+              <div className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-sm font-semibold text-slate-900">GCash Payment</p>
+                <div className="rounded-2xl bg-white p-4 shadow-sm">
+                  <img src={GCASH_QR_CODE} alt="GCash QR code" className="mx-auto h-48 w-full object-contain" />
+                </div>
+                <p className="text-sm text-slate-600">Scan the QR code in your GCash app, pay the exact amount, and upload the receipt.</p>
+                <ReceiptUpload label="Upload GCash receipt" image={receipt} onUpload={setReceipt} onRemove={() => setReceipt(null)} />
+              </div>
+            )}
 
-                  <div className="text-sm text-[var(--text-muted)] space-y-2">
-                    <p className="font-semibold text-[var(--text-light)]">How to pay:</p>
-                    <ol className="list-decimal list-inside space-y-1">
-                      <li>Open GCash app on your phone</li>
-                      <li>Scan the QR code above</li>
-                      <li>Enter the exact amount shown</li>
-                      <li>Send payment and save receipt</li>
-                    </ol>
+            {paymentMethod === 'bank' && (
+              <div className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-sm font-semibold text-slate-900">Bank Transfer</p>
+                <div className="rounded-2xl bg-white p-4 shadow-sm text-sm text-slate-700">
+                  <div className="flex justify-between py-2 border-b border-slate-200">
+                    <span className="text-slate-500">Bank</span>
+                    <span className="font-medium text-slate-900">{BANK_DETAILS.bankName}</span>
                   </div>
+                  <div className="flex justify-between py-2 border-b border-slate-200">
+                    <span className="text-slate-500">Account name</span>
+                    <span className="font-medium text-slate-900">{BANK_DETAILS.accountName}</span>
+                  </div>
+                  <div className="flex justify-between py-2">
+                    <span className="text-slate-500">Account number</span>
+                    <span className="font-medium text-slate-900">{BANK_DETAILS.accountNumber}</span>
+                  </div>
+                </div>
+                <p className="text-sm text-slate-600">Transfer the exact amount to this account and upload proof of payment.</p>
+                <ReceiptUpload label="Upload bank proof" image={receipt} onUpload={setReceipt} onRemove={() => setReceipt(null)} />
+              </div>
+            )}
 
-                  <div>
-                    <p className="text-sm font-semibold text-[var(--text-light)] mb-2">Upload Your Receipt</p>
-                    <ReceiptUpload
-                      label="GCash Receipt"
-                      image={receipt}
-                      onUpload={setReceipt}
-                      onRemove={() => setReceipt(null)}
-                    />
-                  </div>
-                </motion.div>
-              )}
-
-              {paymentMethod === 'bank' && (
-                <motion.div
-                  key="bank"
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="space-y-4"
-                >
-                  <div className="p-4 bg-[var(--surface-elevated)] rounded-lg border border-[var(--border)]">
-                    <p className="text-sm font-semibold text-[var(--text-light)] mb-3">Bank Details</p>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-[var(--text-muted)]">Bank:</span>
-                        <span className="text-[var(--text-light)] font-medium">{BANK_DETAILS.bankName}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-[var(--text-muted)]">Account Name:</span>
-                        <span className="text-[var(--text-light)] font-medium">{BANK_DETAILS.accountName}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-[var(--text-muted)]">Account Number:</span>
-                        <span className="text-[var(--text-light)] font-medium">{BANK_DETAILS.accountNumber}</span>
-                      </div>
-                    </div>
-                    <p className="text-lg font-bold text-[var(--gold-primary)] mt-4 text-center">
-                      Total: ₱{total.toLocaleString('en-PH', { maximumFractionDigits: 2 })}
-                    </p>
-                  </div>
-
-                  <div className="text-sm text-[var(--text-muted)] space-y-2">
-                    <p className="font-semibold text-[var(--text-light)]">How to pay:</p>
-                    <ol className="list-decimal list-inside space-y-1">
-                      <li>Transfer the exact amount to the account above</li>
-                      <li>Use your name as payment reference</li>
-                      <li>Take a screenshot of the transaction</li>
-                      <li>Upload the proof of payment below</li>
-                    </ol>
-                  </div>
-
-                  <div>
-                    <p className="text-sm font-semibold text-[var(--text-light)] mb-2">Upload Proof of Payment</p>
-                    <ReceiptUpload
-                      label="Bank Receipt"
-                      image={receipt}
-                      onUpload={setReceipt}
-                      onRemove={() => setReceipt(null)}
-                    />
-                  </div>
-                </motion.div>
-              )}
-
-              {paymentMethod === 'cod' && (
-                <motion.div
-                  key="cod"
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  exit={{ opacity: 0, height: 0 }}
-                >
-                  <div className="p-4 bg-[var(--surface-elevated)] rounded-lg border border-[var(--border)] text-center">
-                    <p className="text-[var(--text-light)]">
-                      Pay upon delivery. Please prepare the exact amount of{' '}
-                      <span className="font-bold text-[var(--gold-primary)]">
-                        ₱{total.toLocaleString('en-PH', { maximumFractionDigits: 2 })}
-                      </span>
-                    </p>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
+            {paymentMethod === 'cod' && (
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+                <p className="font-semibold text-slate-900">Cash on Delivery</p>
+                <p className="mt-2">Pay the rider when your order arrives. No upload required.</p>
+              </div>
+            )}
           </div>
 
-          <div className="p-5 border-t border-[var(--border)]">
+          <div className="border-t border-slate-200 px-6 py-5">
             <button
+              type="button"
               onClick={handleSubmit}
               disabled={!canSubmit() || isProcessing}
-              className="w-full py-3.5 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-bold rounded-lg hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
             >
-              {isProcessing ? 'Processing...' : `Place Order — ₱${total.toLocaleString('en-PH', { maximumFractionDigits: 2 })}`}
+              {isProcessing ? 'Processing...' : `Place Order · ₱${total.toLocaleString('en-PH', { maximumFractionDigits: 2 })}`}
             </button>
           </div>
         </motion.div>
