@@ -28,6 +28,46 @@ import { ConfirmModal } from '../components/ui/ConfirmModal'
 import { useDebounce } from '../hooks/useDebounce'
 import { useSmartPolling } from '../hooks/useSmartPolling'
 
+// ── Category Tree Helpers ─────────────────────────────────────────────────────
+function buildCategoryTree(categories) {
+  const map = new Map()
+  const roots = []
+  
+  categories.forEach(c => {
+    map.set(c.category_id, { ...c, children: [] })
+  })
+  
+  categories.forEach(c => {
+    const node = map.get(c.category_id)
+    if (c.parent_id && map.has(c.parent_id)) {
+      map.get(c.parent_id).children.push(node)
+    } else {
+      roots.push(node)
+    }
+  })
+  
+  const sortNodes = (nodes) => {
+    nodes.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
+    nodes.forEach(n => sortNodes(n.children))
+  }
+  sortNodes(roots)
+  
+  return roots
+}
+
+function flattenCategoryTreeForAdmin(tree, depth = 0) {
+  const result = []
+  
+  tree.forEach(node => {
+    result.push({ ...node, depth, isParent: node.children && node.children.length > 0 })
+    if (node.children && node.children.length > 0) {
+      result.push(...flattenCategoryTreeForAdmin(node.children, depth + 1))
+    }
+  })
+  
+  return result
+}
+
 const VALID_ROLES = ['customer', 'staff', 'admin', 'super_admin']
 
 function updateIfChanged(currentData, newData, setter) {
@@ -195,7 +235,8 @@ export function AdminPage() {
   // ── Derived / filtered views ─────────────────────────────────────────────
   const visibleProducts = products || []
   const visibleParts = parts || []
-  const visibleCategories = categories || []
+  const categoryTree = useMemo(() => buildCategoryTree(categories || []), [categories])
+  const visibleCategories = useMemo(() => flattenCategoryTreeForAdmin(categoryTree), [categoryTree])
   const visibleOrders = orders || []
   const visibleProjects = projects || []
   const visibleAppointments = appointments || []
@@ -1156,7 +1197,14 @@ export function AdminPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3">
                   <select aria-label="Filter products by category" value={productQuery.category_id} onChange={(e) => setProductQuery((prev) => ({ ...prev, page: 1, category_id: e.target.value }))} className={inputCls}>
                     <option value="">All categories</option>
-                    {visibleCategories.map((c) => <option key={c.category_id} value={c.category_id}>{c.name}</option>)}
+                    {categoryTree.map(parent => (
+                      <optgroup key={parent.category_id} label={parent.name}>
+                        <option value={parent.category_id}>{parent.name} (All)</option>
+                        {parent.children?.map(child => (
+                          <option key={child.category_id} value={child.category_id}>{'→ ' + child.name}</option>
+                        ))}
+                      </optgroup>
+                    ))}
                   </select>
                   <input 
                     type="text"
@@ -1418,26 +1466,54 @@ export function AdminPage() {
           {activeTab === 'categories' && (
             <motion.div key="categories" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
               <AdminTable
-                columns={['Name', 'Slug', 'Parent', 'Status', 'Actions']}
+                columns={['Name', 'Slug', 'Type', 'Status', 'Actions']}
                 rows={visibleCategories}
-                renderRow={(cat) => (
-                  <>
-                    <td className="py-4 px-6 text-white font-semibold">{cat.name}</td>
-                    <td className="py-4 px-6 text-[var(--text-muted)] font-mono text-sm">{cat.slug}</td>
-                    <td className="py-4 px-6 text-[var(--text-muted)]">{cat.parent_name || '—'}</td>
-                    <td className="py-4 px-6"><StatusBadge active={cat.is_active} /></td>
-                    <td className="py-4 px-6">
-                      <div className="flex gap-2">
-                        <button onClick={() => openModal('category', cat)} className="p-1.5 hover:bg-[var(--gold-primary)]/10 rounded">
-                          <Edit className="w-4 h-4 text-[var(--text-muted)]" />
-                        </button>
-                        <button onClick={() => deleteCategory(cat.category_id, cat.name)} className="p-1.5 hover:bg-red-500/10 rounded">
-                          <Trash2 className="w-4 h-4 text-red-400" />
-                        </button>
-                      </div>
-                    </td>
-                  </>
-                )}
+                renderRow={(cat) => {
+                  const depth = cat.depth || 0
+                  const indent = depth * 24
+                  const isParent = cat.isParent
+                  const parentCat = categories?.find(c => c.category_id === cat.parent_id)
+                  
+                  return (
+                    <>
+                      <td className="py-4 px-6" style={{ paddingLeft: `${16 + indent}px` }}>
+                        <div className="flex items-center gap-2">
+                          {isParent ? (
+                            <span className="w-2 h-2 rounded-full bg-[var(--gold-primary)]" />
+                          ) : (
+                            <span className="w-1.5 h-1.5 rounded-full bg-[var(--text-muted)]/50" />
+                          )}
+                          <span className={`font-semibold ${isParent ? 'text-white' : 'text-white/80'}`}>{cat.name}</span>
+                        </div>
+                      </td>
+                      <td className="py-4 px-6 text-[var(--text-muted)] font-mono text-sm">{cat.slug}</td>
+                      <td className="py-4 px-6">
+                        {isParent ? (
+                          <span className="px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wider bg-[var(--gold-primary)]/20 text-[var(--gold-primary)] border border-[var(--gold-primary)]/30">
+                            Parent
+                          </span>
+                        ) : parentCat ? (
+                          <span className="text-[var(--text-muted)] text-sm">
+                            {parentCat.name}
+                          </span>
+                        ) : (
+                          <span className="text-[var(--text-muted)]/50">—</span>
+                        )}
+                      </td>
+                      <td className="py-4 px-6"><StatusBadge active={cat.is_active} /></td>
+                      <td className="py-4 px-6">
+                        <div className="flex gap-2">
+                          <button onClick={() => openModal('category', cat)} className="p-1.5 hover:bg-[var(--gold-primary)]/10 rounded">
+                            <Edit className="w-4 h-4 text-[var(--text-muted)]" />
+                          </button>
+                          <button onClick={() => deleteCategory(cat.category_id, cat.name)} className="p-1.5 hover:bg-red-500/10 rounded">
+                            <Trash2 className="w-4 h-4 text-red-400" />
+                          </button>
+                        </div>
+                      </td>
+                    </>
+                  )
+                }}
                 empty={<EmptyState icon={Tag} label="No categories yet" action={() => openModal('category')} actionLabel="Add Category" />}
               />
             </motion.div>
@@ -2691,10 +2767,13 @@ export function AdminPage() {
                                   className={formErrors.category_id ? selErr : selOk}
                                 >
                                   <option value="">— Select Category —</option>
-                                  {categories.map((c) => (
-                                    <option key={c.category_id} value={c.category_id}>
-                                      {c.name}
-                                    </option>
+                                  {categoryTree.map(parent => (
+                                    <optgroup key={parent.category_id} label={parent.name}>
+                                      <option value={parent.category_id}>{parent.name} (All)</option>
+                                      {parent.children?.map(child => (
+                                        <option key={child.category_id} value={child.category_id}>{'→ ' + child.name}</option>
+                                      ))}
+                                    </optgroup>
                                   ))}
                                 </select>
                                 {formErrors.category_id && <p className="mt-1 text-xs text-red-400">{formErrors.category_id}</p>}
@@ -3005,8 +3084,15 @@ export function AdminPage() {
                             <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5 text-[var(--text-muted)]">Parent Category</label>
                             <select value={form.parent_id || ''} onChange={e => setForm(f => ({ ...f, parent_id: e.target.value || null }))} className={selOk}>
                               <option value="">— None (Top Level) —</option>
-                              {categories.filter(c => c.category_id !== modal.data?.category_id).map(c => (
-                                <option key={c.category_id} value={c.category_id}>{c.name}</option>
+                              {categoryTree.map(parent => (
+                                <optgroup key={parent.category_id} label={parent.name}>
+                                  {parent.category_id !== modal.data?.category_id && (
+                                    <option value={parent.category_id}>{parent.name}</option>
+                                  )}
+                                  {parent.children?.filter(child => child.category_id !== modal.data?.category_id).map(child => (
+                                    <option key={child.category_id} value={child.category_id}>{'→ ' + child.name}</option>
+                                  ))}
+                                </optgroup>
                               ))}
                             </select>
                             <p className="mt-1.5 text-xs text-[var(--text-muted)]">Create subcategories by selecting a parent.</p>
