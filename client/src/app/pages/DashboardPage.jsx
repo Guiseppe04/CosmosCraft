@@ -130,6 +130,13 @@ export function DashboardPage() {
     }
   }, [activeSection])
 
+  useEffect(() => {
+    if (activeSection !== 'password') {
+      setPasswordError('')
+      setPasswordSuccess(false)
+    }
+  }, [activeSection])
+
   const fetchMyAppointments = () => {
     adminApi.getAppointments()
       .then(res => setMyAppointments(res.data?.appointments || []))
@@ -286,6 +293,9 @@ export function DashboardPage() {
     newPassword: '',
     confirmPassword: '',
   })
+  const [passwordError, setPasswordError] = useState('')
+  const [passwordSuccess, setPasswordSuccess] = useState(false)
+  const [isPasswordLoading, setIsPasswordLoading] = useState(false)
   
   const [addressData, setAddressData] = useState({
     streetLine1: '',
@@ -997,12 +1007,49 @@ export function DashboardPage() {
   }
 
   const handleChangePassword = async () => {
+    setPasswordError('')
+    setPasswordSuccess(false)
+    
+    if (!passwordData.oldPassword || !passwordData.newPassword || !passwordData.confirmPassword) {
+      setPasswordError('All password fields are required')
+      return
+    }
+
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      setPasswordError('New passwords do not match')
+      return
+    }
+
+    if (passwordData.newPassword.length < 8) {
+      setPasswordError('Password must be at least 8 characters')
+      return
+    }
+
+    if (!/[A-Z]/.test(passwordData.newPassword) || !/[0-9]/.test(passwordData.newPassword)) {
+      setPasswordError('Password must contain at least one uppercase letter and one number')
+      return
+    }
+
+    setIsPasswordLoading(true)
     try {
       await adminApi.changePassword(passwordData)
-      setToastMessage('Password updated successfully!')
+      setPasswordSuccess(true)
       setPasswordData({ oldPassword: '', newPassword: '', confirmPassword: '' })
     } catch (err) {
-      alert(err.message)
+      const errorMsg = err.message || 'Failed to process password change'
+      if (errorMsg.toLowerCase().includes('incorrect')) {
+        setPasswordError('Current password is incorrect')
+      } else if (errorMsg.toLowerCase().includes('different')) {
+        setPasswordError('New password must be different from current password')
+      } else if (errorMsg.toLowerCase().includes('match')) {
+        setPasswordError('Passwords do not match')
+      } else if (errorMsg.toLowerCase().includes('8')) {
+        setPasswordError('Password must be at least 8 characters with uppercase and numbers')
+      } else {
+        setPasswordError(errorMsg)
+      }
+    } finally {
+      setIsPasswordLoading(false)
     }
   }
 
@@ -1438,6 +1485,18 @@ export function DashboardPage() {
                 <p className="text-sm text-[var(--text-muted)] mb-10">
                   Update your password regularly for security
                 </p>
+                {passwordSuccess && (
+                  <div className="mb-6 p-4 rounded-xl bg-green-500/10 border border-green-500/30">
+                    <p className="text-green-400 text-sm font-medium">
+                      We've sent a confirmation email. Please check your inbox to complete the password change.
+                    </p>
+                  </div>
+                )}
+                {passwordError && (
+                  <div className="mb-6 p-4 rounded-xl bg-red-500/10 border border-red-500/30">
+                    <p className="text-red-400 text-sm font-medium">{passwordError}</p>
+                  </div>
+                )}
                 <div className="space-y-5 max-w-md">
                   <div>
                     <label className="block text-xs font-semibold text-[var(--text-muted)] mb-2">
@@ -1446,7 +1505,10 @@ export function DashboardPage() {
                     <input
                       type="password"
                       value={passwordData.oldPassword}
-                      onChange={e => setPasswordData(prev => ({ ...prev, oldPassword: e.target.value }))}
+                      onChange={e => {
+                        setPasswordData(prev => ({ ...prev, oldPassword: e.target.value }))
+                        setPasswordError('')
+                      }}
                       className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
                     />
                   </div>
@@ -1457,7 +1519,10 @@ export function DashboardPage() {
                     <input
                       type="password"
                       value={passwordData.newPassword}
-                      onChange={e => setPasswordData(prev => ({ ...prev, newPassword: e.target.value }))}
+                      onChange={e => {
+                        setPasswordData(prev => ({ ...prev, newPassword: e.target.value }))
+                        setPasswordError('')
+                      }}
                       className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
                     />
                   </div>
@@ -1468,7 +1533,10 @@ export function DashboardPage() {
                     <input
                       type="password"
                       value={passwordData.confirmPassword}
-                      onChange={e => setPasswordData(prev => ({ ...prev, confirmPassword: e.target.value }))}
+                      onChange={e => {
+                        setPasswordData(prev => ({ ...prev, confirmPassword: e.target.value }))
+                        setPasswordError('')
+                      }}
                       className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
                     />
                   </div>
@@ -1476,9 +1544,17 @@ export function DashboardPage() {
                 <button
                   type="button"
                   onClick={handleChangePassword}
-                  className="mt-6 inline-flex items-center gap-2 px-6 py-2.5 rounded-full bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-sm font-semibold text-[var(--text-dark)] hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition"
+                  disabled={isPasswordLoading}
+                  className="mt-6 inline-flex items-center gap-2 px-6 py-2.5 rounded-full bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-sm font-semibold text-[var(--text-dark)] hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Update Password
+                  {isPasswordLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Processing...
+                    </>
+                  ) : (
+                    'Request Password Change'
+                  )}
                 </button>
               </div>
             )}

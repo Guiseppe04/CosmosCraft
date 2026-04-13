@@ -1,6 +1,15 @@
 const { asyncHandler, AppError } = require('../middleware/errorHandler');
 const userService = require('../services/userService');
+const mailService = require('../services/mailService');
 const { addAddressSchema, updateAddressSchema, updateProfileSchema } = require('../utils/validation');
+
+const getFrontendUrl = () => {
+  const prodUrl = process.env.FRONTEND_URL_PROD;
+  const devUrl = process.env.FRONTEND_URL;
+  if (prodUrl) return prodUrl;
+  if (devUrl) return devUrl;
+  return 'http://localhost:5173';
+};
 
 /**
  * Get Current User Profile
@@ -242,9 +251,10 @@ exports.reactivateAccount = asyncHandler(async (req, res, next) => {
 });
 
 /**
- * Change Password (Email/Password users only)
+ * Request Password Change
+ * Validates current password, creates a secure token, sends confirmation email
  */
-exports.changePassword = asyncHandler(async (req, res, next) => {
+exports.requestPasswordChange = asyncHandler(async (req, res, next) => {
   const { oldPassword, newPassword, confirmPassword } = req.body;
 
   if (!oldPassword || !newPassword || !confirmPassword) {
@@ -255,14 +265,45 @@ exports.changePassword = asyncHandler(async (req, res, next) => {
     throw new AppError('New passwords do not match', 400);
   }
 
-  if (newPassword.length < 8) {
-    throw new AppError('New password must be at least 8 characters', 400);
+  const user = await userService.getUserById(req.user.id);
+  if (!user.password_hash) {
+    throw new AppError('This account does not use password authentication', 400);
   }
 
-  await userService.updatePassword(req.user.id, oldPassword, newPassword);
+  const { token, expiresAt } = await userService.requestPasswordChange(req.user.id, oldPassword, newPassword);
+
+  const resetLink = `${getFrontendUrl()}/reset-password?token=${token}&userId=${req.user.id}`;
+
+  try {
+    await mailService.sendPasswordChangeConfirmationEmail(user.email, resetLink);
+  } catch (mailError) {
+    console.error('Failed to send password change confirmation email:', mailError);
+  }
 
   res.status(200).json({
     status: 'success',
-    message: 'Password changed successfully',
+    message: 'We\'ve sent a confirmation email. Please check your inbox to complete the password change.',
+  });
+});
+
+/**
+ * Verify Password Reset Token
+ */
+exports.verifyPasswordResetToken = asyncHandler(async (req, res, next) => {
+  const { token, userId } = req.body;
+
+  if (!token || !userId) {
+    throw new AppError('Token and user ID are required', 400);
+  }
+
+  try {
+    await userService.verifyPasswordResetToken(userId, token);
+  } catch (error) {
+    throw new AppError('Invalid or expired token', 400);
+  }
+
+  res.status(200).json({
+    status: 'success',
+    message: 'Password updated successfully',
   });
 });
