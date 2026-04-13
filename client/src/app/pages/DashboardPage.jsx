@@ -1324,13 +1324,13 @@ export function DashboardPage() {
           </motion.div>
         )}
       </AnimatePresence>
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-        <div className="grid md:grid-cols-[260px_minmax(0,1fr)] gap-0">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+        <div className="grid md:grid-cols-[1fr_1.4fr] gap-6 items-start">
           {/* Sidebar */}
           <motion.aside
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
-            className="bg-[var(--surface-dark)] border-r-2 border-white/30 rounded-l-2xl overflow-hidden"
+            className="h-full bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl overflow-hidden"
           >
             <div className="px-6 py-5 border-b border-white/20 flex items-center gap-3">
               <div className="w-10 h-10 rounded-full overflow-hidden bg-[var(--bg-primary)] border-2 border-white flex-shrink-0">
@@ -1422,7 +1422,7 @@ export function DashboardPage() {
             key={activeSection}
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
-            className="space-y-4"
+            className="h-full flex flex-col space-y-4"
           >
             {activeSection === 'profile' && renderProfileContent()}
             {activeSection === 'my-guitar' && renderMyGuitarContent()}

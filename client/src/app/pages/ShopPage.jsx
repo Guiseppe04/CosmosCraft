@@ -727,10 +727,8 @@ export function ShopPage() {
                               disabled={buttonState !== 'add'}
                               className={`px-4 py-2 rounded-full text-xs tracking-wide font-bold transition-all border ${
                                 buttonState === 'out_of_stock'
-                                  ? 'border-white/5 bg-white/5 text-white/30 cursor-not-allowed'
-                                  : buttonState === 'item_added' || buttonState === 'in_cart'
-                                  ? 'bg-[#1e1e1e] border-transparent text-[var(--gold-primary)]'
-                                  : 'bg-[#1e1e1e] border-transparent text-white hover:text-[var(--gold-primary)] shadow-sm'
+                                  ? 'border-[var(--border)] bg-[var(--surface-dark)] text-[var(--text-muted)] cursor-not-allowed'
+                                  : 'bg-[var(--surface-dark)] border-[var(--border)] text-[var(--text-light)] hover:text-[var(--gold-primary)] hover:border-[var(--gold-primary)] shadow-sm'
                               }`}
                             >
                               {buttonState === 'add' ? 'Add to cart' : buttonState === 'out_of_stock' ? 'Unavailable' : 'Added to cart'}

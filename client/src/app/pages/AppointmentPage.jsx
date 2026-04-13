@@ -275,8 +275,8 @@ export function AppointmentPage() {
         return (
           <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
             <div>
-              <h2 className="text-2xl font-bold text-white mb-2">Select Services</h2>
-              <p className="text-sm text-white/50">Choose one or more professional guitar services. Our calendar availability will automatically adjust based on the expected turnaround times.</p>
+              <h2 className="text-2xl font-bold text-[var(--text-light)] mb-2">Select Services</h2>
+              <p className="text-sm text-[var(--text-muted)]">Choose one or more professional guitar services. Our calendar availability will automatically adjust based on the expected turnaround times.</p>
             </div>
             
             <div className="space-y-6">
@@ -284,7 +284,7 @@ export function AppointmentPage() {
                 <div key={category.categoryId} className="space-y-3">
                   <div className="flex items-center gap-2">
                     <category.icon className="w-5 h-5 text-[#d4af37]" />
-                    <h3 className="font-semibold text-white/80">{category.name}</h3>
+                    <h3 className="font-semibold text-[var(--text-light)]">{category.name}</h3>
                   </div>
                   <div className="grid sm:grid-cols-2 gap-3 pl-7">
                     {category.options.map(option => {
@@ -296,16 +296,16 @@ export function AppointmentPage() {
                           className={`text-left p-4 rounded-xl border-2 transition-all ${
                             isSelected 
                               ? 'border-[#d4af37] bg-[#d4af37]/10' 
-                              : 'border-white/5 bg-theme-surface-deep hover:border-[#d4af37]/30 hover:bg-white/5'
+                              : 'border-[var(--border)] bg-theme-surface-deep hover:border-[#d4af37]/30 hover:bg-[var(--surface-elevated)]'
                           }`}
                         >
                           <div className="flex justify-between items-start mb-1">
-                            <span className={`font-semibold text-sm ${isSelected ? 'text-[#d4af37]' : 'text-white'}`}>
+                            <span className={`font-semibold text-sm ${isSelected ? 'text-[#d4af37]' : 'text-[var(--text-light)]'}`}>
                               {option.name}
                             </span>
-                            <span className="text-sm font-bold text-white/60">₱{option.price}</span>
+                            <span className="text-sm font-bold text-[var(--text-muted)]">₱{option.price}</span>
                           </div>
-                          <p className="text-xs text-white/40 leading-relaxed">{option.desc}</p>
+                          <p className="text-xs text-[var(--text-muted)] leading-relaxed">{option.desc}</p>
                         </button>
                       )
                     })}
@@ -320,47 +320,47 @@ export function AppointmentPage() {
         return (
           <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
             <div>
-              <h2 className="text-2xl font-bold text-white mb-2">Guitar Details</h2>
-              <p className="text-sm text-white/50">Tell us about the instrument you're bringing in.</p>
+              <h2 className="text-2xl font-bold text-[var(--text-light)] mb-2">Guitar Details</h2>
+              <p className="text-sm text-[var(--text-muted)]">Tell us about the instrument you're bringing in.</p>
             </div>
             
-            <div className="bg-theme-surface-deep border border-white/5 p-6 rounded-2xl space-y-5">
+            <div className="bg-theme-surface-deep border border-[var(--border)] p-6 rounded-2xl space-y-5">
               <div>
-                <label className="block text-sm font-medium text-white/60 mb-1.5">Brand <span className="text-red-400">*</span></label>
+                <label className="block text-sm font-medium text-[var(--text-light)] mb-1.5">Brand <span className="text-red-400">*</span></label>
                 <input
                   type="text"
                   value={guitarDetails.brand}
                   onChange={e => setGuitarDetails({ ...guitarDetails, brand: e.target.value })}
-                  className="w-full px-4 py-3 bg-[#181818] text-white border border-white/10 rounded-xl text-sm focus:outline-none focus:border-[#d4af37] transition-colors"
+                  className="w-full px-4 py-3 bg-[var(--surface-dark)] text-[var(--text-light)] border border-[var(--border)] rounded-xl text-sm focus:outline-none focus:border-[#d4af37] transition-colors placeholder:text-[var(--text-muted)]"
                   placeholder="e.g. Fender, Gibson, Ibanez"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-white/60 mb-1.5">Model <span className="text-red-400">*</span></label>
+                <label className="block text-sm font-medium text-[var(--text-light)] mb-1.5">Model <span className="text-red-400">*</span></label>
                 <input
                   type="text"
                   value={guitarDetails.model}
                   onChange={e => setGuitarDetails({ ...guitarDetails, model: e.target.value })}
-                  className="w-full px-4 py-3 bg-[#181818] text-white border border-white/10 rounded-xl text-sm focus:outline-none focus:border-[#d4af37] transition-colors"
+                  className="w-full px-4 py-3 bg-[var(--surface-dark)] text-[var(--text-light)] border border-[var(--border)] rounded-xl text-sm focus:outline-none focus:border-[#d4af37] transition-colors placeholder:text-[var(--text-muted)]"
                   placeholder="e.g. Stratocaster, Les Paul"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-white/60 mb-1.5">Serial Number <span className="text-red-400">*</span></label>
+                <label className="block text-sm font-medium text-[var(--text-light)] mb-1.5">Serial Number <span className="text-red-400">*</span></label>
                 <input
                   type="text"
                   value={guitarDetails.serial}
                   onChange={e => setGuitarDetails({ ...guitarDetails, serial: e.target.value })}
-                  className="w-full px-4 py-3 bg-[#181818] text-white border border-white/10 rounded-xl text-sm focus:outline-none focus:border-[#d4af37] transition-colors"
+                  className="w-full px-4 py-3 bg-[var(--surface-dark)] text-[var(--text-light)] border border-[var(--border)] rounded-xl text-sm focus:outline-none focus:border-[#d4af37] transition-colors placeholder:text-[var(--text-muted)]"
                   placeholder="Required for shop tracking and liability"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-white/60 mb-1.5">Issues & Notes</label>
+                <label className="block text-sm font-medium text-[var(--text-light)] mb-1.5">Issues & Notes</label>
                 <textarea
                   value={guitarDetails.notes}
                   onChange={e => setGuitarDetails({ ...guitarDetails, notes: e.target.value })}
-                  className="w-full h-32 px-4 py-3 bg-[#181818] text-white border border-white/10 rounded-xl text-sm resize-none focus:outline-none focus:border-[#d4af37] transition-colors"
+                  className="w-full h-32 px-4 py-3 bg-[var(--surface-dark)] text-[var(--text-light)] border border-[var(--border)] rounded-xl text-sm resize-none focus:outline-none focus:border-[#d4af37] transition-colors placeholder:text-[var(--text-muted)]"
                   placeholder="Describe your requested setups, string gauge preferences, or structural issues..."
                 />
               </div>
@@ -372,8 +372,8 @@ export function AppointmentPage() {
         return (
           <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
              <div>
-              <h2 className="text-2xl font-bold text-white mb-2">Location</h2>
-              <p className="text-sm text-white/50">Select the CosmosCraft branch you want to book at.</p>
+              <h2 className="text-2xl font-bold text-[var(--text-light)] mb-2">Location</h2>
+              <p className="text-sm text-[var(--text-muted)]">Select the CosmosCraft branch you want to book at.</p>
             </div>
 
             <div className="space-y-3">
@@ -386,17 +386,17 @@ export function AppointmentPage() {
                     className={`w-full flex items-center justify-between p-5 rounded-2xl border-2 transition-all ${
                       isSelected 
                         ? 'border-[#d4af37] bg-[#d4af37]/5' 
-                        : 'border-white/5 bg-theme-surface-deep hover:border-white/20'
+                        : 'border-[var(--border)] bg-theme-surface-deep hover:border-[#d4af37]/30'
                     }`}
                   >
                     <div className="flex gap-4 text-left">
-                      <div className={`p-3 rounded-full ${isSelected ? 'bg-[#d4af37]/20 text-[#d4af37]' : 'bg-white/5 text-white/40'}`}>
+                      <div className={`p-3 rounded-full ${isSelected ? 'bg-[#d4af37]/20 text-[#d4af37]' : 'bg-[var(--surface-elevated)] text-[var(--text-muted)]'}`}>
                         <MapPin className="w-6 h-6" />
                       </div>
                       <div>
-                        <h3 className={`font-bold text-lg mb-1 ${isSelected ? 'text-white' : 'text-white/80'}`}>{branch.name}</h3>
-                        <p className="text-sm text-white/50">{branch.address}</p>
-                        <p className="text-sm text-white/50 mt-1">{branch.hours}</p>
+                        <h3 className={`font-bold text-lg mb-1 ${isSelected ? 'text-[var(--text-light)]' : 'text-[var(--text-light)]/80'}`}>{branch.name}</h3>
+                        <p className="text-sm text-[var(--text-muted)]">{branch.address}</p>
+                        <p className="text-sm text-[var(--text-muted)] mt-1">{branch.hours}</p>
                       </div>
                     </div>
                     {isSelected && <CheckCircle2 className="w-6 h-6 text-[#d4af37]" />}
@@ -411,14 +411,14 @@ export function AppointmentPage() {
         return (
           <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
             <div>
-               <h2 className="text-2xl font-bold text-white mb-2">Select Date and Time</h2>
-               <p className="text-sm text-white/50">Due to current service volumes and your selected turnaround times, unavailable dates have been disabled.</p>
-            </div>
+               <h2 className="text-2xl font-bold text-[var(--text-light)] mb-2">Select Date and Time</h2>
+               <p className="text-sm text-[var(--text-muted)]">Due to current service volumes and your selected turnaround times, unavailable dates have been disabled.</p>
+             </div>
 
-            <div className="bg-theme-surface-deep border border-white/5 rounded-2xl p-6 shadow-xl">
+            <div className="bg-theme-surface-deep border border-[var(--border)] rounded-2xl p-6 shadow-xl">
               {/* Calendar header */}
                <div className="flex items-center justify-between mb-6">
-                <span className="text-lg font-bold text-white">
+                <span className="text-lg font-bold text-[var(--text-light)]">
                   {new Date(currentYear, currentMonth, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
                 </span>
                 <div className="flex gap-2">
@@ -428,7 +428,7 @@ export function AppointmentPage() {
                       setCurrentYear(prev.getFullYear())
                       setCurrentMonth(prev.getMonth())
                     }}
-                    className="p-2 rounded-lg bg-white/5 text-white/60 hover:bg-white/10 hover:text-white transition-colors border border-white/10"
+                    className="p-2 rounded-lg bg-[var(--surface-dark)] text-[var(--text-muted)] hover:bg-[var(--surface-elevated)] hover:text-[var(--text-light)] transition-colors border border-[var(--border)]"
                   >
                     <ChevronLeft className="w-4 h-4" />
                   </button>
@@ -438,7 +438,7 @@ export function AppointmentPage() {
                       setCurrentYear(next.getFullYear())
                       setCurrentMonth(next.getMonth())
                     }}
-                    className="p-2 rounded-lg bg-white/5 text-white/60 hover:bg-white/10 hover:text-white transition-colors border border-white/10"
+                    className="p-2 rounded-lg bg-[var(--surface-dark)] text-[var(--text-muted)] hover:bg-[var(--surface-elevated)] hover:text-[var(--text-light)] transition-colors border border-[var(--border)]"
                   >
                     <ChevronRight className="w-4 h-4" />
                   </button>
@@ -446,7 +446,7 @@ export function AppointmentPage() {
               </div>
 
               {/* Calendar Grid */}
-              <div className="grid grid-cols-7 gap-2 text-sm text-white/40 mb-3 font-medium">
+              <div className="grid grid-cols-7 gap-2 text-sm text-[var(--text-muted)] mb-3 font-medium">
                 {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
                   <span key={d} className="text-center pb-2">{d}</span>
                 ))}
@@ -462,7 +462,7 @@ export function AppointmentPage() {
 
                     if (isUnavailable) {
                       return (
-                        <div key={day.id} className="flex items-center justify-center h-10 rounded-xl text-sm font-medium text-white/20 bg-black/20 cursor-not-allowed">
+                        <div key={day.id} className="flex items-center justify-center h-10 rounded-xl text-sm font-medium text-[var(--text-muted)] bg-[var(--surface-elevated)] cursor-not-allowed">
                           {day.dayNumber}
                         </div>
                       )
@@ -475,7 +475,7 @@ export function AppointmentPage() {
                         className={`flex items-center justify-center h-10 rounded-xl text-sm font-medium transition-all ${
                           isSelected
                             ? 'bg-[#d4af37] text-black shadow-lg shadow-[#d4af37]/20 scale-105'
-                            : 'bg-white/5 text-white hover:bg-white/10 border border-white/5 hover:border-[#d4af37]/30'
+                            : 'bg-[var(--surface-dark)] text-[var(--text-light)] hover:bg-[var(--surface-elevated)] border border-[var(--border)] hover:border-[#d4af37]/30'
                         }`}
                       >
                         {day.dayNumber}
@@ -487,8 +487,8 @@ export function AppointmentPage() {
 
               {/* Time Slots */}
               {selectedDateId && (
-                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="pt-6 border-t border-white/10">
-                  <h3 className="text-sm font-bold text-white/60 mb-4 uppercase tracking-wider">Available Time Slots</h3>
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="pt-6 border-t border-[var(--border)]">
+                  <h3 className="text-sm font-bold text-[var(--text-muted)] mb-4 uppercase tracking-wider">Available Time Slots</h3>
                   <div className="flex flex-wrap gap-3">
                     {timeSlots.map(time => {
                       const isSelected = selectedTime === time
@@ -499,7 +499,7 @@ export function AppointmentPage() {
                           className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
                             isSelected
                               ? 'bg-[#d4af37] text-black'
-                              : 'bg-black/40 text-white border border-white/10 hover:border-white/30'
+                              : 'bg-[var(--surface-dark)] text-[var(--text-light)] border border-[var(--border)] hover:border-[#d4af37]/30'
                           }`}
                         >
                           {time}
@@ -512,11 +512,11 @@ export function AppointmentPage() {
             </div>
 
             {/* Currently Selected Summary */}
-            <div className={`p-4 rounded-xl border transition-all flex items-center gap-3 ${selectedDateId && selectedTime ? 'bg-[#d4af37]/10 border-[#d4af37]/30' : 'bg-theme-surface-deep border-white/5'}`}>
-               <ClockIcon className={`w-5 h-5 ${selectedDateId && selectedTime ? 'text-[#d4af37]' : 'text-white/20'}`} />
+            <div className={`p-4 rounded-xl border transition-all flex items-center gap-3 ${selectedDateId && selectedTime ? 'bg-[#d4af37]/10 border-[#d4af37]/30' : 'bg-theme-surface-deep border-[var(--border)]'}`}>
+               <ClockIcon className={`w-5 h-5 ${selectedDateId && selectedTime ? 'text-[#d4af37]' : 'text-[var(--text-muted)]'}`} />
                <div>
-                  <p className="text-xs text-white/40 mb-0.5">Currently Selected</p>
-                  <p className={`text-sm font-medium ${selectedDateId && selectedTime ? 'text-[#d4af37]' : 'text-white/40'}`}>
+                  <p className="text-xs text-[var(--text-muted)] mb-0.5">Currently Selected</p>
+                  <p className={`text-sm font-medium ${selectedDateId && selectedTime ? 'text-[#d4af37]' : 'text-[var(--text-muted)]'}`}>
                     {selectedDate && selectedTime 
                         ? `${selectedDate.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })} at ${selectedTime}`
                         : 'No date and time selected yet'}
@@ -530,31 +530,31 @@ export function AppointmentPage() {
         return (
           <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
             <div>
-              <h2 className="text-2xl font-bold text-white mb-2">Confirmation</h2>
-              <p className="text-sm text-white/50">Review your appointment details before finalizing.</p>
+              <h2 className="text-2xl font-bold text-[var(--text-light)] mb-2">Confirmation</h2>
+              <p className="text-sm text-[var(--text-muted)]">Review your appointment details before finalizing.</p>
             </div>
 
-            <div className="bg-theme-surface-deep border border-white/10 rounded-2xl p-6 shadow-xl space-y-6">
-               <div className="flex justify-between items-end border-b border-white/10 pb-4">
+            <div className="bg-theme-surface-deep border border-[var(--border)] rounded-2xl p-6 shadow-xl space-y-6">
+               <div className="flex justify-between items-end border-b border-[var(--border)] pb-4">
                   <div>
-                    <p className="text-xs font-bold text-white/40 uppercase tracking-wider mb-1">Appointment Date</p>
+                    <p className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-1">Appointment Date</p>
                     <p className="text-lg font-medium text-[#d4af37]">
                       {selectedDate?.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric'})} at {selectedTime}
                     </p>
                   </div>
                   <div className="text-right">
-                    <p className="text-xs font-bold text-white/40 uppercase tracking-wider mb-1">Location</p>
-                    <p className="text-sm font-medium text-white">{currentBranch.name}</p>
+                    <p className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-1">Location</p>
+                    <p className="text-sm font-medium text-[var(--text-light)]">{currentBranch.name}</p>
                   </div>
                </div>
                
                <div className="grid sm:grid-cols-2 gap-6">
                  <div>
-                    <p className="text-xs font-bold text-white/40 uppercase tracking-wider mb-3">Selected Services</p>
+                    <p className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-3">Selected Services</p>
                     <ul className="space-y-2">
                       {selectedDetailedServices.map(svc => (
                         <li key={svc.id} className="flex justify-between text-sm">
-                          <span className="text-white/80">{svc.name}</span>
+                          <span className="text-[var(--text-light)]">{svc.name}</span>
                           <span className="text-[#d4af37]">₱{svc.price}</span>
                         </li>
                       ))}
@@ -562,17 +562,17 @@ export function AppointmentPage() {
                  </div>
                  
                  <div>
-                    <p className="text-xs font-bold text-white/40 uppercase tracking-wider mb-3">Guitar Details</p>
-                    <div className="space-y-1 text-sm bg-black/20 p-3 rounded-lg border border-white/5">
-                      <p><span className="text-white/40">Brand:</span> <span className="text-white">{guitarDetails.brand}</span></p>
-                      <p><span className="text-white/40">Model:</span> <span className="text-white">{guitarDetails.model}</span></p>
-                      <p><span className="text-white/40">Serial:</span> <span className="text-white">{guitarDetails.serial}</span></p>
+                    <p className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-3">Guitar Details</p>
+                    <div className="space-y-1 text-sm bg-[var(--surface-dark)] p-3 rounded-lg border border-[var(--border)]">
+                      <p><span className="text-[var(--text-muted)]">Brand:</span> <span className="text-[var(--text-light)]">{guitarDetails.brand}</span></p>
+                      <p><span className="text-[var(--text-muted)]">Model:</span> <span className="text-[var(--text-light)]">{guitarDetails.model}</span></p>
+                      <p><span className="text-[var(--text-muted)]">Serial:</span> <span className="text-[var(--text-light)]">{guitarDetails.serial}</span></p>
                     </div>
                  </div>
                </div>
 
-               <div className="border-t border-white/10 pt-4 flex justify-between items-center">
-                  <span className="text-sm font-bold text-white/60 uppercase">Estimated Total</span>
+               <div className="border-t border-[var(--border)] pt-4 flex justify-between items-center">
+                  <span className="text-sm font-bold text-[var(--text-muted)] uppercase">Estimated Total</span>
                   <span className="text-2xl font-bold text-[#d4af37]">₱{totalPrice}</span>
                </div>
                
@@ -592,13 +592,13 @@ export function AppointmentPage() {
   }
 
   return (
-    <div className="min-h-screen pt-16 bg-[#0a0a0a]">
+    <div className="min-h-screen pt-16 bg-[var(--bg-primary)]">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
         
         {/* Header Back Button */}
         <button
           onClick={() => navigate(-1)}
-          className="flex items-center gap-2 text-white/40 hover:text-white transition-colors mb-8 group"
+          className="flex items-center gap-2 text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors mb-8 group"
         >
           <ChevronLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
           <span className="font-medium text-sm">Back to Dashboard</span>
@@ -607,7 +607,7 @@ export function AppointmentPage() {
         <div className="grid lg:grid-cols-[280px_1fr] gap-8 xl:gap-12 min-h-[600px]">
           
           {/* LEFT SIDEBAR (STEPPER) */}
-          <div className="bg-theme-surface-deep border border-white/5 rounded-3xl p-8 relative overflow-hidden flex flex-col justify-between">
+          <div className="bg-theme-surface-deep border border-[var(--border)] rounded-3xl p-8 relative overflow-hidden flex flex-col justify-between">
              {/* Gradient splash mimicking reference */}
              <div className="absolute -top-32 -left-32 w-64 h-64 bg-[#d4af37]/10 blur-[100px] rounded-full pointer-events-none" />
              <div className="absolute -bottom-32 -right-32 w-64 h-64 bg-[#d4af37]/5 blur-[100px] rounded-full pointer-events-none" />
@@ -618,12 +618,12 @@ export function AppointmentPage() {
                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#d4af37] to-[#8a7223] flex items-center justify-center">
                       <Settings className="w-5 h-5 text-black" />
                    </div>
-                   <span className="font-bold tracking-wider text-white text-lg">Cosmos<span className="font-light">Craft</span></span>
+                   <span className="font-bold tracking-wider text-[var(--text-light)] text-lg">Cosmos<span className="font-light">Craft</span></span>
                 </div>
 
                 <div className="space-y-6 relative ml-2">
                   {/* Vertical connecting line */}
-                  <div className="absolute left-[13px] top-4 bottom-8 w-[2px] bg-white/5 -z-10" />
+                  <div className="absolute left-[13px] top-4 bottom-8 w-[2px] bg-[var(--border)] -z-10" />
 
                   {STEPS.map(step => {
                     const isCompleted = currentStep > step.id
@@ -639,14 +639,14 @@ export function AppointmentPage() {
                               ? 'bg-[#d4af37] text-black border border-[#d4af37]' 
                               : isCurrent 
                                 ? 'bg-[#d4af37] text-black shadow-[0_0_15px_rgba(212,175,55,0.4)] border border-[#d4af37]'
-                                : 'bg-[#181818] text-white/30 border border-white/10'
+                                : 'bg-[var(--surface-dark)] text-[var(--text-muted)] border border-[var(--border)]'
                           }`}
                         >
                           {isCompleted ? <Check className="w-3.5 h-3.5" /> : step.id}
                         </div>
                         {/* Step Label */}
                         <span className={`text-sm font-medium transition-colors ${
-                          isCurrent ? 'text-white' : isCompleted ? 'text-white/70' : 'text-white/30'
+                          isCurrent ? 'text-[var(--text-light)]' : isCompleted ? 'text-[var(--text-light)]/70' : 'text-[var(--text-muted)]'
                         }`}>
                           {step.label}
                         </span>
@@ -656,7 +656,7 @@ export function AppointmentPage() {
                 </div>
              </div>
 
-             <div className="relative z-10 mt-12 text-center text-xs text-white/30">
+             <div className="relative z-10 mt-12 text-center text-xs text-[var(--text-muted)]">
                Need help with booking?<br/>Contact our support
              </div>
           </div>
@@ -672,11 +672,11 @@ export function AppointmentPage() {
             </div>
 
             {/* Pagination Controls */}
-            <div className="mt-8 pt-6 border-t border-white/5 flex items-center justify-between">
+            <div className="mt-8 pt-6 border-t border-[var(--border)] flex items-center justify-between">
                <button
                  onClick={handlePrevStep}
                  disabled={currentStep === 1 || bookingComplete}
-                 className="px-6 py-2.5 rounded-xl text-sm font-bold text-white/60 bg-white/5 border border-white/10 hover:bg-white/10 hover:text-white transition-colors disabled:opacity-0"
+                 className="px-6 py-2.5 rounded-xl text-sm font-bold text-[var(--text-light)] bg-[var(--surface-dark)] border border-[var(--border)] hover:bg-[var(--surface-elevated)] hover:text-[var(--text-light)] transition-colors disabled:opacity-0"
                >
                  Back
                </button>
@@ -720,8 +720,8 @@ export function AppointmentPage() {
                 <div className="w-20 h-20 bg-[#d4af37]/20 rounded-full flex items-center justify-center mx-auto mb-6">
                   <CheckCircle2 className="w-10 h-10 text-[#d4af37]" />
                 </div>
-                <h3 className="text-2xl font-bold text-white mb-2">Booking Confirmed!</h3>
-                <p className="text-sm text-white/60 mb-6">
+                <h3 className="text-2xl font-bold text-[var(--text-light)] mb-2">Booking Confirmed!</h3>
+                <p className="text-sm text-[var(--text-muted)] mb-6">
                   Your appointment has been scheduled successfully. You will be redirected to the dashboard.
                 </p>
                 {referenceNumber && (
