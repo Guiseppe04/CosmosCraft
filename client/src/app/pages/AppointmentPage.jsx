@@ -1,6 +1,8 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router'
 import { motion, AnimatePresence } from 'motion/react'
+import { useAuth } from '../context/AuthContext'
+import { API } from '../utils/apiConfig'
 import {
   Wrench,
   Paintbrush,
@@ -10,19 +12,53 @@ import {
   Phone,
   Clock as ClockIcon,
   Calendar,
-  Music,
   ChevronLeft,
   ChevronRight,
   CheckCircle2,
+  Check,
 } from 'lucide-react'
-import { formatCurrency } from '../utils/formatCurrency.js'
+
+// --- CONSTANTS & DATA ---
 
 const guitarServices = [
-  { id: 'custom-build', name: 'Custom Guitar Build', icon: Music, description: 'Full custom guitar from scratch', price: 350 },
-  { id: 'setup', name: 'Setup & Intonation', icon: Settings, description: 'Professional setup and tuning', price: 120 },
-  { id: 'refinishing', name: 'Refinishing', icon: Paintbrush, description: 'Custom paint and finish work', price: 260 },
-  { id: 'repair', name: 'Repair & Restoration', icon: Wrench, description: 'Expert repair services', price: 180 },
-  { id: 'electronics', name: 'Electronics Upgrade', icon: Sparkles, description: 'Pickup and wiring upgrades', price: 140 },
+  {
+    categoryId: 'setup',
+    name: 'Setup & Intonation',
+    icon: Settings,
+    options: [
+      { id: 'setup-standard', name: 'Standard Setup', leadTime: 3, price: 80, desc: 'Complete intonation, action, and neck adjustment. (1-3 days)' },
+      { id: 'setup-full', name: 'Full Setup', leadTime: 7, price: 120, desc: 'Includes fret polishing and deep cleaning. (up to 7 days)' },
+    ]
+  },
+  {
+    categoryId: 'refinishing',
+    name: 'Refinishing',
+    icon: Paintbrush,
+    options: [
+      { id: 'refinish-basic', name: 'Basic Refinish', leadTime: 21, price: 300, desc: 'Standard solid color. (2-3 weeks)' },
+      { id: 'refinish-custom', name: 'Custom Refinish', leadTime: 42, price: 500, desc: 'Burst, metallic, or custom art. (4-6+ weeks)' },
+    ]
+  },
+  {
+    categoryId: 'repair',
+    name: 'Repair & Restoration',
+    icon: Wrench,
+    options: [
+      { id: 'repair-minor', name: 'Minor Repairs', leadTime: 0, price: 40, desc: 'String replacement, minor wiring fix. (Same day)' },
+      { id: 'repair-moderate', name: 'Moderate Repairs', leadTime: 7, price: 150, desc: 'Fret leveling, nut replacement. (2-7 days)' },
+      { id: 'repair-major', name: 'Major Repairs', leadTime: 21, price: 350, desc: 'Structural fix, headstock repair. (1-3 weeks or more)' },
+    ]
+  },
+  {
+    categoryId: 'electronics',
+    name: 'Electronics Upgrade',
+    icon: Sparkles,
+    options: [
+      { id: 'elec-simple', name: 'Simple Upgrade', leadTime: 0, price: 60, desc: 'Pots, output jack, capacitors. (Same day)' },
+      { id: 'elec-moderate', name: 'Moderate Upgrade', leadTime: 3, price: 120, desc: 'Pickup installation, wiring cleanup. (1-3 days)' },
+      { id: 'elec-advanced', name: 'Advanced Mods', leadTime: 7, price: 200, desc: 'Coil-splitting, custom wiring, shielding. (3-7 days)' },
+    ]
+  }
 ]
 
 const branches = [
@@ -49,13 +85,26 @@ const branches = [
   },
 ]
 
-function getMonthMatrix(year, month) {
+const STEPS = [
+  { id: 1, label: 'Service' },
+  { id: 2, label: 'Guitar Details' },
+  { id: 3, label: 'Location' },
+  { id: 4, label: 'Appointment' },
+  { id: 5, label: 'Confirmation' },
+]
+
+// --- UTILS ---
+
+function getMonthMatrix(year, month, maxLeadTimeDays) {
   const firstDay = new Date(year, month, 1)
   const firstWeekday = firstDay.getDay()
   const daysInMonth = new Date(year, month + 1, 0).getDate()
 
   const today = new Date()
   today.setHours(0, 0, 0, 0)
+
+  const minAvailableDate = new Date(today)
+  minAvailableDate.setDate(today.getDate() + maxLeadTimeDays)
 
   const weeks = []
   let currentDay = 1 - firstWeekday
@@ -71,7 +120,7 @@ function getMonthMatrix(year, month) {
 
       if (inCurrentMonth) {
         id = date.toISOString().slice(0, 10)
-        const isPast = date < today
+        const isPast = date < minAvailableDate
         const isSunday = date.getDay() === 0
         isAvailable = !isPast && !isSunday
       }
@@ -89,200 +138,331 @@ function getMonthMatrix(year, month) {
   return weeks
 }
 
+// --- COMPONENT ---
+
 export function AppointmentPage() {
   const navigate = useNavigate()
-
+  const { user } = useAuth()
   const today = new Date()
 
-  const [selectedBranchId, setSelectedBranchId] = useState(branches[0].id)
+  // State
+  const [currentStep, setCurrentStep] = useState(1)
+  
+  // Selections
   const [selectedServices, setSelectedServices] = useState([])
+  const [guitarDetails, setGuitarDetails] = useState({ brand: '', model: '', serial: '', notes: '' })
+  const [selectedBranchId, setSelectedBranchId] = useState(branches[0].id)
   const [selectedDateId, setSelectedDateId] = useState('')
+  const [selectedTime, setSelectedTime] = useState('')
+  
+  // Calendar state
   const [currentMonth, setCurrentMonth] = useState(today.getMonth())
   const [currentYear, setCurrentYear] = useState(today.getFullYear())
-  const [selectedTime, setSelectedTime] = useState('')
   const [bookingComplete, setBookingComplete] = useState(false)
-  const [guitarDetails, setGuitarDetails] = useState({
-    brand: '',
-    model: '',
-    serial: '',
-    notes: '',
-  })
 
   const timeSlots = ['9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM']
 
   const currentBranch = branches.find(b => b.id === selectedBranchId)
   const selectedDate = selectedDateId ? new Date(`${selectedDateId}T00:00:00`) : null
-  const monthMatrix = getMonthMatrix(currentYear, currentMonth)
 
-  const totalPrice = selectedServices.reduce((sum, id) => {
-    const svc = guitarServices.find(s => s.id === id)
-    return svc ? sum + svc.price : sum
-  }, 0)
+  // Derived calculations
+  const { maxLeadTime, totalPrice, selectedDetailedServices } = useMemo(() => {
+    let lead = 0
+    let price = 0
+    let details = []
 
-  const referenceNumber =
-    selectedDate && selectedTime
-      ? `CC-${selectedBranchId.toUpperCase()}-${selectedDateId.replace(/-/g, '')}-${selectedTime.replace(/[:\s]/g, '')}`
-      : ''
+    selectedServices.forEach(selectedId => {
+      for (const cat of guitarServices) {
+        const opt = cat.options.find(o => o.id === selectedId)
+        if (opt) {
+          lead = Math.max(lead, opt.leadTime)
+          price += opt.price
+          details.push(opt)
+        }
+      }
+    })
+    return { maxLeadTime: lead, totalPrice: price, selectedDetailedServices: details }
+  }, [selectedServices])
 
-  const isFormComplete =
-    selectedServices.length > 0 &&
-    selectedDate &&
-    selectedTime &&
-    guitarDetails.brand &&
-    guitarDetails.model &&
-    guitarDetails.serial
+  const monthMatrix = useMemo(() => getMonthMatrix(currentYear, currentMonth, maxLeadTime), [currentYear, currentMonth, maxLeadTime])
 
-  const handleToggleService = id => {
+  const referenceNumber = selectedDate && selectedTime
+    ? `CC-${selectedBranchId.toUpperCase()}-${selectedDateId.replace(/-/g, '')}-${selectedTime.replace(/[:\s]/g, '')}`
+    : ''
+
+  // Validation
+  const canProceed = () => {
+    if (currentStep === 1) return selectedServices.length > 0
+    if (currentStep === 2) return guitarDetails.brand.trim() && guitarDetails.model.trim() && guitarDetails.serial.trim()
+    if (currentStep === 3) return !!selectedBranchId
+    if (currentStep === 4) return selectedDateId && selectedTime
+    return true
+  }
+
+  // Handlers
+  const handleToggleService = (optId) => {
     setSelectedServices(prev =>
-      prev.includes(id) ? prev.filter(svcId => svcId !== id) : [...prev, id],
+      prev.includes(optId) ? prev.filter(id => id !== optId) : [...prev, optId]
     )
   }
 
-  const handleSubmit = e => {
-    e.preventDefault()
-    if (!isFormComplete) return
-    setBookingComplete(true)
-    setTimeout(() => {
-      setBookingComplete(false)
-      navigate('/dashboard')
-    }, 1500)
+  const handleNextStep = () => {
+    if (canProceed() && currentStep < 5) {
+      setCurrentStep(s => s + 1)
+    }
   }
 
-  return (
-    <div className="min-h-screen pt-16 bg-[var(--bg-primary)]">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-        <div className="flex items-center gap-4 mb-2">
-          <h1 className="text-3xl font-bold text-white">Book an Appointment</h1>
-        </div>
-        <p className="text-sm text-white/50 mb-10">
-          Schedule your guitar service at one of our locations
-        </p>
+  const handlePrevStep = () => {
+    if (currentStep > 1) {
+      setCurrentStep(s => s - 1)
+    }
+  }
 
-        <form onSubmit={handleSubmit} className="grid lg:grid-cols-[1.2fr_1.2fr_1.05fr] gap-8">
-          {/* Services selection */}
-          <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            className="space-y-4"
-          >
-            <h2 className="text-xl font-bold text-white mb-4">Select Services</h2>
-            {guitarServices.map(service => {
-              const Icon = service.icon
-              const isSelected = selectedServices.includes(service.id)
-              return (
-                <button
-                  key={service.id}
-                  type="button"
-                  onClick={() => handleToggleService(service.id)}
-                  className={`w-full p-4 text-left rounded-xl border-2 transition-all ${
-                    isSelected
-                      ? 'border-[#d4af37] bg-[#d4af37]/10'
-                      : 'border-white/10 bg-theme-surface-deep hover:border-[#d4af37]/50 hover:bg-white/5'
-                  }`}
-                >
-                  <div className="flex items-start gap-3">
-                    <div
-                      className={`mt-1 w-4 h-4 rounded-[4px] border flex items-center justify-center ${
-                        isSelected
-                          ? 'border-[#d4af37] bg-[#d4af37]'
-                          : 'border-white/30 bg-transparent'
-                      }`}
-                    >
-                      {isSelected && <span className="w-2 h-2 bg-white rounded-[2px]" />}
-                    </div>
-                    <Icon
-                      className={`w-5 h-5 mt-1 flex-shrink-0 ${
-                        isSelected ? 'text-[#d4af37]' : 'text-white/30'
-                      }`}
-                    />
-                    <div>
-                      <div className="flex items-center justify-between gap-2">
-                        <h3 className="font-semibold text-white">{service.name}</h3>
-                        <span className="text-xs font-semibold text-[#d4af37]">
-                          {formatCurrency(service.price, true)}
-                        </span>
-                      </div>
-                      <p className="text-xs text-white/40">{service.description}</p>
-                    </div>
+  const handleSubmit = async () => {
+    if (!canProceed()) return
+    setBookingComplete(true)
+    
+    try {
+      const [timeStr, modifier] = selectedTime.split(' ');
+      let [hours, minutes] = timeStr.split(':');
+      if (hours === '12') hours = '00';
+      if (modifier === 'PM') hours = parseInt(hours, 10) + 12;
+      const scheduledAt = new Date(`${selectedDateId}T${hours.toString().padStart(2, '0')}:${minutes}:00`);
+
+      const response = await fetch(`${API}/api/appointments`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          appointment_type: 'service_in_shop',
+          services: selectedServices,
+          location_id: selectedBranchId,
+          guitar_details: {
+            brand: guitarDetails.brand,
+            model: guitarDetails.model,
+            serial: guitarDetails.serial,
+            notes: guitarDetails.notes || ''
+          },
+          scheduled_at: scheduledAt.toISOString(),
+          notes: guitarDetails.notes || ''
+        })
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.message || 'Failed to create appointment');
+      }
+
+      setTimeout(() => {
+        setBookingComplete(false)
+        navigate('/dashboard')
+      }, 2000)
+
+    } catch (error) {
+      console.error('Submission Error:', error);
+      setBookingComplete(false);
+      alert(`Failed to book appointment: ${error.message}`);
+    }
+  }
+
+  // --- RENDERS ---
+
+  const renderStepContent = () => {
+    switch (currentStep) {
+      case 1:
+        return (
+          <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
+            <div>
+              <h2 className="text-2xl font-bold text-white mb-2">Select Services</h2>
+              <p className="text-sm text-white/50">Choose one or more professional guitar services. Our calendar availability will automatically adjust based on the expected turnaround times.</p>
+            </div>
+            
+            <div className="space-y-6">
+              {guitarServices.map(category => (
+                <div key={category.categoryId} className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <category.icon className="w-5 h-5 text-[#d4af37]" />
+                    <h3 className="font-semibold text-white/80">{category.name}</h3>
                   </div>
-                </button>
-              )
-            })}
+                  <div className="grid sm:grid-cols-2 gap-3 pl-7">
+                    {category.options.map(option => {
+                      const isSelected = selectedServices.includes(option.id)
+                      return (
+                        <button
+                          key={option.id}
+                          onClick={() => handleToggleService(option.id)}
+                          className={`text-left p-4 rounded-xl border-2 transition-all ${
+                            isSelected 
+                              ? 'border-[#d4af37] bg-[#d4af37]/10' 
+                              : 'border-white/5 bg-theme-surface-deep hover:border-[#d4af37]/30 hover:bg-white/5'
+                          }`}
+                        >
+                          <div className="flex justify-between items-start mb-1">
+                            <span className={`font-semibold text-sm ${isSelected ? 'text-[#d4af37]' : 'text-white'}`}>
+                              {option.name}
+                            </span>
+                            <span className="text-sm font-bold text-white/60">₱{option.price}</span>
+                          </div>
+                          <p className="text-xs text-white/40 leading-relaxed">{option.desc}</p>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
           </motion.div>
+        )
 
-          {/* Date / time / guitar details */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="space-y-6"
-          >
-            {/* Date picker */}
-            <div className="bg-theme-surface-deep border border-white/10 rounded-2xl p-6 space-y-4 shadow-sm">
-              <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                <Calendar className="w-5 h-5 text-[#d4af37]" />
-                Select Date
-              </h2>
-              <p className="text-xs text-white/40 mb-2">
-                Available dates are interactive; unavailable dates are dimmed.
-              </p>
+      case 2:
+        return (
+          <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
+            <div>
+              <h2 className="text-2xl font-bold text-white mb-2">Guitar Details</h2>
+              <p className="text-sm text-white/50">Tell us about the instrument you're bringing in.</p>
+            </div>
+            
+            <div className="bg-theme-surface-deep border border-white/5 p-6 rounded-2xl space-y-5">
+              <div>
+                <label className="block text-sm font-medium text-white/60 mb-1.5">Brand <span className="text-red-400">*</span></label>
+                <input
+                  type="text"
+                  value={guitarDetails.brand}
+                  onChange={e => setGuitarDetails({ ...guitarDetails, brand: e.target.value })}
+                  className="w-full px-4 py-3 bg-[#181818] text-white border border-white/10 rounded-xl text-sm focus:outline-none focus:border-[#d4af37] transition-colors"
+                  placeholder="e.g. Fender, Gibson, Ibanez"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-white/60 mb-1.5">Model <span className="text-red-400">*</span></label>
+                <input
+                  type="text"
+                  value={guitarDetails.model}
+                  onChange={e => setGuitarDetails({ ...guitarDetails, model: e.target.value })}
+                  className="w-full px-4 py-3 bg-[#181818] text-white border border-white/10 rounded-xl text-sm focus:outline-none focus:border-[#d4af37] transition-colors"
+                  placeholder="e.g. Stratocaster, Les Paul"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-white/60 mb-1.5">Serial Number <span className="text-red-400">*</span></label>
+                <input
+                  type="text"
+                  value={guitarDetails.serial}
+                  onChange={e => setGuitarDetails({ ...guitarDetails, serial: e.target.value })}
+                  className="w-full px-4 py-3 bg-[#181818] text-white border border-white/10 rounded-xl text-sm focus:outline-none focus:border-[#d4af37] transition-colors"
+                  placeholder="Required for shop tracking and liability"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-white/60 mb-1.5">Issues & Notes</label>
+                <textarea
+                  value={guitarDetails.notes}
+                  onChange={e => setGuitarDetails({ ...guitarDetails, notes: e.target.value })}
+                  className="w-full h-32 px-4 py-3 bg-[#181818] text-white border border-white/10 rounded-xl text-sm resize-none focus:outline-none focus:border-[#d4af37] transition-colors"
+                  placeholder="Describe your requested setups, string gauge preferences, or structural issues..."
+                />
+              </div>
+            </div>
+          </motion.div>
+        )
 
-              <div className="flex items-center justify-between mb-4">
-                <button
-                  type="button"
-                  onClick={() => {
-                    const prev = new Date(currentYear, currentMonth - 1, 1)
-                    setCurrentYear(prev.getFullYear())
-                    setCurrentMonth(prev.getMonth())
-                  }}
-                  className="p-2 rounded-lg hover:bg-white/10 text-white/40"
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </button>
-                <span className="text-sm font-semibold text-white">
-                  {new Date(currentYear, currentMonth, 1).toLocaleDateString(undefined, {
-                    month: 'long',
-                    year: 'numeric',
-                  })}
+      case 3:
+        return (
+          <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
+             <div>
+              <h2 className="text-2xl font-bold text-white mb-2">Location</h2>
+              <p className="text-sm text-white/50">Select the CosmosCraft branch you want to book at.</p>
+            </div>
+
+            <div className="space-y-3">
+              {branches.map(branch => {
+                const isSelected = selectedBranchId === branch.id
+                return (
+                  <button
+                    key={branch.id}
+                    onClick={() => setSelectedBranchId(branch.id)}
+                    className={`w-full flex items-center justify-between p-5 rounded-2xl border-2 transition-all ${
+                      isSelected 
+                        ? 'border-[#d4af37] bg-[#d4af37]/5' 
+                        : 'border-white/5 bg-theme-surface-deep hover:border-white/20'
+                    }`}
+                  >
+                    <div className="flex gap-4 text-left">
+                      <div className={`p-3 rounded-full ${isSelected ? 'bg-[#d4af37]/20 text-[#d4af37]' : 'bg-white/5 text-white/40'}`}>
+                        <MapPin className="w-6 h-6" />
+                      </div>
+                      <div>
+                        <h3 className={`font-bold text-lg mb-1 ${isSelected ? 'text-white' : 'text-white/80'}`}>{branch.name}</h3>
+                        <p className="text-sm text-white/50">{branch.address}</p>
+                        <p className="text-sm text-white/50 mt-1">{branch.hours}</p>
+                      </div>
+                    </div>
+                    {isSelected && <CheckCircle2 className="w-6 h-6 text-[#d4af37]" />}
+                  </button>
+                )
+              })}
+            </div>
+          </motion.div>
+        )
+
+      case 4:
+        return (
+          <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
+            <div>
+               <h2 className="text-2xl font-bold text-white mb-2">Select Date and Time</h2>
+               <p className="text-sm text-white/50">Due to current service volumes and your selected turnaround times, unavailable dates have been disabled.</p>
+            </div>
+
+            <div className="bg-theme-surface-deep border border-white/5 rounded-2xl p-6 shadow-xl">
+              {/* Calendar header */}
+               <div className="flex items-center justify-between mb-6">
+                <span className="text-lg font-bold text-white">
+                  {new Date(currentYear, currentMonth, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
                 </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const next = new Date(currentYear, currentMonth + 1, 1)
-                    setCurrentYear(next.getFullYear())
-                    setCurrentMonth(next.getMonth())
-                  }}
-                  className="p-2 rounded-lg hover:bg-white/10 text-white/40"
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      const prev = new Date(currentYear, currentMonth - 1, 1)
+                      setCurrentYear(prev.getFullYear())
+                      setCurrentMonth(prev.getMonth())
+                    }}
+                    className="p-2 rounded-lg bg-white/5 text-white/60 hover:bg-white/10 hover:text-white transition-colors border border-white/10"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => {
+                      const next = new Date(currentYear, currentMonth + 1, 1)
+                      setCurrentYear(next.getFullYear())
+                      setCurrentMonth(next.getMonth())
+                    }}
+                    className="p-2 rounded-lg bg-white/5 text-white/60 hover:bg-white/10 hover:text-white transition-colors border border-white/10"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
 
-              <div className="grid grid-cols-7 gap-2 text-xs text-white/30 mb-2">
+              {/* Calendar Grid */}
+              <div className="grid grid-cols-7 gap-2 text-sm text-white/40 mb-3 font-medium">
                 {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
-                  <span key={d} className="text-center">{d}</span>
+                  <span key={d} className="text-center pb-2">{d}</span>
                 ))}
               </div>
 
-              <div className="grid grid-cols-7 gap-2">
+              <div className="grid grid-cols-7 gap-2 mb-8">
                 {monthMatrix.map((week, wIdx) =>
                   week.map((day, dIdx) => {
-                    if (!day.inCurrentMonth) {
-                      return <div key={`${wIdx}-${dIdx}`} className="h-9" />
-                    }
+                    if (!day.inCurrentMonth) return <div key={`empty-${wIdx}-${dIdx}`} className="h-10" />
 
                     const isSelected = selectedDateId === day.id
                     const isUnavailable = !day.isAvailable
 
-                    const base =
-                      'flex items-center justify-center h-9 rounded-xl text-sm transition-all border'
-
                     if (isUnavailable) {
                       return (
-                        <div
-                          key={day.id}
-                          className={`${base} border-transparent text-white/20 bg-white/5`}
-                        >
+                        <div key={day.id} className="flex items-center justify-center h-10 rounded-xl text-sm font-medium text-white/20 bg-black/20 cursor-not-allowed">
                           {day.dayNumber}
                         </div>
                       )
@@ -291,228 +471,265 @@ export function AppointmentPage() {
                     return (
                       <button
                         key={day.id}
-                        type="button"
                         onClick={() => setSelectedDateId(day.id)}
-                        className={`${base} ${
+                        className={`flex items-center justify-center h-10 rounded-xl text-sm font-medium transition-all ${
                           isSelected
-                            ? 'bg-[#d4af37] text-[#111111] border-[#d4af37] font-semibold'
-                            : 'border-white/10 text-white/70 hover:border-[#d4af37] hover:bg-[#d4af37]/10 hover:text-[#d4af37]'
+                            ? 'bg-[#d4af37] text-black shadow-lg shadow-[#d4af37]/20 scale-105'
+                            : 'bg-white/5 text-white hover:bg-white/10 border border-white/5 hover:border-[#d4af37]/30'
                         }`}
                       >
                         {day.dayNumber}
                       </button>
                     )
-                  }),
+                  })
                 )}
               </div>
-            </div>
 
-            {/* Time slots */}
-            <div className="bg-theme-surface-deep border border-white/10 rounded-2xl p-6 shadow-sm">
-              <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-                <ClockIcon className="w-5 h-5 text-[#d4af37]" />
-                Select Time
-              </h2>
-              <div className="grid grid-cols-2 gap-2">
-                {timeSlots.map(time => (
-                  <button
-                    key={time}
-                    type="button"
-                    onClick={() => setSelectedTime(time)}
-                    className={`py-2 rounded-lg transition-all font-semibold ${
-                      selectedTime === time
-                        ? 'bg-[#d4af37] text-[#111111]'
-                        : 'bg-white/5 text-white/50 hover:text-[#d4af37] border border-white/10 hover:border-[#d4af37]/50'
-                    }`}
-                  >
-                    {time}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Guitar details */}
-            <div className="bg-theme-surface-deep border border-white/10 rounded-2xl p-6 space-y-4 shadow-sm">
-              <h2 className="text-xl font-bold text-white">Guitar Details</h2>
-              <div className="grid sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs text-white/40 mb-1">Brand</label>
-                  <input
-                    type="text"
-                    value={guitarDetails.brand}
-                    onChange={e => setGuitarDetails({ ...guitarDetails, brand: e.target.value })}
-                    className="w-full px-3 py-2.5 bg-[var(--surface-dark)] text-[var(--text-light)] border border-[var(--border)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] focus:border-[var(--gold-primary)] placeholder:text-[var(--text-muted)]"
-                    placeholder="Fender, Gibson, Ibanez..."
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-white/40 mb-1">Model</label>
-                  <input
-                    type="text"
-                    value={guitarDetails.model}
-                    onChange={e => setGuitarDetails({ ...guitarDetails, model: e.target.value })}
-                    className="w-full px-3 py-2.5 bg-[var(--surface-dark)] text-[var(--text-light)] border border-[var(--border)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] focus:border-[var(--gold-primary)] placeholder:text-[var(--text-muted)]"
-                    placeholder="Stratocaster, Les Paul..."
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs text-white/40 mb-1">Serial Number</label>
-                  <input
-                    type="text"
-                    value={guitarDetails.serial}
-                    onChange={e => setGuitarDetails({ ...guitarDetails, serial: e.target.value })}
-                    className="w-full px-3 py-2.5 bg-[var(--surface-dark)] text-[var(--text-light)] border border-[var(--border)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] focus:border-[var(--gold-primary)] placeholder:text-[var(--text-muted)]"
-                    placeholder="Optional for tracking"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs text-white/40 mb-1">Issues / Notes</label>
-                <textarea
-                  value={guitarDetails.notes}
-                  onChange={e => setGuitarDetails({ ...guitarDetails, notes: e.target.value })}
-                  className="w-full h-24 px-3 py-2.5 bg-[var(--surface-dark)] text-[var(--text-light)] border border-[var(--border)] rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] focus:border-[var(--gold-primary)] placeholder:text-[var(--text-muted)]"
-                  placeholder="Describe any issues, upgrades, or preferences..."
-                />
-              </div>
-            </div>
-          </motion.div>
-
-          {/* Location + summary */}
-          <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.2 }}
-            className="space-y-6"
-          >
-            <div className="bg-theme-surface-deep border border-white/10 rounded-2xl p-6 space-y-4 shadow-sm">
-              <div className="space-y-2">
-                <label className="block text-xs text-white/40">Location</label>
-                <select
-                  value={selectedBranchId}
-                  onChange={e => setSelectedBranchId(e.target.value)}
-                  className="w-full px-3 py-2.5 bg-[var(--surface-dark)] text-[var(--text-light)] border border-[var(--border)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] focus:border-[var(--gold-primary)]"
-                >
-                  {branches.map(branch => (
-                    <option key={branch.id} value={branch.id}>
-                      {branch.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="bg-white/5 rounded-lg p-4 space-y-3">
-                <div className="flex items-start gap-2">
-                  <MapPin className="w-5 h-5 text-[#d4af37] flex-shrink-0 mt-0.5" />
-                  <p className="text-sm text-white/60">{currentBranch.address}</p>
-                </div>
-                <div className="flex items-start gap-2">
-                  <Phone className="w-5 h-5 text-[#d4af37] flex-shrink-0 mt-0.5" />
-                  <p className="text-sm text-white/60">{currentBranch.phone}</p>
-                </div>
-                <div className="flex items-start gap-2">
-                  <ClockIcon className="w-5 h-5 text-[#d4af37] flex-shrink-0 mt-0.5" />
-                  <p className="text-sm text-white/60">{currentBranch.hours}</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Booking summary */}
-            <div className="bg-theme-surface-deep border border-white/10 rounded-2xl p-6 space-y-4 shadow-sm">
-              <h2 className="text-xl font-bold text-white mb-2">Booking Summary</h2>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-white/40">Location</span>
-                  <span className="text-white">{currentBranch.name}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-white/40">Date</span>
-                  <span className="text-white">
-                    {selectedDate
-                      ? selectedDate.toLocaleDateString(undefined, {
-                          month: 'short',
-                          day: 'numeric',
-                          year: 'numeric',
-                        })
-                      : 'Not selected'}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-white/40">Time</span>
-                  <span className="text-white">{selectedTime || 'Not selected'}</span>
-                </div>
-                <div className="border-t border-white/10 pt-3 mt-3 space-y-1">
-                  <span className="block text-white/40">Services</span>
-                  {selectedServices.length ? (
-                    <ul className="text-white text-xs space-y-1">
-                      {selectedServices.map(id => {
-                        const svc = guitarServices.find(s => s.id === id)
-                        return (
-                          <li key={id} className="flex justify-between">
-                            <span>{svc?.name}</span>
-                            <span className="text-[#d4af37]">{formatCurrency(svc?.price || 0, true)}</span>
-                          </li>
-                        )
-                      })}
-                    </ul>
-                  ) : (
-                    <p className="text-xs text-white/30">No services selected</p>
-                  )}
-                </div>
-                <div className="border-t border-white/10 pt-3 mt-3 space-y-1">
-                  <span className="block text-white/40">Guitar</span>
-                  <p className="text-xs text-white">
-                    {guitarDetails.brand || guitarDetails.model
-                      ? `${guitarDetails.brand} ${guitarDetails.model}`.trim()
-                      : 'No guitar details'}
-                  </p>
-                </div>
-                <div className="flex justify-between pt-3 border-t border-white/10 mt-3">
-                  <span className="text-sm font-semibold text-white">Total</span>
-                  <span className="text-lg font-bold text-[#d4af37]">
-                    {formatCurrency(totalPrice, true)}
-                  </span>
-                </div>
-                {referenceNumber && (
-                  <div className="pt-2 text-xs text-white/40">
-                    Reference:&nbsp;
-                    <span className="font-mono text-white">{referenceNumber}</span>
+              {/* Time Slots */}
+              {selectedDateId && (
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="pt-6 border-t border-white/10">
+                  <h3 className="text-sm font-bold text-white/60 mb-4 uppercase tracking-wider">Available Time Slots</h3>
+                  <div className="flex flex-wrap gap-3">
+                    {timeSlots.map(time => {
+                      const isSelected = selectedTime === time
+                      return (
+                        <button
+                          key={time}
+                          onClick={() => setSelectedTime(time)}
+                          className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
+                            isSelected
+                              ? 'bg-[#d4af37] text-black'
+                              : 'bg-black/40 text-white border border-white/10 hover:border-white/30'
+                          }`}
+                        >
+                          {time}
+                        </button>
+                      )
+                    })}
                   </div>
-                )}
-              </div>
+                </motion.div>
+              )}
+            </div>
 
-              <button
-                type="submit"
-                disabled={!isFormComplete}
-                className="w-full mt-4 py-3 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[#111111] rounded-lg font-semibold hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Complete Booking &amp; Go to Dashboard
-              </button>
+            {/* Currently Selected Summary */}
+            <div className={`p-4 rounded-xl border transition-all flex items-center gap-3 ${selectedDateId && selectedTime ? 'bg-[#d4af37]/10 border-[#d4af37]/30' : 'bg-theme-surface-deep border-white/5'}`}>
+               <ClockIcon className={`w-5 h-5 ${selectedDateId && selectedTime ? 'text-[#d4af37]' : 'text-white/20'}`} />
+               <div>
+                  <p className="text-xs text-white/40 mb-0.5">Currently Selected</p>
+                  <p className={`text-sm font-medium ${selectedDateId && selectedTime ? 'text-[#d4af37]' : 'text-white/40'}`}>
+                    {selectedDate && selectedTime 
+                        ? `${selectedDate.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })} at ${selectedTime}`
+                        : 'No date and time selected yet'}
+                  </p>
+               </div>
             </div>
           </motion.div>
-        </form>
+        )
 
+      case 5:
+        return (
+          <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
+            <div>
+              <h2 className="text-2xl font-bold text-white mb-2">Confirmation</h2>
+              <p className="text-sm text-white/50">Review your appointment details before finalizing.</p>
+            </div>
+
+            <div className="bg-theme-surface-deep border border-white/10 rounded-2xl p-6 shadow-xl space-y-6">
+               <div className="flex justify-between items-end border-b border-white/10 pb-4">
+                  <div>
+                    <p className="text-xs font-bold text-white/40 uppercase tracking-wider mb-1">Appointment Date</p>
+                    <p className="text-lg font-medium text-[#d4af37]">
+                      {selectedDate?.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric'})} at {selectedTime}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs font-bold text-white/40 uppercase tracking-wider mb-1">Location</p>
+                    <p className="text-sm font-medium text-white">{currentBranch.name}</p>
+                  </div>
+               </div>
+               
+               <div className="grid sm:grid-cols-2 gap-6">
+                 <div>
+                    <p className="text-xs font-bold text-white/40 uppercase tracking-wider mb-3">Selected Services</p>
+                    <ul className="space-y-2">
+                      {selectedDetailedServices.map(svc => (
+                        <li key={svc.id} className="flex justify-between text-sm">
+                          <span className="text-white/80">{svc.name}</span>
+                          <span className="text-[#d4af37]">₱{svc.price}</span>
+                        </li>
+                      ))}
+                    </ul>
+                 </div>
+                 
+                 <div>
+                    <p className="text-xs font-bold text-white/40 uppercase tracking-wider mb-3">Guitar Details</p>
+                    <div className="space-y-1 text-sm bg-black/20 p-3 rounded-lg border border-white/5">
+                      <p><span className="text-white/40">Brand:</span> <span className="text-white">{guitarDetails.brand}</span></p>
+                      <p><span className="text-white/40">Model:</span> <span className="text-white">{guitarDetails.model}</span></p>
+                      <p><span className="text-white/40">Serial:</span> <span className="text-white">{guitarDetails.serial}</span></p>
+                    </div>
+                 </div>
+               </div>
+
+               <div className="border-t border-white/10 pt-4 flex justify-between items-center">
+                  <span className="text-sm font-bold text-white/60 uppercase">Estimated Total</span>
+                  <span className="text-2xl font-bold text-[#d4af37]">₱{totalPrice}</span>
+               </div>
+               
+               {referenceNumber && (
+                 <div className="bg-[#d4af37]/10 border border-[#d4af37]/30 rounded-lg p-3 text-center">
+                   <p className="text-xs text-[#d4af37]/80 uppercase tracking-wider mb-1">Temporary Reference Number</p>
+                   <p className="font-mono font-bold text-[#d4af37]">{referenceNumber}</p>
+                 </div>
+               )}
+            </div>
+          </motion.div>
+        )
+
+      default:
+        return null
+    }
+  }
+
+  return (
+    <div className="min-h-screen pt-16 bg-[#0a0a0a]">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+        
+        {/* Header Back Button */}
+        <button
+          onClick={() => navigate(-1)}
+          className="flex items-center gap-2 text-white/40 hover:text-white transition-colors mb-8 group"
+        >
+          <ChevronLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
+          <span className="font-medium text-sm">Back to Dashboard</span>
+        </button>
+
+        <div className="grid lg:grid-cols-[280px_1fr] gap-8 xl:gap-12 min-h-[600px]">
+          
+          {/* LEFT SIDEBAR (STEPPER) */}
+          <div className="bg-theme-surface-deep border border-white/5 rounded-3xl p-8 relative overflow-hidden flex flex-col justify-between">
+             {/* Gradient splash mimicking reference */}
+             <div className="absolute -top-32 -left-32 w-64 h-64 bg-[#d4af37]/10 blur-[100px] rounded-full pointer-events-none" />
+             <div className="absolute -bottom-32 -right-32 w-64 h-64 bg-[#d4af37]/5 blur-[100px] rounded-full pointer-events-none" />
+             
+             <div className="relative z-10">
+                <div className="flex items-center gap-3 mb-12">
+                   {/* Logo mock */}
+                   <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#d4af37] to-[#8a7223] flex items-center justify-center">
+                      <Settings className="w-5 h-5 text-black" />
+                   </div>
+                   <span className="font-bold tracking-wider text-white text-lg">Cosmos<span className="font-light">Craft</span></span>
+                </div>
+
+                <div className="space-y-6 relative ml-2">
+                  {/* Vertical connecting line */}
+                  <div className="absolute left-[13px] top-4 bottom-8 w-[2px] bg-white/5 -z-10" />
+
+                  {STEPS.map(step => {
+                    const isCompleted = currentStep > step.id
+                    const isCurrent = currentStep === step.id
+                    const isUpcoming = currentStep < step.id
+
+                    return (
+                      <div key={step.id} className="flex items-center gap-4 relative">
+                        {/* Step Marker */}
+                        <div 
+                          className={`w-[28px] h-[28px] rounded-full flex items-center justify-center text-xs font-bold transition-all duration-300 ${
+                            isCompleted 
+                              ? 'bg-[#d4af37] text-black border border-[#d4af37]' 
+                              : isCurrent 
+                                ? 'bg-[#d4af37] text-black shadow-[0_0_15px_rgba(212,175,55,0.4)] border border-[#d4af37]'
+                                : 'bg-[#181818] text-white/30 border border-white/10'
+                          }`}
+                        >
+                          {isCompleted ? <Check className="w-3.5 h-3.5" /> : step.id}
+                        </div>
+                        {/* Step Label */}
+                        <span className={`text-sm font-medium transition-colors ${
+                          isCurrent ? 'text-white' : isCompleted ? 'text-white/70' : 'text-white/30'
+                        }`}>
+                          {step.label}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+             </div>
+
+             <div className="relative z-10 mt-12 text-center text-xs text-white/30">
+               Need help with booking?<br/>Contact our support
+             </div>
+          </div>
+
+          {/* RIGHT CONTENT PANE */}
+          <div className="flex flex-col relative">
+            <div className="flex-1">
+              <AnimatePresence mode="wait">
+                <motion.div key={currentStep}>
+                  {renderStepContent()}
+                </motion.div>
+              </AnimatePresence>
+            </div>
+
+            {/* Pagination Controls */}
+            <div className="mt-8 pt-6 border-t border-white/5 flex items-center justify-between">
+               <button
+                 onClick={handlePrevStep}
+                 disabled={currentStep === 1 || bookingComplete}
+                 className="px-6 py-2.5 rounded-xl text-sm font-bold text-white/60 bg-white/5 border border-white/10 hover:bg-white/10 hover:text-white transition-colors disabled:opacity-0"
+               >
+                 Back
+               </button>
+
+               {currentStep < 5 ? (
+                 <button
+                   onClick={handleNextStep}
+                   disabled={!canProceed()}
+                   className="px-8 py-2.5 rounded-xl text-sm font-bold bg-[#d4af37] text-black hover:bg-[#ffe270] transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-[#d4af37]/10"
+                 >
+                   Next {currentStep === 4 && 'Step'}
+                 </button>
+               ) : (
+                 <button
+                   onClick={handleSubmit}
+                   disabled={bookingComplete}
+                   className="px-8 py-2.5 rounded-xl text-sm font-bold bg-[#d4af37] text-black hover:bg-[#ffe270] transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(212,175,55,0.3)] shadow-[#d4af37]/20 flex items-center gap-2"
+                 >
+                   {bookingComplete ? (
+                     <>Processing... <Settings className="w-4 h-4 animate-spin" /></>
+                   ) : (
+                     "Complete Booking"
+                   )}
+                 </button>
+               )}
+            </div>
+          </div>
+
+        </div>
+
+        {/* Global Success Overlay */}
         <AnimatePresence>
           {bookingComplete && (
             <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 20 }}
-              className="fixed inset-0 flex items-center justify-center z-50 bg-black/60"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 flex items-center justify-center z-[100] bg-black/80 backdrop-blur-sm"
             >
-              <div className="bg-theme-surface-deep border border-[#d4af37] rounded-2xl px-10 py-8 text-center max-w-sm mx-4 shadow-2xl">
-                <CheckCircle2 className="w-16 h-16 text-[#d4af37] mx-auto mb-4" />
-                <h3 className="text-xl font-bold text-white mb-2">Booking Confirmed</h3>
-                <p className="text-sm text-white/50 mb-3">
-                  Your appointment has been scheduled successfully.
+              <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} className="bg-[#181818] border border-[#d4af37]/50 rounded-3xl p-10 text-center max-w-sm mx-4 shadow-2xl">
+                <div className="w-20 h-20 bg-[#d4af37]/20 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <CheckCircle2 className="w-10 h-10 text-[#d4af37]" />
+                </div>
+                <h3 className="text-2xl font-bold text-white mb-2">Booking Confirmed!</h3>
+                <p className="text-sm text-white/60 mb-6">
+                  Your appointment has been scheduled successfully. You will be redirected to the dashboard.
                 </p>
                 {referenceNumber && (
-                  <p className="text-xs text-white/40">
-                    Reference:&nbsp;
-                    <span className="font-mono text-white">{referenceNumber}</span>
-                  </p>
+                   <p className="text-xs font-mono text-[#d4af37] bg-[#d4af37]/10 py-2 rounded-lg">
+                     {referenceNumber}
+                   </p>
                 )}
-              </div>
+              </motion.div>
             </motion.div>
           )}
         </AnimatePresence>

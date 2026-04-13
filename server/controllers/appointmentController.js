@@ -33,8 +33,8 @@ async function checkAppointmentAccess(appointmentId, userId, userRole) {
     throw new AppError('Appointment not found', 404);
   }
 
-  // Staff and admin can access all
-  if (['admin', 'staff'].includes(userRole)) {
+  // Staff, admin, and super_admin can access all
+  if (['admin', 'super_admin', 'staff'].includes(userRole)) {
     return appointment;
   }
 
@@ -58,10 +58,12 @@ exports.createAppointment = async (req, res, next) => {
     const validated = validate(req.body, appointmentValidation.createAppointmentSchema);
 
     // Use authenticated user's ID if not provided (customer booking for self)
-    const userId = validated.user_id || req.user.user_id;
+    const userId = validated.user_id || req.user.id;
 
     const appointment = await appointmentService.createAppointment({
-      service_id: validated.service_id,
+      services: validated.services,
+      location_id: validated.location_id,
+      guitar_details: validated.guitar_details,
       scheduled_at: validated.scheduled_at,
       notes: validated.notes,
       user_id: userId,
@@ -92,7 +94,7 @@ exports.getAppointment = async (req, res, next) => {
     // Check access
     const appointment = await checkAppointmentAccess(
       id,
-      req.user.user_id,
+      req.user.id,
       req.user.role
     );
 
@@ -126,7 +128,7 @@ exports.listAppointments = async (req, res, next) => {
 
     // Customers can only see their own appointments
     if (req.user.role === 'customer') {
-      filters.user_id = req.user.user_id;
+      filters.user_id = req.user.id;
     }
 
     // Get appointments

@@ -475,7 +475,9 @@ CREATE INDEX idx_services_is_active ON services(is_active);
 CREATE TABLE appointments (
     appointment_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID,
-    service_id INT NOT NULL,
+    services JSONB DEFAULT '[]'::jsonb,
+    location_id VARCHAR(50),
+    guitar_details JSONB,
     scheduled_at TIMESTAMPTZ NOT NULL,
     estimated_end_at TIMESTAMPTZ,
     status appointment_status_enum NOT NULL DEFAULT 'pending',
@@ -484,7 +486,6 @@ CREATE TABLE appointments (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE SET NULL,
-    FOREIGN KEY (service_id) REFERENCES services(service_id) ON DELETE CASCADE,
     CHECK (estimated_end_at IS NULL OR estimated_end_at > scheduled_at)
 );
 

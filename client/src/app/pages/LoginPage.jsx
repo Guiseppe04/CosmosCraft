@@ -71,7 +71,7 @@ export function LoginPage() {
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
-          className="mb-8"
+          className="mb-8 text-center"
         >
           <Link to="/" className="text-2xl font-bold bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] bg-clip-text text-transparent">
             CosmosCraft
@@ -85,11 +85,11 @@ export function LoginPage() {
           transition={{ duration: 0.5, delay: 0.1 }}
           className="mb-6"
         >
-          <div className="flex justify-start mb-6">
+          <div className="flex justify-center mb-6">
             <img src="/logo-cosmos.png" alt="CosmosCraft Logo" className="h-16 w-auto" />
           </div>
-          <h1 className="text-4xl font-bold text-white mb-2">Welcome Back</h1>
-          <p className="text-[var(--text-muted)]">Sign in to continue to CosmosCraft</p>
+          <h1 className="text-4xl font-bold text-white mb-2 text-center">Welcome Back</h1>
+          <p className="text-[var(--text-muted)] text-center">Sign in to continue to CosmosCraft</p>
         </motion.div>
 
         {error && <p className="mb-4 text-sm text-red-500 font-medium bg-red-500/10 p-3 rounded-lg border border-red-500/20">{error}</p>}

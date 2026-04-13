@@ -59,7 +59,7 @@ function Tooltip({ content, children }) {
 
 function AnimatedPrice({ price }) {
   const displayPrice = useMemo(() => {
-    const phpPrice = toPHP(price, true)
+    const phpPrice = toPHP(price, false)
     return phpPrice.toLocaleString('en-PH')
   }, [price])
   
@@ -108,7 +108,7 @@ function OptionButton({ option, isSelected, onClick }) {
           <div className={`text-xs font-semibold ${
             isSelected ? 'text-[#d4af37]' : 'text-[#d4af37]/70'
           }`}>
-            +₱{toPHP(option.price, true).toLocaleString('en-PH')}
+            +₱{option.price.toLocaleString('en-PH')}
           </div>
         )}
       </div>
@@ -156,7 +156,7 @@ function VisualCard({ option, isSelected, onClick, previewImage }) {
           <div className={`text-[10px] font-medium ${
             isSelected ? 'text-[#d4af37]' : 'text-[#d4af37]/70'
           }`}>
-            +₱{toPHP(option.price, true).toLocaleString('en-PH')}
+            +₱{option.price.toLocaleString('en-PH')}
           </div>
         )}
       </div>
@@ -825,7 +825,7 @@ export function BassCustomizePage() {
                 <div>
                   <p className="text-xs uppercase tracking-[0.2em] text-white/40">Your Build Total</p>
                   <AnimatedPrice price={price} />
-                  <p className="mt-1 text-xs text-white/30">Base price: ₱{toPHP(89999, true).toLocaleString('en-PH')}</p>
+                  <p className="mt-1 text-xs text-white/30">Base price: ₱{(89999).toLocaleString('en-PH')}</p>
                 </div>
                 
                 <div className="flex flex-col sm:flex-row gap-3">
@@ -1088,7 +1088,7 @@ export function BassCustomizePage() {
                           <p>Created: {new Date(build.createdAt).toLocaleDateString('en-PH')}</p>
                         </div>
                         <div className="mt-2 text-sm font-semibold text-[#d4af37]">
-                          ₱{toPHP(build.price, true).toLocaleString('en-PH')}
+                          ₱{build.price.toLocaleString('en-PH')}
                         </div>
                       </div>
                       <button

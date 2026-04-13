@@ -18,23 +18,28 @@ const appointmentValidation = {
         'any.only': 'appointment_type must be: service_in_shop, service_home, or pickup',
       }),
 
-    // Service ID - Required for service types, forbidden for pickup
-    service_id: Joi.number()
-      .integer()
-      .positive()
+    // Services Array - Required for service types, forbidden for pickup
+    services: Joi.array().items(Joi.string())
+      .min(1)
       .when('appointment_type', {
         is: Joi.string().valid('service_in_shop', 'service_home'),
         then: Joi.required().messages({
-          'any.required': 'service_id is required for service appointments',
+          'any.required': 'services array is required for service appointments',
+          'array.min': 'at least one service must be selected',
         }),
         otherwise: Joi.forbidden().messages({
-          'any.forbidden': 'service_id must not be provided for pickup appointments',
+          'any.forbidden': 'services must not be provided for pickup appointments',
         }),
-      })
-      .messages({
-        'number.base': 'service_id must be a number',
-        'number.positive': 'service_id must be positive',
       }),
+
+    location_id: Joi.string().optional(),
+
+    guitar_details: Joi.object({
+      brand: Joi.string().required(),
+      model: Joi.string().required(),
+      serial: Joi.string().required(),
+      notes: Joi.string().allow('').optional()
+    }).optional(),
 
     // Order ID - Required for pickup, forbidden for service
     order_id: Joi.string()
@@ -194,13 +199,8 @@ const appointmentValidation = {
         'string.guid': 'Invalid user_id format',
       }),
 
-    service_id: Joi.number()
-      .integer()
-      .positive()
-      .optional()
-      .messages({
-        'number.positive': 'service_id must be positive',
-      }),
+    service_id: Joi.string()
+      .optional(),
 
     order_id: Joi.string()
       .uuid()

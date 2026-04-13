@@ -28,6 +28,46 @@ import { ConfirmModal } from '../components/ui/ConfirmModal'
 import { useDebounce } from '../hooks/useDebounce'
 import { useSmartPolling } from '../hooks/useSmartPolling'
 
+// ── Category Tree Helpers ─────────────────────────────────────────────────────
+function buildCategoryTree(categories) {
+  const map = new Map()
+  const roots = []
+  
+  categories.forEach(c => {
+    map.set(c.category_id, { ...c, children: [] })
+  })
+  
+  categories.forEach(c => {
+    const node = map.get(c.category_id)
+    if (c.parent_id && map.has(c.parent_id)) {
+      map.get(c.parent_id).children.push(node)
+    } else {
+      roots.push(node)
+    }
+  })
+  
+  const sortNodes = (nodes) => {
+    nodes.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
+    nodes.forEach(n => sortNodes(n.children))
+  }
+  sortNodes(roots)
+  
+  return roots
+}
+
+function flattenCategoryTreeForAdmin(tree, depth = 0) {
+  const result = []
+  
+  tree.forEach(node => {
+    result.push({ ...node, depth, isParent: node.children && node.children.length > 0 })
+    if (node.children && node.children.length > 0) {
+      result.push(...flattenCategoryTreeForAdmin(node.children, depth + 1))
+    }
+  })
+  
+  return result
+}
+
 const VALID_ROLES = ['customer', 'staff', 'admin', 'super_admin']
 
 function updateIfChanged(currentData, newData, setter) {
@@ -199,7 +239,8 @@ export function AdminPage() {
   // ── Derived / filtered views ─────────────────────────────────────────────
   const visibleProducts = products || []
   const visibleParts = parts || []
-  const visibleCategories = categories || []
+  const categoryTree = useMemo(() => buildCategoryTree(categories || []), [categories])
+  const visibleCategories = useMemo(() => flattenCategoryTreeForAdmin(categoryTree), [categoryTree])
   const visibleOrders = orders || []
   const visibleProjects = projects || []
   const visibleAppointments = appointments || []
@@ -298,8 +339,8 @@ export function AdminPage() {
   }, [filteredInventory, inventoryPage])
 
   const guitarTypeOptions = useMemo(
-    () => Array.from(new Set((parts || []).map((p) => p.guitar_type).filter(Boolean))).sort(),
-    [parts]
+    () => ['electric', 'bass', 'acoustic', 'ukulele'].sort(),
+    []
   )
 
   const inventoryHealthData = (() => {
@@ -992,11 +1033,7 @@ export function AdminPage() {
                   <Plus className="w-4 h-4" /> New Project
                 </button>
               )}
-              {activeTab === 'appointments' && (
-                <button onClick={() => openModal('appointment')} className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black rounded-xl font-semibold text-sm hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all">
-                  <Plus className="w-4 h-4" /> Add Appointment
-                </button>
-              )}
+
               {activeTab === 'inventory' && (
                 <button onClick={() => openModal('inventory')} className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black rounded-xl font-semibold text-sm hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all">
                   <Plus className="w-4 h-4" /> Adjust Stock
@@ -1191,7 +1228,14 @@ export function AdminPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3">
                   <select aria-label="Filter products by category" value={productQuery.category_id} onChange={(e) => setProductQuery((prev) => ({ ...prev, page: 1, category_id: e.target.value }))} className={inputCls}>
                     <option value="">All categories</option>
-                    {visibleCategories.map((c) => <option key={c.category_id} value={c.category_id}>{c.name}</option>)}
+                    {categoryTree.map(parent => (
+                      <optgroup key={parent.category_id} label={parent.name}>
+                        <option value={parent.category_id}>{parent.name} (All)</option>
+                        {parent.children?.map(child => (
+                          <option key={child.category_id} value={child.category_id}>{'→ ' + child.name}</option>
+                        ))}
+                      </optgroup>
+                    ))}
                   </select>
                   <input 
                     type="text"
@@ -1453,26 +1497,54 @@ export function AdminPage() {
           {activeTab === 'categories' && (
             <motion.div key="categories" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
               <AdminTable
-                columns={['Name', 'Slug', 'Parent', 'Status', 'Actions']}
+                columns={['Name', 'Slug', 'Type', 'Status', 'Actions']}
                 rows={visibleCategories}
-                renderRow={(cat) => (
-                  <>
-                    <td className="py-4 px-6 text-white font-semibold">{cat.name}</td>
-                    <td className="py-4 px-6 text-[var(--text-muted)] font-mono text-sm">{cat.slug}</td>
-                    <td className="py-4 px-6 text-[var(--text-muted)]">{cat.parent_name || '—'}</td>
-                    <td className="py-4 px-6"><StatusBadge active={cat.is_active} /></td>
-                    <td className="py-4 px-6">
-                      <div className="flex gap-2">
-                        <button onClick={() => openModal('category', cat)} className="p-1.5 hover:bg-[var(--gold-primary)]/10 rounded">
-                          <Edit className="w-4 h-4 text-[var(--text-muted)]" />
-                        </button>
-                        <button onClick={() => deleteCategory(cat.category_id, cat.name)} className="p-1.5 hover:bg-red-500/10 rounded">
-                          <Trash2 className="w-4 h-4 text-red-400" />
-                        </button>
-                      </div>
-                    </td>
-                  </>
-                )}
+                renderRow={(cat) => {
+                  const depth = cat.depth || 0
+                  const indent = depth * 24
+                  const isParent = cat.isParent
+                  const parentCat = categories?.find(c => c.category_id === cat.parent_id)
+                  
+                  return (
+                    <>
+                      <td className="py-4 px-6" style={{ paddingLeft: `${16 + indent}px` }}>
+                        <div className="flex items-center gap-2">
+                          {isParent ? (
+                            <span className="w-2 h-2 rounded-full bg-[var(--gold-primary)]" />
+                          ) : (
+                            <span className="w-1.5 h-1.5 rounded-full bg-[var(--text-muted)]/50" />
+                          )}
+                          <span className={`font-semibold ${isParent ? 'text-white' : 'text-white/80'}`}>{cat.name}</span>
+                        </div>
+                      </td>
+                      <td className="py-4 px-6 text-[var(--text-muted)] font-mono text-sm">{cat.slug}</td>
+                      <td className="py-4 px-6">
+                        {isParent ? (
+                          <span className="px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wider bg-[var(--gold-primary)]/20 text-[var(--gold-primary)] border border-[var(--gold-primary)]/30">
+                            Parent
+                          </span>
+                        ) : parentCat ? (
+                          <span className="text-[var(--text-muted)] text-sm">
+                            {parentCat.name}
+                          </span>
+                        ) : (
+                          <span className="text-[var(--text-muted)]/50">—</span>
+                        )}
+                      </td>
+                      <td className="py-4 px-6"><StatusBadge active={cat.is_active} /></td>
+                      <td className="py-4 px-6">
+                        <div className="flex gap-2">
+                          <button onClick={() => openModal('category', cat)} className="p-1.5 hover:bg-[var(--gold-primary)]/10 rounded">
+                            <Edit className="w-4 h-4 text-[var(--text-muted)]" />
+                          </button>
+                          <button onClick={() => deleteCategory(cat.category_id, cat.name)} className="p-1.5 hover:bg-red-500/10 rounded">
+                            <Trash2 className="w-4 h-4 text-red-400" />
+                          </button>
+                        </div>
+                      </td>
+                    </>
+                  )
+                }}
                 empty={<EmptyState icon={Tag} label="No categories yet" action={() => openModal('category')} actionLabel="Add Category" />}
               />
             </motion.div>
@@ -2076,7 +2148,7 @@ export function AdminPage() {
                             <tr key={apt.appointment_id} className="border-b border-[var(--border)]/50 hover:bg-[var(--bg-primary)]/50 transition-colors">
                               <td className="py-4 px-6 text-[var(--text-muted)] font-mono text-sm">#{i + 1}</td>
                               <td className="py-4 px-6">
-                                <p className="text-white font-medium">{apt.title || apt.service_name || 'Appointment'}</p>
+                                <p className="text-white font-medium">{apt.guitar_details ? `${apt.guitar_details.brand} ${apt.guitar_details.model}` : (apt.title || apt.service_name || 'Appointment')}</p>
                                 {apt.notes && <p className="text-[var(--text-muted)] text-xs truncate max-w-xs">{apt.notes}</p>}
                               </td>
                               <td className="py-4 px-6">
@@ -2087,7 +2159,9 @@ export function AdminPage() {
                                 <p className="text-white">{apptDate ? new Date(apptDate).toLocaleDateString() : '—'}</p>
                                 <p className="text-[var(--text-muted)] text-sm">{apt.time || (apptDate ? new Date(apptDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—')}</p>
                               </td>
-                              <td className="py-4 px-6 text-[var(--text-muted)]">{apt.service_name || 'Consultation'}</td>
+                              <td className="py-4 px-6 text-[var(--text-muted)] capitalize">
+                                {Array.isArray(apt.services) ? apt.services.map(s => s.replace(/-/g, ' ')).join(', ') : (apt.service_name || 'Consultation')}
+                              </td>
                               <td className="py-4 px-6">
                                 <span className={`px-2 py-0.5 rounded-full text-xs font-semibold border ${statusCls}`}>
                                   {apt.status || 'Pending'}
@@ -2095,10 +2169,14 @@ export function AdminPage() {
                               </td>
                               <td className="py-4 px-6">
                                 <div className="flex gap-2">
-                                  <button onClick={() => openModal('appointment', apt)} className="p-1.5 hover:bg-[var(--gold-primary)]/10 rounded transition-colors">
-                                    <Edit className="w-4 h-4 text-[var(--text-muted)]" />
+                                  <button onClick={() => openModal('view_appointment', apt)} className="p-1.5 hover:bg-blue-500/10 rounded transition-colors" title="View Summary">
+                                    <Eye className="w-4 h-4 text-blue-400" />
                                   </button>
-                                  <button onClick={() => deleteAppointment(apt.appointment_id, apt.title)} className="p-1.5 hover:bg-red-500/10 rounded transition-colors">
+                                  <button onClick={() => openModal('appointment', apt)} className="p-1.5 hover:bg-green-500/10 rounded transition-colors" title="Update Status">
+                                    <CheckCircle className="w-4 h-4 text-green-400" />
+                                  </button>
+
+                                  <button onClick={() => deleteAppointment(apt.appointment_id, apt.title)} className="p-1.5 hover:bg-red-500/10 rounded transition-colors" title="Delete">
                                     <Trash2 className="w-4 h-4 text-red-400" />
                                   </button>
                                 </div>
@@ -2537,6 +2615,185 @@ export function AdminPage() {
                 </>
               )}
 
+              {/* Appointment View Modal */}
+              {modal.type === 'view_appointment' && modal.data && (() => {
+                const apt = modal.data;
+                const apptDate = apt.scheduled_at || apt.date;
+                const statusColors = {
+                  pending: 'bg-yellow-500/10 text-yellow-500 border-yellow-500/30',
+                  approved: 'bg-green-500/10 text-green-400 border-green-500/30',
+                  completed: 'bg-blue-500/10 text-blue-400 border-blue-500/30',
+                  cancelled: 'bg-red-500/10 text-red-500 border-red-500/30',
+                  'no_show': 'bg-orange-500/10 text-orange-400 border-orange-500/30',
+                };
+                const statusCls = statusColors[apt.status] || 'bg-gray-500/10 text-gray-400 border-gray-500/30';
+                return (
+                  <>
+                    <ModalHeader title="Appointment Summary" onClose={closeModal} />
+                    <div className="mt-6 space-y-6 text-sm">
+                      <div className="bg-[var(--bg-primary)] p-5 rounded-xl border border-[var(--border)]">
+                        <div className="flex justify-between items-start mb-4">
+                          <div>
+                            <h3 className="text-xl font-bold text-white mb-1">
+                              {apt.guitar_details ? `${apt.guitar_details.brand} ${apt.guitar_details.model}` : (apt.title || apt.service_name || 'Appointment')}
+                            </h3>
+                            <p className="text-[var(--text-muted)] font-mono text-xs">ID: {apt.appointment_id || apt.id || 'N/A'}</p>
+                          </div>
+                          <span className={`px-3 py-1 text-xs font-bold uppercase rounded-full border ${statusCls}`}>
+                            {apt.status || 'Pending'}
+                          </span>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-4 pt-4 border-t border-[var(--border)]">
+                           <div>
+                             <p className="text-[11px] font-semibold uppercase tracking-widest text-[var(--text-muted)] mb-1">Schedule</p>
+                             <p className="text-white font-medium">{apptDate ? new Date(apptDate).toLocaleDateString() : '—'}</p>
+                             <p className="text-[var(--text-muted)]">{apt.time || (apptDate ? new Date(apptDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—')}</p>
+                           </div>
+                           <div>
+                             <p className="text-[11px] font-semibold uppercase tracking-widest text-[var(--text-muted)] mb-1">Branch</p>
+                             <p className="text-white font-medium capitalize">{apt.location_id || 'Main Branch'}</p>
+                           </div>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                        <div className="bg-[var(--bg-primary)] p-5 rounded-xl border border-[var(--border)]">
+                           <p className="text-[11px] font-semibold uppercase tracking-widest text-[var(--text-muted)] mb-3">Customer Information</p>
+                           <div className="space-y-3">
+                             <div>
+                               <p className="text-[var(--text-muted)] text-xs mb-0.5">Name</p>
+                               <p className="text-white font-medium">{apt.customer_name || apt.user_name || '—'}</p>
+                             </div>
+                             <div>
+                               <p className="text-[var(--text-muted)] text-xs mb-0.5">Email</p>
+                               <p className="text-white">{apt.customer_email || apt.user_email || '—'}</p>
+                             </div>
+                             <div>
+                               <p className="text-[var(--text-muted)] text-xs mb-0.5">Phone</p>
+                               <p className="text-white">{apt.customer_phone || apt.user_phone || '—'}</p>
+                             </div>
+                           </div>
+                        </div>
+
+                        <div className="bg-[var(--bg-primary)] p-5 rounded-xl border border-[var(--border)]">
+                           <p className="text-[11px] font-semibold uppercase tracking-widest text-[var(--text-muted)] mb-3">Guitar Details</p>
+                           {apt.guitar_details ? (
+                             <div className="space-y-3">
+                               <div>
+                                 <p className="text-[var(--text-muted)] text-xs mb-0.5">Brand & Model</p>
+                                 <p className="text-white font-medium">{apt.guitar_details.brand} {apt.guitar_details.model}</p>
+                               </div>
+                               <div>
+                                 <p className="text-[var(--text-muted)] text-xs mb-0.5">Serial Number</p>
+                                 <p className="text-white">{apt.guitar_details.serialNumber || '—'}</p>
+                               </div>
+                               {apt.guitar_details.type && (
+                                 <div>
+                                   <p className="text-[var(--text-muted)] text-xs mb-0.5">Type</p>
+                                   <p className="text-white capitalize">{apt.guitar_details.type}</p>
+                                 </div>
+                               )}
+                             </div>
+                           ) : (
+                             <p className="text-[var(--text-muted)] text-sm italic">No detailed guitar specs provided.</p>
+                           )}
+                        </div>
+                      </div>
+
+                      <div className="bg-[var(--bg-primary)] p-5 rounded-xl border border-[var(--border)]">
+                         <p className="text-[11px] font-semibold uppercase tracking-widest text-[var(--text-muted)] mb-3">Requested Services</p>
+                         {Array.isArray(apt.services) && apt.services.length > 0 ? (
+                           <ul className="list-disc list-inside space-y-1 text-white">
+                             {apt.services.map((s, i) => <li key={i} className="capitalize">{s.replace(/-/g, ' ')}</li>)}
+                           </ul>
+                         ) : (
+                           <p className="text-white capitalize">{apt.service_name || 'Consultation'}</p>
+                         )}
+                      </div>
+
+                      {apt.notes && (
+                        <div className="bg-[var(--bg-primary)] p-5 rounded-xl border border-[var(--border)] flex flex-col items-start gap-3">
+                           <p className="text-[11px] font-semibold uppercase tracking-widest text-[var(--text-muted)]">Additional Notes</p>
+                           <p className="text-white bg-[var(--surface-dark)] p-4 rounded-lg border border-[var(--border)] leading-relaxed w-full min-h-[60px] whitespace-pre-wrap">{apt.notes}</p>
+                        </div>
+                      )}
+                      
+                      <div className="flex justify-end pt-4">
+                        <button onClick={closeModal} className="px-6 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] text-white hover:bg-[var(--bg-primary)] transition-colors font-semibold">
+                          Close Summary
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
+
+              {/* Appointment Status Modal */}
+              {modal.type === 'appointment' && modal.data && (() => {
+                const APPOINTMENT_STATUSES = [
+                  { value: 'approved', label: 'Approved (Confirmed)' },
+                  { value: 'completed', label: 'Completed (Showed Up)' },
+                  { value: 'no_show', label: 'No-Show (Missed)' },
+                  { value: 'cancelled', label: 'Cancelled' }
+                ];
+                // Use form.status if it was set, else fallback to modal.data.status
+                const currentStatus = form.status || modal.data.status || 'approved';
+                return (
+                  <>
+                    <ModalHeader title="Update Appointment Status" onClose={closeModal} />
+                    <div className="mt-6 space-y-6">
+                      <div className="p-4 bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl">
+                        <p className="text-white text-lg font-bold mb-1">{modal.data.guitar_details ? `${modal.data.guitar_details.brand} ${modal.data.guitar_details.model}` : (modal.data.title || modal.data.service_name || 'Appointment')}</p>
+                        <p className="text-[var(--text-muted)] text-sm">Customer: <span className="font-medium text-white">{modal.data.customer_name || modal.data.user_name || '—'}</span></p>
+                        <p className="text-[var(--text-muted)] text-sm">Date: <span className="font-medium text-white">{modal.data.scheduled_at ? new Date(modal.data.scheduled_at).toLocaleDateString() : '—'}</span></p>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-3">Status</label>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {APPOINTMENT_STATUSES.map(stat => {
+                            const isSelected = currentStatus === stat.value;
+                            return (
+                              <button
+                                key={stat.value}
+                                onClick={() => setForm({ ...form, status: stat.value })}
+                                className={`p-4 text-left rounded-xl border flex flex-col gap-1 transition-all ${
+                                  isSelected 
+                                    ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)]/10 text-white' 
+                                    : 'border-[var(--border)] bg-[var(--bg-primary)] text-[var(--text-muted)] hover:border-[var(--gold-primary)]/40 hover:text-white'
+                                }`}
+                              >
+                                <div className="flex items-center justify-between w-full">
+                                  <span className="font-semibold">{stat.label.split(' (')[0]}</span>
+                                  {isSelected && <CheckCircle className="w-4 h-4 text-[var(--gold-primary)]" />}
+                                </div>
+                                <span className={`text-xs ${isSelected ? 'text-[var(--gold-primary)]/80' : 'text-[var(--text-muted)]'}`}>
+                                  {stat.label.includes('(') ? stat.label.split('(')[1].replace(')', '') : ''}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                        {currentStatus === 'no_show' && (
+                          <p className="mt-4 text-xs flex items-center gap-2 text-orange-400 bg-orange-500/10 p-3 rounded-lg border border-orange-500/20">
+                            <AlertCircle className="w-4 h-4 shrink-0" />
+                            Warning: Marking as No-Show will lock the appointment.
+                          </p>
+                        )}
+                        {currentStatus === 'cancelled' && (
+                          <p className="mt-4 text-xs flex items-center gap-2 text-red-400 bg-red-500/10 p-3 rounded-lg border border-red-500/20">
+                            <AlertCircle className="w-4 h-4 shrink-0" />
+                            Warning: This will cancel the customer's appointment.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    <ModalFooter onCancel={closeModal} onSave={saveAppointment} isSaving={isSaving} saveText="Update Status" />
+                  </>
+                );
+              })()}
+
               {/* Product Modal - Industry Redesign Wizard */}
               {modal.type === 'product' && (() => {
                 const productStep1Complete = Boolean(String(form.name || '').trim() && String(form.category_id || '').trim())
@@ -2640,10 +2897,13 @@ export function AdminPage() {
                                   className={formErrors.category_id ? selErr : selOk}
                                 >
                                   <option value="">— Select Category —</option>
-                                  {categories.map((c) => (
-                                    <option key={c.category_id} value={c.category_id}>
-                                      {c.name}
-                                    </option>
+                                  {categoryTree.map(parent => (
+                                    <optgroup key={parent.category_id} label={parent.name}>
+                                      <option value={parent.category_id}>{parent.name} (All)</option>
+                                      {parent.children?.map(child => (
+                                        <option key={child.category_id} value={child.category_id}>{'→ ' + child.name}</option>
+                                      ))}
+                                    </optgroup>
                                   ))}
                                 </select>
                                 {formErrors.category_id && <p className="mt-1 text-xs text-red-400">{formErrors.category_id}</p>}
@@ -2954,8 +3214,15 @@ export function AdminPage() {
                             <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5 text-[var(--text-muted)]">Parent Category</label>
                             <select value={form.parent_id || ''} onChange={e => setForm(f => ({ ...f, parent_id: e.target.value || null }))} className={selOk}>
                               <option value="">— None (Top Level) —</option>
-                              {categories.filter(c => c.category_id !== modal.data?.category_id).map(c => (
-                                <option key={c.category_id} value={c.category_id}>{c.name}</option>
+                              {categoryTree.map(parent => (
+                                <optgroup key={parent.category_id} label={parent.name}>
+                                  {parent.category_id !== modal.data?.category_id && (
+                                    <option value={parent.category_id}>{parent.name}</option>
+                                  )}
+                                  {parent.children?.filter(child => child.category_id !== modal.data?.category_id).map(child => (
+                                    <option key={child.category_id} value={child.category_id}>{'→ ' + child.name}</option>
+                                  ))}
+                                </optgroup>
                               ))}
                             </select>
                             <p className="mt-1.5 text-xs text-[var(--text-muted)]">Create subcategories by selecting a parent.</p>
@@ -3109,7 +3376,7 @@ export function AdminPage() {
                                 <option value="">— Select Type —</option>
                                 {(form.builder_category ? BUILDER_CATEGORY_MAP[form.builder_category] || [] : Object.values(BUILDER_CATEGORY_MAP).flat()).map((t) => (
                                   <option key={t} value={t}>
-                                    {t.replace(/([A-Z])/g, ' $1').replace('_', ' ').replace(/\b\w/g, (l) => l.toUpperCase())}
+                                    {t.replace(/([A-Z])/g, ' ').replace('_', ' ').replace(/\b\w/g, (l) => l.toUpperCase())}
                                   </option>
                                 ))}
                               </select>

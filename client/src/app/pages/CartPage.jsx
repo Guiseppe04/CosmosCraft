@@ -133,7 +133,7 @@ export function CartPage() {
               </div>
               <div className="flex justify-between">
                 <span className="text-[var(--text-muted)]">Shipping</span>
-                <span className="font-bold text-white">₱0</span>
+                <span className="font-bold text-white"></span>
               </div>
               <div className="flex justify-between">
                 <span className="text-[var(--text-muted)]">Tax</span>
