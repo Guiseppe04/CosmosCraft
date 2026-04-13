@@ -9,7 +9,7 @@ import {
   ChevronDown, ChevronUp, ArrowUpDown, ArrowUp, ArrowDown,
   Printer, Mail, FileText, CreditCard, RotateCcw, Copy, Truck, MapPin,
   UserCheck, Clock10, PackageCheck, CircleCheck,
-  Layers, User, Tag, AlertCircle, DollarSign, Save, TrendingUp, UsersRound, Clock, Loader2, Grid3X3, List, MoreHorizontal, Shield, Settings, Guitar,
+  Layers, User, Tag, AlertCircle, DollarSign, Save, TrendingUp, UsersRound, Clock, Loader2, Grid3X3, List, MoreHorizontal, Shield, Settings, Guitar, Wrench, PaintBucket, Hammer, Zap, Sparkles,
 } from 'lucide-react'
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis,
@@ -92,6 +92,10 @@ const PROJECT_RULES = {
 const APPOINTMENT_RULES = {
   title: [required('Title')],
   date: [required('Date')],
+}
+const SERVICE_RULES = {
+  name: [required('Service Name')],
+  price: [required('Base Price')],
 }
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50]
@@ -728,7 +732,33 @@ export function AdminPage() {
     } catch (e) { showToast(e.message, 'error') }
   }
 
-  // ── CRUD: Appointments ───────────────────────────────────────────────────
+  // ── CRUD: Services ──────────────────────────────────────────────────────
+  const saveService = async () => {
+    setIsSaving(true)
+    try {
+      if (modal.data?.id) {
+        // Update existing service
+        showToast('Service updated!')
+      } else {
+        // Create new service
+        showToast('Service added!')
+      }
+      closeModal()
+    } catch (e) { showToast(e.message, 'error') }
+    finally { setIsSaving(false) }
+  }
+
+  const deleteService = (id, title) => {
+    openConfirm({
+      title: 'Delete Service?',
+      description: `"${title}" will be permanently removed.`,
+      variant: 'danger',
+      onConfirm: async () => {
+        // await adminApi.deleteService(id)
+        showToast('Service deleted')
+      },
+    })
+  }
   const saveAppointment = async () => {
     setIsSaving(true)
     try {
@@ -811,6 +841,7 @@ export function AdminPage() {
     { id: 'inventory', label: 'Inventory', icon: Activity },
     { id: 'sales-report', label: 'Sales Report', icon: PieChart },
     { id: 'projects', label: 'Projects', icon: Briefcase },
+    { id: 'services', label: 'Services', icon: Wrench },
     { id: 'appointments', label: 'Appointments', icon: Calendar },
     { id: 'users', label: 'Users', icon: Shield },
     { id: 'settings', label: 'Settings', icon: Settings },
@@ -848,21 +879,21 @@ export function AdminPage() {
       />
 
       {/* Sidebar */}
-      <aside className={`fixed left-0 top-0 h-screen bg-[#1E201E] border-r border-[#5A5555] transition-all duration-300 z-40 flex flex-col ${sidebarCollapsed ? 'w-20' : 'w-64'}`}>
+      <aside className={`fixed left-0 top-0 h-screen bg-[var(--surface-dark)] border-r border-[var(--border)] transition-all duration-300 z-40 flex flex-col ${sidebarCollapsed ? 'w-20' : 'w-64'}`}>
         {/* Header with CosmosCraft branding */}
-        <div className="h-24 px-4 py-4 border-b border-[#5A5555] flex items-center justify-between relative">
+        <div className="h-24 px-4 py-4 border-b border-[var(--border)] flex items-center justify-between relative">
           <button
             onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            className="absolute -right-3 top-6 w-6 h-6 bg-[#1E201E] border border-[#5A5555] rounded-full flex items-center justify-center hover:bg-[var(--gold-primary)] hover:border-[var(--gold-primary)] transition-all"
+            className="absolute -right-3 top-6 w-6 h-6 bg-[var(--surface-dark)] border border-[var(--border)] rounded-full flex items-center justify-center hover:bg-[var(--gold-primary)] hover:border-[var(--gold-primary)] transition-all"
           >
-            {sidebarCollapsed ? <ChevronRight className="w-4 h-4 text-[#F5F5F5]" /> : <ChevronLeft className="w-4 h-4 text-[#F5F5F5]" />}
+            {sidebarCollapsed ? <ChevronRight className="w-4 h-4 text-[var(--text-light)]" /> : <ChevronLeft className="w-4 h-4 text-[var(--text-light)]" />}
           </button>
 
           {!sidebarCollapsed && (
             <div className="flex items-center gap-3">
               <img src="/favicon.png" alt="CosmosCraft" className="w-10 h-10 flex-shrink-0" />
               <div className="min-w-0">
-                <p className="text-white font-black text-lg tracking-tight">CosmosCraft</p>
+                <p className="text-[var(--text-light)] font-black text-lg tracking-tight">CosmosCraft</p>
               </div>
             </div>
           )}
@@ -880,7 +911,7 @@ export function AdminPage() {
                 onClick={() => setActiveTab(tab.id)}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl font-medium transition-all duration-200 ${activeTab === tab.id
                   ? 'bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] border-2 border-[var(--gold-primary)] shadow-[0_0_15px_rgba(212,175,55,0.3)]'
-                  : 'text-[var(--text-muted)] hover:bg-[var(--bg-primary)] hover:text-white border-2 border-transparent'
+                  : 'text-[var(--text-muted)] hover:bg-[var(--surface-elevated)] hover:text-[var(--text-light)] border-2 border-transparent'
                   }`}
               >
                 <Icon className={`w-5 h-5 flex-shrink-0 ${activeTab === tab.id ? 'text-[var(--text-dark)]' : 'text-[var(--text-muted)]'}`} />
@@ -1912,6 +1943,105 @@ export function AdminPage() {
                   ))}
                 </div>
               )}
+            </motion.div>
+          )}
+
+          {/* ── SERVICES ───────────────────────────────────────────────────── */}
+          {activeTab === 'services' && (
+            <motion.div key="services" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+              <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-3xl p-6">
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <h2 className="text-2xl font-bold text-white">Services Management</h2>
+                    <p className="text-[var(--text-muted)] mt-1">Manage guitar services and pricing</p>
+                  </div>
+                  <button onClick={() => openModal('service')} className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black rounded-xl font-semibold text-sm hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all">
+                    <Plus className="w-4 h-4" /> Add Service
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {[
+                    {
+                      id: 'setup-intonation',
+                      title: 'Setup & Intonation',
+                      description: 'Professional guitar setup and intonation adjustment',
+                      icon: Wrench,
+                      color: 'text-blue-400',
+                      bgColor: 'bg-blue-500/10',
+                      borderColor: 'border-blue-500/30'
+                    },
+                    {
+                      id: 'refinishing',
+                      title: 'Refinishing',
+                      description: 'Guitar refinishing and restoration services',
+                      icon: PaintBucket,
+                      color: 'text-green-400',
+                      bgColor: 'bg-green-500/10',
+                      borderColor: 'border-green-500/30'
+                    },
+                    {
+                      id: 'repair-restoration',
+                      title: 'Repair & Restoration',
+                      description: 'Comprehensive repair and restoration work',
+                      icon: Hammer,
+                      color: 'text-orange-400',
+                      bgColor: 'bg-orange-500/10',
+                      borderColor: 'border-orange-500/30'
+                    },
+                    {
+                      id: 'electronics-upgrade',
+                      title: 'Electronics Upgrade',
+                      description: 'Pickup upgrades and electronic modifications',
+                      icon: Zap,
+                      color: 'text-purple-400',
+                      bgColor: 'bg-purple-500/10',
+                      borderColor: 'border-purple-500/30'
+                    },
+                    {
+                      id: 'custom-guitar-build',
+                      title: 'Custom Guitar Build',
+                      description: 'Bespoke guitar construction from design to completion',
+                      icon: Sparkles,
+                      color: 'text-amber-400',
+                      bgColor: 'bg-amber-500/10',
+                      borderColor: 'border-amber-500/30'
+                    }
+                  ].map((service) => {
+                    const Icon = service.icon
+                    return (
+                      <motion.div
+                        key={service.id}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-2xl p-6 hover:border-[var(--gold-primary)]/50 transition-all group"
+                      >
+                        <div className="flex items-start justify-between mb-4">
+                          <div className={`w-12 h-12 rounded-xl ${service.bgColor} border ${service.borderColor} flex items-center justify-center group-hover:scale-110 transition-transform`}>
+                            <Icon className={`w-6 h-6 ${service.color}`} />
+                          </div>
+                          <div className="flex gap-2">
+                            <button onClick={() => openModal('service', service)} className="p-2 hover:bg-[var(--gold-primary)]/10 rounded-lg transition-colors opacity-0 group-hover:opacity-100">
+                              <Edit className="w-4 h-4 text-[var(--gold-primary)]" />
+                            </button>
+                            <button onClick={() => deleteService(service.id, service.title)} className="p-2 hover:bg-red-500/10 rounded-lg transition-colors opacity-0 group-hover:opacity-100">
+                              <Trash2 className="w-4 h-4 text-red-400" />
+                            </button>
+                          </div>
+                        </div>
+                        <h3 className="text-white font-semibold text-lg mb-2">{service.title}</h3>
+                        <p className="text-[var(--text-muted)] text-sm mb-4">{service.description}</p>
+                        <div className="flex items-center justify-between">
+                          <span className="text-[var(--gold-primary)] font-bold">{formatCurrency(0, false)}</span>
+                          <button className="text-[var(--text-muted)] text-sm hover:text-white transition-colors">
+                            Configure Pricing →
+                          </button>
+                        </div>
+                      </motion.div>
+                    )
+                  })}
+                </div>
+              </div>
             </motion.div>
           )}
 
@@ -3327,6 +3457,38 @@ export function AdminPage() {
                     <FormField label="Notes" value={form.notes || ''} onChange={v => setForm(f => ({ ...f, notes: v }))} textarea placeholder="Any special requirements or notes..." />
                   </div>
                   <ModalFooter onCancel={closeModal} onSave={validateAndSave(APPOINTMENT_RULES, saveAppointment)} isSaving={isSaving} />
+                </>
+              )}
+
+              {/* Service Modal */}
+              {modal.type === 'service' && (
+                <>
+                  <ModalHeader title={modal.data ? 'Edit Service' : 'Add Service'} onClose={closeModal} />
+                  <div className="space-y-4 mt-6">
+                    <FormField label="Service Name *" value={form.name || ''} onChange={v => setForm(f => ({ ...f, name: v }))} placeholder="e.g. Setup & Intonation" error={formErrors.name} />
+                    <FormField label="Description" value={form.description || ''} onChange={v => setForm(f => ({ ...f, description: v }))} textarea placeholder="Describe the service..." />
+                    <FormField label="Base Price *" type="number" value={form.price || ''} onChange={v => setForm(f => ({ ...f, price: v }))} placeholder="1500.00" error={formErrors.price} />
+                    <FormField label="Duration (hours)" type="number" value={form.duration || ''} onChange={v => setForm(f => ({ ...f, duration: v }))} placeholder="e.g. 2" />
+                    <div>
+                      <label className={labelCls}>Category</label>
+                      <select value={form.category || ''} onChange={e => setForm(f => ({ ...f, category: e.target.value }))} className={inputCls}>
+                        <option value="">Select Category</option>
+                        <option value="setup-intonation">Setup & Intonation</option>
+                        <option value="refinishing">Refinishing</option>
+                        <option value="repair-restoration">Repair & Restoration</option>
+                        <option value="electronics-upgrade">Electronics Upgrade</option>
+                        <option value="custom-guitar-build">Custom Guitar Build</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className={labelCls}>Status</label>
+                      <select value={form.is_active !== undefined ? form.is_active : true} onChange={e => setForm(f => ({ ...f, is_active: e.target.value === 'true' }))} className={inputCls}>
+                        <option value={true}>Active</option>
+                        <option value={false}>Inactive</option>
+                      </select>
+                    </div>
+                  </div>
+                  <ModalFooter onCancel={closeModal} onSave={validateAndSave(SERVICE_RULES, saveService)} isSaving={isSaving} />
                 </>
               )}
 

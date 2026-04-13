@@ -274,7 +274,6 @@ export function DashboardPage() {
     { id: 'notifications', label: 'Notification Settings', icon: Bell, group: 'account' },
     { id: 'my-guitar', label: 'My Guitar', icon: Guitar, group: 'orders' },
     { id: 'projects', label: 'Build Projects', icon: Briefcase, group: 'orders' },
-    { id: 'appointments', label: 'My Appointments', icon: Calendar, group: 'orders' },
     { id: 'cart', label: 'My Cart', icon: ShoppingBag, group: 'orders' },
     { id: 'purchases', label: 'My Purchase', icon: Package, group: 'orders' },
     { id: 'logout', label: 'Logout', icon: User, group: 'orders' },

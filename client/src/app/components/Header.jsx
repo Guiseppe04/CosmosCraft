@@ -86,10 +86,10 @@ export function Header() {
                   <Link
                     key={link.path}
                     to={link.path}
-                    className={`px-4 py-2 rounded-lg transition-all duration-200 ${
+                    className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
                       location.pathname === link.path
                         ? 'bg-[var(--gold-primary)] text-[var(--text-dark)]'
-                        : 'text-[var(--text-muted)] hover:text-[var(--gold-primary)] hover:bg-[var(--surface-elevated)]'
+                        : 'text-[var(--text-light)] hover:text-[var(--gold-primary)] hover:bg-[var(--surface-elevated)]'
                     }`}
                   >
                     {link.label}
@@ -110,10 +110,10 @@ export function Header() {
                         setCustomizeOpen(true)
                       }
                     }}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-200 ${
+                    className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
                       isCustomizeActive
                         ? 'bg-[var(--gold-primary)] text-[var(--text-dark)]'
-                        : 'text-[var(--text-muted)] hover:text-[var(--gold-primary)] hover:bg-[var(--surface-elevated)]'
+                        : 'text-[var(--text-light)] hover:text-[var(--gold-primary)] hover:bg-[var(--surface-elevated)]'
                     }`}
                   >
                     <span className="text-sm font-medium">Customize</span>
@@ -156,13 +156,23 @@ export function Header() {
                 
                 <Link
                   to="/shop"
-                  className={`px-4 py-2 rounded-lg transition-all duration-200 ${
+                  className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
                     location.pathname === '/shop'
                       ? 'bg-[var(--gold-primary)] text-[var(--text-dark)]'
-                      : 'text-[var(--text-muted)] hover:text-[var(--gold-primary)] hover:bg-[var(--surface-elevated)]'
+                      : 'text-[var(--text-light)] hover:text-[var(--gold-primary)] hover:bg-[var(--surface-elevated)]'
                   }`}
                 >
                   Shop
+                </Link>
+                <Link
+                  to="/appointments"
+                  className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
+                    location.pathname === '/appointments'
+                      ? 'bg-[var(--gold-primary)] text-[var(--text-dark)]'
+                      : 'text-[var(--text-light)] hover:text-[var(--gold-primary)] hover:bg-[var(--surface-elevated)]'
+                  }`}
+                >
+                  Appointments
                 </Link>
               </>
             )}
@@ -174,7 +184,7 @@ export function Header() {
             <button
               type="button"
               onClick={() => setCartOpen(true)}
-              className="relative p-2 rounded-lg text-[var(--text-muted)] hover:text-[var(--gold-primary)] hover:bg-[var(--surface-elevated)] transition-all duration-200"
+              className="relative p-2 rounded-lg text-[var(--text-light)] hover:text-[var(--gold-primary)] hover:bg-[var(--surface-elevated)] transition-all duration-200"
             >
               <ShoppingCart className="w-5 h-5" />
               {cartCount > 0 && (
@@ -187,7 +197,7 @@ export function Header() {
               <button
                 type="button"
                 onClick={() => navigate('/dashboard')}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[var(--surface-elevated)] text-[var(--text-muted)] hover:text-[var(--gold-primary)] hover:bg-[var(--surface-elevated)]/80 transition-all duration-200"
+                className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[var(--surface-elevated)] text-[var(--text-light)] hover:text-[var(--gold-primary)] hover:bg-[var(--surface-elevated)]/80 transition-all duration-200"
               >
                 {user?.avatar ? (
                   <img 
@@ -212,7 +222,7 @@ export function Header() {
               <button
                 type="button"
                 onClick={openLogin}
-                className="p-2 rounded-lg text-[var(--text-muted)] hover:text-[var(--gold-primary)] hover:bg-[var(--surface-elevated)] transition-all duration-200"
+                className="p-2 rounded-lg text-[var(--text-light)] hover:text-[var(--gold-primary)] hover:bg-[var(--surface-elevated)] transition-all duration-200"
               >
                 <User className="w-5 h-5" />
               </button>
@@ -247,7 +257,7 @@ export function Header() {
                   className={`block px-4 py-3 rounded-lg transition-all duration-200 ${
                     location.pathname === link.path
                       ? 'bg-[var(--gold-primary)] text-[var(--text-dark)]'
-                      : 'text-[var(--text-muted)] hover:text-[var(--gold-primary)] hover:bg-[var(--surface-elevated)]'
+                      : 'text-[var(--text-light)] hover:text-[var(--gold-primary)] hover:bg-[var(--surface-elevated)]'
                   }`}
                 >
                   {link.label}
@@ -260,7 +270,7 @@ export function Header() {
                     openLogin()
                     setMobileMenuOpen(false)
                   }}
-                  className="block w-full text-left px-4 py-3 rounded-lg text-[var(--text-muted)] hover:text-[var(--gold-primary)] hover:bg-[var(--surface-elevated)] transition-all duration-200"
+                  className="block w-full text-left px-4 py-3 rounded-lg text-[var(--text-light)] hover:text-[var(--gold-primary)] hover:bg-[var(--surface-elevated)] transition-all duration-200"
                 >
                   Login
                 </button>

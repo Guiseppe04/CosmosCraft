@@ -15,6 +15,7 @@ import {
   ChevronRight,
   CheckCircle2,
 } from 'lucide-react'
+import { formatCurrency } from '../utils/formatCurrency.js'
 
 const guitarServices = [
   { id: 'custom-build', name: 'Custom Guitar Build', icon: Music, description: 'Full custom guitar from scratch', price: 350 },
@@ -151,13 +152,6 @@ export function AppointmentPage() {
     <div className="min-h-screen pt-16 bg-[var(--bg-primary)]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
         <div className="flex items-center gap-4 mb-2">
-          <button
-            type="button"
-            onClick={() => navigate(-1)}
-            className="p-2 rounded-lg bg-theme-surface-deep border border-white/10 text-white/70 hover:text-white hover:border-[#d4af37] transition-all"
-          >
-            <ChevronLeft className="w-5 h-5" />
-          </button>
           <h1 className="text-3xl font-bold text-white">Book an Appointment</h1>
         </div>
         <p className="text-sm text-white/50 mb-10">
@@ -205,7 +199,7 @@ export function AppointmentPage() {
                       <div className="flex items-center justify-between gap-2">
                         <h3 className="font-semibold text-white">{service.name}</h3>
                         <span className="text-xs font-semibold text-[#d4af37]">
-                          ${service.price}
+                          {formatCurrency(service.price, true)}
                         </span>
                       </div>
                       <p className="text-xs text-white/40">{service.description}</p>
@@ -347,7 +341,7 @@ export function AppointmentPage() {
                     type="text"
                     value={guitarDetails.brand}
                     onChange={e => setGuitarDetails({ ...guitarDetails, brand: e.target.value })}
-                    className="w-full px-3 py-2.5 bg-[#111111] text-white border border-white/10 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#d4af37] placeholder-white/20"
+                    className="w-full px-3 py-2.5 bg-[var(--surface-dark)] text-[var(--text-light)] border border-[var(--border)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] focus:border-[var(--gold-primary)] placeholder:text-[var(--text-muted)]"
                     placeholder="Fender, Gibson, Ibanez..."
                   />
                 </div>
@@ -357,7 +351,7 @@ export function AppointmentPage() {
                     type="text"
                     value={guitarDetails.model}
                     onChange={e => setGuitarDetails({ ...guitarDetails, model: e.target.value })}
-                    className="w-full px-3 py-2.5 bg-[#111111] text-white border border-white/10 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#d4af37] placeholder-white/20"
+                    className="w-full px-3 py-2.5 bg-[var(--surface-dark)] text-[var(--text-light)] border border-[var(--border)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] focus:border-[var(--gold-primary)] placeholder:text-[var(--text-muted)]"
                     placeholder="Stratocaster, Les Paul..."
                   />
                 </div>
@@ -367,7 +361,7 @@ export function AppointmentPage() {
                     type="text"
                     value={guitarDetails.serial}
                     onChange={e => setGuitarDetails({ ...guitarDetails, serial: e.target.value })}
-                    className="w-full px-3 py-2.5 bg-[#111111] text-white border border-white/10 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#d4af37] placeholder-white/20"
+                    className="w-full px-3 py-2.5 bg-[var(--surface-dark)] text-[var(--text-light)] border border-[var(--border)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] focus:border-[var(--gold-primary)] placeholder:text-[var(--text-muted)]"
                     placeholder="Optional for tracking"
                   />
                 </div>
@@ -377,7 +371,7 @@ export function AppointmentPage() {
                 <textarea
                   value={guitarDetails.notes}
                   onChange={e => setGuitarDetails({ ...guitarDetails, notes: e.target.value })}
-                  className="w-full h-24 px-3 py-2.5 bg-[#111111] text-white border border-white/10 rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[#d4af37] placeholder-white/20"
+                  className="w-full h-24 px-3 py-2.5 bg-[var(--surface-dark)] text-[var(--text-light)] border border-[var(--border)] rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] focus:border-[var(--gold-primary)] placeholder:text-[var(--text-muted)]"
                   placeholder="Describe any issues, upgrades, or preferences..."
                 />
               </div>
@@ -397,7 +391,7 @@ export function AppointmentPage() {
                 <select
                   value={selectedBranchId}
                   onChange={e => setSelectedBranchId(e.target.value)}
-                  className="w-full px-3 py-2.5 bg-[#111111] text-white border border-white/10 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#d4af37]"
+                  className="w-full px-3 py-2.5 bg-[var(--surface-dark)] text-[var(--text-light)] border border-[var(--border)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] focus:border-[var(--gold-primary)]"
                 >
                   {branches.map(branch => (
                     <option key={branch.id} value={branch.id}>
@@ -456,7 +450,7 @@ export function AppointmentPage() {
                         return (
                           <li key={id} className="flex justify-between">
                             <span>{svc?.name}</span>
-                            <span className="text-[#d4af37]">${svc?.price}</span>
+                            <span className="text-[#d4af37]">{formatCurrency(svc?.price || 0, true)}</span>
                           </li>
                         )
                       })}
@@ -476,7 +470,7 @@ export function AppointmentPage() {
                 <div className="flex justify-between pt-3 border-t border-white/10 mt-3">
                   <span className="text-sm font-semibold text-white">Total</span>
                   <span className="text-lg font-bold text-[#d4af37]">
-                    ${totalPrice.toLocaleString()}
+                    {formatCurrency(totalPrice, true)}
                   </span>
                 </div>
                 {referenceNumber && (
