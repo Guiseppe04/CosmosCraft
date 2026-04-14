@@ -68,6 +68,84 @@ function flattenCategoryTreeForAdmin(tree, depth = 0) {
   return result
 }
 
+function CategoryTreeRow({ category, expandedIds, onToggle, onEdit, onDelete, categories, depth = 0 }) {
+  const hasChildren = category.children && category.children.length > 0
+  const isExpanded = expandedIds.has(category.category_id)
+  const indent = depth * 24
+
+  return (
+    <>
+      <tr className="border-b border-[var(--border)] hover:bg-[var(--bg-primary)]/50 transition-colors">
+        <td className="py-4 px-6" style={{ paddingLeft: `${16 + indent}px` }}>
+          <div className="flex items-center gap-2">
+            {hasChildren ? (
+              <button
+                onClick={() => onToggle(category.category_id)}
+                className="p-0.5 hover:bg-[var(--gold-primary)]/20 rounded transition-colors"
+              >
+                {isExpanded ? (
+                  <ChevronDown className="w-4 h-4 text-[var(--gold-primary)]" />
+                ) : (
+                  <ChevronRight className="w-4 h-4 text-[var(--gold-primary)]" />
+                )}
+              </button>
+            ) : (
+              <span className="w-4" />
+            )}
+            <span className="font-semibold text-white">{category.name}</span>
+          </div>
+        </td>
+        <td className="py-4 px-6 text-[var(--text-muted)] font-mono text-sm">{category.slug}</td>
+        <td className="py-4 px-6">
+          {hasChildren ? (
+            <span className="px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wider bg-[var(--gold-primary)]/20 text-[var(--gold-primary)] border border-[var(--gold-primary)]/30">
+              Parent
+            </span>
+          ) : category.parent_id ? (
+            (() => {
+              const parentCat = categories?.find(c => c.category_id === category.parent_id)
+              return parentCat ? (
+                <span className="text-[var(--text-muted)] text-sm">{parentCat.name}</span>
+              ) : (
+                <span className="text-[var(--text-muted)]/50">—</span>
+              )
+            })()
+          ) : (
+            <span className="text-[var(--text-muted)]/50">—</span>
+          )}
+        </td>
+        <td className="py-4 px-6">
+          <span className={`px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wider ${category.is_active ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'bg-gray-500/20 text-gray-400 border border-gray-500/30'}`}>
+            {category.is_active ? 'Active' : 'Inactive'}
+          </span>
+        </td>
+        <td className="py-4 px-6">
+          <div className="flex gap-2">
+            <button onClick={() => onEdit('category', category)} className="p-1.5 hover:bg-[var(--gold-primary)]/10 rounded">
+              <Edit className="w-4 h-4 text-[var(--text-muted)]" />
+            </button>
+            <button onClick={() => onDelete(category.category_id, category.name)} className="p-1.5 hover:bg-red-500/10 rounded">
+              <Trash2 className="w-4 h-4 text-red-400" />
+            </button>
+          </div>
+        </td>
+      </tr>
+      {hasChildren && isExpanded && category.children.map(child => (
+        <CategoryTreeRow
+          key={child.category_id}
+          category={child}
+          expandedIds={expandedIds}
+          onToggle={onToggle}
+          onEdit={onEdit}
+          onDelete={onDelete}
+          categories={categories}
+          depth={depth + 1}
+        />
+      ))}
+    </>
+  )
+}
+
 const VALID_ROLES = ['customer', 'staff', 'admin', 'super_admin']
 
 function updateIfChanged(currentData, newData, setter) {
@@ -76,6 +154,18 @@ function updateIfChanged(currentData, newData, setter) {
   if (currentStr !== newStr) {
     setter(newData)
   }
+}
+
+function generateSlug(text) {
+  if (!text) return ''
+  return text
+    .toString()
+    .toLowerCase()
+    .trim()
+    .replace(/[\s\-]+/g, '-')
+    .replace(/[^a-z0-9\-]/g, '')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
 }
 
 // ── Validation helpers ───────────────────────────────────────────────────────
@@ -231,6 +321,9 @@ export function AdminPage() {
   const [partsLoading, setPartsLoading] = useState(false)
   const [productsPagination, setProductsPagination] = useState({ page: 1, pageSize: 10, total: 0, totalPages: 1 })
   const [partsPagination, setPartsPagination] = useState({ page: 1, pageSize: 10, total: 0, totalPages: 1 })
+
+  // Category tree expand/collapse state
+  const [expandedCategoryIds, setExpandedCategoryIds] = useState(new Set())
 
   // Message panel
   const [messagePanelOpen, setMessagePanelOpen] = useState(false)
@@ -632,6 +725,18 @@ export function AdminPage() {
         showToast('Category deleted')
         fetchCategories()
       },
+    })
+  }
+
+  const toggleCategoryExpand = (categoryId) => {
+    setExpandedCategoryIds(prev => {
+      const next = new Set(prev)
+      if (next.has(categoryId)) {
+        next.delete(categoryId)
+      } else {
+        next.add(categoryId)
+      }
+      return next
     })
   }
 
@@ -1525,57 +1630,42 @@ export function AdminPage() {
           {/* ── CATEGORIES ─────────────────────────────────────────────────── */}
           {activeTab === 'categories' && (
             <motion.div key="categories" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-              <AdminTable
-                columns={['Name', 'Slug', 'Type', 'Status', 'Actions']}
-                rows={visibleCategories}
-                renderRow={(cat) => {
-                  const depth = cat.depth || 0
-                  const indent = depth * 24
-                  const isParent = cat.isParent
-                  const parentCat = categories?.find(c => c.category_id === cat.parent_id)
-                  
-                  return (
-                    <>
-                      <td className="py-4 px-6" style={{ paddingLeft: `${16 + indent}px` }}>
-                        <div className="flex items-center gap-2">
-                          {isParent ? (
-                            <span className="w-2 h-2 rounded-full bg-[var(--gold-primary)]" />
-                          ) : (
-                            <span className="w-1.5 h-1.5 rounded-full bg-[var(--text-muted)]/50" />
-                          )}
-                          <span className={`font-semibold ${isParent ? 'text-white' : 'text-white/80'}`}>{cat.name}</span>
-                        </div>
-                      </td>
-                      <td className="py-4 px-6 text-[var(--text-muted)] font-mono text-sm">{cat.slug}</td>
-                      <td className="py-4 px-6">
-                        {isParent ? (
-                          <span className="px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wider bg-[var(--gold-primary)]/20 text-[var(--gold-primary)] border border-[var(--gold-primary)]/30">
-                            Parent
-                          </span>
-                        ) : parentCat ? (
-                          <span className="text-[var(--text-muted)] text-sm">
-                            {parentCat.name}
-                          </span>
-                        ) : (
-                          <span className="text-[var(--text-muted)]/50">—</span>
-                        )}
-                      </td>
-                      <td className="py-4 px-6"><StatusBadge active={cat.is_active} /></td>
-                      <td className="py-4 px-6">
-                        <div className="flex gap-2">
-                          <button onClick={() => openModal('category', cat)} className="p-1.5 hover:bg-[var(--gold-primary)]/10 rounded">
-                            <Edit className="w-4 h-4 text-[var(--text-muted)]" />
-                          </button>
-                          <button onClick={() => deleteCategory(cat.category_id, cat.name)} className="p-1.5 hover:bg-red-500/10 rounded">
-                            <Trash2 className="w-4 h-4 text-red-400" />
-                          </button>
-                        </div>
-                      </td>
-                    </>
-                  )
-                }}
-                empty={<EmptyState icon={Tag} label="No categories yet" action={() => openModal('category')} actionLabel="Add Category" />}
-              />
+              <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-3xl overflow-hidden">
+                {categoryTree.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-16">
+                    <Tag className="w-12 h-12 text-[var(--text-muted)] mb-4" />
+                    <p className="text-[var(--text-muted)] mb-4">No categories yet</p>
+                    <button onClick={() => openModal('category')} className="px-4 py-2 bg-[var(--gold-primary)] text-black rounded-xl font-semibold text-sm">
+                      Add Category
+                    </button>
+                  </div>
+                ) : (
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-[var(--border)]">
+                        <th className="text-left py-4 px-6 text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold">Name</th>
+                        <th className="text-left py-4 px-6 text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold">Slug</th>
+                        <th className="text-left py-4 px-6 text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold">Type</th>
+                        <th className="text-left py-4 px-6 text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold">Status</th>
+                        <th className="text-left py-4 px-6 text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {categoryTree.map((rootCat) => (
+                        <CategoryTreeRow
+                          key={rootCat.category_id}
+                          category={rootCat}
+                          expandedIds={expandedCategoryIds}
+                          onToggle={toggleCategoryExpand}
+                          onEdit={openModal}
+                          onDelete={deleteCategory}
+                          categories={categories}
+                        />
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
             </motion.div>
           )}
 
@@ -2944,12 +3034,12 @@ export function AdminPage() {
                                   onChange={(e) => setForm((f) => ({ ...f, category_id: e.target.value }))}
                                   className={formErrors.category_id ? selErr : selOk}
                                 >
-                                  <option value="">— Select Category —</option>
+                                  <option value="">Select Category</option>
                                   {categoryTree.map(parent => (
                                     <optgroup key={parent.category_id} label={parent.name}>
                                       <option value={parent.category_id}>{parent.name} (All)</option>
                                       {parent.children?.map(child => (
-                                        <option key={child.category_id} value={child.category_id}>{'→ ' + child.name}</option>
+                                        <option key={child.category_id} value={child.category_id}>{child.name}</option>
                                       ))}
                                     </optgroup>
                                   ))}
@@ -3220,7 +3310,7 @@ export function AdminPage() {
                             value={form.name || ''}
                             onChange={(e) => {
                               const nameVal = e.target.value
-                              setForm(f => ({ ...f, name: nameVal, slug: f.slug || nameVal.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') }))
+                              setForm(f => ({ ...f, name: nameVal, slug: f.slug || generateSlug(nameVal) }))
                             }}
                             placeholder="e.g. Custom Builds, Acoustic Guitars"
                             className={formErrors.name ? fieldErr : fieldOk}
@@ -3231,12 +3321,22 @@ export function AdminPage() {
 
                         <div>
                           <label className={`block text-xs font-semibold uppercase tracking-wider mb-1.5 ${formErrors.slug ? 'text-red-400' : 'text-[var(--text-muted)]'}`}>URL Slug *</label>
-                          <input
-                            value={form.slug || ''}
-                            onChange={(e) => setForm(f => ({ ...f, slug: e.target.value }))}
-                            placeholder="e.g. custom-builds"
-                            className={formErrors.slug ? fieldErr : fieldOk}
-                          />
+                          <div className="flex items-center gap-2">
+                            <input
+                              value={form.slug || ''}
+                              onChange={(e) => setForm(f => ({ ...f, slug: e.target.value }))}
+                              placeholder="custom-builds"
+                              className={`${formErrors.slug ? fieldErr : fieldOk} flex-1`}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setForm(f => ({ ...f, slug: generateSlug(f.name) }))}
+                              className="p-2.5 bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl hover:border-[var(--gold-primary)] transition-colors"
+                              title="Regenerate slug"
+                            >
+                              <RefreshCw className="w-4 h-4 text-[var(--text-muted)]" />
+                            </button>
+                          </div>
                           {formErrors.slug && <p className="mt-1 text-xs text-red-400">{formErrors.slug}</p>}
                           <p className="mt-1.5 text-xs text-[var(--text-muted)]">URL-friendly identifier. Auto-generated from name but can be customized.</p>
                         </div>
@@ -3250,7 +3350,6 @@ export function AdminPage() {
                             placeholder="Write a brief description for this category..."
                             className={fieldOk}
                           />
-                          <p className="mt-1.5 text-xs text-[var(--text-muted)]">Optional. Displayed on category pages for context.</p>
                         </div>
                       </motion.div>
 
@@ -3261,14 +3360,14 @@ export function AdminPage() {
                           <div>
                             <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5 text-[var(--text-muted)]">Parent Category</label>
                             <select value={form.parent_id || ''} onChange={e => setForm(f => ({ ...f, parent_id: e.target.value || null }))} className={selOk}>
-                              <option value="">— None (Top Level) —</option>
+                              <option value="">None</option>
                               {categoryTree.map(parent => (
                                 <optgroup key={parent.category_id} label={parent.name}>
                                   {parent.category_id !== modal.data?.category_id && (
                                     <option value={parent.category_id}>{parent.name}</option>
                                   )}
                                   {parent.children?.filter(child => child.category_id !== modal.data?.category_id).map(child => (
-                                    <option key={child.category_id} value={child.category_id}>{'→ ' + child.name}</option>
+                                    <option key={child.category_id} value={child.category_id}>{child.name}</option>
                                   ))}
                                 </optgroup>
                               ))}
@@ -3399,7 +3498,7 @@ export function AdminPage() {
                                 }}
                                 className={inputCls}
                               >
-                                <option value="">— Select Category —</option>
+                                <option value="">Select Category</option>
                                 <option value="body">Body</option>
                                 <option value="neck">Neck & Headstock</option>
                                 <option value="hardware">Hardware</option>
@@ -3421,7 +3520,7 @@ export function AdminPage() {
                                 }}
                                 className={formErrors.type_mapping ? partSelErr : inputCls}
                               >
-                                <option value="">— Select Type —</option>
+                                <option value="">Select Type</option>
                                 {(form.builder_category ? BUILDER_CATEGORY_MAP[form.builder_category] || [] : Object.values(BUILDER_CATEGORY_MAP).flat()).map((t) => (
                                   <option key={t} value={t}>
                                     {t.replace(/([A-Z])/g, ' ').replace('_', ' ').replace(/\b\w/g, (l) => l.toUpperCase())}
