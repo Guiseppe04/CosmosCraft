@@ -4,7 +4,7 @@ import { useSearchParams, useNavigate, useBlocker } from 'react-router'
 import { 
   RotateCcw, Save, ChevronDown, ChevronRight, Info, 
   ShoppingCart, Clock, Truck, Shield, Check, CheckCircle,
-  Sparkles, Layers, Palette, Cog, Zap, Image, ZoomIn, ZoomOut
+  Sparkles, Layers, Palette, Cog, Zap, Image, ZoomIn, ZoomOut, Upload, Trash2
 } from 'lucide-react'
 import { exportMaskedPreview } from '../utils/exportMaskedPreview.js'
 import { useAuth } from '../context/AuthContext.jsx'
@@ -180,6 +180,8 @@ function VisualCard({ option, isSelected, onClick, previewImage }) {
   )
 }
 
+const MAX_STICKERS = 10
+
 export function CustomizePage() {
   const [searchParams] = useSearchParams()
   const editBuildId = searchParams.get('edit')
@@ -202,17 +204,25 @@ export function CustomizePage() {
   const [zoomLevel, setZoomLevel] = useState(1)
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 })
   const [isDraggingPreview, setIsDraggingPreview] = useState(false)
+  const [stickers, setStickers] = useState([])
+  const [selectedStickerId, setSelectedStickerId] = useState(null)
+  const [isDraggingSticker, setIsDraggingSticker] = useState(false)
+  const stickerFileInputRef = useRef(null)
+  const stickersRef = useRef([])
   const panStartRef = useRef({ pointerX: 0, pointerY: 0, originX: 0, originY: 0 })
   const previewViewportRef = useRef(null)
+  const previewStageRef = useRef(null)
   const [activeCategory, setActiveCategory] = useState('body')
   const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false)
   const [guitarTypeDropdownOpen, setGuitarTypeDropdownOpen] = useState(false)
   const categoryDropdownRef = useRef(null)
   const { isAuthenticated, openLogin } = useAuth()
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(Boolean(editBuildId))
+  const [dbCustomizationId, setDbCustomizationId] = useState(null)
   const bypassNavigationBlockRef = useRef(false)
   const [showUnsavedModal, setShowUnsavedModal] = useState(false)
   const suppressDirtyTrackingRef = useRef(false)
+  const stickersInitializedRef = useRef(false)
 
   const updateConfig = (patch) => {
     if (editBuildId && !suppressDirtyTrackingRef.current) {
@@ -242,6 +252,145 @@ export function CustomizePage() {
     setPanOffset({ x: 0, y: 0 })
   }
 
+  const currentViewStickers = useMemo(
+    () => stickers.filter(s => (s.side || 'front') === view),
+    [stickers, view]
+  )
+
+  const handleStickerUpload = (event) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    if (!file.type.startsWith('image/')) return
+    if (currentViewStickers.length >= MAX_STICKERS) {
+      alert(`You can upload up to ${MAX_STICKERS} stickers.`)
+      event.target.value = ''
+      return
+    }
+
+    const reader = new FileReader()
+    reader.onload = () => {
+      const dataUrl = typeof reader.result === 'string' ? reader.result : null
+      if (!dataUrl) return
+      const newSticker = {
+        id: `sticker-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        src: dataUrl,
+        x: 50,
+        y: 50,
+        size: 18,
+        rotation: 0,
+        side: view,
+      }
+      setStickers(prev => [...prev, newSticker])
+      setSelectedStickerId(newSticker.id)
+    }
+    reader.readAsDataURL(file)
+    event.target.value = ''
+  }
+
+  const selectedSticker = useMemo(
+    () => stickers.find(s => s.id === selectedStickerId) || null,
+    [stickers, selectedStickerId]
+  )
+
+  const updateSelectedSticker = (patchOrUpdater) => {
+    if (!selectedStickerId) return
+    setStickers(prev =>
+      prev.map(stickerItem => {
+        if (stickerItem.id !== selectedStickerId) return stickerItem
+        return typeof patchOrUpdater === 'function'
+          ? patchOrUpdater(stickerItem)
+          : { ...stickerItem, ...patchOrUpdater }
+      })
+    )
+  }
+
+  const updateStickerById = (id, patchOrUpdater) => {
+    if (!id) return
+    setStickers(prev =>
+      prev.map(stickerItem => {
+        if (stickerItem.id !== id) return stickerItem
+        return typeof patchOrUpdater === 'function'
+          ? patchOrUpdater(stickerItem)
+          : { ...stickerItem, ...patchOrUpdater }
+      })
+    )
+  }
+
+  const removeStickerById = (id) => {
+    setStickers(prev => {
+      const target = prev.find(s => s.id === id)
+      if (target?.src?.startsWith('blob:')) {
+        URL.revokeObjectURL(target.src)
+      }
+      return prev.filter(s => s.id !== id)
+    })
+    setSelectedStickerId(prev => (prev === id ? null : prev))
+  }
+
+  const duplicateSelectedSticker = () => {
+    if (!selectedSticker || (selectedSticker.side || 'front') !== view || currentViewStickers.length >= MAX_STICKERS) return
+    const duplicate = {
+      ...selectedSticker,
+      id: `sticker-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      x: Math.min(95, selectedSticker.x + 4),
+      y: Math.min(95, selectedSticker.y + 4),
+    }
+    setStickers(prev => [...prev, duplicate])
+    setSelectedStickerId(duplicate.id)
+  }
+
+  const moveLayer = (direction) => {
+    if (!selectedStickerId) return
+    setStickers(prev => {
+      const current = prev.filter(s => (s.side || 'front') === view)
+      const other = prev.filter(s => (s.side || 'front') !== view)
+      const idx = current.findIndex(s => s.id === selectedStickerId)
+      if (idx < 0) return prev
+      if (direction === 'front' && idx < current.length - 1) {
+        const [item] = current.splice(idx, 1)
+        current.push(item)
+      } else if (direction === 'back' && idx > 0) {
+        const [item] = current.splice(idx, 1)
+        current.unshift(item)
+      } else if (direction === 'up' && idx < current.length - 1) {
+        ;[current[idx], current[idx + 1]] = [current[idx + 1], current[idx]]
+      } else if (direction === 'down' && idx > 0) {
+        ;[current[idx], current[idx - 1]] = [current[idx - 1], current[idx]]
+      }
+      return [...other, ...current]
+    })
+  }
+
+  const clampSticker = (x, y) => ({
+    x: Math.max(5, Math.min(95, x)),
+    y: Math.max(5, Math.min(95, y)),
+  })
+
+  const moveStickerToClientPoint = (clientX, clientY, stickerId = selectedStickerId) => {
+    const stage = previewStageRef.current
+    if (!stage || !stickerId) return
+    const rect = stage.getBoundingClientRect()
+    if (rect.width <= 0 || rect.height <= 0) return
+    const px = ((clientX - rect.left) / rect.width) * 100
+    const py = ((clientY - rect.top) / rect.height) * 100
+    const clamped = clampSticker(px, py)
+    updateStickerById(stickerId, clamped)
+  }
+
+  const beginStickerDrag = (clientX, clientY, stickerId) => {
+    if (!stickerId) return
+    setSelectedStickerId(stickerId)
+    setIsDraggingSticker(true)
+    moveStickerToClientPoint(clientX, clientY, stickerId)
+  }
+
+  const updateStickerDrag = (clientX, clientY) => {
+    if (!isDraggingSticker) return
+    moveStickerToClientPoint(clientX, clientY)
+  }
+
+  const endStickerDrag = () => setIsDraggingSticker(false)
+
   const clampPan = (x, y, scale = zoomLevel) => {
     const viewport = previewViewportRef.current
     if (!viewport || scale <= 1) return { x: 0, y: 0 }
@@ -254,7 +403,7 @@ export function CustomizePage() {
   }
 
   const beginDrag = (clientX, clientY) => {
-    if (zoomLevel <= 1) return
+    if (zoomLevel <= 1 || isDraggingSticker) return
     setIsDraggingPreview(true)
     panStartRef.current = {
       pointerX: clientX,
@@ -265,7 +414,7 @@ export function CustomizePage() {
   }
 
   const updateDrag = (clientX, clientY) => {
-    if (!isDraggingPreview) return
+    if (!isDraggingPreview || isDraggingSticker) return
     const dx = clientX - panStartRef.current.pointerX
     const dy = clientY - panStartRef.current.pointerY
     const next = clampPan(panStartRef.current.originX + dx, panStartRef.current.originY + dy)
@@ -277,6 +426,41 @@ export function CustomizePage() {
   useEffect(() => {
     setPanOffset(prev => clampPan(prev.x, prev.y, zoomLevel))
   }, [zoomLevel])
+
+  useEffect(() => {
+    stickersRef.current = stickers
+  }, [stickers])
+
+  useEffect(() => {
+    if (!stickersInitializedRef.current) {
+      stickersInitializedRef.current = true
+      return
+    }
+    if (editBuildId && !suppressDirtyTrackingRef.current) {
+      setHasUnsavedChanges(true)
+    }
+  }, [stickers, editBuildId])
+
+  useEffect(() => {
+    if (!selectedStickerId) {
+      if (currentViewStickers[0]) setSelectedStickerId(currentViewStickers[0].id)
+      return
+    }
+    const selectedInView = stickers.find(s => s.id === selectedStickerId && (s.side || 'front') === view)
+    if (!selectedInView) {
+      setSelectedStickerId(currentViewStickers[0]?.id || null)
+    }
+  }, [view, stickers, selectedStickerId, currentViewStickers])
+
+  useEffect(() => {
+    return () => {
+      stickersRef.current.forEach(stickerItem => {
+        if (stickerItem?.src?.startsWith('blob:')) {
+          URL.revokeObjectURL(stickerItem.src)
+        }
+      })
+    }
+  }, [])
 
   // Get guitar type from URL and sync with config
   const urlGuitarType = searchParams.get('type') || 'electric'
@@ -321,6 +505,8 @@ export function CustomizePage() {
           try {
             suppressDirtyTrackingRef.current = true
             baseLoadConfig(target.config)
+            setStickers(Array.isArray(target.stickers) ? target.stickers : [])
+            setDbCustomizationId(target.dbCustomizationId || target.customization_id || null)
           } catch (e) {
             console.error('Failed to load build config for editing:', e)
           } finally {
@@ -378,16 +564,18 @@ export function CustomizePage() {
     }
   }, [toastMessage])
 
-  const saveBuild = ({ shouldNavigate = true, continueBlockedNavigation = false } = {}) => {
+  const saveBuild = async ({ shouldNavigate = true, continueBlockedNavigation = false } = {}) => {
     const buildId = editBuildId || `build-${Date.now()}`
-    const build = {
+    const baseBuild = {
       id: buildId,
       name: `${summary.body} build`,
       price,
       config,
+      stickers,
       pricingBreakdown,
       summary,
       savedAt: new Date().toISOString(),
+      dbCustomizationId,
     }
 
     let storedKey = 'cosmoscraft_saved_builds'
@@ -407,14 +595,73 @@ export function CustomizePage() {
 
     if (existingIndex !== -1) {
       // Preserve existing properties like additionalParts
-      stored[existingIndex] = { ...stored[existingIndex], ...build }
+      stored[existingIndex] = { ...stored[existingIndex], ...baseBuild }
     } else {
-      stored.unshift(build)
+      stored.unshift(baseBuild)
     }
 
     if (stored.length > 20) stored = stored.slice(0, 20)
-    window.localStorage.setItem(storedKey, JSON.stringify(stored))
+    const persistLocalBuild = (extraPatch = {}) => {
+      const nextBuild = { ...baseBuild, ...extraPatch }
+      let nextStored = JSON.parse(window.localStorage.getItem(storedKey) || '[]')
+      const nextIndex = nextStored.findIndex(b => b.id === buildId)
+      if (nextIndex !== -1) {
+        nextStored[nextIndex] = { ...nextStored[nextIndex], ...nextBuild }
+      } else {
+        nextStored.unshift(nextBuild)
+      }
+      if (nextStored.length > 20) nextStored = nextStored.slice(0, 20)
+      window.localStorage.setItem(storedKey, JSON.stringify(nextStored))
+      return nextBuild
+    }
+
+    persistLocalBuild()
     setHasUnsavedChanges(false)
+
+    try {
+      const payload = {
+        name: `${summary.body} build`,
+        guitar_type: config.guitarType || 'electric',
+        total_price: price,
+        is_saved: true,
+        body_wood: summary.bodyWood || null,
+        neck_wood: summary.neck || null,
+        fingerboard_wood: summary.fretboard || null,
+        bridge_type: summary.bridge || config.bridge || null,
+        pickups: summary.pickups || config.pickups || null,
+        color: summary.bodyFinish || config.bodyFinish || null,
+        finish_type: summary.bodyFinish || config.bodyFinish || null,
+        config_json: config,
+        stickers,
+      }
+
+      const endpoint = dbCustomizationId
+        ? `${API}/guitars/my-customizations/${dbCustomizationId}`
+        : `${API}/guitars/my-customizations`
+      const method = dbCustomizationId ? 'PUT' : 'POST'
+
+      const response = await fetch(endpoint, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(payload),
+      })
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}))
+        throw new Error(errData.message || 'Failed to save customization in database')
+      }
+
+      const data = await response.json().catch(() => ({}))
+      const savedId = data?.data?.customization_id || dbCustomizationId || null
+      if (savedId) {
+        setDbCustomizationId(savedId)
+        persistLocalBuild({ dbCustomizationId: savedId, customization_id: savedId })
+      }
+    } catch (error) {
+      console.error('Database save failed (local backup retained):', error)
+      setToastMessage('Saved locally. Database sync failed.')
+    }
     
     if (continueBlockedNavigation && blocker.state === 'blocked') {
       setShowUnsavedModal(false)
@@ -435,14 +682,14 @@ export function CustomizePage() {
 
   const handleSave = () => {
     if (!isAuthenticated) {
-      openLogin(() => saveBuild({ shouldNavigate: true }))
+      openLogin(() => { void saveBuild({ shouldNavigate: true }) })
       return
     }
-    saveBuild({ shouldNavigate: true })
+    void saveBuild({ shouldNavigate: true })
   }
 
   const handleAddToCart = () => {
-    const saveAndToast = () => saveBuild({ shouldNavigate: false })
+    const saveAndToast = () => { void saveBuild({ shouldNavigate: false }) }
 
     if (!isAuthenticated) {
       openLogin(saveAndToast)
@@ -454,10 +701,10 @@ export function CustomizePage() {
 
   const handleSaveAndLeave = () => {
     if (!isAuthenticated) {
-      openLogin(() => saveBuild({ shouldNavigate: false, continueBlockedNavigation: true }))
+      openLogin(() => { void saveBuild({ shouldNavigate: false, continueBlockedNavigation: true }) })
       return
     }
-    saveBuild({ shouldNavigate: false, continueBlockedNavigation: true })
+    void saveBuild({ shouldNavigate: false, continueBlockedNavigation: true })
   }
 
   const handleStayOnPage = () => {
@@ -942,9 +1189,21 @@ export function CustomizePage() {
                 ref={previewViewportRef}
                 className={`relative h-full flex items-center justify-center p-6 ${zoomLevel > 1 ? 'cursor-grab' : 'cursor-default'} ${isDraggingPreview ? 'cursor-grabbing' : ''}`}
                 onMouseDown={(e) => beginDrag(e.clientX, e.clientY)}
-                onMouseMove={(e) => updateDrag(e.clientX, e.clientY)}
-                onMouseUp={endDrag}
-                onMouseLeave={endDrag}
+                onMouseMove={(e) => {
+                  if (isDraggingSticker) {
+                    updateStickerDrag(e.clientX, e.clientY)
+                    return
+                  }
+                  updateDrag(e.clientX, e.clientY)
+                }}
+                onMouseUp={() => {
+                  endDrag()
+                  endStickerDrag()
+                }}
+                onMouseLeave={() => {
+                  endDrag()
+                  endStickerDrag()
+                }}
                 onTouchStart={(e) => {
                   const touch = e.touches[0]
                   if (!touch) return
@@ -953,11 +1212,19 @@ export function CustomizePage() {
                 onTouchMove={(e) => {
                   const touch = e.touches[0]
                   if (!touch) return
+                  if (isDraggingSticker) {
+                    updateStickerDrag(touch.clientX, touch.clientY)
+                    return
+                  }
                   updateDrag(touch.clientX, touch.clientY)
                 }}
-                onTouchEnd={endDrag}
+                onTouchEnd={() => {
+                  endDrag()
+                  endStickerDrag()
+                }}
               >
                 <div
+                  ref={previewStageRef}
                   className="w-full max-w-[1100px] transition-transform duration-200 ease-out"
                   style={{
                     transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${zoomLevel})`,
@@ -966,6 +1233,48 @@ export function CustomizePage() {
                   }}
                 >
                   <GuitarPreview config={config} view={view} onViewChange={setView} />
+                  {currentViewStickers.map((stickerItem, index) => {
+                    const isSelectedSticker = selectedStickerId === stickerItem.id
+                    return (
+                      <img
+                        key={stickerItem.id}
+                        src={stickerItem.src}
+                        data-export-sticker="true"
+                        data-sticker-x={stickerItem.x}
+                        data-sticker-y={stickerItem.y}
+                        data-sticker-size={stickerItem.size}
+                        data-sticker-rotation={stickerItem.rotation || 0}
+                        alt={`Custom sticker ${index + 1}`}
+                        className={`absolute select-none ${isDraggingSticker && isSelectedSticker ? 'cursor-grabbing' : 'cursor-grab'} ${isSelectedSticker ? 'ring-2 ring-[#d4af37]/80 ring-offset-1 ring-offset-black/40' : ''}`}
+                        style={{
+                          zIndex: 30 + index,
+                          left: `${stickerItem.x}%`,
+                          top: `${stickerItem.y}%`,
+                          width: `${stickerItem.size}%`,
+                          transform: `translate(-50%, -50%) rotate(${stickerItem.rotation || 0}deg)`,
+                          transformOrigin: 'center center',
+                          touchAction: 'none',
+                          userSelect: 'none',
+                          pointerEvents: 'auto',
+                        }}
+                        draggable={false}
+                        onMouseDown={(e) => {
+                          e.stopPropagation()
+                          beginStickerDrag(e.clientX, e.clientY, stickerItem.id)
+                        }}
+                        onTouchStart={(e) => {
+                          e.stopPropagation()
+                          const touch = e.touches[0]
+                          if (!touch) return
+                          beginStickerDrag(touch.clientX, touch.clientY, stickerItem.id)
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setSelectedStickerId(stickerItem.id)
+                        }}
+                      />
+                    )
+                  })}
                 </div>
               </div>
               
@@ -1029,6 +1338,127 @@ export function CustomizePage() {
                 >
                   <ZoomIn className="h-4 w-4" />
                 </button>
+              </div>
+
+              {/* Sticker controls */}
+              <div className="absolute top-4 right-4 w-[360px] max-w-[calc(100%-2rem)] space-y-2 rounded-lg border border-white/10 bg-black/35 p-2 backdrop-blur-sm">
+                <input
+                  ref={stickerFileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleStickerUpload}
+                  className="hidden"
+                />
+                <div className="flex items-center justify-between gap-2">
+                  <button
+                    type="button"
+                    onClick={() => stickerFileInputRef.current?.click()}
+                    disabled={currentViewStickers.length >= MAX_STICKERS}
+                    className="inline-flex items-center gap-1.5 rounded-md bg-[var(--border)] px-2.5 py-2 text-xs font-semibold text-[var(--text-muted)] hover:bg-[var(--surface-elevated)] disabled:opacity-40 disabled:cursor-not-allowed"
+                    title="Upload sticker image"
+                  >
+                    <Upload className="h-3.5 w-3.5" />
+                    Add Sticker
+                  </button>
+                  <span className="text-[10px] text-white/70">{currentViewStickers.length}/{MAX_STICKERS} ({view})</span>
+                </div>
+
+                {selectedSticker && (selectedSticker.side || 'front') === view && (
+                  <div className="space-y-2 rounded-md border border-white/10 bg-black/25 p-2">
+                    <div className="grid grid-cols-4 gap-1.5">
+                      <button type="button" onClick={() => moveLayer('back')} className="rounded bg-[var(--border)] px-1.5 py-1 text-[10px] text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]">Back</button>
+                      <button type="button" onClick={() => moveLayer('down')} className="rounded bg-[var(--border)] px-1.5 py-1 text-[10px] text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]">Down</button>
+                      <button type="button" onClick={() => moveLayer('up')} className="rounded bg-[var(--border)] px-1.5 py-1 text-[10px] text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]">Up</button>
+                      <button type="button" onClick={() => moveLayer('front')} className="rounded bg-[var(--border)] px-1.5 py-1 text-[10px] text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]">Front</button>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => updateSelectedSticker(prev => ({ ...prev, size: Math.max(6, prev.size - 2) }))}
+                        className="rounded-md bg-[var(--border)] px-2 py-1.5 text-xs font-bold text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]"
+                        title="Shrink sticker"
+                      >
+                        -
+                      </button>
+                      <span className="text-[10px] text-white/70 min-w-10 text-center">{Math.round(selectedSticker.size)}%</span>
+                      <button
+                        type="button"
+                        onClick={() => updateSelectedSticker(prev => ({ ...prev, size: Math.min(50, prev.size + 2) }))}
+                        className="rounded-md bg-[var(--border)] px-2 py-1.5 text-xs font-bold text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]"
+                        title="Enlarge sticker"
+                      >
+                        +
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => updateSelectedSticker(prev => ({ ...prev, rotation: (prev.rotation - 15 + 360) % 360 }))}
+                        className="rounded-md bg-[var(--border)] px-2 py-1.5 text-xs font-bold text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]"
+                        title="Rotate left"
+                      >
+                        -15°
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => updateSelectedSticker(prev => ({ ...prev, rotation: (prev.rotation + 15) % 360 }))}
+                        className="rounded-md bg-[var(--border)] px-2 py-1.5 text-xs font-bold text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]"
+                        title="Rotate right"
+                      >
+                        +15°
+                      </button>
+                    </div>
+
+                    <input
+                      type="range"
+                      min="0"
+                      max="359"
+                      value={selectedSticker.rotation || 0}
+                      onChange={(e) => updateSelectedSticker({ rotation: Number(e.target.value) })}
+                      className="w-full accent-[#d4af37]"
+                    />
+
+                    <div className="flex items-center justify-between gap-1.5">
+                      <button
+                        type="button"
+                        onClick={duplicateSelectedSticker}
+                        disabled={currentViewStickers.length >= MAX_STICKERS}
+                        className="rounded-md bg-[var(--border)] px-2 py-1.5 text-[10px] font-semibold text-[var(--text-muted)] hover:bg-[var(--surface-elevated)] disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        Duplicate
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removeStickerById(selectedSticker.id)}
+                        className="rounded-md bg-red-500/20 px-2 py-1.5 text-red-300 hover:bg-red-500/30"
+                        title="Remove sticker"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {currentViewStickers.length > 0 && (
+                  <div className="max-h-24 overflow-y-auto space-y-1 rounded-md border border-white/10 bg-black/20 p-1.5">
+                    {currentViewStickers.map((stickerItem, index) => (
+                      <button
+                        key={stickerItem.id}
+                        type="button"
+                        onClick={() => setSelectedStickerId(stickerItem.id)}
+                        className={`w-full flex items-center gap-2 rounded px-1.5 py-1 text-left text-[10px] ${
+                          selectedStickerId === stickerItem.id
+                            ? 'bg-[#d4af37]/20 text-[#d4af37]'
+                            : 'bg-white/5 text-white/70 hover:bg-white/10'
+                        }`}
+                      >
+                        <img src={stickerItem.src} alt={`Sticker ${index + 1}`} className="h-5 w-5 rounded object-cover" />
+                          <span>{view === 'front' ? 'Front' : 'Rear'} Sticker {index + 1}</span>
+                          <span className="ml-auto">z:{index + 1}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
             
