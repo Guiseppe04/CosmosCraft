@@ -8,6 +8,7 @@ import { BASE_PRICE, BODY_OPTIONS, BODY_WOOD_OPTIONS, BODY_FINISH_OPTIONS, NECK_
 import { adminApi } from '../utils/adminApi.js'
 import ProjectTaskTracker from '../components/projects/ProjectTaskTracker.jsx'
 import { getAllProvinces, getMunicipalitiesByProvince, getBarangaysByMunicipality } from '@aivangogh/ph-address'
+import { ConfirmModal } from '../components/ui/ConfirmModal'
 
 const getOldConfigData = (key, val, bodyType) => {
     let price;
@@ -320,6 +321,7 @@ export function DashboardPage() {
   
   const [isEditingProfile, setIsEditingProfile] = useState(false)
   const [profileLoading, setProfileLoading] = useState(false)
+  const [confirm, setConfirm] = useState({ open: false, addressId: null, isBusy: false })
 
   // Fetch profile data from API
   useEffect(() => {
@@ -1087,6 +1089,31 @@ export function DashboardPage() {
     }
   }
 
+  const handleDeleteAddress = async () => {
+    if (!confirm.open || !confirm.addressId) return
+    setConfirm(c => ({ ...c, isBusy: true }))
+    try {
+      await adminApi.deleteAddress(confirm.addressId)
+      setToastMessage('Address deleted successfully!')
+      setConfirm(c => ({ ...c, open: false, addressId: null, isBusy: false }))
+      const res = await adminApi.getProfile()
+      if (res?.data?.user?.addresses) {
+        setAddresses(res.data.user.addresses)
+      }
+    } catch (err) {
+      setConfirm(c => ({ ...c, isBusy: false }))
+      alert("Failed to delete address: " + err.message)
+    }
+  }
+
+  const openDeleteConfirm = (addressId) => {
+    setConfirm({ open: true, addressId, isBusy: false })
+  }
+
+  const closeDeleteConfirm = () => {
+    setConfirm({ open: false, addressId: null, isBusy: false })
+  }
+
   const renderProfileContent = () => {
     const fullName = [profileData.firstName, profileData.middleName, profileData.lastName].filter(Boolean).join(' ') || 'User'
     if (profileLoading) {
@@ -1333,6 +1360,9 @@ export function DashboardPage() {
                   }} className="p-2 hover:bg-[var(--gold-primary)]/10 rounded-lg transition-colors">
                     <Edit className="w-4 h-4 text-[var(--text-muted)]" />
                   </button>
+                  <button onClick={() => openDeleteConfirm(addr.address_id)} className="p-2 hover:bg-red-500/10 rounded-lg transition-colors">
+                    <Trash2 className="w-4 h-4 text-red-400" />
+                  </button>
                 </div>
                 <div className="text-sm text-[var(--text-muted)] space-y-1">
                   {formatAddressFull(addr)?.map((line, idx) => (
@@ -1371,6 +1401,18 @@ export function DashboardPage() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Confirm Modal */}
+      <ConfirmModal
+        open={confirm.open}
+        title="Delete Address"
+        description="Are you sure you want to delete this address? This action cannot be undone."
+        variant="danger"
+        isBusy={confirm.isBusy}
+        onConfirm={handleDeleteAddress}
+        onCancel={closeDeleteConfirm}
+      />
+
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
         <div className="grid md:grid-cols-[1fr_1.4fr] gap-6 items-start">
           {/* Sidebar */}

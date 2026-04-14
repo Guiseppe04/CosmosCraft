@@ -52,6 +52,7 @@ export const adminApi = {
   updateProfile: (body) => request('/api/users/profile', { method: 'PUT', body }),
   addAddress: (body) => request('/api/users/addresses', { method: 'POST', body }),
   updateAddress: (id, body) => request(`/api/users/addresses/${id}`, { method: 'PUT', body }),
+  deleteAddress: (id) => request(`/api/users/addresses/${id}`, { method: 'DELETE' }),
   changePassword: (body) => request('/api/users/change-password', { method: 'POST', body }),
 
   // Products
