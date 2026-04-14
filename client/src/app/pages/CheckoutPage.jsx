@@ -773,7 +773,16 @@ export function CheckoutPage() {
             name: item.name || 'Product',
             quantity: item.quantity,
             price: item.price,
-            notes: item.notes || ''
+            notes: item.notes || '',
+            customization: isCustomBuild ? {
+              buildId: item.id,
+              name: item.name || 'Custom Build',
+              config: item.config || {},
+              summary: item.summary || {},
+              pricingBreakdown: item.pricingBreakdown || {},
+              baseBuildPrice: Number(customBuildItem?.price) || 0,
+              additionalParts: Array.isArray(customBuildItem?.additionalParts) ? customBuildItem.additionalParts : [],
+            } : undefined,
           })),
           amount: total,
           notes: additionalNotes,

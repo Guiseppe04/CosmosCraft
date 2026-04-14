@@ -55,6 +55,7 @@ function BassLayer({ src, maskSrc, style, className = '', layerName = '' }) {
       className={`absolute inset-0 pointer-events-none select-none ${className}`}
       style={computedStyle}
       data-layer={layerName}
+      data-export-layer="true"
     />
   )
 }
@@ -493,6 +494,7 @@ function BassPreview({ config, view, onViewChange }) {
 
           <div className="relative flex items-center justify-center py-8">
             <div
+              data-export-stage="true"
               className="relative aspect-[16/7] w-full max-w-[1000px] transition-transform duration-500 ease-out"
               style={{
                 transform: `translate(${previewLayout.x}px, ${previewLayout.y}px) scale(${previewScale}) ${previewFlip}`,

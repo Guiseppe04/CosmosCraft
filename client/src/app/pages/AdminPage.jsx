@@ -147,6 +147,14 @@ function CategoryTreeRow({ category, expandedIds, onToggle, onEdit, onDelete, ca
 }
 
 const VALID_ROLES = ['customer', 'staff', 'admin', 'super_admin']
+const APPOINTMENT_BRANCH_STORAGE_KEY = 'cosmoscraft.appointment.branch'
+const DEFAULT_APPOINTMENT_BRANCH = {
+  id: 'balagtas-main',
+  name: 'CosmosCraft Balagtas Branch',
+  address: 'Sp 047-K St Peter Compound, Balagtas, 3016 Bulacan',
+  phone: '+63 000 000 0000',
+  hours: 'Mon-Sat 9:00 AM - 6:00 PM',
+}
 
 function updateIfChanged(currentData, newData, setter) {
   const currentStr = JSON.stringify(currentData)
@@ -196,12 +204,14 @@ const PART_RULES = {
   type_mapping: [required('Type Mapping')],
 }
 const BUILDER_CATEGORY_MAP = {
+  pricing: ['basePrice'],
   body: ['body', 'bodyWood', 'bodyFinish', 'pickguard'],
   neck: ['neck', 'fretboard', 'headstock', 'headstockWood', 'inlays'],
   hardware: ['hardware', 'bridge', 'knobs'],
   electronics: ['pickups'],
 }
 const SLOT_TO_PART_CATEGORY = {
+  basePrice: 'misc',
   body: 'body',
   bodyWood: 'wood_type',
   bodyFinish: 'finish',
@@ -328,6 +338,7 @@ export function AdminPage() {
   // Message panel
   const [messagePanelOpen, setMessagePanelOpen] = useState(false)
   const [selectedConversation, setSelectedConversation] = useState(null)
+  const [appointmentBranchAddress, setAppointmentBranchAddress] = useState(DEFAULT_APPOINTMENT_BRANCH.address)
 
   // ── Derived / filtered views ─────────────────────────────────────────────
   const visibleProducts = products || []
@@ -458,6 +469,41 @@ export function AdminPage() {
     setToast({ msg, type })
     setTimeout(() => setToast(null), 3500)
   }, [])
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(APPOINTMENT_BRANCH_STORAGE_KEY)
+      if (!raw) return
+      const parsed = JSON.parse(raw)
+      if (parsed?.address) setAppointmentBranchAddress(parsed.address)
+    } catch {
+      // Ignore invalid persisted admin setting
+    }
+  }, [])
+
+  const saveAppointmentBranchAddress = useCallback(() => {
+    const cleanAddress = appointmentBranchAddress.trim()
+    if (!cleanAddress) {
+      showToast('Branch address is required', 'error')
+      return
+    }
+
+    try {
+      const raw = window.localStorage.getItem(APPOINTMENT_BRANCH_STORAGE_KEY)
+      const existing = raw ? JSON.parse(raw) : {}
+      window.localStorage.setItem(
+        APPOINTMENT_BRANCH_STORAGE_KEY,
+        JSON.stringify({
+          ...DEFAULT_APPOINTMENT_BRANCH,
+          ...existing,
+          address: cleanAddress,
+        })
+      )
+      showToast('Appointment branch address saved')
+    } catch {
+      showToast('Failed to save branch address', 'error')
+    }
+  }, [appointmentBranchAddress, showToast])
 
   // ── Confirm dialog helper ────────────────────────────────────────────────
   const openConfirm = ({ title, description, onConfirm, variant = 'danger' }) => {
@@ -1743,6 +1789,31 @@ export function AdminPage() {
                       <label className="block text-sm font-semibold text-[var(--text-muted)] mb-2">Dashboard Theme</label>
                       <p className="text-white text-sm">Light mode is the default. You can switch to dark mode using the theme toggle in the top bar.</p>
                     </div>
+                  </div>
+                </div>
+
+                <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6">
+                  <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-3">
+                    <MapPin className="w-5 h-5 text-[var(--gold-primary)]" />
+                    Appointment Branch
+                  </h3>
+                  <p className="text-sm text-[var(--text-muted)] mb-3">
+                    This address is shown in the customer appointment flow (Step 3 Location).
+                  </p>
+                  <textarea
+                    value={appointmentBranchAddress}
+                    onChange={(e) => setAppointmentBranchAddress(e.target.value)}
+                    className="w-full h-24 px-4 py-3 bg-[var(--bg-primary)] text-white border border-[var(--border)] rounded-xl text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]/50"
+                    placeholder="Branch address"
+                  />
+                  <div className="mt-4 flex justify-end">
+                    <button
+                      onClick={saveAppointmentBranchAddress}
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--gold-primary)] text-black font-semibold text-sm hover:opacity-90 transition"
+                    >
+                      <Save className="w-4 h-4" />
+                      Save Branch Address
+                    </button>
                   </div>
                 </div>
 
@@ -3433,6 +3504,7 @@ export function AdminPage() {
                 const partTextareaOk =
                   'w-full min-h-[5.5rem] resize-y px-4 py-3 box-border bg-[var(--bg-primary)] rounded-2xl border border-[var(--border)] text-white placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] text-sm transition-colors'
                 const slotHints = {
+                  basePrice: 'Overrides the base starting price shown in customization pages.',
                   body: 'Controls the guitar body shape and wood.',
                   bodyWood: 'Controls body wood species and grain for the configurator.',
                   bodyFinish: 'Controls finish color and treatment on the body.',
@@ -3499,6 +3571,7 @@ export function AdminPage() {
                                 className={inputCls}
                               >
                                 <option value="">Select Category</option>
+                                <option value="pricing">Pricing</option>
                                 <option value="body">Body</option>
                                 <option value="neck">Neck & Headstock</option>
                                 <option value="hardware">Hardware</option>

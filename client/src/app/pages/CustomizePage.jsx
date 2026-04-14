@@ -1,12 +1,12 @@
 import { useMemo, useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
-import { useSearchParams, useNavigate } from 'react-router'
+import { useSearchParams, useNavigate, useBlocker } from 'react-router'
 import { 
   RotateCcw, Save, ChevronDown, ChevronRight, Info, 
   ShoppingCart, Clock, Truck, Shield, Check, CheckCircle,
-  Sparkles, Layers, Palette, Cog, Zap
+  Sparkles, Layers, Palette, Cog, Zap, Image, ZoomIn, ZoomOut
 } from 'lucide-react'
-import { formatCurrency, toPHP } from '../utils/formatCurrency'
+import { exportMaskedPreview } from '../utils/exportMaskedPreview.js'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useCart } from '../context/CartContext.jsx'
 import useGuitarConfig from '../hooks/useGuitarConfig.js'
@@ -62,8 +62,7 @@ function Tooltip({ content, children }) {
 // Animated price display
 function AnimatedPrice({ price }) {
   const displayPrice = useMemo(() => {
-    const phpPrice = toPHP(price, false)
-    return phpPrice.toLocaleString('en-PH')
+    return price.toLocaleString('en-PH')
   }, [price])
   
   return (
@@ -185,15 +184,99 @@ export function CustomizePage() {
   const [searchParams] = useSearchParams()
   const editBuildId = searchParams.get('edit')
   
-  const { config, updateConfig, resetConfig, price, summary, pricingBreakdown, exportConfig, loadConfig, builder, options } =
-    useGuitarConfig()
+  const {
+    config,
+    updateConfig: baseUpdateConfig,
+    resetConfig: baseResetConfig,
+    price,
+    summary,
+    pricingBreakdown,
+    exportConfig,
+    loadConfig: baseLoadConfig,
+    builder,
+    options,
+    refreshPrices,
+  } = useGuitarConfig()
   const navigate = useNavigate()
   const [view, setView] = useState('front')
+  const [zoomLevel, setZoomLevel] = useState(1)
+  const [panOffset, setPanOffset] = useState({ x: 0, y: 0 })
+  const [isDraggingPreview, setIsDraggingPreview] = useState(false)
+  const panStartRef = useRef({ pointerX: 0, pointerY: 0, originX: 0, originY: 0 })
+  const previewViewportRef = useRef(null)
   const [activeCategory, setActiveCategory] = useState('body')
   const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false)
   const [guitarTypeDropdownOpen, setGuitarTypeDropdownOpen] = useState(false)
   const categoryDropdownRef = useRef(null)
   const { isAuthenticated, openLogin } = useAuth()
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(Boolean(editBuildId))
+  const bypassNavigationBlockRef = useRef(false)
+  const [showUnsavedModal, setShowUnsavedModal] = useState(false)
+  const suppressDirtyTrackingRef = useRef(false)
+
+  const updateConfig = (patch) => {
+    if (editBuildId && !suppressDirtyTrackingRef.current) {
+      setHasUnsavedChanges(true)
+    }
+    baseUpdateConfig(patch)
+  }
+
+  const resetConfig = () => {
+    if (editBuildId && !suppressDirtyTrackingRef.current) {
+      setHasUnsavedChanges(true)
+    }
+    baseResetConfig()
+  }
+
+  const loadConfig = (raw) => {
+    if (editBuildId && !suppressDirtyTrackingRef.current) {
+      setHasUnsavedChanges(true)
+    }
+    baseLoadConfig(raw)
+  }
+
+  const handleZoomIn = () => setZoomLevel(prev => Math.min(2, Number((prev + 0.1).toFixed(2))))
+  const handleZoomOut = () => setZoomLevel(prev => Math.max(0.7, Number((prev - 0.1).toFixed(2))))
+  const handleZoomReset = () => {
+    setZoomLevel(1)
+    setPanOffset({ x: 0, y: 0 })
+  }
+
+  const clampPan = (x, y, scale = zoomLevel) => {
+    const viewport = previewViewportRef.current
+    if (!viewport || scale <= 1) return { x: 0, y: 0 }
+    const maxX = ((viewport.clientWidth * scale) - viewport.clientWidth) / 2
+    const maxY = ((viewport.clientHeight * scale) - viewport.clientHeight) / 2
+    return {
+      x: Math.max(-maxX, Math.min(maxX, x)),
+      y: Math.max(-maxY, Math.min(maxY, y)),
+    }
+  }
+
+  const beginDrag = (clientX, clientY) => {
+    if (zoomLevel <= 1) return
+    setIsDraggingPreview(true)
+    panStartRef.current = {
+      pointerX: clientX,
+      pointerY: clientY,
+      originX: panOffset.x,
+      originY: panOffset.y,
+    }
+  }
+
+  const updateDrag = (clientX, clientY) => {
+    if (!isDraggingPreview) return
+    const dx = clientX - panStartRef.current.pointerX
+    const dy = clientY - panStartRef.current.pointerY
+    const next = clampPan(panStartRef.current.originX + dx, panStartRef.current.originY + dy)
+    setPanOffset(next)
+  }
+
+  const endDrag = () => setIsDraggingPreview(false)
+
+  useEffect(() => {
+    setPanOffset(prev => clampPan(prev.x, prev.y, zoomLevel))
+  }, [zoomLevel])
 
   // Get guitar type from URL and sync with config
   const urlGuitarType = searchParams.get('type') || 'electric'
@@ -204,6 +287,17 @@ export function CustomizePage() {
       updateConfig({ guitarType: urlGuitarType })
     }
   }, [urlGuitarType])
+
+  // Refresh prices when page becomes visible
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (!document.hidden && refreshPrices) {
+        refreshPrices()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => document.removeEventListener('visibilitychange', handleVisibility)
+  }, [refreshPrices])
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -225,15 +319,41 @@ export function CustomizePage() {
         const target = builds.find(b => b.id === editBuildId)
         if (target) {
           try {
-            loadConfig(target.config)
+            suppressDirtyTrackingRef.current = true
+            baseLoadConfig(target.config)
           } catch (e) {
             console.error('Failed to load build config for editing:', e)
+          } finally {
+            suppressDirtyTrackingRef.current = false
           }
           break
         }
       }
     }
-  }, [editBuildId, loadConfig])
+  }, [editBuildId, baseLoadConfig])
+
+  const shouldBlockNavigation = Boolean(editBuildId) && hasUnsavedChanges && !bypassNavigationBlockRef.current
+  const blocker = useBlocker(
+    ({ currentLocation, nextLocation }) =>
+      shouldBlockNavigation &&
+      (currentLocation.pathname !== nextLocation.pathname || currentLocation.search !== nextLocation.search),
+  )
+
+  useEffect(() => {
+    if (blocker.state === 'blocked') {
+      setShowUnsavedModal(true)
+    }
+  }, [blocker.state])
+
+  useEffect(() => {
+    if (!shouldBlockNavigation) return
+    const handleBeforeUnload = (event) => {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [shouldBlockNavigation])
 
   const { addToCart, setIsOpen: setCartOpen } = useCart()
 
@@ -258,7 +378,7 @@ export function CustomizePage() {
     }
   }, [toastMessage])
 
-  const saveBuild = (shouldNavigate = true) => {
+  const saveBuild = ({ shouldNavigate = true, continueBlockedNavigation = false } = {}) => {
     const buildId = editBuildId || `build-${Date.now()}`
     const build = {
       id: buildId,
@@ -294,9 +414,20 @@ export function CustomizePage() {
 
     if (stored.length > 20) stored = stored.slice(0, 20)
     window.localStorage.setItem(storedKey, JSON.stringify(stored))
+    setHasUnsavedChanges(false)
     
+    if (continueBlockedNavigation && blocker.state === 'blocked') {
+      setShowUnsavedModal(false)
+      bypassNavigationBlockRef.current = true
+      blocker.proceed()
+      setTimeout(() => { bypassNavigationBlockRef.current = false }, 0)
+      return
+    }
+
     if (shouldNavigate) {
-      navigate('/dashboard', { state: { section: 'guitar', message: 'Build saved to My Guitar!' } })
+      bypassNavigationBlockRef.current = true
+      navigate('/dashboard', { state: { section: 'my-guitar', message: 'Build saved to My Guitar!' } })
+      setTimeout(() => { bypassNavigationBlockRef.current = false }, 0)
     } else {
       setToastMessage('Your Build is saved to My Guitar!')
     }
@@ -304,14 +435,14 @@ export function CustomizePage() {
 
   const handleSave = () => {
     if (!isAuthenticated) {
-      openLogin(() => saveBuild(true))
+      openLogin(() => saveBuild({ shouldNavigate: true }))
       return
     }
-    saveBuild(true)
+    saveBuild({ shouldNavigate: true })
   }
 
   const handleAddToCart = () => {
-    const saveAndToast = () => saveBuild(false)
+    const saveAndToast = () => saveBuild({ shouldNavigate: false })
 
     if (!isAuthenticated) {
       openLogin(saveAndToast)
@@ -321,15 +452,55 @@ export function CustomizePage() {
     saveAndToast()
   }
 
-  const handleExport = () => {
-    const data = exportConfig()
-    const blob = new Blob([data], { type: 'application/json' })
-    const url = window.URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = 'cosmoscraft-builder-config.json'
-    link.click()
-    window.URL.revokeObjectURL(url)
+  const handleSaveAndLeave = () => {
+    if (!isAuthenticated) {
+      openLogin(() => saveBuild({ shouldNavigate: false, continueBlockedNavigation: true }))
+      return
+    }
+    saveBuild({ shouldNavigate: false, continueBlockedNavigation: true })
+  }
+
+  const handleStayOnPage = () => {
+    setShowUnsavedModal(false)
+    if (blocker.state === 'blocked') {
+      blocker.reset()
+    }
+  }
+
+  const handleConfirmLeave = () => {
+    setShowUnsavedModal(false)
+    if (blocker.state === 'blocked') {
+      bypassNavigationBlockRef.current = true
+      blocker.proceed()
+      setTimeout(() => { bypassNavigationBlockRef.current = false }, 0)
+    }
+  }
+
+  const previewRef = useRef(null)
+
+  const handleSaveImage = async () => {
+    if (!isAuthenticated) {
+      openLogin(() => {
+        setTimeout(() => handleSaveImage(), 100)
+      })
+      return
+    }
+
+    if (!previewRef.current) {
+      console.error('Preview ref not found')
+      return
+    }
+
+    try {
+      await exportMaskedPreview(previewRef.current, {
+        background: '#141414',
+        scale: 2,
+        fileName: `custom-guitar-${config.guitarType}-${Date.now()}.png`,
+      })
+    } catch (error) {
+      console.error('Failed to save image:', error)
+      window.alert('Failed to save image. Please try again.')
+    }
   }
 
   const handleLoad = () => {
@@ -705,6 +876,14 @@ export function CustomizePage() {
                 <Save className="h-4 w-4" />
                 Save Build
               </button>
+              <div className={`inline-flex items-center gap-2 rounded-lg px-3 py-1 text-[11px] font-semibold ${
+                hasUnsavedChanges
+                  ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
+                  : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+              }`}>
+                <span className={`h-1.5 w-1.5 rounded-full ${hasUnsavedChanges ? 'bg-amber-300' : 'bg-emerald-300'}`} />
+                {hasUnsavedChanges ? 'Unsaved changes' : 'Saved'}
+              </div>
             </div>
           </aside>
 
@@ -716,7 +895,7 @@ export function CustomizePage() {
                 <div>
                   <p className="text-xs uppercase tracking-[0.2em] text-white/40">Your Build Total</p>
                   <AnimatedPrice price={price} />
-                  <p className="mt-1 text-xs text-white/30">Base price: ₱{(1299).toLocaleString('en-PH')}</p>
+                  <p className="mt-1 text-xs text-white/30">Base price: ₱{(options.basePrice ?? 0).toLocaleString('en-PH')}</p>
                 </div>
                 
                 <div className="flex flex-col sm:flex-row gap-3">
@@ -750,7 +929,7 @@ export function CustomizePage() {
             </div>
             
             {/* Guitar Preview */}
-            <div className="relative flex-1 rounded-2xl border border-white/10 bg-gradient-to-b from-[#141414] via-[#0d0d0d] to-[#080808] overflow-hidden">
+            <div ref={previewRef} className="relative flex-1 rounded-2xl border border-white/10 bg-gradient-to-b from-[#141414] via-[#0d0d0d] to-[#080808] overflow-hidden">
               {/* Spotlight effects */}
               <div className="absolute inset-0 overflow-hidden pointer-events-none">
                 <div className="absolute -top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-gradient-radial from-[#d4af37]/10 via-transparent to-transparent opacity-60" />
@@ -759,8 +938,33 @@ export function CustomizePage() {
               </div>
               
               {/* Guitar container */}
-              <div className="relative h-full flex items-center justify-center p-6">
-                <div className="w-full max-w-[1100px]">
+              <div
+                ref={previewViewportRef}
+                className={`relative h-full flex items-center justify-center p-6 ${zoomLevel > 1 ? 'cursor-grab' : 'cursor-default'} ${isDraggingPreview ? 'cursor-grabbing' : ''}`}
+                onMouseDown={(e) => beginDrag(e.clientX, e.clientY)}
+                onMouseMove={(e) => updateDrag(e.clientX, e.clientY)}
+                onMouseUp={endDrag}
+                onMouseLeave={endDrag}
+                onTouchStart={(e) => {
+                  const touch = e.touches[0]
+                  if (!touch) return
+                  beginDrag(touch.clientX, touch.clientY)
+                }}
+                onTouchMove={(e) => {
+                  const touch = e.touches[0]
+                  if (!touch) return
+                  updateDrag(touch.clientX, touch.clientY)
+                }}
+                onTouchEnd={endDrag}
+              >
+                <div
+                  className="w-full max-w-[1100px] transition-transform duration-200 ease-out"
+                  style={{
+                    transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${zoomLevel})`,
+                    transformOrigin: 'center center',
+                    willChange: 'transform',
+                  }}
+                >
                   <GuitarPreview config={config} view={view} onViewChange={setView} />
                 </div>
               </div>
@@ -791,6 +995,39 @@ export function CustomizePage() {
                   }`}
                 >
                   Rear View
+                </button>
+              </div>
+
+              {/* Zoom controls */}
+              <div className="absolute bottom-4 right-4 flex items-center gap-2 rounded-lg border border-white/10 bg-black/35 p-1.5 backdrop-blur-sm">
+                <button
+                  type="button"
+                  onClick={handleZoomOut}
+                  disabled={zoomLevel <= 0.7}
+                  className="rounded-md bg-[var(--border)] px-2.5 py-2 text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-elevated)] disabled:opacity-40 disabled:cursor-not-allowed"
+                  aria-label="Zoom out"
+                  title="Zoom out"
+                >
+                  <ZoomOut className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={handleZoomReset}
+                  className="rounded-md px-2.5 py-1.5 text-xs font-semibold text-white/80 transition-colors hover:bg-white/10"
+                  aria-label="Reset zoom"
+                  title="Reset zoom"
+                >
+                  {Math.round(zoomLevel * 100)}%
+                </button>
+                <button
+                  type="button"
+                  onClick={handleZoomIn}
+                  disabled={zoomLevel >= 2}
+                  className="rounded-md bg-[var(--border)] px-2.5 py-2 text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-elevated)] disabled:opacity-40 disabled:cursor-not-allowed"
+                  aria-label="Zoom in"
+                  title="Zoom in"
+                >
+                  <ZoomIn className="h-4 w-4" />
                 </button>
               </div>
             </div>
@@ -929,16 +1166,17 @@ export function CustomizePage() {
               </div>
             </div>
             
-            {/* Export/Import */}
+            {/* Save Image / Load Config */}
             <div className="border-t border-white/10 p-4 flex-shrink-0">
               <div className="flex gap-2">
                 <button
                   type="button"
-                  onClick={handleExport}
-                  className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 py-2 text-xs font-medium transition-all duration-200 hover:bg-[var(--surface-dark)]"
+                  onClick={handleSaveImage}
+                  className="flex-1 flex items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 py-2 text-xs font-medium transition-all duration-200 hover:bg-[var(--surface-dark)]"
                   style={{ color: 'var(--text-muted)' }}
                 >
-                  Export Config
+                  <Image className="h-3.5 w-3.5" />
+                  Save Image
                 </button>
                 <button
                   type="button"
@@ -958,6 +1196,42 @@ export function CustomizePage() {
       <p className="mt-2 text-center text-[10px] uppercase tracking-[0.15em] text-white/30">
         Graphic representation only. Actual product may differ slightly due to natural wood variations.
       </p>
+
+      {showUnsavedModal && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6">
+            <h3 className="text-lg font-bold text-white mb-2">Unsaved Changes</h3>
+            <p className="text-sm text-[var(--text-muted)]">
+              You have unsaved changes. Please save your build before leaving this page.
+            </p>
+            <div className="mt-6 flex gap-3">
+              <button
+                type="button"
+                onClick={handleStayOnPage}
+                className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-2.5 text-sm font-semibold text-white hover:bg-white/5 transition-colors"
+              >
+                Stay
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  handleSaveAndLeave()
+                }}
+                className="flex-1 rounded-lg bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] px-4 py-2.5 text-sm font-bold text-[var(--text-dark)]"
+              >
+                Save Build
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmLeave}
+                className="flex-1 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2.5 text-sm font-semibold text-red-300 hover:bg-red-500/20 transition-colors"
+              >
+                Leave Anyway
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -1,7 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router'
 import { motion, AnimatePresence } from 'motion/react'
-import { useAuth } from '../context/AuthContext'
 import { API } from '../utils/apiConfig'
 import {
   Wrench,
@@ -61,29 +60,34 @@ const guitarServices = [
   }
 ]
 
-const branches = [
-  {
-    id: 'downtown',
-    name: 'Downtown Nashville',
-    address: '123 Music Row, Nashville, TN 37203',
-    phone: '+1 (615) 123-4567',
-    hours: 'Mon-Sat 9:00 AM - 6:00 PM',
-  },
-  {
-    id: 'midtown',
-    name: 'Midtown Music Hub',
-    address: '456 Broadway Ave, Nashville, TN 37201',
-    phone: '+1 (615) 234-5678',
-    hours: 'Mon-Sat 10:00 AM - 7:00 PM',
-  },
-  {
-    id: 'southend',
-    name: 'South End Studio',
-    address: '789 Harmony Blvd, Nashville, TN 37205',
-    phone: '+1 (615) 345-6789',
-    hours: 'Tue-Sun 11:00 AM - 8:00 PM',
-  },
-]
+const APPOINTMENT_BRANCH_STORAGE_KEY = 'cosmoscraft.appointment.branch'
+const DEFAULT_BRANCH = {
+  id: 'balagtas-main',
+  name: 'CosmosCraft Balagtas Branch',
+  address: 'Sp 047-K St Peter Compound, Balagtas, 3016 Bulacan',
+  phone: '+63 000 000 0000',
+  hours: 'Mon-Sat 9:00 AM - 6:00 PM',
+}
+
+function getAppointmentBranch() {
+  if (typeof window === 'undefined') return DEFAULT_BRANCH
+
+  try {
+    const raw = window.localStorage.getItem(APPOINTMENT_BRANCH_STORAGE_KEY)
+    if (!raw) return DEFAULT_BRANCH
+    const parsed = JSON.parse(raw)
+
+    return {
+      ...DEFAULT_BRANCH,
+      ...parsed,
+      id: parsed?.id || DEFAULT_BRANCH.id,
+      name: parsed?.name || DEFAULT_BRANCH.name,
+      address: parsed?.address || DEFAULT_BRANCH.address,
+    }
+  } catch {
+    return DEFAULT_BRANCH
+  }
+}
 
 const STEPS = [
   { id: 1, label: 'Service' },
@@ -142,16 +146,17 @@ function getMonthMatrix(year, month, maxLeadTimeDays) {
 
 export function AppointmentPage() {
   const navigate = useNavigate()
-  const { user } = useAuth()
   const today = new Date()
+  const branch = useMemo(() => getAppointmentBranch(), [])
+  const branches = useMemo(() => [branch], [branch])
 
   // State
   const [currentStep, setCurrentStep] = useState(1)
   
   // Selections
-  const [selectedServices, setSelectedServices] = useState([])
+  const [selectedServicesByCategory, setSelectedServicesByCategory] = useState({})
   const [guitarDetails, setGuitarDetails] = useState({ brand: '', model: '', serial: '', notes: '' })
-  const [selectedBranchId, setSelectedBranchId] = useState(branches[0].id)
+  const [selectedBranchId] = useState(branches[0].id)
   const [selectedDateId, setSelectedDateId] = useState('')
   const [selectedTime, setSelectedTime] = useState('')
   
@@ -164,6 +169,11 @@ export function AppointmentPage() {
 
   const currentBranch = branches.find(b => b.id === selectedBranchId)
   const selectedDate = selectedDateId ? new Date(`${selectedDateId}T00:00:00`) : null
+
+  const selectedServices = useMemo(
+    () => Object.values(selectedServicesByCategory).filter(Boolean),
+    [selectedServicesByCategory]
+  )
 
   // Derived calculations
   const { maxLeadTime, totalPrice, selectedDetailedServices } = useMemo(() => {
@@ -200,10 +210,11 @@ export function AppointmentPage() {
   }
 
   // Handlers
-  const handleToggleService = (optId) => {
-    setSelectedServices(prev =>
-      prev.includes(optId) ? prev.filter(id => id !== optId) : [...prev, optId]
-    )
+  const handleToggleService = (categoryId, optId) => {
+    setSelectedServicesByCategory(prev => ({
+      ...prev,
+      [categoryId]: prev[categoryId] === optId ? null : optId
+    }))
   }
 
   const handleNextStep = () => {
@@ -288,11 +299,11 @@ export function AppointmentPage() {
                   </div>
                   <div className="grid sm:grid-cols-2 gap-3 pl-7">
                     {category.options.map(option => {
-                      const isSelected = selectedServices.includes(option.id)
+                      const isSelected = selectedServicesByCategory[category.categoryId] === option.id
                       return (
                         <button
                           key={option.id}
-                          onClick={() => handleToggleService(option.id)}
+                          onClick={() => handleToggleService(category.categoryId, option.id)}
                           className={`text-left p-4 rounded-xl border-2 transition-all ${
                             isSelected 
                               ? 'border-[#d4af37] bg-[#d4af37]/10' 
@@ -373,34 +384,29 @@ export function AppointmentPage() {
           <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
              <div>
               <h2 className="text-2xl font-bold text-white mb-2">Location</h2>
-              <p className="text-sm text-[var(--text-muted)]">Select the CosmosCraft branch you want to book at.</p>
+              <p className="text-sm text-[var(--text-muted)]">Appointments are currently available at our Balagtas branch.</p>
             </div>
 
             <div className="space-y-3">
               {branches.map(branch => {
                 const isSelected = selectedBranchId === branch.id
                 return (
-                  <button
+                  <div
                     key={branch.id}
-                    onClick={() => setSelectedBranchId(branch.id)}
-                    className={`w-full flex items-center justify-between p-5 rounded-2xl border-2 transition-all ${
-                      isSelected 
-                        ? 'border-[#d4af37] bg-[#d4af37]/5' 
-                        : 'border-[var(--border)] bg-theme-surface-deep hover:border-[#d4af37]/30'
-                    }`}
+                    className="w-full flex items-center justify-between p-5 rounded-2xl border-2 border-[#d4af37] bg-[#d4af37]/5"
                   >
                     <div className="flex gap-4 text-left">
-                      <div className={`p-3 rounded-full ${isSelected ? 'bg-[#d4af37]/20 text-[#d4af37]' : 'bg-[var(--surface-elevated)] text-[var(--text-muted)]'}`}>
+                      <div className="p-3 rounded-full bg-[#d4af37]/20 text-[#d4af37]">
                         <MapPin className="w-6 h-6" />
                       </div>
                       <div>
-                        <h3 className={`font-bold text-lg mb-1 ${isSelected ? 'text-[var(--text-light)]' : 'text-[var(--text-light)]/80'}`}>{branch.name}</h3>
+                        <h3 className="font-bold text-lg mb-1 text-[var(--text-light)]">{branch.name}</h3>
                         <p className="text-sm text-[var(--text-muted)]">{branch.address}</p>
                         <p className="text-sm text-[var(--text-muted)] mt-1">{branch.hours}</p>
                       </div>
                     </div>
                     {isSelected && <CheckCircle2 className="w-6 h-6 text-[#d4af37]" />}
-                  </button>
+                  </div>
                 )
               })}
             </div>
