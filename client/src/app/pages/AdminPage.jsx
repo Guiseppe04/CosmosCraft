@@ -716,6 +716,16 @@ export function AdminPage() {
 
   // ── CRUD: Orders ─────────────────────────────────────────────────────────
   const updateOrderStatus = async (orderId, status) => {
+    const order = orders.find(o => o.order_id === orderId)
+    
+    if (status === 'processing') {
+      const paymentVerified = order?.payment?.status === 'verified' || order?.payment_status === 'paid'
+      if (!paymentVerified) {
+        showToast('Cannot start processing - payment not verified. Please approve payment first.', 'error')
+        return
+      }
+    }
+    
     try {
       await adminApi.updateOrder(orderId, { status })
       showToast(`Order ${status.toLowerCase()}!`)
