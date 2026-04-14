@@ -31,25 +31,36 @@ exports.createOrder = async (orderData) => {
     // Generate order number
     const orderNumber = `ORD-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`
 
-    // Insert billing address into addresses table
+    // Insert billing address into addresses table (check for existing first)
     let shippingAddressId = null
     if (billingAddress.street && billingAddress.city) {
-      const addressRes = await client.query(
-        `INSERT INTO addresses (user_id, label, line1, line2, city, province, postal_code, country)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-         RETURNING address_id`,
-        [
-          userId,
-          'Shipping Address',
-          billingAddress.street,
-          billingAddress.street2 || null,
-          billingAddress.city,
-          billingAddress.province || null,
-          billingAddress.postalCode || null,
-          'PH' // Philippines - default country
-        ]
+      // Check if similar address already exists
+      const existingAddr = await client.query(
+        `SELECT address_id FROM addresses 
+         WHERE user_id = $1 AND line1 = $2 AND city = $3 AND province = $4`,
+        [userId, billingAddress.street, billingAddress.city, billingAddress.province || null]
       )
-      shippingAddressId = addressRes.rows[0].address_id
+      
+      if (existingAddr.rows.length > 0) {
+        shippingAddressId = existingAddr.rows[0].address_id
+      } else {
+        const addressRes = await client.query(
+          `INSERT INTO addresses (user_id, label, line1, line2, city, province, postal_code, country)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+           RETURNING address_id`,
+          [
+            userId,
+            'Shipping Address',
+            billingAddress.street,
+            billingAddress.street2 || null,
+            billingAddress.city,
+            billingAddress.province || null,
+            billingAddress.postalCode || null,
+            'PH'
+          ]
+        )
+        shippingAddressId = addressRes.rows[0].address_id
+      }
     }
 
     // Insert order with shipping_address_id

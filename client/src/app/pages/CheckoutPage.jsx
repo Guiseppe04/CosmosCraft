@@ -612,16 +612,20 @@ export function CheckoutPage() {
 
   const userAddresses = user?.addresses || []
 
+  const uniqueAddresses = userAddresses.filter(
+    (addr, index, self) => index === self.findIndex(a => a.address_id === addr.address_id)
+  )
+
   useEffect(() => {
-    if (userAddresses.length > 0 && !selectedAddressId) {
-      const defaultAddr = userAddresses.find(a => a.is_default)
+    if (uniqueAddresses.length > 0 && !selectedAddressId) {
+      const defaultAddr = uniqueAddresses.find(a => a.is_default)
       if (defaultAddr) {
         setSelectedAddressId(defaultAddr.address_id)
       } else {
-        setSelectedAddressId(userAddresses[0].address_id)
+        setSelectedAddressId(uniqueAddresses[0].address_id)
       }
     }
-  }, [userAddresses, selectedAddressId])
+  }, [uniqueAddresses, selectedAddressId])
 
   let customSubtotal = 0
   let customBuildPrice = 0
@@ -689,7 +693,7 @@ export function CheckoutPage() {
           is_default: addressData.isDefault
         }
         
-        const updatedAddresses = [...userAddresses]
+        const updatedAddresses = [...uniqueAddresses]
         if (addressData.isDefault) {
           updatedAddresses.forEach(a => a.is_default = false)
         }
@@ -736,7 +740,7 @@ export function CheckoutPage() {
 
     setIsProcessing(true)
     
-    const selectedAddress = userAddresses.find(a => a.address_id === selectedAddressId)
+    const selectedAddress = uniqueAddresses.find(a => a.address_id === selectedAddressId)
     
     const finalAddress = {
       street: selectedAddress?.street_line1 || '',
@@ -847,7 +851,7 @@ export function CheckoutPage() {
 
   const handleRemove = (id, qty) => updateQuantity(id, -qty)
 
-  const hasNoAddresses = userAddresses.length === 0
+  const hasNoAddresses = uniqueAddresses.length === 0
 
   return (
     <>
@@ -935,7 +939,7 @@ export function CheckoutPage() {
                 transition={{ delay: 0.1 }}
               >
                 <AddressSelectionCard 
-                  addresses={userAddresses}
+                  addresses={uniqueAddresses}
                   selectedAddressId={selectedAddressId}
                   onSelectAddress={handleSelectAddress}
                   onAddNew={handleAddNewAddress}
