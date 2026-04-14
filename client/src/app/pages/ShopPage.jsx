@@ -708,16 +708,18 @@ export function ShopPage() {
                           Stock: <span className="text-white">{product.stock || 0} pieces</span>
                         </p>
 
-                        <div className="mt-auto flex flex-wrap items-center justify-between gap-y-3 pt-1">
-                          <p className="text-lg font-bold text-white tracking-tight">
-                            ₱{product.price.toLocaleString('en-PH')}
-                          </p>
+                        <div className="mt-auto flex flex-col gap-4 pt-3 border-t border-white/10">
+                          <div className="flex items-center justify-between">
+                            <p className="text-lg font-bold text-white tracking-tight">
+                              ₱{product.price.toLocaleString('en-PH')}
+                            </p>
+                          </div>
 
-                          <div className="flex items-center gap-2 ml-auto">
+                          <div className="flex flex-col sm:flex-row items-stretch gap-3">
                             {!outOfStock && isAuthenticated && (
                               <button
                                 onClick={(e) => { e.stopPropagation(); handleBuyNow(product); }}
-                                className="px-4 py-2 rounded-full bg-[var(--gold-primary)] text-black font-bold text-xs tracking-wide hover:brightness-110 transition-all shadow-md"
+                                className="flex-1 px-4 py-2.5 rounded-full bg-[var(--gold-primary)] text-black font-bold text-xs tracking-wide hover:brightness-110 transition-all shadow-md"
                               >
                                 Buy Now
                               </button>
@@ -725,7 +727,7 @@ export function ShopPage() {
                             <button
                               onClick={(e) => { e.stopPropagation(); handleAddToCart(product); }}
                               disabled={buttonState !== 'add'}
-                              className={`px-4 py-2 rounded-full text-xs tracking-wide font-bold transition-all border ${
+                              className={`flex-1 px-4 py-2.5 rounded-full text-xs tracking-wide font-bold transition-all border ${
                                 buttonState === 'out_of_stock'
                                   ? 'border-[var(--border)] bg-[var(--surface-dark)] text-[var(--text-muted)] cursor-not-allowed'
                                   : 'bg-[var(--surface-dark)] border-[var(--border)] text-[var(--text-light)] hover:text-[var(--gold-primary)] hover:border-[var(--gold-primary)] shadow-sm'

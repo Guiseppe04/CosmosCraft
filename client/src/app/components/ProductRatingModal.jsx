@@ -1,38 +1,37 @@
-import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
-import { Star, X, CheckCircle2, AlertCircle, ShoppingCart } from 'lucide-react'
+import { X, ShoppingCart } from 'lucide-react'
 
 export function ProductRatingModal({ product, isOpen, onClose, onBuyNow, onAddToCart, getAddButtonState, isAuthenticated }) {
-  const [rating, setRating] = useState(0)
-  const [hoverRating, setHoverRating] = useState(0)
-  const [hasRated, setHasRated] = useState(false)
+  // Rating state disabled - will be re-enabled when product delivery tracking is implemented
+  // const [rating, setRating] = useState(0)
+  // const [hoverRating, setHoverRating] = useState(0)
+  // const [hasRated, setHasRated] = useState(false)
 
-  // Simulation of storing in live database via local storage caching for now
-  useEffect(() => {
-    if (product) {
-      const storedRatings = JSON.parse(localStorage.getItem('product_ratings') || '{}')
-      if (storedRatings[product.id]) {
-        setRating(storedRatings[product.id])
-        setHasRated(true)
-      } else {
-        setRating(0)
-        setHasRated(false)
-      }
-    }
-  }, [product])
+  // Rating initialization effect disabled - will be re-enabled when product delivery tracking is implemented
+  // useEffect(() => {
+  //   if (product) {
+  //     const storedRatings = JSON.parse(localStorage.getItem('product_ratings') || '{}')
+  //     if (storedRatings[product.id]) {
+  //       setRating(storedRatings[product.id])
+  //       setHasRated(true)
+  //     } else {
+  //       setRating(0)
+  //       setHasRated(false)
+  //     }
+  //   }
+  // }, [product])
+
+  // Rating handler disabled - will be re-enabled when product delivery tracking is implemented
+  // const handleRate = (value) => {
+  //   setRating(value)
+  //   setHasRated(true)
+  //   const storedRatings = JSON.parse(localStorage.getItem('product_ratings') || '{}')
+  //   storedRatings[product.id] = value
+  //   localStorage.setItem('product_ratings', JSON.stringify(storedRatings))
+  //   window.dispatchEvent(new Event('ratingUpdated'))
+  // }
 
   if (!isOpen || !product) return null
-
-  const handleRate = (value) => {
-    setRating(value)
-    setHasRated(true)
-    const storedRatings = JSON.parse(localStorage.getItem('product_ratings') || '{}')
-    storedRatings[product.id] = value
-    localStorage.setItem('product_ratings', JSON.stringify(storedRatings))
-    
-    // Dispatch an event to update global ratings or UI if needed
-    window.dispatchEvent(new Event('ratingUpdated'))
-  }
 
   const outOfStock = product.stock === 0
   const buttonState = getAddButtonState(product)
@@ -96,8 +95,8 @@ export function ProductRatingModal({ product, isOpen, onClose, onBuyNow, onAddTo
               )}
             </div>
             
-            {/* Interactive Rating Component */}
-            <div className="mb-8 p-5 bg-white/5 rounded-xl border border-white/5">
+            {/* Rating Section - Disabled: Show only after product delivery */}
+            {/* <div className="mb-8 p-5 bg-white/5 rounded-xl border border-white/5">
               <h4 className="text-xs uppercase tracking-wider font-bold text-[var(--text-muted)] mb-3">
                 {hasRated ? 'Your Rating' : 'Rate this Product'}
               </h4>
@@ -123,7 +122,7 @@ export function ProductRatingModal({ product, isOpen, onClose, onBuyNow, onAddTo
                   </motion.div>
                 )}
               </div>
-            </div>
+            </div> */}
 
             <div className="flex-1 mb-8">
               <h4 className="text-sm font-semibold text-white mb-2">Description</h4>
