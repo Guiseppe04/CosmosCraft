@@ -182,6 +182,117 @@ function validate(rules, form) {
 const required = (label) => (v) => (!v?.toString().trim() ? `${label} is required` : null)
 const positive = (label) => (v) => (Number(v) <= 0 ? `${label} must be greater than 0` : null)
 
+function ImageZoomModal({ src, alt }) {
+  const [isOpen, setIsOpen] = useState(false)
+  const [scale, setScale] = useState(1)
+  const [position, setPosition] = useState({ x: 0, y: 0 })
+  const [isDragging, setIsDragging] = useState(false)
+  const dragStart = useRef({ x: 0, y: 0 })
+
+  const handleWheel = (e) => {
+    e.preventDefault()
+    const delta = e.deltaY > 0 ? -0.1 : 0.1
+    setScale(s => Math.max(0.5, Math.min(3, s + delta)))
+  }
+
+  const handleMouseDown = (e) => {
+    setIsDragging(true)
+    dragStart.current = { x: e.clientX - position.x, y: e.clientY - position.y }
+  }
+
+  const handleMouseMove = (e) => {
+    if (!isDragging) return
+    setPosition({
+      x: e.clientX - dragStart.current.x,
+      y: e.clientY - dragStart.current.y,
+    })
+  }
+
+  const handleMouseUp = () => setIsDragging(false)
+
+  const resetZoom = () => {
+    setScale(1)
+    setPosition({ x: 0, y: 0 })
+  }
+
+  return (
+    <>
+      <div 
+        className="relative cursor-zoom-in overflow-hidden rounded-lg border border-[var(--border)]"
+        onClick={() => setIsOpen(true)}
+      >
+        <img 
+          src={src} 
+          alt={alt} 
+          className="w-full h-48 object-contain bg-[var(--bg-primary)]/50"
+        />
+        <div className="absolute inset-0 bg-black/30 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center">
+          <span className="bg-black/60 px-3 py-1.5 rounded-full text-white text-sm">Click to zoom</span>
+        </div>
+      </div>
+
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[200] bg-black/90 backdrop-blur-sm flex items-center justify-center"
+            onClick={(e) => { if (e.target === e.currentTarget) setIsOpen(false) }}
+          >
+            <button
+              onClick={() => { setIsOpen(false); resetZoom() }}
+              className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors z-10"
+            >
+              <X className="w-6 h-6 text-white" />
+            </button>
+            
+            <div 
+              className="w-full h-full overflow-hidden flex items-center justify-center p-8"
+              onWheel={handleWheel}
+              onMouseDown={handleMouseDown}
+              onMouseMove={handleMouseMove}
+              onMouseUp={handleMouseUp}
+              onMouseLeave={handleMouseUp}
+            >
+              <motion.img
+                src={src}
+                alt={alt}
+                className="max-w-full max-h-full object-contain select-none"
+                style={{ 
+                  transform: `scale(${scale}) translate(${position.x / scale}px, ${position.y / scale}px)`,
+                  cursor: isDragging ? 'grabbing' : 'grab',
+                }}
+                draggable={false}
+              />
+            </div>
+
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-3 bg-black/60 px-4 py-2 rounded-full">
+              <button 
+                onClick={() => setScale(s => Math.max(0.5, s - 0.25))}
+                className="text-white hover:text-[var(--gold-primary)] transition-colors"
+              >
+                <ChevronDown className="w-5 h-5" />
+              </button>
+              <span className="text-white text-sm min-w-[60px] text-center">{Math.round(scale * 100)}%</span>
+              <button 
+                onClick={() => setScale(s => Math.min(3, s + 0.25))}
+                className="text-white hover:text-[var(--gold-primary)] transition-colors"
+              >
+                <ChevronUp className="w-5 h-5" />
+              </button>
+              <button 
+                onClick={resetZoom}
+                className="ml-2 text-white hover:text-[var(--gold-primary)] transition-colors"
+              >
+                <RotateCcw className="w-4 h-4" />
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
+  )
+}
+
 const PRODUCT_RULES = {
   sku: [required('SKU')],
   name: [required('Name')],
@@ -253,6 +364,7 @@ export function AdminPage() {
   // Modal state
   const [modal, setModal] = useState({ open: false, type: null, data: null })
   const [showGuitarTypeSelector, setShowGuitarTypeSelector] = useState(false)
+  const [paymentStatusUpdate, setPaymentStatusUpdate] = useState({ loading: false, orderId: null })
 
   // Confirm dialog state
   const [confirm, setConfirm] = useState({ open: false, title: '', description: '', onConfirm: null, isBusy: false, variant: 'danger' })
@@ -839,22 +951,48 @@ export function AdminPage() {
   }
 
   const approvePayment = async (orderId) => {
-    // Find the order with payment details
     const order = orders.find(o => o.order_id === orderId)
     if (order?.payment) {
-      openModal('payment_approval', order)
+      setForm({
+        order_id: order.order_id,
+        order_number: order.order_number || order.order_id?.slice(0, 8),
+        payment_method: order.payment?.method || order.payment_method || 'N/A',
+        amount: order.total || order.total_amount || order.payment?.amount || 0,
+        payment_status: order.payment_status || order.payment?.status || 'pending',
+        proof_url: order.payment?.proof_url || null,
+      })
+      setFormErrors({})
+      setModal({ open: true, type: 'payment_approval', data: order })
     } else {
       showToast('No payment found for this order', 'error')
     }
   }
 
-  const confirmApprovePayment = async (orderId) => {
+  const updatePaymentStatus = async () => {
+    if (!form.order_id) return
+    
+    const originalStatus = modal.data?.payment_status || modal.data?.payment?.status || 'pending'
+    if (form.payment_status === originalStatus) {
+      showToast('No changes detected', 'error')
+      return
+    }
+
+    setPaymentStatusUpdate({ loading: true, orderId: form.order_id })
     try {
-      await adminApi.approvePayment(orderId)
-      showToast('Payment approved!')
+      await adminApi.updatePaymentStatus(form.order_id, form.payment_status)
+      showToast(`Payment status updated to ${form.payment_status}!`)
+      
+      setOrders(prev => prev.map(o => 
+        o.order_id === form.order_id 
+          ? { ...o, payment_status: form.payment_status }
+          : o
+      ))
+      
       closeModal()
-      fetchOrders()
     } catch (e) { showToast(e.message, 'error') }
+    finally {
+      setPaymentStatusUpdate({ loading: false, orderId: null })
+    }
   }
 
   const cancelOrder = (id, orderNum) => {
@@ -1999,7 +2137,7 @@ export function AdminPage() {
                                     <>
                                       {(order.payment_status === 'pending' || order.payment_status === 'awaiting_approval') && (
                                         <button onClick={(e) => { e.stopPropagation(); approvePayment(order.order_id) }} className="flex items-center gap-2 px-4 py-2 bg-green-500/10 text-green-400 rounded-lg text-sm hover:bg-green-500/20 transition-all">
-                                          <CreditCard className="w-4 h-4" /> Approve Payment
+                                          <CreditCard className="w-4 h-4" /> Update Payment Status
                                         </button>
                                       )}
                                       <button onClick={(e) => { e.stopPropagation(); updateOrderStatus(order.order_id, 'processing') }} className="flex items-center gap-2 px-4 py-2 bg-green-500/10 text-green-400 rounded-lg text-sm hover:bg-green-500/20 transition-all">
@@ -3910,7 +4048,7 @@ export function AdminPage() {
           </motion.div>
         )}
 
-        {/* Payment Approval Modal */}
+        {/* Payment Status Update Modal */}
         {modal.type === 'payment_approval' && modal.data?.payment && (
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -3922,58 +4060,65 @@ export function AdminPage() {
               className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-3xl p-8 w-full max-w-2xl shadow-2xl overflow-y-auto max-h-[90vh]"
             >
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-2xl font-bold text-white">Verify Payment Proof</h2>
+                <h2 className="text-2xl font-bold text-white">Update Payment Status</h2>
                 <button onClick={closeModal} className="p-1 hover:bg-white/10 rounded-lg transition-colors">
                   <X className="w-6 h-6 text-white" />
                 </button>
               </div>
 
               <div className="space-y-6">
-                {/* Order Info */}
-                <div className="bg-[var(--bg-primary)]/50 rounded-lg p-4">
-                  <p className="text-[var(--text-muted)] text-sm mb-2">Order #</p>
-                  <p className="text-white font-mono font-semibold">{modal.data?.order_number || modal.data?.order_id?.slice(0, 8)}</p>
+                {/* Order # - Highlighted */}
+                <div className="bg-[var(--gold-primary)]/10 border border-[var(--gold-primary)]/30 rounded-lg p-4">
+                  <p className="text-[var(--gold-primary)] text-sm mb-1">Order #</p>
+                  <p className="text-white font-mono text-xl font-bold">{form.order_number || modal.data?.order_number || modal.data?.order_id?.slice(0, 8)}</p>
                 </div>
 
                 {/* Payment Details */}
                 <div className="grid grid-cols-2 gap-4">
                   <div className="bg-[var(--bg-primary)]/50 rounded-lg p-4">
                     <p className="text-[var(--text-muted)] text-sm mb-1">Payment Method</p>
-                    <p className="text-white font-semibold capitalize">{modal.data?.payment?.method || 'N/A'}</p>
+                    <p className="text-white font-semibold capitalize">{form.payment_method || 'N/A'}</p>
                   </div>
                   <div className="bg-[var(--bg-primary)]/50 rounded-lg p-4">
                     <p className="text-[var(--text-muted)] text-sm mb-1">Amount</p>
-                    <p className="text-[var(--gold-primary)] font-bold">{formatCurrency(modal.data?.payment?.amount || 0)}</p>
-                  </div>
-                  <div className="bg-[var(--bg-primary)]/50 rounded-lg p-4">
-                    <p className="text-[var(--text-muted)] text-sm mb-1">Reference</p>
-                    <p className="text-white font-mono text-sm">{modal.data?.payment?.reference_number || '—'}</p>
-                  </div>
-                  <div className="bg-[var(--bg-primary)]/50 rounded-lg p-4">
-                    <p className="text-[var(--text-muted)] text-sm mb-1">Status</p>
-                    <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${
-                      modal.data?.payment?.status === 'verified' ? 'bg-green-500/20 text-green-400' :
-                      modal.data?.payment?.status === 'rejected' ? 'bg-red-500/20 text-red-400' :
-                      'bg-amber-500/20 text-amber-400'
-                    }`}>
-                      {modal.data?.payment?.status?.charAt(0).toUpperCase() + modal.data?.payment?.status?.slice(1)}
-                    </span>
+                    <p className="text-[var(--gold-primary)] font-bold text-xl">{formatCurrency(form.amount || 0)}</p>
                   </div>
                 </div>
 
-                {/* Payment Proof Image */}
-                {modal.data?.payment?.proof_url ? (
-                  <div className="space-y-3">
-                    <p className="text-white font-semibold">Payment Proof</p>
-                    <img 
-                      src={modal.data.payment.proof_url} 
-                      alt="Payment Proof" 
-                      className="w-full rounded-lg border border-[var(--border)] max-h-96 object-contain"
-                    />
+                {/* Status Dropdown */}
+                <div className="bg-[var(--bg-primary)]/50 rounded-lg p-4">
+                  <p className="text-[var(--text-muted)] text-sm mb-2">Status</p>
+                  <div className="flex gap-2 flex-wrap">
+                    {[
+                      { value: 'pending', label: 'Pending', color: 'bg-amber-500/20 text-amber-400 border-amber-500/30', dot: 'bg-amber-400' },
+                      { value: 'paid', label: 'Paid', color: 'bg-green-500/20 text-green-400 border-green-500/30', dot: 'bg-green-400' },
+                      { value: 'failed', label: 'Failed', color: 'bg-red-500/20 text-red-400 border-red-500/30', dot: 'bg-red-400' },
+                      { value: 'refunded', label: 'Refunded', color: 'bg-blue-500/20 text-blue-400 border-blue-500/30', dot: 'bg-blue-400' },
+                    ].map((status) => (
+                      <button
+                        key={status.value}
+                        onClick={() => setForm(f => ({ ...f, payment_status: status.value }))}
+                        className={`px-4 py-2 rounded-full text-sm font-semibold border transition-all ${
+                          form.payment_status === status.value
+                            ? status.color + ' border-2'
+                            : 'bg-[var(--surface-dark)] text-[var(--text-muted)] border border-[var(--border)] hover:border-[var(--gold-primary)]/50'
+                        }`}
+                      >
+                        <span className={`w-2 h-2 rounded-full ${status.dot} inline-block mr-2`} />
+                        {status.label}
+                      </button>
+                    ))}
                   </div>
-                ) : (
-                  <div className="bg-[var(--bg-primary)]/30 border border-[var(--border)] rounded-lg p-6 text-center">
-                    <p className="text-[var(--text-muted)]">No proof image uploaded</p>
+                </div>
+
+                {/* Payment Proof Image - Zoomable */}
+                {form.proof_url && (
+                  <div className="space-y-3">
+                    <p className="text-white font-semibold flex items-center gap-2">
+                      Payment Proof
+                      <span className="text-xs text-[var(--text-muted)] font-normal">(Click to zoom)</span>
+                    </p>
+                    <ImageZoomModal src={form.proof_url} alt="Payment Proof" />
                   </div>
                 )}
 
@@ -3986,11 +4131,25 @@ export function AdminPage() {
                     Cancel
                   </button>
                   <button
-                    onClick={() => confirmApprovePayment(modal.data.order_id)}
-                    className="flex-1 px-4 py-3 bg-gradient-to-r from-green-500 to-green-600 rounded-lg text-white font-semibold hover:shadow-[0_0_20px_rgba(34,197,94,0.4)] transition-all flex items-center justify-center gap-2"
+                    onClick={updatePaymentStatus}
+                    disabled={paymentStatusUpdate.loading || form.payment_status === (modal.data?.payment_status || modal.data?.payment?.status)}
+                    className={`flex-1 px-4 py-3 bg-gradient-to-r from-green-500 to-green-600 rounded-lg text-white font-semibold hover:shadow-[0_0_20px_rgba(34,197,94,0.4)] transition-all flex items-center justify-center gap-2 ${
+                      paymentStatusUpdate.loading || form.payment_status === (modal.data?.payment_status || modal.data?.payment?.status)
+                        ? 'opacity-50 cursor-not-allowed'
+                        : ''
+                    }`}
                   >
-                    <Check className="w-4 h-4" />
-                    Approve Payment
+                    {paymentStatusUpdate.loading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="w-4 h-4" />
+                        Update Status
+                      </>
+                    )}
                   </button>
                 </div>
               </div>
