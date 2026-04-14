@@ -1768,7 +1768,7 @@ export function AdminPage() {
                             </span>
                           </div>
                           <div className={`w-28 text-right font-bold text-sm ${orderStatus === 'cancelled' ? 'text-gray-500' : 'text-[var(--gold-primary)]'}`}>
-                            {formatCurrency(order.total || order.total_amount, true)}
+                            {formatCurrency(order.total || order.total_amount)}
                           </div>
                           <button className="p-1 text-[var(--text-muted)] hover:text-white transition-colors">
                             {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
@@ -1822,8 +1822,8 @@ export function AdminPage() {
                                               </div>
                                             </td>
                                             <td className="py-3 px-4 text-center text-white">{item.quantity || item.qty || 1}</td>
-                                            <td className="py-3 px-4 text-right text-white">{formatCurrency(item.price || item.unit_price, true)}</td>
-                                            <td className="py-3 pl-4 text-right text-[var(--gold-primary)] font-semibold">{formatCurrency((item.price || item.unit_price || 0) * (item.quantity || item.qty || 1), true)}</td>
+                                            <td className="py-3 px-4 text-right text-white">{formatCurrency(item.price || item.unit_price)}</td>
+                                            <td className="py-3 pl-4 text-right text-[var(--gold-primary)] font-semibold">{formatCurrency((item.price || item.unit_price || 0) * (item.quantity || item.qty || 1))}</td>
                                           </tr>
                                         ))}
                                       </tbody>
