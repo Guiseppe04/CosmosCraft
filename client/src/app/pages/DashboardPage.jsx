@@ -1149,27 +1149,27 @@ export function DashboardPage() {
         </div>
         <div className="grid md:grid-cols-2 gap-6">
           <div>
-            <label className="block text-xs font-semibold text-[var(--text-muted)] mb-2">First Name</label>
+            <label className="block text-xs font-semibold text-white mb-2">First Name</label>
             <input type="text" value={profileData.firstName} onChange={e => handleInputChange('firstName', e.target.value)} disabled={!isEditingProfile} className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] disabled:opacity-50" />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-[var(--text-muted)] mb-2">Last Name</label>
+            <label className="block text-xs font-semibold text-white mb-2">Last Name</label>
             <input type="text" value={profileData.lastName} onChange={e => handleInputChange('lastName', e.target.value)} disabled={!isEditingProfile} className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] disabled:opacity-50" />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-[var(--text-muted)] mb-2">Middle Initial (Optional)</label>
+            <label className="block text-xs font-semibold text-white mb-2">Middle Initial (Optional)</label>
             <input type="text" value={profileData.middleName} maxLength={1} onChange={e => handleInputChange('middleName', e.target.value)} disabled={!isEditingProfile} className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] disabled:opacity-50" />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-[var(--text-muted)] mb-2">Email</label>
+            <label className="block text-xs font-semibold text-white mb-2">Email</label>
             <input type="email" value={profileData.email} disabled className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] disabled:opacity-50" />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-[var(--text-muted)] mb-2">Phone Number</label>
+            <label className="block text-xs font-semibold text-white mb-2">Phone Number</label>
             <input type="tel" value={profileData.phone} onChange={e => handleInputChange('phone', e.target.value)} disabled={!isEditingProfile} className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] disabled:opacity-50" />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-[var(--text-muted)] mb-2">Gender</label>
+            <label className="block text-xs font-semibold text-white mb-2">Gender</label>
             <div className={`flex items-center gap-4 text-sm ${isEditingProfile ? 'text-[var(--text-muted)]' : 'text-[var(--text-muted)] opacity-50'}`}>
               {['male', 'female', 'other'].map(value => (
                 <label key={value} className={`inline-flex items-center gap-2 ${isEditingProfile ? 'cursor-pointer' : 'cursor-not-allowed'}`}>
@@ -1181,10 +1181,6 @@ export function DashboardPage() {
                 </label>
               ))}
             </div>
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-[var(--text-muted)] mb-2">Date of birth</label>
-            <input type="date" value={profileData.birthDate} onChange={e => handleInputChange('birthDate', e.target.value)} disabled={!isEditingProfile} className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-[var(--text-muted)] bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] disabled:opacity-50" />
           </div>
         </div>
         {isEditingProfile && (
@@ -1321,48 +1317,50 @@ export function DashboardPage() {
                     </span>
                     {addr.is_default && <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[var(--gold-primary)] text-[var(--text-dark)]">Default</span>}
                   </div>
-                  <button onClick={() => { 
-                    setEditingAddressId(addr.address_id)
-                    setAddressData({ 
-                      streetLine1: addr.street_line1 || '', 
-                      streetLine2: addr.street_line2 || '', 
-                      province: addr.province || '',
-                      city: addr.city || '', 
-                      barangay: addr.barangay || '',
-                      postalZipCode: addr.postal_code || '', 
-                      country: addr.country || 'Philippines', 
-                      isDefault: addr.is_default || false 
-                    })
-                    const loadCascade = async () => {
-                      try {
-                        const provinces = getAllProvinces()
-                        setLocationData(prev => ({ ...prev, provinces }))
-                        if (addr.province) {
-                          const province = provinces.find(p => p.name === addr.province || p.psgcCode === addr.province)
-                          if (province) {
-                            const cities = getMunicipalitiesByProvince(province.psgcCode)
-                            setLocationData(prev => ({ ...prev, cities }))
+                  <div className="flex items-center gap-3">
+                    <button onClick={() => { 
+                      setEditingAddressId(addr.address_id)
+                      setAddressData({ 
+                        streetLine1: addr.street_line1 || '', 
+                        streetLine2: addr.street_line2 || '', 
+                        province: addr.province || '',
+                        city: addr.city || '', 
+                        barangay: addr.barangay || '',
+                        postalZipCode: addr.postal_code || '', 
+                        country: addr.country || 'Philippines', 
+                        isDefault: addr.is_default || false 
+                      })
+                      const loadCascade = async () => {
+                        try {
+                          const provinces = getAllProvinces()
+                          setLocationData(prev => ({ ...prev, provinces }))
+                          if (addr.province) {
+                            const province = provinces.find(p => p.name === addr.province || p.psgcCode === addr.province)
+                            if (province) {
+                              const cities = getMunicipalitiesByProvince(province.psgcCode)
+                              setLocationData(prev => ({ ...prev, cities }))
+                            }
                           }
-                        }
-                        if (addr.city) {
-                          const cities = locationData.cities.length > 0 ? locationData.cities : (addr.province ? getMunicipalitiesByProvince(addr.province) : [])
-                          const city = cities.find(c => c.name === addr.city || c.psgcCode === addr.city)
-                          if (city) {
-                            const barangays = getBarangaysByMunicipality(city.psgcCode)
-                            setLocationData(prev => ({ ...prev, barangays }))
+                          if (addr.city) {
+                            const cities = locationData.cities.length > 0 ? locationData.cities : (addr.province ? getMunicipalitiesByProvince(addr.province) : [])
+                            const city = cities.find(c => c.name === addr.city || c.psgcCode === addr.city)
+                            if (city) {
+                              const barangays = getBarangaysByMunicipality(city.psgcCode)
+                              setLocationData(prev => ({ ...prev, barangays }))
+                            }
                           }
+                        } catch (e) {
+                          console.error('Failed to load cascade:', e)
                         }
-                      } catch (e) {
-                        console.error('Failed to load cascade:', e)
                       }
-                    }
-                    loadCascade()
-                  }} className="p-2 hover:bg-[var(--gold-primary)]/10 rounded-lg transition-colors">
-                    <Edit className="w-4 h-4 text-[var(--text-muted)]" />
-                  </button>
-                  <button onClick={() => openDeleteConfirm(addr.address_id)} className="p-2 hover:bg-red-500/10 rounded-lg transition-colors">
-                    <Trash2 className="w-4 h-4 text-red-400" />
-                  </button>
+                      loadCascade()
+                    }} className="p-2.5 hover:bg-[var(--gold-primary)]/20 hover:border hover:border-[var(--gold-primary)] rounded-lg transition-all duration-150">
+                      <Edit className="w-5 h-5 text-[var(--gold-primary)]" />
+                    </button>
+                    <button onClick={() => openDeleteConfirm(addr.address_id)} className="p-2.5 hover:bg-red-500/20 hover:border hover:border-red-500 rounded-lg transition-all duration-150">
+                      <Trash2 className="w-5 h-5 text-red-400" />
+                    </button>
+                  </div>
                 </div>
                 <div className="text-sm text-[var(--text-muted)] space-y-1">
                   {formatAddressFull(addr)?.map((line, idx) => (
@@ -1541,7 +1539,7 @@ export function DashboardPage() {
                 )}
                 <div className="space-y-5 max-w-md">
                   <div>
-                    <label className="block text-xs font-semibold text-[var(--text-muted)] mb-2">
+                    <label className="block text-xs font-semibold text-white mb-2">
                       Current Password
                     </label>
                     <input
@@ -1555,7 +1553,7 @@ export function DashboardPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-[var(--text-muted)] mb-2">
+                    <label className="block text-xs font-semibold text-white mb-2">
                       New Password
                     </label>
                     <input
@@ -1569,7 +1567,7 @@ export function DashboardPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-[var(--text-muted)] mb-2">
+                    <label className="block text-xs font-semibold text-white mb-2">
                       Confirm New Password
                     </label>
                     <input

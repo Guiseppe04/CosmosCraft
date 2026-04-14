@@ -275,7 +275,7 @@ export function AppointmentPage() {
         return (
           <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
             <div>
-              <h2 className="text-2xl font-bold text-[var(--text-light)] mb-2">Select Services</h2>
+              <h2 className="text-2xl font-bold text-white mb-2">Select Services</h2>
               <p className="text-sm text-[var(--text-muted)]">Choose one or more professional guitar services. Our calendar availability will automatically adjust based on the expected turnaround times.</p>
             </div>
             
@@ -320,13 +320,13 @@ export function AppointmentPage() {
         return (
           <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
             <div>
-              <h2 className="text-2xl font-bold text-[var(--text-light)] mb-2">Guitar Details</h2>
+              <h2 className="text-2xl font-bold text-white mb-2">Guitar Details</h2>
               <p className="text-sm text-[var(--text-muted)]">Tell us about the instrument you're bringing in.</p>
             </div>
             
             <div className="bg-theme-surface-deep border border-[var(--border)] p-6 rounded-2xl space-y-5">
               <div>
-                <label className="block text-sm font-medium text-[var(--text-light)] mb-1.5">Brand <span className="text-red-400">*</span></label>
+                <label className="block text-sm font-medium text-white mb-1.5">Brand <span className="text-red-400">*</span></label>
                 <input
                   type="text"
                   value={guitarDetails.brand}
@@ -336,7 +336,7 @@ export function AppointmentPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-[var(--text-light)] mb-1.5">Model <span className="text-red-400">*</span></label>
+                <label className="block text-sm font-medium text-white mb-1.5">Model <span className="text-red-400">*</span></label>
                 <input
                   type="text"
                   value={guitarDetails.model}
@@ -346,7 +346,7 @@ export function AppointmentPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-[var(--text-light)] mb-1.5">Serial Number <span className="text-red-400">*</span></label>
+                <label className="block text-sm font-medium text-white mb-1.5">Serial Number <span className="text-red-400">*</span></label>
                 <input
                   type="text"
                   value={guitarDetails.serial}
@@ -356,7 +356,7 @@ export function AppointmentPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-[var(--text-light)] mb-1.5">Issues & Notes</label>
+                <label className="block text-sm font-medium text-white mb-1.5">Issues & Notes</label>
                 <textarea
                   value={guitarDetails.notes}
                   onChange={e => setGuitarDetails({ ...guitarDetails, notes: e.target.value })}
@@ -372,7 +372,7 @@ export function AppointmentPage() {
         return (
           <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
              <div>
-              <h2 className="text-2xl font-bold text-[var(--text-light)] mb-2">Location</h2>
+              <h2 className="text-2xl font-bold text-white mb-2">Location</h2>
               <p className="text-sm text-[var(--text-muted)]">Select the CosmosCraft branch you want to book at.</p>
             </div>
 
@@ -411,7 +411,7 @@ export function AppointmentPage() {
         return (
           <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
             <div>
-               <h2 className="text-2xl font-bold text-[var(--text-light)] mb-2">Select Date and Time</h2>
+               <h2 className="text-2xl font-bold text-white mb-2">Select Date and Time</h2>
                <p className="text-sm text-[var(--text-muted)]">Due to current service volumes and your selected turnaround times, unavailable dates have been disabled.</p>
              </div>
 
@@ -530,7 +530,7 @@ export function AppointmentPage() {
         return (
           <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
             <div>
-              <h2 className="text-2xl font-bold text-[var(--text-light)] mb-2">Confirmation</h2>
+              <h2 className="text-2xl font-bold text-white mb-2">Confirmation</h2>
               <p className="text-sm text-[var(--text-muted)]">Review your appointment details before finalizing.</p>
             </div>
 
