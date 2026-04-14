@@ -16,6 +16,23 @@ exports.PAYMENT_STATUS = {
   REFUNDED: 'refunded',
 };
 
+exports.createPayment = createPayment;
+exports.uploadProofOfPayment = uploadProofOfPayment;
+exports.verifyPayment = verifyPayment;
+exports.rejectPayment = rejectPayment;
+exports.cancelPayment = cancelPayment;
+exports.listPayments = listPayments;
+exports.getPaymentsCount = getPaymentsCount;
+exports.getPaymentInstructions = getPaymentInstructions;
+exports.getAllPaymentMethods = getAllPaymentMethods;
+exports.getPaymentStats = getPaymentStats;
+exports.refundPayment = refundPayment;
+exports.getPaymentsByUser = getPaymentsByUser;
+exports.getPaymentsByUserCount = getPaymentsByUserCount;
+exports.getPaymentById = getPaymentById;
+exports.getPaymentByOrderId = getPaymentByOrderId;
+exports.checkIdempotency = checkIdempotency;
+
 const STATUS_TRANSITIONS = {
   [exports.PAYMENT_STATUS.PENDING]: [exports.PAYMENT_STATUS.FOR_VERIFICATION, exports.PAYMENT_STATUS.CANCELLED],
   [exports.PAYMENT_STATUS.FOR_VERIFICATION]: [exports.PAYMENT_STATUS.VERIFIED, exports.PAYMENT_STATUS.REJECTED, exports.PAYMENT_STATUS.CANCELLED],
@@ -71,7 +88,7 @@ async function getPaymentByOrderId(orderId) {
   return result.rows;
 }
 
-async function createPayment({ order_id, user_id, method, amount, currency = 'PHP', reference_number }) {
+async function createPayment({ order_id, user_id, method, amount, currency = 'PHP', reference_number, proof_url }) {
   const client = await pool.connect();
   
   try {
@@ -117,10 +134,10 @@ async function createPayment({ order_id, user_id, method, amount, currency = 'PH
     }
 
     const result = await client.query(
-      `INSERT INTO payments (order_id, user_id, method, amount, currency, reference_number, payment_instructions, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      `INSERT INTO payments (order_id, user_id, method, amount, currency, reference_number, proof_url, payment_instructions, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        RETURNING *`,
-      [order_id, user_id, method, amount, currency, reference_number, JSONB.stringify(paymentInstructions), exports.PAYMENT_STATUS.PENDING]
+      [order_id, user_id, method, amount, currency, reference_number, proof_url || null, JSON.stringify(paymentInstructions), exports.PAYMENT_STATUS.PENDING]
     );
 
     await client.query('COMMIT');
@@ -212,7 +229,7 @@ async function verifyPayment(paymentId, verifiedByUserId, notes) {
         exports.PAYMENT_STATUS.VERIFIED,
         verifiedByUserId,
         new Date(),
-        JSONB.stringify({ verification_notes: notes }),
+        JSON.stringify({ verification_notes: notes }),
         paymentId
       ]
     );
@@ -259,7 +276,7 @@ async function rejectPayment(paymentId, rejectedByUserId, reason, notes) {
         rejectedByUserId,
         new Date(),
         reason,
-        JSONB.stringify({ rejection_notes: notes }),
+        JSON.stringify({ rejection_notes: notes }),
         paymentId
       ]
     );
@@ -298,7 +315,7 @@ async function cancelPayment(paymentId, cancelledByUserId) {
      RETURNING *`,
     [
       exports.PAYMENT_STATUS.CANCELLED,
-      JSONB.stringify({ cancelled_by: cancelledByUserId }),
+      JSON.stringify({ cancelled_by: cancelledByUserId }),
       new Date(),
       paymentId
     ]
@@ -496,7 +513,7 @@ async function refundPayment(paymentId, refundedByUserId, reason) {
        RETURNING *`,
       [
         exports.PAYMENT_STATUS.REFUNDED,
-        JSONB.stringify({ refunded_by: refundedByUserId, refund_reason: reason }),
+        JSON.stringify({ refunded_by: refundedByUserId, refund_reason: reason }),
         new Date(),
         paymentId
       ]

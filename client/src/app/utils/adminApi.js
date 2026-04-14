@@ -117,6 +117,7 @@ export const adminApi = {
   getMyOrders: () => request('/api/orders/my-orders').then(res => res.data.orders ? res.data.orders : []),
   getOrder: (id) => request(`/api/orders/${id}`),
   updateOrder: (id, body) => request(`/api/orders/${id}`, { method: 'PUT', body }),
+  approvePayment: (id) => request(`/api/orders/${id}/approve-payment`, { method: 'POST' }),
   cancelOrder: (id) => request(`/api/orders/${id}/cancel`, { method: 'POST' }),
   cancelMyOrder: (id) => request(`/api/orders/${id}/cancel-my-order`, { method: 'POST' }),
 

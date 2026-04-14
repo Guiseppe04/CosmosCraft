@@ -425,7 +425,7 @@ export function AdminPage() {
 
   const fetchOrders = useCallback(async () => {
     try {
-      const res = await adminApi.getOrders({ search: debouncedSearch })
+      const res = await adminApi.getOrders({ search: debouncedSearch, include_items: true })
       const newData = Array.isArray(res.data) ? res.data : res.data?.orders || []
       updateIfChanged(orders, newData, setOrders)
     } catch (e) { showToast(e.message, 'error') }
@@ -719,6 +719,25 @@ export function AdminPage() {
     try {
       await adminApi.updateOrder(orderId, { status })
       showToast(`Order ${status.toLowerCase()}!`)
+      fetchOrders()
+    } catch (e) { showToast(e.message, 'error') }
+  }
+
+  const approvePayment = async (orderId) => {
+    // Find the order with payment details
+    const order = orders.find(o => o.order_id === orderId)
+    if (order?.payment) {
+      openModal('payment_approval', order)
+    } else {
+      showToast('No payment found for this order', 'error')
+    }
+  }
+
+  const confirmApprovePayment = async (orderId) => {
+    try {
+      await adminApi.approvePayment(orderId)
+      showToast('Payment approved!')
+      closeModal()
       fetchOrders()
     } catch (e) { showToast(e.message, 'error') }
   }
@@ -1062,7 +1081,7 @@ export function AdminPage() {
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mt-8">
                     {[
-                      { label: 'Revenue this month', value: formatCurrency(salesReport?.monthlySales || 0, true), badge: salesReport?.monthlySales > 0 ? '+live' : 'Live', badgeCls: 'bg-green-500/10 text-green-400' },
+                      { label: 'Revenue this month', value: formatCurrency(salesReport?.monthlySales || 0), badge: salesReport?.monthlySales > 0 ? '+live' : 'Live', badgeCls: 'bg-green-500/10 text-green-400' },
                       { label: 'Total orders', value: visibleOrders.length, badge: 'Order volume', badgeCls: 'bg-blue-500/10 text-blue-400' },
                       { label: 'Active projects', value: visibleProjects.filter(p => p.status === 'in_progress').length, badge: 'In progress', badgeCls: 'bg-purple-500/10 text-purple-400' },
                       { label: 'Open appointments', value: visibleAppointments.filter(a => a.status === 'pending' || a.status === 'approved').length, badge: 'Action required', badgeCls: 'bg-[var(--gold-primary)]/10 text-[var(--gold-primary)]' },
@@ -1757,7 +1776,12 @@ export function AdminPage() {
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className="text-white text-sm font-medium truncate">{order.customer_name || order.user_name || 'Customer'}</p>
-                            <p className="text-[var(--text-muted)] text-xs truncate">{order.customer_email || order.email || ''}</p>
+                            <p className="text-[var(--text-muted)] text-xs truncate">
+                              {itemCount > 0 
+                                ? order.items.map(item => item.product_name || item.name || 'Product').join(', ')
+                                : order.customer_email || order.email || ''
+                              }
+                            </p>
                           </div>
                           <div className="w-16 text-center text-[var(--text-muted)] text-sm">{itemCount} items</div>
                           <div className="w-24 text-right text-[var(--text-muted)] text-sm">{order.created_at ? new Date(order.created_at).toLocaleDateString() : '—'}</div>
@@ -1766,6 +1790,11 @@ export function AdminPage() {
                               <span className={`w-1.5 h-1.5 rounded-full ${statusDotColors[orderStatus]}`}></span>
                               {orderStatus.charAt(0).toUpperCase() + orderStatus.slice(1)}
                             </span>
+                            {order.payment_status && order.payment_status !== 'paid' && (
+                              <span className={`mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${order.payment_status === 'pending' || order.payment_status === 'awaiting_approval' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' : order.payment_status === 'failed' ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-green-500/20 text-green-400 border border-green-500/30'}`}>
+                                {order.payment_status === 'pending' || order.payment_status === 'awaiting_approval' ? 'Payment Pending' : order.payment_status === 'failed' ? 'Payment Failed' : order.payment_status}
+                              </span>
+                            )}
                           </div>
                           <div className={`w-28 text-right font-bold text-sm ${orderStatus === 'cancelled' ? 'text-gray-500' : 'text-[var(--gold-primary)]'}`}>
                             {formatCurrency(order.total || order.total_amount)}
@@ -1812,18 +1841,22 @@ export function AdminPage() {
                                           <tr key={idx} className="border-b border-[var(--border)]/30">
                                             <td className="py-3 pr-4">
                                               <div className="flex items-center gap-3">
-                                                {item.image_url && (
-                                                  <img src={item.image_url} alt="" className="w-10 h-10 rounded-lg object-cover bg-[var(--surface-dark)]" />
-                                                )}
+                                                <div className="w-10 h-10 rounded-lg bg-[var(--surface-dark)] flex items-center justify-center overflow-hidden">
+                                                  {item.image_url ? (
+                                                    <img src={item.image_url} alt={item.product_name || item.name} className="w-full h-full object-cover" />
+                                                  ) : (
+                                                    <Package className="w-5 h-5 text-[var(--text-muted)]" />
+                                                  )}
+                                                </div>
                                                 <div>
-                                                  <p className="text-white text-sm font-medium">{item.name || item.product_name || 'Product'}</p>
-                                                  {item.subtitle && <p className="text-[var(--text-muted)] text-xs">{item.subtitle}</p>}
+                                                  <p className="text-white text-sm font-medium">{item.product_name || item.name || 'Product'}</p>
+                                                  {item.product_sku && <p className="text-[var(--text-muted)] text-xs">SKU: {item.product_sku}</p>}
                                                 </div>
                                               </div>
                                             </td>
                                             <td className="py-3 px-4 text-center text-white">{item.quantity || item.qty || 1}</td>
-                                            <td className="py-3 px-4 text-right text-white">{formatCurrency(item.price || item.unit_price)}</td>
-                                            <td className="py-3 pl-4 text-right text-[var(--gold-primary)] font-semibold">{formatCurrency((item.price || item.unit_price || 0) * (item.quantity || item.qty || 1))}</td>
+                                            <td className="py-3 px-4 text-right text-white">{formatCurrency(item.unit_price || item.price || 0)}</td>
+                                            <td className="py-3 pl-4 text-right text-[var(--gold-primary)] font-semibold">{formatCurrency((item.unit_price || item.price || 0) * (item.quantity || item.qty || 1))}</td>
                                           </tr>
                                         ))}
                                       </tbody>
@@ -1864,6 +1897,11 @@ export function AdminPage() {
                                 <div className="flex flex-wrap gap-2 pt-4 border-t border-[var(--border)]">
                                   {orderStatus === 'pending' && (
                                     <>
+                                      {(order.payment_status === 'pending' || order.payment_status === 'awaiting_approval') && (
+                                        <button onClick={(e) => { e.stopPropagation(); approvePayment(order.order_id) }} className="flex items-center gap-2 px-4 py-2 bg-green-500/10 text-green-400 rounded-lg text-sm hover:bg-green-500/20 transition-all">
+                                          <CreditCard className="w-4 h-4" /> Approve Payment
+                                        </button>
+                                      )}
                                       <button onClick={(e) => { e.stopPropagation(); updateOrderStatus(order.order_id, 'processing') }} className="flex items-center gap-2 px-4 py-2 bg-green-500/10 text-green-400 rounded-lg text-sm hover:bg-green-500/20 transition-all">
                                         <UserCheck className="w-4 h-4" /> Confirm Order
                                       </button>
@@ -2463,9 +2501,9 @@ export function AdminPage() {
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                     {[
-                      { icon: DollarSign, label: 'Total Gross Sales', value: formatCurrency(salesReport.totalGrossSales || 0, true), color: 'var(--gold-primary)', bg: 'from-[var(--gold-primary)]/10', border: 'border-[var(--gold-primary)]/30' },
+                      { icon: DollarSign, label: 'Total Gross Sales', value: formatCurrency(salesReport.totalGrossSales || 0), color: 'var(--gold-primary)', bg: 'from-[var(--gold-primary)]/10', border: 'border-[var(--gold-primary)]/30' },
                       { icon: ShoppingBag, label: 'Total Transactions', value: salesReport.totalTransactions || 0, color: '#60a5fa', bg: 'from-blue-500/10', border: 'border-blue-500/30' },
-                      { icon: TrendingUp, label: 'Avg per Transaction', value: formatCurrency(salesReport.averagePerTransaction || 0, true), color: '#34d399', bg: 'from-green-500/10', border: 'border-green-500/30' },
+                      { icon: TrendingUp, label: 'Avg per Transaction', value: formatCurrency(salesReport.averagePerTransaction || 0), color: '#34d399', bg: 'from-green-500/10', border: 'border-green-500/30' },
                       { icon: BarChart3, label: 'Customization Orders', value: salesReport.customizationOrders || 0, color: '#a78bfa', bg: 'from-purple-500/10', border: 'border-purple-500/30' },
                     ].map((s) => {
                       const Icon = s.icon
@@ -2491,7 +2529,7 @@ export function AdminPage() {
                           <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                           <XAxis dataKey="category" stroke="var(--text-muted)" fontSize={12} tick={{ fill: 'var(--text-muted)' }} />
                           <YAxis stroke="var(--text-muted)" fontSize={12} tick={{ fill: 'var(--text-muted)' }} tickFormatter={(v) => `₱${(v / 1000).toFixed(0)}k`} />
-                          <Tooltip contentStyle={{ backgroundColor: 'var(--surface-dark)', border: '1px solid var(--border)', borderRadius: '8px', color: 'white' }} formatter={(v) => [formatCurrency(v, true), 'Revenue']} />
+                          <Tooltip contentStyle={{ backgroundColor: 'var(--surface-dark)', border: '1px solid var(--border)', borderRadius: '8px', color: 'white' }} formatter={(v) => [formatCurrency(v), 'Revenue']} />
                           <Bar dataKey="amount" radius={[4, 4, 0, 0]}>
                             {['#10B981', '#3B82F6', '#8B5CF6'].map((color, idx) => <Cell key={idx} fill={color} />)}
                           </Bar>
@@ -2506,7 +2544,7 @@ export function AdminPage() {
                       ].map(ch => (
                         <div key={ch.label} className={`p-4 border rounded-lg ${ch.cls}`}>
                           <p className="font-semibold">{ch.label}</p>
-                          <p className="text-white text-lg">{formatCurrency(ch.sales || 0, true)}</p>
+                          <p className="text-white text-lg">{formatCurrency(ch.sales || 0)}</p>
                           <p className="text-[var(--text-muted)] text-sm">{ch.tx || 0} transactions</p>
                         </div>
                       ))}
@@ -2529,7 +2567,7 @@ export function AdminPage() {
                           <div className="space-y-3">
                             <div className="flex justify-between items-center py-2 border-b border-[var(--border)]">
                               <span className="text-[var(--text-muted)]">Revenue</span>
-                              <span className="text-[var(--gold-primary)] font-bold">{formatCurrency(p.sales || 0, true)}</span>
+                              <span className="text-[var(--gold-primary)] font-bold">{formatCurrency(p.sales || 0)}</span>
                             </div>
                             <div className="flex justify-between items-center py-2">
                               <span className="text-[var(--text-muted)]">Transactions</span>
@@ -2561,7 +2599,7 @@ export function AdminPage() {
                                 </td>
                                 <td className="py-4 px-6 text-white font-medium">{product.name}</td>
                                 <td className="py-4 px-6 text-white font-medium">{product.units}</td>
-                                <td className="py-4 px-6 text-[var(--gold-primary)] font-bold">{formatCurrency(product.revenue, true)}</td>
+                                <td className="py-4 px-6 text-[var(--gold-primary)] font-bold">{formatCurrency(product.revenue)}</td>
                                 <td className="py-4 px-6">
                                   <span className="px-3 py-1 bg-[var(--gold-primary)]/20 text-[var(--gold-primary)] rounded-full text-sm">{product.category}</span>
                                 </td>
@@ -3614,7 +3652,7 @@ export function AdminPage() {
                       ['Status', <span className={`px-2 py-0.5 rounded-full text-xs font-semibold border ${getStatusBadge(modal.data.status)}`}>{modal.data.status || 'Pending'}</span>],
                       ['Customer', modal.data.customer_name || modal.data.user_name || '—'],
                       ['Date', modal.data.created_at ? new Date(modal.data.created_at).toLocaleDateString() : '—'],
-                      ['Total', <span className="text-[var(--gold-primary)] font-bold">{formatCurrency(modal.data.total || modal.data.total_amount, true)}</span>],
+                      ['Total', <span className="text-[var(--gold-primary)] font-bold">{formatCurrency(modal.data.total || modal.data.total_amount)}</span>],
                     ].map(([key, val]) => (
                       <div key={key} className="flex justify-between gap-4 border-b border-[var(--border)] pb-2">
                         <span className="text-[var(--text-muted)]">{key}</span>
@@ -3631,7 +3669,7 @@ export function AdminPage() {
                                 <span className="text-white text-sm">{item.product_name || item.name || 'Item'}</span>
                                 <span className="text-[var(--text-muted)] text-xs">Qty: {item.quantity || 1}</span>
                               </div>
-                              <span className="text-[var(--gold-primary)] text-sm">{formatCurrency(item.unit_price || item.price)}</span>
+                              <span className="text-[var(--gold-primary)] text-sm">{formatCurrency((item.unit_price || item.price || 0) * (item.quantity || 1))}</span>
                             </div>
                           ))}
                         </div>
@@ -3759,6 +3797,94 @@ export function AdminPage() {
                 </>
               )}
 
+            </motion.div>
+          </motion.div>
+        )}
+
+        {/* Payment Approval Modal */}
+        {modal.type === 'payment_approval' && modal.data?.payment && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+            onClick={(e) => { if (e.target === e.currentTarget) closeModal() }}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-3xl p-8 w-full max-w-2xl shadow-2xl overflow-y-auto max-h-[90vh]"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-bold text-white">Verify Payment Proof</h2>
+                <button onClick={closeModal} className="p-1 hover:bg-white/10 rounded-lg transition-colors">
+                  <X className="w-6 h-6 text-white" />
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                {/* Order Info */}
+                <div className="bg-[var(--bg-primary)]/50 rounded-lg p-4">
+                  <p className="text-[var(--text-muted)] text-sm mb-2">Order #</p>
+                  <p className="text-white font-mono font-semibold">{modal.data?.order_number || modal.data?.order_id?.slice(0, 8)}</p>
+                </div>
+
+                {/* Payment Details */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-[var(--bg-primary)]/50 rounded-lg p-4">
+                    <p className="text-[var(--text-muted)] text-sm mb-1">Payment Method</p>
+                    <p className="text-white font-semibold capitalize">{modal.data?.payment?.method || 'N/A'}</p>
+                  </div>
+                  <div className="bg-[var(--bg-primary)]/50 rounded-lg p-4">
+                    <p className="text-[var(--text-muted)] text-sm mb-1">Amount</p>
+                    <p className="text-[var(--gold-primary)] font-bold">{formatCurrency(modal.data?.payment?.amount || 0)}</p>
+                  </div>
+                  <div className="bg-[var(--bg-primary)]/50 rounded-lg p-4">
+                    <p className="text-[var(--text-muted)] text-sm mb-1">Reference</p>
+                    <p className="text-white font-mono text-sm">{modal.data?.payment?.reference_number || '—'}</p>
+                  </div>
+                  <div className="bg-[var(--bg-primary)]/50 rounded-lg p-4">
+                    <p className="text-[var(--text-muted)] text-sm mb-1">Status</p>
+                    <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${
+                      modal.data?.payment?.status === 'verified' ? 'bg-green-500/20 text-green-400' :
+                      modal.data?.payment?.status === 'rejected' ? 'bg-red-500/20 text-red-400' :
+                      'bg-amber-500/20 text-amber-400'
+                    }`}>
+                      {modal.data?.payment?.status?.charAt(0).toUpperCase() + modal.data?.payment?.status?.slice(1)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Payment Proof Image */}
+                {modal.data?.payment?.proof_url ? (
+                  <div className="space-y-3">
+                    <p className="text-white font-semibold">Payment Proof</p>
+                    <img 
+                      src={modal.data.payment.proof_url} 
+                      alt="Payment Proof" 
+                      className="w-full rounded-lg border border-[var(--border)] max-h-96 object-contain"
+                    />
+                  </div>
+                ) : (
+                  <div className="bg-[var(--bg-primary)]/30 border border-[var(--border)] rounded-lg p-6 text-center">
+                    <p className="text-[var(--text-muted)]">No proof image uploaded</p>
+                  </div>
+                )}
+
+                {/* Actions */}
+                <div className="flex gap-3 pt-4">
+                  <button
+                    onClick={closeModal}
+                    className="flex-1 px-4 py-3 bg-[var(--surface-dark)] border border-[var(--border)] rounded-lg text-white font-semibold hover:border-[var(--gold-primary)]/50 transition-all"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => confirmApprovePayment(modal.data.order_id)}
+                    className="flex-1 px-4 py-3 bg-gradient-to-r from-green-500 to-green-600 rounded-lg text-white font-semibold hover:shadow-[0_0_20px_rgba(34,197,94,0.4)] transition-all flex items-center justify-center gap-2"
+                  >
+                    <Check className="w-4 h-4" />
+                    Approve Payment
+                  </button>
+                </div>
+              </div>
             </motion.div>
           </motion.div>
         )}

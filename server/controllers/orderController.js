@@ -110,3 +110,9 @@ exports.cancelMyOrder = asyncHandler(async (req, res, next) => {
     throw new AppError(error.message, 400);
   }
 })
+
+exports.approvePayment = asyncHandler(async (req, res, next) => {
+  const order = await orderService.approvePayment(req.params.id)
+  if (!order) throw new AppError('Order not found', 404)
+  res.status(200).json({ status: 'success', data: order })
+})

@@ -42,6 +42,12 @@ exports.createPaymentSchema = Joi.object({
     .messages({
       'string.max': 'Reference number must not exceed 100 characters',
     }),
+  proof_url: Joi.string()
+    .optional()
+    .allow(null)
+    .messages({
+      'string.base': 'Proof URL must be a string',
+    }),
 });
 
 exports.uploadProofSchema = Joi.object({

@@ -750,6 +750,15 @@ export function CheckoutPage() {
     
     try {
       setOrderError(null)
+      // Map payment method names to backend values
+      const methodMap = {
+        'gcash': 'gcash',
+        'bank': 'bank_transfer',
+        'cod': 'cash'
+      }
+      const mappedPaymentMethod = methodMap[paymentMethod] || paymentMethod
+
+      // 1. Create order
       const response = await fetch(`${API}/api/orders`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -757,6 +766,7 @@ export function CheckoutPage() {
         body: JSON.stringify({
           items: checkoutItems.map(item => ({
             productId: item.id,
+            name: item.name || 'Product',
             quantity: item.quantity,
             price: item.price,
             notes: item.notes || ''
@@ -764,7 +774,7 @@ export function CheckoutPage() {
           amount: total,
           notes: additionalNotes,
           shippingMethod,
-          paymentMethod,
+          paymentMethod: mappedPaymentMethod,
           paymentTerms: 'full',
           billingAddress: finalAddress
         })
@@ -773,10 +783,49 @@ export function CheckoutPage() {
       const data = await response.json()
 
       if (response.ok) {
-        clearCart()
-        setOrderError(null)
-        setShowPaymentModal(false)
-        setShowSuccessModal(true)
+        const orderId = data.data.order.order_id
+        let paymentCreated = false
+
+        // 2. Create payment record with proof
+        try {
+          const paymentResponse = await fetch(`${API}/api/payments`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+              order_id: orderId,
+              method: mappedPaymentMethod,
+              amount: total,
+              currency: 'PHP',
+              reference_number: `PROOF-${Date.now()}`,
+              proof_url: receipt // Include the receipt image
+            })
+          })
+
+          const paymentData = await paymentResponse.json()
+
+          if (!paymentResponse.ok) {
+            console.error('Payment creation failed:', paymentData)
+            setOrderError('Order created, but payment record could not be created. Please contact support.')
+            setIsProcessing(false)
+            return
+          }
+
+          paymentCreated = true
+        } catch (paymentError) {
+          console.error('Payment creation error:', paymentError)
+          setOrderError('Order created, but payment record could not be created. Please contact support.')
+          setIsProcessing(false)
+          return
+        }
+
+        // 3. Only show success if both order and payment were created
+        if (paymentCreated) {
+          clearCart()
+          setOrderError(null)
+          setShowPaymentModal(false)
+          setShowSuccessModal(true)
+        }
       } else {
         setOrderError(data.message || 'Order failed. Please try again.')
       }

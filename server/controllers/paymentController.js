@@ -1,6 +1,6 @@
 const paymentService = require('../services/paymentService');
 const { AppError } = require('../middleware/errorHandler');
-const { paymentValidation } = require('../utils/paymentValidation');
+const paymentValidation = require('../utils/paymentValidation');
 
 const validate = (data, schema) => {
   const { error, value } = schema.validate(data, { abortEarly: false });
@@ -33,26 +33,6 @@ exports.createPayment = async (req, res, next) => {
   try {
     const validated = validate(req.body, paymentValidation.createPaymentSchema);
 
-    const idempotencyCheck = await paymentService.checkIdempotency(
-      validated.order_id,
-      validated.method,
-      validated.amount
-    );
-
-    if (idempotencyCheck.is_duplicate) {
-      return res.status(409).json({
-        status: 'error',
-        message: 'A similar payment already exists',
-        data: {
-          existing_payment: {
-            payment_id: idempotencyCheck.existing_payment.payment_id,
-            status: idempotencyCheck.existing_payment.status,
-            created_at: idempotencyCheck.existing_payment.created_at,
-          },
-        },
-      });
-    }
-
     const userId = req.user ? req.user.user_id : null;
 
     const payment = await paymentService.createPayment({
@@ -62,6 +42,7 @@ exports.createPayment = async (req, res, next) => {
       amount: validated.amount,
       currency: validated.currency,
       reference_number: validated.reference_number,
+      proof_url: validated.proof_url || null,
     });
 
     res.status(201).json({

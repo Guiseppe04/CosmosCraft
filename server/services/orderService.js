@@ -67,9 +67,10 @@ exports.createOrder = async (orderData) => {
       // Check if product_id is a valid UUID
       const productId = isValidUUID(item.productId) ? item.productId : null
       
-      // For mock products (non-UUID IDs like "prod-001"), store in product_sku and product_name
+      // For mock products (non-UUID IDs like "prod-001"), store in product_sku
       const productSku = !productId ? item.productId : null
-      const productName = !productId ? item.name : null
+      // Always store product name if provided
+      const productName = item.name || null
       
       await client.query(
         `INSERT INTO order_items (order_id, product_id, product_sku, product_name, quantity, unit_price)
@@ -121,20 +122,29 @@ exports.getOrderById = async (orderId, userId) => {
     throw new Error('Order not found')
   }
 
-  // Get order items
+  // Get order items with product images
   const itemsRes = await pool.query(
-    `SELECT * FROM order_items WHERE order_id = $1`,
+    `SELECT oi.*, pi.image_url FROM order_items oi
+     LEFT JOIN product_images pi ON oi.product_id = pi.product_id AND pi.is_primary = true
+     WHERE oi.order_id = $1`,
+    [orderId]
+  )
+
+  // Get payment information
+  const paymentRes = await pool.query(
+    `SELECT * FROM payments WHERE order_id = $1`,
     [orderId]
   )
 
   const order = res.rows[0]
   order.items = itemsRes.rows
+  order.payment = paymentRes.rows[0] || null
 
   return order
 }
 
 exports.getAllOrders = async (params = {}) => {
-  const { search } = params;
+  const { search, include_items } = params;
   let query = 'SELECT * FROM orders';
   const queryParams = [];
 
@@ -145,6 +155,39 @@ exports.getAllOrders = async (params = {}) => {
 
   query += ' ORDER BY created_at DESC';
   const res = await pool.query(query, queryParams);
+  
+  if (include_items === 'true' || include_items === true) {
+    const orderIds = res.rows.map(o => o.order_id);
+    if (orderIds.length > 0) {
+      const itemsRes = await pool.query(
+        `SELECT oi.*, pi.image_url FROM order_items oi
+         LEFT JOIN product_images pi ON oi.product_id = pi.product_id AND pi.is_primary = true
+         WHERE oi.order_id = ANY($1)`,
+        [orderIds]
+      );
+      const itemsByOrder = itemsRes.rows.reduce((acc, item) => {
+        if (!acc[item.order_id]) acc[item.order_id] = [];
+        acc[item.order_id].push(item);
+        return acc;
+      }, {});
+      
+      // Get payment information for all orders
+      const paymentsRes = await pool.query(
+        `SELECT * FROM payments WHERE order_id = ANY($1)`,
+        [orderIds]
+      );
+      const paymentsByOrder = paymentsRes.rows.reduce((acc, payment) => {
+        acc[payment.order_id] = payment;
+        return acc;
+      }, {});
+      return res.rows.map(order => ({
+        ...order,
+        items: itemsByOrder[order.order_id] || [],
+        payment: paymentsByOrder[order.order_id] || null
+      }));
+    }
+  }
+  
   return res.rows;
 }
 
@@ -189,5 +232,14 @@ exports.cancelMyOrder = async (orderId, userId) => {
     `UPDATE orders SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP WHERE order_id = $1 AND user_id = $2 RETURNING *`,
     [orderId, userId]
   );
+  return res.rows[0];
+}
+
+exports.approvePayment = async (orderId) => {
+  const res = await pool.query(
+    `UPDATE orders SET payment_status = 'paid', updated_at = CURRENT_TIMESTAMP WHERE order_id = $1 RETURNING *`,
+    [orderId]
+  );
+  if (res.rows.length === 0) return null;
   return res.rows[0];
 }
