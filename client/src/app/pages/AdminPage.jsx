@@ -439,6 +439,8 @@ export function AdminPage() {
   const [formErrors, setFormErrors] = useState({})
   const [isSaving, setIsSaving] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
+  const [orderStatusDropdownOpen, setOrderStatusDropdownOpen] = useState(false)
+  const [paymentStatusDropdownOpen, setPaymentStatusDropdownOpen] = useState(false)
   const [productsLoading, setProductsLoading] = useState(false)
   const [partsLoading, setPartsLoading] = useState(false)
   const [productsPagination, setProductsPagination] = useState({ page: 1, pageSize: 10, total: 0, totalPages: 1 })
@@ -802,7 +804,7 @@ export function AdminPage() {
     setFormErrors({})
     setModal({ open: true, type, data })
   }
-  const closeModal = () => { setModal({ open: false, type: null, data: null }); setFormErrors({}) }
+  const closeModal = () => { setModal({ open: false, type: null, data: null }); setFormErrors({}); setOrderStatusDropdownOpen(false); setPaymentStatusDropdownOpen(false) }
 
   // ── Form validation helper ───────────────────────────────────────────────
   const validateAndSave = (rules, saveFn) => async () => {
@@ -2095,14 +2097,16 @@ export function AdminPage() {
                           <div className="w-16 text-center text-[var(--text-muted)] text-sm">{itemCount} items</div>
                           <div className="w-24 text-right text-[var(--text-muted)] text-sm">{order.created_at ? new Date(order.created_at).toLocaleDateString() : '—'}</div>
                           <div className="w-32 flex-shrink-0">
-                            <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold ${statusBgColors[orderStatus]}`}>
-                              <span className={`w-1.5 h-1.5 rounded-full ${statusDotColors[orderStatus]}`}></span>
+                            <p className="text-[var(--text-muted)] text-xs uppercase tracking-wider mb-1">Order Status</p>
+                            <p className={`inline-flex px-3 py-1.5 rounded-full text-xs font-semibold ${statusBgColors[orderStatus]}`}>
                               {orderStatus.charAt(0).toUpperCase() + orderStatus.slice(1)}
-                            </span>
+                            </p>
                             {order.payment_status && order.payment_status !== 'paid' && (
-                              <span className={`mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${order.payment_status === 'pending' || order.payment_status === 'awaiting_approval' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' : order.payment_status === 'failed' ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-green-500/20 text-green-400 border border-green-500/30'}`}>
-                                {order.payment_status === 'pending' || order.payment_status === 'awaiting_approval' ? 'Payment Pending' : order.payment_status === 'failed' ? 'Payment Failed' : order.payment_status}
-                              </span>
+                              <p className="mt-2 text-sm font-semibold text-[var(--text-muted)]">
+                                Payment Status: <span className={`${order.payment_status === 'pending' || order.payment_status === 'awaiting_approval' ? 'text-amber-400' : order.payment_status === 'failed' ? 'text-red-400' : 'text-green-400'}`}>
+                                  {order.payment_status === 'pending' || order.payment_status === 'awaiting_approval' ? 'Payment Pending' : order.payment_status === 'failed' ? 'Payment Failed' : order.payment_status}
+                                </span>
+                              </p>
                             )}
                           </div>
                           <div className={`w-28 text-right font-bold text-sm ${orderStatus === 'cancelled' ? 'text-gray-500' : 'text-[var(--gold-primary)]'}`}>
@@ -2123,10 +2127,41 @@ export function AdminPage() {
                               <div className="p-5 space-y-6">
                                 {/* Metadata Row */}
                                 <div className="flex flex-wrap gap-6 text-sm">
-                                  <div className="flex items-center gap-2 text-[var(--text-muted)]">
-                                    <CreditCard className="w-4 h-4" />
-                                    <span>{order.channel || 'Online'} • {order.payment_method || 'Card'} • {order.payment_status || 'Paid'}</span>
+                                  <div className="grid gap-4 sm:grid-cols-2">
+                                    <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-4">
+                                      <p className="text-[var(--text-muted)] text-xs uppercase tracking-wider mb-2">Payment Method</p>
+                                      <p className="text-white font-semibold">
+                                        {(() => {
+                                          const method = order.payment_method || order.payment?.method || 'Unknown'
+                                          const methodLower = method.toString().toLowerCase()
+
+                                          if (methodLower.includes('gcash') || methodLower.includes('g-cash')) return 'GCash'
+                                          if (methodLower.includes('bank') || methodLower.includes('transfer') || methodLower.includes('bdo') || methodLower.includes('bpi') || methodLower.includes('unionbank')) return 'Bank Transfer'
+                                          if (methodLower.includes('cod') || methodLower.includes('cash')) return 'Cash on Delivery'
+                                          return method.charAt(0).toUpperCase() + method.slice(1)
+                                        })()}
+                                      </p>
+                                    </div>
+
+                                    <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-4">
+                                      <p className="text-[var(--text-muted)] text-xs uppercase tracking-wider mb-2">Payment Status</p>
+                                      <p className={`text-sm font-semibold ${
+                                        (order.payment_status || 'paid') === 'paid' ? 'text-green-400' :
+                                        (order.payment_status || 'paid') === 'pending' ? 'text-amber-400' :
+                                        (order.payment_status || 'paid') === 'failed' ? 'text-red-400' :
+                                        'text-blue-400'
+                                      }`}>
+                                        {(order.payment_status || 'paid') === 'pending' || (order.payment_status || 'paid') === 'awaiting_approval'
+                                          ? 'Payment Pending'
+                                          : (order.payment_status || 'paid') === 'failed'
+                                            ? 'Payment Failed'
+                                            : (order.payment_status || 'paid') === 'paid'
+                                              ? 'Paid'
+                                              : order.payment_status}
+                                      </p>
+                                    </div>
                                   </div>
+
                                   <div className="flex items-center gap-2 text-[var(--text-muted)]">
                                     <Truck className="w-4 h-4" />
                                     <span>{order.shipping_method || 'Standard'} • {order.shipping_address || 'See details'}</span>
@@ -2177,25 +2212,73 @@ export function AdminPage() {
 
                                 {/* Order Timeline */}
                                 <div>
-                                  <p className="text-[var(--text-muted)] text-xs font-semibold uppercase tracking-wider mb-3">Order Timeline</p>
-                                  <div className="flex items-center gap-2">
+                                  <p className="text-[var(--text-muted)] text-xs font-semibold uppercase tracking-wider mb-4">Order Timeline</p>
+                                  <div className="space-y-3">
                                     {[
-                                      { step: 'placed', label: 'Order Placed', time: order.created_at },
-                                      { step: 'confirmed', label: 'Awaiting Confirmation', time: orderStatus !== 'pending' ? order.created_at : null },
-                                      { step: 'processing', label: 'Processing', time: orderStatus === 'processing' || orderStatus === 'completed' || orderStatus === 'shipped' || orderStatus === 'delivered' ? order.updated_at : null },
-                                      { step: 'shipped', label: 'Shipped', time: orderStatus === 'shipped' || orderStatus === 'delivered' ? order.shipped_at : null },
-                                      { step: 'delivered', label: 'Delivered', time: orderStatus === 'delivered' ? order.delivered_at : null },
+                                      { step: 'placed', label: 'Order Placed', time: order.created_at, desc: 'Customer placed the order' },
+                                      { step: 'confirmed', label: 'Order Confirmed', time: orderStatus !== 'pending' ? order.created_at : null, desc: 'Order confirmed and payment verified' },
+                                      { step: 'processing', label: 'Processing', time: orderStatus === 'processing' || orderStatus === 'completed' || orderStatus === 'shipped' || orderStatus === 'delivered' ? order.updated_at : null, desc: 'Order is being prepared' },
+                                      { step: 'shipped', label: 'Shipped', time: orderStatus === 'shipped' || orderStatus === 'delivered' ? order.shipped_at : null, desc: 'Order has been shipped' },
+                                      { step: 'delivered', label: 'Delivered', time: orderStatus === 'delivered' ? order.delivered_at : null, desc: 'Order delivered successfully' },
                                     ].map((item, idx, arr) => {
                                       const isCompleted = arr.slice(0, idx + 1).some(s => orderStatus === s.step || (s.step !== 'placed' && orderStatus === 'cancelled') || (orderStatus !== 'pending' && s.step === 'confirmed'))
                                       const isActive = orderStatus === item.step || (orderStatus === 'pending' && item.step === 'confirmed')
-                                      const dotClass = isCompleted ? 'bg-green-400' : isActive ? 'bg-blue-400' : 'border border-[var(--border)]'
+                                      const isCancelled = orderStatus === 'cancelled' && idx > 0
+
                                       return (
-                                        <div key={item.step} className="flex items-center gap-2">
-                                          <div className={`w-3 h-3 rounded-full ${dotClass}`}></div>
-                                          <span className={`text-xs ${isActive ? 'text-blue-400 font-medium' : isCompleted ? 'text-white' : 'text-[var(--text-muted)]'}`}>
-                                            {isCompleted && item.time ? new Date(item.time).toLocaleDateString() : isActive ? 'Now' : '—'}
-                                          </span>
-                                          {idx < arr.length - 1 && <div className={`w-8 h-px ${isCompleted ? 'bg-green-400/50' : 'bg-[var(--border)]'}`}></div>}
+                                        <div key={item.step} className={`flex items-start gap-4 p-3 rounded-lg border transition-all ${
+                                          isCompleted
+                                            ? 'bg-green-500/5 border-green-500/20'
+                                            : isActive
+                                              ? 'bg-blue-500/5 border-blue-500/20'
+                                              : isCancelled
+                                                ? 'bg-red-500/5 border-red-500/20'
+                                                : 'bg-[var(--bg-primary)] border-[var(--border)]'
+                                        }`}>
+                                          <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+                                            isCompleted
+                                              ? 'bg-green-500 text-white'
+                                              : isActive
+                                                ? 'bg-blue-500 text-white'
+                                                : isCancelled
+                                                  ? 'bg-red-500 text-white'
+                                                  : 'bg-[var(--surface-dark)] text-[var(--text-muted)] border border-[var(--border)]'
+                                          }`}>
+                                            {idx + 1}
+                                          </div>
+                                          <div className="flex-1 min-w-0">
+                                            <div className="flex items-center justify-between mb-1">
+                                              <h4 className={`font-semibold text-sm ${
+                                                isCompleted
+                                                  ? 'text-green-400'
+                                                  : isActive
+                                                    ? 'text-blue-400'
+                                                    : isCancelled
+                                                      ? 'text-red-400'
+                                                      : 'text-[var(--text-muted)]'
+                                              }`}>
+                                                {item.label}
+                                              </h4>
+                                              {item.time && (
+                                                <span className={`text-xs font-medium ${
+                                                  isCompleted
+                                                    ? 'text-green-400/80'
+                                                    : isActive
+                                                      ? 'text-blue-400/80'
+                                                      : 'text-[var(--text-muted)]'
+                                                }`}>
+                                                  {new Date(item.time).toLocaleDateString()} at {new Date(item.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                </span>
+                                              )}
+                                            </div>
+                                            <p className={`text-xs ${
+                                              isCompleted || isActive
+                                                ? 'text-white/80'
+                                                : 'text-[var(--text-muted)]'
+                                            }`}>
+                                              {item.desc}
+                                            </p>
+                                          </div>
                                         </div>
                                       )
                                     })}
@@ -2204,24 +2287,27 @@ export function AdminPage() {
 
                                 {/* Contextual Actions */}
                                 <div className="flex flex-wrap gap-2 pt-4 border-t border-[var(--border)]">
+                                  <button onClick={(e) => { e.stopPropagation(); openModal('order-status', order) }} className="px-4 py-2 bg-violet-500/10 text-violet-300 rounded-lg text-sm hover:bg-violet-500/20 transition-all">
+                                    Update Order Status
+                                  </button>
                                   {orderStatus === 'pending' && (
                                     <>
                                       {(order.payment_status === 'pending' || order.payment_status === 'awaiting_approval') && (
-                                        <button onClick={(e) => { e.stopPropagation(); approvePayment(order.order_id) }} className="flex items-center gap-2 px-4 py-2 bg-green-500/10 text-green-400 rounded-lg text-sm hover:bg-green-500/20 transition-all">
-                                          <CreditCard className="w-4 h-4" /> Update Payment Status
+                                        <button onClick={(e) => { e.stopPropagation(); approvePayment(order.order_id) }} className="px-4 py-2 bg-teal-500/10 text-teal-300 rounded-lg text-sm hover:bg-teal-500/20 transition-all">
+                                          Update Payment Status
                                         </button>
                                       )}
-                                      <button onClick={(e) => { e.stopPropagation(); updateOrderStatus(order.order_id, 'processing') }} className="flex items-center gap-2 px-4 py-2 bg-green-500/10 text-green-400 rounded-lg text-sm hover:bg-green-500/20 transition-all">
-                                        <UserCheck className="w-4 h-4" /> Confirm Order
+                                      <button onClick={(e) => { e.stopPropagation(); updateOrderStatus(order.order_id, 'processing') }} className="px-4 py-2 bg-green-500/10 text-green-300 rounded-lg text-sm hover:bg-green-500/20 transition-all">
+                                        Confirm Order
                                       </button>
-                                      <button onClick={(e) => e.stopPropagation()} className="flex items-center gap-2 px-4 py-2 bg-[var(--surface-dark)] text-white rounded-lg text-sm border border-[var(--border)] hover:border-[var(--gold-primary)]/50 transition-all">
-                                        <Printer className="w-4 h-4" /> Print Slip
+                                      <button onClick={(e) => e.stopPropagation()} className="px-4 py-2 bg-slate-500/10 text-slate-200 rounded-lg text-sm border border-slate-600 hover:bg-slate-500/20 transition-all">
+                                        Print Slip
                                       </button>
-                                      <button onClick={(e) => e.stopPropagation()} className="flex items-center gap-2 px-4 py-2 bg-[var(--surface-dark)] text-white rounded-lg text-sm border border-[var(--border)] hover:border-[var(--gold-primary)]/50 transition-all">
-                                        <Mail className="w-4 h-4" /> Email Customer
+                                      <button onClick={(e) => e.stopPropagation()} className="px-4 py-2 bg-blue-500/10 text-blue-300 rounded-lg text-sm hover:bg-blue-500/20 transition-all">
+                                        Email Customer
                                       </button>
-                                      <button onClick={(e) => { e.stopPropagation(); cancelOrder(order.order_id, order.order_number) }} className="flex items-center gap-2 px-4 py-2 bg-red-500/10 text-red-400 rounded-lg text-sm hover:bg-red-500/20 transition-all">
-                                        <XCircle className="w-4 h-4" /> Cancel
+                                      <button onClick={(e) => { e.stopPropagation(); cancelOrder(order.order_id, order.order_number) }} className="px-4 py-2 bg-red-500/10 text-red-300 rounded-lg text-sm hover:bg-red-500/20 transition-all">
+                                        Cancel
                                       </button>
                                     </>
                                   )}
@@ -2572,7 +2658,7 @@ export function AdminPage() {
                     )
                   })}
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <span className="text-[var(--text-muted)] text-sm">Sort:</span>
                   <select
                     value={inventorySort}
@@ -2584,6 +2670,14 @@ export function AdminPage() {
                     <option value="stock_low">Stock (Low to High)</option>
                     <option value="stock_high">Stock (High to Low)</option>
                   </select>
+                  <button
+                    type="button"
+                    onClick={() => {}}
+                    className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-cyan-500 to-sky-500 px-5 py-2.5 text-sm font-semibold text-white shadow-[0_10px_30px_rgba(14,165,233,0.18)] hover:shadow-[0_12px_35px_rgba(14,165,233,0.25)] transition-all"
+                  >
+                    <ShoppingBag className="w-4 h-4" />
+                    POS
+                  </button>
                 </div>
               </div>
 
@@ -2665,8 +2759,7 @@ export function AdminPage() {
                             </div>
                           </div>
                           <div className="w-24 text-center">
-                            <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold ${statusBgColors[statusLabel]}`}>
-                              <span className={`w-1.5 h-1.5 rounded-full ${statusDotColors[statusLabel]}`}></span>
+                            <span className={`inline-flex px-3 py-1.5 rounded-full text-xs font-semibold ${statusBgColors[statusLabel]}`}>
                               {statusLabel}
                             </span>
                           </div>
@@ -4149,8 +4242,51 @@ export function AdminPage() {
                 {/* Payment Details */}
                 <div className="grid grid-cols-2 gap-4">
                   <div className="bg-[var(--bg-primary)]/50 rounded-lg p-4">
-                    <p className="text-[var(--text-muted)] text-sm mb-1">Payment Method</p>
-                    <p className="text-white font-semibold capitalize">{form.payment_method || 'N/A'}</p>
+                    <p className="text-[var(--text-muted)] text-sm mb-2">Payment Method</p>
+                    <div className="flex items-center gap-3">
+                      {(() => {
+                        const method = form.payment_method || 'card'
+                        const methodLower = method.toLowerCase()
+
+                        if (methodLower.includes('gcash') || methodLower.includes('g-cash')) {
+                          return (
+                            <>
+                              <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
+                                <span className="text-white text-xs font-bold">G</span>
+                              </div>
+                              <span className="text-white font-semibold">GCash</span>
+                            </>
+                          )
+                        } else if (methodLower.includes('bank') || methodLower.includes('transfer') || methodLower.includes('bdo') || methodLower.includes('bpi') || methodLower.includes('unionbank')) {
+                          return (
+                            <>
+                              <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
+                                <CreditCard className="w-3.5 h-3.5 text-white" />
+                              </div>
+                              <span className="text-white font-semibold">Bank Transfer</span>
+                            </>
+                          )
+                        } else if (methodLower.includes('cod') || methodLower.includes('cash')) {
+                          return (
+                            <>
+                              <div className="w-6 h-6 bg-amber-500 rounded-full flex items-center justify-center">
+                                <DollarSign className="w-3.5 h-3.5 text-white" />
+                              </div>
+                              <span className="text-white font-semibold">Cash on Delivery</span>
+                            </>
+                          )
+                        } else {
+                          return (
+                            <>
+                              <div className="w-6 h-6 bg-purple-500 rounded-full flex items-center justify-center">
+                                <CreditCard className="w-3.5 h-3.5 text-white" />
+                              </div>
+                              <span className="text-white font-semibold capitalize">{method}</span>
+                            </>
+                          )
+                        }
+                      })()}
+                    </div>
                   </div>
                   <div className="bg-[var(--bg-primary)]/50 rounded-lg p-4">
                     <p className="text-[var(--text-muted)] text-sm mb-1">Amount</p>
@@ -4158,30 +4294,59 @@ export function AdminPage() {
                   </div>
                 </div>
 
-                {/* Status Dropdown */}
+                {/* Status Cards */}
                 <div className="bg-[var(--bg-primary)]/50 rounded-lg p-4">
-                  <p className="text-[var(--text-muted)] text-sm mb-2">Status</p>
-                  <div className="flex gap-2 flex-wrap">
-                    {[
-                      { value: 'pending', label: 'Pending', color: 'bg-amber-500/20 text-amber-400 border-amber-500/30', dot: 'bg-amber-400' },
-                      { value: 'paid', label: 'Paid', color: 'bg-green-500/20 text-green-400 border-green-500/30', dot: 'bg-green-400' },
-                      { value: 'failed', label: 'Failed', color: 'bg-red-500/20 text-red-400 border-red-500/30', dot: 'bg-red-400' },
-                      { value: 'refunded', label: 'Refunded', color: 'bg-blue-500/20 text-blue-400 border-blue-500/30', dot: 'bg-blue-400' },
-                    ].map((status) => (
-                      <button
-                        key={status.value}
-                        onClick={() => setForm(f => ({ ...f, payment_status: status.value }))}
-                        className={`px-4 py-2 rounded-full text-sm font-semibold border transition-all ${
-                          form.payment_status === status.value
-                            ? status.color + ' border-2'
-                            : 'bg-[var(--surface-dark)] text-[var(--text-muted)] border border-[var(--border)] hover:border-[var(--gold-primary)]/50'
-                        }`}
-                      >
-                        <span className={`w-2 h-2 rounded-full ${status.dot} inline-block mr-2`} />
-                        {status.label}
-                      </button>
-                    ))}
+                  <p className="text-[var(--text-muted)] text-sm mb-3">Status</p>
+                  <div className="relative">
+                    {(() => {
+                      const statuses = [
+                        { value: 'pending', label: 'Pending', color: '#f59e0b' },
+                        { value: 'paid', label: 'Paid', color: '#22c55e' },
+                        { value: 'failed', label: 'Cancel', color: '#f87171' },
+                        { value: 'refunded', label: 'Refunded', color: '#38bdf8' },
+                      ]
+                      const currentValue = form.payment_status || 'pending'
+                      const currentStatus = statuses.find((status) => status.value === currentValue)
+
+                      return (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => setPaymentStatusDropdownOpen((open) => !open)}
+                            className="w-full rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] px-4 py-3 text-left flex items-center justify-between gap-3 transition-all hover:border-[var(--gold-primary)]/30"
+                          >
+                            <span className="text-sm font-semibold" style={{ color: currentStatus?.color || '#ffffff' }}>
+                              {currentStatus?.label || 'Pending'}
+                            </span>
+                            <ChevronDown className="w-4 h-4 text-white" />
+                          </button>
+
+                          {paymentStatusDropdownOpen && (
+                            <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] shadow-2xl">
+                              {statuses.map((status) => (
+                                <button
+                                  key={status.value}
+                                  type="button"
+                                  onClick={() => {
+                                    setForm((f) => ({ ...f, payment_status: status.value }))
+                                    setPaymentStatusDropdownOpen(false)
+                                  }}
+                                  className={`w-full px-4 py-3 text-left text-sm font-medium transition-colors ${
+                                    currentValue === status.value ? 'bg-[var(--border)]/20' : 'hover:bg-[var(--gold-primary)]/10'
+                                  }`}
+                                >
+                                  <span className="text-white">{status.label}</span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </>
+                      )
+                    })()}
                   </div>
+                  <p className="mt-3 text-[var(--text-muted)] text-sm leading-relaxed">
+                    Choose the current payment status for this order. Save your selection with Update Status.
+                  </p>
                 </div>
 
                 {/* Payment Proof Image - Zoomable */}
@@ -4216,6 +4381,132 @@ export function AdminPage() {
                       <>
                         <Loader2 className="w-4 h-4 animate-spin" />
                         Saving...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="w-4 h-4" />
+                        Update Status
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {/* Update Order Status Modal */}
+        {modal.type === 'order-status' && modal.data && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+            onClick={(e) => { if (e.target === e.currentTarget) closeModal() }}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-3xl p-8 w-full max-w-lg shadow-2xl"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-bold text-white">Update Order Status</h2>
+                <button onClick={closeModal} className="p-1 hover:bg-white/10 rounded-lg transition-colors">
+                  <X className="w-6 h-6 text-white" />
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                {/* Order Info */}
+                <div className="bg-[var(--bg-primary)]/50 rounded-lg p-4">
+                  <p className="text-[var(--text-muted)] text-sm mb-1">Order #</p>
+                  <p className="text-white font-mono text-lg font-bold">{modal.data.order_number || modal.data.order_id?.slice(0, 8)}</p>
+                  <p className="text-[var(--text-muted)] text-sm mt-2">Total: {formatCurrency(modal.data.total || modal.data.total_amount || 0)}</p>
+                </div>
+
+                {/* Status Selection */}
+                <div>
+                  <p className="text-[var(--text-muted)] text-sm mb-3">Select New Order Status</p>
+                  <div className="relative">
+                    {(() => {
+                      const statusItems = [
+                        { value: 'pending', label: 'Pending', color: '#f59e0b' },
+                        { value: 'processing', label: 'Processing', color: '#60a5fa' },
+                        { value: 'shipped', label: 'Shipped', color: '#a78bfa' },
+                        { value: 'delivered', label: 'Delivered', color: '#22c55e' },
+                        { value: 'cancelled', label: 'Cancelled', color: '#f87171' },
+                      ]
+                      const currentValue = form.order_status || modal.data.status || 'pending'
+                      const currentItem = statusItems.find(item => item.value === currentValue) || statusItems[0]
+
+                      return (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => setOrderStatusDropdownOpen((open) => !open)}
+                            className="w-full rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] px-4 py-4 text-left flex items-center justify-between gap-3 transition-all hover:border-[var(--gold-primary)]/30"
+                          >
+                            <span className="text-sm font-semibold" style={{ color: currentItem.color }}>{currentItem.label}</span>
+                            <ChevronDown className="w-4 h-4 text-white" />
+                          </button>
+
+                          {orderStatusDropdownOpen && (
+                            <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] shadow-2xl">
+                              {statusItems.map((status) => (
+                                <button
+                                  key={status.value}
+                                  type="button"
+                                  onClick={() => {
+                                    setForm((f) => ({ ...f, order_status: status.value }))
+                                    setOrderStatusDropdownOpen(false)
+                                  }}
+                                  className={`w-full px-4 py-3 text-left text-sm font-medium transition-colors ${
+                                    currentValue === status.value ? 'bg-[var(--border)]/20' : 'hover:bg-[var(--gold-primary)]/10'
+                                  }`}
+                                >
+                                  <span className="text-white">{status.label}</span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </>
+                      )
+                    })()}
+                  </div>
+                  <p className="mt-3 text-[var(--text-muted)] text-sm leading-relaxed">
+                    Choose the current order status for this order and save it with Update Status.
+                  </p>
+                </div>
+
+                {/* Actions */}
+                <div className="flex gap-3 pt-4">
+                  <button
+                    onClick={closeModal}
+                    className="flex-1 px-4 py-3 bg-[var(--surface-dark)] border border-[var(--border)] rounded-lg text-white font-semibold hover:border-[var(--gold-primary)]/50 transition-all"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={async () => {
+                      if (!form.order_status) return
+                      setIsSaving(true)
+                      try {
+                        await adminApi.updateOrder(modal.data.order_id, { status: form.order_status })
+                        showToast(`Order status updated to ${form.order_status}!`)
+                        fetchOrders()
+                        closeModal()
+                      } catch (e) {
+                        showToast(e.message, 'error')
+                      } finally {
+                        setIsSaving(false)
+                      }
+                    }}
+                    disabled={isSaving || !form.order_status}
+                    className={`flex-1 px-4 py-3 bg-gradient-to-r from-purple-500 to-purple-600 rounded-lg text-white font-semibold hover:shadow-[0_0_20px_rgba(147,51,234,0.4)] transition-all flex items-center justify-center gap-2 ${
+                      isSaving || !form.order_status ? 'opacity-50 cursor-not-allowed' : ''
+                    }`}
+                  >
+                    {isSaving ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Updating...
                       </>
                     ) : (
                       <>
