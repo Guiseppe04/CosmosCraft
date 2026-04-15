@@ -238,6 +238,13 @@ exports.emailLoginSchema = Joi.object({
 
 // Add/Update Single Address
 exports.addAddressSchema = Joi.object({
+  label: Joi.string()
+    .max(50)
+    .optional()
+    .trim()
+    .messages({
+      'string.max': 'Label must not exceed 50 characters',
+    }),
   streetLine1: addressFields.streetLine1,
   streetLine2: addressFields.streetLine2,
   city: addressFields.city,
@@ -249,6 +256,13 @@ exports.addAddressSchema = Joi.object({
 
 // Update Address (partial fields allowed)
 exports.updateAddressSchema = Joi.object({
+  label: Joi.string()
+    .max(50)
+    .optional()
+    .trim()
+    .messages({
+      'string.max': 'Label must not exceed 50 characters',
+    }),
   streetLine1: addressFields.streetLine1.optional(),
   streetLine2: addressFields.streetLine2,
   city: addressFields.city.optional(),

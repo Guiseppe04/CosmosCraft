@@ -156,10 +156,11 @@ exports.addAddress = async (userId, addressData) => {
     }
 
     const res = await client.query(
-      `INSERT INTO addresses (user_id, line1, line2, city, province, postal_code, country, is_default)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+      `INSERT INTO addresses (user_id, label, line1, line2, city, province, postal_code, country, is_default)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
       [
         userId,
+        addressData.label || null,
         addressData.streetLine1,
         addressData.streetLine2 || null,
         addressData.city,
@@ -193,7 +194,7 @@ exports.updateAddress = async (userId, addressId, updates) => {
     const values = [];
     let idx = 1;
     // Map frontend fields (e.g. streetLine1) to db columns if necessary
-    const map = { streetLine1: 'line1', streetLine2: 'line2', city: 'city', stateProvince: 'province', postalZipCode: 'postal_code', country: 'country', isDefault: 'is_default' };
+    const map = { label: 'label', streetLine1: 'line1', streetLine2: 'line2', city: 'city', stateProvince: 'province', postalZipCode: 'postal_code', country: 'country', isDefault: 'is_default' };
     
     for (const key in updates) {
       if (map[key]) {
@@ -205,8 +206,9 @@ exports.updateAddress = async (userId, addressId, updates) => {
     
     if (fields.length > 0) {
       values.push(addressId, userId);
+      const paramCount = idx - 1;
       await client.query(
-        `UPDATE addresses SET ${fields.join(', ')} WHERE address_id = $${idx} AND user_id = $${idx+1}`,
+        `UPDATE addresses SET ${fields.join(', ')} WHERE address_id = $${paramCount + 1} AND user_id = $${paramCount + 2}`,
         values
       );
     }

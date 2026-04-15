@@ -8,7 +8,13 @@ import { BASE_PRICE, BODY_OPTIONS, BODY_WOOD_OPTIONS, BODY_FINISH_OPTIONS, NECK_
 import { adminApi } from '../utils/adminApi.js'
 import ProjectTaskTracker from '../components/projects/ProjectTaskTracker.jsx'
 import { getAllProvinces, getMunicipalitiesByProvince, getBarangaysByMunicipality } from '@aivangogh/ph-address'
+import { Country } from 'country-state-city'
 import { ConfirmModal } from '../components/ui/ConfirmModal'
+
+const ALL_COUNTRIES = Country.getAllCountries()
+const PHILIPPINES = ALL_COUNTRIES.find(c => c.isoCode === 'PH')
+const OTHER_COUNTRIES = ALL_COUNTRIES.filter(c => c.isoCode !== 'PH')
+const COUNTRIES = PHILIPPINES ? [PHILIPPINES, ...OTHER_COUNTRIES] : ALL_COUNTRIES
 
 const getOldConfigData = (key, val, bodyType) => {
     let price;
@@ -152,7 +158,7 @@ export function DashboardPage() {
   }
 
   const fetchMyOrders = () => {
-    adminApi.getMyOrders().then(orders => setMyOrders(orders)).catch(console.error)
+    adminApi.getMyOrders().then(res => setMyOrders(res.data?.orders || [])).catch(console.error)
   }
 
   const fetchMyProjects = () => {
@@ -306,13 +312,14 @@ export function DashboardPage() {
   const [isPasswordLoading, setIsPasswordLoading] = useState(false)
   
   const [addressData, setAddressData] = useState({
+    category: 'Home',
+    country: 'PH',
     streetLine1: '',
     streetLine2: '',
     province: '',
     city: '',
     barangay: '',
     postalZipCode: '',
-    country: 'Philippines',
     isDefault: true
   })
   const [isAddingAddress, setIsAddingAddress] = useState(false)
@@ -1064,10 +1071,11 @@ export function DashboardPage() {
 
   const handleSaveAddress = async () => {
     try {
-      const provinceLabel = locationData.provinces.find(p => p.province_code === addressData.province)?.province_name || addressData.province
-      const cityLabel = locationData.cities.find(c => c.municipality_code === addressData.city)?.municipality_name || addressData.city
+      const provinceLabel = locationData.provinces.find(p => p.psgcCode === addressData.province)?.name || addressData.province
+      const cityLabel = locationData.cities.find(c => c.psgcCode === addressData.city)?.name || addressData.city
       
       const addressPayload = {
+        label: addressData.category,
         streetLine1: addressData.streetLine1,
         streetLine2: addressData.streetLine2,
         city: cityLabel || addressData.city,
@@ -1089,7 +1097,7 @@ export function DashboardPage() {
       if (res?.data?.user?.addresses) {
         setAddresses(res.data.user.addresses)
       }
-      setAddressData({ streetLine1: '', streetLine2: '', province: '', city: '', barangay: '', postalZipCode: '', country: 'Philippines', isDefault: true })
+      setAddressData({ category: 'Home', country: 'PH', streetLine1: '', streetLine2: '', province: '', city: '', barangay: '', postalZipCode: '', isDefault: true })
       setLocationData(prev => ({ ...prev, cities: [], barangays: [] }))
     } catch (err) {
       alert("Failed to save address: " + err.message)
@@ -1237,21 +1245,56 @@ export function DashboardPage() {
       {isAddingAddress || editingAddressId ? (
         <div className="space-y-4 max-w-xl">
           <div className="flex items-center gap-2 mb-4">
-            <button onClick={() => { setIsAddingAddress(false); setEditingAddressId(null); setAddressData({ streetLine1: '', streetLine2: '', province: '', city: '', barangay: '', postalZipCode: '', country: 'Philippines', isDefault: true }); setLocationData(prev => ({ ...prev, cities: [], barangays: [] })) }} className="text-[var(--gold-primary)] hover:underline text-sm font-semibold flex items-center gap-1">
+            <button onClick={() => { setIsAddingAddress(false); setEditingAddressId(null); setAddressData({ category: 'Home', country: 'PH', streetLine1: '', streetLine2: '', province: '', city: '', barangay: '', postalZipCode: '', isDefault: true }); setLocationData(prev => ({ ...prev, cities: [], barangays: [] })) }} className="text-[var(--gold-primary)] hover:underline text-sm font-semibold flex items-center gap-1">
               ← Back
             </button>
             <span className="text-white font-semibold">{editingAddressId ? 'Edit Address' : 'Add New Address'}</span>
           </div>
+          
+          <div>
+            <label className="block text-xs font-semibold text-[var(--text-muted)] mb-2">Address Category</label>
+            <div className="flex gap-2">
+              {['Home', 'Work', 'Other'].map((cat) => (
+                <button
+                  key={cat}
+                  type="button"
+                  onClick={() => setAddressData(prev => ({ ...prev, category: cat }))}
+                  className={`flex-1 py-2 rounded-lg border text-sm font-medium transition-all ${
+                    addressData.category === cat
+                      ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)]/10 text-white'
+                      : 'border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--gold-primary)]/50'
+                  }`}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-[var(--text-muted)] mb-2">Country *</label>
+            <select
+              value={addressData.country}
+              onChange={e => setAddressData(p => ({ ...p, country: e.target.value }))}
+              className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] appearance-none cursor-pointer"
+            >
+              <option value="" disabled className="bg-[var(--surface-dark)]">Select Country</option>
+              {COUNTRIES.map(c => (
+                <option key={c.isoCode} value={c.isoCode} className="bg-[var(--surface-dark)]">{c.name}</option>
+              ))}
+            </select>
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div className="col-span-2">
-               <label className="block text-xs font-semibold text-[var(--text-muted)] mb-2">Street Line 1</label>
+               <label className="block text-xs font-semibold text-[var(--text-muted)] mb-2">Street Line 1 *</label>
                <input type="text" value={addressData.streetLine1} onChange={e => setAddressData(p => ({...p, streetLine1: e.target.value}))} className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]" />
             </div>
             <div className="col-span-2">
                <label className="block text-xs font-semibold text-[var(--text-muted)] mb-2">Street Line 2 (Optional)</label>
                <input type="text" value={addressData.streetLine2} onChange={e => setAddressData(p => ({...p, streetLine2: e.target.value}))} className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]" />
             </div>
-<div className="col-span-2 md:col-span-1">
+            <div className="col-span-2 md:col-span-1">
               <label className="block text-xs font-semibold text-[var(--text-muted)] mb-2">Province</label>
               <select 
                 value={addressData.province}
@@ -1288,7 +1331,7 @@ export function DashboardPage() {
               <label className="block text-xs font-semibold text-[var(--text-muted)] mb-2">Barangay</label>
               <select 
                 value={addressData.barangay}
-                onChange={(e) => handleBarangayChange(e.target.value)}
+                onChange={e => handleBarangayChange(e.target.value)}
                 disabled={!addressData.city}
                 className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] disabled:opacity-50"
               >
@@ -1302,14 +1345,10 @@ export function DashboardPage() {
                <label className="block text-xs font-semibold text-[var(--text-muted)] mb-2">Postal / Zip Code</label>
                <input type="text" value={addressData.postalZipCode} onChange={e => setAddressData(p => ({...p, postalZipCode: e.target.value}))} className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]" />
             </div>
-            <div>
-               <label className="block text-xs font-semibold text-[var(--text-muted)] mb-2">Country</label>
-               <input type="text" value={addressData.country} onChange={e => setAddressData(p => ({...p, country: e.target.value}))} className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]" />
-            </div>
           </div>
           <div className="flex gap-4 mt-6">
             <button onClick={handleSaveAddress} className="flex-1 py-2.5 rounded-full bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-bold shadow-[0_0_15px_rgba(212,175,55,0.3)]">{editingAddressId ? 'Update Address' : 'Save Address'}</button>
-            <button onClick={() => { setIsAddingAddress(false); setEditingAddressId(null); setAddressData({ streetLine1: '', streetLine2: '', province: '', city: '', barangay: '', postalZipCode: '', country: 'Philippines', isDefault: true }); setLocationData(prev => ({ ...prev, cities: [], barangays: [] })) }} className="px-6 py-2.5 rounded-full border border-[var(--border)] text-white hover:bg-white/5 transition-all">Cancel</button>
+            <button onClick={() => { setIsAddingAddress(false); setEditingAddressId(null); setAddressData({ category: 'Home', country: 'PH', streetLine1: '', streetLine2: '', province: '', city: '', barangay: '', postalZipCode: '', isDefault: true }); setLocationData(prev => ({ ...prev, cities: [], barangays: [] })) }} className="px-6 py-2.5 rounded-full border border-[var(--border)] text-white hover:bg-white/5 transition-all">Cancel</button>
           </div>
         </div>
       ) : (
@@ -1319,8 +1358,8 @@ export function DashboardPage() {
               <div key={addr.address_id} className="p-4 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]">
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
-                    <span className="font-semibold text-white">
-                      {formatAddress(addr)}
+                    <span className="font-semibold text-white capitalize">
+                      {addr.label || 'Address'}
                     </span>
                     {addr.is_default && <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[var(--gold-primary)] text-[var(--text-dark)]">Default</span>}
                   </div>
@@ -1328,13 +1367,14 @@ export function DashboardPage() {
                     <button onClick={() => { 
                       setEditingAddressId(addr.address_id)
                       setAddressData({ 
+                        category: addr.label || 'Home',
+                        country: addr.country || 'PH',
                         streetLine1: addr.street_line1 || '', 
                         streetLine2: addr.street_line2 || '', 
                         province: addr.province || '',
                         city: addr.city || '', 
                         barangay: addr.barangay || '',
                         postalZipCode: addr.postal_code || '', 
-                        country: addr.country || 'Philippines', 
                         isDefault: addr.is_default || false 
                       })
                       const loadCascade = async () => {

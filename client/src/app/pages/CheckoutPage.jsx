@@ -11,6 +11,13 @@ import {
 } from 'lucide-react'
 import { PaymentModal } from '../components/PaymentModal.jsx'
 import { API } from '../utils/apiConfig'
+import { Country, State } from 'country-state-city'
+import { getAllProvinces, getMunicipalitiesByProvince, getBarangaysByMunicipality } from '@aivangogh/ph-address'
+
+const ALL_COUNTRIES = Country.getAllCountries()
+const PHILIPPINES = ALL_COUNTRIES.find(c => c.isoCode === 'PH')
+const OTHER_COUNTRIES = ALL_COUNTRIES.filter(c => c.isoCode !== 'PH')
+const COUNTRIES = PHILIPPINES ? [PHILIPPINES, ...OTHER_COUNTRIES] : ALL_COUNTRIES
 
 // ==================== REUSABLE COMPONENTS ====================
 
@@ -400,24 +407,106 @@ function SuccessModal({ isOpen, onClose }) {
   )
 }
 
-function AddAddressModal({ isOpen, onClose, onSave, isSaving }) {
+function AddAddressModal({ isOpen, onClose, onSave, isSaving, locationData: propLocationData, setLocationData: propSetLocationData }) {
   const [formData, setFormData] = useState({
+    label: 'Home',
+    country: 'PH',
     streetLine1: '',
     streetLine2: '',
+    province: '',
     city: '',
+    barangay: '',
     stateProvince: '',
     postalZipCode: '',
-    label: 'Home',
-    country: 'Philippines',
     isDefault: false
   })
   const [errors, setErrors] = useState({})
+  const isExternalData = !!propLocationData
+  const [internalLocationData, setInternalLocationData] = useState({
+    provinces: [],
+    cities: [],
+    barangays: []
+  })
+  const locationData = propLocationData || internalLocationData
+  const setLocationData = propSetLocationData || setInternalLocationData
+
+  const isPhilippines = formData.country === 'PH'
+
+  useEffect(() => {
+    if (isPhilippines) {
+      if (isExternalData && propLocationData?.provinces?.length === 0) {
+        try {
+          const provinces = getAllProvinces()
+          propSetLocationData({ provinces, cities: [], barangays: [] })
+        } catch (err) {
+          console.error('Failed to load provinces:', err)
+        }
+      } else if (!isExternalData && internalLocationData.provinces.length === 0) {
+        try {
+          const provinces = getAllProvinces()
+          setInternalLocationData({ provinces, cities: [], barangays: [] })
+        } catch (err) {
+          console.error('Failed to load provinces:', err)
+        }
+      }
+    } else {
+      if (isExternalData) {
+        propSetLocationData({ provinces: [], cities: [], barangays: [] })
+      } else {
+        setInternalLocationData({ provinces: [], cities: [], barangays: [] })
+      }
+      setFormData(prev => ({ ...prev, province: '', city: '', barangay: '', stateProvince: '' }))
+    }
+  }, [isPhilippines, isExternalData])
+
+  const handleProvinceChange = (provinceCode, provinceName) => {
+    setFormData(prev => ({ ...prev, province: provinceCode, city: '', barangay: '', stateProvince: provinceName }))
+    if (provinceCode) {
+      try {
+        const cities = getMunicipalitiesByProvince(provinceCode)
+        if (isExternalData) {
+          propSetLocationData({ provinces: locationData.provinces, cities, barangays: [] })
+        } else {
+          setLocationData(prev => ({ ...prev, cities, barangays: [] }))
+        }
+      } catch (err) {
+        console.error('Failed to load cities:', err)
+      }
+    }
+  }
+
+  const handleCityChange = (cityCode, cityName) => {
+    setFormData(prev => ({ ...prev, city: cityCode, barangay: '', stateProvince: cityName }))
+    if (cityCode) {
+      try {
+        const barangays = getBarangaysByMunicipality(cityCode)
+        if (isExternalData) {
+          const currentCities = locationData.cities
+          const currentProvinces = locationData.provinces
+          propSetLocationData({ provinces: currentProvinces, cities: currentCities, barangays })
+        } else {
+          setLocationData(prev => ({ ...prev, barangays }))
+        }
+      } catch (err) {
+        console.error('Failed to load barangays:', err)
+      }
+    }
+  }
+
+  const handleBarangayChange = (barangayCode) => {
+    setFormData(prev => ({ ...prev, barangay: barangayCode }))
+  }
 
   const validate = () => {
     const newErrors = {}
     if (!formData.streetLine1?.trim()) newErrors.streetLine1 = 'Street address is required'
-    if (!formData.city?.trim()) newErrors.city = 'City is required'
-    if (!formData.stateProvince?.trim()) newErrors.stateProvince = 'Province is required'
+    if (isPhilippines) {
+      if (!formData.province) newErrors.province = 'Province is required'
+      if (!formData.city) newErrors.city = 'City is required'
+    } else {
+      if (!formData.city?.trim()) newErrors.city = 'City is required'
+      if (!formData.stateProvince?.trim()) newErrors.stateProvince = 'Province is required'
+    }
     if (!formData.postalZipCode?.trim()) newErrors.postalZipCode = 'Postal code is required'
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
@@ -468,7 +557,7 @@ function AddAddressModal({ isOpen, onClose, onSave, isSaving }) {
 
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-[var(--text-muted)] mb-1.5">Address Label</label>
+            <label className="block text-sm font-medium text-[var(--text-muted)] mb-1.5">Address Category</label>
             <div className="flex gap-2">
               {['Home', 'Work', 'Other'].map((label) => (
                 <button
@@ -488,6 +577,20 @@ function AddAddressModal({ isOpen, onClose, onSave, isSaving }) {
           </div>
 
           <div>
+            <label className="block text-sm font-medium text-[var(--text-muted)] mb-1.5">Country *</label>
+            <select
+              value={formData.country}
+              onChange={(e) => setFormData(prev => ({ ...prev, country: e.target.value }))}
+              className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--text-light)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]/20 focus:border-[var(--gold-primary)] appearance-none cursor-pointer"
+            >
+              <option value="" disabled className="bg-[var(--surface-dark)]">Select Country</option>
+              {COUNTRIES.map(c => (
+                <option key={c.isoCode} value={c.isoCode} className="bg-[var(--surface-dark)]">{c.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
             <label className="block text-sm font-medium text-[var(--text-muted)] mb-1.5">Street Address *</label>
             <input
               type="text"
@@ -499,52 +602,98 @@ function AddAddressModal({ isOpen, onClose, onSave, isSaving }) {
             {errors.streetLine1 && <p className="text-xs text-red-400 mt-1.5">{errors.streetLine1}</p>}
           </div>
 
+          {isPhilippines ? (
+            <>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-1.5">Province *</label>
+                  <select
+                    value={formData.province}
+                    onChange={(e) => {
+                      const opt = locationData.provinces.find(p => p.psgcCode === e.target.value)
+                      handleProvinceChange(e.target.value, opt?.name || '')
+                    }}
+                    className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--text-light)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]/20 focus:border-[var(--gold-primary)] appearance-none cursor-pointer"
+                  >
+                    <option value="" className="bg-[var(--surface-dark)]">Select Province</option>
+                    {locationData.provinces.map(p => (
+                      <option key={p.psgcCode} value={p.psgcCode} className="bg-[var(--surface-dark)]">{p.name}</option>
+                    ))}
+                  </select>
+                  {errors.province && <p className="text-xs text-red-400 mt-1.5">{errors.province}</p>}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-1.5">City / Municipality *</label>
+                  <select
+                    value={formData.city}
+                    onChange={(e) => {
+                      const opt = locationData.cities.find(c => c.psgcCode === e.target.value)
+                      handleCityChange(e.target.value, opt?.name || '')
+                    }}
+                    disabled={!formData.province}
+                    className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--text-light)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]/20 focus:border-[var(--gold-primary)] appearance-none cursor-pointer disabled:opacity-50"
+                  >
+                    <option value="" className="bg-[var(--surface-dark)]">{formData.province ? 'Select City' : 'Select a province first'}</option>
+                    {locationData.cities.map(c => (
+                      <option key={c.psgcCode} value={c.psgcCode} className="bg-[var(--surface-dark)]">{c.name}</option>
+                    ))}
+                  </select>
+                  {errors.city && <p className="text-xs text-red-400 mt-1.5">{errors.city}</p>}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-1.5">Barangay (Optional)</label>
+                <select
+                  value={formData.barangay}
+                  onChange={(e) => handleBarangayChange(e.target.value)}
+                  disabled={!formData.city}
+                  className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--text-light)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]/20 focus:border-[var(--gold-primary)] appearance-none cursor-pointer disabled:opacity-50"
+                >
+                  <option value="" className="bg-[var(--surface-dark)]">{formData.city ? 'Select Barangay' : 'Select a city first'}</option>
+                  {locationData.barangays.map(b => (
+                    <option key={b.psgcCode} value={b.name} className="bg-[var(--surface-dark)]">{b.name}</option>
+                  ))}
+                </select>
+              </div>
+            </>
+          ) : (
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-1.5">State / Province *</label>
+                <input
+                  type="text"
+                  value={formData.stateProvince}
+                  onChange={(e) => handleChange('province', e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--text-light)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]/20 focus:border-[var(--gold-primary)]"
+                  placeholder="State / Province"
+                />
+                {errors.stateProvince && <p className="text-xs text-red-400 mt-1.5">{errors.stateProvince}</p>}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-[var(--text-muted)] mb-1.5">City *</label>
+                <input
+                  type="text"
+                  value={formData.city}
+                  onChange={(e) => handleChange('city', e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--text-light)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]/20 focus:border-[var(--gold-primary)]"
+                  placeholder="City"
+                />
+                {errors.city && <p className="text-xs text-red-400 mt-1.5">{errors.city}</p>}
+              </div>
+            </div>
+          )}
+
           <div>
-            <label className="block text-sm font-medium text-[var(--text-muted)] mb-1.5">Barangay / Additional (Optional)</label>
+            <label className="block text-sm font-medium text-[var(--text-muted)] mb-1.5">Postal Code *</label>
             <input
               type="text"
-              value={formData.streetLine2}
-              onChange={(e) => handleChange('barangay', e.target.value)}
+              value={formData.postalZipCode}
+              onChange={(e) => handleChange('postalCode', e.target.value)}
               className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--text-light)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]/20 focus:border-[var(--gold-primary)]"
-              placeholder="Barangay, subdivision, etc."
+              placeholder="1234"
             />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-[var(--text-muted)] mb-1.5">City *</label>
-              <input
-                type="text"
-                value={formData.city}
-                onChange={(e) => handleChange('city', e.target.value)}
-                className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--text-light)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]/20 focus:border-[var(--gold-primary)]"
-                placeholder="City"
-              />
-              {errors.city && <p className="text-xs text-red-400 mt-1.5">{errors.city}</p>}
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-[var(--text-muted)] mb-1.5">Postal Code *</label>
-              <input
-                type="text"
-                value={formData.postalZipCode}
-                onChange={(e) => handleChange('postalCode', e.target.value)}
-                className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--text-light)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]/20 focus:border-[var(--gold-primary)]"
-                placeholder="1234"
-              />
-              {errors.postalZipCode && <p className="text-xs text-red-400 mt-1.5">{errors.postalZipCode}</p>}
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-[var(--text-muted)] mb-1.5">Province *</label>
-            <input
-              type="text"
-              value={formData.stateProvince}
-              onChange={(e) => handleChange('province', e.target.value)}
-              className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--text-light)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]/20 focus:border-[var(--gold-primary)]"
-              placeholder="Province"
-            />
-            {errors.stateProvince && <p className="text-xs text-red-400 mt-1.5">{errors.stateProvince}</p>}
+            {errors.postalZipCode && <p className="text-xs text-red-400 mt-1.5">{errors.postalZipCode}</p>}
           </div>
 
           <label className="flex items-center gap-3 cursor-pointer pt-2">
@@ -606,6 +755,11 @@ export function CheckoutPage() {
   const [addressError, setAddressError] = useState(false)
   const [showAddAddressModal, setShowAddAddressModal] = useState(false)
   const [isSavingAddress, setIsSavingAddress] = useState(false)
+  const [addressLocationData, setAddressLocationData] = useState({
+    provinces: [],
+    cities: [],
+    barangays: []
+  })
   
   const [showSuccessModal, setShowSuccessModal] = useState(false)
   const [showPaymentModal, setShowPaymentModal] = useState(false)
@@ -671,11 +825,37 @@ export function CheckoutPage() {
   const handleSaveAddress = async (addressData) => {
     setIsSavingAddress(true)
     try {
-      const response = await fetch(`${API}/api/users/addresses`, {
+      const countryCode = addressData.country
+      const countryName = COUNTRIES.find(c => c.isoCode === countryCode)?.name || countryCode
+      
+      let city = addressData.city
+      let stateProvince = addressData.stateProvince
+      
+      if (addressData.country === 'PH' && addressData.province) {
+        const selectedProvince = addressLocationData.provinces.find(p => p.psgcCode === addressData.province)
+        stateProvince = selectedProvince?.name || addressData.stateProvince
+        if (addressData.city) {
+          const selectedCity = addressLocationData.cities.find(c => c.psgcCode === addressData.city)
+          city = selectedCity?.name || addressData.city
+        }
+      }
+      
+      const payload = {
+        label: addressData.label,
+        streetLine1: addressData.streetLine1,
+        streetLine2: addressData.streetLine2,
+        city: city,
+        stateProvince: stateProvince,
+        postalZipCode: addressData.postalZipCode,
+        country: countryCode,
+        isDefault: addressData.isDefault
+      }
+      
+      const response = await fetch(`${API}/api/users/me/addresses`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify(addressData)
+        body: JSON.stringify(payload)
       })
 
       if (response.ok) {
@@ -685,10 +865,10 @@ export function CheckoutPage() {
           address_id: data.data?.user?.addresses?.[0]?.address_id || `new-${Date.now()}`,
           street_line1: addressData.streetLine1,
           street_line2: addressData.streetLine2,
-          city: addressData.city,
-          province: addressData.province,
-          postal_code: addressData.postalCode,
-          country: addressData.country,
+          city: city,
+          province: stateProvince,
+          postal_code: addressData.postalZipCode,
+          country: countryName,
           label: addressData.label,
           is_default: addressData.isDefault
         }
@@ -705,6 +885,7 @@ export function CheckoutPage() {
         setAddressError(false)
       } else {
         const err = await response.json()
+        console.error('Address save error:', err)
         alert(err.message || 'Failed to save address')
       }
     } catch (error) {
@@ -795,6 +976,8 @@ export function CheckoutPage() {
 
       const data = await response.json()
 
+      console.log('Order response:', response.status, data)
+
       if (response.ok) {
         const orderId = data.data.order.order_id
         let paymentCreated = false
@@ -816,11 +999,13 @@ export function CheckoutPage() {
           })
 
           const paymentData = await paymentResponse.json()
+          console.log('Payment response:', paymentResponse.status, paymentData)
 
           if (!paymentResponse.ok) {
             console.error('Payment creation failed:', paymentData)
             setOrderError('Order created, but payment record could not be created. Please contact support.')
             setIsProcessing(false)
+            setShowPaymentModal(false)
             return
           }
 
@@ -829,6 +1014,7 @@ export function CheckoutPage() {
           console.error('Payment creation error:', paymentError)
           setOrderError('Order created, but payment record could not be created. Please contact support.')
           setIsProcessing(false)
+          setShowPaymentModal(false)
           return
         }
 
@@ -840,10 +1026,16 @@ export function CheckoutPage() {
           setShowSuccessModal(true)
         }
       } else {
-        setOrderError(data.message || 'Order failed. Please try again.')
+        console.error('Order failed:', response.status, data)
+        setOrderError(data.message || data.error || 'Order failed. Please try again.')
+        setIsProcessing(false)
+        setShowPaymentModal(false)
       }
     } catch (error) {
+      console.error('Checkout error:', error)
       setOrderError(error.message || 'Network error. Please check your connection and try again.')
+      setIsProcessing(false)
+      setShowPaymentModal(false)
     } finally {
       setIsProcessing(false)
     }
@@ -1008,6 +1200,8 @@ export function CheckoutPage() {
         onClose={() => setShowAddAddressModal(false)}
         onSave={handleSaveAddress}
         isSaving={isSavingAddress}
+        locationData={addressLocationData}
+        setLocationData={setAddressLocationData}
       />
 
       {/* Payment Modal */}

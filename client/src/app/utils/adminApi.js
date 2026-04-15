@@ -85,12 +85,12 @@ export const adminApi = {
     const qs = new URLSearchParams(params).toString()
     return request(`/api/orders${qs ? '?' + qs : ''}`)
   },
-  getMyOrders: () => request('/api/orders/my'),
+  getMyOrders: () => request('/api/orders/my-orders'),
   getOrder: (id) => request(`/api/orders/${id}`),
   updateOrder: (id, body) => request(`/api/orders/${id}`, { method: 'PUT', body }),
   updatePaymentStatus: (id, status, options = {}) => request(`/api/orders/${id}/payment-status`, { method: 'PUT', body: { status, ...options } }),
   cancelOrder: (id) => request(`/api/orders/${id}/cancel`, { method: 'POST' }),
-  cancelMyOrder: (id) => request(`/api/orders/my/${id}/cancel`, { method: 'POST' }),
+  cancelMyOrder: (id) => request(`/api/orders/${id}/cancel-my-order`, { method: 'POST' }),
 
   // Projects
   getProjects: (params = {}) => {
