@@ -2631,7 +2631,9 @@ export function AdminPage() {
     { id: 'product-categories', label: 'Product Categories', icon: Tag },
     { id: 'orders', label: 'Orders', icon: ShoppingBag },
     { id: 'inventory', label: 'Inventory', icon: Activity },
-    { id: 'sales-report', label: 'Sales Report', icon: PieChart },
+    ...(isSuperAdmin ? [
+      { id: 'sales-report', label: 'Sales Report', icon: PieChart },
+    ] : []),
     { id: 'projects', label: 'Projects', icon: Briefcase },
     { id: 'services', label: 'Services', icon: Wrench },
     { id: 'appointments', label: 'Appointments', icon: Calendar },
@@ -3097,12 +3099,12 @@ export function AdminPage() {
                   <Plus className="w-4 h-4" /> Add Builder Part
                 </button>
               )}
-              {activeTab === 'product-categories' && (
+              {activeTab === 'product-categories' && isSuperAdmin && (
                 <button onClick={() => openModal('category')} className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black rounded-xl font-semibold text-sm hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all">
                   <Plus className="w-4 h-4" /> Add Category
                 </button>
               )}
-              {activeTab === 'projects' && (
+              {activeTab === 'projects' && isSuperAdmin && (
                 <button onClick={() => setShowGuitarTypeSelector(true)} className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black rounded-xl font-semibold text-sm hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all">
                   <Plus className="w-4 h-4" /> New Project
                 </button>
@@ -3527,9 +3529,11 @@ export function AdminPage() {
                   <div className="flex flex-col items-center justify-center py-16">
                     <Tag className="w-12 h-12 text-[var(--text-muted)] mb-4" />
                     <p className="text-[var(--text-muted)] mb-4">No categories yet</p>
-                    <button onClick={() => openModal('category')} className="px-4 py-2 bg-[var(--gold-primary)] text-black rounded-xl font-semibold text-sm">
-                      Add Category
-                    </button>
+                    {isSuperAdmin && (
+                      <button onClick={() => openModal('category')} className="px-4 py-2 bg-[var(--gold-primary)] text-black rounded-xl font-semibold text-sm">
+                        Add Category
+                      </button>
+                    )}
                   </div>
                 ) : (
                   <table className="w-full">
@@ -3549,8 +3553,8 @@ export function AdminPage() {
                           category={rootCat}
                           expandedIds={expandedCategoryIds}
                           onToggle={toggleCategoryExpand}
-                          onEdit={openModal}
-                          onDelete={deleteCategory}
+                          onEdit={isSuperAdmin ? openModal : undefined}
+                          onDelete={isSuperAdmin ? deleteCategory : undefined}
                           categories={categories}
                         />
                       ))}
@@ -3638,30 +3642,32 @@ export function AdminPage() {
                   </div>
                 </div>
 
-                <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6">
-                  <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-3">
-                    <MapPin className="w-5 h-5 text-[var(--gold-primary)]" />
-                    Appointment Branch
-                  </h3>
-                  <p className="text-sm text-[var(--text-muted)] mb-3">
-                    This address is shown in the customer appointment flow (Step 3 Location).
-                  </p>
-                  <textarea
-                    value={appointmentBranchAddress}
-                    onChange={(e) => setAppointmentBranchAddress(e.target.value)}
-                    className="w-full h-24 px-4 py-3 bg-[var(--bg-primary)] text-white border border-[var(--border)] rounded-xl text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]/50"
-                    placeholder="Branch address"
-                  />
-                  <div className="mt-4 flex justify-end">
-                    <button
-                      onClick={saveAppointmentBranchAddress}
-                      className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--gold-primary)] text-black font-semibold text-sm hover:opacity-90 transition"
-                    >
-                      <Save className="w-4 h-4" />
-                      Save Branch Address
-                    </button>
+                {isSuperAdmin && (
+                  <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6">
+                    <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-3">
+                      <MapPin className="w-5 h-5 text-[var(--gold-primary)]" />
+                      Appointment Branch
+                    </h3>
+                    <p className="text-sm text-[var(--text-muted)] mb-3">
+                      This address is shown in the customer appointment flow (Step 3 Location).
+                    </p>
+                    <textarea
+                      value={appointmentBranchAddress}
+                      onChange={(e) => setAppointmentBranchAddress(e.target.value)}
+                      className="w-full h-24 px-4 py-3 bg-[var(--bg-primary)] text-white border border-[var(--border)] rounded-xl text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]/50"
+                      placeholder="Branch address"
+                    />
+                    <div className="mt-4 flex justify-end">
+                      <button
+                        onClick={saveAppointmentBranchAddress}
+                        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--gold-primary)] text-black font-semibold text-sm hover:opacity-90 transition"
+                      >
+                        <Save className="w-4 h-4" />
+                        Save Branch Address
+                      </button>
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {/* System Information */}
                 <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6">
@@ -3715,11 +3721,11 @@ export function AdminPage() {
             />
           )}
 
-          {/* ── PROJECTS ───────────────────────────────────────────────────── */}
+{/* ── PROJECTS ───────────────────────────────────────────────────── */}
           {activeTab === 'projects' && (
             <motion.div key="projects" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
               {visibleProjects.length === 0 ? (
-                <EmptyState icon={Briefcase} label="No projects yet" action={() => openModal('project')} actionLabel="Create Project" />
+                <EmptyState icon={Briefcase} label="No projects yet" action={isSuperAdmin ? () => openModal('project') : undefined} actionLabel={isSuperAdmin ? "Create Project" : undefined} />
               ) : (
                 <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {visibleProjects.map((project) => (
@@ -3755,15 +3761,19 @@ export function AdminPage() {
                         </button>
                       </div>
                       <div className="flex gap-2 pt-2">
-                        <button onClick={() => openModal('project', project)} className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-[var(--bg-primary)] border border-[var(--border)] rounded-lg text-white text-sm hover:border-[var(--gold-primary)]/50 transition-all">
-                          <Edit className="w-4 h-4" /> Edit
-                        </button>
-                        <button onClick={() => openModal('project_team', project)} className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-[var(--bg-primary)] border border-[var(--border)] rounded-lg text-white text-sm hover:border-[var(--gold-primary)]/50 transition-all">
-                          <Users className="w-4 h-4" /> Team
-                        </button>
-                        <button onClick={() => deleteProject(project.project_id, project.name || project.title)} className="p-2 hover:bg-red-500/10 rounded-lg transition-all border border-transparent">
-                          <Trash2 className="w-4 h-4 text-red-400" />
-                        </button>
+                        {isSuperAdmin && (
+                          <>
+                            <button onClick={() => openModal('project', project)} className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-[var(--bg-primary)] border border-[var(--border)] rounded-lg text-white text-sm hover:border-[var(--gold-primary)]/50 transition-all">
+                              <Edit className="w-4 h-4" /> Edit
+                            </button>
+                            <button onClick={() => openModal('project_team', project)} className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-[var(--bg-primary)] border border-[var(--border)] rounded-lg text-white text-sm hover:border-[var(--gold-primary)]/50 transition-all">
+                              <Users className="w-4 h-4" /> Team
+                            </button>
+                            <button onClick={() => deleteProject(project.project_id, project.name || project.title)} className="p-2 hover:bg-red-500/10 rounded-lg transition-all border border-transparent">
+                              <Trash2 className="w-4 h-4 text-red-400" />
+                            </button>
+                          </>
+                        )}
                       </div>
                     </motion.div>
                   ))}
@@ -3781,9 +3791,11 @@ export function AdminPage() {
                     <h2 className="text-2xl font-bold text-white">Services Management</h2>
                     <p className="text-[var(--text-muted)] mt-1">Manage guitar services and pricing</p>
                   </div>
-                  <button onClick={() => openModal('service')} className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black rounded-xl font-semibold text-sm hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all">
-                    <Plus className="w-4 h-4" /> Add Service
-                  </button>
+                  {isSuperAdmin && (
+                    <button onClick={() => openModal('service')} className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black rounded-xl font-semibold text-sm hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all">
+                      <Plus className="w-4 h-4" /> Add Service
+                    </button>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -3875,7 +3887,7 @@ export function AdminPage() {
           {activeTab === 'appointments' && (
             <motion.div key="appointments" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
               {visibleAppointments.length === 0 ? (
-                <EmptyState icon={Calendar} label="No appointments scheduled" action={() => openModal('appointment')} actionLabel="Book Appointment" />
+                <EmptyState icon={Calendar} label="No appointments scheduled" action={isSuperAdmin ? () => openModal('appointment') : undefined} actionLabel={isSuperAdmin ? "Book Appointment" : undefined} />
               ) : (
                 <>
                   <AppointmentCalendar
@@ -3934,12 +3946,16 @@ export function AdminPage() {
                                     <button onClick={() => openModal('view_appointment', apt)} className="p-1.5 hover:bg-blue-500/10 rounded transition-colors" title="View Summary">
                                       <Eye className="w-4 h-4 text-blue-400" />
                                     </button>
-                                    <button onClick={() => openModal('appointment', apt)} className="p-1.5 hover:bg-green-500/10 rounded transition-colors" title="Update Status">
-                                      <CheckCircle className="w-4 h-4 text-green-400" />
-                                    </button>
-                                    <button onClick={() => deleteAppointment(apt.appointment_id, apt.title)} className="p-1.5 hover:bg-red-500/10 rounded transition-colors" title="Delete">
-                                      <Trash2 className="w-4 h-4 text-red-400" />
-                                    </button>
+                                    {isSuperAdmin && (
+                                      <>
+                                        <button onClick={() => openModal('appointment', apt)} className="p-1.5 hover:bg-green-500/10 rounded transition-colors" title="Update Status">
+                                          <CheckCircle className="w-4 h-4 text-green-400" />
+                                        </button>
+                                        <button onClick={() => deleteAppointment(apt.appointment_id, apt.title)} className="p-1.5 hover:bg-red-500/10 rounded transition-colors" title="Delete">
+                                          <Trash2 className="w-4 h-4 text-red-400" />
+                                        </button>
+                                      </>
+                                    )}
                                   </div>
                                 </td>
                               </tr>
@@ -4036,7 +4052,7 @@ export function AdminPage() {
                     <option value="stock_low">Stock (Low to High)</option>
                     <option value="stock_high">Stock (High to Low)</option>
                   </select>
-                  {isSuperAdmin && (
+                  {(user?.role === 'super_admin' || user?.role === 'staff') && (
                     <button
                       type="button"
                       onClick={() => setPosDrawerOpen(true)}
@@ -4143,7 +4159,7 @@ export function AdminPage() {
                           <div className="w-16 text-right">
                             <span className="text-white text-sm font-mono">{stock}</span>
                           </div>
-                          {inventorySubTab === 'products' && isSuperAdmin && (
+                          {inventorySubTab === 'products' && (user?.role === 'super_admin' || user?.role === 'staff') && (
                             <button
                               onClick={(e) => { e.stopPropagation(); openModal('inventory', { product_id: item.product_id, name: item.name }) }}
                               className="p-2 hover:bg-[var(--gold-primary)]/10 rounded transition-colors"
