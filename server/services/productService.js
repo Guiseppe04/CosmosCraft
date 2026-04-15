@@ -83,7 +83,7 @@ exports.getAllProducts = async ({
     params.push(`%${brand}%`);
     idx++;
   }
-  if (is_active !== undefined) {
+  if (is_active !== undefined && is_active !== '') {
     where.push(`p.is_active = $${idx}`);
     params.push(is_active === 'true' || is_active === true);
     idx++;

@@ -55,7 +55,17 @@ export const adminApi = {
   },
   createPart: (body) => request('/api/guitars/parts', { method: 'POST', body }),
   updatePart: (id, body) => request(`/api/guitars/parts/${id}`, { method: 'PUT', body }),
-  deletePart: (id) => request(`/api/guitars/parts/${id}`, { method: 'DELETE' }),
+  deletePart: (id, body) => request(`/api/guitars/parts/${id}`, { method: 'DELETE', body }),
+
+  // Builder Parts
+  getBuilderParts: (params = {}) => {
+    const qs = new URLSearchParams(params).toString()
+    return request(`/api/builder-parts${qs ? '?' + qs : ''}`)
+  },
+  getBuilderPart: (id) => request(`/api/builder-parts/${id}`),
+  createBuilderPart: (body) => request('/api/builder-parts', { method: 'POST', body }),
+  updateBuilderPart: (id, body) => request(`/api/builder-parts/${id}`, { method: 'PUT', body }),
+  deleteBuilderPart: (id) => request(`/api/builder-parts/${id}`, { method: 'DELETE' }),
 
   // Users / RBAC
   getUsers: (params = {}) => {
@@ -95,4 +105,25 @@ export const adminApi = {
   createAppointment: (body) => request('/api/appointments', { method: 'POST', body }),
   updateAppointment: (id, body) => request(`/api/appointments/${id}`, { method: 'PUT', body }),
   deleteAppointment: (id) => request(`/api/appointments/${id}`, { method: 'DELETE' }),
+
+  // Inventory
+  getInventoryProducts: (params = {}) => {
+    const qs = new URLSearchParams(params).toString()
+    return request(`/api/inventory/products${qs ? '?' + qs : ''}`)
+  },
+  getInventoryProduct: (id) => request(`/api/inventory/products/${id}`),
+  addStock: (body) => request('/api/inventory/stock-in', { method: 'PATCH', body }),
+  deductStock: (body) => request('/api/inventory/stock-out', { method: 'PATCH', body }),
+  adjustStock: (body) => request('/api/inventory/adjust', { method: 'PATCH', body }),
+  getInventoryLogs: (params = {}) => {
+    const qs = new URLSearchParams(params).toString()
+    return request(`/api/inventory/logs${qs ? '?' + qs : ''}`)
+  },
+  getProductInventoryLogs: (productId) => request(`/api/inventory/logs/${productId}`),
+  getLowStockAlerts: (params = {}) => {
+    const qs = new URLSearchParams(params).toString()
+    return request(`/api/inventory/alerts/low-stock${qs ? '?' + qs : ''}`)
+  },
+  markAlertAsRead: (alertId) => request(`/api/inventory/alerts/${alertId}/read`, { method: 'PATCH' }),
+  getInventorySummary: () => request('/api/inventory/summary'),
 }

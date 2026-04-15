@@ -37,7 +37,7 @@ exports.getAllParts = async ({
     params.push(part_category);
     idx++;
   }
-  if (is_active !== undefined) {
+  if (is_active !== undefined && is_active !== '') {
     where.push(`is_active = $${idx}`);
     params.push(is_active === 'true' || is_active === true);
     idx++;
