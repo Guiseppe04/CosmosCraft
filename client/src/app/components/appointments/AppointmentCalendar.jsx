@@ -154,7 +154,7 @@ export default function AppointmentCalendar({ appointments = [], onAppointmentCl
           <div>
             <div className="flex items-center gap-2 text-[var(--text-muted)] uppercase tracking-[0.3em] text-xs">
               <Calendar className="w-4 h-4" />
-              <span>Appointment Calendar</span>
+              <span>Calendar</span>
             </div>
             <h2 className="mt-2 text-3xl font-semibold text-white">Available / Booked Dates</h2>
             <p className="mt-2 text-sm leading-6 text-[var(--text-muted)] max-w-2xl">
@@ -162,7 +162,6 @@ export default function AppointmentCalendar({ appointments = [], onAppointmentCl
             </p>
           </div>
           <div className="flex flex-col items-end gap-2 text-right">
-            <p className="text-sm uppercase tracking-[0.3em] text-[var(--text-muted)]">Current month</p>
             <p className="text-lg font-semibold text-white">{format(new Date(currentYear, currentMonth, 1), 'MMMM yyyy')}</p>
             <div className="flex items-center gap-2">
               <button
@@ -211,20 +210,27 @@ export default function AppointmentCalendar({ appointments = [], onAppointmentCl
               const { isSunday, isHoliday, isPast, isDisabled, status } = getDateStatus(dateKey)
               const isSelected = dateKey && selectedDateId === dateKey
               const isAvailable = !isDisabled && !bookingCount
+              const isHolidayCell = isDisabled && isHoliday
+              const isSundayClosed = isDisabled && isSunday
+              const isPastDate = isDisabled && isPast
 
               const cellClasses = isSelected
                 ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)]/15 text-white shadow-lg shadow-[var(--gold-primary)]/10'
-                : isDisabled
-                  ? 'border-[#444] bg-[#121518] text-[#f8fafc] cursor-not-allowed'
-                  : bookingCount
-                    ? 'border-red-500/10 bg-red-500/10 text-red-200 hover:border-red-400 hover:bg-red-500/15'
-                    : 'border-[var(--border)] bg-[var(--surface-dark)] text-white hover:border-[var(--gold-primary)] hover:bg-[var(--surface-elevated)]'
+                : isHolidayCell
+                  ? 'border-[#758A93]/30 bg-[#758A93]/10 text-[#c9d2db] cursor-not-allowed'
+                  : isSundayClosed || isPastDate
+                    ? 'border-[#444] bg-[#121518] text-[#f8fafc] cursor-not-allowed'
+                    : bookingCount
+                      ? 'border-red-500/10 bg-red-500/10 text-red-200 hover:border-red-400 hover:bg-red-500/15'
+                      : 'border-[var(--border)] bg-[var(--surface-dark)] text-white hover:border-[var(--gold-primary)] hover:bg-[var(--surface-elevated)]'
 
-              const badgeClasses = isDisabled
-                ? 'bg-[#23272e] text-[#e2e8f0] border border-[#39404c]'
-                : bookingCount
-                  ? 'bg-red-500/15 text-red-200 border border-red-500/20'
-                  : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/20'
+              const badgeClasses = isHolidayCell
+                ? 'bg-[#758A93]/15 text-[#c9d2db] border border-[#758A93]/20'
+                : isSundayClosed || isPastDate
+                  ? 'bg-[#23272e] text-[#e2e8f0] border border-[#39404c]'
+                  : bookingCount
+                    ? 'bg-red-500/15 text-red-200 border border-red-500/20'
+                    : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/20'
 
               return (
                 <button
@@ -264,8 +270,8 @@ export default function AppointmentCalendar({ appointments = [], onAppointmentCl
             <span className="h-2.5 w-2.5 rounded-full bg-red-400" />
             Booked
           </div>
-          <div className="flex items-center gap-2 rounded-3xl border border-orange-500/20 bg-orange-500/10 px-3 py-2">
-            <span className="h-2.5 w-2.5 rounded-full bg-orange-400" />
+          <div className="flex items-center gap-2 rounded-3xl border border-[#758A93]/20 bg-[#758A93]/10 px-3 py-2">
+            <span className="h-2.5 w-2.5 rounded-full bg-[#758A93]" />
             Holiday / Sunday Closed
           </div>
         </div>
