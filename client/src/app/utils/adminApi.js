@@ -1,9 +1,9 @@
+import { API } from './apiConfig'
+
 /**
  * Centralized API utility for Admin Dashboard.
  * All functions use credentials: 'include' so the access token cookie is sent automatically.
  */
-
-const API_URL = import.meta.env.VITE_API_URL
 
 function buildQueryString(params = {}) {
   const qs = new URLSearchParams()
@@ -34,7 +34,7 @@ function normalizeListResponse(res, legacyKey) {
 }
 
 async function request(path, options = {}) {
-  const res = await fetch(`${API_URL}${path}`, {
+  const res = await fetch(`${API}${path}`, {
     headers: { 'Content-Type': 'application/json', ...options.headers },
     credentials: 'include',
     ...options,

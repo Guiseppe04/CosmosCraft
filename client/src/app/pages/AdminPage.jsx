@@ -16,6 +16,7 @@ import {
   CartesianGrid, Tooltip, ResponsiveContainer, Cell,
 } from 'recharts'
 import ProjectTaskTracker from '../components/projects/ProjectTaskTracker'
+import AppointmentCalendar from '../components/appointments/AppointmentCalendar'
 import { useAuth } from '../context/AuthContext'
 import { useNavigate } from 'react-router'
 import { Topbar } from '../components/admin/Topbar'
@@ -234,6 +235,7 @@ function ImageZoomModal({ src, alt }) {
       <AnimatePresence>
         {isOpen && (
           <motion.div
+            key="image-zoom-modal"
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 z-[200] bg-black/90 backdrop-blur-sm flex items-center justify-center"
             onClick={(e) => { if (e.target === e.currentTarget) setIsOpen(false) }}
@@ -1170,6 +1172,7 @@ export function AdminPage() {
       <AnimatePresence>
         {toast && (
           <motion.div
+            key="toast"
             initial={{ opacity: 0, y: -30 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -30 }}
             className={`fixed top-24 right-6 z-[200] px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-3 text-sm font-semibold border ${toast.type === 'error'
               ? 'bg-red-500/10 border-red-500/30 text-red-400'
@@ -2050,6 +2053,7 @@ export function AdminPage() {
                         <AnimatePresence>
                           {isExpanded && (
                             <motion.div
+                              key={`order-details-${order.order_id || order.order_number}`}
                               initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
                               className="border-t border-[var(--border)] bg-[var(--bg-primary)]/50"
                             >
@@ -2485,71 +2489,79 @@ export function AdminPage() {
               {visibleAppointments.length === 0 ? (
                 <EmptyState icon={Calendar} label="No appointments scheduled" action={() => openModal('appointment')} actionLabel="Book Appointment" />
               ) : (
-                <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl overflow-hidden">
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead className="bg-[var(--bg-primary)] border-b border-[var(--border)]">
-                        <tr>
-                          {['#', 'Title', 'Customer', 'Date & Time', 'Service', 'Status', 'Actions'].map(col => (
-                            <th key={col} className="text-left py-4 px-6 text-[var(--text-muted)] font-medium text-xs uppercase tracking-wider">{col}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {visibleAppointments.map((apt, i) => {
-                          const statusColors = {
-                            pending: 'bg-[var(--gold-primary)]/20 text-[var(--gold-primary)] border-[var(--gold-primary)]/30',
-                            approved: 'bg-green-500/20 text-green-400 border-green-500/30',
-                            completed: 'bg-green-500/20 text-green-400 border-green-500/30',
-                            cancelled: 'bg-red-500/20 text-red-400 border-red-500/30',
-                            'no_show': 'bg-orange-500/20 text-orange-400 border-orange-500/30',
-                          }
-                          const statusCls = statusColors[apt.status] || 'bg-gray-500/20 text-gray-400 border-gray-500/30'
-                          const apptDate = apt.scheduled_at || apt.date
-                          return (
-                            <tr key={apt.appointment_id} className="border-b border-[var(--border)]/50 hover:bg-[var(--bg-primary)]/50 transition-colors">
-                              <td className="py-4 px-6 text-[var(--text-muted)] font-mono text-sm">#{i + 1}</td>
-                              <td className="py-4 px-6">
-                                <p className="text-white font-medium">{apt.guitar_details ? `${apt.guitar_details.brand} ${apt.guitar_details.model}` : (apt.title || apt.service_name || 'Appointment')}</p>
-                                {apt.notes && <p className="text-[var(--text-muted)] text-xs truncate max-w-xs">{apt.notes}</p>}
-                              </td>
-                              <td className="py-4 px-6">
-                                <p className="text-white">{apt.customer_name || apt.user_name || '—'}</p>
-                                <p className="text-[var(--text-muted)] text-xs">{apt.customer_email || '—'}</p>
-                              </td>
-                              <td className="py-4 px-6">
-                                <p className="text-white">{apptDate ? new Date(apptDate).toLocaleDateString() : '—'}</p>
-                                <p className="text-[var(--text-muted)] text-sm">{apt.time || (apptDate ? new Date(apptDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—')}</p>
-                              </td>
-                              <td className="py-4 px-6 text-[var(--text-muted)] capitalize">
-                                {Array.isArray(apt.services) ? apt.services.map(s => s.replace(/-/g, ' ')).join(', ') : (apt.service_name || 'Consultation')}
-                              </td>
-                              <td className="py-4 px-6">
-                                <span className={`px-2 py-0.5 rounded-full text-xs font-semibold border ${statusCls}`}>
-                                  {apt.status || 'Pending'}
-                                </span>
-                              </td>
-                              <td className="py-4 px-6">
-                                <div className="flex gap-2">
-                                  <button onClick={() => openModal('view_appointment', apt)} className="p-1.5 hover:bg-blue-500/10 rounded transition-colors" title="View Summary">
-                                    <Eye className="w-4 h-4 text-blue-400" />
-                                  </button>
-                                  <button onClick={() => openModal('appointment', apt)} className="p-1.5 hover:bg-green-500/10 rounded transition-colors" title="Update Status">
-                                    <CheckCircle className="w-4 h-4 text-green-400" />
-                                  </button>
-
-                                  <button onClick={() => deleteAppointment(apt.appointment_id, apt.title)} className="p-1.5 hover:bg-red-500/10 rounded transition-colors" title="Delete">
-                                    <Trash2 className="w-4 h-4 text-red-400" />
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
+                <>
+                  <AppointmentCalendar
+                    appointments={visibleAppointments}
+                    onAppointmentClick={(apt) => openModal('view_appointment', apt)}
+                  />
+                  <div className="mt-8 mb-4">
+                    <h3 className="text-white text-lg font-semibold mb-4">All Appointments</h3>
                   </div>
-                </div>
+                  <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead className="bg-[var(--bg-primary)] border-b border-[var(--border)]">
+                          <tr>
+                            {['#', 'Title', 'Customer', 'Date & Time', 'Service', 'Status', 'Actions'].map(col => (
+                              <th key={col} className="text-left py-4 px-6 text-[var(--text-muted)] font-medium text-xs uppercase tracking-wider">{col}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {visibleAppointments.map((apt, i) => {
+                            const statusColors = {
+                              pending: 'bg-[var(--gold-primary)]/20 text-[var(--gold-primary)] border-[var(--gold-primary)]/30',
+                              approved: 'bg-green-500/20 text-green-400 border-green-500/30',
+                              completed: 'bg-green-500/20 text-green-400 border-green-500/30',
+                              cancelled: 'bg-red-500/20 text-red-400 border-red-500/30',
+                              'no_show': 'bg-orange-500/20 text-orange-400 border-orange-500/30',
+                            }
+                            const statusCls = statusColors[apt.status] || 'bg-gray-500/20 text-gray-400 border-gray-500/30'
+                            const apptDate = apt.scheduled_at || apt.date
+                            return (
+                              <tr key={apt.appointment_id || apt.id || i} className="border-b border-[var(--border)]/50 hover:bg-[var(--bg-primary)]/50 transition-colors">
+                                <td className="py-4 px-6 text-[var(--text-muted)] font-mono text-sm">#{i + 1}</td>
+                                <td className="py-4 px-6">
+                                  <p className="text-white font-medium">{apt.guitar_details ? `${apt.guitar_details.brand} ${apt.guitar_details.model}` : (apt.title || apt.service_name || 'Appointment')}</p>
+                                  {apt.notes && <p className="text-[var(--text-muted)] text-xs truncate max-w-xs">{apt.notes}</p>}
+                                </td>
+                                <td className="py-4 px-6">
+                                  <p className="text-white">{apt.customer_name || apt.user_name || '—'}</p>
+                                  <p className="text-[var(--text-muted)] text-xs">{apt.customer_email || '—'}</p>
+                                </td>
+                                <td className="py-4 px-6">
+                                  <p className="text-white">{apptDate ? new Date(apptDate).toLocaleDateString() : '—'}</p>
+                                  <p className="text-[var(--text-muted)] text-sm">{apt.time || (apptDate ? new Date(apptDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—')}</p>
+                                </td>
+                                <td className="py-4 px-6 text-[var(--text-muted)] capitalize">
+                                  {Array.isArray(apt.services) ? apt.services.map(s => s.replace(/-/g, ' ')).join(', ') : (apt.service_name || 'Consultation')}
+                                </td>
+                                <td className="py-4 px-6">
+                                  <span className={`px-2 py-0.5 rounded-full text-xs font-semibold border ${statusCls}`}>
+                                    {apt.status || 'Pending'}
+                                  </span>
+                                </td>
+                                <td className="py-4 px-6">
+                                  <div className="flex gap-2">
+                                    <button onClick={() => openModal('view_appointment', apt)} className="p-1.5 hover:bg-blue-500/10 rounded transition-colors" title="View Summary">
+                                      <Eye className="w-4 h-4 text-blue-400" />
+                                    </button>
+                                    <button onClick={() => openModal('appointment', apt)} className="p-1.5 hover:bg-green-500/10 rounded transition-colors" title="Update Status">
+                                      <CheckCircle className="w-4 h-4 text-green-400" />
+                                    </button>
+                                    <button onClick={() => deleteAppointment(apt.appointment_id, apt.title)} className="p-1.5 hover:bg-red-500/10 rounded transition-colors" title="Delete">
+                                      <Trash2 className="w-4 h-4 text-red-400" />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </>
               )}
             </motion.div>
           )}
@@ -2693,22 +2705,7 @@ export function AdminPage() {
                             </span>
                           </div>
                           <div className="w-16 text-right">
-                            <div className="flex items-center justify-end gap-1">
-                              <button
-                                onClick={(e) => { e.stopPropagation(); handleQuickAdjust(-1) }}
-                                disabled={stock === 0}
-                                className="w-6 h-6 flex items-center justify-center rounded bg-[var(--bg-primary)] border border-[var(--border)] text-white hover:text-red-400 hover:border-red-500/50 transition-colors disabled:opacity-50"
-                              >
-                                -
-                              </button>
-                              <span className="text-white text-sm font-mono w-8 text-center">{stock}</span>
-                              <button
-                                onClick={(e) => { e.stopPropagation(); handleQuickAdjust(1) }}
-                                className="w-6 h-6 flex items-center justify-center rounded bg-[var(--bg-primary)] border border-[var(--border)] text-white hover:text-emerald-400 hover:border-emerald-500/50 transition-colors"
-                              >
-                                +
-                              </button>
-                            </div>
+                            <span className="text-white text-sm font-mono">{stock}</span>
                           </div>
                           {item.type === 'product' && (
                             <button
@@ -2727,6 +2724,7 @@ export function AdminPage() {
                         <AnimatePresence>
                           {isExpanded && (
                             <motion.div
+                              key={`inventory-details-${item.product_id || item.part_id}`}
                               initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
                               className="border-t border-[var(--border)] bg-[var(--bg-primary)]/50"
                             >
@@ -2959,6 +2957,7 @@ export function AdminPage() {
       <AnimatePresence>
         {modal.open && (
           <motion.div
+            key={`modal-${modal.type || 'default'}`}
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
             onClick={(e) => { if (e.target === e.currentTarget) closeModal() }}

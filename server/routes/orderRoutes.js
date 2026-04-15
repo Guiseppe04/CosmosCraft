@@ -12,6 +12,7 @@ router.get('/', authenticateToken, authorize('staff', 'admin', 'super_admin'), o
 
 // --- ID-BASED ROUTES (after specific routes) ---
 router.get('/:orderId', authenticateToken, orderController.getOrder)
+router.put('/:id/payment-status', authenticateToken, authorize('staff', 'admin', 'super_admin'), orderController.updatePaymentStatus)
 router.put('/:id', authenticateToken, authorize('staff', 'admin', 'super_admin'), orderController.updateOrder)
 router.post('/:id/cancel', authenticateToken, authorize('staff', 'admin', 'super_admin'), orderController.cancelOrder)
 router.post('/:id/approve-payment', authenticateToken, authorize('staff', 'admin', 'super_admin'), orderController.approvePayment)

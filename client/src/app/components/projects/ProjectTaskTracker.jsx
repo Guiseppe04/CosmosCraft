@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
 import { CheckCircle, Circle, ChevronDown, ChevronRight, Plus, Trash2, Edit, User, Clock, AlertCircle, Guitar, Package, Search } from 'lucide-react';
 import { adminApi } from '../../utils/adminApi';
 import { formatCurrency } from '../../utils/formatCurrency';
-
-const API_URL = import.meta.env.VITE_API_URL;
 
 export default function ProjectTaskTracker({ projectId, projectName, isAdmin = false, parts = [], projectData = null }) {
   const [hierarchy, setHierarchy] = useState(null);

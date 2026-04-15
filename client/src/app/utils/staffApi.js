@@ -1,13 +1,13 @@
+import { API } from './apiConfig'
+
 /**
  * staffApi.js — API utility for Staff Dashboard
  * Mirrors adminApi.js but scoped to staff-appropriate endpoints.
  * All calls use credentials:'include' so the access-token cookie is sent automatically.
  */
 
-const API_URL = import.meta.env.VITE_API_URL
-
 async function request(path, options = {}) {
-  const res = await fetch(`${API_URL}${path}`, {
+  const res = await fetch(`${API}${path}`, {
     headers: { 'Content-Type': 'application/json', ...options.headers },
     credentials: 'include',
     ...options,
