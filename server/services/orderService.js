@@ -200,7 +200,14 @@ exports.getUserOrders = async (userId) => {
 
 exports.getOrderById = async (orderId, userId) => {
   const res = await pool.query(
-    `SELECT * FROM orders WHERE order_id = $1 AND user_id = $2`,
+    `SELECT o.*, 
+      a.line1 as shipping_line1, a.line2 as shipping_line2, a.city as shipping_city, 
+      a.province as shipping_province, a.postal_code as shipping_postal_code, a.country as shipping_country,
+      u.first_name, u.last_name, u.email, u.phone as contact_phone
+      FROM orders o
+      LEFT JOIN addresses a ON o.shipping_address_id = a.address_id
+      LEFT JOIN users u ON o.user_id = u.user_id
+      WHERE o.order_id = $1 AND o.user_id = $2`,
     [orderId, userId]
   )
   
@@ -231,15 +238,21 @@ exports.getOrderById = async (orderId, userId) => {
 
 exports.getAllOrders = async (params = {}) => {
   const { search, include_items } = params;
-  let query = 'SELECT * FROM orders';
+  let query = `SELECT o.*, 
+    a.line1 as shipping_line1, a.line2 as shipping_line2, a.city as shipping_city, 
+    a.province as shipping_province, a.postal_code as shipping_postal_code, a.country as shipping_country,
+    u.first_name, u.last_name, u.email, u.phone as contact_phone
+    FROM orders o
+    LEFT JOIN addresses a ON o.shipping_address_id = a.address_id
+    LEFT JOIN users u ON o.user_id = u.user_id`;
   const queryParams = [];
 
   if (search) {
-    query += ` WHERE order_number ILIKE $1`;
+    query += ` WHERE o.order_number ILIKE $1`;
     queryParams.push(`%${search}%`);
   }
 
-  query += ' ORDER BY created_at DESC';
+  query += ' ORDER BY o.created_at DESC';
   const res = await pool.query(query, queryParams);
   
   if (include_items === 'true' || include_items === true) {
