@@ -22,6 +22,7 @@ import { useNavigate } from 'react-router'
 import { Topbar } from '../components/admin/Topbar'
 import { MessagePanel } from '../components/admin/MessagePanel'
 import { ProjectProgress, ProgressBadge } from '../components/admin/ProjectProgress'
+import { OrderManagement } from '../components/admin/OrderManagement'
 import { formatCurrency } from '../utils/formatCurrency'
 import { adminApi } from '../utils/adminApi'
 import { uploadToCloudinary } from '../utils/cloudinary'
@@ -1304,6 +1305,12 @@ export function AdminPage() {
       initialForm.image_url = data.primary_image
     }
     
+    // Initialize status fields for order-details modal
+    if (type === 'order-details' && data) {
+      initialForm.order_status = data.status || 'pending'
+      initialForm.payment_status = data.payment_status || data.payment?.status || 'pending'
+    }
+    
     setForm(initialForm)
     setFormErrors({})
     setModal({ open: true, type, data })
@@ -1615,6 +1622,48 @@ export function AdminPage() {
           : o
       ))
       
+      closeModal()
+    } catch (e) { showToast(e.message, 'error') }
+    finally {
+      setPaymentStatusUpdate({ loading: false, orderId: null })
+    }
+  }
+
+  const updateOrderAndPaymentStatus = async () => {
+    if (!modal.data?.order_id) return
+    
+    const currentOrder = orders.find(o => o.order_id === modal.data.order_id)
+    const currentOrderStatus = currentOrder?.status || modal.data.status || 'pending'
+    const currentPaymentStatus = currentOrder?.payment_status || modal.data.payment_status || modal.data?.payment?.status || 'pending'
+    
+    const newOrderStatus = form.order_status || currentOrderStatus
+    const newPaymentStatus = form.payment_status || currentPaymentStatus
+    
+    const orderStatusChanged = newOrderStatus !== currentOrderStatus
+    const paymentStatusChanged = newPaymentStatus !== currentPaymentStatus
+    
+    if (!orderStatusChanged && !paymentStatusChanged) {
+      showToast('No changes detected', 'error')
+      return
+    }
+
+    if (newOrderStatus === 'processing' && newPaymentStatus !== 'paid' && newPaymentStatus !== 'verified') {
+      showToast('Cannot start processing - payment not verified. Please set payment to Paid first.', 'error')
+      return
+    }
+
+    setPaymentStatusUpdate({ loading: true, orderId: modal.data.order_id })
+    try {
+      if (paymentStatusChanged) {
+        await adminApi.updatePaymentStatus(modal.data.order_id, newPaymentStatus)
+      }
+      
+      if (orderStatusChanged) {
+        await adminApi.updateOrder(modal.data.order_id, { status: newOrderStatus })
+      }
+      
+      showToast('Order statuses updated!')
+      fetchOrders()
       closeModal()
     } catch (e) { showToast(e.message, 'error') }
     finally {
@@ -2528,159 +2577,13 @@ export function AdminPage() {
             </motion.div>
           )}
 
-          {/* ── ORDERS ─────────────────────────────────────────────────────── */}
-          {activeTab === 'orders' && (
-            <motion.div key="orders" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-                <div className="flex flex-wrap gap-2">
-                  {ORDER_STATUS_TABS.map((tab) => {
-                    const isActive = orderStatusFilter === tab.id
-                    const chipStyles = isActive
-                      ? `${tab.bgColor} ${tab.textColor} border ${tab.borderColor}`
-                      : 'bg-[var(--surface-dark)] text-[var(--text-muted)] hover:text-white'
-                    const tabCount = tab.id === 'all' 
-                      ? visibleOrders.length 
-                      : visibleOrders.filter(o => o.status === tab.id).length
-                    return (
-                      <button
-                        key={tab.id}
-                        onClick={() => { setOrderStatusFilter(tab.id); setOrderPage(1) }}
-                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-all border ${chipStyles}`}
-                      >
-                        {tab.label}
-                        <span className="ml-2 text-xs opacity-70">({tabCount})</span>
-                      </button>
-                    )
-                  })}
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[var(--text-muted)] text-sm">Sort:</span>
-                  <select
-                    value={orderSort}
-                    onChange={(e) => setOrderSort(e.target.value)}
-                    className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
-                  >
-                    <option value="newest">Newest first</option>
-                    <option value="oldest">Oldest first</option>
-                    <option value="highest">Highest value</option>
-                    <option value="lowest">Lowest value</option>
-                  </select>
-                </div>
-              </div>
-
-              {filteredOrders.length === 0 ? (
-                <EmptyState icon={ShoppingBag} label="No orders found" />
-              ) : (
-                <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl overflow-hidden">
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead className="bg-[var(--bg-primary)]/50 border-b border-[var(--border)]">
-                        <tr>
-                          <th className="p-4 text-left text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold">Order ID</th>
-                          <th className="p-4 text-left text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold">Date</th>
-                          <th className="p-4 text-left text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold">Customer</th>
-                          <th className="p-4 text-right text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold">Total</th>
-                          <th className="p-4 text-left text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold">Payment</th>
-                          <th className="p-4 text-center text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold">Items</th>
-                          <th className="p-4 text-left text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold">Status</th>
-                          <th className="p-4 text-center text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {paginatedOrders.map((order) => {
-                          const orderStatus = order.status || 'pending'
-                          const statusConfig = getOrderStatusConfig(orderStatus)
-                          const paymentConfig = getPaymentStatusConfig(order.payment_status || 'pending')
-                          const itemCount = order.items?.length || 0
-                          
-                          const rowHighlight = {
-                            shipped: 'bg-sky-500/5 border-l-2 border-l-sky-400',
-                            out_for_delivery: 'bg-indigo-500/10 border-l-2 border-l-indigo-400',
-                            delivered: 'bg-green-500/5 opacity-60',
-                          }
-                          const highlightClass = rowHighlight[orderStatus] || ''
-
-                          return (
-                            <tr key={order.order_id} className={`border-b border-[var(--border)]/30 hover:bg-white/5 transition-colors ${highlightClass}`}>
-                              <td className="p-4">
-                                <p className="text-white font-mono text-sm font-semibold">#{order.order_number || order.order_id?.slice(0, 8)}</p>
-                              </td>
-                              <td className="p-4 text-[var(--text-muted)] text-sm">
-                                {order.created_at ? new Date(order.created_at).toLocaleDateString() : '—'}
-                              </td>
-                              <td className="p-4">
-                                <p className="text-white text-sm font-medium">{order.first_name && order.last_name ? `${order.first_name} ${order.last_name}` : order.customer_name || order.user_name || 'N/A'}</p>
-                                <p className="text-[var(--text-muted)] text-xs">{order.email || order.customer_email || 'N/A'}</p>
-                              </td>
-                              <td className="p-4 text-right font-bold text-[var(--gold-primary)]">
-                                {formatCurrency(order.total || order.total_amount)}
-                              </td>
-                              <td className="p-4">
-                                <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold border ${paymentConfig.bgColor} ${paymentConfig.textColor} ${paymentConfig.borderColor}`}>
-                                  {paymentConfig.label}
-                                </span>
-                              </td>
-                              <td className="p-4 text-center text-[var(--text-muted)] text-sm">{itemCount}</td>
-                              <td className="p-4">
-                                <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-semibold border bg-[var(--gold-primary)]/20 text-[var(--gold-primary)] border-[var(--gold-primary)]/30">
-                                  {statusConfig.label}
-                                </span>
-                              </td>
-                              <td className="p-4 text-center">
-                                <div className="flex items-center justify-center gap-1">
-                                  <button onClick={(e) => { e.stopPropagation(); openModal('order-details', order) }} className="p-2 hover:bg-[var(--gold-primary)]/10 rounded-lg transition-colors" title="View Details">
-                                    <Eye className="w-4 h-4 text-[var(--text-muted)]" />
-                                  </button>
-                                  <button onClick={(e) => { e.stopPropagation(); openModal('order-status', order) }} className="p-2 hover:bg-[var(--gold-primary)]/10 rounded-lg transition-colors" title="Update Status">
-                                    <Edit className="w-4 h-4 text-[var(--text-muted)]" />
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-              {filteredOrders.length > 0 && (
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mt-6 pt-4 border-t border-[var(--border)]">
-                  <p className="text-[var(--text-muted)] text-sm">
-                    Showing {(orderPage - 1) * ORDERS_PAGE_SIZE + 1}–{Math.min(orderPage * ORDERS_PAGE_SIZE, filteredOrders.length)} of {filteredOrders.length} orders
-                  </p>
-                  <div className="flex items-center gap-1 mt-4 sm:mt-0">
-                    <button
-                      onClick={() => setOrderPage(p => Math.max(1, p - 1))}
-                      disabled={orderPage === 1}
-                      className="p-2 rounded-lg border border-[var(--border)] text-[var(--text-muted)] hover:text-white hover:border-[var(--gold-primary)] disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                    >
-                      <ChevronLeft className="w-4 h-4" />
-                    </button>
-                    {Array.from({ length: Math.ceil(filteredOrders.length / ORDERS_PAGE_SIZE) }, (_, i) => i + 1).slice(
-                      Math.max(0, orderPage - 3),
-                      Math.min(Math.ceil(filteredOrders.length / ORDERS_PAGE_SIZE), orderPage + 2)
-                    ).map(page => (
-                      <button
-                        key={page}
-                        onClick={() => setOrderPage(page)}
-                        className={`w-10 h-10 rounded-lg text-sm font-medium transition-all ${orderPage === page ? 'bg-[var(--gold-primary)] text-black' : 'border border-[var(--border)] text-[var(--text-muted)] hover:text-white hover:border-[var(--gold-primary)]'}`}
-                      >
-                        {page}
-                      </button>
-                    ))}
-                    <button
-                      onClick={() => setOrderPage(p => Math.min(Math.ceil(filteredOrders.length / ORDERS_PAGE_SIZE), p + 1))}
-                      disabled={orderPage >= Math.ceil(filteredOrders.length / ORDERS_PAGE_SIZE)}
-                      className="p-2 rounded-lg border border-[var(--border)] text-[var(--text-muted)] hover:text-white hover:border-[var(--gold-primary)] disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                    >
-                      <ChevronRight className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              )}
-            </motion.div>
+{/* ── ORDERS ─────────────────────────────────────────────────────── */}
+{activeTab === 'orders' && (
+            <OrderManagement
+              orders={visibleOrders}
+              onRefresh={fetchOrders}
+              user={user}
+            />
           )}
 
           {/* ── PROJECTS ───────────────────────────────────────────────────── */}
@@ -4872,63 +4775,81 @@ export function AdminPage() {
                   </div>
                 </div>
 
-                {/* Contextual Actions */}
-                <div className="flex flex-wrap gap-2 pt-4 border-t border-[var(--border)]">
-                  {modal.data.status === 'pending' && (
-                    <>
-                      {(modal.data.payment_status === 'pending' || modal.data.payment_status === 'awaiting_approval') && (
-                        <button onClick={() => { approvePayment(modal.data.order_id); closeModal() }} className="px-4 py-2 bg-teal-500/10 text-teal-300 rounded-lg text-sm hover:bg-teal-500/20 transition-all">
-                          Approve Payment
-                        </button>
-                      )}
-                      <button onClick={() => { updateOrderStatus(modal.data.order_id, 'processing'); closeModal() }} className="px-4 py-2 bg-blue-500/10 text-blue-300 rounded-lg text-sm hover:bg-blue-500/20 transition-all">
-                        Confirm Order
-                      </button>
-                      <button onClick={() => { cancelOrder(modal.data.order_id, modal.data.order_number); closeModal() }} className="px-4 py-2 bg-red-500/10 text-red-300 rounded-lg text-sm hover:bg-red-500/20 transition-all">
-                        Cancel Order
-                      </button>
-                    </>
-                  )}
-                  {modal.data.status === 'processing' && (
-                    <button onClick={() => { openModal('order-status', modal.data); closeModal() }} className="px-4 py-2 bg-sky-500/10 text-sky-300 rounded-lg text-sm hover:bg-sky-500/20 transition-all">
-                      Mark as Shipped
-                    </button>
-                  )}
-                  {modal.data.status === 'shipped' && (
-                    <>
-                      <button onClick={() => { openModal('order-status', modal.data); closeModal() }} className="px-4 py-2 bg-indigo-500/10 text-indigo-300 rounded-lg text-sm hover:bg-indigo-500/20 transition-all">
-                        Update Tracking Info
-                      </button>
-                      <button onClick={() => { updateOrderStatus(modal.data.order_id, 'out_for_delivery'); closeModal() }} className="px-4 py-2 bg-indigo-500/10 text-indigo-300 rounded-lg text-sm hover:bg-indigo-500/20 transition-all">
-                        Mark Out for Delivery
-                      </button>
-                    </>
-                  )}
-                  {modal.data.status === 'out_for_delivery' && (
-                    <>
-                      <button onClick={() => { openModal('order-status', modal.data); closeModal() }} className="px-4 py-2 bg-indigo-500/10 text-indigo-300 rounded-lg text-sm hover:bg-indigo-500/20 transition-all">
-                        Add Rider Details
-                      </button>
-                      <button onClick={() => { updateOrderStatus(modal.data.order_id, 'delivered'); closeModal() }} className="px-4 py-2 bg-green-500/10 text-green-300 rounded-lg text-sm hover:bg-green-500/20 transition-all">
-                        Mark as Delivered
-                      </button>
-                    </>
-                  )}
-                  {modal.data.status === 'delivered' && (
-                    <button onClick={(e) => e.stopPropagation()} className="px-4 py-2 bg-green-500/10 text-green-300 rounded-lg text-sm hover:bg-green-500/20 transition-all">
-                      View / Export Receipt
-                    </button>
-                  )}
-                  {modal.data.status === 'cancelled' && (
-                    <>
-                      <button onClick={(e) => e.stopPropagation()} className="px-4 py-2 bg-[var(--surface-dark)] text-white rounded-lg text-sm border border-[var(--border)] hover:border-[var(--gold-primary)]/50 transition-all">
-                        Duplicate Order
-                      </button>
-                      <button onClick={(e) => e.stopPropagation()} className="px-4 py-2 bg-red-500/10 text-red-300 rounded-lg text-sm hover:bg-red-500/20 transition-all">
-                        Process Refund
-                      </button>
-                    </>
-                  )}
+                {/* Unified Status Update Section */}
+                <div className="bg-[var(--bg-primary)]/50 rounded-xl p-4 border border-[var(--border)]">
+                  <h3 className="text-white font-semibold mb-4 flex items-center gap-2">
+                    <RefreshCw className="w-4 h-4 text-[var(--gold-primary)]" />
+                    Update Status
+                  </h3>
+                  
+                  {/* Order Status Selector */}
+                  <div className="mb-4">
+                    <p className="text-[var(--text-muted)] text-xs uppercase tracking-wider mb-2">Order Status</p>
+                    <div className="grid grid-cols-3 gap-2">
+                      {ORDER_STATUS_LIFECYCLE.filter(s => s.value !== 'out_for_delivery').map((status) => {
+                        const isActive = (form.order_status || modal.data.status || 'pending') === status.value
+                        return (
+                          <button
+                            key={status.value}
+                            type="button"
+                            onClick={() => setForm((f) => ({ ...f, order_status: status.value }))}
+                            className={`p-2 rounded-lg border text-xs font-medium transition-all ${
+                              isActive 
+                                ? `${status.bgColor} ${status.textColor} ${status.borderColor}` 
+                                : 'bg-[var(--surface-dark)] border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--gold-primary)]/50'
+                            }`}
+                          >
+                            {status.label}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                  
+                  {/* Payment Status Selector */}
+                  <div className="mb-4">
+                    <p className="text-[var(--text-muted)] text-xs uppercase tracking-wider mb-2">Payment Status</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {PAYMENT_STATUS_LIFECYCLE.map((status) => {
+                        const isActive = (form.payment_status || modal.data.payment_status || modal.data?.payment?.status || 'pending') === status.value
+                        return (
+                          <button
+                            key={status.value}
+                            type="button"
+                            onClick={() => setForm((f) => ({ ...f, payment_status: status.value }))}
+                            className={`p-2 rounded-lg border text-xs font-medium transition-all ${
+                              isActive 
+                                ? `${status.bgColor} ${status.textColor} ${status.borderColor}` 
+                                : 'bg-[var(--surface-dark)] border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--gold-primary)]/50'
+                            }`}
+                          >
+                            {status.label}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                  
+                  {/* Save Button */}
+                  <button
+                    onClick={updateOrderAndPaymentStatus}
+                    disabled={paymentStatusUpdate.loading}
+                    className={`w-full px-4 py-3 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] rounded-lg text-black font-semibold hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all flex items-center justify-center gap-2 ${
+                      paymentStatusUpdate.loading ? 'opacity-50 cursor-not-allowed' : ''
+                    }`}
+                  >
+                    {paymentStatusUpdate.loading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="w-4 h-4" />
+                        Save Status Updates
+                      </>
+                    )}
+                  </button>
                 </div>
               </div>
             </motion.div>

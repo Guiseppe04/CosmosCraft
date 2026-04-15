@@ -5,18 +5,45 @@ const isValidUUID = (uuid) => {
   return uuidRegex.test(uuid)
 }
 
+// Payment status enum for order payment_status field
+exports.PAYMENT_STATUS = {
+  PENDING: 'pending',
+  PROOF_SUBMITTED: 'proof_submitted',
+  UNDER_REVIEW: 'under_review',
+  APPROVED: 'approved',
+  REJECTED: 'rejected',
+  FAILED: 'failed'
+}
+
+// Valid payment status transitions (including self-transition for idempotent updates)
+const PAYMENT_STATUS_TRANSITIONS = {
+  'pending': ['proof_submitted', 'pending'],
+  'proof_submitted': ['under_review', 'pending', 'proof_submitted'],
+  'under_review': ['approved', 'rejected', 'under_review'],
+  'approved': ['approved', 'rejected', 'failed'],
+  'rejected': ['pending', 'proof_submitted', 'rejected'],
+  'failed': ['pending', 'proof_submitted', 'failed']
+}
+
+function isValidPaymentStatusTransition(currentStatus, newStatus) {
+  // Allow same status (idempotent)
+  if (currentStatus === newStatus) return true
+  const allowed = PAYMENT_STATUS_TRANSITIONS[currentStatus] || []
+  return allowed.includes(newStatus)
+}
+
 const VALID_STATUS_TRANSITIONS = {
-  'pending': ['processing', 'cancelled'],
-  'processing': ['shipped', 'cancelled'],
-  'shipped': ['out_for_delivery', 'cancelled'],
-  'out_for_delivery': ['delivered', 'cancelled'],
-  'delivered': [],
-  'cancelled': []
+  'pending': ['processing', 'cancelled', 'pending'],
+  'processing': ['shipped', 'cancelled', 'processing'],
+  'shipped': ['out_for_delivery', 'cancelled', 'shipped'],
+  'out_for_delivery': ['delivered', 'cancelled', 'out_for_delivery'],
+  'delivered': ['delivered'],
+  'cancelled': ['pending', 'cancelled']
 }
 
 const STATUS_FIELD_REQUIREMENTS = {
   'shipped': ['tracking_number'],
-  'out_for_delivery': ['tracking_number', 'rider_name', 'rider_contact'],
+  'out_for_delivery': ['tracking_number', 'rider_details'],
   'delivered': ['tracking_number']
 }
 
@@ -295,7 +322,7 @@ exports.updateOrder = async (orderId, updateData) => {
   
   if (status) {
     const currentRes = await pool.query(
-      `SELECT status FROM orders WHERE order_id = $1`,
+      `SELECT status, tracking_number, rider_name, rider_contact FROM orders WHERE order_id = $1`,
       [orderId]
     );
     
@@ -304,16 +331,37 @@ exports.updateOrder = async (orderId, updateData) => {
     }
     
     const currentStatus = currentRes.rows[0].status;
-    const allowedTransitions = VALID_STATUS_TRANSITIONS[currentStatus] || [];
+    const order = currentRes.rows[0];
     
-    if (!allowedTransitions.includes(status)) {
-      throw new Error(`Invalid status transition from '${currentStatus}' to '${status}'`);
-    }
-    
-    if (STATUS_FIELD_REQUIREMENTS[status]) {
-      const missingFields = STATUS_FIELD_REQUIREMENTS[status].filter(field => !updateData[field]);
-      if (missingFields.length > 0) {
-        throw new Error(`Missing required fields for status '${status}': ${missingFields.join(', ')}`);
+    // Skip validation if status is not actually changing (idempotent)
+    if (status !== currentStatus) {
+      const allowedTransitions = VALID_STATUS_TRANSITIONS[currentStatus] || [];
+      
+      if (!allowedTransitions.includes(status)) {
+        throw new Error(`Invalid status transition from '${currentStatus}' to '${status}'`);
+      }
+      
+      if (STATUS_FIELD_REQUIREMENTS[status]) {
+        // Check for required fields - accept either in updateData or existing order
+        // Also support rider_details combining rider_name and rider_contact
+        const orderRiderDetails = order.rider_name || order.rider_contact || null
+        const orderFields = {
+          ...order,
+          rider_details: orderRiderDetails
+        }
+        
+        const missingFields = STATUS_FIELD_REQUIREMENTS[status].filter(field => 
+          !updateData[field] && !orderFields[field]
+        );
+        if (missingFields.length > 0) {
+          throw new Error(`Missing required fields for status '${status}': ${missingFields.join(', ')}`);
+        }
+        
+        // Map rider_details to separate fields if provided
+        if (updateData.rider_details && !updateData.rider_name && !updateData.rider_contact) {
+          updateData.rider_name = updateData.rider_details
+          updateData.rider_contact = updateData.rider_details
+        }
       }
     }
   }
@@ -348,22 +396,135 @@ exports.updateOrder = async (orderId, updateData) => {
   return res.rows[0];
 }
 
-exports.updatePaymentStatus = async (orderId, status) => {
-  const res = await pool.query(
-    `UPDATE orders SET payment_status = $1, updated_at = CURRENT_TIMESTAMP WHERE order_id = $2 RETURNING *`,
-    [status, orderId]
-  )
-  if (res.rows.length === 0) return null
-  return res.rows[0]
-}
+exports.updatePaymentStatus = async (orderId, status, options = {}) => {
+  const { 
+    reference_number, 
+    admin_name, 
+    admin_email, 
+    rejection_reason, 
+    admin_notes,
+    admin_user_id 
+  } = options
 
-exports.approvePayment = async (orderId) => {
-  const res = await pool.query(
-    `UPDATE orders SET payment_status = 'paid', updated_at = CURRENT_TIMESTAMP WHERE order_id = $1 RETURNING *`,
+  // Get current order to check status transition
+  const orderRes = await pool.query(
+    'SELECT payment_status, status FROM orders WHERE order_id = $1',
     [orderId]
   )
-  if (res.rows.length === 0) return null;
-  return res.rows[0];
+  
+  if (orderRes.rows.length === 0) return null
+  
+  const currentStatus = orderRes.rows[0].payment_status
+  
+  // Validate status transition
+  if (!isValidPaymentStatusTransition(currentStatus, status)) {
+    throw new Error(`Invalid payment status transition from '${currentStatus}' to '${status}'`)
+  }
+
+  // Build update query dynamically
+  const updateFields = ['payment_status = $1', 'updated_at = CURRENT_TIMESTAMP']
+  const updateValues = [status]
+  let paramIndex = 2
+
+  if (reference_number !== undefined) {
+    updateFields.push(`payment_reference_number = $${paramIndex++}`)
+    updateValues.push(reference_number)
+  }
+
+  if (status === 'approved') {
+    updateFields.push(`reviewed_by = $${paramIndex++}`)
+    updateValues.push(admin_user_id || null)
+    updateFields.push(`reviewed_at = CURRENT_TIMESTAMP`)
+    updateFields.push(`rejection_reason = NULL`)
+  }
+
+  if (status === 'rejected' && rejection_reason) {
+    updateFields.push(`rejection_reason = $${paramIndex++}`)
+    updateValues.push(rejection_reason)
+  }
+
+  if (admin_notes) {
+    updateFields.push(`admin_notes = $${paramIndex++}`)
+    updateValues.push(admin_notes)
+  }
+
+  updateValues.push(orderId)
+
+  const res = await pool.query(
+    `UPDATE orders SET ${updateFields.join(', ')} WHERE order_id = $${paramIndex} RETURNING *`,
+    updateValues
+  )
+
+  const order = res.rows[0]
+
+  // Log to audit table if it exists
+  try {
+    await pool.query(
+      `INSERT INTO payment_audit_log (order_id, action, previous_status, new_status, admin_name, admin_email, reference_number, rejection_reason, admin_notes)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [
+        orderId,
+        status === 'approved' ? 'approved' : status === 'rejected' ? 'rejected' : 'reviewed',
+        currentStatus,
+        status,
+        admin_name,
+        admin_email,
+        reference_number,
+        rejection_reason,
+        admin_notes
+      ]
+    )
+  } catch (auditErr) {
+    // Log but don't fail if audit table doesn't exist
+    console.warn('Payment audit log not available:', auditErr.message)
+  }
+
+  return order
+}
+
+exports.approvePayment = async (orderId, options = {}) => {
+  const { admin_name, admin_email, admin_user_id } = options
+  
+  // Get current status first
+  const currentRes = await pool.query(
+    'SELECT payment_status FROM orders WHERE order_id = $1',
+    [orderId]
+  )
+  
+  if (currentRes.rows.length === 0) return null
+  
+  const currentStatus = currentRes.rows[0].payment_status
+  
+  // Validate transition to approved
+  if (!isValidPaymentStatusTransition(currentStatus, 'approved')) {
+    throw new Error(`Cannot approve payment with current status: ${currentStatus}`)
+  }
+  
+  const res = await pool.query(
+    `UPDATE orders SET 
+      payment_status = 'approved', 
+      reviewed_by = $1, 
+      reviewed_at = CURRENT_TIMESTAMP,
+      rejection_reason = NULL,
+      updated_at = CURRENT_TIMESTAMP 
+    WHERE order_id = $2 RETURNING *`,
+    [admin_user_id || null, orderId]
+  )
+  
+  const order = res.rows[0]
+  
+  // Log audit
+  try {
+    await pool.query(
+      `INSERT INTO payment_audit_log (order_id, action, previous_status, new_status, admin_name, admin_email)
+       VALUES ($1, 'approved', $2, 'approved', $3, $4)`,
+      [orderId, currentStatus, admin_name, admin_email]
+    )
+  } catch (auditErr) {
+    console.warn('Payment audit log not available:', auditErr.message)
+  }
+  
+  return order
 }
 
 exports.updateShipment = async (orderId, shipmentData) => {

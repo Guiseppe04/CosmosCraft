@@ -23,7 +23,14 @@ CREATE TYPE payment_status_enum AS ENUM (
   'cancelled',
   'refunded'
 );
-CREATE TYPE order_payment_status_enum AS ENUM ('paid', 'pending', 'awaiting_approval', 'failed');
+CREATE TYPE order_payment_status_enum AS ENUM (
+    'pending',              -- order created, no payment submitted yet
+    'proof_submitted',    -- customer uploaded proof of payment
+    'under_review',       -- admin is currently checking the proof
+    'approved',           -- payment verified by admin
+    'rejected',           -- proof invalid / denied
+    'failed'              -- payment attempt failed (optional fallback)
+);
 CREATE TYPE appointment_status_enum AS ENUM ('pending', 'approved', 'completed', 'cancelled');
 CREATE TYPE project_status_enum AS ENUM ('not_started', 'in_progress', 'completed');
 CREATE TYPE notification_type_enum AS ENUM ('order_update', 'appointment_reminder', 'system', 'promotional');
@@ -1417,3 +1424,84 @@ BEGIN
         CHECK (currency ~ '^[A-Z]{3}$');
     END IF;
 END $$;
+
+
+-- =============================================
+-- PAYMENT VERIFICATION WORKFLOW TABLES
+-- =============================================
+
+-- Payment Audit Log for tracking admin actions
+CREATE TABLE IF NOT EXISTS payment_audit_log (
+    audit_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    order_id UUID NOT NULL,
+    payment_id UUID,
+    action VARCHAR(50) NOT NULL,
+    previous_status VARCHAR(50),
+    new_status VARCHAR(50) NOT NULL,
+    admin_name TEXT,
+    admin_email TEXT,
+    reference_number VARCHAR(100),
+    rejection_reason TEXT,
+    admin_notes TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    
+    FOREIGN KEY (order_id) REFERENCES orders(order_id) ON DELETE CASCADE,
+    FOREIGN KEY (payment_id) REFERENCES payments(payment_id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_payment_audit_order_id ON payment_audit_log(order_id);
+CREATE INDEX IF NOT EXISTS idx_payment_audit_created_at ON payment_audit_log(created_at DESC);
+
+
+-- =============================================
+-- MIGRATION: Add columns to orders for payment verification
+-- =============================================
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'orders' AND column_name = 'payment_reference_number'
+    ) THEN
+        ALTER TABLE orders ADD COLUMN payment_reference_number VARCHAR(100);
+    END IF;
+    
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'orders' AND column_name = 'proof_submitted_at'
+    ) THEN
+        ALTER TABLE orders ADD COLUMN proof_submitted_at TIMESTAMPTZ;
+    END IF;
+    
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'orders' AND column_name = 'reviewed_by'
+    ) THEN
+        ALTER TABLE orders ADD COLUMN reviewed_by UUID;
+    END IF;
+    
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'orders' AND column_name = 'reviewed_at'
+    ) THEN
+        ALTER TABLE orders ADD COLUMN reviewed_at TIMESTAMPTZ;
+    END IF;
+    
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'orders' AND column_name = 'rejection_reason'
+    ) THEN
+        ALTER TABLE orders ADD COLUMN rejection_reason TEXT;
+    END IF;
+    
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'orders' AND column_name = 'admin_notes'
+    ) THEN
+        ALTER TABLE orders ADD COLUMN admin_notes TEXT;
+    END IF;
+END $$;
+
+CREATE INDEX IF NOT EXISTS idx_orders_payment_reference ON orders(payment_reference_number);
+CREATE INDEX IF NOT EXISTS idx_orders_proof_submitted_at ON orders(proof_submitted_at) WHERE proof_submitted_at IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_orders_reviewed_at ON orders(reviewed_at) WHERE reviewed_at IS NOT NULL;

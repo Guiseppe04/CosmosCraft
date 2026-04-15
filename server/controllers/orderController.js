@@ -112,16 +112,35 @@ exports.cancelMyOrder = asyncHandler(async (req, res, next) => {
 })
 
 exports.updatePaymentStatus = asyncHandler(async (req, res, next) => {
-  const { status } = req.body
+  const { status, reference_number, rejection_reason, admin_notes } = req.body
   if (!status) throw new AppError('Payment status is required', 400)
 
-  const order = await orderService.updatePaymentStatus(req.params.id, status)
+  const adminUserId = req.user?.user_id || req.user?.id
+  const adminName = req.user?.first_name ? `${req.user.first_name}${req.user.last_name ? ' ' + req.user.last_name : ''}` : null
+  const adminEmail = req.user?.email
+
+  const order = await orderService.updatePaymentStatus(req.params.id, status, {
+    reference_number,
+    admin_name: adminName,
+    admin_email: adminEmail,
+    rejection_reason,
+    admin_notes,
+    admin_user_id: adminUserId
+  })
   if (!order) throw new AppError('Order not found', 404)
   res.status(200).json({ status: 'success', data: order })
 })
 
 exports.approvePayment = asyncHandler(async (req, res, next) => {
-  const order = await orderService.approvePayment(req.params.id)
+  const adminUserId = req.user?.user_id || req.user?.id
+  const adminName = req.user?.first_name ? `${req.user.first_name}${req.user.last_name ? ' ' + req.user.last_name : ''}` : null
+  const adminEmail = req.user?.email
+
+  const order = await orderService.approvePayment(req.params.id, {
+    admin_name: adminName,
+    admin_email: adminEmail,
+    admin_user_id: adminUserId
+  })
   if (!order) throw new AppError('Order not found', 404)
   res.status(200).json({ status: 'success', data: order })
 })

@@ -88,7 +88,7 @@ export const adminApi = {
   getMyOrders: () => request('/api/orders/my'),
   getOrder: (id) => request(`/api/orders/${id}`),
   updateOrder: (id, body) => request(`/api/orders/${id}`, { method: 'PUT', body }),
-  updatePaymentStatus: (id, status) => request(`/api/orders/${id}/payment-status`, { method: 'PUT', body: { status } }),
+  updatePaymentStatus: (id, status, options = {}) => request(`/api/orders/${id}/payment-status`, { method: 'PUT', body: { status, ...options } }),
   cancelOrder: (id) => request(`/api/orders/${id}/cancel`, { method: 'POST' }),
   cancelMyOrder: (id) => request(`/api/orders/my/${id}/cancel`, { method: 'POST' }),
 
