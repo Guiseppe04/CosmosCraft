@@ -148,6 +148,393 @@ function CategoryTreeRow({ category, expandedIds, onToggle, onEdit, onDelete, ca
 }
 
 const VALID_ROLES = ['customer', 'staff', 'admin', 'super_admin']
+const GUITAR_TYPE_LABELS = {
+  electric: 'Electric Guitar',
+  acoustic: 'Acoustic Guitar',
+  bass: 'Bass Guitar',
+  ukulele: 'Ukulele',
+  general: 'General Parts',
+}
+const PART_CATEGORY_LABELS = {
+  body: 'Body',
+  neck: 'Neck',
+  fretboard: 'Fretboard',
+  headstock: 'Headstock',
+  hardware: 'Hardware',
+  bridge: 'Bridge',
+  knobs: 'Knobs',
+  pickups: 'Pickups',
+  pickguard: 'Pickguard',
+  wood_type: 'Wood Type',
+  finish: 'Finish',
+  inlays: 'Inlays',
+  misc: 'Miscellaneous',
+}
+const PART_CATEGORIES_BY_GUITAR_TYPE = {
+  electric: ['body', 'neck', 'fretboard', 'headstock', 'hardware', 'bridge', 'knobs', 'pickups', 'pickguard', 'wood_type', 'finish', 'inlays', 'misc'],
+  acoustic: ['body', 'neck', 'fretboard', 'headstock', 'hardware', 'bridge', 'knobs', 'pickups', 'pickguard', 'wood_type', 'finish', 'inlays', 'misc'],
+  bass: ['body', 'neck', 'fretboard', 'headstock', 'hardware', 'bridge', 'knobs', 'pickups', 'pickguard', 'wood_type', 'finish', 'inlays', 'misc'],
+  ukulele: ['body', 'neck', 'fretboard', 'headstock', 'hardware', 'bridge', 'knobs', 'pickups', 'wood_type', 'finish', 'misc'],
+  general: ['body', 'neck', 'fretboard', 'headstock', 'hardware', 'bridge', 'knobs', 'pickups', 'pickguard', 'wood_type', 'finish', 'inlays', 'misc'],
+}
+
+function GuitarPartAccordion({ parts, expandedGuitarTypes, onToggleGuitarType, expandedPartCategories, onTogglePartCategory, onEdit, onDelete, onQuickAdd, density }) {
+  const guitarTypes = ['electric', 'acoustic', 'bass', 'general']
+  const densityClass = density === 'compact' ? 'text-xs' : 'text-sm'
+  
+  const getPartsByGuitarTypeAndCategory = (guitarType, category) => {
+    if (guitarType === 'general') {
+      return parts.filter(p => 
+        (!p.guitar_type || p.guitar_type === 'general' || p.guitar_type === '') && 
+        (p.part_category || 'misc') === category
+      )
+    }
+    return parts.filter(p => 
+      p.guitar_type === guitarType && 
+      (p.part_category || 'misc') === category
+    )
+  }
+
+  return (
+    <div className="space-y-3">
+      {guitarTypes.map(guitarType => {
+        const isExpanded = expandedGuitarTypes.has(guitarType)
+        const typeLabel = GUITAR_TYPE_LABELS[guitarType] || guitarType
+        const categories = PART_CATEGORIES_BY_GUITAR_TYPE[guitarType] || []
+        
+        return (
+          <div key={guitarType} className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl overflow-hidden">
+            <button
+              onClick={() => onToggleGuitarType(guitarType)}
+              className="w-full flex items-center justify-between px-5 py-4 hover:bg-white/5 transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-[var(--gold-primary)]/20 flex items-center justify-center">
+                  <Guitar className="w-5 h-5 text-[var(--gold-primary)]" />
+                </div>
+                <div className="text-left">
+                  <h4 className="text-white font-semibold">{typeLabel}</h4>
+                  <p className="text-[var(--text-muted)] text-xs">
+                    {parts.filter(p => p.guitar_type === guitarType).length} parts
+                  </p>
+                </div>
+              </div>
+              {isExpanded ? (
+                <ChevronUp className="w-5 h-5 text-[var(--text-muted)]" />
+              ) : (
+                <ChevronDown className="w-5 h-5 text-[var(--text-muted)]" />
+              )}
+            </button>
+            
+            <AnimatePresence>
+              {isExpanded && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  className="border-t border-[var(--border)]"
+                >
+                  <div className="p-4 space-y-2">
+                    {categories.map(category => {
+                      const categoryParts = getPartsByGuitarTypeAndCategory(guitarType, category)
+                      const isCategoryExpanded = expandedPartCategories.has(`${guitarType}-${category}`)
+                      const categoryLabel = PART_CATEGORY_LABELS[category] || category
+                      
+                      if (categoryParts.length === 0) return null
+                      
+                      return (
+                        <div key={category} className="border border-[var(--border)] rounded-xl overflow-hidden">
+                          <button
+                            onClick={() => onTogglePartCategory(`${guitarType}-${category}`)}
+                            className="w-full flex items-center justify-between px-4 py-3 hover:bg-white/5 transition-colors bg-[var(--bg-primary)]/50"
+                          >
+                            <div className="flex items-center gap-2">
+                              {isCategoryExpanded ? (
+                                <ChevronDown className="w-4 h-4 text-[var(--gold-primary)]" />
+                              ) : (
+                                <ChevronRight className="w-4 h-4 text-[var(--gold-primary)]" />
+                              )}
+                              <span className="text-white font-medium">{categoryLabel}</span>
+                              <span className="px-2 py-0.5 rounded-full text-xs bg-[var(--bg-primary)] text-[var(--text-muted)]">
+                                {categoryParts.length}
+                              </span>
+                            </div>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); onQuickAdd(guitarType, category) }}
+                              className="p-1.5 hover:bg-[var(--gold-primary)]/20 rounded-lg transition-colors"
+                              title="Quick add part"
+                            >
+                              <Plus className="w-4 h-4 text-[var(--gold-primary)]" />
+                            </button>
+                          </button>
+                          
+                          <AnimatePresence>
+                            {isCategoryExpanded && (
+                              <motion.div
+                                initial={{ height: 0, opacity: 0 }}
+                                animate={{ height: 'auto', opacity: 1 }}
+                                exit={{ height: 0, opacity: 0 }}
+                                className="border-t border-[var(--border)]"
+                              >
+                                <div className={`p-3 space-y-2 ${density === 'compact' ? 'p-2' : 'p-3'}`}>
+                                  {categoryParts.map(part => (
+                                    <div
+                                      key={part.part_id}
+                                      className="flex items-center justify-between p-2 rounded-lg bg-[var(--bg-primary)]/50 hover:bg-[var(--gold-primary)]/10 transition-colors group"
+                                    >
+                                      <div className="flex items-center gap-3 min-w-0">
+                                        {part.image_url ? (
+                                          <img src={part.image_url} alt={part.name} className="w-8 h-8 rounded object-contain border border-[var(--border)]" />
+                                        ) : (
+                                          <div className="w-8 h-8 rounded bg-[var(--surface-dark)] flex items-center justify-center border border-[var(--border)]">
+                                            <Guitar className="w-4 h-4 text-[var(--text-muted)]" />
+                                          </div>
+                                        )}
+                                        <div className="min-w-0">
+                                          <p className={`text-white truncate ${densityClass}`}>{part.name}</p>
+                                          <p className="text-[var(--gold-primary)] text-xs">{formatCurrency(part.price)}</p>
+                                        </div>
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <span className={`px-2 py-0.5 rounded-full text-xs ${part.is_active ? 'bg-green-500/20 text-green-400' : 'bg-gray-500/20 text-gray-400'}`}>
+                                          {part.is_active ? 'Active' : 'Inactive'}
+                                        </span>
+                                        <span className="text-[var(--text-muted)] text-xs">{part.quantity ?? 0} in stock</span>
+                                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                          <button onClick={() => onEdit(part)} className="p-1.5 hover:bg-[var(--gold-primary)]/20 rounded" title="Edit">
+                                            <Edit className="w-3.5 h-3.5 text-[var(--text-muted)]" />
+                                          </button>
+                                          <button onClick={() => onDelete(part.part_id, part.name)} className="p-1.5 hover:bg-red-500/20 rounded" title="Delete">
+                                            <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                                          </button>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function GuitarPartTableView({ parts, onEdit, onDelete, density, sortConfig, onSort }) {
+  const densityClass = density === 'compact' ? 'text-xs py-2' : 'text-sm py-3'
+  const [selectedParts, setSelectedParts] = useState(new Set())
+  
+  const handleSort = (column) => {
+    if (onSort) {
+      onSort(column)
+    }
+  }
+
+  const toggleSelectAll = () => {
+    if (selectedParts.size === parts.length) {
+      setSelectedParts(new Set())
+    } else {
+      setSelectedParts(new Set(parts.map(p => p.part_id)))
+    }
+  }
+
+  const toggleSelect = (partId) => {
+    const next = new Set(selectedParts)
+    if (next.has(partId)) {
+      next.delete(partId)
+    } else {
+      next.add(partId)
+    }
+    setSelectedParts(next)
+  }
+
+  return (
+    <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full">
+          <thead>
+            <tr className="border-b border-[var(--border)] bg-[var(--bg-primary)]/50">
+              <th className="px-4 py-3 text-left">
+                <input 
+                  type="checkbox" 
+                  checked={selectedParts.size === parts.length && parts.length > 0}
+                  onChange={toggleSelectAll}
+                  className="rounded border-[var(--border)]"
+                />
+              </th>
+              <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold cursor-pointer hover:text-white" onClick={() => handleSort('name')}>
+                Part Name {sortConfig?.sortBy === 'name' && (sortConfig.sortDir === 'asc' ? <ArrowUp className="w-3 h-3 inline" /> : <ArrowDown className="w-3 h-3 inline" />)}
+              </th>
+              <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold cursor-pointer hover:text-white" onClick={() => handleSort('guitar_type')}>
+                Guitar Type {sortConfig?.sortBy === 'guitar_type' && (sortConfig.sortDir === 'asc' ? <ArrowUp className="w-3 h-3 inline" /> : <ArrowDown className="w-3 h-3 inline" />)}
+              </th>
+              <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold cursor-pointer hover:text-white" onClick={() => handleSort('part_category')}>
+                Category {sortConfig?.sortBy === 'part_category' && (sortConfig.sortDir === 'asc' ? <ArrowUp className="w-3 h-3 inline" /> : <ArrowDown className="w-3 h-3 inline" />)}
+              </th>
+              <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold cursor-pointer hover:text-white" onClick={() => handleSort('price')}>
+                Price {sortConfig?.sortBy === 'price' && (sortConfig.sortDir === 'asc' ? <ArrowUp className="w-3 h-3 inline" /> : <ArrowDown className="w-3 h-3 inline" />)}
+              </th>
+              <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold">Stock</th>
+              <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold">Status</th>
+              <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {parts.map(part => (
+              <tr key={part.part_id} className="border-b border-[var(--border)] hover:bg-[var(--bg-primary)]/50 transition-colors">
+                <td className="px-4">
+                  <input 
+                    type="checkbox" 
+                    checked={selectedParts.has(part.part_id)}
+                    onChange={() => toggleSelect(part.part_id)}
+                    className="rounded border-[var(--border)]"
+                  />
+                </td>
+                <td className={`px-4 ${densityClass}`}>
+                  <div className="flex items-center gap-3">
+                    {part.image_url ? (
+                      <img src={part.image_url} alt={part.name} className="w-8 h-8 rounded object-contain border border-[var(--border)]" />
+                    ) : (
+                      <div className="w-8 h-8 rounded bg-[var(--surface-dark)] flex items-center justify-center border border-[var(--border)]">
+                        <Guitar className="w-4 h-4 text-[var(--text-muted)]" />
+                      </div>
+                    )}
+                    <span className="text-white font-medium truncate max-w-[200px]">{part.name}</span>
+                  </div>
+                </td>
+                <td className={`px-4 ${densityClass}`}>
+                  <span className="px-2 py-1 rounded-full text-xs bg-[var(--gold-primary)]/20 text-[var(--gold-primary)] border border-[var(--gold-primary)]/30 capitalize">
+                    {GUITAR_TYPE_LABELS[part.guitar_type] || part.guitar_type}
+                  </span>
+                </td>
+                <td className={`px-4 ${densityClass} text-[var(--text-muted)] capitalize`}>
+                  {PART_CATEGORY_LABELS[part.part_category] || part.part_category || '—'}
+                </td>
+                <td className={`px-4 ${densityClass} text-[var(--gold-primary)] font-semibold`}>
+                  {formatCurrency(part.price)}
+                </td>
+                <td className={`px-4 ${densityClass}`}>
+                  <span className={(part.quantity ?? 0) > 0 ? 'text-green-400' : 'text-red-400'}>
+                    {part.quantity ?? 0}
+                  </span>
+                </td>
+                <td className={`px-4 ${densityClass}`}>
+                  <span className={`px-2 py-1 rounded-full text-xs font-semibold ${part.is_active ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'bg-gray-500/20 text-gray-400 border border-gray-500/30'}`}>
+                    {part.is_active ? 'Active' : 'Inactive'}
+                  </span>
+                </td>
+                <td className={`px-4 ${densityClass}`}>
+                  <div className="flex gap-2">
+                    <button onClick={() => onEdit(part)} className="p-2 hover:bg-[var(--gold-primary)]/10 rounded-lg transition-colors" title="Edit">
+                      <Edit className="w-4 h-4 text-[var(--text-muted)]" />
+                    </button>
+                    <button onClick={() => onDelete(part.part_id, part.name)} className="p-2 hover:bg-red-500/10 rounded-lg transition-colors" title="Delete">
+                      <Trash2 className="w-4 h-4 text-red-400" />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {parts.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-16">
+          <Layers className="w-12 h-12 text-[var(--text-muted)] mb-4" />
+          <p className="text-[var(--text-muted)]">No parts found</p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function GuitarPartsStickyHeader({ viewMode, setViewMode, density, setDensity, searchQuery, setSearchQuery, onAddPart, onClearFilters, partQuery }) {
+  return (
+    <div className="sticky top-0 z-20 bg-[var(--bg-primary)]/95 backdrop-blur-md border-b border-[var(--border)] pb-4 mb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+        <div>
+          <h3 className="text-white text-xl font-semibold">Guitar Parts (Builder Catalog)</h3>
+          <p className="text-[var(--text-muted)] text-sm">Manage parts aligned with builder slots used in customization pages.</p>
+        </div>
+        <button
+          onClick={onAddPart}
+          className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black rounded-xl font-semibold text-sm hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all"
+        >
+          <Plus className="w-4 h-4" />
+          Add Part
+        </button>
+      </div>
+      
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex-1 min-w-[200px]">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
+            <input
+              type="text"
+              placeholder="Search parts..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-2.5 bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
+            />
+          </div>
+        </div>
+        
+        <div className="flex items-center gap-2 bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl p-1">
+          <button
+            onClick={() => setViewMode('tree')}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${viewMode === 'tree' ? 'bg-[var(--gold-primary)] text-black' : 'text-[var(--text-muted)] hover:text-white'}`}
+          >
+            <div className="flex items-center gap-1.5">
+              <Layers className="w-4 h-4" />
+              Tree
+            </div>
+          </button>
+          <button
+            onClick={() => setViewMode('table')}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${viewMode === 'table' ? 'bg-[var(--gold-primary)] text-black' : 'text-[var(--text-muted)] hover:text-white'}`}
+          >
+            <div className="flex items-center gap-1.5">
+              <List className="w-4 h-4" />
+              Table
+            </div>
+          </button>
+        </div>
+
+        <div className="flex items-center gap-2 bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl p-1">
+          <button
+            onClick={() => setDensity('comfortable')}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${density === 'comfortable' ? 'bg-[var(--gold-primary)] text-black' : 'text-[var(--text-muted)] hover:text-white'}`}
+          >
+            Comfortable
+          </button>
+          <button
+            onClick={() => setDensity('compact')}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${density === 'compact' ? 'bg-[var(--gold-primary)] text-black' : 'text-[var(--text-muted)] hover:text-white'}`}
+          >
+            Compact
+          </button>
+        </div>
+        
+        <button
+          onClick={onClearFilters}
+          className="px-3 py-2 rounded-lg border border-[var(--border)] text-sm text-[var(--text-muted)] hover:text-white hover:border-[var(--gold-primary)] transition-colors"
+        >
+          Clear filters
+        </button>
+      </div>
+    </div>
+  )
+}
+
 const APPOINTMENT_BRANCH_STORAGE_KEY = 'cosmoscraft.appointment.branch'
 const DEFAULT_APPOINTMENT_BRANCH = {
   id: 'balagtas-main',
@@ -397,7 +784,7 @@ export function AdminPage() {
   })
   const [partQuery, setPartQuery] = useState({
     page: 1,
-    pageSize: 10,
+    pageSize: 100,
     sortBy: 'created_at',
     sortDir: 'desc',
     guitar_type: '',
@@ -450,6 +837,13 @@ export function AdminPage() {
 
   // Category tree expand/collapse state
   const [expandedCategoryIds, setExpandedCategoryIds] = useState(new Set())
+
+  // Guitar Parts section state
+  const [guitarPartViewMode, setGuitarPartViewMode] = useState('tree')
+  const [expandedGuitarTypes, setExpandedGuitarTypes] = useState(new Set(['electric', 'general']))
+  const [expandedPartCategories, setExpandedPartCategories] = useState(new Set())
+  const [partDensity, setPartDensity] = useState('comfortable')
+  const [partSearchQuery, setPartSearchQuery] = useState('')
 
   // Message panel
   const [messagePanelOpen, setMessagePanelOpen] = useState(false)
@@ -662,13 +1056,14 @@ export function AdminPage() {
     try {
       const res = await adminApi.getBuilderParts({
         search: debouncedSearch,
-        ...partQuery,
+        page: 1,
+        pageSize: 500,
       })
       updateIfChanged(parts, res.data || [], setParts)
-      setPartsPagination(res.pagination || { page: 1, pageSize: 10, total: 0, totalPages: 1 })
+      setPartsPagination(res.pagination || { page: 1, pageSize: 500, total: 0, totalPages: 1 })
     } catch (e) { showToast(e.message, 'error') }
     finally { setPartsLoading(false) }
-  }, [debouncedSearch, partQuery, showToast, parts])
+  }, [debouncedSearch, showToast, parts])
 
   const fetchUsers = useCallback(async () => {
     try {
@@ -905,6 +1300,81 @@ export function AdminPage() {
       return next
     })
   }
+
+  const toggleGuitarType = (guitarType) => {
+    setExpandedGuitarTypes(prev => {
+      const next = new Set(prev)
+      if (next.has(guitarType)) {
+        next.delete(guitarType)
+      } else {
+        next.add(guitarType)
+      }
+      return next
+    })
+  }
+
+  const togglePartCategory = (categoryKey) => {
+    setExpandedPartCategories(prev => {
+      const next = new Set(prev)
+      if (next.has(categoryKey)) {
+        next.delete(categoryKey)
+      } else {
+        next.add(categoryKey)
+      }
+      return next
+    })
+  }
+
+  const handleQuickAddPart = (guitarType, category) => {
+    openModal('part', { guitar_type: guitarType, part_category: category })
+  }
+
+  const clearPartFilters = () => {
+    setPartQuery({ page: 1, pageSize: partQuery.pageSize, sortBy: 'created_at', sortDir: 'desc', guitar_type: '', part_category: '', is_active: '', min_price: '', max_price: '' })
+    setPartSearchQuery('')
+  }
+
+  const filteredParts = useMemo(() => {
+    let result = [...visibleParts]
+    if (partSearchQuery) {
+      const q = partSearchQuery.toLowerCase()
+      result = result.filter(p => 
+        p.name?.toLowerCase().includes(q) || 
+        p.part_category?.toLowerCase().includes(q) ||
+        p.guitar_type?.toLowerCase().includes(q)
+      )
+    }
+    return result
+  }, [visibleParts, partSearchQuery])
+
+  const [partSortConfig, setPartSortConfig] = useState({ sortBy: 'name', sortDir: 'asc' })
+
+  const handlePartSort = (column) => {
+    setPartSortConfig(prev => ({
+      sortBy: column,
+      sortDir: prev.sortBy === column && prev.sortDir === 'asc' ? 'desc' : 'asc'
+    }))
+  }
+
+  const sortedFilteredParts = useMemo(() => {
+    const sorted = [...filteredParts]
+    const { sortBy, sortDir } = partSortConfig
+    sorted.sort((a, b) => {
+      let aVal = a[sortBy] ?? ''
+      let bVal = b[sortBy] ?? ''
+      if (sortBy === 'price') {
+        aVal = Number(aVal) || 0
+        bVal = Number(bVal) || 0
+      } else {
+        aVal = String(aVal).toLowerCase()
+        bVal = String(bVal).toLowerCase()
+      }
+      if (aVal < bVal) return sortDir === 'asc' ? -1 : 1
+      if (aVal > bVal) return sortDir === 'asc' ? 1 : -1
+      return 0
+    })
+    return sorted
+  }, [filteredParts, partSortConfig])
 
   // ── CRUD: Builder Parts ──────────────────────────────────────────────────
   const savePart = async () => {
@@ -1719,108 +2189,47 @@ export function AdminPage() {
 
           {/* ── GUITAR PARTS ───────────────────────────────────────────── */}
           {activeTab === 'guitar-parts' && (
-            <motion.div key="guitar-parts" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+            <motion.div key="guitar-parts" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mt-10">
+              <GuitarPartsStickyHeader
+                viewMode={guitarPartViewMode}
+                setViewMode={setGuitarPartViewMode}
+                density={partDensity}
+                setDensity={setPartDensity}
+                searchQuery={partSearchQuery}
+                setSearchQuery={setPartSearchQuery}
+                onAddPart={() => openModal('part')}
+                onClearFilters={clearPartFilters}
+                partQuery={partQuery}
+              />
 
-              {/* Builder Parts Section */}
-              <div className="flex justify-between items-center mb-4 mt-10">
-                <div>
-                  <h3 className="text-white text-xl font-semibold">Guitar Parts (Builder Catalog)</h3>
-                  <p className="text-[var(--text-muted)] text-sm">Align parts with builder slots used in customization pages.</p>
-                </div>
-              </div>
-              <div className="mb-3 flex justify-end">
-                <button
-                  type="button"
-                  onClick={() => setPartQuery({ page: 1, pageSize: partQuery.pageSize, sortBy: 'created_at', sortDir: 'desc', guitar_type: '', part_category: '', is_active: '', min_price: '', max_price: '' })}
-                  className="px-3 py-2 rounded-lg border border-[var(--border)] text-sm text-[var(--text-muted)] hover:text-white hover:border-[var(--gold-primary)] transition-colors"
-                >
-                  Clear part filters
-                </button>
-              </div>
-              <div className="mb-4 p-4 rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)]/70 backdrop-blur-sm">
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-7 gap-3">
-                  <select aria-label="Filter parts by guitar type" value={partQuery.guitar_type} onChange={(e) => setPartQuery((prev) => ({ ...prev, page: 1, guitar_type: e.target.value }))} className={inputCls}>
-                    <option value="">All guitar types</option>
-                    {guitarTypeOptions.map((val) => <option key={val} value={val}>{val}</option>)}
-                  </select>
-                  <select aria-label="Filter parts by category" value={partQuery.part_category} onChange={(e) => setPartQuery((prev) => ({ ...prev, page: 1, part_category: e.target.value }))} className={inputCls}>
-                    <option value="">All categories</option>
-                    {partCategoryOptions.map((val) => <option key={val} value={val}>{val}</option>)}
-                  </select>
-                  <select aria-label="Filter parts by status" value={partQuery.is_active} onChange={(e) => setPartQuery((prev) => ({ ...prev, page: 1, is_active: e.target.value }))} className={inputCls}>
-                    <option value="">All statuses</option>
-                    <option value="true">Active</option>
-                    <option value="false">Inactive</option>
-                  </select>
-                  <select aria-label="Sort parts" value={`${partQuery.sortBy}:${partQuery.sortDir}`} onChange={(e) => {
-                    const [sortBy, sortDir] = e.target.value.split(':')
-                    setPartQuery((prev) => ({ ...prev, page: 1, sortBy, sortDir }))
-                  }} className={inputCls}>
-                    <option value="created_at:desc">Newest first</option>
-                    <option value="created_at:asc">Oldest first</option>
-                    <option value="name:asc">Name A-Z</option>
-                    <option value="name:desc">Name Z-A</option>
-                    <option value="price:asc">Price: Low to High</option>
-                    <option value="price:desc">Price: High to Low</option>
-                  </select>
-                  <select aria-label="Parts page size" value={partQuery.pageSize} onChange={(e) => setPartQuery((prev) => ({ ...prev, page: 1, pageSize: Number(e.target.value) }))} className={inputCls}>
-                    {PAGE_SIZE_OPTIONS.map((n) => <option key={n} value={n}>{n} per page</option>)}
-                  </select>
-                </div>
-              </div>
               {partsLoading ? (
                 <SectionLoader label="Loading builder parts..." />
               ) : (
-                <AdminTable
-                  columns={['Asset', 'Part Name', 'Guitar Type', 'Category', 'Stock', 'Upgrade Price', 'Status', 'Actions']}
-                  rows={visibleParts}
-                  renderRow={(part) => (
-                    <>
-                      <td className="py-4 px-6">
-                        {part.image_url ? (
-                          <div className="w-12 h-12 relative flex items-center justify-center p-1 bg-black/30 rounded-lg overflow-hidden border border-[var(--border)]">
-                            <img src={part.image_url} alt={part.name} className="max-w-full max-h-full object-contain drop-shadow-md" loading="lazy" />
-                          </div>
-                        ) : (
-                          <div className="w-12 h-12 bg-[var(--bg-primary)] border border-[var(--border)] rounded-lg flex items-center justify-center">
-                            <Guitar className="w-5 h-5 text-[var(--text-muted)]" />
-                          </div>
-                        )}
-                      </td>
-                      <td className="py-4 px-6 text-white font-semibold">{part.name}</td>
-                      <td className="py-4 px-6 text-[var(--text-muted)] capitalize">{part.guitar_type || '—'}</td>
-                      <td className="py-4 px-6 text-[var(--text-muted)] capitalize">{(part.part_category || part.type_mapping || '—').replace('_', ' ')}</td>
-                      <td className="py-4 px-6">
-                        <span className={part.stock > 0 ? 'text-green-400' : 'text-red-400'}>{part.stock}</span>
-                      </td>
-                      <td className="py-4 px-6 text-[var(--gold-primary)] font-bold text-lg">{formatCurrency(part.price)}</td>
-                      <td className="py-4 px-6">
-                        <span className={`px-2 py-1 rounded-full text-xs font-semibold border ${part.is_active ? 'bg-green-500/20 text-green-400 border-green-500/30' : 'bg-gray-500/20 text-gray-400 border-gray-500/30'}`}>
-                          {part.is_active ? 'Active' : 'Inactive'}
-                        </span>
-                      </td>
-                      <td className="py-4 px-6">
-                        <div className="flex gap-2">
-                          <button onClick={() => openModal('part', part)} className="p-2 hover:bg-[var(--gold-primary)]/10 rounded-lg transition-colors" aria-label={`View ${part.name}`}>
-                            <Eye className="w-4 h-4 text-[var(--text-muted)]" />
-                          </button>
-                          <button onClick={() => openModal('part', part)} className="p-2 hover:bg-[var(--gold-primary)]/10 rounded-lg transition-colors" aria-label={`Edit ${part.name}`}>
-                            <Edit className="w-4 h-4 text-[var(--text-muted)]" />
-                          </button>
-                          <button onClick={() => deletePart(part.part_id, part.name)} className="p-2 hover:bg-red-500/10 rounded-lg transition-colors" aria-label={`Deactivate ${part.name}`}>
-                            <Trash2 className="w-4 h-4 text-red-400" />
-                          </button>
-                        </div>
-                      </td>
-                    </>
+                <>
+                  {guitarPartViewMode === 'tree' ? (
+                    <GuitarPartAccordion
+                      parts={sortedFilteredParts}
+                      expandedGuitarTypes={expandedGuitarTypes}
+                      onToggleGuitarType={toggleGuitarType}
+                      expandedPartCategories={expandedPartCategories}
+                      onTogglePartCategory={togglePartCategory}
+                      onEdit={(part) => openModal('part', part)}
+                      onDelete={deletePart}
+                      onQuickAdd={handleQuickAddPart}
+                      density={partDensity}
+                    />
+                  ) : (
+                    <GuitarPartTableView
+                      parts={sortedFilteredParts}
+                      onEdit={(part) => openModal('part', part)}
+                      onDelete={deletePart}
+                      density={partDensity}
+                      sortConfig={partSortConfig}
+                      onSort={handlePartSort}
+                    />
                   )}
-                  empty={<EmptyState icon={Layers} label={debouncedSearch ? 'No builder parts match your search/filters' : 'No builder parts yet'} action={() => openModal('part')} actionLabel="Add Builder Part" />}
-                />
+                </>
               )}
-              <PaginationBar
-                pagination={partsPagination}
-                onPageChange={(nextPage) => setPartQuery((prev) => ({ ...prev, page: nextPage }))}
-              />
             </motion.div>
           )}
 
