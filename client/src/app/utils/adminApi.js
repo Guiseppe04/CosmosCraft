@@ -75,21 +75,29 @@ export const adminApi = {
   updateUserRole: (id, role) => request(`/api/users/${id}/role`, { method: 'PUT', body: { role } }),
   updateUserStatus: (id, is_active) => request(`/api/users/${id}/status`, { method: 'PUT', body: { is_active } }),
 
+  // User Profile
+  getProfile: () => request('/api/users/me'),
+  updateProfile: (body) => request('/api/users/me', { method: 'PUT', body }),
+  changePassword: (body) => request('/api/users/me/password', { method: 'PUT', body }),
+
   // Orders
   getOrders: (params = {}) => {
     const qs = new URLSearchParams(params).toString()
     return request(`/api/orders${qs ? '?' + qs : ''}`)
   },
+  getMyOrders: () => request('/api/orders/my'),
   getOrder: (id) => request(`/api/orders/${id}`),
   updateOrder: (id, body) => request(`/api/orders/${id}`, { method: 'PUT', body }),
   updatePaymentStatus: (id, status) => request(`/api/orders/${id}/payment-status`, { method: 'PUT', body: { status } }),
   cancelOrder: (id) => request(`/api/orders/${id}/cancel`, { method: 'POST' }),
+  cancelMyOrder: (id) => request(`/api/orders/my/${id}/cancel`, { method: 'POST' }),
 
   // Projects
   getProjects: (params = {}) => {
     const qs = new URLSearchParams(params).toString()
     return request(`/api/projects${qs ? '?' + qs : ''}`)
   },
+  getMyProjects: () => request('/api/projects/my'),
   getProject: (id) => request(`/api/projects/${id}`),
   createProject: (body) => request('/api/projects', { method: 'POST', body }),
   updateProject: (id, body) => request(`/api/projects/${id}`, { method: 'PUT', body }),
@@ -126,4 +134,26 @@ export const adminApi = {
   },
   markAlertAsRead: (alertId) => request(`/api/inventory/alerts/${alertId}/read`, { method: 'PATCH' }),
   getInventorySummary: () => request('/api/inventory/summary'),
+
+  // Reports
+  getSalesReport: (params = {}) => {
+    const qs = new URLSearchParams(params).toString()
+    return request(`/api/reports/sales${qs ? '?' + qs : ''}`)
+  },
+
+  // Project Hierarchy & Activity
+  getProjectHierarchy: (id) => request(`/api/projects/${id}/hierarchy`),
+  getProjectActivity: (id) => request(`/api/projects/${id}/activity`),
+
+  // Milestones & Subtasks
+  createMilestone: (projectId, body) => request(`/api/projects/${projectId}/milestones`, { method: 'POST', body }),
+  deleteMilestone: (projectId, milestoneId) => request(`/api/projects/${projectId}/milestones/${milestoneId}`, { method: 'DELETE' }),
+  createSubtask: (milestoneId, body) => request(`/api/milestones/${milestoneId}/subtasks`, { method: 'POST', body }),
+  deleteSubtask: (subtaskId) => request(`/api/subtasks/${subtaskId}`, { method: 'DELETE' }),
+  updateSubtask: (subtaskId, body) => request(`/api/subtasks/${subtaskId}`, { method: 'PUT', body }),
+
+  // User Addresses
+  updateAddress: (addressId, body) => request(`/api/users/me/addresses/${addressId}`, { method: 'PUT', body }),
+  addAddress: (body) => request('/api/users/me/addresses', { method: 'POST', body }),
+  deleteAddress: (addressId) => request(`/api/users/me/addresses/${addressId}`, { method: 'DELETE' }),
 }

@@ -125,3 +125,41 @@ exports.approvePayment = asyncHandler(async (req, res, next) => {
   if (!order) throw new AppError('Order not found', 404)
   res.status(200).json({ status: 'success', data: order })
 })
+
+exports.updateShipment = asyncHandler(async (req, res, next) => {
+  const { tracking_number, courier_name, rider_name, rider_contact } = req.body
+  
+  if (!tracking_number || !courier_name) {
+    throw new AppError('Tracking number and courier name are required', 400)
+  }
+  
+  const order = await orderService.updateShipment(req.params.id, {
+    tracking_number,
+    courier_name,
+    rider_name,
+    rider_contact
+  })
+  if (!order) throw new AppError('Order not found', 404)
+  res.status(200).json({ status: 'success', data: order })
+})
+
+exports.updateOutForDelivery = asyncHandler(async (req, res, next) => {
+  const { rider_name, rider_contact } = req.body
+  
+  if (!rider_name || !rider_contact) {
+    throw new AppError('Rider name and contact are required', 400)
+  }
+  
+  const order = await orderService.updateOutForDelivery(req.params.id, {
+    rider_name,
+    rider_contact
+  })
+  if (!order) throw new AppError('Order not found', 404)
+  res.status(200).json({ status: 'success', data: order })
+})
+
+exports.markDelivered = asyncHandler(async (req, res, next) => {
+  const order = await orderService.markDelivered(req.params.id)
+  if (!order) throw new AppError('Order not found', 404)
+  res.status(200).json({ status: 'success', data: order })
+})

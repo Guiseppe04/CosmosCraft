@@ -1,9 +1,23 @@
 const { pool } = require('../config/database')
 
-// Helper to validate UUID format
 const isValidUUID = (uuid) => {
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
   return uuidRegex.test(uuid)
+}
+
+const VALID_STATUS_TRANSITIONS = {
+  'pending': ['processing', 'cancelled'],
+  'processing': ['shipped', 'cancelled'],
+  'shipped': ['out_for_delivery', 'cancelled'],
+  'out_for_delivery': ['delivered', 'cancelled'],
+  'delivered': [],
+  'cancelled': []
+}
+
+const STATUS_FIELD_REQUIREMENTS = {
+  'shipped': ['tracking_number'],
+  'out_for_delivery': ['tracking_number', 'rider_name', 'rider_contact'],
+  'delivered': ['tracking_number']
 }
 
 exports.createOrder = async (orderData) => {
@@ -264,15 +278,58 @@ exports.getAllOrders = async (params = {}) => {
 }
 
 exports.updateOrder = async (orderId, updateData) => {
-  const { status, payment_status, notes } = updateData;
+  const { status, payment_status, notes, tracking_number, courier_name, shipped_at, out_for_delivery_at, delivered_at, rider_name, rider_contact } = updateData;
+  
+  if (status) {
+    const currentRes = await pool.query(
+      `SELECT status FROM orders WHERE order_id = $1`,
+      [orderId]
+    );
+    
+    if (currentRes.rows.length === 0) {
+      return null;
+    }
+    
+    const currentStatus = currentRes.rows[0].status;
+    const allowedTransitions = VALID_STATUS_TRANSITIONS[currentStatus] || [];
+    
+    if (!allowedTransitions.includes(status)) {
+      throw new Error(`Invalid status transition from '${currentStatus}' to '${status}'`);
+    }
+    
+    if (STATUS_FIELD_REQUIREMENTS[status]) {
+      const missingFields = STATUS_FIELD_REQUIREMENTS[status].filter(field => !updateData[field]);
+      if (missingFields.length > 0) {
+        throw new Error(`Missing required fields for status '${status}': ${missingFields.join(', ')}`);
+      }
+    }
+  }
+  
+  if (status === 'shipped' && !shipped_at && tracking_number) {
+    updateData.shipped_at = new Date();
+  }
+  if (status === 'out_for_delivery' && !out_for_delivery_at) {
+    updateData.out_for_delivery_at = new Date();
+  }
+  if (status === 'delivered' && !delivered_at) {
+    updateData.delivered_at = new Date();
+  }
+
   const res = await pool.query(
     `UPDATE orders 
      SET status = COALESCE($1, status),
          payment_status = COALESCE($2, payment_status),
          notes = COALESCE($3, notes),
+         tracking_number = COALESCE($4, tracking_number),
+         courier_name = COALESCE($5, courier_name),
+         shipped_at = COALESCE($6, shipped_at),
+         out_for_delivery_at = COALESCE($7, out_for_delivery_at),
+         delivered_at = COALESCE($8, delivered_at),
+         rider_name = COALESCE($9, rider_name),
+         rider_contact = COALESCE($10, rider_contact),
          updated_at = CURRENT_TIMESTAMP
-     WHERE order_id = $4 RETURNING *`,
-    [status, payment_status, notes, orderId]
+     WHERE order_id = $11 RETURNING *`,
+    [status, payment_status, notes, tracking_number, courier_name, shipped_at, out_for_delivery_at, delivered_at, rider_name, rider_contact, orderId]
   );
   if (res.rows.length === 0) return null;
   return res.rows[0];
@@ -293,6 +350,113 @@ exports.approvePayment = async (orderId) => {
     [orderId]
   )
   if (res.rows.length === 0) return null;
+  return res.rows[0];
+}
+
+exports.updateShipment = async (orderId, shipmentData) => {
+  const { tracking_number, courier_name, rider_name, rider_contact } = shipmentData;
+  
+  const orderRes = await pool.query(
+    `SELECT status, payment_status FROM orders WHERE order_id = $1`,
+    [orderId]
+  );
+  
+  if (orderRes.rows.length === 0) {
+    throw new Error('Order not found');
+  }
+  
+  const order = orderRes.rows[0];
+  
+  if (order.payment_status !== 'paid') {
+    throw new Error('Cannot ship order - payment not completed');
+  }
+  
+  const validShipStatuses = ['processing'];
+  if (!validShipStatuses.includes(order.status)) {
+    throw new Error(`Cannot ship order - current status is '${order.status}'. Order must be in 'processing' status to be shipped.`);
+  }
+  
+  if (!tracking_number || !courier_name) {
+    throw new Error('Tracking number and courier name are required for shipment');
+  }
+  
+  const res = await pool.query(
+    `UPDATE orders 
+     SET status = 'shipped',
+         tracking_number = $1,
+         courier_name = $2,
+         rider_name = $3,
+         rider_contact = $4,
+         shipped_at = CURRENT_TIMESTAMP,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE order_id = $5 RETURNING *`,
+    [tracking_number, courier_name, rider_name || null, rider_contact || null, orderId]
+  );
+  
+  return res.rows[0];
+}
+
+exports.updateOutForDelivery = async (orderId, riderData) => {
+  const { rider_name, rider_contact } = riderData;
+  
+  const orderRes = await pool.query(
+    `SELECT status FROM orders WHERE order_id = $1`,
+    [orderId]
+  );
+  
+  if (orderRes.rows.length === 0) {
+    throw new Error('Order not found');
+  }
+  
+  const order = orderRes.rows[0];
+  
+  if (order.status !== 'shipped') {
+    throw new Error(`Cannot mark as out for delivery - current status is '${order.status}'. Order must be in 'shipped' status.`);
+  }
+  
+  if (!rider_name || !rider_contact) {
+    throw new Error('Rider name and contact are required for out for delivery status');
+  }
+  
+  const res = await pool.query(
+    `UPDATE orders 
+     SET status = 'out_for_delivery',
+         rider_name = $1,
+         rider_contact = $2,
+         out_for_delivery_at = CURRENT_TIMESTAMP,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE order_id = $3 RETURNING *`,
+    [rider_name, rider_contact, orderId]
+  );
+  
+  return res.rows[0];
+}
+
+exports.markDelivered = async (orderId) => {
+  const orderRes = await pool.query(
+    `SELECT status FROM orders WHERE order_id = $1`,
+    [orderId]
+  );
+  
+  if (orderRes.rows.length === 0) {
+    throw new Error('Order not found');
+  }
+  
+  const order = orderRes.rows[0];
+  
+  if (order.status !== 'out_for_delivery') {
+    throw new Error(`Cannot mark as delivered - current status is '${order.status}'. Order must be in 'out_for_delivery' status.`);
+  }
+  
+  const res = await pool.query(
+    `UPDATE orders 
+     SET status = 'delivered',
+         delivered_at = CURRENT_TIMESTAMP,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE order_id = $1 RETURNING *`,
+    [orderId]
+  );
+  
   return res.rows[0];
 }
 

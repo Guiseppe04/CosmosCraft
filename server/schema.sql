@@ -13,7 +13,7 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE TYPE user_role_enum AS ENUM ('customer', 'staff', 'admin', 'super_admin');
 CREATE TYPE auth_provider_enum AS ENUM ('local', 'google', 'facebook');
 CREATE TYPE guitar_type_enum AS ENUM ('acoustic', 'electric', 'bass');
-CREATE TYPE order_status_enum AS ENUM ('pending', 'processing', 'completed', 'cancelled');
+CREATE TYPE order_status_enum AS ENUM ('pending', 'processing', 'shipped', 'out_for_delivery', 'delivered', 'cancelled');
 CREATE TYPE payment_method_enum AS ENUM ('gcash', 'bank_transfer', 'cash');
 CREATE TYPE payment_status_enum AS ENUM (
   'pending',
@@ -23,7 +23,7 @@ CREATE TYPE payment_status_enum AS ENUM (
   'cancelled',
   'refunded'
 );
-CREATE TYPE order_payment_status_enum AS ENUM ('pending', 'paid', 'failed');
+CREATE TYPE order_payment_status_enum AS ENUM ('paid', 'pending', 'awaiting_approval', 'failed');
 CREATE TYPE appointment_status_enum AS ENUM ('pending', 'approved', 'completed', 'cancelled');
 CREATE TYPE project_status_enum AS ENUM ('not_started', 'in_progress', 'completed');
 CREATE TYPE notification_type_enum AS ENUM ('order_update', 'appointment_reminder', 'system', 'promotional');
@@ -347,9 +347,15 @@ CREATE TABLE orders (
     status order_status_enum NOT NULL DEFAULT 'pending',
     payment_status order_payment_status_enum NOT NULL DEFAULT 'pending',
     notes TEXT,
+    tracking_number VARCHAR(100),
+    courier_name VARCHAR(100),
+    shipped_at TIMESTAMPTZ,
+    out_for_delivery_at TIMESTAMPTZ,
+    delivered_at TIMESTAMPTZ,
+    rider_name VARCHAR(100),
+    rider_contact VARCHAR(50),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    completed_at TIMESTAMPTZ,
     
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE SET NULL,
     FOREIGN KEY (shipping_address_id) REFERENCES addresses(address_id) ON DELETE SET NULL
@@ -359,6 +365,10 @@ CREATE INDEX idx_orders_order_number ON orders(order_number);
 CREATE INDEX idx_orders_user_id ON orders(user_id);
 CREATE INDEX idx_orders_status ON orders(status);
 CREATE INDEX idx_orders_created_at ON orders(created_at DESC);
+CREATE INDEX idx_orders_payment_status ON orders(payment_status);
+CREATE INDEX idx_orders_tracking_number ON orders(tracking_number);
+CREATE INDEX idx_orders_shipped_at ON orders(shipped_at) WHERE shipped_at IS NOT NULL;
+CREATE INDEX idx_orders_delivered_at ON orders(delivered_at) WHERE delivered_at IS NOT NULL;
 
 
 -- =============================================
