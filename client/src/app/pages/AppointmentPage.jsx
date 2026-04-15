@@ -97,7 +97,30 @@ const STEPS = [
   { id: 5, label: 'Confirmation' },
 ]
 
+// --- HOLIDAYS ---
+const HOLIDAYS = [
+  // Format: 'MM-DD' (month-day)
+  '01-01', // New Year's Day
+  '04-02', // Maundy Thursday
+  '04-03', // Good Friday
+  '04-09', // Araw ng Kagitingan
+  '05-01', // Labor Day
+  '06-12', // Independence Day
+  '08-31', // National Heroes Day
+  '11-30', // Bonifacio Day
+  '12-25', // Christmas Day
+  '12-30', // Rizal Day
+]
+
+const OPENING_YEAR = 2026
+
 // --- UTILS ---
+
+function isHoliday(date) {
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return HOLIDAYS.includes(`${month}-${day}`)
+}
 
 function getMonthMatrix(year, month, maxLeadTimeDays) {
   const firstDay = new Date(year, month, 1)
@@ -121,12 +144,15 @@ function getMonthMatrix(year, month, maxLeadTimeDays) {
 
       let id = null
       let isAvailable = false
+      let isHolidayDate = false
 
       if (inCurrentMonth) {
         id = date.toISOString().slice(0, 10)
-        const isPast = date < minAvailableDate
+        const isPast = date < today
+        const isTooSoon = date < minAvailableDate
         const isSunday = date.getDay() === 0
-        isAvailable = !isPast && !isSunday
+        isHolidayDate = isHoliday(date)
+        isAvailable = !isPast && !isTooSoon && !isSunday && !isHolidayDate
       }
 
       week.push({
@@ -134,6 +160,8 @@ function getMonthMatrix(year, month, maxLeadTimeDays) {
         dayNumber: inCurrentMonth ? date.getDate() : null,
         inCurrentMonth,
         isAvailable,
+        isHolidayDate,
+        isPastDate: inCurrentMonth ? date < today : false,
       })
     }
     weeks.push(week)
@@ -418,7 +446,7 @@ export function AppointmentPage() {
           <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
             <div>
                <h2 className="text-2xl font-bold text-white mb-2">Select Date and Time</h2>
-               <p className="text-sm text-[var(--text-muted)]">Due to current service volumes and your selected turnaround times, unavailable dates have been disabled.</p>
+               <p className="text-sm text-[var(--text-muted)]">Select an available date (Mon-Sat) and time. Sundays and official holidays are unavailable.</p>
              </div>
 
             <div className="bg-theme-surface-deep border border-[var(--border)] rounded-2xl p-6 shadow-xl">
@@ -465,10 +493,19 @@ export function AppointmentPage() {
 
                     const isSelected = selectedDateId === day.id
                     const isUnavailable = !day.isAvailable
+                    const isSunday = day.dayNumber && new Date(day.id).getDay() === 0
 
                     if (isUnavailable) {
+                      const disabledStyle = day.isHolidayDate
+                        ? 'text-[#FF3737]/80 bg-[#FF3737]/10 border border-[#FF3737]/20'
+                        : day.isPastDate
+                          ? 'text-[var(--text-muted)]/70 bg-[var(--surface-elevated)]/80 border border-[var(--border)]'
+                          : 'text-[var(--text-muted)]/60 bg-[var(--surface-elevated)]/80 border border-[var(--border)]'
+
                       return (
-                        <div key={day.id} className="flex items-center justify-center h-10 rounded-xl text-sm font-medium text-[var(--text-muted)] bg-[var(--surface-elevated)] cursor-not-allowed">
+                        <div 
+                          key={day.id}
+                          className={`flex items-center justify-center h-10 rounded-xl text-sm font-medium transition-colors ${disabledStyle} cursor-not-allowed`}>
                           {day.dayNumber}
                         </div>
                       )
@@ -480,8 +517,8 @@ export function AppointmentPage() {
                         onClick={() => setSelectedDateId(day.id)}
                         className={`flex items-center justify-center h-10 rounded-xl text-sm font-medium transition-all ${
                           isSelected
-                            ? 'bg-[#d4af37] text-black shadow-lg shadow-[#d4af37]/20 scale-105'
-                            : 'bg-[var(--surface-dark)] text-[var(--text-light)] hover:bg-[var(--surface-elevated)] border border-[var(--border)] hover:border-[#d4af37]/30'
+                            ? 'bg-[#08CB00] text-black shadow-lg shadow-[#08CB00]/20 scale-105 border border-[#08CB00]/40'
+                            : 'bg-[var(--surface-dark)] text-[var(--text-light)] border border-[var(--border)] hover:bg-[#08CB00]/10 hover:border-[#08CB00]/40'
                         }`}
                       >
                         {day.dayNumber}

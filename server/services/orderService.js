@@ -278,6 +278,24 @@ exports.updateOrder = async (orderId, updateData) => {
   return res.rows[0];
 }
 
+exports.updatePaymentStatus = async (orderId, status) => {
+  const res = await pool.query(
+    `UPDATE orders SET payment_status = $1, updated_at = CURRENT_TIMESTAMP WHERE order_id = $2 RETURNING *`,
+    [status, orderId]
+  )
+  if (res.rows.length === 0) return null
+  return res.rows[0]
+}
+
+exports.approvePayment = async (orderId) => {
+  const res = await pool.query(
+    `UPDATE orders SET payment_status = 'paid', updated_at = CURRENT_TIMESTAMP WHERE order_id = $1 RETURNING *`,
+    [orderId]
+  )
+  if (res.rows.length === 0) return null;
+  return res.rows[0];
+}
+
 exports.cancelOrder = async (orderId) => {
   const res = await pool.query(
     `UPDATE orders SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP WHERE order_id = $1 RETURNING *`,
@@ -304,14 +322,5 @@ exports.cancelMyOrder = async (orderId, userId) => {
     `UPDATE orders SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP WHERE order_id = $1 AND user_id = $2 RETURNING *`,
     [orderId, userId]
   );
-  return res.rows[0];
-}
-
-exports.approvePayment = async (orderId) => {
-  const res = await pool.query(
-    `UPDATE orders SET payment_status = 'paid', updated_at = CURRENT_TIMESTAMP WHERE order_id = $1 RETURNING *`,
-    [orderId]
-  );
-  if (res.rows.length === 0) return null;
   return res.rows[0];
 }

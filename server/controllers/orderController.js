@@ -111,6 +111,15 @@ exports.cancelMyOrder = asyncHandler(async (req, res, next) => {
   }
 })
 
+exports.updatePaymentStatus = asyncHandler(async (req, res, next) => {
+  const { status } = req.body
+  if (!status) throw new AppError('Payment status is required', 400)
+
+  const order = await orderService.updatePaymentStatus(req.params.id, status)
+  if (!order) throw new AppError('Order not found', 404)
+  res.status(200).json({ status: 'success', data: order })
+})
+
 exports.approvePayment = asyncHandler(async (req, res, next) => {
   const order = await orderService.approvePayment(req.params.id)
   if (!order) throw new AppError('Order not found', 404)
