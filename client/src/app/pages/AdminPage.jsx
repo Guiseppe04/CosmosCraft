@@ -735,7 +735,8 @@ export function AdminPage() {
     setSearchQuery('')
     setFormErrors({})
     const loaders = {
-      'products-parts': () => { fetchProducts(); fetchCategories(); fetchParts() },
+      'products': () => { fetchProducts(); fetchCategories(); },
+      'guitar-parts': () => { fetchParts(); },
       'categories': () => { fetchCategories(); },
       'users': fetchUsers,
       'orders': fetchOrders,
@@ -750,8 +751,10 @@ export function AdminPage() {
 
   // ── Re-fetch when debounced search changes ───────────────────────────────
   useEffect(() => {
-    if (activeTab === 'products-parts') {
+    if (activeTab === 'products') {
       setProductQuery((prev) => ({ ...prev, page: 1 }))
+    }
+    if (activeTab === 'guitar-parts') {
       setPartQuery((prev) => ({ ...prev, page: 1 }))
     }
     if (activeTab === 'users') fetchUsers()
@@ -762,17 +765,18 @@ export function AdminPage() {
   }, [debouncedSearch]) // eslint-disable-line
 
   useEffect(() => {
-    if (activeTab === 'products-parts') fetchProducts()
+    if (activeTab === 'products') fetchProducts()
   }, [activeTab, fetchProducts])
 
   useEffect(() => {
-    if (activeTab === 'products-parts' || activeTab === 'inventory') fetchParts()
+    if (activeTab === 'guitar-parts') fetchParts()
   }, [activeTab, fetchParts])
 
   // ── Smart polling: active tab ────────────────────────────────────────────
   const pollingFn = useCallback(async () => {
     const map = {
-      'products-parts': async () => { await fetchProducts(); await fetchParts() },
+      'products': fetchProducts,
+      'guitar-parts': fetchParts,
       'categories': fetchCategories,
       'users': fetchUsers,
       'orders': fetchOrders,
@@ -1198,8 +1202,9 @@ export function AdminPage() {
   // ── Tabs ─────────────────────────────────────────────────────────────────
   const tabs = [
     { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
-    { id: 'products-parts', label: 'Guitar Parts & Products', icon: Layers },
-    { id: 'categories', label: 'Categories', icon: Tag },
+    { id: 'products', label: 'Products', icon: Package },
+    { id: 'guitar-parts', label: 'Guitar Parts', icon: Layers },
+    { id: 'product-categories', label: 'Product Categories', icon: Tag },
     { id: 'orders', label: 'Orders', icon: ShoppingBag },
     { id: 'inventory', label: 'Inventory', icon: Activity },
     { id: 'sales-report', label: 'Sales Report', icon: PieChart },
@@ -1298,7 +1303,7 @@ export function AdminPage() {
 
           {/* Actions bar */}
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
-            {['products-parts', 'users', 'categories', 'orders', 'projects', 'appointments'].includes(activeTab) && (
+            {['products', 'guitar-parts', 'users', 'product-categories', 'orders', 'projects', 'appointments'].includes(activeTab) && (
               <div className="relative max-w-sm w-full">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
                 <input
@@ -1318,7 +1323,7 @@ export function AdminPage() {
                   <RefreshCw className={`w-4 h-4 text-[var(--text-muted)] ${isLoading ? 'animate-spin' : ''}`} />
                 </button>
               )}
-              {activeTab === 'products-parts' && (
+              {activeTab === 'products' && (
                 <div className="flex rounded-lg border border-[var(--border)] overflow-hidden">
                   <button
                     onClick={() => setProductViewMode('grid')}
@@ -1336,17 +1341,17 @@ export function AdminPage() {
                   </button>
                 </div>
               )}
-              {activeTab === 'products-parts' && (
-                <>
-                  <button onClick={() => openModal('product')} className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black rounded-xl font-semibold text-sm hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all">
-                    <Plus className="w-4 h-4" /> Add Product
-                  </button>
-                  <button onClick={() => openModal('part')} className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black rounded-xl font-semibold text-sm hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all">
-                    <Plus className="w-4 h-4" /> Add Part
-                  </button>
-                </>
+              {activeTab === 'products' && (
+                <button onClick={() => openModal('product')} className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black rounded-xl font-semibold text-sm hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all">
+                  <Plus className="w-4 h-4" /> Add Product
+                </button>
               )}
-              {activeTab === 'categories' && (
+              {activeTab === 'guitar-parts' && (
+                <button onClick={() => openModal('part')} className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black rounded-xl font-semibold text-sm hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all">
+                  <Plus className="w-4 h-4" /> Add Builder Part
+                </button>
+              )}
+              {activeTab === 'product-categories' && (
                 <button onClick={() => openModal('category')} className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black rounded-xl font-semibold text-sm hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all">
                   <Plus className="w-4 h-4" /> Add Category
                 </button>
@@ -1504,9 +1509,9 @@ export function AdminPage() {
             </motion.div>
           )}
 
-          {/* ── PRODUCTS & PARTS ───────────────────────────────────────────── */}
-          {activeTab === 'products-parts' && (
-            <motion.div key="products-parts" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+          {/* ── PRODUCTS ───────────────────────────────────────────── */}
+          {activeTab === 'products' && (
+            <motion.div key="products" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
               <div className="mb-4 flex items-end justify-between gap-3">
                 <div>
                   <h2 className="text-white text-xl font-semibold">Products</h2>
@@ -1709,6 +1714,12 @@ export function AdminPage() {
                 pagination={productsPagination}
                 onPageChange={(nextPage) => setProductQuery((prev) => ({ ...prev, page: nextPage }))}
               />
+            </motion.div>
+          )}
+
+          {/* ── GUITAR PARTS ───────────────────────────────────────────── */}
+          {activeTab === 'guitar-parts' && (
+            <motion.div key="guitar-parts" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
 
               {/* Builder Parts Section */}
               <div className="flex justify-between items-center mb-4 mt-10">
@@ -1716,9 +1727,6 @@ export function AdminPage() {
                   <h3 className="text-white text-xl font-semibold">Guitar Parts (Builder Catalog)</h3>
                   <p className="text-[var(--text-muted)] text-sm">Align parts with builder slots used in customization pages.</p>
                 </div>
-                <button onClick={() => openModal('part')} className="flex items-center gap-2 bg-[var(--surface-dark)] border border-[var(--border)] text-white px-4 py-2 rounded-xl font-semibold hover:border-[var(--gold-primary)]/50 transition-colors">
-                  <Plus className="w-5 h-5 text-[var(--gold-primary)]" /> Add Builder Part
-                </button>
               </div>
               <div className="mb-3 flex justify-end">
                 <button
@@ -1817,8 +1825,8 @@ export function AdminPage() {
           )}
 
           {/* ── CATEGORIES ─────────────────────────────────────────────────── */}
-          {activeTab === 'categories' && (
-            <motion.div key="categories" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+          {activeTab === 'product-categories' && (
+            <motion.div key="product-categories" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
               <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-3xl overflow-hidden">
                 {categoryTree.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-16">
