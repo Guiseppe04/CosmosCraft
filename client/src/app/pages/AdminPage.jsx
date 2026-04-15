@@ -9,7 +9,7 @@ import {
   ChevronDown, ChevronUp, ArrowUpDown, ArrowUp, ArrowDown,
   Printer, Mail, FileText, CreditCard, RotateCcw, Copy, Truck, MapPin,
   UserCheck, Clock10, PackageCheck, CircleCheck,
-  Layers, User, Tag, AlertCircle, DollarSign, Save, TrendingUp, UsersRound, Clock, Loader2, Grid3X3, List, MoreHorizontal, Shield, Settings, Guitar, Wrench, PaintBucket, Hammer, Zap, Sparkles,
+  Layers, User, Tag, AlertCircle, DollarSign, Save, TrendingUp, UsersRound, Clock, Loader2, Grid3X3, List, MoreHorizontal, Shield, Settings, Guitar, Wrench, PaintBucket, Hammer, Zap, Sparkles, Wallet, ArrowUpCircle, ArrowDownCircle,
 } from 'lucide-react'
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis,
@@ -784,6 +784,591 @@ const TIMELINE_STEPS = [
   { status: 'delivered', label: 'Delivered', desc: 'Successfully delivered to customer' },
 ]
 
+// ── Stock Adjustment Components ───────────────────────────────────────────────
+const ADJUSTMENT_REASONS = [
+  { value: 'restocking', label: 'Restocking', group: 'Inventory', requiresNotes: false },
+  { value: 'received_shipment', label: 'Received Shipment', group: 'Inventory', requiresNotes: false },
+  { value: 'returned_items', label: 'Returned Items', group: 'Sales', requiresNotes: false },
+  { value: 'sale_adjustment', label: 'Sales Reconciliation', group: 'Sales', requiresNotes: false },
+  { value: 'damaged_goods', label: 'Damaged/Defective', group: 'Loss', requiresNotes: true },
+  { value: 'lost_missing', label: 'Lost/Missing', group: 'Loss', requiresNotes: true },
+  { value: 'cycle_count', label: 'Cycle Count Correction', group: 'Adjustment', requiresNotes: true },
+  { value: 'transfer_in', label: 'Transfer In', group: 'Transfer', requiresNotes: true },
+  { value: 'transfer_out', label: 'Transfer Out', group: 'Transfer', requiresNotes: true },
+  { value: 'sample_item', label: 'Sample Item', group: 'Other', requiresNotes: true },
+  { value: 'other', label: 'Other', group: 'Other', requiresNotes: true },
+]
+
+const ADJUSTMENT_TYPE_LABELS = {
+  stock_in: { label: 'Stock In (Add)', color: 'text-green-400', bg: 'bg-green-500/20', icon: ArrowUpCircle },
+  stock_out: { label: 'Stock Out (Remove)', color: 'text-red-400', bg: 'bg-red-500/20', icon: ArrowDownCircle },
+  adjustment: { label: 'Manual Set', color: 'text-amber-400', bg: 'bg-amber-500/20', icon: ArrowUpDown },
+}
+
+function StockVisualizer({ currentStock, newStock, threshold = 10, showDelta = true }) {
+  const delta = newStock - currentStock
+  const isIncrease = delta > 0
+  const isDecrease = delta < 0
+  const isNormal = currentStock > threshold * 2
+  const isWarning = currentStock > 0 && currentStock <= threshold * 2
+  const isCritical = currentStock === 0
+  
+  const currentColor = isCritical ? 'bg-red-500' : isWarning ? 'bg-amber-500' : 'bg-green-500'
+  const currentTextColor = isCritical ? 'text-red-400' : isWarning ? 'text-amber-400' : 'text-green-400'
+  
+  const newColor = isIncrease ? 'bg-green-500' : isDecrease ? 'bg-red-500' : currentColor
+  const deltaColor = isIncrease ? 'text-green-400' : isDecrease ? 'text-red-400' : 'text-white'
+  
+  const maxStock = Math.max(currentStock, newStock, threshold * 3, 50)
+  const currentPct = Math.min((currentStock / maxStock) * 100, 100)
+  const newPct = Math.min((newStock / maxStock) * 100, 100)
+  
+  return (
+    <div className="grid grid-cols-2 gap-4">
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-[var(--text-muted)] uppercase tracking-wider">Current</span>
+          <span className={`text-xs px-2 py-0.5 rounded-full ${currentBgColors[isCritical ? 'critical' : isWarning ? 'warning' : 'healthy']}`}>
+            {isCritical ? 'Out of Stock' : isWarning ? 'Low Stock' : 'In Stock'}
+          </span>
+        </div>
+        <div className={`text-3xl font-bold ${currentTextColor}`}>{currentStock}</div>
+        <div className={`h-2 rounded-full overflow-hidden ${currentColor}/30`}>
+          <motion.div 
+            className={`h-full ${currentColor}`}
+            initial={{ width: 0 }}
+            animate={{ width: `${currentPct}%` }}
+            transition={{ duration: 0.5, ease: 'easeOut' }}
+          />
+        </div>
+      </div>
+      
+      {showDelta && newStock !== currentStock && (
+        <motion.div 
+          className="space-y-2"
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          key={newStock}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-[var(--text-muted)] uppercase tracking-wider">New Stock</span>
+            <span className={`text-xs px-2 py-0.5 rounded-full ${isIncrease ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+              {isIncrease ? `+${delta}` : delta}
+            </span>
+          </div>
+          <div className={`text-3xl font-bold ${deltaColor}`}>{newStock}</div>
+          <div className="h-2 rounded-full overflow-hidden bg-gray-700">
+            <motion.div 
+              className={`h-full ${newColor}`}
+              initial={{ width: 0 }}
+              animate={{ width: `${newPct}%` }}
+              transition={{ duration: 0.3, ease: 'easeOut' }}
+            />
+          </div>
+        </motion.div>
+      )}
+    </div>
+  )
+}
+
+function QuantityStepper({ value, onChange, maxValue, minValue = 1, disabled = false }) {
+  const handleDecrement = () => {
+    if (!disabled && value > (minValue || 1)) {
+      onChange(value - 1)
+    }
+  }
+  
+  const handleIncrement = () => {
+    if (!disabled && (!maxValue || value < maxValue)) {
+      onChange(value + 1)
+    }
+  }
+  
+  const handleInputChange = (e) => {
+    const val = parseInt(e.target.value) || 0
+    const validVal = Math.max(minValue || 1, Math.min(maxValue || 9999, val))
+    onChange(validVal)
+  }
+  
+  return (
+    <div className="flex items-center gap-2">
+      <button
+        type="button"
+        onClick={handleDecrement}
+        disabled={disabled || value <= (minValue || 1)}
+        className="w-12 h-12 rounded-xl bg-[var(--bg-primary)] border border-[var(--border)] text-white text-xl font-bold hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center"
+      >
+        −
+      </button>
+      <input
+        type="number"
+        value={value}
+        onChange={handleInputChange}
+        disabled={disabled}
+        min={minValue}
+        max={maxValue}
+        className="flex-1 h-12 px-4 bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl text-white text-center font-mono text-lg focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] disabled:opacity-50"
+      />
+      <button
+        type="button"
+        onClick={handleIncrement}
+        disabled={disabled || (maxValue && value >= maxValue)}
+        className="w-12 h-12 rounded-xl bg-[var(--bg-primary)] border border-[var(--border)] text-white text-xl font-bold hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center"
+      >
+        +
+      </button>
+    </div>
+  )
+}
+
+function ProductSearchSelector({ products, value, onChange, placeholder, disabled }) {
+  const [isOpen, setIsOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [highlightedIndex, setHighlightedIndex] = useState(0)
+  const inputRef = useRef(null)
+  const wrapperRef = useRef(null)
+  
+  const productList = useMemo(() => {
+    if (!products) return []
+    return Array.isArray(products) ? products : []
+  }, [products])
+  
+  const filteredProducts = useMemo(() => {
+    if (productList.length === 0) return []
+    if (!searchQuery) return productList.slice(0, 10)
+    const q = searchQuery.toLowerCase()
+    return productList
+      .filter(p => 
+        p.name?.toLowerCase().includes(q) ||
+        p.sku?.toLowerCase().includes(q)
+      )
+      .slice(0, 10)
+  }, [productList, searchQuery])
+  
+  const selectedProduct = useMemo(() => {
+    if (!value || productList.length === 0) return null
+    return productList.find(p => p.product_id === value)
+  }, [productList, value])
+  
+  const isSelected = !!selectedProduct
+  
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) {
+        setIsOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+  
+  useEffect(() => {
+    setHighlightedIndex(0)
+  }, [searchQuery])
+  
+  const handleSelect = (product) => {
+    onChange(product.product_id, product)
+    setSearchQuery('')
+    setIsOpen(false)
+  }
+  
+  const handleClear = (e) => {
+    e.stopPropagation()
+    onChange('', null)
+    setSearchQuery('')
+    setIsOpen(false)
+    inputRef.current?.focus()
+  }
+  
+  const handleKeyDown = (e) => {
+    if (disabled) return
+    
+    if (!isOpen && (e.key === 'Enter' || e.key === 'ArrowDown' || e.key === ' ')) {
+      e.preventDefault()
+      setIsOpen(true)
+      return
+    }
+    
+    if (!isOpen) return
+    
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault()
+        setHighlightedIndex(i => Math.min(i + 1, filteredProducts.length - 1))
+        break
+      case 'ArrowUp':
+        e.preventDefault()
+        setHighlightedIndex(i => Math.max(i - 1, 0))
+        break
+      case 'Enter':
+        e.preventDefault()
+        if (filteredProducts[highlightedIndex]) {
+          handleSelect(filteredProducts[highlightedIndex])
+        }
+        break
+      case 'Escape':
+        e.preventDefault()
+        setIsOpen(false)
+        inputRef.current?.blur()
+        break
+    }
+  }
+  
+  const handleInputChange = (e) => {
+    if (disabled) return
+    setSearchQuery(e.target.value)
+    if (!isOpen) setIsOpen(true)
+  }
+  
+  const handleFocus = () => {
+    if (!disabled) {
+      setIsOpen(true)
+    }
+  }
+  
+  const handleToggle = () => {
+    if (disabled) return
+    setIsOpen(prev => !prev)
+    if (!isOpen) inputRef.current?.focus()
+  }
+  
+  const displayValue = isSelected ? `${selectedProduct.name} (${selectedProduct.sku})` : searchQuery
+  
+  return (
+    <div ref={wrapperRef} className="relative">
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)] pointer-events-none" />
+        <input
+          ref={inputRef}
+          type="text"
+          value={displayValue}
+          onChange={handleInputChange}
+          onFocus={handleFocus}
+          onKeyDown={handleKeyDown}
+          disabled={disabled}
+          placeholder={placeholder || 'Search by name or SKU...'}
+          className="w-full pl-10 pr-16 py-3 bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl text-white placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] disabled:opacity-50"
+          autoComplete="off"
+        />
+        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+          {isSelected && (
+            <button
+              type="button"
+              onClick={handleClear}
+              disabled={disabled}
+              className="p-1.5 hover:bg-white/10 rounded transition-colors"
+            >
+              <X className="w-4 h-4 text-[var(--text-muted)]" />
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={handleToggle}
+            disabled={disabled}
+            className="p-1.5 hover:bg-white/10 rounded transition-colors"
+          >
+            <ChevronDown className={`w-4 h-4 text-[var(--text-muted)] transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+          </button>
+        </div>
+      </div>
+      
+      {isOpen && filteredProducts.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="absolute z-[100] w-full mt-2 bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl shadow-xl max-h-64 overflow-y-auto"
+        >
+          {filteredProducts.map((product, index) => (
+            <button
+              key={product.product_id}
+              type="button"
+              onClick={() => handleSelect(product)}
+              onMouseEnter={() => setHighlightedIndex(index)}
+              className={`w-full px-4 py-3 text-left transition-colors flex items-center justify-between border-b border-[var(--border)]/50 last:border-b-0 ${
+                index === highlightedIndex 
+                  ? 'bg-[var(--gold-primary)]/20' 
+                  : 'hover:bg-white/5'
+              }`}
+            >
+              <div className="flex-1 min-w-0 pr-2">
+                <p className="text-white font-medium truncate">{product.name}</p>
+                <p className="text-xs text-[var(--text-muted)]">{product.sku}</p>
+              </div>
+              <div className="text-right flex-shrink-0">
+                <p className="text-[var(--gold-primary)] font-mono text-sm">{formatCurrency(product.price)}</p>
+                <p className={`text-xs ${product.stock > 10 ? 'text-green-400' : product.stock > 0 ? 'text-amber-400' : 'text-red-400'}`}>
+                  {product.stock} in stock
+                </p>
+              </div>
+            </button>
+          ))}
+        </motion.div>
+      )}
+      
+      {isOpen && filteredProducts.length === 0 && (
+        <div className="absolute z-[100] w-full mt-2 bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl shadow-xl p-4 text-center">
+          <p className="text-[var(--text-muted)]">No products found</p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ReasonSelector({ value, onChange }) {
+  const groupedReasons = useMemo(() => {
+    const groups = {}
+    ADJUSTMENT_REASONS.forEach(r => {
+      if (!groups[r.group]) groups[r.group] = []
+      groups[r.group].push(r)
+    })
+    return groups
+  }, [])
+  
+  const selectedReason = ADJUSTMENT_REASONS.find(r => r.value === value)
+  const needsNotes = selectedReason?.requiresNotes
+  
+  return (
+    <div className="space-y-2">
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full px-4 py-3 bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
+      >
+        <option value="">— Select Reason —</option>
+        {Object.entries(groupedReasons).map(([group, reasons]) => (
+          <optgroup key={group} label={group}>
+            {reasons.map(r => (
+              <option key={r.value} value={r.value}>{r.label}</option>
+            ))}
+          </optgroup>
+        ))}
+      </select>
+      {needsNotes && (
+        <p className="text-xs text-amber-400 flex items-center gap-1">
+          <Info className="w-3 h-3" />
+          Notes required for this reason
+        </p>
+      )}
+    </div>
+  )
+}
+
+const currentBgColors = {
+  healthy: 'bg-green-500/20 text-green-400',
+  warning: 'bg-amber-500/20 text-amber-400', 
+  critical: 'bg-red-500/20 text-red-400',
+}
+
+function AdjustStockModal({ visibleProducts, modal, form, setForm, formErrors, setFormErrors, closeModal, isSaving, saveStockAdjust, showToast, formatCurrency }) {
+  const [selectedProduct, setSelectedProduct] = useState(null)
+  const [localNotes, setLocalNotes] = useState('')
+  
+  const preSelectedId = modal.data?.product_id
+  
+  useEffect(() => {
+    if (preSelectedId) {
+      const product = visibleProducts?.find(p => p.product_id === preSelectedId)
+      if (product) {
+        setSelectedProduct(product)
+        setForm(f => ({ ...f, product_id: preSelectedId, current_stock: product.stock }))
+      }
+    }
+  }, [preSelectedId, visibleProducts])
+  
+  const handleProductSelect = (productId, product) => {
+    setSelectedProduct(product || visibleProducts?.find(p => p.product_id === productId))
+    setForm(f => ({ 
+      ...f, 
+      product_id: productId, 
+      current_stock: product?.stock || f.current_stock,
+      change_type: '',
+      quantity: '',
+    }))
+    setFormErrors(e => ({ ...e, product_id: null }))
+  }
+  
+  const adjustmentType = form.change_type
+  const quantity = parseInt(form.quantity) || 0
+  
+  const calculatedNewStock = useMemo(() => {
+    if (!selectedProduct || !adjustmentType || !quantity) return null
+    const current = selectedProduct.stock || 0
+    if (adjustmentType === 'stock_in') return current + quantity
+    if (adjustmentType === 'stock_out') return current - quantity
+    if (adjustmentType === 'adjustment') return quantity
+    return current
+  }, [selectedProduct, adjustmentType, quantity])
+  
+  const canSubmit = selectedProduct && adjustmentType && quantity > 0
+  
+  const selectedReason = ADJUSTMENT_REASONS.find(r => r.value === form.reason)
+  const needsNotes = selectedReason?.requiresNotes
+  
+  const handleSubmit = async () => {
+    const errors = {}
+    
+    if (!selectedProduct) errors.product_id = 'Please select a product'
+    if (!adjustmentType) errors.change_type = 'Please select adjustment type'
+    if (!quantity || quantity < 1) errors.quantity = 'Quantity must be greater than 0'
+    if (adjustmentType === 'stock_out' && quantity > selectedProduct?.stock) {
+      errors.quantity = `Insufficient stock. Available: ${selectedProduct?.stock || 0}`
+    }
+    if (adjustmentType === 'stock_out' && calculatedNewStock < 0) {
+      errors.quantity = 'Stock cannot be negative'
+    }
+    if (needsNotes && !localNotes.trim()) {
+      errors.notes = 'Notes are required for this reason'
+    }
+    
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors)
+      return
+    }
+    
+    setForm(f => ({ ...f, reason: form.reason, notes: localNotes }))
+    await saveStockAdjust()
+  }
+  
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.95 }}
+      className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-3xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto"
+    >
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-white text-xl font-bold">Adjust Stock</h2>
+        <button onClick={closeModal} className="p-2 hover:bg-white/10 rounded-lg transition-colors">
+          <X className="w-5 h-5 text-[var(--text-muted)]" />
+        </button>
+      </div>
+      
+      <div className="space-y-5">
+        {/* Product Selector */}
+        <div>
+          <label className="block text-sm font-semibold text-[var(--text-muted)] mb-2">Product *</label>
+          <ProductSearchSelector
+            products={visibleProducts}
+            value={form.product_id}
+            onChange={handleProductSelect}
+            placeholder="Search by name or SKU..."
+          />
+          {formErrors.product_id && (
+            <p className="mt-1 text-xs text-red-400">{formErrors.product_id}</p>
+          )}
+        </div>
+        
+        {/* Stock Visualizer */}
+        {selectedProduct && (
+          <div className="p-4 bg-[var(--bg-primary)]/50 rounded-xl border border-[var(--border)]">
+            <StockVisualizer
+              currentStock={selectedProduct.stock || 0}
+              newStock={calculatedNewStock}
+              threshold={selectedProduct.low_stock_threshold || 10}
+            />
+          </div>
+        )}
+        
+        {/* Adjustment Type Selector */}
+        <div>
+          <label className="block text-sm font-semibold text-[var(--text-muted)] mb-2">Adjustment Type *</label>
+          <div className="grid grid-cols-3 gap-2">
+            {Object.entries(ADJUSTMENT_TYPE_LABELS).map(([key, { label, color, bg, icon: Icon }]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => {
+                  setForm(f => ({ ...f, change_type: key }))
+                  setFormErrors(e => ({ ...e, change_type: null }))
+                }}
+                className={`py-3 px-3 rounded-xl text-sm font-medium transition-all border ${
+                  adjustmentType === key 
+                    ? 'bg-[var(--gold-primary)] text-black border-[var(--gold-primary)]' 
+                    : 'bg-[var(--bg-primary)] text-[var(--text-muted)] border-[var(--border)] hover:border-[var(--gold-primary)]/50'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {formErrors.change_type && (
+            <p className="mt-1 text-xs text-red-400">{formErrors.change_type}</p>
+          )}
+        </div>
+        
+        {/* Quantity Stepper */}
+        <div>
+          <label className="block text-sm font-semibold text-[var(--text-muted)] mb-2">Quantity *</label>
+          <QuantityStepper
+            value={quantity}
+            onChange={(val) => {
+              setForm(f => ({ ...f, quantity: val }))
+              setFormErrors(e => ({ ...e, quantity: null }))
+            }}
+            maxValue={adjustmentType === 'stock_out' ? selectedProduct?.stock : undefined}
+            disabled={!selectedProduct || !adjustmentType}
+          />
+          {formErrors.quantity && (
+            <p className="mt-1 text-xs text-red-400">{formErrors.quantity}</p>
+          )}
+        </div>
+        
+        {/* Reason Selector */}
+        <div>
+          <label className="block text-sm font-semibold text-[var(--text-muted)] mb-2">Reason *</label>
+          <ReasonSelector
+            value={form.reason || ''}
+            onChange={(val) => {
+              setForm(f => ({ ...f, reason: val }))
+              setFormErrors(e => ({ ...e, reason: null }))
+            }}
+          />
+          {formErrors.reason && (
+            <p className="mt-1 text-xs text-red-400">{formErrors.reason}</p>
+          )}
+        </div>
+        
+        {/* Notes */}
+        <div>
+          <label className="block text-sm font-semibold text-[var(--text-muted)] mb-2">
+            Notes {needsNotes && <span className="text-red-400">*</span>}
+          </label>
+          <textarea
+            value={localNotes}
+            onChange={(e) => {
+              setLocalNotes(e.target.value)
+              setFormErrors(e => ({ ...e, notes: null }))
+            }}
+            placeholder={needsNotes ? "Please provide additional details..." : "Add any additional details (optional)"}
+            className="w-full h-20 px-4 py-3 bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl text-white text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
+          />
+          {formErrors.notes && (
+            <p className="mt-1 text-xs text-red-400">{formErrors.notes}</p>
+          )}
+        </div>
+      </div>
+      
+      {/* Action Buttons */}
+      <div className="flex gap-3 mt-6 pt-4 border-t border-[var(--border)]">
+        <button
+          onClick={closeModal}
+          disabled={isSaving}
+          className="flex-1 py-3 rounded-xl bg-[var(--bg-primary)] text-white font-semibold hover:bg-white/10 transition-colors disabled:opacity-50"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={handleSubmit}
+          disabled={!canSubmit || isSaving}
+          className="flex-1 py-3 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black font-bold hover:shadow-[0_8px_25px_rgba(212,175,55,0.35)] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {isSaving ? 'Processing...' : 'Confirm Adjustment'}
+        </button>
+      </div>
+    </motion.div>
+  )
+}
+
 // ── Skeleton Components ───────────────────────────────────────────────────────
 function OrderTableSkeleton() {
   return (
@@ -894,6 +1479,14 @@ export function AdminPage() {
   const [wizardTab, setWizardTab] = useState('basic')
   const [inventorySubTab, setInventorySubTab] = useState('products')
 
+  // Inventory tab state - separate for products and parts
+  const [productsInventoryFilter, setProductsInventoryFilter] = useState({ status: 'all', sort: 'name', page: 1 })
+  const [partsInventoryFilter, setPartsInventoryFilter] = useState({ status: 'all', sort: 'name', page: 1 })
+  const INVENTORY_SUB_TABS = [
+    { id: 'products', label: 'Products', icon: Package },
+    { id: 'guitar-parts', label: 'Guitar Parts', icon: Guitar },
+  ]
+
   // Orders tab state
   const [expandedOrderIds, setExpandedOrderIds] = useState(new Set())
   const [orderStatusFilter, setOrderStatusFilter] = useState('all')
@@ -935,6 +1528,144 @@ export function AdminPage() {
   const [selectedConversation, setSelectedConversation] = useState(null)
   const [appointmentBranchAddress, setAppointmentBranchAddress] = useState(DEFAULT_APPOINTMENT_BRANCH.address)
 
+  // POS Drawer state
+  const [posDrawerOpen, setPosDrawerOpen] = useState(false)
+  const [posDrawerState, setPosDrawerState] = useState({
+    isOpen: false,
+    openedAt: null,
+    openingCash: 0,
+    closedAt: null,
+    closingCash: 0,
+    status: 'closed', // closed, open, settling
+  })
+  const [posCart, setPosCart] = useState([])
+  const [posSearchQuery, setPosSearchQuery] = useState('')
+  const [posSelectedCategory, setPosSelectedCategory] = useState('all')
+  const [posPaymentMethod, setPosPaymentMethod] = useState('cash')
+  const [posCashReceived, setPosCashReceived] = useState('')
+  const [posShowCloseConfirm, setPosShowCloseConfirm] = useState(false)
+  const [posDenominations, setPosDenominations] = useState({
+    '1000': 0, '500': 0, '200': 0, '100': 0, '50': 0, '20': 0, '10': 0, '5': 0, '1': 0, '0.25': 0, '0.10': 0, '0.05': 0,
+  })
+  const TAX_RATE = 0.12
+
+  // POS helper functions
+  const openPosDrawer = (openingCash) => {
+    setPosDrawerState(prev => ({
+      ...prev,
+      isOpen: true,
+      openedAt: new Date().toISOString(),
+      openingCash: Number(openingCash),
+      status: 'open',
+    }))
+    setPosDenominations({ '1000': 0, '500': 0, '200': 0, '100': 0, '50': 0, '20': 0, '10': 0, '5': 0, '1': 0, '0.25': 0, '0.10': 0, '0.05': 0 })
+    setPosCart([])
+  }
+
+  const closePosDrawer = () => {
+    setPosDrawerState(prev => ({
+      ...prev,
+      isOpen: false,
+      closedAt: new Date().toISOString(),
+      closingCash: calculateTotalCash(),
+      status: 'closed',
+    }))
+    setPosShowCloseConfirm(false)
+  }
+
+  const calculateTotalCash = () => {
+    const bills = { '1000': 1000, '500': 500, '200': 200, '100': 100, '50': 50, '20': 20, '10': 10, '5': 5, '1': 1, '0.25': 0.25, '0.10': 0.10, '0.05': 0.05 }
+    let total = posDrawerState.openingCash
+    Object.entries(posDenominations).forEach(([denom, qty]) => {
+      total += (bills[denom] || 0) * qty
+    })
+    return total
+  }
+
+  const calculateSalesTotal = () => {
+    return posCart.reduce((sum, item) => sum + (item.price * item.quantity), 0)
+  }
+
+  const calculateTax = () => calculateSalesTotal() * TAX_RATE
+
+  const calculateGrandTotal = () => calculateSalesTotal() + calculateTax()
+
+  const calculateChange = () => {
+    const received = Number(posCashReceived) || 0
+    const total = calculateGrandTotal()
+    return Math.max(0, received - total)
+  }
+
+  const addToCart = (product) => {
+    setPosCart(prev => {
+      const existing = prev.find(item => item.product_id === product.product_id)
+      if (existing) {
+        return prev.map(item => item.product_id === product.product_id ? { ...item, quantity: item.quantity + 1 } : item)
+      }
+      return [...prev, { ...product, quantity: 1 }]
+    })
+  }
+
+  const removeFromCart = (productId) => {
+    setPosCart(prev => {
+      const existing = prev.find(item => item.product_id === productId)
+      if (existing && existing.quantity > 1) {
+        return prev.map(item => item.product_id === productId ? { ...item, quantity: item.quantity - 1 } : item)
+      }
+      return prev.filter(item => item.product_id !== productId)
+    })
+  }
+
+  const removeEntireItem = (productId) => {
+    setPosCart(prev => prev.filter(item => item.product_id !== productId))
+  }
+
+  const clearCart = () => setPosCart([])
+
+  const processSale = () => {
+    const total = calculateGrandTotal()
+    const received = Number(posCashReceived)
+    if (received < total) {
+      showToast('Insufficient payment', 'error')
+      return
+    }
+    if (posPaymentMethod === 'cash' && received < total && received > 0) {
+      showToast('Exact cash required for cash payments', 'error')
+      return
+    }
+    if (posPaymentMethod === 'cash' && received >= total) {
+      const change = calculateChange()
+      const denominations = { ...posDenominations }
+      let changeRemaining = change * 100
+      const bills = [1000, 500, 200, 100, 50, 20, 10, 5, 1, 0.25, 0.10, 0.05]
+      bills.forEach(bill => {
+        const key = String(bill)
+        while (changeRemaining >= bill * 100 && denominations[key] > 0) {
+          denominations[key]--
+          changeRemaining -= bill * 100
+        }
+      })
+      setPosDenominations(denominations)
+    }
+    const newItem = {
+      id: Date.now(),
+      items: [...posCart],
+      subtotal: calculateSalesTotal(),
+      tax: calculateTax(),
+      total: total,
+      paymentMethod: posPaymentMethod,
+      cashReceived: received,
+      change: posPaymentMethod === 'cash' ? calculateChange() : 0,
+      createdAt: new Date().toISOString(),
+    }
+    showToast('Sale completed!')
+    setPosCart([])
+    setPosCashReceived('')
+    setPaymentHistory(prev => [newItem, ...prev])
+  }
+
+  const [paymentHistory, setPaymentHistory] = useState([])
+
   // ── Derived / filtered views ─────────────────────────────────────────────
   const visibleProducts = products || []
   const visibleParts = parts || []
@@ -943,7 +1674,7 @@ export function AdminPage() {
   const visibleOrders = orders || []
   const visibleProjects = projects || []
   const visibleAppointments = appointments || []
-  const visibleInventory = inventory || []
+  const visibleInventory = (inventory && inventory.length > 0) ? inventory : (products || [])
 
   const visibleUsers = (users || []).filter(u => {
     if (userRoleFilter !== 'all' && u.role !== userRoleFilter) return false
@@ -1050,6 +1781,68 @@ export function AdminPage() {
     })
     return result
   }, [inventoryItems, inventoryStatusFilter, inventorySort])
+
+  // Separate filtered inventory for Products sub-tab
+  const filteredProductsInventory = useMemo(() => {
+    const prods = visibleInventory.map(p => ({ ...p, type: 'product', stock: p.stock, name: p.name, sku: p.sku, low_stock_threshold: p.low_stock_threshold, part_id: p.product_id }))
+    let result = [...prods]
+    const statusFilter = productsInventoryFilter.status
+    if (statusFilter !== 'all') {
+      result = result.filter(item => {
+        const stock = Number(item.stock ?? 0)
+        const threshold = Number(item.low_stock_threshold ?? 10)
+        if (statusFilter === 'out_of_stock') return stock === 0
+        if (statusFilter === 'critical') return stock > 0 && stock <= threshold
+        if (statusFilter === 'warning') return stock > threshold && stock <= threshold * 2
+        if (statusFilter === 'healthy') return stock > threshold * 2
+        return true
+      })
+    }
+    result.sort((a, b) => {
+      if (productsInventoryFilter.sort === 'name') return (a.name || '').localeCompare(b.name || '')
+      if (productsInventoryFilter.sort === 'sku') return (a.sku || '').localeCompare(b.sku || '')
+      if (productsInventoryFilter.sort === 'stock_low') return Number(a.stock || 0) - Number(b.stock || 0)
+      if (productsInventoryFilter.sort === 'stock_high') return Number(b.stock || 0) - Number(a.stock || 0)
+      return 0
+    })
+    return result
+  }, [visibleInventory, productsInventoryFilter])
+
+  const paginatedProductsInventory = useMemo(() => {
+    const start = (inventoryPage - 1) * INVENTORY_PAGE_SIZE
+    return filteredProductsInventory.slice(start, start + INVENTORY_PAGE_SIZE)
+  }, [filteredProductsInventory, inventoryPage])
+
+  // Separate filtered inventory for Guitar Parts sub-tab
+  const filteredPartsInventory = useMemo(() => {
+    const pts = visibleParts.map(p => ({ ...p, type: 'part', stock: p.quantity, name: p.name, sku: p.type_mapping, low_stock_threshold: 10 }))
+    let result = [...pts]
+    const statusFilter = partsInventoryFilter.status
+    if (statusFilter !== 'all') {
+      result = result.filter(item => {
+        const stock = Number(item.stock ?? 0)
+        const threshold = 10 // parts always use 10 as threshold
+        if (statusFilter === 'out_of_stock') return stock === 0
+        if (statusFilter === 'critical') return stock > 0 && stock <= threshold
+        if (statusFilter === 'warning') return stock > threshold && stock <= threshold * 2
+        if (statusFilter === 'healthy') return stock > threshold * 2
+        return true
+      })
+    }
+    result.sort((a, b) => {
+      if (partsInventoryFilter.sort === 'name') return (a.name || '').localeCompare(b.name || '')
+      if (partsInventoryFilter.sort === 'sku') return (a.sku || '').localeCompare(b.sku || '')
+      if (partsInventoryFilter.sort === 'stock_low') return Number(a.stock || 0) - Number(b.stock || 0)
+      if (partsInventoryFilter.sort === 'stock_high') return Number(b.stock || 0) - Number(a.stock || 0)
+      return 0
+    })
+    return result
+  }, [visibleParts, partsInventoryFilter])
+
+  const paginatedPartsInventory = useMemo(() => {
+    const start = (inventoryPage - 1) * INVENTORY_PAGE_SIZE
+    return filteredPartsInventory.slice(start, start + INVENTORY_PAGE_SIZE)
+  }, [filteredPartsInventory, inventoryPage])
 
   const paginatedInventory = useMemo(() => {
     const start = (inventoryPage - 1) * INVENTORY_PAGE_SIZE
@@ -1780,13 +2573,19 @@ export function AdminPage() {
   const saveStockAdjust = async () => {
     setIsSaving(true)
     try {
-      const { product_id, change_type, quantity, notes } = form
+      const { product_id, change_type, quantity, reason, notes } = form
       if (!product_id || !change_type || !quantity) {
         showToast('Please fill all required fields', 'error'); return
       }
-      if (change_type === 'stock_in') await adminApi.addStock({ product_id, quantity: Number(quantity), notes })
-      else if (change_type === 'stock_out') await adminApi.deductStock({ product_id, quantity: Number(quantity), notes })
-      else await adminApi.adjustStock({ product_id, quantity: Number(quantity), notes })
+      const payload = { 
+        productId: product_id, 
+        quantity: Number(quantity), 
+        reason: reason || notes,
+        notes: notes 
+      }
+      if (change_type === 'stock_in') await adminApi.addStock(payload)
+      else if (change_type === 'stock_out') await adminApi.deductStock(payload)
+      else await adminApi.adjustStock(payload)
       showToast('Stock adjusted!')
       fetchInventory()
       closeModal()
@@ -1871,6 +2670,328 @@ export function AdminPage() {
         onConfirm={handleConfirmAction}
         onCancel={closeConfirm}
       />
+
+      {/* POS Drawer Modal */}
+      <AnimatePresence>
+        {posDrawerOpen && (
+          <motion.div
+            key="pos-drawer"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[150] flex items-center justify-center bg-black/80 backdrop-blur-sm"
+            onClick={(e) => { if (e.target === e.currentTarget) setPosDrawerOpen(false) }}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-3xl w-full max-w-[95vw] h-[90vh] overflow-hidden flex flex-col"
+            >
+              {/* POS Header */}
+              <div className="flex items-center justify-between p-4 border-b border-[var(--border)] bg-[var(--bg-primary)]/50">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500 to-sky-600 flex items-center justify-center">
+                    <ShoppingBag className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <h2 className="text-white font-bold text-lg">POS Cash Drawer</h2>
+                    <p className="text-xs text-[var(--text-muted)]">
+                      {posDrawerState.isOpen 
+                        ? `Opened at ${new Date(posDrawerState.openedAt).toLocaleTimeString()}`
+                        : 'Drawer is closed'}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {posDrawerState.isOpen && (
+                    <>
+                      <button onClick={() => setPosShowCloseConfirm(true)} className="px-3 py-2 rounded-lg border border-[var(--border)] text-sm text-red-400 hover:bg-red-500/10 transition-colors">
+                        Close Drawer
+                      </button>
+                    </>
+                  )}
+                  <button onClick={() => setPosDrawerOpen(false)} className="p-2 hover:bg-white/10 rounded-lg transition-colors">
+                    <X className="w-5 h-5 text-[var(--text-muted)]" />
+                  </button>
+                </div>
+              </div>
+
+              {/* POS Content */}
+              {!posDrawerState.isOpen ? (
+                <div className="flex-1 flex flex-col items-center justify-center p-8">
+                  <div className="w-24 h-24 rounded-full bg-gradient-to-br from-cyan-500/20 to-sky-600/20 flex items-center justify-center mb-6">
+                    <Wallet className="w-12 h-12 text-cyan-400" />
+                  </div>
+                  <h3 className="text-white text-xl font-bold mb-2">Open the Cash Drawer</h3>
+                  <p className="text-[var(--text-muted)] text-center mb-6 max-w-md">
+                    Set the opening cash amount to start POS transactions. This will be used as the starting float for the day.
+                  </p>
+                  <div className="w-full max-w-sm space-y-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-[var(--text-muted)] mb-2">Opening Cash Amount</label>
+                      <input
+                        type="number"
+                        id="openingCash"
+                        placeholder="0.00"
+                        className="w-full px-4 py-3 bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl text-white text-lg font-mono focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                      />
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        const amount = Number(e.target.closest('button')?.previousSibling?.querySelector('input')?.value) || 0
+                        openPosDrawer(amount)
+                      }}
+                      className="w-full py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-sky-600 text-white font-bold hover:shadow-[0_8px_25px_rgba(6,182,212,0.35)] transition-all"
+                    >
+                      Open Drawer
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex-1 flex overflow-hidden">
+                  {/* Left Panel - Products */}
+                  <div className="w-1/2 border-r border-[var(--border)] flex flex-col">
+                    <div className="p-3 border-b border-[var(--border)]">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
+                        <input
+                          type="text"
+                          placeholder="Search products..."
+                          value={posSearchQuery}
+                          onChange={(e) => setPosSearchQuery(e.target.value)}
+                          className="w-full pl-10 pr-4 py-2.5 bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                      {visibleInventory
+                        .filter(p => p.stock > 0)
+                        .filter(p => !posSearchQuery || p.name?.toLowerCase().includes(posSearchQuery.toLowerCase()) || p.sku?.toLowerCase().includes(posSearchQuery.toLowerCase()))
+                        .slice(0, 20)
+                        .map(product => (
+                          <button
+                            key={product.product_id}
+                            onClick={() => addToCart(product)}
+                            className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-white/5 transition-colors text-left group"
+                          >
+                            <div className="flex-1 min-w-0">
+                              <p className="text-white font-medium truncate">{product.name}</p>
+                              <p className="text-xs text-[var(--text-muted)]">{product.sku}</p>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <span className="text-cyan-400 font-mono">{formatCurrency(product.price)}</span>
+                              <span className="text-xs text-[var(--text-muted)]">×{product.stock}</span>
+                              <Plus className="w-4 h-4 text-[var(--text-muted)] opacity-0 group-hover:opacity-100 transition-opacity" />
+                            </div>
+                          </button>
+                        ))}
+                    </div>
+                  </div>
+
+                  {/* Right Panel - Cart & Payment */}
+                  <div className="w-1/2 flex flex-col">
+                    {/* Cart Items */}
+                    <div className="flex-1 overflow-y-auto border-b border-[var(--border)]">
+                      {posCart.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center h-full text-[var(--text-muted)]">
+                          <ShoppingBag className="w-10 h-10 mb-2 opacity-30" />
+                          <p className="text-sm">Add items to cart</p>
+                        </div>
+                      ) : (
+                        <div className="p-2 space-y-1">
+                          {posCart.map(item => (
+                            <div key={item.product_id} className="flex items-center justify-between p-2 rounded-lg bg-[var(--bg-primary)]/50">
+                              <div className="flex-1 min-w-0">
+                                <p className="text-white font-medium truncate text-sm">{item.name}</p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <button onClick={() => removeFromCart(item.product_id)} className="p-1 hover:bg-white/10 rounded">
+                                  <ChevronDown className="w-4 h-4 text-[var(--text-muted)]" />
+                                </button>
+                                <span className="text-white font-mono w-6 text-center">{item.quantity}</span>
+                                <button onClick={() => addToCart(item)} className="p-1 hover:bg-white/10 rounded">
+                                  <ChevronUp className="w-4 h-4 text-[var(--text-muted)]" />
+                                </button>
+                                <span className="text-cyan-400 font-mono w-20 text-right">{formatCurrency(item.price * item.quantity)}</span>
+                                <button onClick={() => removeEntireItem(item.product_id)} className="p-1 hover:bg-red-500/20 rounded">
+                                  <X className="w-4 h-4 text-red-400" />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Totals */}
+                    <div className="p-3 border-b border-[var(--border)] space-y-1">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-[var(--text-muted)]">Subtotal</span>
+                        <span className="text-white font-mono">{formatCurrency(calculateSalesTotal())}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-[var(--text-muted)]">Tax (12%)</span>
+                        <span className="text-white font-mono">{formatCurrency(calculateTax())}</span>
+                      </div>
+                      <div className="flex justify-between text-lg font-bold pt-2 border-t border-[var(--border)]">
+                        <span className="text-white">Total</span>
+                        <span className="text-cyan-400">{formatCurrency(calculateGrandTotal())}</span>
+                      </div>
+                    </div>
+
+                    {/* Payment */}
+                    <div className="p-3 space-y-2">
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setPosPaymentMethod('cash')}
+                          className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${posPaymentMethod === 'cash' ? 'bg-cyan-500 text-black' : 'bg-[var(--bg-primary)] text-[var(--text-muted)] hover:text-white'}`}
+                        >
+                          Cash
+                        </button>
+                        <button
+                          onClick={() => setPosPaymentMethod('card')}
+                          className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${posPaymentMethod === 'card' ? 'bg-cyan-500 text-black' : 'bg-[var(--bg-primary)] text-[var(--text-muted)] hover:text-white'}`}
+                        >
+                          Card
+                        </button>
+                        <button
+                          onClick={() => setPosPaymentMethod('gcash')}
+                          className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${posPaymentMethod === 'gcash' ? 'bg-cyan-500 text-black' : 'bg-[var(--bg-primary)] text-[var(--text-muted)] hover:text-white'}`}
+                        >
+                          GCash
+                        </button>
+                      </div>
+                      
+                      {posPaymentMethod === 'cash' && (
+                        <>
+                          <div>
+                            <label className="block text-xs text-[var(--text-muted)] mb-1">Cash Received</label>
+                            <input
+                              type="number"
+                              value={posCashReceived}
+                              onChange={(e) => setPosCashReceived(e.target.value)}
+                              placeholder="0.00"
+                              className="w-full px-3 py-2 bg-[var(--bg-primary)] border border-[var(--border)] rounded-lg text-white font-mono focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                            />
+                          </div>
+                          {posCashReceived && (
+                            <div className="flex justify-between text-sm py-2 border-t border-[var(--border)]">
+                              <span className="text-[var(--text-muted)]">Change</span>
+                              <span className="text-green-400 font-mono">{formatCurrency(calculateChange())}</span>
+                            </div>
+                          )}
+                        </>
+                      )}
+                      
+                      <button
+                        onClick={processSale}
+                        disabled={posCart.length === 0 || calculateGrandTotal() === 0}
+                        className="w-full py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-sky-600 text-white font-bold disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-[0_8px_25px_rgba(6,182,212,0.35)] transition-all"
+                      >
+                        {posPaymentMethod === 'cash' ? `Receive ${formatCurrency(Number(posCashReceived) || 0)}` : 'Process Payment'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+
+        {/* Close Drawer Confirmation */}
+        {posShowCloseConfirm && (
+          <motion.div
+            key="close-drawer-confirm"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-sm"
+            onClick={() => setPosShowCloseConfirm(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-3xl p-6 w-full max-w-md"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="text-center mb-6">
+                <div className="w-16 h-16 rounded-full bg-red-500/20 flex items-center justify-center mx-auto mb-4">
+                  <Wallet className="w-8 h-8 text-red-400" />
+                </div>
+                <h3 className="text-white text-xl font-bold">Close Cash Drawer?</h3>
+                <p className="text-[var(--text-muted)] mt-2">
+                  Count the cash in the drawer and compare with expected amount.
+                </p>
+              </div>
+
+              {/* Cash Denominations */}
+              <div className="mb-6">
+                <h4 className="text-white font-semibold mb-3">Cash Count</h4>
+                <div className="grid grid-cols-4 gap-2">
+                  {[
+                    { denom: '1000', label: '₱1000' },
+                    { denom: '500', label: '₱500' },
+                    { denom: '200', label: '₱200' },
+                    { denom: '100', label: '₱100' },
+                    { denom: '50', label: '₱50' },
+                    { denom: '20', label: '₱20' },
+                    { denom: '10', label: '₱10' },
+                    { denom: '5', label: '₱5' },
+                    { denom: '1', label: '₱1' },
+                    { denom: '0.25', label: '₱0.25' },
+                    { denom: '0.10', label: '₱0.10' },
+                    { denom: '0.05', label: '₱0.05' },
+                  ].map(({ denom, label }) => (
+                    <div key={denom} className="flex items-center gap-2">
+                      <span className="text-xs text-[var(--text-muted)] w-12">{label}</span>
+                      <input
+                        type="number"
+                        min="0"
+                        value={posDenominations[denom]}
+                        onChange={(e) => setPosDenominations(prev => ({ ...prev, [denom]: Number(e.target.value) }))}
+                        className="w-16 px-2 py-1 bg-[var(--bg-primary)] border border-[var(--border)] rounded text-white text-sm text-center font-mono"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Summary */}
+              <div className="bg-[var(--bg-primary)]/50 rounded-xl p-4 mb-6 space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-[var(--text-muted)]">Opening Cash</span>
+                  <span className="text-white font-mono">{formatCurrency(posDrawerState.openingCash)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-[var(--text-muted)]">Sales Revenue</span>
+                  <span className="text-white font-mono">{formatCurrency(calculateSalesTotal())}</span>
+                </div>
+                <div className="flex justify-between text-sm border-t border-[var(--border)] pt-2">
+                  <span className="text-[var(--text-muted)]">Total in Drawer</span>
+                  <span className="text-white font-mono">{formatCurrency(calculateTotalCash())}</span>
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setPosShowCloseConfirm(false)}
+                  className="flex-1 py-3 rounded-xl bg-[var(--bg-primary)] text-white font-semibold hover:bg-white/10 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={closePosDrawer}
+                  className="flex-1 py-3 rounded-xl bg-gradient-to-r from-red-500 to-red-600 text-white font-semibold hover:shadow-[0_8px_25px_rgba(239,68,68,0.35)] transition-all"
+                >
+                  Close Drawer
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Sidebar */}
       <aside className={`fixed left-0 top-0 h-screen bg-[var(--surface-dark)] border-r border-[var(--border)] transition-all duration-300 z-40 flex flex-col ${sidebarCollapsed ? 'w-20' : 'w-64'}`}>
@@ -2828,6 +3949,35 @@ export function AdminPage() {
           {/* ── INVENTORY ──────────────────────────────────────────────────── */}
           {activeTab === 'inventory' && (
             <motion.div key="inventory" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+              {/* Inventory Sub-Tabs */}
+              <div className="flex border-b border-[var(--border)] mb-6 gap-4 pb-0">
+                {INVENTORY_SUB_TABS.map(tab => {
+                  const tabIsActive = inventorySubTab === tab.id
+                  const TabIcon = tab.icon
+                  const count = tab.id === 'products' 
+                    ? visibleInventory.length 
+                    : visibleParts.length
+                  return (
+                    <button key={tab.id}
+                      onClick={() => {
+                        setInventorySubTab(tab.id)
+                        setInventoryPage(1)
+                      }}
+                      className={`px-4 py-3 text-sm font-semibold uppercase tracking-wider transition-all relative flex items-center gap-2 ${tabIsActive ? 'text-[var(--gold-primary)]' : 'text-[var(--text-muted)] hover:text-white'}`}
+                    >
+                      <TabIcon className="w-4 h-4" />
+                      {tab.label}
+                      <span className={`ml-1 px-2 py-0.5 rounded-full text-xs ${tabIsActive ? 'bg-[var(--gold-primary)] text-black' : 'bg-[var(--surface-dark)]'}`}>
+                        {count}
+                      </span>
+                      {tabIsActive && (
+                        <motion.div layoutId="inventory-tab-indicator" className="absolute bottom-0 left-0 right-0 h-[2px] bg-[var(--gold-primary)]" />
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+
               {/* Filters & Sort */}
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
                 <div className="flex flex-wrap gap-2">
@@ -2838,11 +3988,13 @@ export function AdminPage() {
                     { id: 'critical', label: 'Critical', cls: 'text-orange-400' },
                     { id: 'out_of_stock', label: 'Out of Stock', cls: 'text-red-400' },
                   ].map((status) => {
-                    const isActive = inventoryStatusFilter === status.id
+                    const currentFilter = inventorySubTab === 'products' ? productsInventoryFilter : partsInventoryFilter
+                    const isActive = currentFilter.status === status.id
+                    const setFilter = inventorySubTab === 'products' ? setProductsInventoryFilter : setPartsInventoryFilter
                     return (
                       <button
                         key={status.id}
-                        onClick={() => { setInventoryStatusFilter(status.id); setInventoryPage(1) }}
+                        onClick={() => { setFilter(prev => ({ ...prev, status: status.id, page: 1 })); setInventoryPage(1) }}
                         className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                           isActive
                             ? status.id === 'all' ? 'bg-[var(--gold-primary)] text-black'
@@ -2861,8 +4013,14 @@ export function AdminPage() {
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-[var(--text-muted)] text-sm">Sort:</span>
                   <select
-                    value={inventorySort}
-                    onChange={(e) => setInventorySort(e.target.value)}
+                    value={inventorySubTab === 'products' ? productsInventoryFilter.sort : partsInventoryFilter.sort}
+                    onChange={(e) => {
+                      if (inventorySubTab === 'products') {
+                        setProductsInventoryFilter(prev => ({ ...prev, sort: e.target.value }))
+                      } else {
+                        setPartsInventoryFilter(prev => ({ ...prev, sort: e.target.value }))
+                      }
+                    }}
                     className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
                   >
                     <option value="name">Name (A-Z)</option>
@@ -2872,7 +4030,7 @@ export function AdminPage() {
                   </select>
                   <button
                     type="button"
-                    onClick={() => {}}
+                    onClick={() => setPosDrawerOpen(true)}
                     className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-cyan-500 to-sky-500 px-5 py-2.5 text-sm font-semibold text-white shadow-[0_10px_30px_rgba(14,165,233,0.18)] hover:shadow-[0_12px_35px_rgba(14,165,233,0.25)] transition-all"
                   >
                     <ShoppingBag className="w-4 h-4" />
@@ -2882,14 +4040,23 @@ export function AdminPage() {
               </div>
 
               {/* Inventory List */}
-              {filteredInventory.length === 0 ? (
+              {(inventorySubTab === 'products' ? filteredProductsInventory : filteredPartsInventory).length === 0 ? (
                 <div className="text-center py-16 text-[var(--text-muted)]">
-                  <Package className="w-12 h-12 mx-auto mb-4 opacity-20" />
-                  <p className="font-semibold text-lg">No inventory items found.</p>
+                  {inventorySubTab === 'products' ? (
+                    <>
+                      <Package className="w-12 h-12 mx-auto mb-4 opacity-20" />
+                      <p className="font-semibold text-lg">No products found.</p>
+                    </>
+                  ) : (
+                    <>
+                      <Guitar className="w-12 h-12 mx-auto mb-4 opacity-20" />
+                      <p className="font-semibold text-lg">No guitar parts found.</p>
+                    </>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {paginatedInventory.map((item) => {
+                  {(inventorySubTab === 'products' ? paginatedProductsInventory : paginatedPartsInventory).map((item) => {
                     const isExpanded = expandedInventoryIds.has(item.product_id || item.part_id)
                     const toggleExpand = () => {
                       setExpandedInventoryIds(prev => {
@@ -2943,13 +4110,13 @@ export function AdminPage() {
                           onClick={toggleExpand}
                         >
                           <div className="w-8 flex-shrink-0">
-                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${item.type === 'product' ? 'bg-blue-500/10 text-blue-400' : 'bg-purple-500/10 text-purple-400'}`}>
-                              <Package className="w-4 h-4" />
+                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${inventorySubTab === 'products' ? 'bg-blue-500/10 text-blue-400' : 'bg-purple-500/10 text-purple-400'}`}>
+                              {inventorySubTab === 'products' ? <Package className="w-4 h-4" /> : <Guitar className="w-4 h-4" />}
                             </div>
                           </div>
                           <div className="flex-1 min-w-0">
                             <p className="text-white text-sm font-medium truncate">{item.name}</p>
-                            <p className="text-[var(--text-muted)] text-xs truncate">{item.type === 'product' ? 'Product' : 'Part'} • {item.sku || '—'}</p>
+                            <p className="text-[var(--text-muted)] text-xs truncate">{inventorySubTab === 'products' ? 'Product' : 'Guitar Part'} • {item.sku || '—'}</p>
                           </div>
                           <div className="w-32 flex-shrink-0">
                             <div className="flex items-center gap-2">
@@ -2966,7 +4133,7 @@ export function AdminPage() {
                           <div className="w-16 text-right">
                             <span className="text-white text-sm font-mono">{stock}</span>
                           </div>
-                          {item.type === 'product' && (
+                          {inventorySubTab === 'products' && (
                             <button
                               onClick={(e) => { e.stopPropagation(); openModal('inventory', { product_id: item.product_id, name: item.name }) }}
                               className="p-2 hover:bg-[var(--gold-primary)]/10 rounded transition-colors"
@@ -2992,7 +4159,7 @@ export function AdminPage() {
                                 <div className="flex flex-wrap gap-6 text-sm">
                                   <div className="flex items-center gap-2 text-[var(--text-muted)]">
                                     <span className="text-xs uppercase tracking-wider">Type:</span>
-                                    <span className="text-white">{item.type === 'product' ? 'Standard Product' : 'Custom Builder Part'}</span>
+                                    <span className="text-white">{inventorySubTab === 'products' ? 'Standard Product' : 'Custom Builder Part'}</span>
                                   </div>
                                   <div className="flex items-center gap-2 text-[var(--text-muted)]">
                                     <span className="text-xs uppercase tracking-wider">SKU:</span>
@@ -3002,12 +4169,12 @@ export function AdminPage() {
                                     <span className="text-xs uppercase tracking-wider">Threshold:</span>
                                     <span className="text-white">{threshold}</span>
                                   </div>
-                                  {item.type === 'product' && item.primary_image && (
+                                  {inventorySubTab === 'products' && item.primary_image && (
                                     <div className="flex items-center gap-2">
                                       <img src={item.primary_image} alt="" className="w-12 h-12 rounded-lg object-cover bg-[var(--surface-dark)]" />
                                     </div>
                                   )}
-                                  {item.type === 'part' && item.image_url && (
+                                  {inventorySubTab === 'guitar-parts' && item.image_url && (
                                     <div className="flex items-center gap-2">
                                       <img src={item.image_url} alt="" className="w-12 h-12 rounded-lg object-cover bg-[var(--surface-dark)]" />
                                     </div>
@@ -3040,10 +4207,10 @@ export function AdminPage() {
               )}
 
               {/* Pagination */}
-              {filteredInventory.length > 0 && (
+              {(inventorySubTab === 'products' ? filteredProductsInventory : filteredPartsInventory).length > 0 && (
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mt-6 pt-4 border-t border-[var(--border)]">
                   <p className="text-[var(--text-muted)] text-sm">
-                    Showing {(inventoryPage - 1) * INVENTORY_PAGE_SIZE + 1}–{Math.min(inventoryPage * INVENTORY_PAGE_SIZE, filteredInventory.length)} of {filteredInventory.length} items
+                    Showing {(inventoryPage - 1) * INVENTORY_PAGE_SIZE + 1}–{Math.min(inventoryPage * INVENTORY_PAGE_SIZE, (inventorySubTab === 'products' ? filteredProductsInventory : filteredPartsInventory).length)} of {(inventorySubTab === 'products' ? filteredProductsInventory : filteredPartsInventory).length} items
                   </p>
                   <div className="flex items-center gap-1 mt-4 sm:mt-0">
                     <button
@@ -3053,9 +4220,9 @@ export function AdminPage() {
                     >
                       <ChevronLeft className="w-4 h-4" />
                     </button>
-                    {Array.from({ length: Math.ceil(filteredInventory.length / INVENTORY_PAGE_SIZE) }, (_, i) => i + 1).slice(
+                    {Array.from({ length: Math.ceil((inventorySubTab === 'products' ? filteredProductsInventory : filteredPartsInventory).length / INVENTORY_PAGE_SIZE) }, (_, i) => i + 1).slice(
                       Math.max(0, inventoryPage - 3),
-                      Math.min(Math.ceil(filteredInventory.length / INVENTORY_PAGE_SIZE), inventoryPage + 2)
+                      Math.min(Math.ceil((inventorySubTab === 'products' ? filteredProductsInventory : filteredPartsInventory).length / INVENTORY_PAGE_SIZE), inventoryPage + 2)
                     ).map(page => (
                       <button
                         key={page}
@@ -3066,8 +4233,8 @@ export function AdminPage() {
                       </button>
                     ))}
                     <button
-                      onClick={() => setInventoryPage(p => Math.min(Math.ceil(filteredInventory.length / INVENTORY_PAGE_SIZE), p + 1))}
-                      disabled={inventoryPage >= Math.ceil(filteredInventory.length / INVENTORY_PAGE_SIZE)}
+                      onClick={() => setInventoryPage(p => Math.min(Math.ceil((inventorySubTab === 'products' ? filteredProductsInventory : filteredPartsInventory).length / INVENTORY_PAGE_SIZE), p + 1))}
+                      disabled={inventoryPage >= Math.ceil((inventorySubTab === 'products' ? filteredProductsInventory : filteredPartsInventory).length / INVENTORY_PAGE_SIZE)}
                       className="p-2 rounded-lg border border-[var(--border)] text-[var(--text-muted)] hover:text-white hover:border-[var(--gold-primary)] disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                     >
                       <ChevronRight className="w-4 h-4" />
@@ -4182,37 +5349,19 @@ export function AdminPage() {
 
               {/* Inventory Adjust Modal */}
               {modal.type === 'inventory' && (
-                <>
-                  <ModalHeader title="Adjust Stock" onClose={closeModal} />
-                  <div className="space-y-4 mt-6">
-                    {modal.data?.name && (
-                      <div className="p-3 bg-[var(--bg-primary)] rounded-xl border border-[var(--border)]">
-                        <p className="text-white font-semibold">{modal.data.name}</p>
-                      </div>
-                    )}
-                    {!modal.data?.product_id && (
-                      <div>
-                        <label className={labelCls}>Select Product *</label>
-                        <select value={form.product_id || ''} onChange={e => setForm(f => ({ ...f, product_id: e.target.value }))} className={inputCls}>
-                          <option value="">— Select Product —</option>
-                          {visibleProducts.map(p => <option key={p.product_id} value={p.product_id}>{p.name} ({p.sku})</option>)}
-                        </select>
-                      </div>
-                    )}
-                    <div>
-                      <label className={labelCls}>Adjustment Type *</label>
-                      <select value={form.change_type || ''} onChange={e => setForm(f => ({ ...f, change_type: e.target.value }))} className={inputCls}>
-                        <option value="">— Select Type —</option>
-                        <option value="stock_in">Stock In (Add)</option>
-                        <option value="stock_out">Stock Out (Deduct)</option>
-                        <option value="adjustment">Manual Adjustment</option>
-                      </select>
-                    </div>
-                    <FormField label="Quantity *" type="number" value={form.quantity ?? ''} onChange={v => setForm(f => ({ ...f, quantity: v }))} />
-                    <FormField label="Reason / Notes" value={form.notes || ''} onChange={v => setForm(f => ({ ...f, notes: v }))} textarea placeholder="e.g. Used 2 fretboards for project PRJ-001" />
-                  </div>
-                  <ModalFooter onCancel={closeModal} onSave={saveStockAdjust} isSaving={isSaving} />
-                </>
+                <AdjustStockModal
+                  visibleProducts={visibleInventory}
+                  modal={modal}
+                  form={form}
+                  setForm={setForm}
+                  formErrors={formErrors}
+                  setFormErrors={setFormErrors}
+                  closeModal={closeModal}
+                  isSaving={isSaving}
+                  saveStockAdjust={saveStockAdjust}
+                  showToast={showToast}
+                  formatCurrency={formatCurrency}
+                />
               )}
 
               {/* Guitar View Modal */}
