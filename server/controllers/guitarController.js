@@ -33,6 +33,31 @@ exports.deleteCustomization = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+exports.getMyCustomizations = async (req, res, next) => {
+  try {
+    const userId = req.user?.id || req.user?.user_id;
+    const data = await guitarService.getMyCustomizations(userId);
+    res.json({ status: 'success', data });
+  } catch (err) { next(err); }
+};
+
+exports.createMyCustomization = async (req, res, next) => {
+  try {
+    const userId = req.user?.id || req.user?.user_id;
+    const data = await guitarService.createMyCustomization(userId, req.body);
+    res.status(201).json({ status: 'success', data });
+  } catch (err) { next(err); }
+};
+
+exports.updateMyCustomization = async (req, res, next) => {
+  try {
+    const userId = req.user?.id || req.user?.user_id;
+    const data = await guitarService.updateMyCustomization(req.params.id, userId, req.body);
+    if (!data) throw new AppError('Customization not found', 404);
+    res.json({ status: 'success', data });
+  } catch (err) { next(err); }
+};
+
 // ─── GUITAR PARTS ────────────────────────────────────────────────────────────
 
 exports.getParts = async (req, res, next) => {

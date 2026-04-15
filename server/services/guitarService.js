@@ -1,8 +1,30 @@
 const { pool } = require('../config/database');
 
+let customizationColumnsReady = false;
+let customizationColumnsPromise = null;
+
+async function ensureCustomizationColumns() {
+  if (customizationColumnsReady) return;
+  if (!customizationColumnsPromise) {
+    customizationColumnsPromise = pool.query(`
+      ALTER TABLE customizations
+      ADD COLUMN IF NOT EXISTS config_json JSONB DEFAULT '{}'::jsonb,
+      ADD COLUMN IF NOT EXISTS stickers JSONB DEFAULT '[]'::jsonb,
+      ADD COLUMN IF NOT EXISTS preview_image TEXT
+    `).then(() => {
+      customizationColumnsReady = true;
+    }).catch((error) => {
+      customizationColumnsPromise = null;
+      throw error;
+    });
+  }
+  await customizationColumnsPromise;
+}
+
 // ─── CUSTOMIZATIONS ──────────────────────────────────────────────────────────
 
 exports.getAllCustomizations = async ({ search, guitar_type, is_saved, user_id } = {}) => {
+  await ensureCustomizationColumns();
   let where = [];
   let params = [];
   let idx = 1;
@@ -44,6 +66,7 @@ exports.getAllCustomizations = async ({ search, guitar_type, is_saved, user_id }
 };
 
 exports.getCustomizationById = async (id) => {
+  await ensureCustomizationColumns();
   const res = await pool.query(
     `SELECT c.*, u.email AS user_email, u.first_name || ' ' || u.last_name AS user_name
      FROM customizations c
@@ -65,6 +88,7 @@ exports.getCustomizationById = async (id) => {
 };
 
 exports.updateCustomization = async (id, { name, total_price, is_saved, body_wood, neck_wood, fingerboard_wood, bridge_type, pickups, color, finish_type }) => {
+  await ensureCustomizationColumns();
   const res = await pool.query(
     `UPDATE customizations SET
        name             = COALESCE($1, name),
@@ -87,6 +111,124 @@ exports.updateCustomization = async (id, { name, total_price, is_saved, body_woo
 
 exports.deleteCustomization = async (id) => {
   await pool.query('DELETE FROM customizations WHERE customization_id = $1', [id]);
+};
+
+exports.getMyCustomizations = async (userId) => {
+  await ensureCustomizationColumns();
+  const res = await pool.query(
+    `SELECT *
+     FROM customizations
+     WHERE user_id = $1
+     ORDER BY updated_at DESC`,
+    [userId]
+  );
+  return res.rows;
+};
+
+exports.getMyCustomizationById = async (customizationId, userId) => {
+  await ensureCustomizationColumns();
+  const res = await pool.query(
+    `SELECT *
+     FROM customizations
+     WHERE customization_id = $1 AND user_id = $2`,
+    [customizationId, userId]
+  );
+  return res.rows[0] || null;
+};
+
+exports.createMyCustomization = async (userId, payload) => {
+  await ensureCustomizationColumns();
+  const {
+    name,
+    guitar_type,
+    body_wood,
+    neck_wood,
+    fingerboard_wood,
+    bridge_type,
+    pickups,
+    color,
+    finish_type,
+    total_price,
+    is_saved,
+    config_json,
+    stickers,
+    preview_image,
+  } = payload;
+
+  const res = await pool.query(
+    `INSERT INTO customizations (
+      user_id, name, guitar_type, body_wood, neck_wood, fingerboard_wood,
+      bridge_type, pickups, color, finish_type, total_price, is_saved,
+      config_json, stickers, preview_image
+    )
+    VALUES (
+      $1, $2, $3, $4, $5, $6,
+      $7, $8, $9, $10, $11, $12,
+      COALESCE($13::jsonb, '{}'::jsonb),
+      COALESCE($14::jsonb, '[]'::jsonb),
+      $15
+    )
+    RETURNING *`,
+    [
+      userId, name, guitar_type, body_wood, neck_wood, fingerboard_wood,
+      bridge_type, pickups, color, finish_type, total_price, is_saved ?? true,
+      config_json ? JSON.stringify(config_json) : null,
+      stickers ? JSON.stringify(stickers) : null,
+      preview_image || null,
+    ]
+  );
+  return res.rows[0];
+};
+
+exports.updateMyCustomization = async (customizationId, userId, payload) => {
+  await ensureCustomizationColumns();
+  const {
+    name,
+    guitar_type,
+    body_wood,
+    neck_wood,
+    fingerboard_wood,
+    bridge_type,
+    pickups,
+    color,
+    finish_type,
+    total_price,
+    is_saved,
+    config_json,
+    stickers,
+    preview_image,
+  } = payload;
+
+  const res = await pool.query(
+    `UPDATE customizations SET
+      name             = COALESCE($1, name),
+      guitar_type      = COALESCE($2, guitar_type),
+      body_wood        = COALESCE($3, body_wood),
+      neck_wood        = COALESCE($4, neck_wood),
+      fingerboard_wood = COALESCE($5, fingerboard_wood),
+      bridge_type      = COALESCE($6, bridge_type),
+      pickups          = COALESCE($7, pickups),
+      color            = COALESCE($8, color),
+      finish_type      = COALESCE($9, finish_type),
+      total_price      = COALESCE($10, total_price),
+      is_saved         = COALESCE($11, is_saved),
+      config_json      = COALESCE($12::jsonb, config_json),
+      stickers         = COALESCE($13::jsonb, stickers),
+      preview_image    = COALESCE($14, preview_image),
+      updated_at       = now()
+    WHERE customization_id = $15 AND user_id = $16
+    RETURNING *`,
+    [
+      name, guitar_type, body_wood, neck_wood, fingerboard_wood, bridge_type,
+      pickups, color, finish_type, total_price, is_saved,
+      config_json ? JSON.stringify(config_json) : null,
+      stickers ? JSON.stringify(stickers) : null,
+      preview_image || null,
+      customizationId, userId,
+    ]
+  );
+
+  return res.rows[0] || null;
 };
 
 // ─── CUSTOMIZATION PARTS ─────────────────────────────────────────────────────

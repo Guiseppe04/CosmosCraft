@@ -73,20 +73,81 @@ exports.createOrder = async (orderData) => {
     
     const order = orderRes.rows[0]
 
-    // Insert order items - handle both UUID and non-UUID product IDs
+    // Insert order items - handle products and custom builds
     for (const item of items) {
+      let customizationId = null
+
+      if (item.customization) {
+        const {
+          name,
+          config = {},
+          summary = {},
+          baseBuildPrice,
+          additionalParts = [],
+        } = item.customization
+
+        const customizationRes = await client.query(
+          `INSERT INTO customizations (
+             user_id,
+             name,
+             guitar_type,
+             body_wood,
+             neck_wood,
+             fingerboard_wood,
+             bridge_type,
+             pickups,
+             color,
+             finish_type,
+             total_price,
+             is_saved
+           )
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+           RETURNING customization_id`,
+          [
+            userId,
+            name || 'Custom Build',
+            config.guitarType || 'electric',
+            summary.bodyWood || config.bodyWood || null,
+            summary.neck || config.neck || null,
+            summary.fretboard || config.fretboard || null,
+            summary.bridge || config.bridge || null,
+            summary.pickups || config.pickups || null,
+            summary.bodyFinish || config.bodyFinish || null,
+            summary.bodyFinish || config.bodyFinish || null,
+            Number(baseBuildPrice ?? item.price ?? 0),
+            true
+          ]
+        )
+
+        customizationId = customizationRes.rows[0].customization_id
+
+        for (const part of additionalParts) {
+          await client.query(
+            `INSERT INTO customization_parts (customization_id, product_id, part_name, quantity, price)
+             VALUES ($1, $2, $3, $4, $5)`,
+            [
+              customizationId,
+              isValidUUID(part.product_id) ? part.product_id : null,
+              part.name || part.part_name || 'Custom Part',
+              Number(part.quantity) > 0 ? Number(part.quantity) : 1,
+              Number(part.price) || 0,
+            ]
+          )
+        }
+      }
+
       // Check if product_id is a valid UUID
-      const productId = isValidUUID(item.productId) ? item.productId : null
+      const productId = customizationId ? null : (isValidUUID(item.productId) ? item.productId : null)
       
       // For mock products (non-UUID IDs like "prod-001"), store in product_sku
-      const productSku = !productId ? item.productId : null
+      const productSku = !customizationId && !productId ? item.productId : null
       // Always store product name if provided
       const productName = item.name || null
       
       await client.query(
-        `INSERT INTO order_items (order_id, product_id, product_sku, product_name, quantity, unit_price)
-         VALUES ($1, $2, $3, $4, $5, $6)`,
-        [order.order_id, productId, productSku, productName, item.quantity, item.price]
+        `INSERT INTO order_items (order_id, product_id, customization_id, product_sku, product_name, quantity, unit_price)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [order.order_id, productId, customizationId, productSku, productName, item.quantity, item.price]
       )
     }
 

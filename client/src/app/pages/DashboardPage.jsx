@@ -90,6 +90,7 @@ export function DashboardPage() {
   const { logout, user } = useAuth()
   const { cart, addToCart, removeFromCart, updateQuantity, getTotalPrice, getCartCount } = useCart()
   const initialSection = location.state?.section || 'profile'
+  const VALID_SECTIONS = new Set(['profile', 'my-guitar', 'appointments', 'cart', 'purchases', 'addresses', 'password', 'privacy', 'notifications'])
   const [activeSection, setActiveSection] = useState(initialSection)
   const [profileImage, setProfileImage] = useState('')
   const [showSelectInstrumentModal, setShowSelectInstrumentModal] = useState(false)
@@ -114,10 +115,16 @@ export function DashboardPage() {
   const [ratingText, setRatingText] = useState('')
 
   useEffect(() => {
-    if (activeSection === 'projects' && !activeProjectView) {
-      fetchMyProjects()
+    const sectionFromState = location.state?.section
+    if (!sectionFromState) return
+    setActiveSection(VALID_SECTIONS.has(sectionFromState) ? sectionFromState : 'profile')
+  }, [location.state])
+
+  useEffect(() => {
+    if (!VALID_SECTIONS.has(activeSection)) {
+      setActiveSection('profile')
     }
-  }, [activeSection, activeProjectView])
+  }, [activeSection])
 
   useEffect(() => {
     if (activeSection === 'purchases') {
@@ -431,7 +438,7 @@ export function DashboardPage() {
     { id: 'privacy', label: 'Privacy Settings', icon: Settings, group: 'account' },
     { id: 'notifications', label: 'Notification Settings', icon: Bell, group: 'account' },
     { id: 'my-guitar', label: 'My Guitar', icon: Guitar, group: 'orders' },
-    { id: 'projects', label: 'Build Projects', icon: Briefcase, group: 'orders' },
+    { id: 'appointments', label: 'Appointments', icon: Calendar, group: 'orders' },
     { id: 'cart', label: 'My Cart', icon: ShoppingBag, group: 'orders' },
     { id: 'purchases', label: 'My Purchase', icon: Package, group: 'orders' },
     { id: 'logout', label: 'Logout', icon: User, group: 'orders' },
@@ -1513,7 +1520,6 @@ export function DashboardPage() {
           >
             {activeSection === 'profile' && renderProfileContent()}
             {activeSection === 'my-guitar' && renderMyGuitarContent()}
-            {activeSection === 'projects' && renderProjectsContent()}
             {activeSection === 'appointments' && renderAppointmentsContent()}
             {activeSection === 'cart' && renderCartContent()}
             {activeSection === 'purchases' && renderPurchasesContent()}

@@ -36,6 +36,7 @@ function GuitarLayer({ src, maskSrc, style, className = '' }) {
       aria-hidden="true"
       className={`absolute inset-0 pointer-events-none select-none ${className}`}
       style={maskSrc ? maskedLayerStyle(maskSrc, style) : layerStyle(src, style)}
+      data-export-layer="true"
     />
   )
 }
@@ -251,6 +252,7 @@ function GuitarPreview({ config, view, onViewChange }) {
           {/* Guitar image */}
           <div className="relative flex items-center justify-center py-8">
             <div
+              data-export-stage="true"
               className="relative aspect-[16/7] w-full max-w-[1000px] transition-transform duration-500 ease-out"
               style={{
                 transform: `translate(${previewX}px, ${previewY}px) scale(${previewScale}) ${previewFlip}`,

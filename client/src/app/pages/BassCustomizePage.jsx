@@ -1,16 +1,17 @@
 import { useMemo, useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
-import { useSearchParams, useNavigate } from 'react-router'
+import { useSearchParams, useNavigate, useBlocker } from 'react-router'
 import { 
   RotateCcw, Save, ChevronDown, ChevronRight, Info, 
   ShoppingCart, Clock, Truck, Shield, Check, CheckCircle,
-  Sparkles, Layers, Palette, Cog, Zap
+  Sparkles, Layers, Palette, Cog, Zap, Image
 } from 'lucide-react'
-import { formatCurrency, toPHP } from '../utils/formatCurrency'
+import { formatCurrency } from '../utils/formatCurrency'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useCart } from '../context/CartContext.jsx'
 import useBassConfig from '../hooks/useBassConfig.js'
 import BassPreview from '../components/bass/BassPreview.jsx'
+import { exportMaskedPreview } from '../utils/exportMaskedPreview.js'
 
 const CATEGORIES = [
   { 
@@ -59,8 +60,7 @@ function Tooltip({ content, children }) {
 
 function AnimatedPrice({ price }) {
   const displayPrice = useMemo(() => {
-    const phpPrice = toPHP(price, false)
-    return phpPrice.toLocaleString('en-PH')
+    return price.toLocaleString('en-PH')
   }, [price])
   
   return (
@@ -175,8 +175,18 @@ export function BassCustomizePage() {
   const editBuildId = searchParams.get('edit')
   const navigate = useNavigate()
 
-  const { config, updateConfig, resetConfig, price, summary, exportConfig, loadConfig, builder, options } =
-    useBassConfig()
+  const {
+    config,
+    updateConfig: baseUpdateConfig,
+    resetConfig: baseResetConfig,
+    price,
+    summary,
+    exportConfig,
+    loadConfig: baseLoadConfig,
+    builder,
+    options,
+    refreshPrices,
+  } = useBassConfig()
   const [view, setView] = useState('front')
   const [activeCategory, setActiveCategory] = useState('body')
   const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false)
@@ -184,6 +194,31 @@ export function BassCustomizePage() {
   const categoryDropdownRef = useRef(null)
   const { isAuthenticated, openLogin } = useAuth()
   const { addToCart, setIsOpen: setCartOpen } = useCart()
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(Boolean(editBuildId))
+  const bypassNavigationBlockRef = useRef(false)
+  const [showUnsavedModal, setShowUnsavedModal] = useState(false)
+  const suppressDirtyTrackingRef = useRef(false)
+
+  const updateConfig = (patch) => {
+    if (editBuildId && !suppressDirtyTrackingRef.current) {
+      setHasUnsavedChanges(true)
+    }
+    baseUpdateConfig(patch)
+  }
+
+  const resetConfig = () => {
+    if (editBuildId && !suppressDirtyTrackingRef.current) {
+      setHasUnsavedChanges(true)
+    }
+    baseResetConfig()
+  }
+
+  const loadConfig = (raw) => {
+    if (editBuildId && !suppressDirtyTrackingRef.current) {
+      setHasUnsavedChanges(true)
+    }
+    baseLoadConfig(raw)
+  }
 
   useEffect(() => {
     function handleClickOutside(event) {
@@ -197,21 +232,57 @@ export function BassCustomizePage() {
   }, [])
 
   useEffect(() => {
+    const handleVisibility = () => {
+      if (!document.hidden && refreshPrices) {
+        refreshPrices()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => document.removeEventListener('visibilitychange', handleVisibility)
+  }, [refreshPrices])
+
+  useEffect(() => {
     if (editBuildId) {
       for (const storageKey of ['cosmoscraft_saved_bass_builds', 'cosmoscraft_saved_builds']) {
         const builds = JSON.parse(window.localStorage.getItem(storageKey) || '[]')
         const target = builds.find(b => b.id === editBuildId)
         if (target) {
           try {
-            loadConfig(target.config)
+            suppressDirtyTrackingRef.current = true
+            baseLoadConfig(target.config)
           } catch (e) {
             console.error('Failed to load build config for editing:', e)
+          } finally {
+            suppressDirtyTrackingRef.current = false
           }
           break
         }
       }
     }
-  }, [editBuildId, loadConfig])
+  }, [editBuildId, baseLoadConfig])
+
+  const shouldBlockNavigation = Boolean(editBuildId) && hasUnsavedChanges && !bypassNavigationBlockRef.current
+  const blocker = useBlocker(
+    ({ currentLocation, nextLocation }) =>
+      shouldBlockNavigation &&
+      (currentLocation.pathname !== nextLocation.pathname || currentLocation.search !== nextLocation.search),
+  )
+
+  useEffect(() => {
+    if (blocker.state === 'blocked') {
+      setShowUnsavedModal(true)
+    }
+  }, [blocker.state])
+
+  useEffect(() => {
+    if (!shouldBlockNavigation) return
+    const handleBeforeUnload = (event) => {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [shouldBlockNavigation])
 
   const pickguardOptions = useMemo(() => {
     if (!options.pickguardOptions) return []
@@ -232,7 +303,7 @@ export function BassCustomizePage() {
     }
   }, [toastMessage])
 
-  const saveBuild = (shouldNavigate = true) => {
+  const saveBuild = ({ shouldNavigate = true, continueBlockedNavigation = false } = {}) => {
     const buildId = editBuildId || `build-${Date.now()}`
     const build = {
       id: buildId,
@@ -265,9 +336,20 @@ export function BassCustomizePage() {
 
     if (stored.length > 20) stored = stored.slice(0, 20)
     window.localStorage.setItem(storedKey, JSON.stringify(stored))
+    setHasUnsavedChanges(false)
     
+    if (continueBlockedNavigation && blocker.state === 'blocked') {
+      setShowUnsavedModal(false)
+      bypassNavigationBlockRef.current = true
+      blocker.proceed()
+      setTimeout(() => { bypassNavigationBlockRef.current = false }, 0)
+      return
+    }
+
     if (shouldNavigate) {
-      navigate('/dashboard', { state: { section: 'guitar', message: 'Build saved to My Guitar!' } })
+      bypassNavigationBlockRef.current = true
+      navigate('/dashboard', { state: { section: 'my-guitar', message: 'Build saved to My Guitar!' } })
+      setTimeout(() => { bypassNavigationBlockRef.current = false }, 0)
     } else {
       setToastMessage('Your Build is saved to My Guitar!')
     }
@@ -275,14 +357,14 @@ export function BassCustomizePage() {
 
   const handleSave = () => {
     if (!isAuthenticated) {
-      openLogin(() => saveBuild(true))
+      openLogin(() => saveBuild({ shouldNavigate: true }))
       return
     }
-    saveBuild(true)
+    saveBuild({ shouldNavigate: true })
   }
 
   const handleAddToCart = () => {
-    const saveAndToast = () => saveBuild(false)
+    const saveAndToast = () => saveBuild({ shouldNavigate: false })
 
     if (!isAuthenticated) {
       openLogin(saveAndToast)
@@ -292,8 +374,33 @@ export function BassCustomizePage() {
     saveAndToast()
   }
 
+  const handleSaveAndLeave = () => {
+    if (!isAuthenticated) {
+      openLogin(() => saveBuild({ shouldNavigate: false, continueBlockedNavigation: true }))
+      return
+    }
+    saveBuild({ shouldNavigate: false, continueBlockedNavigation: true })
+  }
+
+  const handleStayOnPage = () => {
+    setShowUnsavedModal(false)
+    if (blocker.state === 'blocked') {
+      blocker.reset()
+    }
+  }
+
+  const handleConfirmLeave = () => {
+    setShowUnsavedModal(false)
+    if (blocker.state === 'blocked') {
+      bypassNavigationBlockRef.current = true
+      blocker.proceed()
+      setTimeout(() => { bypassNavigationBlockRef.current = false }, 0)
+    }
+  }
+
   const [savedBuilds, setSavedBuilds] = useState([])
   const [showLoadModal, setShowLoadModal] = useState(false)
+  const previewRef = useRef(null)
 
   useEffect(() => {
     // Load saved builds from localStorage
@@ -301,15 +408,29 @@ export function BassCustomizePage() {
     setSavedBuilds(stored)
   }, [])
 
-  const handleSaveImage = () => {
+  const handleSaveImage = async () => {
     if (!isAuthenticated) {
       openLogin(() => {
-        window.alert('Please log in to save your bass design as an image.')
+        setTimeout(() => handleSaveImage(), 100)
       })
       return
     }
 
-    window.alert('Image save feature coming soon! Your build configuration is automatically saved.')
+    if (!previewRef.current) {
+      console.error('Preview ref not found')
+      return
+    }
+
+    try {
+      await exportMaskedPreview(previewRef.current, {
+        background: '#141414',
+        scale: 2,
+        fileName: `custom-bass-${config.bassType}-${Date.now()}.png`,
+      })
+    } catch (error) {
+      console.error('Failed to save image:', error)
+      window.alert('Failed to save image. Please try again.')
+    }
   }
 
   const handleLoadBuild = (buildId) => {
@@ -804,6 +925,14 @@ export function BassCustomizePage() {
                 <Save className="h-4 w-4" />
                 Save Build
               </button>
+              <div className={`inline-flex items-center gap-2 rounded-lg px-3 py-1 text-[11px] font-semibold ${
+                hasUnsavedChanges
+                  ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
+                  : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+              }`}>
+                <span className={`h-1.5 w-1.5 rounded-full ${hasUnsavedChanges ? 'bg-amber-300' : 'bg-emerald-300'}`} />
+                {hasUnsavedChanges ? 'Unsaved changes' : 'Saved'}
+              </div>
               {savedBuilds.length > 0 && (
                 <button
                   type="button"
@@ -825,7 +954,7 @@ export function BassCustomizePage() {
                 <div>
                   <p className="text-xs uppercase tracking-[0.2em] text-white/40">Your Build Total</p>
                   <AnimatedPrice price={price} />
-                  <p className="mt-1 text-xs text-white/30">Base price: ₱{(89999).toLocaleString('en-PH')}</p>
+                  <p className="mt-1 text-xs text-white/30">Base price: ₱{(options.basePrice ?? 0).toLocaleString('en-PH')}</p>
                 </div>
                 
                 <div className="flex flex-col sm:flex-row gap-3">
@@ -857,7 +986,7 @@ export function BassCustomizePage() {
               </div>
             </div>
             
-            <div className="relative flex-1 rounded-2xl border border-white/10 bg-gradient-to-b from-[#141414] via-[#0d0d0d] to-[#080808] overflow-hidden">
+            <div ref={previewRef} className="relative flex-1 rounded-2xl border border-white/10 bg-gradient-to-b from-[#141414] via-[#0d0d0d] to-[#080808] overflow-hidden">
               <div className="absolute inset-0 overflow-hidden pointer-events-none">
                 <div className="absolute -top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-gradient-radial from-[#d4af37]/10 via-transparent to-transparent opacity-60" />
                 <div className="absolute top-1/4 left-1/4 w-[400px] h-[400px] bg-gradient-radial from-white/5 via-transparent to-transparent rounded-full" />
@@ -1037,11 +1166,12 @@ export function BassCustomizePage() {
               <div className="flex gap-2">
                 <button
                   type="button"
-                  onClick={handleExportConfig}
-                  className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 py-2 text-xs font-medium transition-all duration-200 hover:bg-[var(--surface-dark)]"
+                  onClick={handleSaveImage}
+                  className="flex-1 flex items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 py-2 text-xs font-medium transition-all duration-200 hover:bg-[var(--surface-dark)]"
                   style={{ color: 'var(--text-muted)' }}
                 >
-                  Export
+                  <Image className="h-3.5 w-3.5" />
+                  Save Image
                 </button>
                 <button
                   type="button"
@@ -1125,6 +1255,42 @@ export function BassCustomizePage() {
       <p className="mt-2 text-center text-[10px] uppercase tracking-[0.15em] text-white/30">
         Graphic representation only. Actual product may differ slightly due to natural wood variations.
       </p>
+
+      {showUnsavedModal && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6">
+            <h3 className="text-lg font-bold text-white mb-2">Unsaved Changes</h3>
+            <p className="text-sm text-[var(--text-muted)]">
+              You have unsaved changes. Please save your build before leaving this page.
+            </p>
+            <div className="mt-6 flex gap-3">
+              <button
+                type="button"
+                onClick={handleStayOnPage}
+                className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-2.5 text-sm font-semibold text-white hover:bg-white/5 transition-colors"
+              >
+                Stay
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  handleSaveAndLeave()
+                }}
+                className="flex-1 rounded-lg bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] px-4 py-2.5 text-sm font-bold text-[var(--text-dark)]"
+              >
+                Save Build
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmLeave}
+                className="flex-1 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2.5 text-sm font-semibold text-red-300 hover:bg-red-500/20 transition-colors"
+              >
+                Leave Anyway
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
