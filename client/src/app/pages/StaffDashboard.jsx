@@ -14,6 +14,7 @@ import { useSmartPolling } from '../hooks/useSmartPolling'
 import { useDebounce } from '../hooks/useDebounce'
 import ProjectTaskTracker from '../components/projects/ProjectTaskTracker'
 import { Topbar } from '../components/admin/Topbar'
+import { OrderManagement } from '../components/admin/OrderManagement'
 
 // ── Skeleton Loader ──────────────────────────────────────────────────────────
 function SkeletonRow({ cols = 5 }) {
@@ -446,46 +447,11 @@ export function StaffDashboard() {
           {/* ── ORDERS ────────────────────────────────────────────────── */}
           {activeTab === 'orders' && (
             <motion.div key="orders" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-              {loadingOrders ? (
-                <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl overflow-hidden">
-                  <table className="w-full"><tbody>{[...Array(5)].map((_, i) => <SkeletonRow cols={5} key={i} />)}</tbody></table>
-                </div>
-              ) : orders.length === 0 ? (
-                <EmptyState icon={ShoppingBag} label="No orders found" />
-              ) : (
-                <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl overflow-hidden">
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead className="bg-[var(--bg-primary)] border-b border-[var(--border)]">
-                        <tr>
-                          {['Order #', 'Customer', 'Date', 'Total', 'Status', 'Actions'].map(col => (
-                            <th key={col} className="text-left py-4 px-6 text-[var(--text-muted)] font-medium text-xs uppercase tracking-wider">{col}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {orders.map(order => (
-                          <tr key={order.order_id} className="border-b border-[var(--border)]/50 hover:bg-[var(--bg-primary)]/50 transition-colors">
-                            <td className="py-4 px-6 text-white font-mono text-sm">#{order.order_number || order.order_id?.slice(0, 8)}</td>
-                            <td className="py-4 px-6">
-                              <p className="text-white">{order.customer_name || order.user_name || '—'}</p>
-                              <p className="text-[var(--text-muted)] text-xs">{order.customer_email || '—'}</p>
-                            </td>
-                            <td className="py-4 px-6 text-[var(--text-muted)] text-sm">{order.created_at ? new Date(order.created_at).toLocaleDateString() : '—'}</td>
-                            <td className="py-4 px-6 text-[var(--gold-primary)] font-bold">{formatCurrency(order.total || order.total_amount, true)}</td>
-                            <td className="py-4 px-6">
-                              <StatusBadge label={order.status || 'pending'} variant={statusVariant(order.status)} />
-                            </td>
-                            <td className="py-4 px-6">
-                              <span className="text-[var(--text-muted)] text-xs">View Only</span>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
+              <OrderManagement
+                orders={orders}
+                onRefresh={fetchOrders}
+                user={user}
+              />
             </motion.div>
           )}
 

@@ -1,23 +1,22 @@
 /**
  * Currency formatting utility for Philippine Peso (PHP)
- * Converts USD amounts to PHP using a fixed exchange rate for demo
- * In production, this would fetch real-time exchange rates
+ * Prices are stored directly in PHP - no conversion needed
  */
 
-// Exchange rate: 1 USD = 56 PHP (approximate)
-const USD_TO_PHP_RATE = 56
+// No exchange rate - amounts are already in PHP
+const USD_TO_PHP_RATE = 1
 
 /**
  * Format a number as Philippine Peso
- * @param {number} amount - The amount to format (in USD or raw number)
- * @param {boolean} isUSD - Whether the amount is in USD (will convert to PHP)
+ * @param {number} amount - The amount to format (in PHP)
+ * @param {boolean} isUSD - Unused, kept for backward compatibility
  * @returns {string} Formatted currency string
  */
 export function formatCurrency(amount, isUSD = false) {
   const numericAmount = typeof amount === 'number' ? amount : parseFloat(amount) || 0
   
-  // Convert to PHP if amount is in USD
-  const phpAmount = isUSD ? numericAmount * USD_TO_PHP_RATE : numericAmount
+  // Amounts are already in PHP - no conversion needed
+  const phpAmount = numericAmount
   
   return new Intl.NumberFormat('en-PH', {
     style: 'currency',
@@ -31,12 +30,12 @@ export function formatCurrency(amount, isUSD = false) {
  * Format a number as Philippine Peso without currency symbol
  * Useful for calculations
  * @param {number} amount - The amount to format
- * @param {boolean} isUSD - Whether the amount is in USD
+ * @param {boolean} isUSD - Unused, kept for backward compatibility
  * @returns {number} The numeric amount in PHP
  */
 export function toPHP(amount, isUSD = false) {
   const numericAmount = typeof amount === 'number' ? amount : parseFloat(amount) || 0
-  return isUSD ? numericAmount * USD_TO_PHP_RATE : numericAmount
+  return numericAmount
 }
 
 /**
@@ -53,5 +52,5 @@ export function formatNumber(num) {
  * @returns {number} The current USD to PHP exchange rate
  */
 export function getExchangeRate() {
-  return USD_TO_PHP_RATE
+  return 1
 }

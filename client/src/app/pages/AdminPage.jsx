@@ -2635,7 +2635,7 @@ export function AdminPage() {
     { id: 'projects', label: 'Projects', icon: Briefcase },
     { id: 'services', label: 'Services', icon: Wrench },
     { id: 'appointments', label: 'Appointments', icon: Calendar },
-    { id: 'users', label: 'Users', icon: Shield },
+    ...(isSuperAdmin ? [{ id: 'users', label: 'Users', icon: Shield }] : []),
     { id: 'settings', label: 'Settings', icon: Settings },
   ]
 
@@ -3087,12 +3087,12 @@ export function AdminPage() {
                   </button>
                 </div>
               )}
-              {activeTab === 'products' && (
+              {activeTab === 'products' && isSuperAdmin && (
                 <button onClick={() => openModal('product')} className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black rounded-xl font-semibold text-sm hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all">
                   <Plus className="w-4 h-4" /> Add Product
                 </button>
               )}
-              {activeTab === 'guitar-parts' && (
+              {activeTab === 'guitar-parts' && isSuperAdmin && (
                 <button onClick={() => openModal('part')} className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black rounded-xl font-semibold text-sm hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all">
                   <Plus className="w-4 h-4" /> Add Builder Part
                 </button>
@@ -3374,12 +3374,16 @@ export function AdminPage() {
                       </td>
                       <td className="py-4 px-6">
                         <div className="flex items-center gap-2">
-                          <button onClick={() => openModal('product', p)} className="p-2 hover:bg-[var(--gold-primary)]/10 rounded-lg transition-colors" title="Edit">
-                            <Edit className="w-4 h-4 text-[var(--text-muted)]" />
-                          </button>
-                          <button onClick={() => deleteProduct(p.product_id, p.name)} className="p-2 hover:bg-red-500/10 rounded-lg transition-colors" title="Deactivate">
-                            <Trash2 className="w-4 h-4 text-red-400" />
-                          </button>
+                          {isSuperAdmin && (
+                            <>
+                              <button onClick={() => openModal('product', p)} className="p-2 hover:bg-[var(--gold-primary)]/10 rounded-lg transition-colors" title="Edit">
+                                <Edit className="w-4 h-4 text-[var(--text-muted)]" />
+                              </button>
+                              <button onClick={() => deleteProduct(p.product_id, p.name)} className="p-2 hover:bg-red-500/10 rounded-lg transition-colors" title="Deactivate">
+                                <Trash2 className="w-4 h-4 text-red-400" />
+                              </button>
+                            </>
+                          )}
                         </div>
                       </td>
                     </>
@@ -3444,12 +3448,16 @@ export function AdminPage() {
                               </div>
                             </div>
                             <div className="flex gap-1">
-                              <button onClick={() => openModal('product', p)} className="p-2 bg-[var(--bg-primary)] hover:bg-[var(--gold-primary)]/20 rounded-lg transition-colors" title="Edit">
-                                <Edit className="w-4 h-4 text-[var(--text-muted)]" />
-                              </button>
-                              <button onClick={() => deleteProduct(p.product_id, p.name)} className="p-2 bg-[var(--bg-primary)] hover:bg-red-500/20 rounded-lg transition-colors" title="Delete">
-                                <Trash2 className="w-4 h-4 text-red-400" />
-                              </button>
+                              {isSuperAdmin && (
+                                <>
+                                  <button onClick={() => openModal('product', p)} className="p-2 bg-[var(--bg-primary)] hover:bg-[var(--gold-primary)]/20 rounded-lg transition-colors" title="Edit">
+                                    <Edit className="w-4 h-4 text-[var(--text-muted)]" />
+                                  </button>
+                                  <button onClick={() => deleteProduct(p.product_id, p.name)} className="p-2 bg-[var(--bg-primary)] hover:bg-red-500/20 rounded-lg transition-colors" title="Delete">
+                                    <Trash2 className="w-4 h-4 text-red-400" />
+                                  </button>
+                                </>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -4028,14 +4036,16 @@ export function AdminPage() {
                     <option value="stock_low">Stock (Low to High)</option>
                     <option value="stock_high">Stock (High to Low)</option>
                   </select>
-                  <button
-                    type="button"
-                    onClick={() => setPosDrawerOpen(true)}
-                    className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-cyan-500 to-sky-500 px-5 py-2.5 text-sm font-semibold text-white shadow-[0_10px_30px_rgba(14,165,233,0.18)] hover:shadow-[0_12px_35px_rgba(14,165,233,0.25)] transition-all"
-                  >
-                    <ShoppingBag className="w-4 h-4" />
-                    POS
-                  </button>
+                  {isSuperAdmin && (
+                    <button
+                      type="button"
+                      onClick={() => setPosDrawerOpen(true)}
+                      className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-cyan-500 to-sky-500 px-5 py-2.5 text-sm font-semibold text-white shadow-[0_10px_30px_rgba(14,165,233,0.18)] hover:shadow-[0_12px_35px_rgba(14,165,233,0.25)] transition-all"
+                    >
+                      <ShoppingBag className="w-4 h-4" />
+                      POS
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -4133,7 +4143,7 @@ export function AdminPage() {
                           <div className="w-16 text-right">
                             <span className="text-white text-sm font-mono">{stock}</span>
                           </div>
-                          {inventorySubTab === 'products' && (
+                          {inventorySubTab === 'products' && isSuperAdmin && (
                             <button
                               onClick={(e) => { e.stopPropagation(); openModal('inventory', { product_id: item.product_id, name: item.name }) }}
                               className="p-2 hover:bg-[var(--gold-primary)]/10 rounded transition-colors"
