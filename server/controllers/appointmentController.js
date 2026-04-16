@@ -661,3 +661,119 @@ exports.getUserStats = async (req, res, next) => {
     next(err);
   }
 };
+
+// ─── UNAVAILABLE DATES ───────────────────────────────────────────────────────
+
+/**
+ * GET /appointments/unavailable-dates
+ * Get all unavailable dates
+ * Access: Admin/Staff only
+ */
+exports.getUnavailableDates = async (req, res, next) => {
+  try {
+    const dates = await appointmentService.getUnavailableDates();
+
+    res.json({
+      status: 'success',
+      data: {
+        unavailable_dates: dates,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * POST /appointments/unavailable-dates
+ * Add unavailable date
+ * Access: Admin/Staff only
+ */
+exports.addUnavailableDate = async (req, res, next) => {
+  try {
+    const { date, reason } = req.body;
+
+    if (!date) {
+      throw new AppError('date is required', 400);
+    }
+
+    const result = await appointmentService.addUnavailableDate(
+      date,
+      reason,
+      req.user.user_id
+    );
+
+    res.status(201).json({
+      status: 'success',
+      data: {
+        unavailable_date: result,
+      },
+      message: 'Date marked as unavailable',
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * DELETE /appointments/unavailable-dates/:id
+ * Remove unavailable date
+ * Access: Admin/Staff only
+ */
+exports.removeUnavailableDate = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const result = await appointmentService.removeUnavailableDate(id);
+
+    res.json({
+      status: 'success',
+      data: {
+        removed: result,
+      },
+      message: 'Date availability restored',
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ─── PAYMENT STATUS ─────────────────────────────────────────────────────────
+
+/**
+ * PATCH /appointments/:id/payment-status
+ * Update payment status
+ * Access: Admin/Staff only
+ */
+exports.updatePaymentStatus = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { payment_status, payment_method, payment_proof_url } = req.body;
+
+    if (!payment_status) {
+      throw new AppError('payment_status is required', 400);
+    }
+
+    const validStatuses = ['pending', 'awaiting_approval', 'paid', 'failed'];
+    if (!validStatuses.includes(payment_status)) {
+      throw new AppError('Invalid payment status', 400);
+    }
+
+    const updated = await appointmentService.updatePaymentStatus(
+      id,
+      payment_status,
+      payment_method,
+      payment_proof_url
+    );
+
+    res.json({
+      status: 'success',
+      data: {
+        appointment: updated,
+      },
+      message: 'Payment status updated',
+    });
+  } catch (err) {
+    next(err);
+  }
+};

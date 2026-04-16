@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
-import { motion, AnimatePresence } from 'motion/react'
-import { Calendar, ChevronLeft, ChevronRight, Clock, Plus, X } from 'lucide-react'
-import { format, setHours, setMinutes } from 'date-fns'
+import { motion } from 'motion/react'
+import { Calendar, ChevronLeft, ChevronRight, Clock } from 'lucide-react'
+import { format } from 'date-fns'
 
 const DEFAULT_HOLIDAYS = [
   '2026-01-01',
@@ -105,134 +105,12 @@ function buildMonthMatrix(year, month) {
   return weeks
 }
 
-function generateTimeSlots(date, startHour = TIME_SLOT_CONFIG.startHour, endHour = TIME_SLOT_CONFIG.endHour, intervalMinutes = TIME_SLOT_CONFIG.intervalMinutes) {
-  const slots = []
-  const numSlots = ((endHour - startHour) * 60) / intervalMinutes
-  
-  for (let i = 0; i < numSlots; i++) {
-    const minutes = startHour * 60 + i * intervalMinutes
-    const hours = Math.floor(minutes / 60)
-    const mins = minutes % 60
-    
-    const slotTime = setMinutes(setHours(new Date(date), hours), mins)
-    const endTime = new Date(slotTime.getTime() + intervalMinutes * 60000)
-    
-    slots.push({
-      id: format(slotTime, 'HH:mm'),
-      startTime: slotTime,
-      endTime,
-      label: format(slotTime, 'hh:mm a'),
-      endLabel: format(endTime, 'hh:mm a'),
-      hour: hours,
-    })
-  }
-  
-  return slots
-}
-
-function getAppointmentForSlot(appointments, slotStart) {
-  if (!appointments || appointments.length === 0) return null
-  
-  for (const apt of appointments) {
-    if (!apt.scheduled_at) continue
-    
-    const aptDate = new Date(apt.scheduled_at)
-    const aptHour = aptDate.getHours()
-    const aptMinutes = aptDate.getMinutes()
-    const slotHour = slotStart.getHours()
-    const slotMinutes = slotStart.getMinutes()
-    
-    if (aptHour === slotHour && aptMinutes === slotMinutes) {
-      return apt
-    }
-  }
-  
-  return null
-}
-
-function TimeGrid({ date, appointments = [], onSlotClick, onAppointmentClick, isAdminMode = false }) {
-  const timeSlots = useMemo(() => generateTimeSlots(date), [date])
-  
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-2 mb-4">
-        <Clock className="w-5 h-5 text-[var(--gold-primary)]" />
-        <h4 className="text-white font-semibold">Time Slots</h4>
-        <span className="text-[var(--text-muted)] text-sm">({TIME_SLOT_CONFIG.startHour}:00 - {TIME_SLOT_CONFIG.endHour}:00)</span>
-      </div>
-      
-      <div className="grid gap-2">
-        {timeSlots.map((slot) => {
-          const appointment = getAppointmentForSlot(appointments, slot.startTime)
-          const isBooked = !!appointment
-          const statusConfig = appointment ? STATUS_COLORS[appointment.status] || STATUS_COLORS.pending : null
-          
-          return (
-            <motion.button
-              key={slot.id}
-              type="button"
-              whileHover={{ scale: 1.01 }}
-              whileTap={{ scale: 0.99 }}
-              onClick={() => {
-                if (isBooked) {
-                  onAppointmentClick?.(appointment)
-                } else {
-                  onSlotClick?.(slot)
-                }
-              }}
-              className={`flex items-center justify-between p-4 rounded-2xl border transition-all ${
-                isBooked
-                  ? `border-[var(--border)] bg-[var(--surface-dark)] hover:border-[var(--gold-primary)]`
-                  : 'border-green-500/30 bg-green-500/10 hover:border-green-400 hover:bg-green-500/20 cursor-pointer'
-              }`}
-            >
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-2">
-                  <Clock className="w-4 h-4 text-[var(--text-muted)]" />
-                  <span className="text-white font-medium">{slot.label}</span>
-                  <span className="text-[var(--text-muted)] text-sm">- {slot.endLabel}</span>
-                </div>
-                
-                {isBooked && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-white">{appointment.customer_name || appointment.user?.name || appointment.client_name || 'Guest'}</span>
-                    <span className="text-[var(--text-muted)]">•</span>
-                    <span className="text-[var(--gold-primary)]">
-                      {appointment.service_name || appointment.title || 'Service'}
-                    </span>
-                  </div>
-                )}
-              </div>
-              
-              <div className="flex items-center gap-3">
-                {isBooked ? (
-                  <span className={`px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider ${statusConfig.bg} ${statusConfig.text} ${statusConfig.border}`}>
-                    {statusConfig.label}
-                  </span>
-                ) : (
-                  <div className="flex items-center gap-1 text-green-400 text-sm">
-                    <Plus className="w-4 h-4" />
-                    Available
-                  </div>
-                )}
-              </div>
-            </motion.button>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
-export default function AppointmentCalendar({ 
-  appointments = [], 
-  onAppointmentClick, 
-  holidays = [], 
-  unavailableDates = [], 
-  onToggleDate, 
-  isAdminMode = false,
-  onCreateAppointment,
-}) {
+export default function AppointmentCalendar({ appointments = [], onAppointmentClick, holidays = [] }) {
+  // Default time slots for the day
+  const timeSlots = [
+    '7:00 AM', '8:00 AM', '9:00 AM', '10:00 AM', '10:30 AM', '11:00 AM',
+    '12:00 PM', '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM'
+  ];
   const today = useMemo(() => {
     const now = new Date()
     now.setHours(0, 0, 0, 0)
@@ -559,67 +437,43 @@ export default function AppointmentCalendar({
             </p>
           </div>
 
-          {selectedDateLabel && selectedAppointments.length === 0 && (
-            <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-6 text-center text-[var(--text-muted)]">
-              No appointments are scheduled for the selected date.
-            </div>
-          )}
-
-          {selectedAppointments.length > 0 && (
-            <div className="grid gap-4">
-              {selectedAppointments.map((appointment) => {
-                const scheduledAt = appointment.scheduled_at ? new Date(appointment.scheduled_at) : null
-                const formattedTime = scheduledAt ? format(scheduledAt, 'hh:mm a') : appointment.time || 'TBD'
-                const title = appointment.title || appointment.service_name || 'Appointment'
-                const customerName = appointment.customer_name || appointment.user?.name || appointment.client_name || 'Guest'
-                const requestedService = appointment.service_name || (Array.isArray(appointment.services) ? appointment.services.map((s) => s.replace(/-/g, ' ')).join(', ') : appointment.title || 'Consultation')
-                const statusConfig = STATUS_COLORS[appointment.status] || STATUS_COLORS.pending
-
+        {selectedDateLabel && (
+          <div className="grid gap-2">
+            {timeSlots.map((slot) => {
+              const booked = selectedAppointments.find(a => {
+                const scheduledAt = a.scheduled_at ? new Date(a.scheduled_at) : null;
+                const formattedTime = scheduledAt ? format(scheduledAt, 'hh:mm a') : a.time || 'TBD';
+                return formattedTime === slot;
+              });
+              if (booked) {
+                const scheduledAt = booked.scheduled_at ? new Date(booked.scheduled_at) : null;
+                const formattedTime = scheduledAt ? format(scheduledAt, 'hh:mm a') : booked.time || 'TBD';
+                const customerName = booked.customer_name || booked.user?.name || booked.client_name || 'Guest';
+                const requestedService = booked.service_name || (Array.isArray(booked.services) ? booked.services.map((s) => s.replace(/-/g, ' ')).join(', ') : booked.title || 'Consultation');
                 return (
-                  <motion.button
-                    key={appointment.appointment_id || appointment.id || `${selectedDateId}-${formattedTime}-${title}`}
-                    type="button"
-                    whileHover={{ y: -2 }}
-                    className="w-full rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-5 text-left transition-all hover:border-[var(--gold-primary)] hover:bg-[var(--bg-primary)]"
-                    onClick={() => onAppointmentClick?.(appointment)}
-                    onMouseEnter={() => setHoveredAppointment(appointment.appointment_id || appointment.id)}
-                    onMouseLeave={() => setHoveredAppointment(null)}
-                  >
-                    <div className="flex items-center justify-between gap-3 mb-3">
-                      <div>
-                        <p className="text-xs uppercase tracking-[0.3em] text-[var(--text-muted)]">Scheduled</p>
-                        <h4 className="mt-2 text-lg font-semibold text-white">{title}</h4>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="rounded-3xl bg-[var(--border)] px-3 py-2 text-[var(--text-muted)] text-xs uppercase tracking-[0.2em]">
-                          {formattedTime}
-                        </span>
-                        <span className={`px-2 py-1 rounded-full text-xs font-semibold uppercase ${statusConfig.bg} ${statusConfig.text}`}>
-                          {statusConfig.label}
-                        </span>
+                  <div key={slot} className="flex items-center justify-between rounded-2xl border border-green-500/20 bg-green-500/10 px-4 py-3 mb-1">
+                    <div>
+                      <span className="font-semibold text-base text-black flex items-center gap-2"><Clock className="inline w-4 h-4" /> {slot}</span>
+                      <div className="ml-7">
+                        <div className="font-semibold text-black">{customerName}</div>
+                        <div className="text-[var(--text-muted)] text-sm">{requestedService}</div>
                       </div>
                     </div>
-                    <div className="grid gap-3 sm:grid-cols-3">
-                      <div>
-                        <p className="text-[var(--text-muted)] text-[11px] uppercase tracking-[0.3em]">Customer</p>
-                        <p className="mt-2 text-sm font-semibold text-white">{customerName}</p>
-                      </div>
-                      <div>
-                        <p className="text-[var(--text-muted)] text-[11px] uppercase tracking-[0.3em]">Requested Service</p>
-                        <p className="mt-2 text-sm font-semibold text-white capitalize">{requestedService}</p>
-                      </div>
-                      <div>
-                        <p className="text-[var(--text-muted)] text-[11px] uppercase tracking-[0.3em]">Status</p>
-                        <p className="mt-2 text-sm font-semibold text-white capitalize">{appointment.status || 'Pending'}</p>
-                      </div>
-                    </div>
-                  </motion.button>
-                )
-              })}
-            </div>
-          )}
-        </div>
-      )}
+                    <span className="rounded-full bg-green-200 text-green-800 px-3 py-1 text-xs font-semibold">Booked</span>
+                  </div>
+                );
+              } else {
+                return (
+                  <div key={slot} className="flex items-center justify-between rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] px-4 py-3 mb-1">
+                    <span className="font-semibold text-base text-white flex items-center gap-2"><Clock className="inline w-4 h-4" /> {slot}</span>
+                    <span className="rounded-full bg-[var(--border)] text-[var(--text-muted)] px-3 py-1 text-xs font-semibold">Available</span>
+                  </div>
+                );
+              }
+            })}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

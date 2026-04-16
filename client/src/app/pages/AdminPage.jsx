@@ -9,7 +9,7 @@ import {
   ChevronDown, ChevronUp, ArrowUpDown, ArrowUp, ArrowDown,
   Printer, Mail, FileText, CreditCard, RotateCcw, Copy, Truck, MapPin,
   UserCheck, Clock10, PackageCheck, CircleCheck,
-  Layers, User, Tag, AlertCircle, DollarSign, Save, TrendingUp, UsersRound, Clock, Loader2, Grid3X3, List, MoreHorizontal, Shield, Settings, Guitar, Wrench, PaintBucket, Hammer, Zap, Sparkles, Wallet, ArrowUpCircle, ArrowDownCircle,
+  Layers, User, Tag, AlertCircle, DollarSign, Save, TrendingUp, UsersRound, Clock, Loader2, Grid3X3, List, MoreHorizontal, Shield, Settings, Guitar, Wrench, PaintBucket, Hammer, Zap, Sparkles, Wallet, ArrowUpCircle, ArrowDownCircle, CalendarX,
 } from 'lucide-react'
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis,
@@ -17,6 +17,10 @@ import {
 } from 'recharts'
 import ProjectTaskTracker from '../components/projects/ProjectTaskTracker'
 import AppointmentCalendar from '../components/appointments/AppointmentCalendar'
+import AppointmentList from '../components/appointments/AppointmentList'
+import AppointmentModal from '../components/appointments/AppointmentModal'
+import AppointmentForm from '../components/appointments/AppointmentForm'
+import UnavailableDatesManager from '../components/appointments/UnavailableDatesManager'
 import { useAuth } from '../context/AuthContext'
 import { useNavigate } from 'react-router'
 import { Topbar } from '../components/admin/Topbar'
@@ -1597,6 +1601,19 @@ export function AdminPage() {
   const [formErrors, setFormErrors] = useState({})
   const [isSaving, setIsSaving] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
+  
+  // Appointment Management state
+  const [appointmentModalOpen, setAppointmentModalOpen] = useState(false)
+  const [selectedAppointment, setSelectedAppointment] = useState(null)
+  const [appointmentFormOpen, setAppointmentFormOpen] = useState(false)
+  const [appointmentFormData, setAppointmentFormData] = useState(null)
+  const [unavailableDatesOpen, setUnavailableDatesOpen] = useState(false)
+  const [unavailableDates, setUnavailableDates] = useState([])
+  const [services, setServices] = useState([])
+  const [appointmentPagination, setAppointmentPagination] = useState({ page: 1, limit: 20, total: 0, pages: 1 })
+  const [appointmentLoading, setAppointmentLoading] = useState(false)
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState(null)
+  
   const [orderStatusDropdownOpen, setOrderStatusDropdownOpen] = useState(false)
   const [paymentStatusDropdownOpen, setPaymentStatusDropdownOpen] = useState(false)
   const [productsLoading, setProductsLoading] = useState(false)
@@ -2115,50 +2132,95 @@ export function AdminPage() {
   }, [debouncedSearch, showToast, projects])
 
   const fetchAppointments = useCallback(async () => {
+    setAppointmentLoading(true)
     try {
-      const res = await adminApi.getAppointments({ search: debouncedSearch })
+      const params = {
+        search: debouncedSearch,
+        limit: appointmentPagination.limit,
+        offset: (appointmentPagination.page - 1) * appointmentPagination.limit,
+      }
+      const res = await adminApi.getAppointments(params)
       const newData = Array.isArray(res.data) ? res.data : res.data?.appointments || []
+      const total = res.data?.pagination?.total || newData.length
+      const pages = res.data?.pagination?.pages || Math.ceil(total / appointmentPagination.limit)
       updateIfChanged(appointments, newData, setAppointments)
+      setAppointmentPagination(prev => ({ ...prev, total, pages }))
     } catch (e) { showToast(e.message, 'error') }
-  }, [debouncedSearch, showToast, appointments])
+    finally { setAppointmentLoading(false) }
+  }, [debouncedSearch, showToast, appointments, appointmentPagination.limit, appointmentPagination.page])
 
-   const fetchServices = useCallback(async () => {
-     setServicesLoading(true)
-     try {
-       // Convert UI pagination (page, pageSize) to backend (limit, offset)
-       const limit = serviceQuery.pageSize
-       const offset = (serviceQuery.page - 1) * limit
+  const fetchServices = useCallback(async () => {
+    try {
+      const res = await adminApi.getServices()
+      const newData = Array.isArray(res.data) ? res.data : res.data?.services || []
+      updateIfChanged(services, newData, setServices)
+    } catch (e) { console.error('Failed to fetch services:', e) }
+  }, [showToast, services])
 
-       const params = {
-         search: debouncedSearch,
-         sort: serviceQuery.sortBy,
-         order: serviceQuery.sortDir,
-         limit,
-         offset,
-       }
-       // Only include is_active filter if set
-       if (serviceQuery.is_active !== '') {
-         params.is_active = serviceQuery.is_active === 'true' || serviceQuery.is_active === true
-       }
+  const fetchUnavailableDates = useCallback(async () => {
+    try {
+      const res = await adminApi.getUnavailableDates()
+      const newData = res.data?.unavailable_dates || []
+      updateIfChanged(unavailableDates, newData, setUnavailableDates)
+    } catch (e) { console.error('Failed to fetch unavailable dates:', e) }
+  }, [showToast, unavailableDates])
 
-       const res = await adminApi.getServices(params)
-       updateIfChanged(services, res.data || [], setServices)
+  // Appointment action handlers
+  const handleAppointmentStatusChange = useCallback(async (id, status, reason) => {
+    try {
+      await adminApi.updateAppointmentStatus(id, status, reason)
+      showToast('Appointment status updated', 'success')
+      fetchAppointments()
+    } catch (e) { showToast(e.message, 'error') }
+  }, [showToast, fetchAppointments])
 
-       // Convert backend pagination (limit, offset, total) to frontend shape (page, pageSize, totalPages)
-       const { limit: resLimit, offset: resOffset, total } = res.pagination || {}
-       const pageSize = resLimit || limit
-       const page = resOffset !== undefined ? Math.floor(resOffset / pageSize) + 1 : serviceQuery.page
-       const totalPages = total ? Math.max(Math.ceil(total / pageSize), 1) : 1
+  const handleAppointmentPaymentStatusChange = useCallback(async (id, paymentStatus) => {
+    try {
+      await adminApi.updateAppointment(id, { payment_status: paymentStatus })
+      showToast('Payment status updated', 'success')
+      fetchAppointments()
+    } catch (e) { showToast(e.message, 'error') }
+  }, [showToast, fetchAppointments])
 
-       setServicesPagination({
-         page,
-         pageSize,
-         total: total || 0,
-         totalPages,
-       })
-     } catch (e) { showToast(e.message, 'error') }
-     finally { setServicesLoading(false) }
-   }, [debouncedSearch, serviceQuery, showToast, services])
+  const handleAppointmentReschedule = useCallback(async (id, newScheduledAt, reason) => {
+    try {
+      await adminApi.rescheduleAppointment(id, newScheduledAt, reason)
+      showToast('Appointment rescheduled', 'success')
+      fetchAppointments()
+    } catch (e) { showToast(e.message, 'error') }
+  }, [showToast, fetchAppointments])
+
+  const handleAppointmentCancel = useCallback(async (id, reason) => {
+    try {
+      await adminApi.cancelAppointment(id, reason)
+      showToast('Appointment cancelled', 'success')
+      fetchAppointments()
+    } catch (e) { showToast(e.message, 'error') }
+  }, [showToast, fetchAppointments])
+
+  const handleCreateAppointment = useCallback(async (data) => {
+    try {
+      await adminApi.createAppointment(data)
+      showToast('Appointment created successfully', 'success')
+      fetchAppointments()
+    } catch (e) { showToast(e.message, 'error') }
+  }, [showToast, fetchAppointments])
+
+  const handleAddUnavailableDate = useCallback(async (date, reason) => {
+    try {
+      await adminApi.setUnavailableDate(date, reason)
+      showToast('Date marked as unavailable', 'success')
+      fetchUnavailableDates()
+    } catch (e) { showToast(e.message, 'error') }
+  }, [showToast, fetchUnavailableDates])
+
+  const handleRemoveUnavailableDate = useCallback(async (dateId) => {
+    try {
+      await adminApi.removeUnavailableDate(dateId)
+      showToast('Date availability restored', 'success')
+      fetchUnavailableDates()
+    } catch (e) { showToast(e.message, 'error') }
+  }, [showToast, fetchUnavailableDates])
 
   const fetchInventory = useCallback(async () => {
     try {
@@ -2188,25 +2250,24 @@ export function AdminPage() {
     }
   }, [showToast, salesReport])
 
-   // ── Initial data load on tab change ─────────────────────────────────────
-   useEffect(() => {
-     setSearchQuery('')
-     setFormErrors({})
-     const loaders = {
-       'products': () => { fetchProducts(); fetchCategories(); },
-       'guitar-parts': () => { fetchParts(); },
-       'product-categories': () => { fetchCategories(); },
-       'users': fetchUsers,
-       'orders': fetchOrders,
-       'projects': fetchProjects,
-       'services': fetchServices,
-       'appointments': fetchAppointments,
-       'inventory': () => { fetchInventory(); fetchParts(); },
-       'sales-report': fetchSalesReport,
-       'dashboard': () => { fetchOrders(); fetchProjects(); fetchAppointments() },
-     }
-     loaders[activeTab]?.()
-  }, [activeTab]) // eslint-disable-line
+  // ── Initial data load on tab change ─────────────────────────────────────
+  useEffect(() => {
+    setSearchQuery('')
+    setFormErrors({})
+    const loaders = {
+      'products': () => { fetchProducts(); fetchCategories(); },
+      'guitar-parts': () => { fetchParts(); },
+      'product-categories': () => { fetchCategories(); },
+      'users': fetchUsers,
+      'orders': fetchOrders,
+      'projects': fetchProjects,
+      'appointments': () => { fetchAppointments(); fetchServices(); fetchUnavailableDates(); },
+      'inventory': () => { fetchInventory(); fetchParts(); },
+      'sales-report': fetchSalesReport,
+      'dashboard': () => { fetchOrders(); fetchProjects(); fetchAppointments() },
+    }
+    loaders[activeTab]?.()
+  }, [activeTab, fetchAppointments, fetchServices, fetchUnavailableDates]) // eslint-disable-line
 
    // ── Re-fetch when debounced search changes ───────────────────────────────
    useEffect(() => {
@@ -3973,157 +4034,62 @@ export function AdminPage() {
             />
           )}
 
-{/* ── PROJECTS ───────────────────────────────────────────────────── */}
-          {activeTab === 'projects' && (
-            <motion.div key="projects" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-              {visibleProjects.length === 0 ? (
-                <EmptyState icon={Briefcase} label="No projects yet" action={isSuperAdmin ? () => openModal('project') : undefined} actionLabel={isSuperAdmin ? "Create Project" : undefined} />
-              ) : (
-                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {visibleProjects.map((project) => (
-                    <motion.div key={project.project_id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-                      className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6 hover:border-[var(--gold-primary)]/50 transition-all"
-                    >
-                      <div className="flex items-start justify-between mb-3">
-                        <div>
-                          <h3 className="text-white font-semibold">{project.name || project.title || 'Untitled Project'}</h3>
-                          <p className="text-[var(--text-muted)] text-xs">{project.customer_name || project.user_name || '—'}</p>
-                        </div>
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-semibold border ${getStatusBadge(project.status)}`}>
-                          {project.status?.replace('_', ' ') || 'Pending'}
-                        </span>
-                      </div>
-                      {project.description && (
-                        <p className="text-[var(--text-muted)] text-sm mb-4 line-clamp-2">{project.description}</p>
-                      )}
-                      {project.progress !== undefined && (
-                        <div className="mb-4">
-                          <div className="flex justify-between text-xs mb-1">
-                            <span className="text-[var(--text-muted)]">Progress</span>
-                            <span className="text-[var(--gold-primary)]">{project.progress}%</span>
-                          </div>
-                          <div className="h-2 bg-[var(--bg-primary)] rounded-full overflow-hidden">
-                            <div className="h-full bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] rounded-full" style={{ width: `${project.progress}%` }} />
-                          </div>
-                        </div>
-                      )}
-                      <div className="flex flex-col gap-2 pt-4 border-t border-[var(--border)]">
-                        <button onClick={() => openModal('project_tasks', project)} className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-[var(--gold-primary)]/10 border border-[var(--gold-primary)]/30 rounded-lg text-[var(--gold-primary)] text-sm hover:bg-[var(--gold-primary)]/20 transition-all">
-                          <Activity className="w-4 h-4" /> Tasks & Parts
-                        </button>
-                      </div>
-                      <div className="flex gap-2 pt-2">
-                        {isSuperAdmin && (
-                          <>
-                            <button onClick={() => openModal('project', project)} className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-[var(--bg-primary)] border border-[var(--border)] rounded-lg text-white text-sm hover:border-[var(--gold-primary)]/50 transition-all">
-                              <Edit className="w-4 h-4" /> Edit
-                            </button>
-                            <button onClick={() => openModal('project_team', project)} className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-[var(--bg-primary)] border border-[var(--border)] rounded-lg text-white text-sm hover:border-[var(--gold-primary)]/50 transition-all">
-                              <Users className="w-4 h-4" /> Team
-                            </button>
-                            <button onClick={() => deleteProject(project.project_id, project.name || project.title)} className="p-2 hover:bg-red-500/10 rounded-lg transition-all border border-transparent">
-                              <Trash2 className="w-4 h-4 text-red-400" />
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </motion.div>
-                  ))}
-                </div>
-              )}
-            </motion.div>
-          )}
 
-          {/* ── SERVICES ───────────────────────────────────────────────────── */}
-           {activeTab === 'services' && <ServicesTab />}
 
           {/* ── APPOINTMENTS ───────────────────────────────────────────────── */}
           {activeTab === 'appointments' && (
             <motion.div key="appointments" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-              {visibleAppointments.length === 0 ? (
-                <EmptyState icon={Calendar} label="No appointments scheduled" action={isSuperAdmin ? () => openModal('appointment') : undefined} actionLabel={isSuperAdmin ? "Book Appointment" : undefined} />
-              ) : (
-                <>
-                  <AppointmentCalendar
-                    appointments={visibleAppointments}
-                    onAppointmentClick={(apt) => openModal('view_appointment', apt)}
-                    unavailableDates={unavailableDates}
-                    onToggleDate={toggleUnavailableDate}
-                    isAdminMode={true}
-                  />
-                  <div className="mt-8 mb-4">
-                    <h3 className="text-white text-lg font-semibold mb-4">All Appointments</h3>
-                  </div>
-                  <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl overflow-hidden">
-                    <div className="overflow-x-auto">
-                      <table className="w-full">
-                        <thead className="bg-[var(--bg-primary)] border-b border-[var(--border)]">
-                          <tr>
-                            {['#', 'Title', 'Customer', 'Date & Time', 'Service', 'Status', 'Actions'].map(col => (
-                              <th key={col} className="text-left py-4 px-6 text-[var(--text-muted)] font-medium text-xs uppercase tracking-wider">{col}</th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {visibleAppointments.map((apt, i) => {
-                            const statusColors = {
-                              pending: 'bg-[var(--gold-primary)]/20 text-[var(--gold-primary)] border-[var(--gold-primary)]/30',
-                              approved: 'bg-green-500/20 text-green-400 border-green-500/30',
-                              completed: 'bg-green-500/20 text-green-400 border-green-500/30',
-                              cancelled: 'bg-red-500/20 text-red-400 border-red-500/30',
-                              'no_show': 'bg-orange-500/20 text-orange-400 border-orange-500/30',
-                            }
-                            const statusCls = statusColors[apt.status] || 'bg-gray-500/20 text-gray-400 border-gray-500/30'
-                            const apptDate = apt.scheduled_at || apt.date
-                            return (
-                              <tr key={apt.appointment_id || apt.id || i} className="border-b border-[var(--border)]/50 hover:bg-[var(--bg-primary)]/50 transition-colors">
-                                <td className="py-4 px-6 text-[var(--text-muted)] font-mono text-sm">#{i + 1}</td>
-                                <td className="py-4 px-6">
-                                  <p className="text-white font-medium">{apt.guitar_details ? `${apt.guitar_details.brand} ${apt.guitar_details.model}` : (apt.title || apt.service_name || 'Appointment')}</p>
-                                  {apt.notes && <p className="text-[var(--text-muted)] text-xs truncate max-w-xs">{apt.notes}</p>}
-                                </td>
-                                <td className="py-4 px-6">
-                                  <p className="text-white">{apt.customer_name || apt.user_name || '—'}</p>
-                                  <p className="text-[var(--text-muted)] text-xs">{apt.customer_email || '—'}</p>
-                                </td>
-                                <td className="py-4 px-6">
-                                  <p className="text-white">{apptDate ? new Date(apptDate).toLocaleDateString() : '—'}</p>
-                                  <p className="text-[var(--text-muted)] text-sm">{apt.time || (apptDate ? new Date(apptDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—')}</p>
-                                </td>
-                                <td className="py-4 px-6 text-[var(--text-muted)] capitalize">
-                                  {Array.isArray(apt.services) ? apt.services.map(s => s.replace(/-/g, ' ')).join(', ') : (apt.service_name || 'Consultation')}
-                                </td>
-                                <td className="py-4 px-6">
-                                  <span className={`px-2 py-0.5 rounded-full text-xs font-semibold border ${statusCls}`}>
-                                    {apt.status || 'Pending'}
-                                  </span>
-                                </td>
-                                <td className="py-4 px-6">
-                                  <div className="flex gap-2">
-                                    <button onClick={() => openModal('view_appointment', apt)} className="p-1.5 hover:bg-blue-500/10 rounded transition-colors" title="View Summary">
-                                      <Eye className="w-4 h-4 text-blue-400" />
-                                    </button>
-                                    {isSuperAdmin && (
-                                      <>
-                                        <button onClick={() => openModal('appointment', apt)} className="p-1.5 hover:bg-green-500/10 rounded transition-colors" title="Update Status">
-                                          <CheckCircle className="w-4 h-4 text-green-400" />
-                                        </button>
-                                        <button onClick={() => deleteAppointment(apt.appointment_id, apt.title)} className="p-1.5 hover:bg-red-500/10 rounded transition-colors" title="Delete">
-                                          <Trash2 className="w-4 h-4 text-red-400" />
-                                        </button>
-                                      </>
-                                    )}
-                                  </div>
-                                </td>
-                               </tr>
-                            )
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                </>
-              )}
+
+              {/* Header with Unavailable Dates Button */}
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h2 className="text-white text-xl font-semibold">Appointments</h2>
+                  <p className="text-[var(--text-muted)] text-sm">Manage customer appointments and schedules</p>
+                </div>
+                {isSuperAdmin && (
+                  <button
+                    onClick={() => setUnavailableDatesOpen(true)}
+                    className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black rounded-xl font-semibold text-sm hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all"
+                  >
+                    <CalendarX className="w-4 h-4" />
+                    Mark Unavailable
+                  </button>
+                )}
+              </div>
+
+              {/* Calendar View */}
+              <AppointmentCalendar
+                appointments={visibleAppointments}
+                onAppointmentClick={(apt) => {
+                  setSelectedAppointment(apt)
+                  setAppointmentModalOpen(true)
+                }}
+                holidays={unavailableDates.map(d => {
+                  const date = d.date instanceof Date ? d.date : new Date(d.date)
+                  return date.toISOString().slice(0, 10)
+                })}
+              />
+
+              {/* Appointment List */}
+              <div className="mt-8">
+                <AppointmentList
+                  appointments={visibleAppointments}
+                  loading={appointmentLoading}
+                  onRefresh={fetchAppointments}
+                  onViewDetails={(apt) => {
+                    setSelectedAppointment(apt)
+                    setAppointmentModalOpen(true)
+                  }}
+                  onEdit={(apt) => {
+                    setAppointmentFormData(apt)
+                    setAppointmentFormOpen(true)
+                  }}
+                  onCreateNew={() => setAppointmentFormOpen(true)}
+                  pagination={appointmentPagination}
+                  onPageChange={(page) => setAppointmentPagination(prev => ({ ...prev, page }))}
+                  selectedDate={selectedCalendarDate}
+                />
+              </div>
             </motion.div>
           )}
 
@@ -6384,6 +6350,44 @@ export function AdminPage() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* ── APPOINTMENT MODALS ─────────────────────────────────────────────── */}
+      <AppointmentModal
+        isOpen={appointmentModalOpen}
+        onClose={() => {
+          setAppointmentModalOpen(false)
+          setSelectedAppointment(null)
+        }}
+        appointment={selectedAppointment}
+        onStatusChange={handleAppointmentStatusChange}
+        onPaymentStatusChange={handleAppointmentPaymentStatusChange}
+        onReschedule={handleAppointmentReschedule}
+        onCancel={handleAppointmentCancel}
+        loading={appointmentLoading}
+      />
+
+      <AppointmentForm
+        isOpen={appointmentFormOpen}
+        onClose={() => {
+          setAppointmentFormOpen(false)
+          setAppointmentFormData(null)
+        }}
+        onSubmit={handleCreateAppointment}
+        initialData={appointmentFormData}
+        services={services}
+        users={users}
+        loading={appointmentLoading}
+        selectedDate={selectedCalendarDate}
+      />
+
+      <UnavailableDatesManager
+        isOpen={unavailableDatesOpen}
+        onClose={() => setUnavailableDatesOpen(false)}
+        unavailableDates={unavailableDates}
+        onAddUnavailable={handleAddUnavailableDate}
+        onRemoveUnavailable={handleRemoveUnavailableDate}
+        loading={appointmentLoading}
+      />
     </div>
   )
 }
