@@ -543,7 +543,6 @@ function GuitarPartsStickyHeader({ viewMode, setViewMode, density, setDensity, s
 }
 
 const APPOINTMENT_BRANCH_STORAGE_KEY = 'cosmoscraft.appointment.branch'
-const UNAVAILABLE_DATES_KEY = 'cosmoscraft.appointment.unavailable'
 const DEFAULT_APPOINTMENT_BRANCH = {
   id: 'balagtas-main',
   name: 'CosmosCraft Balagtas Branch',
@@ -1633,7 +1632,6 @@ export function AdminPage() {
 
   // Services section state
   const [serviceViewMode, setServiceViewMode] = useState('grid')
-  const [services, setServices] = useState([])
   const [servicesLoading, setServicesLoading] = useState(false)
   const [servicesPagination, setServicesPagination] = useState({ page: 1, pageSize: 20, total: 0, totalPages: 1 })
   const [serviceQuery, setServiceQuery] = useState({
@@ -1648,7 +1646,6 @@ export function AdminPage() {
   const [messagePanelOpen, setMessagePanelOpen] = useState(false)
   const [selectedConversation, setSelectedConversation] = useState(null)
   const [appointmentBranchAddress, setAppointmentBranchAddress] = useState(DEFAULT_APPOINTMENT_BRANCH.address)
-  const [unavailableDates, setUnavailableDates] = useState([])
 
   // POS Drawer state
   const [posDrawerOpen, setPosDrawerOpen] = useState(false)
@@ -2009,14 +2006,6 @@ export function AdminPage() {
       // Ignore invalid persisted admin setting
     }
 
-    try {
-      const raw = window.localStorage.getItem(UNAVAILABLE_DATES_KEY)
-      if (!raw) return
-      const parsed = JSON.parse(raw)
-      if (Array.isArray(parsed)) setUnavailableDates(parsed)
-    } catch {
-      // Ignore invalid persisted dates
-    }
   }, [])
 
   const saveAppointmentBranchAddress = useCallback(() => {
@@ -2042,20 +2031,6 @@ export function AdminPage() {
       showToast('Failed to save branch address', 'error')
     }
   }, [appointmentBranchAddress, showToast])
-
-  const toggleUnavailableDate = useCallback((dateKey) => {
-    setUnavailableDates(prev => {
-      const newDates = prev.includes(dateKey)
-        ? prev.filter(d => d !== dateKey)
-        : [...prev, dateKey]
-      try {
-        window.localStorage.setItem(UNAVAILABLE_DATES_KEY, JSON.stringify(newDates))
-      } catch {
-        // Ignore storage errors
-      }
-      return newDates
-    })
-  }, [])
 
   // ── Confirm dialog helper ────────────────────────────────────────────────
   const openConfirm = ({ title, description, onConfirm, variant = 'danger' }) => {
@@ -4064,10 +4039,8 @@ export function AdminPage() {
                   setSelectedAppointment(apt)
                   setAppointmentModalOpen(true)
                 }}
-                holidays={unavailableDates.map(d => {
-                  const date = d.date instanceof Date ? d.date : new Date(d.date)
-                  return date.toISOString().slice(0, 10)
-                })}
+                unavailableDates={unavailableDates.map((entry) => entry?.date || entry).filter(Boolean)}
+                isAdminMode
               />
 
               {/* Appointment List */}

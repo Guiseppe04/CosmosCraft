@@ -25,6 +25,28 @@ router.post('/', appointmentController.createAppointment);
 // ─── GET SINGLE APPOINTMENT ────────────────────────────────────────────────
 
 /**
+ * GET /api/appointments/unavailable-dates
+ * Get all unavailable dates
+ * Access: Admin/Staff only
+ */
+router.get(
+  '/unavailable-dates',
+  authorize('admin', 'staff', 'super_admin'),
+  appointmentController.getUnavailableDates
+);
+
+/**
+ * POST /api/appointments/unavailable-dates
+ * Add unavailable date
+ * Access: Admin/Staff only
+ */
+router.post(
+  '/unavailable-dates',
+  authorize('admin', 'staff', 'super_admin'),
+  appointmentController.addUnavailableDate
+);
+
+/**
  * GET /api/appointments/:id
  * Get appointment details
  * Access: Customers see own, Admin/Staff see all
@@ -92,7 +114,7 @@ router.patch('/:id/reschedule', appointmentController.rescheduleAppointment);
  */
 router.patch(
   '/:id/status',
-  authorize(['admin', 'staff']),
+  authorize('admin', 'staff', 'super_admin'),
   appointmentController.updateStatus
 );
 
@@ -123,7 +145,7 @@ router.delete('/:id', appointmentController.cancelAppointment);
  */
 router.get(
   '/search/by-date',
-  authorize(['admin', 'staff']),
+  authorize('admin', 'staff', 'super_admin'),
   appointmentController.getAppointmentsByDateRange
 );
 
@@ -199,7 +221,7 @@ router.get(
  */
 router.get(
   '/services/:serviceId/appointments',
-  authorize(['admin', 'staff']),
+  authorize('admin', 'staff', 'super_admin'),
   appointmentController.getServiceAppointments
 );
 
@@ -225,7 +247,7 @@ router.get('/stats', appointmentController.getAppointmentStats);
  */
 router.get(
   '/services/:serviceId/stats',
-  authorize(['admin', 'staff']),
+  authorize('admin', 'staff', 'super_admin'),
   appointmentController.getServiceStats
 );
 
@@ -238,7 +260,7 @@ router.get(
  */
 router.get(
   '/stats/peak-hours',
-  authorize(['admin', 'staff']),
+  authorize('admin', 'staff', 'super_admin'),
   appointmentController.getPeakHours
 );
 
@@ -253,35 +275,13 @@ router.get('/users/:userId/stats', appointmentController.getUserStats);
 // ─── UNAVAILABLE DATES ───────────────────────────────────────────────────────
 
 /**
- * GET /api/appointments/unavailable-dates
- * Get all unavailable dates
- * Access: Admin/Staff only
- */
-router.get(
-  '/unavailable-dates',
-  authorize(['admin', 'staff']),
-  appointmentController.getUnavailableDates
-);
-
-/**
- * POST /api/appointments/unavailable-dates
- * Add unavailable date
- * Access: Admin/Staff only
- */
-router.post(
-  '/unavailable-dates',
-  authorize(['admin', 'staff']),
-  appointmentController.addUnavailableDate
-);
-
-/**
  * DELETE /api/appointments/unavailable-dates/:id
  * Remove unavailable date
  * Access: Admin/Staff only
  */
 router.delete(
   '/unavailable-dates/:id',
-  authorize(['admin', 'staff']),
+  authorize('admin', 'staff', 'super_admin'),
   appointmentController.removeUnavailableDate
 );
 
@@ -294,7 +294,7 @@ router.delete(
  */
 router.patch(
   '/:id/payment-status',
-  authorize(['admin', 'staff']),
+  authorize('admin', 'staff', 'super_admin'),
   appointmentController.updatePaymentStatus
 );
 

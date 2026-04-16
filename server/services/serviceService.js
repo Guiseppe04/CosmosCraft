@@ -49,7 +49,7 @@ exports.getAllServices = async ({
   const sortOrder = order.toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
 
   const result = await pool.query(
-    `SELECT * FROM services
+    `SELECT * FROM services s
      ${whereClause}
      ORDER BY s.${sortColumn} ${sortOrder}
      LIMIT $${idx} OFFSET $${idx + 1}`,

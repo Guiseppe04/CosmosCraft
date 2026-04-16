@@ -64,6 +64,11 @@ const formatAddressFull = (addr) => {
   return lines
 }
 
+const formatStatus = (status) => {
+  if (!status) return ''
+  return status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+}
+
 function NotificationRow({ setting }) {
   const [enabled, setEnabled] = useState(setting.defaultOn)
 
@@ -581,12 +586,12 @@ export function DashboardPage() {
                   </div>
                   <div className="text-right">
                     <span className="inline-block px-3 py-1 bg-[var(--surface-light)] border border-[var(--border)] rounded-full text-xs font-semibold text-white capitalize mr-2">
-                       {order.status}
+                       {formatStatus(order.status)}
                     </span>
                     <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold capitalize ${
                        order.payment_status === 'paid' ? 'bg-green-500/10 text-green-400 border border-green-500/30' : 'bg-yellow-500/10 text-yellow-500 border border-yellow-500/30'
                     }`}>
-                       {order.payment_status}
+                       {formatStatus(order.payment_status)}
                     </span>
                   </div>
                 </div>

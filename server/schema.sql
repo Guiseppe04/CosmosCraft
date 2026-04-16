@@ -495,9 +495,15 @@ CREATE TABLE appointments (
     services JSONB DEFAULT '[]'::jsonb,
     location_id VARCHAR(50),
     guitar_details JSONB,
+    customer_name VARCHAR(100),
+    customer_email VARCHAR(100),
+    customer_phone VARCHAR(20),
     scheduled_at TIMESTAMPTZ NOT NULL,
     estimated_end_at TIMESTAMPTZ,
     status appointment_status_enum NOT NULL DEFAULT 'pending',
+    payment_status VARCHAR(50) NOT NULL DEFAULT 'pending',
+    payment_method VARCHAR(50),
+    payment_proof_url TEXT,
     notes TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -507,9 +513,30 @@ CREATE TABLE appointments (
 );
 
 CREATE INDEX idx_appointments_user_id ON appointments(user_id);
-CREATE INDEX idx_appointments_service_id ON appointments(service_id);
+CREATE INDEX idx_appointments_services_gin ON appointments USING GIN (services);
 CREATE INDEX idx_appointments_scheduled_at ON appointments(scheduled_at);
 CREATE INDEX idx_appointments_status ON appointments(status);
+CREATE INDEX idx_appointments_payment_status ON appointments(payment_status);
+
+
+-- =============================================
+-- 17A. UNAVAILABLE DATES
+-- =============================================
+
+CREATE TABLE unavailable_dates (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    date DATE NOT NULL UNIQUE,
+    reason VARCHAR(255),
+    is_recurring BOOLEAN NOT NULL DEFAULT FALSE,
+    created_by UUID,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+    FOREIGN KEY (created_by) REFERENCES users(user_id) ON DELETE SET NULL
+);
+
+CREATE INDEX idx_unavailable_dates_date ON unavailable_dates(date);
+CREATE INDEX idx_unavailable_dates_created_by ON unavailable_dates(created_by);
 
 
 -- =============================================

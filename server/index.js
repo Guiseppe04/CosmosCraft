@@ -29,8 +29,6 @@ const { errorHandler, notFound } = require('./middleware/errorHandler.js');
 
 const app = express();
 
-connectDB();
-
 app.use(
   cors({
     origin: ['http://localhost:5173', 'http://localhost:3000', process.env.FRONTEND_URL].filter(Boolean),
@@ -77,17 +75,31 @@ app.use(errorHandler);
 
 const PORT = process.env.PORT || 5000;
 
-const server = app.listen(PORT, async () => {
+let server;
 
-  console.log(`Backend Running`);
-  console.log(`Port: ${PORT}`);
-  console.log(`Environment: ${process.env.NODE_ENV}`);
+async function startServer() {
+  await connectDB();
 
-  // Verify email service connection
-  await mailService.verifyConnection();
+  server = app.listen(PORT, async () => {
+    console.log(`Backend Running`);
+    console.log(`Port: ${PORT}`);
+    console.log(`Environment: ${process.env.NODE_ENV}`);
+
+    // Verify email service connection
+    await mailService.verifyConnection();
+  });
+}
+
+startServer().catch((error) => {
+  console.error('Failed to start server:', error);
+  process.exit(1);
 });
 
 process.on('SIGTERM', () => {
+  if (!server) {
+    process.exit(0);
+  }
+
   server.close(() => {
     console.log('Server closed');
     process.exit(0);

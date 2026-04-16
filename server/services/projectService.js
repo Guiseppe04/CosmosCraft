@@ -38,7 +38,7 @@ exports.getProjects = async () => {
     const stats = await pool.query(`
       SELECT 
         COUNT(*) as total, 
-        COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed
+        COUNT(CASE WHEN ps.status = 'completed' THEN 1 END) as completed
       FROM project_subtasks ps
       JOIN project_milestones pm ON ps.milestone_id = pm.milestone_id
       WHERE pm.project_id = $1
@@ -63,7 +63,7 @@ exports.getProjectById = async (projectId) => {
   const stats = await pool.query(`
     SELECT 
       COUNT(*) as total, 
-      COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed
+      COUNT(CASE WHEN ps.status = 'completed' THEN 1 END) as completed
     FROM project_subtasks ps
     JOIN project_milestones pm ON ps.milestone_id = pm.milestone_id
     WHERE pm.project_id = $1
@@ -85,7 +85,7 @@ exports.getMyProjects = async (userId) => {
   );
   for (let p of result.rows) {
     const stats = await pool.query(`
-      SELECT COUNT(*) as total, COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed
+      SELECT COUNT(*) as total, COUNT(CASE WHEN ps.status = 'completed' THEN 1 END) as completed
       FROM project_subtasks ps
       JOIN project_milestones pm ON ps.milestone_id = pm.milestone_id
       WHERE pm.project_id = $1
