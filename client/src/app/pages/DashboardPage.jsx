@@ -451,8 +451,6 @@ export function DashboardPage() {
     { id: 'logout', label: 'Logout', icon: User, group: 'orders' },
   ]
 
-
-
   const renderPurchasesContent = () => {
     const filteredOrders = myOrders.filter(order => {
       if (activePurchaseTab === 'All') return true;
@@ -1558,6 +1556,13 @@ export function DashboardPage() {
             animate={{ opacity: 1, y: 0 }}
             className="h-full flex flex-col space-y-4"
           >
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[var(--text-muted)]">Dashboard</p>
+                <h1 className="mt-2 text-2xl font-bold text-white">{currentMenu?.label || 'Profile'}</h1>
+              </div>
+            </div>
+
             {activeSection === 'profile' && renderProfileContent()}
             {activeSection === 'my-guitar' && renderMyGuitarContent()}
             {activeSection === 'appointments' && renderAppointmentsContent()}
