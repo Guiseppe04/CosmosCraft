@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { motion } from 'motion/react'
+import { AnimatePresence, motion } from 'motion/react'
 import { Calendar, ChevronLeft, ChevronRight, Clock } from 'lucide-react'
 import { format } from 'date-fns'
 
@@ -62,9 +62,10 @@ const STATUS_COLORS = {
 
 function toISODate(value) {
   if (!value) return null
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return null
-  return date.toISOString().slice(0, 10)
+  return formatLocalISO(date)
 }
 
 function parseLocalDateFromISO(dateKey) {
@@ -105,17 +106,104 @@ function buildMonthMatrix(year, month) {
   return weeks
 }
 
-export default function AppointmentCalendar({ appointments = [], onAppointmentClick, holidays = [] }) {
-  // Default time slots for the day
-  const timeSlots = [
-    '7:00 AM', '8:00 AM', '9:00 AM', '10:00 AM', '10:30 AM', '11:00 AM',
-    '12:00 PM', '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM'
-  ];
+function buildTimeSlots() {
+  const slots = []
+
+  for (let hour = TIME_SLOT_CONFIG.startHour; hour < TIME_SLOT_CONFIG.endHour; hour++) {
+    const slotDate = new Date(2000, 0, 1, hour, 0, 0, 0)
+    slots.push(format(slotDate, 'hh:mm a'))
+  }
+
+  return slots
+}
+
+function getAppointmentSlotLabel(appointment) {
+  const scheduledAt = appointment?.scheduled_at ? new Date(appointment.scheduled_at) : null
+
+  if (scheduledAt && !Number.isNaN(scheduledAt.getTime())) {
+    return format(scheduledAt, 'hh:mm a')
+  }
+
+  return appointment?.time || null
+}
+
+function TimeGrid({ date, appointments = [], onSlotClick, onAppointmentClick, isAdminMode = false }) {
+  const slotLabels = useMemo(() => buildTimeSlots(), [])
+
+  return (
+    <div className="grid gap-3">
+      {slotLabels.map((slot) => {
+        const bookedAppointment = appointments.find((appointment) => getAppointmentSlotLabel(appointment) === slot)
+
+        if (bookedAppointment) {
+          const colors = STATUS_COLORS[bookedAppointment.status] || STATUS_COLORS.pending
+          const customerName = bookedAppointment.customer_name || bookedAppointment.user?.name || bookedAppointment.client_name || 'Guest'
+          const requestedService = bookedAppointment.service_name
+            || (Array.isArray(bookedAppointment.services) ? bookedAppointment.services.map((service) => service.replace(/-/g, ' ')).join(', ') : null)
+            || bookedAppointment.title
+            || 'Consultation'
+
+          return (
+            <button
+              key={slot}
+              type="button"
+              onClick={() => onAppointmentClick?.(bookedAppointment)}
+              className={`flex w-full items-center justify-between rounded-2xl border px-4 py-4 text-left transition hover:brightness-110 ${colors.bg} ${colors.border}`}
+            >
+              <div>
+                <div className="flex items-center gap-2 text-white font-semibold">
+                  <Clock className="w-4 h-4" />
+                  <span>{slot}</span>
+                </div>
+                <div className="mt-2 pl-6">
+                  <div className="font-semibold text-white">{customerName}</div>
+                  <div className="text-sm text-[var(--text-muted)]">{requestedService}</div>
+                </div>
+              </div>
+              <span className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] ${colors.bg} ${colors.text} ${colors.border}`}>
+                {colors.label}
+              </span>
+            </button>
+          )
+        }
+
+        return (
+          <button
+            key={slot}
+            type="button"
+            onClick={() => onSlotClick?.(slot)}
+            disabled={!isAdminMode && !onSlotClick}
+            className="flex w-full items-center justify-between rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] px-4 py-4 text-left transition hover:border-[var(--gold-primary)] hover:bg-[var(--surface-elevated)] disabled:cursor-default disabled:hover:border-[var(--border)] disabled:hover:bg-[var(--surface-dark)]"
+          >
+            <span className="flex items-center gap-2 text-base font-semibold text-white">
+              <Clock className="w-4 h-4" />
+              {slot}
+            </span>
+            <span className="rounded-full bg-[var(--border)] px-3 py-1 text-xs font-semibold text-[var(--text-muted)]">
+              Available
+            </span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+export default function AppointmentCalendar({
+  appointments = [],
+  onAppointmentClick,
+  holidays = [],
+  unavailableDates = [],
+  isAdminMode = false,
+  onCreateAppointment,
+  onToggleDate,
+}) {
   const today = useMemo(() => {
     const now = new Date()
     now.setHours(0, 0, 0, 0)
     return now
   }, [])
+  const timeSlots = useMemo(() => buildTimeSlots(), [])
 
   const holidaySet = useMemo(() => {
     const source = holidays.length ? holidays : DEFAULT_HOLIDAYS
@@ -170,7 +258,7 @@ export default function AppointmentCalendar({ appointments = [], onAppointmentCl
         ? 'Sunday Closed'
         : isPast
           ? 'Past'
-          : isUnavailable && isAdminMode
+          : isUnavailable
             ? 'Marked Unavailable'
             : 'Available'
     return { isSunday, isHoliday, isPast, isDisabled, isUnavailable, status }
@@ -344,7 +432,7 @@ export default function AppointmentCalendar({ appointments = [], onAppointmentCl
                   const isHolidayCell = isDisabled && isHoliday
                   const isSundayClosed = isDisabled && isSunday
                   const isPastDate = isDisabled && isPast
-                  const isUnavailableCell = isAdminMode && isUnavailable
+                  const isUnavailableCell = isUnavailable
 
                   const cellClasses = isSelected
                     ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)]/15 text-white shadow-lg shadow-[var(--gold-primary)]/10'
@@ -441,13 +529,9 @@ export default function AppointmentCalendar({ appointments = [], onAppointmentCl
           <div className="grid gap-2">
             {timeSlots.map((slot) => {
               const booked = selectedAppointments.find(a => {
-                const scheduledAt = a.scheduled_at ? new Date(a.scheduled_at) : null;
-                const formattedTime = scheduledAt ? format(scheduledAt, 'hh:mm a') : a.time || 'TBD';
-                return formattedTime === slot;
+                return getAppointmentSlotLabel(a) === slot;
               });
               if (booked) {
-                const scheduledAt = booked.scheduled_at ? new Date(booked.scheduled_at) : null;
-                const formattedTime = scheduledAt ? format(scheduledAt, 'hh:mm a') : booked.time || 'TBD';
                 const customerName = booked.customer_name || booked.user?.name || booked.client_name || 'Guest';
                 const requestedService = booked.service_name || (Array.isArray(booked.services) ? booked.services.map((s) => s.replace(/-/g, ' ')).join(', ') : booked.title || 'Consultation');
                 return (

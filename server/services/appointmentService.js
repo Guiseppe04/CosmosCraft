@@ -25,12 +25,18 @@ function formatAppointmentResponse(appointment) {
     user_email: appointment.user_email,
     user_name: appointment.user_name,
     user_phone: appointment.user_phone,
+    customer_name: appointment.customer_name || null,
+    customer_email: appointment.customer_email || null,
+    customer_phone: appointment.customer_phone || null,
     services: parsedServices,
     location_id: appointment.location_id,
     guitar_details: parsedGuitarDetails,
     scheduled_at: appointment.scheduled_at,
     estimated_end_at: appointment.estimated_end_at,
     status: appointment.status,
+    payment_status: appointment.payment_status || null,
+    payment_method: appointment.payment_method || null,
+    payment_proof_url: appointment.payment_proof_url || null,
     notes: appointment.notes,
     time_until_appointment_minutes: appointment.time_until_appointment_minutes || null,
     created_at: appointment.created_at,
@@ -227,7 +233,16 @@ exports.getUserBookingFrequency = async (userId) => {
 
 exports.getUnavailableDates = async () => {
   const result = await pool.query(
-    `SELECT * FROM unavailable_dates ORDER BY date ASC`
+    `SELECT
+       id,
+       date::text AS date,
+       reason,
+       is_recurring,
+       created_by,
+       created_at,
+       updated_at
+     FROM unavailable_dates
+     ORDER BY date ASC`
   );
   return result.rows;
 };
@@ -237,7 +252,14 @@ exports.addUnavailableDate = async (date, reason, userId) => {
     `INSERT INTO unavailable_dates (date, reason, created_by)
      VALUES ($1, $2, $3)
      ON CONFLICT (date) DO UPDATE SET reason = $2, updated_at = now()
-     RETURNING *`,
+     RETURNING
+       id,
+       date::text AS date,
+       reason,
+       is_recurring,
+       created_by,
+       created_at,
+       updated_at`,
     [date, reason || null, userId || null]
   );
   return result.rows[0];
@@ -245,7 +267,16 @@ exports.addUnavailableDate = async (date, reason, userId) => {
 
 exports.removeUnavailableDate = async (dateId) => {
   const result = await pool.query(
-    `DELETE FROM unavailable_dates WHERE id = $1 RETURNING *`,
+    `DELETE FROM unavailable_dates
+     WHERE id = $1
+     RETURNING
+       id,
+       date::text AS date,
+       reason,
+       is_recurring,
+       created_by,
+       created_at,
+       updated_at`,
     [dateId]
   );
   return result.rows[0];
