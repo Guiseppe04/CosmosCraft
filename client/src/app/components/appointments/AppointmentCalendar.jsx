@@ -474,6 +474,7 @@ export default function AppointmentCalendar({ appointments = [], onAppointmentCl
           </div>
         )}
       </div>
+    )}
     </div>
   )
 }
