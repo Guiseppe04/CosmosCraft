@@ -245,11 +245,12 @@ function GuitarPartAccordion({ parts, expandedGuitarTypes, onToggleGuitarType, e
                       
                       return (
                         <div key={category} className="border border-[var(--border)] rounded-xl overflow-hidden">
-                          <button
-                            onClick={() => onTogglePartCategory(`${guitarType}-${category}`)}
-                            className="w-full flex items-center justify-between px-4 py-3 hover:bg-white/5 transition-colors bg-[var(--bg-primary)]/50"
-                          >
-                            <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 px-4 py-3 bg-[var(--bg-primary)]/50">
+                            <button
+                              type="button"
+                              onClick={() => onTogglePartCategory(`${guitarType}-${category}`)}
+                              className="flex-1 flex items-center gap-2 text-left hover:text-white transition-colors"
+                            >
                               {isCategoryExpanded ? (
                                 <ChevronDown className="w-4 h-4 text-[var(--gold-primary)]" />
                               ) : (
@@ -259,15 +260,16 @@ function GuitarPartAccordion({ parts, expandedGuitarTypes, onToggleGuitarType, e
                               <span className="px-2 py-0.5 rounded-full text-xs bg-[var(--bg-primary)] text-[var(--text-muted)]">
                                 {categoryParts.length}
                               </span>
-                            </div>
+                            </button>
                             <button
-                              onClick={(e) => { e.stopPropagation(); onQuickAdd(guitarType, category) }}
+                              type="button"
+                              onClick={() => onQuickAdd(guitarType, category)}
                               className="p-1.5 hover:bg-[var(--gold-primary)]/20 rounded-lg transition-colors"
                               title="Quick add part"
                             >
                               <Plus className="w-4 h-4 text-[var(--gold-primary)]" />
                             </button>
-                          </button>
+                          </div>
                           
                           <AnimatePresence>
                             {isCategoryExpanded && (
@@ -2029,7 +2031,7 @@ export function AdminPage() {
     const loaders = {
       'products': () => { fetchProducts(); fetchCategories(); },
       'guitar-parts': () => { fetchParts(); },
-      'categories': () => { fetchCategories(); },
+      'product-categories': () => { fetchCategories(); },
       'users': fetchUsers,
       'orders': fetchOrders,
       'projects': fetchProjects,
@@ -2069,7 +2071,7 @@ export function AdminPage() {
     const map = {
       'products': fetchProducts,
       'guitar-parts': fetchParts,
-      'categories': fetchCategories,
+      'product-categories': fetchCategories,
       'users': fetchUsers,
       'orders': fetchOrders,
       'projects': fetchProjects,
@@ -3153,15 +3155,15 @@ export function AdminPage() {
                 </div>
 
                 <div className="grid gap-6 xl:grid-cols-[1.8fr_1.2fr]">
-                  <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-6">
+                  <div className="min-w-0 rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-6">
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
                       <div>
                         <h2 className="text-white text-2xl font-semibold">Performance Trends</h2>
                         <p className="text-[var(--text-muted)] mt-1">Revenue across the last 6 months.</p>
                       </div>
                     </div>
-                    <div className="h-72">
-                      <ResponsiveContainer width="100%" height="100%">
+                    <div className="h-72 min-h-[200px] min-w-0">
+                      <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                         <AreaChart data={[
                           { month: 'Jan', revenue: 42000 }, { month: 'Feb', revenue: 38000 },
                           { month: 'Mar', revenue: 51000 }, { month: 'Apr', revenue: 47000 },
@@ -3643,7 +3645,7 @@ export function AdminPage() {
                 </div>
 
                 {isSuperAdmin && (
-                  <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6">
+                  <div className="min-w-0 bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6">
                     <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-3">
                       <MapPin className="w-5 h-5 text-[var(--gold-primary)]" />
                       Appointment Branch
@@ -4300,8 +4302,8 @@ export function AdminPage() {
 
                   <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6">
                     <h2 className="text-white text-xl font-semibold mb-6 text-center">Sales Breakdown by Channel</h2>
-                    <div className="h-80 mb-6">
-                      <ResponsiveContainer width="100%" height="100%">
+                    <div className="h-80 min-h-[250px] min-w-0 mb-6">
+                      <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                         <BarChart data={[
                           { category: 'Walk-in', amount: salesReport.walkInSales || 0 },
                           { category: 'Online', amount: salesReport.onlineSales || 0 },
