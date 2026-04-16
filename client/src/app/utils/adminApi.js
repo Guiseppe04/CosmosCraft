@@ -44,6 +44,7 @@ export const adminApi = {
     const qs = new URLSearchParams(params).toString()
     return request(`/api/guitars/customizations${qs ? '?' + qs : ''}`)
   },
+  getMyCustomizations: () => request('/api/guitars/my-customizations'),
   getCustomization: (id) => request(`/api/guitars/customizations/${id}`),
   updateCustomization: (id, body) => request(`/api/guitars/customizations/${id}`, { method: 'PUT', body }),
   deleteCustomization: (id) => request(`/api/guitars/customizations/${id}`, { method: 'DELETE' }),
@@ -134,7 +135,7 @@ export const adminApi = {
   setUnavailableDate: (date, reason) => request('/api/appointments/unavailable-dates', { method: 'POST', body: { date, reason } }),
   removeUnavailableDate: (dateId) => request(`/api/appointments/unavailable-dates/${dateId}`, { method: 'DELETE' }),
 
-  // Inventory
+   // Inventory
   getInventoryProducts: (params = {}) => {
     const qs = new URLSearchParams(params).toString()
     return request(`/api/inventory/products${qs ? '?' + qs : ''}`)

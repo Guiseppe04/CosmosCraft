@@ -5,6 +5,271 @@ const isValidUUID = (uuid) => {
   return uuidRegex.test(uuid)
 }
 
+const resolveProductId = (...values) => {
+  for (const value of values) {
+    if (isValidUUID(value)) return value
+  }
+
+  return null
+}
+
+const normalizePositiveQuantity = (value, fallback = 1) => {
+  const quantity = Number(value)
+
+  if (!Number.isFinite(quantity) || quantity <= 0) {
+    return fallback
+  }
+
+  return Math.max(1, Math.trunc(quantity))
+}
+
+const addInventoryReservation = (reservations, productId, quantity) => {
+  if (!productId || quantity <= 0) return
+
+  const currentQuantity = reservations.get(productId) || 0
+  reservations.set(productId, currentQuantity + quantity)
+}
+
+const collectInventoryReservations = (items = []) => {
+  const reservations = new Map()
+
+  for (const item of items) {
+    const itemQuantity = normalizePositiveQuantity(item.quantity)
+    const directProductId = item.customization ? null : resolveProductId(item.productId, item.id)
+
+    addInventoryReservation(reservations, directProductId, itemQuantity)
+
+    if (!item.customization) continue
+
+    const additionalParts = Array.isArray(item.customization.additionalParts)
+      ? item.customization.additionalParts
+      : []
+
+    for (const part of additionalParts) {
+      const partProductId = resolveProductId(part.product_id, part.productId, part.id)
+      const partQuantity = normalizePositiveQuantity(part.quantity)
+
+      addInventoryReservation(reservations, partProductId, itemQuantity * partQuantity)
+    }
+  }
+
+  return reservations
+}
+
+const getRequestedCustomizationId = (customization = {}) => {
+  if (!customization || typeof customization !== 'object') return null
+
+  return resolveProductId(
+    customization.customizationId,
+    customization.dbCustomizationId,
+    customization.customization_id
+  )
+}
+
+const syncCustomizationParts = async (client, customizationId, additionalParts = []) => {
+  await client.query(
+    'DELETE FROM customization_parts WHERE customization_id = $1',
+    [customizationId]
+  )
+
+  for (const part of additionalParts) {
+    const customizationPartProductId = resolveProductId(part.product_id, part.productId, part.id)
+
+    await client.query(
+      `INSERT INTO customization_parts (customization_id, product_id, part_name, quantity, price)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [
+        customizationId,
+        customizationPartProductId,
+        part.name || part.part_name || 'Custom Part',
+        Number(part.quantity) > 0 ? Number(part.quantity) : 1,
+        Number(part.price) || 0,
+      ]
+    )
+  }
+}
+
+const upsertCustomizationForOrder = async (client, userId, customization, fallbackPrice) => {
+  const {
+    name,
+    config = {},
+    summary = {},
+    baseBuildPrice,
+    additionalParts = [],
+  } = customization
+
+  const requestedCustomizationId = getRequestedCustomizationId(customization)
+  const totalPrice = Number(baseBuildPrice ?? fallbackPrice ?? 0)
+  const guitarType = config.guitarType || (config.bassType ? 'bass' : 'electric')
+
+  if (requestedCustomizationId) {
+    const existingCustomizationRes = await client.query(
+      `SELECT customization_id
+       FROM customizations
+       WHERE customization_id = $1 AND user_id = $2`,
+      [requestedCustomizationId, userId]
+    )
+
+    if (existingCustomizationRes.rows.length > 0) {
+      const activeOrderRes = await client.query(
+        `SELECT o.order_id
+         FROM order_items oi
+         JOIN orders o ON o.order_id = oi.order_id
+         WHERE oi.customization_id = $1
+           AND o.status <> 'cancelled'
+         LIMIT 1`,
+        [requestedCustomizationId]
+      )
+
+      if (activeOrderRes.rows.length > 0) {
+        throw new Error('This custom build is already attached to an active order.')
+      }
+
+      await client.query(
+        `UPDATE customizations
+         SET name = $1,
+             guitar_type = $2,
+             body_wood = $3,
+             neck_wood = $4,
+             fingerboard_wood = $5,
+             bridge_type = $6,
+             pickups = $7,
+             color = $8,
+             finish_type = $9,
+             total_price = $10,
+             is_saved = $11,
+             updated_at = now()
+         WHERE customization_id = $12`,
+        [
+          name || 'Custom Build',
+          guitarType,
+          summary.bodyWood || config.bodyWood || null,
+          summary.neck || config.neck || null,
+          summary.fretboard || config.fretboard || null,
+          summary.bridge || config.bridge || null,
+          summary.pickups || config.pickups || null,
+          summary.bodyFinish || config.bodyFinish || null,
+          summary.bodyFinish || config.bodyFinish || null,
+          totalPrice,
+          true,
+          requestedCustomizationId,
+        ]
+      )
+
+      await syncCustomizationParts(client, requestedCustomizationId, additionalParts)
+
+      return requestedCustomizationId
+    }
+  }
+
+  const customizationRes = await client.query(
+    `INSERT INTO customizations (
+       user_id,
+       name,
+       guitar_type,
+       body_wood,
+       neck_wood,
+       fingerboard_wood,
+       bridge_type,
+       pickups,
+       color,
+       finish_type,
+       total_price,
+       is_saved
+     )
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+     RETURNING customization_id`,
+    [
+      userId,
+      name || 'Custom Build',
+      guitarType,
+      summary.bodyWood || config.bodyWood || null,
+      summary.neck || config.neck || null,
+      summary.fretboard || config.fretboard || null,
+      summary.bridge || config.bridge || null,
+      summary.pickups || config.pickups || null,
+      summary.bodyFinish || config.bodyFinish || null,
+      summary.bodyFinish || config.bodyFinish || null,
+      totalPrice,
+      true
+    ]
+  )
+
+  const customizationId = customizationRes.rows[0].customization_id
+  await syncCustomizationParts(client, customizationId, additionalParts)
+
+  return customizationId
+}
+
+const validateAndDeductInventory = async (client, reservations, orderId) => {
+  const productIds = Array.from(reservations.keys()).sort()
+
+  for (const productId of productIds) {
+    const quantity = reservations.get(productId)
+
+    const productRes = await client.query(
+      `SELECT p.product_id, p.name, p.is_active, i.stock, i.low_stock_threshold
+       FROM products p
+       LEFT JOIN inventory i ON p.product_id = i.product_id
+       WHERE p.product_id = $1`,
+      [productId]
+    )
+
+    const product = productRes.rows[0]
+
+    if (!product) {
+      throw new Error(`Product ${productId} not found`)
+    }
+
+    if (!product.is_active) {
+      throw new Error(`Product "${product.name}" is no longer available`)
+    }
+
+    const inventoryRes = await client.query(
+      `SELECT stock, low_stock_threshold
+       FROM inventory
+       WHERE product_id = $1
+       FOR UPDATE`,
+      [productId]
+    )
+
+    if (inventoryRes.rows.length === 0) {
+      throw new Error(`Inventory record not found for "${product.name}"`)
+    }
+
+    const currentStock = Number(inventoryRes.rows[0].stock) || 0
+    const lowStockThreshold = Number(inventoryRes.rows[0].low_stock_threshold) || 10
+
+    if (currentStock < quantity) {
+      throw new Error(`Insufficient stock for "${product.name}". Available: ${currentStock}`)
+    }
+
+    const updateRes = await client.query(
+      `UPDATE inventory
+       SET stock = stock - $1, updated_at = now()
+       WHERE product_id = $2
+       RETURNING stock`,
+      [quantity, productId]
+    )
+
+    await client.query(
+      `INSERT INTO inventory_logs (product_id, change_type, quantity, reference_type, reference_id)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [productId, 'sale', -quantity, 'order', orderId]
+    )
+
+    const newStock = Number(updateRes.rows[0]?.stock) || 0
+
+    if (newStock <= lowStockThreshold && newStock > 0) {
+      await client.query(
+        `INSERT INTO low_stock_alerts (product_id, current_stock, threshold)
+         VALUES ($1, $2, $3)`,
+        [productId, newStock, lowStockThreshold]
+      )
+    }
+  }
+}
+
 // Payment status enum for order payment_status field
 exports.PAYMENT_STATUS = {
   PENDING: 'pending',
@@ -113,72 +378,33 @@ exports.createOrder = async (orderData) => {
     )
     
     const order = orderRes.rows[0]
+    const inventoryReservations = collectInventoryReservations(items)
+    const customizationIds = []
+    const orderedCustomBuilds = []
+
+    await validateAndDeductInventory(client, inventoryReservations, order.order_id)
 
     // Insert order items - handle products and custom builds
     for (const item of items) {
       let customizationId = null
 
       if (item.customization) {
-        const {
-          name,
-          config = {},
-          summary = {},
-          baseBuildPrice,
-          additionalParts = [],
-        } = item.customization
-
-        const customizationRes = await client.query(
-          `INSERT INTO customizations (
-             user_id,
-             name,
-             guitar_type,
-             body_wood,
-             neck_wood,
-             fingerboard_wood,
-             bridge_type,
-             pickups,
-             color,
-             finish_type,
-             total_price,
-             is_saved
-           )
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-           RETURNING customization_id`,
-          [
-            userId,
-            name || 'Custom Build',
-            config.guitarType || 'electric',
-            summary.bodyWood || config.bodyWood || null,
-            summary.neck || config.neck || null,
-            summary.fretboard || config.fretboard || null,
-            summary.bridge || config.bridge || null,
-            summary.pickups || config.pickups || null,
-            summary.bodyFinish || config.bodyFinish || null,
-            summary.bodyFinish || config.bodyFinish || null,
-            Number(baseBuildPrice ?? item.price ?? 0),
-            true
-          ]
+        customizationId = await upsertCustomizationForOrder(
+          client,
+          userId,
+          item.customization,
+          item.price
         )
 
-        customizationId = customizationRes.rows[0].customization_id
-
-        for (const part of additionalParts) {
-          await client.query(
-            `INSERT INTO customization_parts (customization_id, product_id, part_name, quantity, price)
-             VALUES ($1, $2, $3, $4, $5)`,
-            [
-              customizationId,
-              isValidUUID(part.product_id) ? part.product_id : null,
-              part.name || part.part_name || 'Custom Part',
-              Number(part.quantity) > 0 ? Number(part.quantity) : 1,
-              Number(part.price) || 0,
-            ]
-          )
-        }
+        customizationIds.push(customizationId)
+        orderedCustomBuilds.push({
+          build_id: item.customization.buildId || null,
+          customization_id: customizationId,
+        })
       }
 
       // Check if product_id is a valid UUID
-      const productId = customizationId ? null : (isValidUUID(item.productId) ? item.productId : null)
+      const productId = customizationId ? null : resolveProductId(item.productId, item.id)
       
       // For mock products (non-UUID IDs like "prod-001"), store in product_sku
       const productSku = !customizationId && !productId ? item.productId : null
@@ -205,6 +431,9 @@ exports.createOrder = async (orderData) => {
       )
     }
 
+    order.customization_ids = Array.from(new Set(customizationIds))
+    order.ordered_custom_builds = orderedCustomBuilds
+
     await client.query('COMMIT')
 
     return order
@@ -222,6 +451,19 @@ exports.getUserOrders = async (userId) => {
     `SELECT * FROM orders WHERE user_id = $1 ORDER BY created_at DESC`,
     [userId]
   )
+
+  for (const order of res.rows) {
+    const itemsRes = await pool.query(
+      `SELECT customization_id
+       FROM order_items
+       WHERE order_id = $1
+         AND customization_id IS NOT NULL`,
+      [order.order_id]
+    )
+
+    order.customization_ids = itemsRes.rows.map(item => item.customization_id)
+  }
+
   return res.rows
 }
 

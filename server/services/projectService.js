@@ -1,8 +1,37 @@
 const { pool } = require('../config/database');
 
+const normalizeProjectStatus = (status) => {
+  const normalized = String(status || '').trim().toLowerCase().replace(/\s+/g, '_')
+
+  if (normalized === 'completed') return 'completed'
+  if (normalized === 'in_progress') return 'in_progress'
+  if (normalized === 'not_started' || normalized === 'pending') return 'not_started'
+
+  return null
+}
+
+const PROJECT_BASE_SELECT = `
+  SELECT
+    p.*,
+    p.title AS name,
+    p.notes AS description,
+    o.user_id AS customer_id,
+    o.order_number,
+    CONCAT(
+      COALESCE(u.first_name, ''),
+      CASE
+        WHEN COALESCE(u.first_name, '') <> '' AND COALESCE(u.last_name, '') <> '' THEN ' '
+        ELSE ''
+      END,
+      COALESCE(u.last_name, '')
+    ) AS customer_name
+  FROM projects p
+  JOIN orders o ON o.order_id = p.order_id
+  LEFT JOIN users u ON u.user_id = o.user_id
+`
+
 exports.getProjects = async () => {
-  // We need to calculate global progress on the fly or just use the field in projects
-  const result = await pool.query('SELECT * FROM projects ORDER BY created_at DESC');
+  const result = await pool.query(`${PROJECT_BASE_SELECT} ORDER BY p.created_at DESC`);
   
   // To get proper progress, we calculate it dynamically for each project
   for (let p of result.rows) {
@@ -24,7 +53,10 @@ exports.getProjects = async () => {
 };
 
 exports.getProjectById = async (projectId) => {
-  const result = await pool.query('SELECT * FROM projects WHERE project_id = $1', [projectId]);
+  const result = await pool.query(
+    `${PROJECT_BASE_SELECT} WHERE p.project_id = $1`,
+    [projectId]
+  );
   if (result.rows.length === 0) return null;
   const project = result.rows[0];
 
@@ -45,7 +77,12 @@ exports.getProjectById = async (projectId) => {
 };
 
 exports.getMyProjects = async (userId) => {
-  const result = await pool.query('SELECT * FROM projects WHERE customer_id = $1 ORDER BY created_at DESC', [userId]);
+  const result = await pool.query(
+    `${PROJECT_BASE_SELECT}
+     WHERE o.user_id = $1
+     ORDER BY p.created_at DESC`,
+    [userId]
+  );
   for (let p of result.rows) {
     const stats = await pool.query(`
       SELECT COUNT(*) as total, COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed
@@ -53,37 +90,53 @@ exports.getMyProjects = async (userId) => {
       JOIN project_milestones pm ON ps.milestone_id = pm.milestone_id
       WHERE pm.project_id = $1
     `, [p.project_id]);
+    const customizationsRes = await pool.query(
+      `SELECT DISTINCT customization_id
+       FROM order_items
+       WHERE order_id = $1
+         AND customization_id IS NOT NULL`,
+      [p.order_id]
+    );
     const total = parseInt(stats.rows[0].total) || 0;
     const completed = parseInt(stats.rows[0].completed) || 0;
     p.progress = total === 0 ? 0 : Math.round((completed / total) * 100);
+    p.customization_ids = customizationsRes.rows.map(row => row.customization_id);
+    p.primary_customization_id = p.customization_ids[0] || null;
   }
   return result.rows;
 };
 
 exports.createProject = async (projectData) => {
-  const { name, customer_name, customer_id, status, description } = projectData;
+  const { order_id, orderId, title, name, status, description, notes, estimated_completion_date } = projectData;
+  const projectOrderId = order_id || orderId
+  const projectTitle = title || name
+  const normalizedStatus = normalizeProjectStatus(status) || 'not_started'
+
   const result = await pool.query(
-    'INSERT INTO projects (name, customer_name, customer_id, status, description) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-    [name, customer_name, customer_id || null, status || 'Pending', description]
+    `INSERT INTO projects (order_id, title, status, notes, estimated_completion_date)
+     VALUES ($1, $2, $3, $4, $5)
+     RETURNING *`,
+    [projectOrderId, projectTitle, normalizedStatus, notes ?? description ?? null, estimated_completion_date || null]
   );
-  return result.rows[0];
+  return { ...result.rows[0], name: result.rows[0].title, description: result.rows[0].notes };
 };
 
 exports.updateProject = async (projectId, projectData) => {
-  const { name, customer_name, customer_id, status, description } = projectData;
+  const { title, name, status, description, notes, estimated_completion_date } = projectData;
+  const normalizedStatus = normalizeProjectStatus(status)
+
   const result = await pool.query(
     `UPDATE projects 
-     SET name = COALESCE($1, name),
-         customer_name = COALESCE($2, customer_name),
-         customer_id = COALESCE($3, customer_id),
-         status = COALESCE($4, status),
-         description = COALESCE($5, description),
+     SET title = COALESCE($1, title),
+         status = COALESCE($2, status),
+         notes = COALESCE($3, notes),
+         estimated_completion_date = COALESCE($4, estimated_completion_date),
          updated_at = CURRENT_TIMESTAMP
-     WHERE project_id = $6 RETURNING *`,
-    [name, customer_name, customer_id || null, status, description, projectId]
+     WHERE project_id = $5 RETURNING *`,
+    [title || name, normalizedStatus, notes ?? description, estimated_completion_date || null, projectId]
   );
   if (result.rows.length === 0) return null;
-  return result.rows[0];
+  return { ...result.rows[0], name: result.rows[0].title, description: result.rows[0].notes };
 };
 
 exports.deleteProject = async (projectId) => {
@@ -129,7 +182,10 @@ const logActivity = async (client, projectId, userId, actionType, details) => {
 exports.getProjectHierarchy = async (projectId) => {
   const client = await pool.connect();
   try {
-    const pResult = await client.query('SELECT * FROM projects WHERE project_id = $1', [projectId]);
+    const pResult = await client.query(
+      `${PROJECT_BASE_SELECT} WHERE p.project_id = $1`,
+      [projectId]
+    );
     if (pResult.rows.length === 0) return null;
     const project = pResult.rows[0];
 
@@ -141,6 +197,88 @@ exports.getProjectHierarchy = async (projectId) => {
       WHERE ptm.project_id = $1
     `, [projectId]);
     project.team = teamResult.rows;
+
+    const customizationResult = await client.query(
+      `SELECT DISTINCT
+         c.customization_id,
+         c.name,
+         c.guitar_type,
+         c.body_wood,
+         c.neck_wood,
+         c.fingerboard_wood,
+         c.bridge_type,
+         c.pickups,
+         c.color,
+         c.finish_type
+       FROM order_items oi
+       JOIN customizations c ON c.customization_id = oi.customization_id
+       WHERE oi.order_id = $1
+       ORDER BY c.created_at ASC`,
+      [project.order_id]
+    );
+
+    const customizationIds = customizationResult.rows.map((row) => row.customization_id);
+    let linkedParts = [];
+
+    if (customizationIds.length > 0) {
+      const linkedPartsResult = await client.query(
+        `SELECT
+           cp.part_id::text AS part_id,
+           cp.customization_id,
+           cp.part_name AS name,
+           cp.quantity,
+           cp.price,
+           c.guitar_type,
+           pi.image_url,
+           'additional_parts' AS part_category,
+           p.is_active,
+           i.stock
+         FROM customization_parts cp
+         JOIN customizations c ON c.customization_id = cp.customization_id
+         LEFT JOIN products p ON p.product_id = cp.product_id
+         LEFT JOIN inventory i ON i.product_id = cp.product_id
+         LEFT JOIN product_images pi
+           ON pi.product_id = cp.product_id
+          AND pi.is_primary = true
+         WHERE cp.customization_id = ANY($1::uuid[])
+         ORDER BY cp.created_at ASC`,
+        [customizationIds]
+      );
+
+      linkedParts = linkedPartsResult.rows;
+    }
+
+    const specFields = [
+      ['name', 'model'],
+      ['body_wood', 'body'],
+      ['neck_wood', 'neck'],
+      ['fingerboard_wood', 'fretboard'],
+      ['bridge_type', 'bridge'],
+      ['pickups', 'pickups'],
+      ['color', 'finish'],
+      ['finish_type', 'finish'],
+    ];
+
+    const configuredParts = customizationResult.rows.flatMap((customization) =>
+      specFields.flatMap(([field, category]) => {
+        const value = customization[field];
+        if (!value) return [];
+
+        return [{
+          part_id: `${customization.customization_id}:${field}`,
+          customization_id: customization.customization_id,
+          name: value,
+          guitar_type: customization.guitar_type,
+          part_category: category,
+          stock: null,
+          is_active: true,
+          source: 'configuration',
+        }];
+      })
+    );
+
+    project.customization_ids = customizationIds;
+    project.parts = [...configuredParts, ...linkedParts];
 
     // Fetch milestones
     const mResult = await client.query('SELECT * FROM project_milestones WHERE project_id = $1 ORDER BY order_index ASC, created_at ASC', [projectId]);

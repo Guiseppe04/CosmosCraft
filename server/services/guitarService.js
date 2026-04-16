@@ -1,4 +1,5 @@
 const { pool } = require('../config/database');
+const { AppError } = require('../middleware/errorHandler');
 
 let customizationColumnsReady = false;
 let customizationColumnsPromise = null;
@@ -19,6 +20,40 @@ async function ensureCustomizationColumns() {
     });
   }
   await customizationColumnsPromise;
+}
+
+async function getCustomizationLockInfo(customizationId, userId) {
+  const res = await pool.query(
+    `SELECT
+       linked_order.order_id AS active_order_id,
+       linked_project.project_id AS active_project_id
+     FROM customizations c
+     LEFT JOIN LATERAL (
+       SELECT o.order_id
+       FROM order_items oi
+       JOIN orders o ON o.order_id = oi.order_id
+       WHERE oi.customization_id = c.customization_id
+         AND o.user_id = c.user_id
+         AND o.status <> 'cancelled'
+       ORDER BY o.created_at DESC
+       LIMIT 1
+     ) linked_order ON TRUE
+     LEFT JOIN LATERAL (
+       SELECT p.project_id
+       FROM projects p
+       JOIN orders o ON o.order_id = p.order_id
+       JOIN order_items oi ON oi.order_id = o.order_id
+       WHERE oi.customization_id = c.customization_id
+         AND o.user_id = c.user_id
+       ORDER BY p.created_at DESC
+       LIMIT 1
+     ) linked_project ON TRUE
+     WHERE c.customization_id = $1
+       AND c.user_id = $2`,
+    [customizationId, userId]
+  );
+
+  return res.rows[0] || null;
 }
 
 // ─── CUSTOMIZATIONS ──────────────────────────────────────────────────────────
@@ -122,6 +157,13 @@ exports.getMyCustomizations = async (userId) => {
      ORDER BY updated_at DESC`,
     [userId]
   );
+  for (const customization of res.rows) {
+    const lockInfo = await getCustomizationLockInfo(customization.customization_id, userId);
+    customization.active_order_id = lockInfo?.active_order_id || null;
+    customization.active_project_id = lockInfo?.active_project_id || null;
+    customization.is_locked = Boolean(lockInfo?.active_order_id);
+  }
+
   return res.rows;
 };
 
@@ -133,7 +175,15 @@ exports.getMyCustomizationById = async (customizationId, userId) => {
      WHERE customization_id = $1 AND user_id = $2`,
     [customizationId, userId]
   );
-  return res.rows[0] || null;
+  const customization = res.rows[0] || null;
+  if (!customization) return null;
+
+  const lockInfo = await getCustomizationLockInfo(customizationId, userId);
+  customization.active_order_id = lockInfo?.active_order_id || null;
+  customization.active_project_id = lockInfo?.active_project_id || null;
+  customization.is_locked = Boolean(lockInfo?.active_order_id);
+
+  return customization;
 };
 
 exports.createMyCustomization = async (userId, payload) => {
@@ -182,6 +232,12 @@ exports.createMyCustomization = async (userId, payload) => {
 
 exports.updateMyCustomization = async (customizationId, userId, payload) => {
   await ensureCustomizationColumns();
+  const lockInfo = await getCustomizationLockInfo(customizationId, userId);
+
+  if (lockInfo?.active_order_id) {
+    throw new AppError('This custom build is already attached to an active order and can no longer be edited.', 409);
+  }
+
   const {
     name,
     guitar_type,

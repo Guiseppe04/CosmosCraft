@@ -3,7 +3,8 @@ import { motion, AnimatePresence } from 'motion/react'
 import { useCart } from '../context/CartContext.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
 import { Trash2, Plus, Minus, ArrowRight, ShoppingBag, AlertTriangle, Package, Zap, ShieldCheck, Truck } from 'lucide-react'
-import { useState, useEffect } from 'react'
+import { forwardRef, useState } from 'react'
+import { getCustomBuildSummaryTree } from '../utils/customBuildSummary.js'
 
 export function CartPage() {
   const { cart, removeFromCart, updateQuantity, getTotalPrice, clearCart } = useCart()
@@ -34,10 +35,8 @@ export function CartPage() {
 
   const subtotal = getTotalPrice()
   const shipping = subtotal >= 5000 ? 0 : 150
-  const taxRate = 0.1
-  const tax = subtotal * taxRate
   const discount = 0
-  const total = subtotal + shipping + tax - discount
+  const total = subtotal + shipping - discount
   const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0)
   const hasOutOfStock = cart.some(item => item.stock === 0)
   const hasLowStock = cart.some(item => item.stock > 0 && item.stock <= 5)
@@ -71,13 +70,15 @@ export function CartPage() {
     )
   }
 
-  const CartItemCard = ({ item, index }) => {
+  const CartItemCard = forwardRef(function CartItemCard({ item, index }, ref) {
     const isOutOfStock = item.stock === 0
     const isLowStock = item.stock > 0 && item.stock <= 5
     const isMaxQuantity = item.quantity >= item.stock
+    const customBuildSummaryTree = item.isCustomBuild ? getCustomBuildSummaryTree(item) : []
 
     return (
       <motion.div
+        ref={ref}
         layout
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -162,9 +163,31 @@ export function CartPage() {
             )}
           </div>
         </div>
+
+        {item.isCustomBuild && customBuildSummaryTree.length > 0 && (
+          <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]/60 p-4">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--gold-primary)]">
+              Build Tree
+            </p>
+            <div className="mt-3 space-y-3">
+              {customBuildSummaryTree.map((branch) => (
+                <div key={branch.label} className="pl-4">
+                  <p className="text-xs font-semibold text-white">{branch.label}</p>
+                  <div className="mt-2 space-y-1.5 pl-4">
+                    {branch.children.map((child) => (
+                      <p key={`${branch.label}-${child}`} className="text-xs text-[var(--text-muted)]">
+                        {child}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </motion.div>
     )
-  }
+  })
 
   const CartSection = ({ title, icon: Icon, items }) => (
     <div className="space-y-4">
@@ -257,10 +280,6 @@ export function CartPage() {
                 {subtotal < 5000 && (
                   <p className="text-xs text-[var(--text-muted)]">Free shipping on orders over ₱5,000</p>
                 )}
-                <div className="flex justify-between">
-                  <span className="text-[var(--text-muted)]">Tax (10%)</span>
-                  <span className="font-bold text-white">₱{tax.toLocaleString('en-PH', { maximumFractionDigits: 2 })}</span>
-                </div>
                 {discount > 0 && (
                   <div className="flex justify-between">
                     <span className="text-green-400">Discount</span>

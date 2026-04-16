@@ -25,7 +25,7 @@ const DEFAULT_HOLIDAYS = [
 ]
 
 const HOLIDAY_LABELS = {
-  '2026-01-01': 'New Year’s Day',
+  '2026-01-01': "New Year's Day",
   '2026-02-17': 'Chinese New Year',
   '2026-04-02': 'Maundy Thursday',
   '2026-04-03': 'Good Friday',
@@ -35,14 +35,29 @@ const HOLIDAY_LABELS = {
   '2026-06-12': 'Independence Day',
   '2026-08-21': 'Ninoy Aquino Day',
   '2026-08-31': 'National Heroes Day',
-  '2026-11-01': 'All Saints’ Day',
-  '2026-11-02': 'All Souls’ Day',
+  '2026-11-01': 'All Saints Day',
+  '2026-11-02': 'All Souls Day',
   '2026-11-30': 'Bonifacio Day',
   '2026-12-08': 'Feast of the Immaculate Conception',
   '2026-12-24': 'Christmas Eve',
   '2026-12-25': 'Christmas Day',
   '2026-12-30': 'Rizal Day',
   '2026-12-31': 'Last Day of the Year',
+}
+
+const TIME_SLOT_CONFIG = {
+  startHour: 9,
+  endHour: 18,
+  intervalMinutes: 60,
+}
+
+const STATUS_COLORS = {
+  pending: { bg: 'bg-amber-500/20', text: 'text-amber-400', border: 'border-amber-500/30', label: 'Pending' },
+  confirmed: { bg: 'bg-blue-500/20', text: 'text-blue-400', border: 'border-blue-500/30', label: 'Confirmed' },
+  in_progress: { bg: 'bg-purple-500/20', text: 'text-purple-400', border: 'border-purple-500/30', label: 'In Progress' },
+  completed: { bg: 'bg-green-500/20', text: 'text-green-400', border: 'border-green-500/30', label: 'Completed' },
+  cancelled: { bg: 'bg-red-500/20', text: 'text-red-400', border: 'border-red-500/30', label: 'Cancelled' },
+  approved: { bg: 'bg-blue-500/20', text: 'text-blue-400', border: 'border-blue-500/30', label: 'Approved' },
 }
 
 function toISODate(value) {
@@ -107,6 +122,10 @@ export default function AppointmentCalendar({ appointments = [], onAppointmentCl
     return new Set(source.map(toISODate).filter(Boolean))
   }, [holidays])
 
+  const unavailableSet = useMemo(() => {
+    return new Set(unavailableDates.map(toISODate).filter(Boolean))
+  }, [unavailableDates])
+
   const appointmentsByDate = useMemo(() => {
     const map = new Map()
     appointments.forEach((appointment) => {
@@ -122,6 +141,8 @@ export default function AppointmentCalendar({ appointments = [], onAppointmentCl
   const [currentMonth, setCurrentMonth] = useState(today.getMonth())
   const [currentYear, setCurrentYear] = useState(today.getFullYear())
   const [selectedDateId, setSelectedDateId] = useState('')
+  const [showTimeGrid, setShowTimeGrid] = useState(false)
+  const [hoveredAppointment, setHoveredAppointment] = useState(null)
 
   useEffect(() => {
     if (!selectedDateId && appointments.length > 0) {
@@ -132,8 +153,8 @@ export default function AppointmentCalendar({ appointments = [], onAppointmentCl
 
   const monthMatrix = useMemo(() => buildMonthMatrix(currentYear, currentMonth), [currentYear, currentMonth])
   const selectedAppointments = selectedDateId ? appointmentsByDate.get(selectedDateId) || [] : []
-
-  const selectedDateLabel = selectedDateId ? format(parseLocalDateFromISO(selectedDateId), 'MMMM d, yyyy') : null
+  const selectedDate = selectedDateId ? parseLocalDateFromISO(selectedDateId) : null
+  const selectedDateLabel = selectedDateId ? format(selectedDate, 'MMMM d, yyyy') : null
 
   const getDateStatus = (dateKey) => {
     const date = parseLocalDateFromISO(dateKey)
@@ -141,158 +162,280 @@ export default function AppointmentCalendar({ appointments = [], onAppointmentCl
     const isSunday = dayOfWeek === 0
     const isHoliday = holidaySet.has(dateKey)
     const isPast = date < today
-    const isDisabled = isSunday || isHoliday || isPast
+    const isUnavailable = unavailableSet.has(dateKey)
+    const isDisabled = isSunday || isHoliday || isPast || (isAdminMode ? false : isUnavailable)
     const status = isHoliday
       ? HOLIDAY_LABELS[dateKey] || 'Holiday'
       : isSunday
         ? 'Sunday Closed'
         : isPast
           ? 'Past'
-          : 'Available'
-    return { isSunday, isHoliday, isPast, isDisabled, status }
+          : isUnavailable && isAdminMode
+            ? 'Marked Unavailable'
+            : 'Available'
+    return { isSunday, isHoliday, isPast, isDisabled, isUnavailable, status }
+  }
+
+  const handleDateSelect = (dateKey, isUnavailableCell) => {
+    if (isAdminMode && isUnavailableCell) {
+      onToggleDate?.(dateKey)
+    } else {
+      setSelectedDateId(dateKey)
+      setShowTimeGrid(true)
+    }
+  }
+
+  const handleSlotClick = (slot) => {
+    if (isAdminMode || onCreateAppointment) {
+      onCreateAppointment?.(slot, selectedDateId)
+    }
+  }
+
+  const handleBackToMonth = () => {
+    setShowTimeGrid(false)
   }
 
   return (
     <div className="space-y-8">
-      <div className="rounded-3xl border border-[var(--border)] bg-[var(--bg-primary)] p-6 shadow-[0_30px_80px_rgba(0,0,0,0.18)]">
-        <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
-          <div>
-            <div className="flex items-center gap-2 text-[var(--text-muted)] uppercase tracking-[0.3em] text-xs">
-              <Calendar className="w-4 h-4" />
-              <span>Calendar</span>
+      <AnimatePresence mode="wait">
+        {showTimeGrid && selectedDate ? (
+          <motion.div
+            key="time-grid"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            className="rounded-3xl border border-[var(--border)] bg-[var(--bg-primary)] p-6 shadow-[0_30px_80px_rgba(0,0,0,0.18)]"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+              <div className="flex items-center gap-4">
+                <button
+                  type="button"
+                  onClick={handleBackToMonth}
+                  className="p-2 hover:bg-[var(--gold-primary)]/20 rounded-xl transition-colors"
+                >
+                  <ChevronLeft className="w-5 h-5 text-[var(--gold-primary)]" />
+                </button>
+                <div>
+                  <div className="flex items-center gap-2 text-[var(--text-muted)] uppercase tracking-[0.3em] text-xs">
+                    <Clock className="w-4 h-4" />
+                    <span>Day View</span>
+                  </div>
+                  <h2 className="mt-2 text-2xl font-semibold text-white">{selectedDateLabel}</h2>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
+                <span className="px-3 py-1 rounded-full bg-green-500/20 text-green-400">
+                  {selectedAppointments.filter(a => a.status !== 'cancelled').length} booked
+                </span>
+                <span className="px-3 py-1 rounded-full bg-[var(--surface-dark)] text-[var(--text-muted)]">
+                  {TIME_SLOT_CONFIG.endHour - TIME_SLOT_CONFIG.startHour} hours available
+                </span>
+              </div>
             </div>
-            <h2 className="mt-2 text-3xl font-semibold text-white">Available / Booked Dates</h2>
-            <p className="mt-2 text-sm leading-6 text-[var(--text-muted)] max-w-2xl">
-              Booking is enabled Monday through Saturday. Sundays and listed holidays are automatically disabled.
+
+            <TimeGrid
+              date={selectedDate}
+              appointments={selectedAppointments}
+              onSlotClick={handleSlotClick}
+              onAppointmentClick={onAppointmentClick}
+              isAdminMode={isAdminMode}
+            />
+
+            <div className="mt-6 flex flex-wrap gap-3 text-sm text-[var(--text-muted)]">
+              <div className="flex items-center gap-2 rounded-3xl border border-green-500/20 bg-green-500/10 px-3 py-2">
+                <span className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
+                Available (Click to book)
+              </div>
+              <div className="flex items-center gap-2 rounded-3xl border border-amber-500/20 bg-amber-500/10 px-3 py-2">
+                <span className="h-2.5 w-2.5 rounded-full bg-amber-400" />
+                Pending
+              </div>
+              <div className="flex items-center gap-2 rounded-3xl border border-blue-500/20 bg-blue-500/10 px-3 py-2">
+                <span className="h-2.5 w-2.5 rounded-full bg-blue-400" />
+                Confirmed
+              </div>
+              <div className="flex items-center gap-2 rounded-3xl border border-purple-500/20 bg-purple-500/10 px-3 py-2">
+                <span className="h-2.5 w-2.5 rounded-full bg-purple-400" />
+                In Progress
+              </div>
+              <div className="flex items-center gap-2 rounded-3xl border border-green-500/20 bg-green-500/10 px-3 py-2">
+                <span className="h-2.5 w-2.5 rounded-full bg-green-400" />
+                Completed
+              </div>
+              <div className="flex items-center gap-2 rounded-3xl border border-red-500/20 bg-red-500/10 px-3 py-2">
+                <span className="h-2.5 w-2.5 rounded-full bg-red-400" />
+                Cancelled
+              </div>
+            </div>
+
+            {isAdminMode && (
+              <p className="mt-4 text-xs text-[var(--text-muted)] text-center">
+                Click on an available time slot to create a new appointment. Click on a booked slot to view or edit details.
+              </p>
+            )}
+          </motion.div>
+        ) : (
+          <motion.div
+            key="month-view"
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 20 }}
+            className="rounded-3xl border border-[var(--border)] bg-[var(--bg-primary)] p-6 shadow-[0_30px_80px_rgba(0,0,0,0.18)]"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+              <div>
+                <div className="flex items-center gap-2 text-[var(--text-muted)] uppercase tracking-[0.3em] text-xs">
+                  <Calendar className="w-4 h-4" />
+                  <span>Calendar</span>
+                </div>
+                <h2 className="mt-2 text-3xl font-semibold text-white">Available / Booked Dates</h2>
+                <p className="mt-2 text-sm leading-6 text-[var(--text-muted)] max-w-2xl">
+                  Booking is enabled Monday through Saturday. Sundays and listed holidays are automatically disabled.
+                </p>
+              </div>
+              <div className="flex flex-col items-end gap-2 text-right">
+                <p className="text-lg font-semibold text-white">{format(new Date(currentYear, currentMonth, 1), 'MMMM yyyy')}</p>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const prev = new Date(currentYear, currentMonth - 1, 1)
+                      setCurrentYear(prev.getFullYear())
+                      setCurrentMonth(prev.getMonth())
+                    }}
+                    className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] px-4 py-3 text-sm text-[var(--text-muted)] hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)] transition"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = new Date(currentYear, currentMonth + 1, 1)
+                      setCurrentYear(next.getFullYear())
+                      setCurrentMonth(next.getMonth())
+                    }}
+                    className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] px-4 py-3 text-sm text-[var(--text-muted)] hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)] transition"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-7 gap-2 text-sm text-[var(--text-muted)] mb-3 font-semibold tracking-widest">
+              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
+                <div key={day} className="text-center py-3">
+                  {day}
+                </div>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-7 gap-3">
+              {monthMatrix.map((week, weekIndex) =>
+                week.map((day, dayIndex) => {
+                  if (!day.inCurrentMonth) {
+                    return <div key={`empty-${weekIndex}-${dayIndex}`} className="h-20 rounded-3xl bg-[var(--surface-dark)]" />
+                  }
+
+                  const dateKey = day.id
+                  const bookingCount = appointmentsByDate.get(dateKey)?.length || 0
+                  const { isSunday, isHoliday, isPast, isDisabled, isUnavailable, status } = getDateStatus(dateKey)
+                  const isSelected = dateKey && selectedDateId === dateKey
+                  const isHolidayCell = isDisabled && isHoliday
+                  const isSundayClosed = isDisabled && isSunday
+                  const isPastDate = isDisabled && isPast
+                  const isUnavailableCell = isAdminMode && isUnavailable
+
+                  const cellClasses = isSelected
+                    ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)]/15 text-white shadow-lg shadow-[var(--gold-primary)]/10'
+                    : isHolidayCell
+                      ? 'border-[#758A93]/30 bg-[#758A93]/10 text-[#c9d2db] cursor-not-allowed'
+                      : isSundayClosed || isPastDate
+                        ? 'border-[#444] bg-[#121518] text-[#f8fafc] cursor-not-allowed'
+                        : isUnavailableCell
+                          ? 'border-amber-500/30 bg-amber-500/10 text-amber-200 cursor-pointer hover:border-amber-400 hover:bg-amber-500/20'
+                          : bookingCount
+                            ? 'border-red-500/10 bg-red-500/10 text-red-200 hover:border-red-400 hover:bg-red-500/15'
+                            : 'border-[var(--border)] bg-[var(--surface-dark)] text-white hover:border-[var(--gold-primary)] hover:bg-[var(--surface-elevated)]'
+
+                  const badgeClasses = isHolidayCell
+                    ? 'bg-[#758A93]/15 text-[#c9d2db] border border-[#758A93]/20'
+                    : isSundayClosed || isPastDate
+                      ? 'bg-[#23272e] text-[#e2e8f0] border border-[#39404c]'
+                      : isUnavailableCell
+                        ? 'bg-amber-500/15 text-amber-200 border border-amber-500/20'
+                        : bookingCount
+                          ? 'bg-red-500/15 text-red-200 border border-red-500/20'
+                          : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/20'
+
+                  return (
+                    <button
+                      key={dateKey}
+                      type="button"
+                      onClick={() => handleDateSelect(dateKey, isUnavailableCell)}
+                      title={status}
+                      disabled={isSunday || isHoliday || (isPast && !isAdminMode && !isUnavailableCell)}
+                      className={`flex h-20 flex-col items-center justify-between rounded-3xl border px-3 py-3 text-sm transition-all ${cellClasses}`}
+                    >
+                      <div className="flex w-full items-center justify-between">
+                        <span className="text-lg font-semibold">{day.dayNumber}</span>
+                        {isPast && (
+                          <span className="rounded-full bg-[#272a30] px-2 py-1 text-[10px] uppercase tracking-[0.2em] text-[var(--text-muted)]">
+                            Past
+                          </span>
+                        )}
+                      </div>
+
+                      <span className={`inline-flex items-center gap-2 rounded-full px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.15em] ${badgeClasses}`}>
+                        {isUnavailableCell ? 'Unavailable' : isDisabled ? status : bookingCount ? `${bookingCount} booked` : 'Available'}
+                      </span>
+                    </button>
+                  )
+                })
+              )}
+            </div>
+
+            <div className="mt-6 grid gap-2 sm:grid-cols-4 text-sm text-[var(--text-muted)]">
+              <div className="flex items-center gap-2 rounded-3xl border border-green-500/20 bg-green-500/10 px-3 py-2">
+                <span className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
+                Available
+              </div>
+              <div className="flex items-center gap-2 rounded-3xl border border-red-500/20 bg-red-500/10 px-3 py-2">
+                <span className="h-2.5 w-2.5 rounded-full bg-red-400" />
+                Booked
+              </div>
+              <div className="flex items-center gap-2 rounded-3xl border border-amber-500/20 bg-amber-500/10 px-3 py-2">
+                <span className="h-2.5 w-2.5 rounded-full bg-amber-400" />
+                Marked Unavailable
+              </div>
+              <div className="flex items-center gap-2 rounded-3xl border border-[#758A93]/20 bg-[#758A93]/10 px-3 py-2">
+                <span className="h-2.5 w-2.5 rounded-full bg-[#758A93]" />
+                Holiday / Sunday Closed
+              </div>
+            </div>
+            {isAdminMode && (
+              <p className="mt-4 text-xs text-[var(--text-muted)] text-center">
+                Click on any available date (Mon-Sat) to view time slots. Click on marked unavailable dates to toggle availability.
+              </p>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {!showTimeGrid && (
+        <div className="rounded-3xl border border-[var(--border)] bg-[var(--bg-primary)] p-6 shadow-[0_20px_60px_rgba(0,0,0,0.14)]">
+          <div className="flex flex-col gap-1 mb-5">
+            <h3 className="text-lg font-semibold text-white">
+              {selectedDateLabel ? `Appointments on ${selectedDateLabel}` : 'Select a day to see details'}
+            </h3>
+            <p className="text-sm text-[var(--text-muted)]">
+              {selectedDateLabel
+                ? selectedAppointments.length > 0
+                  ? 'Tap an appointment to view details or click the date to see time slots.'
+                  : 'No appointments are scheduled for the selected date.'
+                : 'Sunday is always disabled. Holidays are automatically marked as not available.'}
             </p>
           </div>
-          <div className="flex flex-col items-end gap-2 text-right">
-            <p className="text-lg font-semibold text-white">{format(new Date(currentYear, currentMonth, 1), 'MMMM yyyy')}</p>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  const prev = new Date(currentYear, currentMonth - 1, 1)
-                  setCurrentYear(prev.getFullYear())
-                  setCurrentMonth(prev.getMonth())
-                }}
-                className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] px-4 py-3 text-sm text-[var(--text-muted)] hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)] transition"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const next = new Date(currentYear, currentMonth + 1, 1)
-                  setCurrentYear(next.getFullYear())
-                  setCurrentMonth(next.getMonth())
-                }}
-                className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] px-4 py-3 text-sm text-[var(--text-muted)] hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)] transition"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-7 gap-2 text-sm text-[var(--text-muted)] mb-3 font-semibold tracking-widest">
-          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
-            <div key={day} className="text-center py-3">
-              {day}
-            </div>
-          ))}
-        </div>
-
-        <div className="grid grid-cols-7 gap-3">
-          {monthMatrix.map((week, weekIndex) =>
-            week.map((day, dayIndex) => {
-              if (!day.inCurrentMonth) {
-                return <div key={`empty-${weekIndex}-${dayIndex}`} className="h-20 rounded-3xl bg-[var(--surface-dark)]" />
-              }
-
-              const dateKey = day.id
-              const bookingCount = appointmentsByDate.get(dateKey)?.length || 0
-              const { isSunday, isHoliday, isPast, isDisabled, status } = getDateStatus(dateKey)
-              const isSelected = dateKey && selectedDateId === dateKey
-              const isAvailable = !isDisabled && !bookingCount
-              const isHolidayCell = isDisabled && isHoliday
-              const isSundayClosed = isDisabled && isSunday
-              const isPastDate = isDisabled && isPast
-
-              const cellClasses = isSelected
-                ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)]/15 text-white shadow-lg shadow-[var(--gold-primary)]/10'
-                : isHolidayCell
-                  ? 'border-[#758A93]/30 bg-[#758A93]/10 text-[#c9d2db] cursor-not-allowed'
-                  : isSundayClosed || isPastDate
-                    ? 'border-[#444] bg-[#121518] text-[#f8fafc] cursor-not-allowed'
-                    : bookingCount
-                      ? 'border-red-500/10 bg-red-500/10 text-red-200 hover:border-red-400 hover:bg-red-500/15'
-                      : 'border-[var(--border)] bg-[var(--surface-dark)] text-white hover:border-[var(--gold-primary)] hover:bg-[var(--surface-elevated)]'
-
-              const badgeClasses = isHolidayCell
-                ? 'bg-[#758A93]/15 text-[#c9d2db] border border-[#758A93]/20'
-                : isSundayClosed || isPastDate
-                  ? 'bg-[#23272e] text-[#e2e8f0] border border-[#39404c]'
-                  : bookingCount
-                    ? 'bg-red-500/15 text-red-200 border border-red-500/20'
-                    : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/20'
-
-              return (
-                <button
-                  key={dateKey}
-                  type="button"
-                  onClick={() => {
-                    if (!isDisabled) setSelectedDateId(dateKey)
-                  }}
-                  disabled={isDisabled}
-                  title={status}
-                  className={`flex h-20 flex-col items-center justify-between rounded-3xl border px-3 py-3 text-sm transition-all ${cellClasses}`}
-                >
-                  <div className="flex w-full items-center justify-between">
-                    <span className="text-lg font-semibold">{day.dayNumber}</span>
-                    {isPast && (
-                      <span className="rounded-full bg-[#272a30] px-2 py-1 text-[10px] uppercase tracking-[0.2em] text-[var(--text-muted)]">
-                        Past
-                      </span>
-                    )}
-                  </div>
-
-                  <span className={`inline-flex items-center gap-2 rounded-full px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.15em] ${badgeClasses}`}>
-                    {isDisabled ? status : bookingCount ? `${bookingCount} booked` : 'Available'}
-                  </span>
-                </button>
-              )
-            })
-          )}
-        </div>
-
-        <div className="mt-6 grid gap-2 sm:grid-cols-3 text-sm text-[var(--text-muted)]">
-          <div className="flex items-center gap-2 rounded-3xl border border-green-500/20 bg-green-500/10 px-3 py-2">
-            <span className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
-            Available
-          </div>
-          <div className="flex items-center gap-2 rounded-3xl border border-red-500/20 bg-red-500/10 px-3 py-2">
-            <span className="h-2.5 w-2.5 rounded-full bg-red-400" />
-            Booked
-          </div>
-          <div className="flex items-center gap-2 rounded-3xl border border-[#758A93]/20 bg-[#758A93]/10 px-3 py-2">
-            <span className="h-2.5 w-2.5 rounded-full bg-[#758A93]" />
-            Holiday / Sunday Closed
-          </div>
-        </div>
-      </div>
-
-      <div className="rounded-3xl border border-[var(--border)] bg-[var(--bg-primary)] p-6 shadow-[0_20px_60px_rgba(0,0,0,0.14)]">
-        <div className="flex flex-col gap-1 mb-5">
-          <h3 className="text-lg font-semibold text-white">{selectedDateLabel ? `Appointments on ${selectedDateLabel}` : 'Select a day to see details'}</h3>
-          <p className="text-sm text-[var(--text-muted)]">
-            {selectedDateLabel
-              ? selectedAppointments.length > 0
-                ? 'Tap an appointment to view details.'
-                : 'No appointments are scheduled for the selected date.'
-              : 'Sunday is always disabled. Holidays are automatically marked as not available.'}
-          </p>
-        </div>
 
         {selectedDateLabel && (
           <div className="grid gap-2">
@@ -331,6 +474,7 @@ export default function AppointmentCalendar({ appointments = [], onAppointmentCl
           </div>
         )}
       </div>
+    )}
     </div>
   )
 }
