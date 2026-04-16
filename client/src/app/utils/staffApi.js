@@ -54,9 +54,28 @@ export const staffApi = {
     return request(`/api/appointments${qs ? '?' + qs : ''}`)
   },
 
+  /** POST /api/appointments — create new appointment */
+  createAppointment: (data) =>
+    request('/api/appointments', { method: 'POST', body: data }),
+
+  /** PUT /api/appointments/:id — update appointment */
+  updateAppointment: (id, data) =>
+    request(`/api/appointments/${id}`, { method: 'PUT', body: data }),
+
   /** PATCH /api/appointments/:id — update status (completed / no-show / cancelled) */
   updateAppointmentStatus: (id, status) =>
     request(`/api/appointments/${id}`, { method: 'PATCH', body: { status } }),
+
+  /** GET /api/appointments/unavailable — get unavailable dates */
+  getUnavailableDates: () => request('/api/appointments/unavailable'),
+
+  /** POST /api/appointments/unavailable — add unavailable date */
+  addUnavailableDate: (data) =>
+    request('/api/appointments/unavailable', { method: 'POST', body: data }),
+
+  /** DELETE /api/appointments/unavailable/:id — remove unavailable date */
+  removeUnavailableDate: (id) =>
+    request(`/api/appointments/unavailable/${id}`, { method: 'DELETE' }),
 
   // ── Inventory ─────────────────────────────────────────────────────────────
   /** GET /api/inventory/summary — current stock overview */

@@ -8,6 +8,7 @@ import { format } from 'date-fns'
 
 // Main AppointmentForm component
 export default function AppointmentForm({
+  open,
   isOpen,
   onClose,
   onSubmit,
@@ -34,10 +35,11 @@ export default function AppointmentForm({
   const [searchUsers, setSearchUsers] = useState('')
   const [showUserDropdown, setShowUserDropdown] = useState(false)
   const [errors, setErrors] = useState({})
+  const modalOpen = isOpen ?? open
 
   // Reset form when opening
   useEffect(() => {
-    if (isOpen) {
+    if (modalOpen) {
       if (initialData) {
         // Edit mode
         const scheduledAt = new Date(initialData.scheduled_at || initialData.scheduledAt)
@@ -70,7 +72,7 @@ export default function AppointmentForm({
       }
       setErrors({})
     }
-  }, [isOpen, initialData, selectedDate])
+  }, [modalOpen, initialData, selectedDate])
 
   // Filter users based on search
   const filteredUsers = useMemo(() => {
@@ -206,7 +208,7 @@ export default function AppointmentForm({
     }
   }
 
-  if (!isOpen) return null
+  if (!modalOpen) return null
 
   return (
     <>
@@ -219,42 +221,47 @@ export default function AppointmentForm({
       />
 
       <motion.div
-        initial={{ opacity: 0, x: 100 }}
-        animate={{ opacity: 1, x: 0 }}
-        exit={{ opacity: 0, x: 100 }}
-        className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-xl bg-[var(--bg-primary)] border-l border-[var(--border)] shadow-2xl overflow-y-auto"
+        initial={{ opacity: 0, scale: 0.96, y: 18 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.96, y: 18 }}
+        className="fixed inset-0 z-50 flex items-center justify-center p-4"
+        onClick={onClose}
       >
-        {/* Header */}
-        <div className="sticky top-0 z-10 bg-[var(--bg-primary)] border-b border-[var(--border)] p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-2xl font-semibold text-white">
-                {initialData ? 'Edit Appointment' : 'New Appointment'}
-              </h2>
-              <p className="text-[var(--text-muted)] text-sm mt-1">
-                {initialData ? 'Update appointment details' : 'Schedule a new appointment'}
-              </p>
+        <div
+          className="w-full max-w-[460px] max-h-[92vh] overflow-y-auto rounded-[28px] bg-[#413b3b] border border-white/10 shadow-2xl"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Header */}
+          <div className="sticky top-0 z-10 bg-[#413b3b] border-b border-white/10 px-4 py-4 sm:px-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-[31px] leading-none sm:text-[32px] font-semibold text-white">
+                  {initialData ? 'Edit Appointment' : 'New Appointment'}
+                </h2>
+                <p className="text-[#d4d0d0] text-sm mt-2">
+                  {initialData ? 'Update appointment details' : 'Schedule a new appointment'}
+                </p>
+              </div>
+              <button
+                onClick={onClose}
+                className="p-2.5 rounded-2xl border border-white/10 bg-white/5 text-[#d1cbcb] hover:bg-white/10 hover:text-white transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
-            <button
-              onClick={onClose}
-              className="p-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] text-[var(--text-muted)] hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)] transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
           </div>
-        </div>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+          {/* Form */}
+          <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-6">
           {/* Customer Information */}
           <div className="space-y-4">
               <div>
-                <label className="block text-sm text-[var(--text-muted)] mb-2">Name *</label>
+                <label className="block text-sm text-[#d4d0d0] mb-2">Name *</label>
                 <input
                   type="text"
                   value={formData.customer_name}
                   onChange={(e) => handleInputChange('customer_name', e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] text-white focus:border-[var(--gold-primary)] focus:outline-none"
+                  className="w-full px-4 py-3 rounded-xl border border-white/10 bg-[#3a3535] text-white placeholder:text-[#9aa4ad] focus:border-white/20 focus:outline-none"
                   placeholder="Customer name"
                 />
                 {errors.customer_name && (
@@ -262,12 +269,12 @@ export default function AppointmentForm({
                 )}
               </div>
               <div>
-                <label className="block text-sm text-[var(--text-muted)] mb-2">Email *</label>
+                <label className="block text-sm text-[#d4d0d0] mb-2">Email *</label>
                 <input
                   type="email"
                   value={formData.customer_email}
                   onChange={(e) => handleInputChange('customer_email', e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] text-white focus:border-[var(--gold-primary)] focus:outline-none"
+                  className="w-full px-4 py-3 rounded-xl border border-white/10 bg-[#3a3535] text-white placeholder:text-[#9aa4ad] focus:border-white/20 focus:outline-none"
                   placeholder="customer@example.com"
                 />
                 {errors.customer_email && (
@@ -275,12 +282,12 @@ export default function AppointmentForm({
                 )}
               </div>
               <div>
-                <label className="block text-sm text-[var(--text-muted)] mb-2">Phone</label>
+                <label className="block text-sm text-[#d4d0d0] mb-2">Phone</label>
                 <input
                   type="tel"
                   value={formData.customer_phone}
                   onChange={(e) => handleInputChange('customer_phone', e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] text-white focus:border-[var(--gold-primary)] focus:outline-none"
+                  className="w-full px-4 py-3 rounded-xl border border-white/10 bg-[#3a3535] text-white placeholder:text-[#9aa4ad] focus:border-white/20 focus:outline-none"
                   placeholder="+63 912 345 6789"
                 />
               </div>
@@ -288,11 +295,11 @@ export default function AppointmentForm({
 
           {/* Service Selection */}
           <div>
-            <label className="block text-sm text-[var(--text-muted)] mb-2">Service</label>
+            <label className="block text-sm text-[#d4d0d0] mb-2">Service</label>
             <select
               value={formData.service_id}
               onChange={(e) => handleInputChange('service_id', e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] text-white focus:border-[var(--gold-primary)] focus:outline-none"
+              className="w-full px-4 py-3 rounded-xl border border-white/10 bg-[#3a3535] text-white focus:border-white/20 focus:outline-none"
             >
               <option value="">Select a service...</option>
               {services.map(service => (
@@ -306,29 +313,29 @@ export default function AppointmentForm({
           {/* Date & Time */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm text-[var(--text-muted)] mb-2">Date *</label>
+              <label className="block text-sm text-[#d4d0d0] mb-2">Date *</label>
               <input
                 type="date"
                 value={formData.scheduled_date}
                 onChange={(e) => handleInputChange('scheduled_date', e.target.value)}
                 min={format(new Date(), 'yyyy-MM-dd')}
-                className="w-full px-4 py-3 rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] text-white focus:border-[var(--gold-primary)] focus:outline-none"
+                className="w-full px-4 py-3 rounded-xl border border-white/10 bg-[#3a3535] text-white focus:border-white/20 focus:outline-none"
               />
               {errors.scheduled_date && (
                 <p className="mt-2 text-sm text-red-400">{errors.scheduled_date}</p>
               )}
             </div>
             <div>
-              <label className="block text-sm text-[var(--text-muted)] mb-2">Time *</label>
+              <label className="block text-sm text-[#d4d0d0] mb-2">Time *</label>
               {loadingSlots ? (
-                <div className="w-full px-4 py-3 rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] flex items-center justify-center">
+                <div className="w-full px-4 py-3 rounded-xl border border-white/10 bg-[#3a3535] flex items-center justify-center">
                   <Loader2 className="w-5 h-5 text-[var(--text-muted)] animate-spin" />
                 </div>
               ) : (
                 <select
                   value={formData.scheduled_time}
                   onChange={(e) => handleInputChange('scheduled_time', e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] text-white focus:border-[var(--gold-primary)] focus:outline-none"
+                  className="w-full px-4 py-3 rounded-xl border border-white/10 bg-[#3a3535] text-white focus:border-white/20 focus:outline-none"
                 >
                   <option value="">Select time...</option>
                   {availableSlots.map(slot => (
@@ -346,11 +353,11 @@ export default function AppointmentForm({
 
           {/* Status */}
           <div>
-            <label className="block text-sm text-[var(--text-muted)] mb-2">Initial Status</label>
+            <label className="block text-sm text-[#d4d0d0] mb-2">Initial Status</label>
             <select
               value={formData.status}
               onChange={(e) => handleInputChange('status', e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] text-white focus:border-[var(--gold-primary)] focus:outline-none"
+              className="w-full px-4 py-3 rounded-xl border border-white/10 bg-[#3a3535] text-white focus:border-white/20 focus:outline-none"
             >
               <option value="pending">Pending</option>
               <option value="approved">Approved</option>
@@ -360,12 +367,12 @@ export default function AppointmentForm({
 
           {/* Notes */}
           <div>
-            <label className="block text-sm text-[var(--text-muted)] mb-2">Notes</label>
+            <label className="block text-sm text-[#d4d0d0] mb-2">Notes</label>
             <textarea
               value={formData.notes}
               onChange={(e) => handleInputChange('notes', e.target.value)}
               rows={4}
-              className="w-full px-4 py-3 rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] text-white focus:border-[var(--gold-primary)] focus:outline-none resize-none"
+              className="w-full px-4 py-3 rounded-xl border border-white/10 bg-[#3a3535] text-white placeholder:text-[#9aa4ad] focus:border-white/20 focus:outline-none resize-none"
               placeholder="Add any special requests or notes..."
             />
           </div>
@@ -375,14 +382,14 @@ export default function AppointmentForm({
             <button
               type="button"
               onClick={onClose}
-              className="px-6 py-3 rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] text-[var(--text-muted)] hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)] transition-colors"
+              className="px-6 py-3 rounded-xl border border-white/10 bg-white/5 text-[#d4d0d0] hover:bg-white/10 hover:text-white transition-colors"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="flex items-center gap-2 px-6 py-3 rounded-xl bg-[var(--gold-primary)] text-black font-medium hover:bg-[var(--gold-primary)]/90 transition-colors disabled:opacity-50"
+              className="flex items-center gap-2 px-6 py-3 rounded-xl bg-[#ffd21c] text-black font-semibold hover:bg-[#ffda3a] transition-colors disabled:opacity-50"
             >
               {loading ? (
                 <>
@@ -397,7 +404,8 @@ export default function AppointmentForm({
               )}
             </button>
           </div>
-        </form>
+          </form>
+        </div>
       </motion.div>
     </>
   )

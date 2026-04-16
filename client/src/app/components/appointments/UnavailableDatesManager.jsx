@@ -41,6 +41,8 @@ export default function UnavailableDatesManager({
   unavailableDates = [],
   onAddUnavailable,
   onRemoveUnavailable,
+  onAdd,
+  onRemove,
   loading = false,
 }) {
   const [currentMonth, setCurrentMonth] = useState(new Date())
@@ -48,6 +50,8 @@ export default function UnavailableDatesManager({
   const [selectedDate, setSelectedDate] = useState(null)
   const [reason, setReason] = useState('')
   const [actionLoading, setActionLoading] = useState(false)
+  const handleAddAction = onAddUnavailable || onAdd
+  const handleRemoveAction = onRemoveUnavailable || onRemove
 
   // Get unavailable dates as a Set for quick lookup
   const unavailableSet = new Set(
@@ -112,7 +116,7 @@ export default function UnavailableDatesManager({
     setActionLoading(true)
     try {
       const dateStr = format(selectedDate, 'yyyy-MM-dd')
-      await onAddUnavailable?.(dateStr, reason)
+      await handleAddAction?.(dateStr, reason)
       setShowAddModal(false)
       setSelectedDate(null)
       setReason('')
@@ -130,7 +134,7 @@ export default function UnavailableDatesManager({
         format(parseISO(d.date), 'yyyy-MM-dd') === dateStr
       )
       if (entry?.id) {
-        await onRemoveUnavailable?.(entry.id)
+        await handleRemoveAction?.(entry.id)
       }
       setShowAddModal(false)
       setSelectedDate(null)
@@ -170,170 +174,168 @@ export default function UnavailableDatesManager({
   return (
     <>
       <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
-        onClick={onClose}
-      />
-
-      <motion.div
         initial={{ opacity: 0, x: 100 }}
         animate={{ opacity: 1, x: 0 }}
         exit={{ opacity: 0, x: 100 }}
-        className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-xl bg-[var(--bg-primary)] border-l border-[var(--border)] shadow-2xl overflow-y-auto"
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+        onClick={onClose}
       >
-        {/* Header */}
-        <div className="sticky top-0 z-10 bg-[var(--bg-primary)] border-b border-[var(--border)] p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-2xl font-semibold text-white">Unavailable Dates</h2>
-              <p className="text-[var(--text-muted)] text-sm mt-1">
-                Manage dates when appointments cannot be booked
-              </p>
-            </div>
-            <button
-              onClick={onClose}
-              className="p-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] text-[var(--text-muted)] hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)] transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
-
-        {/* Content */}
-        <div className="p-6 space-y-6">
-          {/* Legend */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
-            <div className="flex items-center gap-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 px-3 py-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
-              <span className="text-emerald-300">Available</span>
-            </div>
-            <div className="flex items-center gap-2 rounded-xl bg-red-500/10 border border-red-500/20 px-3 py-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-red-400" />
-              <span className="text-red-300">Unavailable</span>
-            </div>
-            <div className="flex items-center gap-2 rounded-xl bg-[#758A93]/10 border border-[#758A93]/20 px-3 py-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-[#758A93]" />
-              <span className="text-[#c9d2db]">Holiday</span>
-            </div>
-            <div className="flex items-center gap-2 rounded-xl bg-[#444]/10 border border-[#444]/20 px-3 py-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-[#666]" />
-              <span className="text-[#999]">Sunday</span>
-            </div>
-          </div>
-
-          {/* Calendar */}
-          <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-5">
-            {/* Month Navigation */}
-            <div className="flex items-center justify-between mb-6">
+        <div
+          className="w-full max-w-[460px] max-h-[92vh] overflow-y-auto rounded-[28px] bg-[#413b3b] border border-white/10 shadow-2xl"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Header */}
+          <div className="sticky top-0 z-10 bg-[#413b3b] border-b border-white/10 px-4 py-4 sm:px-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-[31px] leading-none sm:text-[32px] font-semibold text-white">Unavailable Dates</h2>
+                <p className="text-[#d4d0d0] text-sm mt-2">
+                  Manage dates when appointments cannot be booked
+                </p>
+              </div>
               <button
-                onClick={handlePrevMonth}
-                className="p-2 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] text-[var(--text-muted)] hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)] transition-colors"
+                onClick={onClose}
+                className="p-2.5 rounded-2xl border border-white/10 bg-white/5 text-[#d1cbcb] hover:bg-white/10 hover:text-white transition-colors"
               >
-                <ChevronLeft className="w-5 h-5" />
-              </button>
-              <h3 className="text-lg font-semibold text-white">
-                {format(currentMonth, 'MMMM yyyy')}
-              </h3>
-              <button
-                onClick={handleNextMonth}
-                className="p-2 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] text-[var(--text-muted)] hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)] transition-colors"
-              >
-                <ChevronRight className="w-5 h-5" />
+                <X className="w-5 h-5" />
               </button>
             </div>
-
-            {/* Day Headers */}
-            <div className="grid grid-cols-7 gap-1 mb-2">
-              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-                <div key={day} className="text-center text-xs uppercase tracking-wider text-[var(--text-muted)] py-2">
-                  {day}
-                </div>
-              ))}
-            </div>
-
-            {/* Calendar Grid */}
-            <div className="grid grid-cols-7 gap-1">
-              {calendarDays.map((date, index) => {
-                if (!date) {
-                  return <div key={`empty-${index}`} className="h-10" />
-                }
-
-                const status = getDateStatus(date)
-                const isSelected = selectedDate && isSameDay(date, selectedDate)
-
-                const cellClasses = isSelected
-                  ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)]/15'
-                  : status.type === 'holiday'
-                    ? 'border-[#758A93]/30 bg-[#758A93]/10'
-                    : status.type === 'sunday'
-                      ? 'border-[#444] bg-[#222]'
-                      : status.type === 'past'
-                        ? 'border-[#333] bg-[#1a1a1a] opacity-50'
-                        : status.type === 'unavailable'
-                          ? 'border-red-500/30 bg-red-500/10'
-                          : 'border-[var(--border)] bg-[var(--bg-primary)] hover:border-[var(--gold-primary)]'
-
-                return (
-                  <button
-                    key={date.toISOString()}
-                    onClick={() => handleDateClick(date)}
-                    disabled={status.disabled}
-                    className={`h-10 rounded-lg border text-sm font-medium transition-all ${cellClasses} ${
-                      status.disabled ? 'cursor-not-allowed' : 'cursor-pointer hover:bg-[var(--gold-primary)]/10'
-                    } ${status.type === 'holiday' || status.type === 'sunday' ? 'text-[#c9d2db]' : 'text-white'}`}
-                  >
-                    {format(date, 'd')}
-                  </button>
-                )
-              })}
-            </div>
           </div>
 
-          {/* Unavailable Dates List */}
-          <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-5">
-            <h3 className="text-lg font-semibold text-white mb-4">Marked Unavailable</h3>
-            {unavailableDates.length === 0 ? (
-              <p className="text-[var(--text-muted)] text-center py-8">
-                No dates have been marked as unavailable.
-              </p>
-            ) : (
-              <div className="space-y-2 max-h-60 overflow-y-auto">
-                {unavailableDates.map((date, index) => {
-                  const dateObj = date.date instanceof Date ? date.date : parseISO(date.date)
+          {/* Content */}
+          <div className="p-4 sm:p-6 space-y-5">
+            {/* Legend */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
+              <div className="flex items-center gap-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 px-3 py-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
+                <span className="text-emerald-300">Available</span>
+              </div>
+              <div className="flex items-center gap-2 rounded-xl bg-red-500/10 border border-red-500/20 px-3 py-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-red-400" />
+                <span className="text-red-300">Unavailable</span>
+              </div>
+              <div className="flex items-center gap-2 rounded-xl bg-slate-400/10 border border-slate-400/20 px-3 py-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-slate-300" />
+                <span className="text-slate-200">Holiday</span>
+              </div>
+              <div className="flex items-center gap-2 rounded-xl bg-white/5 border border-white/10 px-3 py-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-white/30" />
+                <span className="text-[#b7b0b0]">Sunday</span>
+              </div>
+            </div>
+
+            {/* Calendar */}
+            <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4 sm:p-5">
+              {/* Month Navigation */}
+              <div className="flex items-center justify-between mb-6">
+                <button
+                  onClick={handlePrevMonth}
+                  className="p-2 rounded-xl border border-white/10 bg-white/5 text-[#d1cbcb] hover:bg-white/10 hover:text-white transition-colors"
+                >
+                  <ChevronLeft className="w-5 h-5" />
+                </button>
+                <h3 className="text-lg font-semibold text-white">
+                  {format(currentMonth, 'MMMM yyyy')}
+                </h3>
+                <button
+                  onClick={handleNextMonth}
+                  className="p-2 rounded-xl border border-white/10 bg-white/5 text-[#d1cbcb] hover:bg-white/10 hover:text-white transition-colors"
+                >
+                  <ChevronRight className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Day Headers */}
+              <div className="grid grid-cols-7 gap-1 mb-2">
+                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                  <div key={day} className="text-center text-[11px] uppercase tracking-wider text-[#bdb5b5] py-2">
+                    {day}
+                  </div>
+                ))}
+              </div>
+
+              {/* Calendar Grid */}
+              <div className="grid grid-cols-7 gap-1.5">
+                {calendarDays.map((date, index) => {
+                  if (!date) {
+                    return <div key={`empty-${index}`} className="h-10" />
+                  }
+
+                  const status = getDateStatus(date)
+                  const isSelected = selectedDate && isSameDay(date, selectedDate)
+
+                  const cellClasses = isSelected
+                    ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)]/15'
+                    : status.type === 'holiday'
+                      ? 'border-slate-400/30 bg-slate-400/10'
+                      : status.type === 'sunday'
+                        ? 'border-white/5 bg-[#2c2828]'
+                        : status.type === 'past'
+                          ? 'border-white/5 bg-[#262222] opacity-50'
+                          : status.type === 'unavailable'
+                            ? 'border-red-500/30 bg-red-500/10'
+                            : 'border-white/10 bg-[#4a4444] hover:border-white/20'
+
                   return (
-                    <div
-                      key={date.id || index}
-                      className="flex items-center justify-between p-3 rounded-xl border border-red-500/20 bg-red-500/5"
+                    <button
+                      key={date.toISOString()}
+                      onClick={() => handleDateClick(date)}
+                      disabled={status.disabled}
+                      className={`h-10 rounded-lg border text-sm font-medium transition-all ${cellClasses} ${
+                        status.disabled ? 'cursor-not-allowed' : 'cursor-pointer hover:bg-white/[0.08]'
+                      } ${status.type === 'holiday' || status.type === 'sunday' ? 'text-[#d0d4db]' : 'text-white'}`}
                     >
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-red-500/20 flex items-center justify-center">
-                          <Calendar className="w-4 h-4 text-red-400" />
-                        </div>
-                        <div>
-                          <p className="text-white font-medium">
-                            {format(dateObj, 'MMMM d, yyyy')}
-                          </p>
-                          {date.reason && (
-                            <p className="text-sm text-[var(--text-muted)]">{date.reason}</p>
-                          )}
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => {
-                          setSelectedDate(dateObj)
-                          setShowAddModal(true)
-                        }}
-                        className="p-2 rounded-lg hover:bg-red-500/20 text-red-400 transition-colors"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
+                      {format(date, 'd')}
+                    </button>
                   )
                 })}
               </div>
-            )}
+            </div>
+
+            {/* Unavailable Dates List */}
+            <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-5">
+              <h3 className="text-lg font-semibold text-white mb-4">Marked Unavailable</h3>
+              {unavailableDates.length === 0 ? (
+                <p className="text-[#bfb8b8] text-center py-10">
+                  No dates have been marked as unavailable.
+                </p>
+              ) : (
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                  {unavailableDates.map((date, index) => {
+                    const dateObj = date.date instanceof Date ? date.date : parseISO(date.date)
+                    return (
+                      <div
+                        key={date.id || index}
+                        className="flex items-center justify-between p-3 rounded-xl border border-red-500/20 bg-red-500/5"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-lg bg-red-500/20 flex items-center justify-center">
+                            <Calendar className="w-4 h-4 text-red-400" />
+                          </div>
+                          <div>
+                            <p className="text-white font-medium">
+                              {format(dateObj, 'MMMM d, yyyy')}
+                            </p>
+                            {date.reason && (
+                              <p className="text-sm text-[var(--text-muted)]">{date.reason}</p>
+                            )}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => {
+                            setSelectedDate(dateObj)
+                            setShowAddModal(true)
+                          }}
+                          className="p-2 rounded-lg hover:bg-red-500/20 text-red-400 transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </motion.div>
