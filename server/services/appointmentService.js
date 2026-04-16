@@ -222,3 +222,162 @@ exports.getUserBookingFrequency = async (userId) => {
   );
   return result.rows[0] || null;
 };
+
+// ─── UNAVAILABLE DATES ───────────────────────────────────────────────────────
+
+exports.getUnavailableDates = async () => {
+  const result = await pool.query(
+    `SELECT * FROM unavailable_dates ORDER BY date ASC`
+  );
+  return result.rows;
+};
+
+exports.addUnavailableDate = async (date, reason, userId) => {
+  const result = await pool.query(
+    `INSERT INTO unavailable_dates (date, reason, created_by)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (date) DO UPDATE SET reason = $2, updated_at = now()
+     RETURNING *`,
+    [date, reason || null, userId || null]
+  );
+  return result.rows[0];
+};
+
+exports.removeUnavailableDate = async (dateId) => {
+  const result = await pool.query(
+    `DELETE FROM unavailable_dates WHERE id = $1 RETURNING *`,
+    [dateId]
+  );
+  return result.rows[0];
+};
+
+exports.isDateUnavailable = async (date) => {
+  const result = await pool.query(
+    `SELECT id FROM unavailable_dates WHERE date = $1`,
+    [date]
+  );
+  return result.rows.length > 0;
+};
+
+// ─── PAYMENT STATUS ──────────────────────────────────────────────────────────
+
+exports.updatePaymentStatus = async (appointmentId, paymentStatus, paymentMethod = null, paymentProofUrl = null) => {
+  const setClauses = ['payment_status = $2'];
+  const params = [appointmentId, paymentStatus];
+  let idx = 3;
+
+  if (paymentMethod !== undefined) {
+    setClauses.push(`payment_method = $${idx++}`);
+    params.push(paymentMethod);
+  }
+  if (paymentProofUrl !== undefined) {
+    setClauses.push(`payment_proof_url = $${idx++}`);
+    params.push(paymentProofUrl);
+  }
+
+  setClauses.push('updated_at = now()');
+
+  await pool.query(
+    `UPDATE appointments SET ${setClauses.join(', ')} WHERE appointment_id = $${idx} RETURNING *`,
+    params
+  );
+  return this.getAppointmentById(appointmentId);
+};
+
+// ─── AVAILABLE SLOTS ─────────────────────────────────────────────────────────
+
+exports.getAvailableSlots = async (serviceId, date, slotDuration = 30) => {
+  const dayOfWeek = new Date(date).getDay();
+  if (dayOfWeek === 0) return []; // Sunday closed
+
+  // Check if date is unavailable
+  const isUnavailable = await this.isDateUnavailable(date);
+  if (isUnavailable) return [];
+
+  // Get existing appointments for the date
+  const startOfDay = new Date(date);
+  startOfDay.setHours(0, 0, 0, 0);
+  const endOfDay = new Date(date);
+  endOfDay.setHours(23, 59, 59, 999);
+
+  const appointmentsResult = await pool.query(
+    `SELECT scheduled_at, estimated_end_at FROM appointments 
+     WHERE scheduled_at >= $1 AND scheduled_at <= $2 AND status NOT IN ('cancelled')`,
+    [startOfDay, endOfDay]
+  );
+
+  const bookedSlots = appointmentsResult.rows.map(apt => ({
+    start: new Date(apt.scheduled_at),
+    end: new Date(apt.estimated_end_at || apt.scheduled_at)
+  }));
+
+  // Generate available slots (9 AM to 6 PM)
+  const slots = [];
+  const openingHour = 9;
+  const closingHour = 18;
+
+  for (let hour = openingHour; hour < closingHour; hour++) {
+    for (let min = 0; min < 60; min += slotDuration) {
+      const slotStart = new Date(date);
+      slotStart.setHours(hour, min, 0, 0);
+      const slotEnd = new Date(slotStart);
+      slotEnd.setMinutes(slotEnd.getMinutes() + slotDuration);
+
+      // Check if slot conflicts with any booked appointment
+      const isBooked = bookedSlots.some(booked =>
+        (slotStart >= booked.start && slotStart < booked.end) ||
+        (slotEnd > booked.start && slotEnd <= booked.end) ||
+        (slotStart <= booked.start && slotEnd >= booked.end)
+      );
+
+      if (!isBooked && slotStart > new Date()) {
+        slots.push({
+          start: slotStart.toISOString(),
+          end: slotEnd.toISOString(),
+          formatted_start: slotStart.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
+          formatted_end: slotEnd.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+        });
+      }
+    }
+  }
+
+  return slots;
+};
+
+exports.checkAvailability = async (serviceId, scheduledAt, durationMinutes) => {
+  const date = new Date(scheduledAt);
+  const dayOfWeek = date.getDay();
+  if (dayOfWeek === 0) return false;
+
+  const dateStr = date.toISOString().slice(0, 10);
+  const isUnavailable = await this.isDateUnavailable(dateStr);
+  if (isUnavailable) return false;
+
+  const startOfDay = new Date(date);
+  startOfDay.setHours(0, 0, 0, 0);
+  const endOfDay = new Date(date);
+  endOfDay.setHours(23, 59, 59, 999);
+
+  const appointmentsResult = await pool.query(
+    `SELECT scheduled_at, estimated_end_at FROM appointments 
+     WHERE scheduled_at >= $1 AND scheduled_at <= $2 AND status NOT IN ('cancelled')`,
+    [startOfDay, endOfDay]
+  );
+
+  const slotStart = new Date(scheduledAt);
+  const slotEnd = new Date(slotStart);
+  slotEnd.setMinutes(slotEnd.getMinutes() + (durationMinutes || 60));
+
+  for (const apt of appointmentsResult.rows) {
+    const bookedStart = new Date(apt.scheduled_at);
+    const bookedEnd = new Date(apt.estimated_end_at || bookedStart);
+
+    if ((slotStart >= bookedStart && slotStart < bookedEnd) ||
+        (slotEnd > bookedStart && slotEnd <= bookedEnd) ||
+        (slotStart <= bookedStart && slotEnd >= bookedEnd)) {
+      return false;
+    }
+  }
+
+  return true;
+};

@@ -111,8 +111,28 @@ export const adminApi = {
   },
   getAppointment: (id) => request(`/api/appointments/${id}`),
   createAppointment: (body) => request('/api/appointments', { method: 'POST', body }),
-  updateAppointment: (id, body) => request(`/api/appointments/${id}`, { method: 'PUT', body }),
-  deleteAppointment: (id) => request(`/api/appointments/${id}`, { method: 'DELETE' }),
+  updateAppointment: (id, body) => request(`/api/appointments/${id}`, { method: 'PATCH', body }),
+  updateAppointmentStatus: (id, status, reason) => request(`/api/appointments/${id}/status`, { method: 'PATCH', body: { status, reason } }),
+  rescheduleAppointment: (id, newScheduledAt, reason) => request(`/api/appointments/${id}/reschedule`, { method: 'PATCH', body: { new_scheduled_at: newScheduledAt, reason } }),
+  cancelAppointment: (id, reason) => request(`/api/appointments/${id}`, { method: 'DELETE', body: reason ? { reason } : {} }),
+  getAppointmentStats: (params = {}) => {
+    const qs = new URLSearchParams(params).toString()
+    return request(`/api/appointments/stats${qs ? '?' + qs : ''}`)
+  },
+  getAvailableSlots: (serviceId, date, slotDuration = 30) => request(`/api/appointments/services/${serviceId}/availability/slots?date=${date}&slot_duration=${slotDuration}`),
+  checkAvailability: (serviceId, scheduledAt) => request(`/api/appointments/services/${serviceId}/availability?scheduled_at=${scheduledAt}`),
+
+  // Services (for appointment creation)
+  getServices: (params = {}) => {
+    const qs = new URLSearchParams(params).toString()
+    return request(`/api/services${qs ? '?' + qs : ''}`)
+  },
+  getService: (id) => request(`/api/services/${id}`),
+
+  // Unavailable Dates
+  getUnavailableDates: () => request('/api/appointments/unavailable-dates'),
+  setUnavailableDate: (date, reason) => request('/api/appointments/unavailable-dates', { method: 'POST', body: { date, reason } }),
+  removeUnavailableDate: (dateId) => request(`/api/appointments/unavailable-dates/${dateId}`, { method: 'DELETE' }),
 
   // Inventory
   getInventoryProducts: (params = {}) => {

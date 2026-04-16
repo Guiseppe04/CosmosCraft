@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { motion } from 'motion/react'
-import { Calendar, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Calendar, ChevronLeft, ChevronRight, Clock } from 'lucide-react'
 import { format } from 'date-fns'
 
 const DEFAULT_HOLIDAYS = [
@@ -91,6 +91,11 @@ function buildMonthMatrix(year, month) {
 }
 
 export default function AppointmentCalendar({ appointments = [], onAppointmentClick, holidays = [] }) {
+  // Default time slots for the day
+  const timeSlots = [
+    '7:00 AM', '8:00 AM', '9:00 AM', '10:00 AM', '10:30 AM', '11:00 AM',
+    '12:00 PM', '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM'
+  ];
   const today = useMemo(() => {
     const now = new Date()
     now.setHours(0, 0, 0, 0)
@@ -289,54 +294,39 @@ export default function AppointmentCalendar({ appointments = [], onAppointmentCl
           </p>
         </div>
 
-        {selectedDateLabel && selectedAppointments.length === 0 && (
-          <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-6 text-center text-[var(--text-muted)]">
-            No appointments are scheduled for the selected date.
-          </div>
-        )}
-
-        {selectedAppointments.length > 0 && (
-          <div className="grid gap-4">
-            {selectedAppointments.map((appointment) => {
-              const scheduledAt = appointment.scheduled_at ? new Date(appointment.scheduled_at) : null
-              const formattedTime = scheduledAt ? format(scheduledAt, 'hh:mm a') : appointment.time || 'TBD'
-              const title = appointment.title || appointment.service_name || 'Appointment'
-              const customerName = appointment.customer_name || appointment.user?.name || appointment.client_name || 'Guest'
-              const requestedService = appointment.service_name || (Array.isArray(appointment.services) ? appointment.services.map((s) => s.replace(/-/g, ' ')).join(', ') : appointment.title || 'Consultation')
-
-              return (
-                <motion.button
-                  key={appointment.appointment_id || appointment.id || `${selectedDateId}-${formattedTime}-${title}`}
-                  type="button"
-                  whileHover={{ y: -2 }}
-                  className="w-full rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-5 text-left transition-all hover:border-[var(--gold-primary)] hover:bg-[var(--bg-primary)]"
-                  onClick={() => onAppointmentClick?.(appointment)}
-                >
-                  <div className="flex items-center justify-between gap-3 mb-3">
+        {selectedDateLabel && (
+          <div className="grid gap-2">
+            {timeSlots.map((slot) => {
+              const booked = selectedAppointments.find(a => {
+                const scheduledAt = a.scheduled_at ? new Date(a.scheduled_at) : null;
+                const formattedTime = scheduledAt ? format(scheduledAt, 'hh:mm a') : a.time || 'TBD';
+                return formattedTime === slot;
+              });
+              if (booked) {
+                const scheduledAt = booked.scheduled_at ? new Date(booked.scheduled_at) : null;
+                const formattedTime = scheduledAt ? format(scheduledAt, 'hh:mm a') : booked.time || 'TBD';
+                const customerName = booked.customer_name || booked.user?.name || booked.client_name || 'Guest';
+                const requestedService = booked.service_name || (Array.isArray(booked.services) ? booked.services.map((s) => s.replace(/-/g, ' ')).join(', ') : booked.title || 'Consultation');
+                return (
+                  <div key={slot} className="flex items-center justify-between rounded-2xl border border-green-500/20 bg-green-500/10 px-4 py-3 mb-1">
                     <div>
-                      <p className="text-xs uppercase tracking-[0.3em] text-[var(--text-muted)]">Scheduled</p>
-                      <h4 className="mt-2 text-lg font-semibold text-white">{title}</h4>
+                      <span className="font-semibold text-base text-black flex items-center gap-2"><Clock className="inline w-4 h-4" /> {slot}</span>
+                      <div className="ml-7">
+                        <div className="font-semibold text-black">{customerName}</div>
+                        <div className="text-[var(--text-muted)] text-sm">{requestedService}</div>
+                      </div>
                     </div>
-                    <span className="rounded-3xl bg-[var(--border)] px-3 py-2 text-[var(--text-muted)] text-xs uppercase tracking-[0.2em]">
-                      {formattedTime}
-                    </span>
+                    <span className="rounded-full bg-green-200 text-green-800 px-3 py-1 text-xs font-semibold">Booked</span>
                   </div>
-                  <div className="grid gap-3 sm:grid-cols-3">
-                    <div>
-                      <p className="text-[var(--text-muted)] text-[11px] uppercase tracking-[0.3em]">Customer</p>
-                      <p className="mt-2 text-sm font-semibold text-white">{customerName}</p>
-                    </div>
-                    <div>
-                      <p className="text-[var(--text-muted)] text-[11px] uppercase tracking-[0.3em]">Requested Service</p>
-                      <p className="mt-2 text-sm font-semibold text-white capitalize">{requestedService}</p>
-                    </div>
-                    <div>
-                      <p className="text-[var(--text-muted)] text-[11px] uppercase tracking-[0.3em]">Status</p>
-                      <p className="mt-2 text-sm font-semibold text-white capitalize">{appointment.status || 'Pending'}</p>
-                    </div>
+                );
+              } else {
+                return (
+                  <div key={slot} className="flex items-center justify-between rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] px-4 py-3 mb-1">
+                    <span className="font-semibold text-base text-white flex items-center gap-2"><Clock className="inline w-4 h-4" /> {slot}</span>
+                    <span className="rounded-full bg-[var(--border)] text-[var(--text-muted)] px-3 py-1 text-xs font-semibold">Available</span>
                   </div>
-                </motion.button>
-              )
+                );
+              }
             })}
           </div>
         )}

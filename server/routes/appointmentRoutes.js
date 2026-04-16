@@ -250,4 +250,52 @@ router.get(
  */
 router.get('/users/:userId/stats', appointmentController.getUserStats);
 
+// ─── UNAVAILABLE DATES ───────────────────────────────────────────────────────
+
+/**
+ * GET /api/appointments/unavailable-dates
+ * Get all unavailable dates
+ * Access: Admin/Staff only
+ */
+router.get(
+  '/unavailable-dates',
+  authorize(['admin', 'staff']),
+  appointmentController.getUnavailableDates
+);
+
+/**
+ * POST /api/appointments/unavailable-dates
+ * Add unavailable date
+ * Access: Admin/Staff only
+ */
+router.post(
+  '/unavailable-dates',
+  authorize(['admin', 'staff']),
+  appointmentController.addUnavailableDate
+);
+
+/**
+ * DELETE /api/appointments/unavailable-dates/:id
+ * Remove unavailable date
+ * Access: Admin/Staff only
+ */
+router.delete(
+  '/unavailable-dates/:id',
+  authorize(['admin', 'staff']),
+  appointmentController.removeUnavailableDate
+);
+
+// ─── PAYMENT STATUS ─────────────────────────────────────────────────────────
+
+/**
+ * PATCH /api/appointments/:id/payment-status
+ * Update payment status
+ * Access: Admin/Staff only
+ */
+router.patch(
+  '/:id/payment-status',
+  authorize(['admin', 'staff']),
+  appointmentController.updatePaymentStatus
+);
+
 module.exports = router;
