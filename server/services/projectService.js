@@ -1,8 +1,37 @@
 const { pool } = require('../config/database');
 
+const normalizeProjectStatus = (status) => {
+  const normalized = String(status || '').trim().toLowerCase().replace(/\s+/g, '_')
+
+  if (normalized === 'completed') return 'completed'
+  if (normalized === 'in_progress') return 'in_progress'
+  if (normalized === 'not_started' || normalized === 'pending') return 'not_started'
+
+  return null
+}
+
+const PROJECT_BASE_SELECT = `
+  SELECT
+    p.*,
+    p.title AS name,
+    p.notes AS description,
+    o.user_id AS customer_id,
+    o.order_number,
+    CONCAT(
+      COALESCE(u.first_name, ''),
+      CASE
+        WHEN COALESCE(u.first_name, '') <> '' AND COALESCE(u.last_name, '') <> '' THEN ' '
+        ELSE ''
+      END,
+      COALESCE(u.last_name, '')
+    ) AS customer_name
+  FROM projects p
+  JOIN orders o ON o.order_id = p.order_id
+  LEFT JOIN users u ON u.user_id = o.user_id
+`
+
 exports.getProjects = async () => {
-  // We need to calculate global progress on the fly or just use the field in projects
-  const result = await pool.query('SELECT * FROM projects ORDER BY created_at DESC');
+  const result = await pool.query(`${PROJECT_BASE_SELECT} ORDER BY p.created_at DESC`);
   
   // To get proper progress, we calculate it dynamically for each project
   for (let p of result.rows) {
@@ -24,7 +53,10 @@ exports.getProjects = async () => {
 };
 
 exports.getProjectById = async (projectId) => {
-  const result = await pool.query('SELECT * FROM projects WHERE project_id = $1', [projectId]);
+  const result = await pool.query(
+    `${PROJECT_BASE_SELECT} WHERE p.project_id = $1`,
+    [projectId]
+  );
   if (result.rows.length === 0) return null;
   const project = result.rows[0];
 
@@ -45,7 +77,12 @@ exports.getProjectById = async (projectId) => {
 };
 
 exports.getMyProjects = async (userId) => {
-  const result = await pool.query('SELECT * FROM projects WHERE customer_id = $1 ORDER BY created_at DESC', [userId]);
+  const result = await pool.query(
+    `${PROJECT_BASE_SELECT}
+     WHERE o.user_id = $1
+     ORDER BY p.created_at DESC`,
+    [userId]
+  );
   for (let p of result.rows) {
     const stats = await pool.query(`
       SELECT COUNT(*) as total, COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed
@@ -61,29 +98,36 @@ exports.getMyProjects = async (userId) => {
 };
 
 exports.createProject = async (projectData) => {
-  const { name, customer_name, customer_id, status, description } = projectData;
+  const { order_id, orderId, title, name, status, description, notes, estimated_completion_date } = projectData;
+  const projectOrderId = order_id || orderId
+  const projectTitle = title || name
+  const normalizedStatus = normalizeProjectStatus(status) || 'not_started'
+
   const result = await pool.query(
-    'INSERT INTO projects (name, customer_name, customer_id, status, description) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-    [name, customer_name, customer_id || null, status || 'Pending', description]
+    `INSERT INTO projects (order_id, title, status, notes, estimated_completion_date)
+     VALUES ($1, $2, $3, $4, $5)
+     RETURNING *`,
+    [projectOrderId, projectTitle, normalizedStatus, notes ?? description ?? null, estimated_completion_date || null]
   );
-  return result.rows[0];
+  return { ...result.rows[0], name: result.rows[0].title, description: result.rows[0].notes };
 };
 
 exports.updateProject = async (projectId, projectData) => {
-  const { name, customer_name, customer_id, status, description } = projectData;
+  const { title, name, status, description, notes, estimated_completion_date } = projectData;
+  const normalizedStatus = normalizeProjectStatus(status)
+
   const result = await pool.query(
     `UPDATE projects 
-     SET name = COALESCE($1, name),
-         customer_name = COALESCE($2, customer_name),
-         customer_id = COALESCE($3, customer_id),
-         status = COALESCE($4, status),
-         description = COALESCE($5, description),
+     SET title = COALESCE($1, title),
+         status = COALESCE($2, status),
+         notes = COALESCE($3, notes),
+         estimated_completion_date = COALESCE($4, estimated_completion_date),
          updated_at = CURRENT_TIMESTAMP
-     WHERE project_id = $6 RETURNING *`,
-    [name, customer_name, customer_id || null, status, description, projectId]
+     WHERE project_id = $5 RETURNING *`,
+    [title || name, normalizedStatus, notes ?? description, estimated_completion_date || null, projectId]
   );
   if (result.rows.length === 0) return null;
-  return result.rows[0];
+  return { ...result.rows[0], name: result.rows[0].title, description: result.rows[0].notes };
 };
 
 exports.deleteProject = async (projectId) => {

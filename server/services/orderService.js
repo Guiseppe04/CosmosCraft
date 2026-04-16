@@ -5,6 +5,126 @@ const isValidUUID = (uuid) => {
   return uuidRegex.test(uuid)
 }
 
+const resolveProductId = (...values) => {
+  for (const value of values) {
+    if (isValidUUID(value)) return value
+  }
+
+  return null
+}
+
+const normalizePositiveQuantity = (value, fallback = 1) => {
+  const quantity = Number(value)
+
+  if (!Number.isFinite(quantity) || quantity <= 0) {
+    return fallback
+  }
+
+  return Math.max(1, Math.trunc(quantity))
+}
+
+const addInventoryReservation = (reservations, productId, quantity) => {
+  if (!productId || quantity <= 0) return
+
+  const currentQuantity = reservations.get(productId) || 0
+  reservations.set(productId, currentQuantity + quantity)
+}
+
+const collectInventoryReservations = (items = []) => {
+  const reservations = new Map()
+
+  for (const item of items) {
+    const itemQuantity = normalizePositiveQuantity(item.quantity)
+    const directProductId = item.customization ? null : resolveProductId(item.productId, item.id)
+
+    addInventoryReservation(reservations, directProductId, itemQuantity)
+
+    if (!item.customization) continue
+
+    const additionalParts = Array.isArray(item.customization.additionalParts)
+      ? item.customization.additionalParts
+      : []
+
+    for (const part of additionalParts) {
+      const partProductId = resolveProductId(part.product_id, part.productId, part.id)
+      const partQuantity = normalizePositiveQuantity(part.quantity)
+
+      addInventoryReservation(reservations, partProductId, itemQuantity * partQuantity)
+    }
+  }
+
+  return reservations
+}
+
+const validateAndDeductInventory = async (client, reservations, orderId) => {
+  const productIds = Array.from(reservations.keys()).sort()
+
+  for (const productId of productIds) {
+    const quantity = reservations.get(productId)
+
+    const productRes = await client.query(
+      `SELECT p.product_id, p.name, p.is_active, i.stock, i.low_stock_threshold
+       FROM products p
+       LEFT JOIN inventory i ON p.product_id = i.product_id
+       WHERE p.product_id = $1`,
+      [productId]
+    )
+
+    const product = productRes.rows[0]
+
+    if (!product) {
+      throw new Error(`Product ${productId} not found`)
+    }
+
+    if (!product.is_active) {
+      throw new Error(`Product "${product.name}" is no longer available`)
+    }
+
+    const inventoryRes = await client.query(
+      `SELECT stock, low_stock_threshold
+       FROM inventory
+       WHERE product_id = $1
+       FOR UPDATE`,
+      [productId]
+    )
+
+    if (inventoryRes.rows.length === 0) {
+      throw new Error(`Inventory record not found for "${product.name}"`)
+    }
+
+    const currentStock = Number(inventoryRes.rows[0].stock) || 0
+    const lowStockThreshold = Number(inventoryRes.rows[0].low_stock_threshold) || 10
+
+    if (currentStock < quantity) {
+      throw new Error(`Insufficient stock for "${product.name}". Available: ${currentStock}`)
+    }
+
+    const updateRes = await client.query(
+      `UPDATE inventory
+       SET stock = stock - $1, updated_at = now()
+       WHERE product_id = $2
+       RETURNING stock`,
+      [quantity, productId]
+    )
+
+    await client.query(
+      `INSERT INTO inventory_logs (product_id, change_type, quantity, reference_type, reference_id)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [productId, 'sale', -quantity, 'order', orderId]
+    )
+
+    const newStock = Number(updateRes.rows[0]?.stock) || 0
+
+    if (newStock <= lowStockThreshold && newStock > 0) {
+      await client.query(
+        `INSERT INTO low_stock_alerts (product_id, current_stock, threshold)
+         VALUES ($1, $2, $3)`,
+        [productId, newStock, lowStockThreshold]
+      )
+    }
+  }
+}
+
 // Payment status enum for order payment_status field
 exports.PAYMENT_STATUS = {
   PENDING: 'pending',
@@ -113,6 +233,9 @@ exports.createOrder = async (orderData) => {
     )
     
     const order = orderRes.rows[0]
+    const inventoryReservations = collectInventoryReservations(items)
+
+    await validateAndDeductInventory(client, inventoryReservations, order.order_id)
 
     // Insert order items - handle products and custom builds
     for (const item of items) {
@@ -163,12 +286,14 @@ exports.createOrder = async (orderData) => {
         customizationId = customizationRes.rows[0].customization_id
 
         for (const part of additionalParts) {
+          const customizationPartProductId = resolveProductId(part.product_id, part.productId, part.id)
+
           await client.query(
             `INSERT INTO customization_parts (customization_id, product_id, part_name, quantity, price)
              VALUES ($1, $2, $3, $4, $5)`,
             [
               customizationId,
-              isValidUUID(part.product_id) ? part.product_id : null,
+              customizationPartProductId,
               part.name || part.part_name || 'Custom Part',
               Number(part.quantity) > 0 ? Number(part.quantity) : 1,
               Number(part.price) || 0,
@@ -178,7 +303,7 @@ exports.createOrder = async (orderData) => {
       }
 
       // Check if product_id is a valid UUID
-      const productId = customizationId ? null : (isValidUUID(item.productId) ? item.productId : null)
+      const productId = customizationId ? null : resolveProductId(item.productId, item.id)
       
       // For mock products (non-UUID IDs like "prod-001"), store in product_sku
       const productSku = !customizationId && !productId ? item.productId : null

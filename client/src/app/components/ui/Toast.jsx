@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback } from 'react'
+import { createContext, forwardRef, useContext, useState, useCallback } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { CheckCircle, XCircle, AlertCircle, Info, X } from 'lucide-react'
 
@@ -47,12 +47,13 @@ const toastTypes = {
  * Toast Component
  * Individual toast notification with animation
  */
-function Toast({ toast, onDismiss }) {
+const Toast = forwardRef(function Toast({ toast, onDismiss }, ref) {
   const config = toastTypes[toast.type] || toastTypes.info
   const Icon = config.icon
 
   return (
     <motion.div
+      ref={ref}
       initial={{ opacity: 0, y: 50, scale: 0.9 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: -20, scale: 0.9 }}
@@ -82,7 +83,7 @@ function Toast({ toast, onDismiss }) {
       </button>
     </motion.div>
   )
-}
+})
 
 /**
  * Toast Container Component

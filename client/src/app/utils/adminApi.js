@@ -104,17 +104,27 @@ export const adminApi = {
   deleteProject: (id) => request(`/api/projects/${id}`, { method: 'DELETE' }),
   assignTeam: (id, userIds) => request(`/api/projects/${id}/team`, { method: 'PUT', body: { user_ids: userIds } }),
 
-  // Appointments
-  getAppointments: (params = {}) => {
-    const qs = new URLSearchParams(params).toString()
-    return request(`/api/appointments${qs ? '?' + qs : ''}`)
-  },
-  getAppointment: (id) => request(`/api/appointments/${id}`),
-  createAppointment: (body) => request('/api/appointments', { method: 'POST', body }),
-  updateAppointment: (id, body) => request(`/api/appointments/${id}`, { method: 'PUT', body }),
-  deleteAppointment: (id) => request(`/api/appointments/${id}`, { method: 'DELETE' }),
+   // Appointments
+   getAppointments: (params = {}) => {
+     const qs = new URLSearchParams(params).toString()
+     return request(`/api/appointments${qs ? '?' + qs : ''}`)
+   },
+   getAppointment: (id) => request(`/api/appointments/${id}`),
+   createAppointment: (body) => request('/api/appointments', { method: 'POST', body }),
+   updateAppointment: (id, body) => request(`/api/appointments/${id}`, { method: 'PUT', body }),
+   deleteAppointment: (id) => request(`/api/appointments/${id}`, { method: 'DELETE' }),
 
-  // Inventory
+   // Services
+   getServices: (params = {}) => {
+     const qs = new URLSearchParams(params).toString()
+     return request(`/api/services${qs ? '?' + qs : ''}`)
+   },
+   getService: (id) => request(`/api/services/${id}`),
+   createService: (body) => request('/api/services', { method: 'POST', body }),
+   updateService: (id, body) => request(`/api/services/${id}`, { method: 'PUT', body }),
+   deleteService: (id) => request(`/api/services/${id}`, { method: 'DELETE' }),
+
+   // Inventory
   getInventoryProducts: (params = {}) => {
     const qs = new URLSearchParams(params).toString()
     return request(`/api/inventory/products${qs ? '?' + qs : ''}`)

@@ -15,6 +15,7 @@ const ALL_COUNTRIES = Country.getAllCountries()
 const PHILIPPINES = ALL_COUNTRIES.find(c => c.isoCode === 'PH')
 const OTHER_COUNTRIES = ALL_COUNTRIES.filter(c => c.isoCode !== 'PH')
 const COUNTRIES = PHILIPPINES ? [PHILIPPINES, ...OTHER_COUNTRIES] : ALL_COUNTRIES
+const MAX_USER_ADDRESSES = 2
 
 const getOldConfigData = (key, val, bodyType) => {
     let price;
@@ -1069,6 +1070,11 @@ export function DashboardPage() {
 
   const handleSaveAddress = async () => {
     try {
+      if (!editingAddressId && addresses.length >= MAX_USER_ADDRESSES) {
+        alert(`You can only save up to ${MAX_USER_ADDRESSES} addresses.`)
+        return
+      }
+
       const provinceLabel = locationData.provinces.find(p => p.psgcCode === addressData.province)?.name || addressData.province
       const cityLabel = locationData.cities.find(c => c.psgcCode === addressData.city)?.name || addressData.city
       
@@ -1214,6 +1220,8 @@ export function DashboardPage() {
   )
 
   const renderAddressesContent = () => {
+    const canAddMoreAddresses = addresses.length < MAX_USER_ADDRESSES
+
     if (addressesLoading) {
       return (
         <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-8">
@@ -1230,7 +1238,7 @@ export function DashboardPage() {
           <h2 className="text-2xl font-bold text-white mb-1">My Addresses</h2>
           <p className="text-sm text-[var(--text-muted)]">Manage your shipping addresses</p>
         </div>
-        {!isAddingAddress && (
+        {!isAddingAddress && canAddMoreAddresses && (
           <button
             onClick={() => setIsAddingAddress(true)}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-[var(--gold-primary)] text-sm font-semibold text-[var(--gold-primary)] hover:bg-[var(--gold-primary)] hover:text-[var(--text-dark)] transition-colors"
@@ -1239,6 +1247,10 @@ export function DashboardPage() {
           </button>
         )}
       </div>
+
+      {!canAddMoreAddresses && !isAddingAddress && !editingAddressId && (
+        <p className="mb-6 text-sm text-[var(--text-muted)]">Maximum of 2 addresses reached.</p>
+      )}
 
       {isAddingAddress || editingAddressId ? (
         <div className="space-y-4 max-w-xl">

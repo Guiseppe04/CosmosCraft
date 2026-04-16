@@ -539,6 +539,7 @@ function GuitarPartsStickyHeader({ viewMode, setViewMode, density, setDensity, s
 }
 
 const APPOINTMENT_BRANCH_STORAGE_KEY = 'cosmoscraft.appointment.branch'
+const UNAVAILABLE_DATES_KEY = 'cosmoscraft.appointment.unavailable'
 const DEFAULT_APPOINTMENT_BRANCH = {
   id: 'balagtas-main',
   name: 'CosmosCraft Balagtas Branch',
@@ -1412,6 +1413,94 @@ function OrderDetailsSkeleton() {
   )
 }
 
+// ── Services Components ────────────────────────────────────────────────────
+function ServiceTableView({ services, onEdit, onDelete }) {
+  return (
+    <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full">
+          <thead>
+            <tr className="border-b border-[var(--border)] bg-[var(--bg-primary)]/50">
+              <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold">Service Name</th>
+              <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold">Description</th>
+              <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold">Price</th>
+              <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold">Duration (mins)</th>
+              <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold">Status</th>
+              <th className="px-4 py-3 text-left text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {services.map(service => (
+              <tr key={service.service_id} className="border-b border-[var(--border)] hover:bg-[var(--bg-primary)]/50 transition-colors">
+                <td className="px-4 py-3 text-sm text-white font-medium">{service.name}</td>
+                <td className="px-4 py-3 text-sm text-[var(--text-muted)] max-w-xs truncate" title={service.description || ''}>{service.description || '—'}</td>
+                <td className="px-4 py-3 text-sm text-[var(--gold-primary)] font-semibold">{formatCurrency(service.price)}</td>
+                <td className="px-4 py-3 text-sm text-[var(--text-muted)]">{service.duration_minutes ?? '—'}</td>
+                <td className="px-4 py-3">
+                  <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${service.is_active ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'bg-gray-500/20 text-gray-400 border border-gray-500/30'}`}>
+                    {service.is_active ? 'Active' : 'Inactive'}
+                  </span>
+                </td>
+                <td className="px-4 py-3">
+                  <div className="flex gap-2">
+                    <button onClick={() => onEdit(service)} className="p-2 hover:bg-[var(--gold-primary)]/10 rounded-lg transition-colors" title="Edit">
+                      <Edit className="w-4 h-4 text-[var(--text-muted)]" />
+                    </button>
+                    <button onClick={() => onDelete(service.service_id, service.name)} className="p-2 hover:bg-red-500/10 rounded-lg transition-colors" title="Delete">
+                      <Trash2 className="w-4 h-4 text-red-400" />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {services.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-16">
+          <Wrench className="w-12 h-12 text-[var(--text-muted)] mb-4" />
+          <p className="text-[var(--text-muted)]">No services found</p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ServiceGridView({ services, onEdit, onDelete }) {
+  return (
+    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+      {services.map(service => (
+        <motion.div key={service.service_id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6 hover:border-[var(--gold-primary)]/50 transition-all group">
+          <div className="flex items-start justify-between mb-4">
+            <div className="w-12 h-12 rounded-xl bg-[var(--gold-primary)]/20 border border-[var(--gold-primary)]/30 flex items-center justify-center">
+              <Wrench className="w-6 h-6 text-[var(--gold-primary)]" />
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => onEdit(service)} className="p-2 hover:bg-[var(--gold-primary)]/10 rounded-lg transition-colors opacity-0 group-hover:opacity-100" title="Edit">
+                <Edit className="w-4 h-4 text-[var(--gold-primary)]" />
+              </button>
+              <button onClick={() => onDelete(service.service_id, service.name)} className="p-2 hover:bg-red-500/10 rounded-lg transition-colors opacity-0 group-hover:opacity-100" title="Delete">
+                <Trash2 className="w-4 h-4 text-red-400" />
+              </button>
+            </div>
+          </div>
+          <h3 className="text-white font-semibold text-lg mb-2 truncate">{service.name}</h3>
+          <p className="text-[var(--text-muted)] text-sm mb-4 line-clamp-2">{service.description || 'No description'}</p>
+          <div className="flex items-center justify-between">
+            <span className="text-[var(--gold-primary)] font-bold">{formatCurrency(service.price)}</span>
+            <span className="text-[var(--text-muted)] text-xs">{service.duration_minutes ? `${service.duration_minutes} min` : ''}</span>
+          </div>
+          <div className="mt-3">
+            <span className={`px-2 py-1 rounded-full text-xs font-semibold border ${service.is_active ? 'bg-green-500/20 text-green-400 border-green-500/30' : 'bg-gray-500/20 text-gray-400 border-gray-500/30'}`}>
+              {service.is_active ? 'Active' : 'Inactive'}
+            </span>
+          </div>
+        </motion.div>
+      ))}
+    </div>
+  )
+}
+
 export function AdminPage() {
   const { user, isAuthenticated } = useAuth()
   const navigate = useNavigate()
@@ -1525,10 +1614,24 @@ export function AdminPage() {
   const [partDensity, setPartDensity] = useState('comfortable')
   const [partSearchQuery, setPartSearchQuery] = useState('')
 
+  // Services section state
+  const [serviceViewMode, setServiceViewMode] = useState('grid')
+  const [services, setServices] = useState([])
+  const [servicesLoading, setServicesLoading] = useState(false)
+  const [servicesPagination, setServicesPagination] = useState({ page: 1, pageSize: 20, total: 0, totalPages: 1 })
+  const [serviceQuery, setServiceQuery] = useState({
+    page: 1,
+    pageSize: 20,
+    sortBy: 'created_at',
+    sortDir: 'desc',
+    is_active: '',
+  })
+
   // Message panel
   const [messagePanelOpen, setMessagePanelOpen] = useState(false)
   const [selectedConversation, setSelectedConversation] = useState(null)
   const [appointmentBranchAddress, setAppointmentBranchAddress] = useState(DEFAULT_APPOINTMENT_BRANCH.address)
+  const [unavailableDates, setUnavailableDates] = useState([])
 
   // POS Drawer state
   const [posDrawerOpen, setPosDrawerOpen] = useState(false)
@@ -1888,6 +1991,15 @@ export function AdminPage() {
     } catch {
       // Ignore invalid persisted admin setting
     }
+
+    try {
+      const raw = window.localStorage.getItem(UNAVAILABLE_DATES_KEY)
+      if (!raw) return
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed)) setUnavailableDates(parsed)
+    } catch {
+      // Ignore invalid persisted dates
+    }
   }, [])
 
   const saveAppointmentBranchAddress = useCallback(() => {
@@ -1913,6 +2025,20 @@ export function AdminPage() {
       showToast('Failed to save branch address', 'error')
     }
   }, [appointmentBranchAddress, showToast])
+
+  const toggleUnavailableDate = useCallback((dateKey) => {
+    setUnavailableDates(prev => {
+      const newDates = prev.includes(dateKey)
+        ? prev.filter(d => d !== dateKey)
+        : [...prev, dateKey]
+      try {
+        window.localStorage.setItem(UNAVAILABLE_DATES_KEY, JSON.stringify(newDates))
+      } catch {
+        // Ignore storage errors
+      }
+      return newDates
+    })
+  }, [])
 
   // ── Confirm dialog helper ────────────────────────────────────────────────
   const openConfirm = ({ title, description, onConfirm, variant = 'danger' }) => {
@@ -1996,6 +2122,44 @@ export function AdminPage() {
     } catch (e) { showToast(e.message, 'error') }
   }, [debouncedSearch, showToast, appointments])
 
+   const fetchServices = useCallback(async () => {
+     setServicesLoading(true)
+     try {
+       // Convert UI pagination (page, pageSize) to backend (limit, offset)
+       const limit = serviceQuery.pageSize
+       const offset = (serviceQuery.page - 1) * limit
+
+       const params = {
+         search: debouncedSearch,
+         sort: serviceQuery.sortBy,
+         order: serviceQuery.sortDir,
+         limit,
+         offset,
+       }
+       // Only include is_active filter if set
+       if (serviceQuery.is_active !== '') {
+         params.is_active = serviceQuery.is_active === 'true' || serviceQuery.is_active === true
+       }
+
+       const res = await adminApi.getServices(params)
+       updateIfChanged(services, res.data || [], setServices)
+
+       // Convert backend pagination (limit, offset, total) to frontend shape (page, pageSize, totalPages)
+       const { limit: resLimit, offset: resOffset, total } = res.pagination || {}
+       const pageSize = resLimit || limit
+       const page = resOffset !== undefined ? Math.floor(resOffset / pageSize) + 1 : serviceQuery.page
+       const totalPages = total ? Math.max(Math.ceil(total / pageSize), 1) : 1
+
+       setServicesPagination({
+         page,
+         pageSize,
+         total: total || 0,
+         totalPages,
+       })
+     } catch (e) { showToast(e.message, 'error') }
+     finally { setServicesLoading(false) }
+   }, [debouncedSearch, serviceQuery, showToast, services])
+
   const fetchInventory = useCallback(async () => {
     try {
       const statsRes = await adminApi.getInventorySummary()
@@ -2024,64 +2188,73 @@ export function AdminPage() {
     }
   }, [showToast, salesReport])
 
-  // ── Initial data load on tab change ─────────────────────────────────────
-  useEffect(() => {
-    setSearchQuery('')
-    setFormErrors({})
-    const loaders = {
-      'products': () => { fetchProducts(); fetchCategories(); },
-      'guitar-parts': () => { fetchParts(); },
-      'product-categories': () => { fetchCategories(); },
-      'users': fetchUsers,
-      'orders': fetchOrders,
-      'projects': fetchProjects,
-      'appointments': fetchAppointments,
-      'inventory': () => { fetchInventory(); fetchParts(); },
-      'sales-report': fetchSalesReport,
-      'dashboard': () => { fetchOrders(); fetchProjects(); fetchAppointments() },
-    }
-    loaders[activeTab]?.()
+   // ── Initial data load on tab change ─────────────────────────────────────
+   useEffect(() => {
+     setSearchQuery('')
+     setFormErrors({})
+     const loaders = {
+       'products': () => { fetchProducts(); fetchCategories(); },
+       'guitar-parts': () => { fetchParts(); },
+       'product-categories': () => { fetchCategories(); },
+       'users': fetchUsers,
+       'orders': fetchOrders,
+       'projects': fetchProjects,
+       'services': fetchServices,
+       'appointments': fetchAppointments,
+       'inventory': () => { fetchInventory(); fetchParts(); },
+       'sales-report': fetchSalesReport,
+       'dashboard': () => { fetchOrders(); fetchProjects(); fetchAppointments() },
+     }
+     loaders[activeTab]?.()
   }, [activeTab]) // eslint-disable-line
 
-  // ── Re-fetch when debounced search changes ───────────────────────────────
-  useEffect(() => {
-    if (activeTab === 'products') {
-      setProductQuery((prev) => ({ ...prev, page: 1 }))
-    }
-    if (activeTab === 'guitar-parts') {
-      setPartQuery((prev) => ({ ...prev, page: 1 }))
-    }
-    if (activeTab === 'users') fetchUsers()
-    if (activeTab === 'orders') fetchOrders()
-    if (activeTab === 'projects') fetchProjects()
-    if (activeTab === 'appointments') fetchAppointments()
-    if (activeTab === 'inventory') { fetchInventory(); fetchParts(); }
-  }, [debouncedSearch]) // eslint-disable-line
+   // ── Re-fetch when debounced search changes ───────────────────────────────
+   useEffect(() => {
+     if (activeTab === 'products') {
+       setProductQuery((prev) => ({ ...prev, page: 1 }))
+     }
+     if (activeTab === 'guitar-parts') {
+       setPartQuery((prev) => ({ ...prev, page: 1 }))
+     }
+     if (activeTab === 'services') {
+       setServiceQuery(prev => ({ ...prev, page: 1 }))
+     }
+     if (activeTab === 'users') fetchUsers()
+     if (activeTab === 'orders') fetchOrders()
+     if (activeTab === 'projects') fetchProjects()
+     if (activeTab === 'appointments') fetchAppointments()
+     if (activeTab === 'inventory') { fetchInventory(); fetchParts(); }
+   }, [debouncedSearch]) // eslint-disable-line
 
   useEffect(() => {
     if (activeTab === 'products') fetchProducts()
   }, [activeTab, fetchProducts])
 
-  useEffect(() => {
-    if (activeTab === 'guitar-parts') fetchParts()
-  }, [activeTab, fetchParts])
+   useEffect(() => {
+     if (activeTab === 'guitar-parts') fetchParts()
+   }, [activeTab, fetchParts])
 
-  // ── Smart polling: active tab ────────────────────────────────────────────
-  const pollingFn = useCallback(async () => {
-    const map = {
-      'products': fetchProducts,
-      'guitar-parts': fetchParts,
-      'product-categories': fetchCategories,
-      'users': fetchUsers,
-      'orders': fetchOrders,
-      'projects': fetchProjects,
-      'appointments': fetchAppointments,
-      'inventory': fetchInventory,
-      'sales-report': fetchSalesReport,
-      'dashboard': async () => { await fetchOrders(); await fetchProjects(); await fetchAppointments() },
-    }
-    return map[activeTab]?.()
-  }, [activeTab, fetchProducts, fetchParts, fetchCategories, fetchUsers, fetchOrders, fetchProjects, fetchAppointments, fetchInventory, fetchSalesReport])
+   useEffect(() => {
+     if (activeTab === 'services') fetchServices()
+   }, [activeTab, fetchServices])
+
+   // ── Smart polling: active tab ────────────────────────────────────────────
+   const pollingFn = useCallback(async () => {
+     const map = {
+       'products': fetchProducts,
+       'guitar-parts': fetchParts,
+       'product-categories': fetchCategories,
+       'users': fetchUsers,
+       'orders': fetchOrders,
+       'projects': fetchProjects,
+       'services': fetchServices,
+       'appointments': fetchAppointments,
+       'inventory': fetchInventory,
+       'sales-report': fetchSalesReport,
+       'dashboard': async () => { await fetchOrders(); await fetchProjects(); await fetchAppointments() },
+     }
+     return map[activeTab]?.()
+   }, [activeTab, fetchProducts, fetchParts, fetchCategories, fetchUsers, fetchOrders, fetchProjects, fetchServices, fetchAppointments, fetchInventory, fetchSalesReport])
 
   const pollingEnabled = ['dashboard', 'orders', 'inventory', 'projects', 'appointments'].includes(activeTab)
   useSmartPolling(pollingFn, { interval: 5000, maxInterval: 60000, backoffFactor: 1.5, enabled: pollingEnabled })
@@ -2091,25 +2264,30 @@ export function AdminPage() {
     pollingFn()?.finally(() => setIsLoading(false))
   }
 
-  // ── Modal helpers ────────────────────────────────────────────────────────
-  const openModal = (type, data = null) => {
-    let initialForm = data ? { ...data } : {}
-    
-    // Aligns primary_image coming from API to image_url used in form wizard
-    if (type === 'product' && data?.primary_image) {
-      initialForm.image_url = data.primary_image
-    }
-    
-    // Initialize status fields for order-details modal
-    if (type === 'order-details' && data) {
-      initialForm.order_status = data.status || 'pending'
-      initialForm.payment_status = data.payment_status || data.payment?.status || 'pending'
-    }
-    
-    setForm(initialForm)
-    setFormErrors({})
-    setModal({ open: true, type, data })
-  }
+   // ── Modal helpers ────────────────────────────────────────────────────────
+   const openModal = (type, data = null) => {
+     let initialForm = data ? { ...data } : {}
+
+     // Aligns primary_image coming from API to image_url used in form wizard
+     if (type === 'product' && data?.primary_image) {
+       initialForm.image_url = data.primary_image
+     }
+
+     // Initialize status fields for order-details modal
+     if (type === 'order-details' && data) {
+       initialForm.order_status = data.status || 'pending'
+       initialForm.payment_status = data.payment_status || data.payment?.status || 'pending'
+     }
+
+     // Convert duration_minutes (from API) to duration (hours for form)
+     if (type === 'service' && data?.duration_minutes) {
+       initialForm.duration = Number(data.duration_minutes) / 60
+     }
+
+     setForm(initialForm)
+     setFormErrors({})
+     setModal({ open: true, type, data })
+   }
   const closeModal = () => { setModal({ open: false, type: null, data: null }); setFormErrors({}); setOrderStatusDropdownOpen(false); setPaymentStatusDropdownOpen(false) }
 
   // ── Form validation helper ───────────────────────────────────────────────
@@ -2516,33 +2694,45 @@ export function AdminPage() {
     } catch (e) { showToast(e.message, 'error') }
   }
 
-  // ── CRUD: Services ──────────────────────────────────────────────────────
-  const saveService = async () => {
-    setIsSaving(true)
-    try {
-      if (modal.data?.id) {
-        // Update existing service
-        showToast('Service updated!')
-      } else {
-        // Create new service
-        showToast('Service added!')
-      }
-      closeModal()
-    } catch (e) { showToast(e.message, 'error') }
-    finally { setIsSaving(false) }
-  }
+   // ── CRUD: Services ──────────────────────────────────────────────────────
+   const saveService = async () => {
+     setIsSaving(true)
+     try {
+       // Base payload with fields common to create & update
+       const payload = {
+         name: form.name,
+         description: form.description || '',
+         price: Number(form.price),
+         duration_minutes: Math.round(Number(form.duration) * 60),
+       }
 
-  const deleteService = (id, title) => {
-    openConfirm({
-      title: 'Delete Service?',
-      description: `"${title}" will be permanently removed.`,
-      variant: 'danger',
-      onConfirm: async () => {
-        // await adminApi.deleteService(id)
-        showToast('Service deleted')
-      },
-    })
-  }
+       // is_active only sent on update (create defaults to true in DB)
+       if (modal.data?.service_id) {
+         payload.is_active = form.is_active !== undefined ? Boolean(form.is_active) : true
+         await adminApi.updateService(modal.data.service_id, payload)
+         showToast('Service updated!')
+       } else {
+         await adminApi.createService(payload)
+         showToast('Service added!')
+       }
+       fetchServices()
+       closeModal()
+     } catch (e) { showToast(e.message, 'error') }
+     finally { setIsSaving(false) }
+   }
+
+   const deleteService = (id, title) => {
+     openConfirm({
+       title: 'Delete Service?',
+       description: `"${title}" will be permanently removed.`,
+       variant: 'danger',
+       onConfirm: async () => {
+         await adminApi.deleteService(id)
+         showToast('Service deleted')
+         fetchServices()
+       },
+     })
+   }
   const saveAppointment = async () => {
     setIsSaving(true)
     try {
@@ -2643,7 +2833,43 @@ export function AdminPage() {
     { id: 'settings', label: 'Settings', icon: Settings },
   ]
 
-  // ── JSX ──────────────────────────────────────────────────────────────────
+   // Services Tab Component
+   const ServicesTab = () => {
+     return (
+       <motion.div key="services" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+         <div className="mb-4 flex items-end justify-between gap-3">
+           <div>
+             <h2 className="text-white text-xl font-semibold">Services</h2>
+             <p className="text-[var(--text-muted)] text-sm">Manage services and pricing offered to customers.</p>
+           </div>
+           {services.length > 0 && (
+             <button onClick={() => { setServiceQuery({ page: 1, pageSize: serviceQuery.pageSize, sortBy: 'created_at', sortDir: 'desc', is_active: '' }); setSearchQuery(''); }} className="px-3 py-2 rounded-lg border border-[var(--border)] text-sm text-[var(--text-muted)] hover:text-white hover:border-[var(--gold-primary)] transition-colors">
+               Clear filters
+             </button>
+           )}
+         </div>
+
+         {servicesLoading ? (
+           <SectionLoader label="Loading services..." />
+         ) : services.length === 0 ? (
+           <EmptyState icon={Wrench} label={debouncedSearch ? 'No services match your search' : 'No services found'} action={() => openModal('service')} actionLabel="Add Service" />
+         ) : serviceViewMode === 'table' ? (
+           <ServiceTableView services={services} onEdit={(svc) => openModal('service', svc)} onDelete={deleteService} />
+         ) : (
+           <ServiceGridView services={services} onEdit={(svc) => openModal('service', svc)} onDelete={deleteService} />
+         )}
+
+         {!servicesLoading && servicesPagination.totalPages > 1 && (
+           <PaginationBar
+             pagination={servicesPagination}
+             onPageChange={(page) => setServiceQuery(prev => ({ ...prev, page }))}
+           />
+         )}
+       </motion.div>
+     )
+   }
+
+   // ── JSX ──────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-[var(--bg-primary)]">
 
@@ -3053,7 +3279,7 @@ export function AdminPage() {
 
           {/* Actions bar */}
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
-            {['products', 'guitar-parts', 'users', 'product-categories', 'orders', 'projects', 'appointments'].includes(activeTab) && (
+            {['products', 'guitar-parts', 'users', 'product-categories', 'orders', 'projects', 'services', 'appointments'].includes(activeTab) && (
               <div className="relative max-w-sm w-full">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
                 <input
@@ -3073,24 +3299,42 @@ export function AdminPage() {
                   <RefreshCw className={`w-4 h-4 text-[var(--text-muted)] ${isLoading ? 'animate-spin' : ''}`} />
                 </button>
               )}
-              {activeTab === 'products' && (
-                <div className="flex rounded-lg border border-[var(--border)] overflow-hidden">
-                  <button
-                    onClick={() => setProductViewMode('grid')}
-                    className={`p-2 ${productViewMode === 'grid' ? 'bg-[var(--gold-primary)] text-black' : 'bg-[var(--surface-dark)] text-[var(--text-muted)] hover:text-white'} transition-colors`}
-                    title="Grid View"
-                  >
-                    <Grid3X3 className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => setProductViewMode('table')}
-                    className={`p-2 ${productViewMode === 'table' ? 'bg-[var(--gold-primary)] text-black' : 'bg-[var(--surface-dark)] text-[var(--text-muted)] hover:text-white'} transition-colors`}
-                    title="Table View"
-                  >
-                    <List className="w-4 h-4" />
-                  </button>
-                </div>
-              )}
+               {activeTab === 'products' && (
+                 <div className="flex rounded-lg border border-[var(--border)] overflow-hidden">
+                   <button
+                     onClick={() => setProductViewMode('grid')}
+                     className={`p-2 ${productViewMode === 'grid' ? 'bg-[var(--gold-primary)] text-black' : 'bg-[var(--surface-dark)] text-[var(--text-muted)] hover:text-white'} transition-colors`}
+                     title="Grid View"
+                   >
+                     <Grid3X3 className="w-4 h-4" />
+                   </button>
+                   <button
+                     onClick={() => setProductViewMode('table')}
+                     className={`p-2 ${productViewMode === 'table' ? 'bg-[var(--gold-primary)] text-black' : 'bg-[var(--surface-dark)] text-[var(--text-muted)] hover:text-white'} transition-colors`}
+                     title="Table View"
+                   >
+                     <List className="w-4 h-4" />
+                   </button>
+                 </div>
+               )}
+               {activeTab === 'services' && (
+                 <div className="flex rounded-lg border border-[var(--border)] overflow-hidden">
+                   <button
+                     onClick={() => setServiceViewMode('grid')}
+                     className={`p-2 ${serviceViewMode === 'grid' ? 'bg-[var(--gold-primary)] text-black' : 'bg-[var(--surface-dark)] text-[var(--text-muted)] hover:text-white'} transition-colors`}
+                     title="Grid View"
+                   >
+                     <Grid3X3 className="w-4 h-4" />
+                   </button>
+                   <button
+                     onClick={() => setServiceViewMode('table')}
+                     className={`p-2 ${serviceViewMode === 'table' ? 'bg-[var(--gold-primary)] text-black' : 'bg-[var(--surface-dark)] text-[var(--text-muted)] hover:text-white'} transition-colors`}
+                     title="Table View"
+                   >
+                     <List className="w-4 h-4" />
+                   </button>
+                 </div>
+               )}
               {activeTab === 'products' && isSuperAdmin && (
                 <button onClick={() => openModal('product')} className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black rounded-xl font-semibold text-sm hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all">
                   <Plus className="w-4 h-4" /> Add Product
@@ -3112,11 +3356,17 @@ export function AdminPage() {
                 </button>
               )}
 
-              {activeTab === 'inventory' && (
-                <button onClick={() => openModal('inventory')} className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black rounded-xl font-semibold text-sm hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all">
-                  <Plus className="w-4 h-4" /> Adjust Stock
-                </button>
-              )}
+               {activeTab === 'inventory' && (
+                 <button onClick={() => openModal('inventory')} className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black rounded-xl font-semibold text-sm hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all">
+                   <Plus className="w-4 h-4" /> Adjust Stock
+                 </button>
+               )}
+
+               {activeTab === 'services' && isSuperAdmin && (
+                 <button onClick={() => openModal('service')} className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black rounded-xl font-semibold text-sm hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all">
+                   <Plus className="w-4 h-4" /> Add Service
+                 </button>
+               )}
             </div>
           </div>
 
@@ -3785,105 +4035,7 @@ export function AdminPage() {
           )}
 
           {/* ── SERVICES ───────────────────────────────────────────────────── */}
-          {activeTab === 'services' && (
-            <motion.div key="services" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-              <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-3xl p-6">
-                <div className="flex items-center justify-between mb-6">
-                  <div>
-                    <h2 className="text-2xl font-bold text-white">Services Management</h2>
-                    <p className="text-[var(--text-muted)] mt-1">Manage guitar services and pricing</p>
-                  </div>
-                  {isSuperAdmin && (
-                    <button onClick={() => openModal('service')} className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black rounded-xl font-semibold text-sm hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all">
-                      <Plus className="w-4 h-4" /> Add Service
-                    </button>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {[
-                    {
-                      id: 'setup-intonation',
-                      title: 'Setup & Intonation',
-                      description: 'Professional guitar setup and intonation adjustment',
-                      icon: Wrench,
-                      color: 'text-blue-400',
-                      bgColor: 'bg-blue-500/10',
-                      borderColor: 'border-blue-500/30'
-                    },
-                    {
-                      id: 'refinishing',
-                      title: 'Refinishing',
-                      description: 'Guitar refinishing and restoration services',
-                      icon: PaintBucket,
-                      color: 'text-green-400',
-                      bgColor: 'bg-green-500/10',
-                      borderColor: 'border-green-500/30'
-                    },
-                    {
-                      id: 'repair-restoration',
-                      title: 'Repair & Restoration',
-                      description: 'Comprehensive repair and restoration work',
-                      icon: Hammer,
-                      color: 'text-orange-400',
-                      bgColor: 'bg-orange-500/10',
-                      borderColor: 'border-orange-500/30'
-                    },
-                    {
-                      id: 'electronics-upgrade',
-                      title: 'Electronics Upgrade',
-                      description: 'Pickup upgrades and electronic modifications',
-                      icon: Zap,
-                      color: 'text-purple-400',
-                      bgColor: 'bg-purple-500/10',
-                      borderColor: 'border-purple-500/30'
-                    },
-                    {
-                      id: 'custom-guitar-build',
-                      title: 'Custom Guitar Build',
-                      description: 'Bespoke guitar construction from design to completion',
-                      icon: Sparkles,
-                      color: 'text-amber-400',
-                      bgColor: 'bg-amber-500/10',
-                      borderColor: 'border-amber-500/30'
-                    }
-                  ].map((service) => {
-                    const Icon = service.icon
-                    return (
-                      <motion.div
-                        key={service.id}
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-2xl p-6 hover:border-[var(--gold-primary)]/50 transition-all group"
-                      >
-                        <div className="flex items-start justify-between mb-4">
-                          <div className={`w-12 h-12 rounded-xl ${service.bgColor} border ${service.borderColor} flex items-center justify-center group-hover:scale-110 transition-transform`}>
-                            <Icon className={`w-6 h-6 ${service.color}`} />
-                          </div>
-                          <div className="flex gap-2">
-                            <button onClick={() => openModal('service', service)} className="p-2 hover:bg-[var(--gold-primary)]/10 rounded-lg transition-colors opacity-0 group-hover:opacity-100">
-                              <Edit className="w-4 h-4 text-[var(--gold-primary)]" />
-                            </button>
-                            <button onClick={() => deleteService(service.id, service.title)} className="p-2 hover:bg-red-500/10 rounded-lg transition-colors opacity-0 group-hover:opacity-100">
-                              <Trash2 className="w-4 h-4 text-red-400" />
-                            </button>
-                          </div>
-                        </div>
-                        <h3 className="text-white font-semibold text-lg mb-2">{service.title}</h3>
-                        <p className="text-[var(--text-muted)] text-sm mb-4">{service.description}</p>
-                        <div className="flex items-center justify-between">
-                          <span className="text-[var(--gold-primary)] font-bold">{formatCurrency(0, false)}</span>
-                          <button className="text-[var(--text-muted)] text-sm hover:text-white transition-colors">
-                            Configure Pricing →
-                          </button>
-                        </div>
-                      </motion.div>
-                    )
-                  })}
-                </div>
-              </div>
-            </motion.div>
-          )}
+           {activeTab === 'services' && <ServicesTab />}
 
           {/* ── APPOINTMENTS ───────────────────────────────────────────────── */}
           {activeTab === 'appointments' && (
@@ -3895,6 +4047,9 @@ export function AdminPage() {
                   <AppointmentCalendar
                     appointments={visibleAppointments}
                     onAppointmentClick={(apt) => openModal('view_appointment', apt)}
+                    unavailableDates={unavailableDates}
+                    onToggleDate={toggleUnavailableDate}
+                    isAdminMode={true}
                   />
                   <div className="mt-8 mb-4">
                     <h3 className="text-white text-lg font-semibold mb-4">All Appointments</h3>
@@ -3960,7 +4115,7 @@ export function AdminPage() {
                                     )}
                                   </div>
                                 </td>
-                              </tr>
+                               </tr>
                             )
                           })}
                         </tbody>
@@ -5562,13 +5717,13 @@ export function AdminPage() {
                         <option value="custom-guitar-build">Custom Guitar Build</option>
                       </select>
                     </div>
-                    <div>
-                      <label className={labelCls}>Status</label>
-                      <select value={form.is_active !== undefined ? form.is_active : true} onChange={e => setForm(f => ({ ...f, is_active: e.target.value === 'true' }))} className={inputCls}>
-                        <option value={true}>Active</option>
-                        <option value={false}>Inactive</option>
-                      </select>
-                    </div>
+                     <div>
+                       <label className={labelCls}>Status</label>
+                       <select value={form.is_active === undefined ? 'true' : (form.is_active ? 'true' : 'false')} onChange={e => setForm(f => ({ ...f, is_active: e.target.value === 'true' }))} className={inputCls}>
+                         <option value="true">Active</option>
+                         <option value="false">Inactive</option>
+                       </select>
+                     </div>
                   </div>
                   <ModalFooter onCancel={closeModal} onSave={validateAndSave(SERVICE_RULES, saveService)} isSaving={isSaving} />
                 </>

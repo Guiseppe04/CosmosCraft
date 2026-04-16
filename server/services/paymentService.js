@@ -42,6 +42,57 @@ const STATUS_TRANSITIONS = {
   [exports.PAYMENT_STATUS.REFUNDED]: [],
 };
 
+async function ensureProjectForCustomBuildOrder(client, orderId) {
+  const existingProjectRes = await client.query(
+    'SELECT project_id FROM projects WHERE order_id = $1',
+    [orderId]
+  );
+
+  if (existingProjectRes.rows.length > 0) {
+    return existingProjectRes.rows[0];
+  }
+
+  const customBuildOrderRes = await client.query(
+    `SELECT
+       o.order_id,
+       o.order_number,
+       o.notes,
+       COALESCE(c.name, oi.product_name, 'Custom Build') AS build_name
+     FROM orders o
+     JOIN order_items oi ON oi.order_id = o.order_id
+     LEFT JOIN customizations c ON c.customization_id = oi.customization_id
+     WHERE o.order_id = $1
+       AND oi.customization_id IS NOT NULL
+     ORDER BY oi.quantity DESC, oi.unit_price DESC
+     LIMIT 1`,
+    [orderId]
+  );
+
+  const customBuildOrder = customBuildOrderRes.rows[0];
+
+  if (!customBuildOrder) {
+    return null;
+  }
+
+  const title = customBuildOrder.order_number
+    ? `${customBuildOrder.build_name} (${customBuildOrder.order_number})`
+    : customBuildOrder.build_name;
+
+  const notes = [
+    customBuildOrder.notes,
+    `Auto-created from custom build payment for order ${customBuildOrder.order_number || customBuildOrder.order_id}.`,
+  ].filter(Boolean).join('\n\n');
+
+  const projectRes = await client.query(
+    `INSERT INTO projects (order_id, title, status, notes)
+     VALUES ($1, $2, $3, $4)
+     RETURNING *`,
+    [orderId, title, 'not_started', notes || null]
+  );
+
+  return projectRes.rows[0] || null;
+}
+
 async function getOrderById(orderId) {
   const result = await pool.query(
     'SELECT * FROM orders WHERE order_id = $1',
@@ -88,6 +139,10 @@ async function getPaymentByOrderId(orderId) {
   return result.rows;
 }
 
+function normalizeAmount(value) {
+  return Number(Number(value || 0).toFixed(2));
+}
+
 async function createPayment({ order_id, user_id, method, amount, currency = 'PHP', reference_number, proof_url }) {
   const client = await pool.connect();
   
@@ -101,17 +156,37 @@ async function createPayment({ order_id, user_id, method, amount, currency = 'PH
 
     const existingPayments = await client.query(
       `SELECT p.* FROM payments p 
-       WHERE p.order_id = $1 AND p.status NOT IN ('rejected', 'cancelled', 'refunded')`,
+       WHERE p.order_id = $1`,
       [order_id]
     );
 
-    if (existingPayments.rows.length > 0) {
+    const hasActiveSubmission = existingPayments.rows.some(payment =>
+      ['pending', 'for_verification'].includes(payment.status)
+    );
+
+    if (hasActiveSubmission) {
       throw new AppError('An active payment already exists for this order. Please complete or cancel the existing payment first.', 400);
     }
 
-    const amountMatch = parseFloat(order.rows[0].total_amount) === parseFloat(amount);
-    if (!amountMatch) {
-      throw new AppError(`Payment amount must match order total (${order.rows[0].total_amount})`, 400);
+    const orderTotal = normalizeAmount(order.rows[0].total_amount);
+    const requestedAmount = normalizeAmount(amount);
+    const totalVerifiedAmount = normalizeAmount(
+      existingPayments.rows
+        .filter(payment => payment.status === exports.PAYMENT_STATUS.VERIFIED)
+        .reduce((sum, payment) => sum + Number(payment.amount || 0), 0)
+    );
+    const remainingBalance = normalizeAmount(orderTotal - totalVerifiedAmount);
+
+    if (requestedAmount <= 0) {
+      throw new AppError('Payment amount must be greater than zero', 400);
+    }
+
+    if (remainingBalance <= 0) {
+      throw new AppError('This order has already been fully paid.', 400);
+    }
+
+    if (requestedAmount > remainingBalance) {
+      throw new AppError(`Payment amount must not exceed the remaining balance (${remainingBalance.toFixed(2)})`, 400);
     }
 
     const config = await client.query(
@@ -137,8 +212,10 @@ async function createPayment({ order_id, user_id, method, amount, currency = 'PH
       `INSERT INTO payments (order_id, user_id, method, amount, currency, reference_number, proof_url, payment_instructions, status)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        RETURNING *`,
-      [order_id, user_id, method, amount, currency, reference_number, proof_url || null, JSON.stringify(paymentInstructions), exports.PAYMENT_STATUS.PENDING]
+      [order_id, user_id, method, requestedAmount, currency, reference_number, proof_url || null, JSON.stringify(paymentInstructions), exports.PAYMENT_STATUS.PENDING]
     );
+
+    await ensureProjectForCustomBuildOrder(client, order_id);
 
     await client.query('COMMIT');
     return result.rows[0];
@@ -238,6 +315,8 @@ async function verifyPayment(paymentId, verifiedByUserId, notes) {
       `UPDATE orders SET payment_status = $1, updated_at = $2 WHERE order_id = $3`,
       ['paid', new Date(), payment.order_id]
     );
+
+    await ensureProjectForCustomBuildOrder(client, payment.order_id);
 
     await client.query('COMMIT');
     return result.rows[0];

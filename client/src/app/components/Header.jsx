@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
-import { Guitar, Menu, X, User, ShoppingCart, ChevronDown, Settings, LogOut, Sun, Moon } from 'lucide-react'
+import { Guitar, Menu, X, User, ShoppingCart, ChevronDown, Settings, LogOut, Sun, Moon, LayoutDashboard } from 'lucide-react'
 import { motion, AnimatePresence } from 'motion/react'
 import { useCart } from '../context/CartContext.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
@@ -264,6 +264,20 @@ export function Header() {
                       </div>
 
                       <div className="border-t border-white/10 p-3">
+                        {/* Dashboard Link - Only for admin/staff roles */}
+                        {(user?.role === 'admin' || user?.role === 'super_admin' || user?.role === 'staff') && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setProfileMenuOpen(false)
+                              navigate(user?.role === 'admin' || user?.role === 'super_admin' ? '/admin' : '/staff')
+                            }}
+                            className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-white transition-colors hover:bg-[var(--surface-elevated)]"
+                          >
+                            <LayoutDashboard className="h-4 w-4 text-[var(--gold-primary)]" />
+                            <span className="text-sm font-medium">{user?.role === 'super_admin' ? 'Admin' : user?.role === 'admin' ? 'Admin' : 'Staff'} Dashboard</span>
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() => {
