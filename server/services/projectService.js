@@ -90,9 +90,18 @@ exports.getMyProjects = async (userId) => {
       JOIN project_milestones pm ON ps.milestone_id = pm.milestone_id
       WHERE pm.project_id = $1
     `, [p.project_id]);
+    const customizationsRes = await pool.query(
+      `SELECT DISTINCT customization_id
+       FROM order_items
+       WHERE order_id = $1
+         AND customization_id IS NOT NULL`,
+      [p.order_id]
+    );
     const total = parseInt(stats.rows[0].total) || 0;
     const completed = parseInt(stats.rows[0].completed) || 0;
     p.progress = total === 0 ? 0 : Math.round((completed / total) * 100);
+    p.customization_ids = customizationsRes.rows.map(row => row.customization_id);
+    p.primary_customization_id = p.customization_ids[0] || null;
   }
   return result.rows;
 };
@@ -173,7 +182,10 @@ const logActivity = async (client, projectId, userId, actionType, details) => {
 exports.getProjectHierarchy = async (projectId) => {
   const client = await pool.connect();
   try {
-    const pResult = await client.query('SELECT * FROM projects WHERE project_id = $1', [projectId]);
+    const pResult = await client.query(
+      `${PROJECT_BASE_SELECT} WHERE p.project_id = $1`,
+      [projectId]
+    );
     if (pResult.rows.length === 0) return null;
     const project = pResult.rows[0];
 
@@ -185,6 +197,88 @@ exports.getProjectHierarchy = async (projectId) => {
       WHERE ptm.project_id = $1
     `, [projectId]);
     project.team = teamResult.rows;
+
+    const customizationResult = await client.query(
+      `SELECT DISTINCT
+         c.customization_id,
+         c.name,
+         c.guitar_type,
+         c.body_wood,
+         c.neck_wood,
+         c.fingerboard_wood,
+         c.bridge_type,
+         c.pickups,
+         c.color,
+         c.finish_type
+       FROM order_items oi
+       JOIN customizations c ON c.customization_id = oi.customization_id
+       WHERE oi.order_id = $1
+       ORDER BY c.created_at ASC`,
+      [project.order_id]
+    );
+
+    const customizationIds = customizationResult.rows.map((row) => row.customization_id);
+    let linkedParts = [];
+
+    if (customizationIds.length > 0) {
+      const linkedPartsResult = await client.query(
+        `SELECT
+           cp.part_id::text AS part_id,
+           cp.customization_id,
+           cp.part_name AS name,
+           cp.quantity,
+           cp.price,
+           c.guitar_type,
+           pi.image_url,
+           'additional_parts' AS part_category,
+           p.is_active,
+           i.stock
+         FROM customization_parts cp
+         JOIN customizations c ON c.customization_id = cp.customization_id
+         LEFT JOIN products p ON p.product_id = cp.product_id
+         LEFT JOIN inventory i ON i.product_id = cp.product_id
+         LEFT JOIN product_images pi
+           ON pi.product_id = cp.product_id
+          AND pi.is_primary = true
+         WHERE cp.customization_id = ANY($1::uuid[])
+         ORDER BY cp.created_at ASC`,
+        [customizationIds]
+      );
+
+      linkedParts = linkedPartsResult.rows;
+    }
+
+    const specFields = [
+      ['name', 'model'],
+      ['body_wood', 'body'],
+      ['neck_wood', 'neck'],
+      ['fingerboard_wood', 'fretboard'],
+      ['bridge_type', 'bridge'],
+      ['pickups', 'pickups'],
+      ['color', 'finish'],
+      ['finish_type', 'finish'],
+    ];
+
+    const configuredParts = customizationResult.rows.flatMap((customization) =>
+      specFields.flatMap(([field, category]) => {
+        const value = customization[field];
+        if (!value) return [];
+
+        return [{
+          part_id: `${customization.customization_id}:${field}`,
+          customization_id: customization.customization_id,
+          name: value,
+          guitar_type: customization.guitar_type,
+          part_category: category,
+          stock: null,
+          is_active: true,
+          source: 'configuration',
+        }];
+      })
+    );
+
+    project.customization_ids = customizationIds;
+    project.parts = [...configuredParts, ...linkedParts];
 
     // Fetch milestones
     const mResult = await client.query('SELECT * FROM project_milestones WHERE project_id = $1 ORDER BY order_index ASC, created_at ASC', [projectId]);

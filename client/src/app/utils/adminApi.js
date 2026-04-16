@@ -44,6 +44,7 @@ export const adminApi = {
     const qs = new URLSearchParams(params).toString()
     return request(`/api/guitars/customizations${qs ? '?' + qs : ''}`)
   },
+  getMyCustomizations: () => request('/api/guitars/my-customizations'),
   getCustomization: (id) => request(`/api/guitars/customizations/${id}`),
   updateCustomization: (id, body) => request(`/api/guitars/customizations/${id}`, { method: 'PUT', body }),
   deleteCustomization: (id) => request(`/api/guitars/customizations/${id}`, { method: 'DELETE' }),

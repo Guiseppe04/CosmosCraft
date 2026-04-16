@@ -107,6 +107,7 @@ export function DashboardPage() {
   const [buildToDelete, setBuildToDelete] = useState(null)
   
   const [myProjects, setMyProjects] = useState([])
+  const [myCustomizations, setMyCustomizations] = useState([])
   const [activeProjectView, setActiveProjectView] = useState(null)
   
   const [myOrders, setMyOrders] = useState([])
@@ -146,6 +147,13 @@ export function DashboardPage() {
   }, [activeSection])
 
   useEffect(() => {
+    if (activeSection === 'my-guitar') {
+      fetchMyProjects()
+      fetchMyCustomizations()
+    }
+  }, [activeSection])
+
+  useEffect(() => {
     if (activeSection !== 'password') {
       setPasswordError('')
       setPasswordSuccess(false)
@@ -164,6 +172,49 @@ export function DashboardPage() {
 
   const fetchMyProjects = () => {
     adminApi.getMyProjects().then(res => setMyProjects(res.data)).catch(console.error)
+  }
+
+  const fetchMyCustomizations = () => {
+    adminApi.getMyCustomizations().then(res => setMyCustomizations(res.data || [])).catch(console.error)
+  }
+
+  const customizationLookup = useMemo(
+    () => new Map(myCustomizations.map(customization => [customization.customization_id, customization])),
+    [myCustomizations]
+  )
+
+  const projectLookupByCustomization = useMemo(() => {
+    const nextLookup = new Map()
+
+    for (const project of myProjects) {
+      for (const customizationId of project.customization_ids || []) {
+        if (customizationId && !nextLookup.has(customizationId)) {
+          nextLookup.set(customizationId, project)
+        }
+      }
+    }
+
+    return nextLookup
+  }, [myProjects])
+
+  const getBuildCustomizationId = (build) =>
+    build?.dbCustomizationId || build?.customization_id || null
+
+  const getBuildLockState = (build) => {
+    const customizationId = getBuildCustomizationId(build)
+    const customization = customizationId ? customizationLookup.get(customizationId) : null
+    const project = customizationId ? projectLookupByCustomization.get(customizationId) : null
+
+    return {
+      customizationId,
+      customization,
+      project,
+      isLocked: Boolean(customization?.is_locked || project),
+    }
+  }
+
+  const handleLockedBuildAction = () => {
+    setToastMessage('This build is already in an active order. You can track it in My Guitar, but you can no longer edit or order it again.')
   }
 
   const submitRating = () => {
@@ -268,6 +319,11 @@ export function DashboardPage() {
   }, [location, navigate])
 
   const updateAdditionalPartQuantity = (buildId, partIndex, newQuantity) => {
+    if (viewingBuild && getBuildLockState(viewingBuild).isLocked) {
+      handleLockedBuildAction()
+      return
+    }
+
     const updatedBuild = { ...viewingBuild };
     const partsArray = [...updatedBuild.additionalParts];
     
@@ -465,7 +521,10 @@ export function DashboardPage() {
     });
 
     return (
-      <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-8">
+      <div className="space-y-8">
+        {renderProjectsContent()}
+
+        <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-8">
         <h2 className="text-2xl font-bold text-white mb-1">My Purchase</h2>
         <p className="text-sm text-[var(--text-muted)] mb-8">Track and manage your orders</p>
 
@@ -574,6 +633,7 @@ export function DashboardPage() {
             ))}
           </div>
         )}
+        </div>
       </div>
     )
   }
@@ -614,7 +674,7 @@ export function DashboardPage() {
 
             return (
               <div key={apt.appointment_id || apt.id} className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl p-5 hover:border-[var(--gold-primary)]/40 transition-colors">
-                <div className="flex justify-between items-start mb-4">
+                <div className="flex justify-between items-start mb-4 gap-4">
                   <div>
                     <h3 className="font-bold text-white text-lg">{apt.guitar_details ? `${apt.guitar_details.brand} ${apt.guitar_details.model}` : (apt.title || apt.service_name || 'Appointment')}</h3>
                     <p className="text-xs text-[var(--text-muted)] mt-1 capitalize">
@@ -756,17 +816,6 @@ export function DashboardPage() {
                       Cancel Project
                     </button>
                   )}
-                  {project.progress < 80 && project.status !== 'Cancelled' && (
-                    <button
-                      onClick={() => {
-                          // Edit specs logic
-                          alert("Inline Edit Specs coming soon");
-                      }}
-                      className="px-4 py-2 rounded-lg border border-blue-500/30 text-blue-400 hover:bg-blue-500/10 transition-colors text-sm font-semibold"
-                    >
-                      Edit Project
-                    </button>
-                  )}
                 </div>
               </div>
             ))}
@@ -777,6 +826,10 @@ export function DashboardPage() {
   };
 
   const renderMyGuitarContent = () => {
+    if (activeProjectView) {
+      return renderProjectsContent()
+    }
+
     const savedGuitarBuilds = JSON.parse(window.localStorage.getItem('cosmoscraft_saved_builds') || '[]').map(b => ({...b, isBass: false}))
     const savedBassBuilds = JSON.parse(window.localStorage.getItem('cosmoscraft_saved_bass_builds') || '[]').map(b => ({...b, isBass: true}))
     const allBuilds = [...savedGuitarBuilds, ...savedBassBuilds].sort((a, b) => new Date(b.savedAt || 0) - new Date(a.savedAt || 0))
@@ -786,7 +839,10 @@ export function DashboardPage() {
     };
 
     return (
-      <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-8">
+      <div className="space-y-8">
+        {renderProjectsContent()}
+
+        <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-8">
         <div className="flex items-center justify-between mb-6">
           <div>
             <h2 className="text-2xl font-bold text-white mb-1">My Saved Builds</h2>
@@ -816,12 +872,20 @@ export function DashboardPage() {
             {allBuilds.map((build) => {
               const additionalPartsTotal = (build.additionalParts || []).reduce((sum, p) => sum + (p.price * p.quantity), 0);
               const grandTotal = build.price + additionalPartsTotal;
+              const buildLockState = getBuildLockState(build)
 
               return (
               <div key={build.id} className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl p-5 hover:border-[var(--gold-primary)]/40 transition-colors flex flex-col h-full">
-                <div className="flex justify-between items-start mb-4">
+                <div className="flex justify-between items-start mb-4 gap-4">
                   <div>
-                    <h3 className="text-lg font-bold text-white">{build.name || 'Custom Build'}</h3>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-lg font-bold text-white">{build.name || 'Custom Build'}</h3>
+                      {buildLockState.isLocked && (
+                        <span className="px-2 py-0.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 text-[11px] font-semibold">
+                          Already Ordered
+                        </span>
+                      )}
+                    </div>
                     <p className="text-xs text-[var(--text-muted)] mt-1">Saved on {new Date(build.savedAt || new Date()).toLocaleDateString()}</p>
                   </div>
                   <div className="text-right">
@@ -841,14 +905,27 @@ export function DashboardPage() {
                    )).slice(0, 6)}
                 </div>
 
+                {buildLockState.isLocked && (
+                  <div className="mt-4 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200 flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+                    <span>This build is already in an active order, so parts, specs, and checkout are now locked.</span>
+                  </div>
+                )}
+
                 <div className="mt-6 space-y-2">
                    <div className="flex gap-2">
                       <button
+                        type="button"
+                        disabled={buildLockState.isLocked}
                         onClick={() => {
                           window.localStorage.setItem('cosmoscraft_target_build_id', build.id);
                           navigate('/shop');
                         }}
-                        className="flex-1 py-1.5 px-2 rounded-lg border border-[var(--border)] text-[var(--text-light)] text-xs hover:bg-white/5 transition-all text-center font-medium"
+                        className={`flex-1 py-1.5 px-2 rounded-lg border text-[var(--text-light)] text-xs transition-all text-center font-medium ${
+                          buildLockState.isLocked
+                            ? 'border-[var(--border)] opacity-40 cursor-not-allowed'
+                            : 'border-[var(--border)] hover:bg-white/5'
+                        }`}
                       >
                         Add Parts
                       </button>
@@ -861,8 +938,14 @@ export function DashboardPage() {
                    </div>
                    <div className="flex gap-2">
                       <button
+                        type="button"
+                        disabled={buildLockState.isLocked}
                         onClick={() => navigate(build.isBass ? `/customize-bass?edit=${build.id}` : `/customize?edit=${build.id}`)}
-                        className="flex-1 py-1.5 px-2 rounded-lg border border-blue-500/30 text-blue-400 text-xs hover:bg-blue-500/10 transition-all text-center font-medium"
+                        className={`flex-1 py-1.5 px-2 rounded-lg border text-xs transition-all text-center font-medium ${
+                          buildLockState.isLocked
+                            ? 'border-blue-500/20 text-blue-200/40 cursor-not-allowed'
+                            : 'border-blue-500/30 text-blue-400 hover:bg-blue-500/10'
+                        }`}
                       >
                         Edit Build
                       </button>
@@ -873,20 +956,43 @@ export function DashboardPage() {
                         Delete
                       </button>
                    </div>
-                  <button
-                    onClick={() => {
-                        navigate('/checkout', { state: { checkoutItem: build, isCustomBuild: true } });
-                    }}
-                    className="w-full mt-2 py-2.5 px-3 rounded-lg bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-bold text-sm shadow-[0_0_10px_rgba(212,175,55,0.3)] hover:shadow-[0_0_15px_rgba(212,175,55,0.5)] transition-all flex items-center justify-center gap-2"
-                  >
-                    <ShoppingCart className="w-4 h-4" />
-                    Order This Build
-                  </button>
+                  {buildLockState.isLocked ? (
+                    buildLockState.project ? (
+                      <button
+                        type="button"
+                        onClick={() => setActiveProjectView(buildLockState.project)}
+                        className="w-full mt-2 py-2.5 px-3 rounded-lg bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-bold text-sm shadow-[0_0_10px_rgba(212,175,55,0.3)] hover:shadow-[0_0_15px_rgba(212,175,55,0.5)] transition-all flex items-center justify-center gap-2"
+                      >
+                        <Activity className="w-4 h-4" />
+                        Track Progress
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={handleLockedBuildAction}
+                        className="w-full mt-2 py-2.5 px-3 rounded-lg border border-[var(--border)] text-[var(--text-muted)] font-bold text-sm transition-all flex items-center justify-center gap-2"
+                      >
+                        <Clock className="w-4 h-4" />
+                        Awaiting Project Setup
+                      </button>
+                    )
+                  ) : (
+                    <button
+                      onClick={() => {
+                          navigate('/checkout', { state: { checkoutItem: build, isCustomBuild: true } });
+                      }}
+                      className="w-full mt-2 py-2.5 px-3 rounded-lg bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-bold text-sm shadow-[0_0_10px_rgba(212,175,55,0.3)] hover:shadow-[0_0_15px_rgba(212,175,55,0.5)] transition-all flex items-center justify-center gap-2"
+                    >
+                      <ShoppingCart className="w-4 h-4" />
+                      Order This Build
+                    </button>
+                  )}
                 </div>
               </div>
             )})}
           </div>
         )}
+        </div>
       </div>
     )
   }
@@ -1821,6 +1927,13 @@ export function DashboardPage() {
             </button>
             <h2 className="text-2xl font-bold text-white mb-1">{viewingBuild.name || 'Custom Build'} Summary</h2>
             <p className="text-sm text-[var(--text-muted)] mb-6">Saved on {new Date(viewingBuild.savedAt || new Date()).toLocaleDateString()}</p>
+
+            {getBuildLockState(viewingBuild).isLocked && (
+              <div className="mb-6 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200 flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 mt-0.5 shrink-0" />
+                <span>This build is already part of an active order, so its specs and checkout are now locked. You can still review the summary and track project progress here.</span>
+              </div>
+            )}
             
             <div className="bg-[var(--bg-primary)] rounded-xl p-5 border border-[var(--border)] mb-6">
               <h3 className="text-lg font-bold text-white mb-4 border-b border-[var(--border)] pb-2 flex justify-between">
@@ -1884,9 +1997,9 @@ export function DashboardPage() {
                         <span className="text-white block font-medium truncate mb-1.5">{part.name}</span>
                         <div className="flex items-center gap-3">
                           <div className="flex items-center gap-2 bg-[var(--surface-dark)] border border-[var(--border)] rounded-md px-1.5 py-0.5 w-fit">
-                            <button onClick={() => updateAdditionalPartQuantity(viewingBuild.id, idx, part.quantity - 1)} className="p-0.5 hover:bg-white/10 rounded cursor-pointer transition-colors"><Minus className="w-3.5 h-3.5 text-white" /></button>
+                            <button type="button" disabled={getBuildLockState(viewingBuild).isLocked} onClick={() => updateAdditionalPartQuantity(viewingBuild.id, idx, part.quantity - 1)} className={`p-0.5 rounded transition-colors ${getBuildLockState(viewingBuild).isLocked ? 'opacity-40 cursor-not-allowed' : 'hover:bg-white/10 cursor-pointer'}`}><Minus className="w-3.5 h-3.5 text-white" /></button>
                             <span className="text-[var(--text-muted)] text-xs w-4 text-center">{part.quantity}</span>
-                            <button onClick={() => updateAdditionalPartQuantity(viewingBuild.id, idx, part.quantity + 1)} className="p-0.5 hover:bg-white/10 rounded cursor-pointer transition-colors"><Plus className="w-3.5 h-3.5 text-white" /></button>
+                            <button type="button" disabled={getBuildLockState(viewingBuild).isLocked} onClick={() => updateAdditionalPartQuantity(viewingBuild.id, idx, part.quantity + 1)} className={`p-0.5 rounded transition-colors ${getBuildLockState(viewingBuild).isLocked ? 'opacity-40 cursor-not-allowed' : 'hover:bg-white/10 cursor-pointer'}`}><Plus className="w-3.5 h-3.5 text-white" /></button>
                           </div>
                         </div>
                       </div>
@@ -1906,17 +2019,43 @@ export function DashboardPage() {
                </span>
             </div>
             
-            <button
-              type="button"
-              onClick={() => {
-                  setViewingBuild(null);
-                  navigate('/checkout', { state: { checkoutItem: viewingBuild, isCustomBuild: true } });
-              }}
-              className="w-full mt-8 py-4 px-4 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-bold text-lg shadow-[0_0_10px_rgba(212,175,55,0.3)] hover:shadow-[0_0_20px_rgba(212,175,55,0.5)] transition-all flex items-center justify-center gap-3"
-            >
-              <ShoppingCart className="w-6 h-6" />
-              Order This Build
-            </button>
+            {getBuildLockState(viewingBuild).isLocked ? (
+              getBuildLockState(viewingBuild).project ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                      const linkedProject = getBuildLockState(viewingBuild).project
+                      setViewingBuild(null);
+                      setActiveProjectView(linkedProject);
+                  }}
+                  className="w-full mt-8 py-4 px-4 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-bold text-lg shadow-[0_0_10px_rgba(212,175,55,0.3)] hover:shadow-[0_0_20px_rgba(212,175,55,0.5)] transition-all flex items-center justify-center gap-3"
+                >
+                  <Activity className="w-6 h-6" />
+                  Track Progress
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleLockedBuildAction}
+                  className="w-full mt-8 py-4 px-4 rounded-xl border border-[var(--border)] text-[var(--text-muted)] font-bold text-lg transition-all flex items-center justify-center gap-3"
+                >
+                  <Clock className="w-6 h-6" />
+                  Already Ordered
+                </button>
+              )
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                    setViewingBuild(null);
+                    navigate('/checkout', { state: { checkoutItem: viewingBuild, isCustomBuild: true } });
+                }}
+                className="w-full mt-8 py-4 px-4 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-bold text-lg shadow-[0_0_10px_rgba(212,175,55,0.3)] hover:shadow-[0_0_20px_rgba(212,175,55,0.5)] transition-all flex items-center justify-center gap-3"
+              >
+                <ShoppingCart className="w-6 h-6" />
+                Order This Build
+              </button>
+            )}
           </div>
         </div>
       )}

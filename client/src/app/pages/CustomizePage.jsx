@@ -7,6 +7,7 @@ import {
   Sparkles, Layers, Palette, Cog, Zap, Image, ZoomIn, ZoomOut, Upload, Trash2
 } from 'lucide-react'
 import { exportMaskedPreview } from '../utils/exportMaskedPreview.js'
+import { adminApi } from '../utils/adminApi.js'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useCart } from '../context/CartContext.jsx'
 import useGuitarConfig from '../hooks/useGuitarConfig.js'
@@ -219,6 +220,7 @@ export function CustomizePage() {
   const { isAuthenticated, openLogin } = useAuth()
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(Boolean(editBuildId))
   const [dbCustomizationId, setDbCustomizationId] = useState(null)
+  const [isLockedCustomization, setIsLockedCustomization] = useState(false)
   const bypassNavigationBlockRef = useRef(false)
   const [showUnsavedModal, setShowUnsavedModal] = useState(false)
   const suppressDirtyTrackingRef = useRef(false)
@@ -497,26 +499,60 @@ export function CustomizePage() {
 
   // Load existing build if editBuildId is provided
   useEffect(() => {
-    if (editBuildId) {
+    if (!editBuildId) return
+
+    let cancelled = false
+
+    const loadExistingBuild = async () => {
       for (const storageKey of ['cosmoscraft_saved_builds', 'cosmoscraft_saved_bass_builds']) {
         const builds = JSON.parse(window.localStorage.getItem(storageKey) || '[]')
         const target = builds.find(b => b.id === editBuildId)
-        if (target) {
+        if (!target) continue
+
+        const targetCustomizationId = target.dbCustomizationId || target.customization_id || null
+
+        if (targetCustomizationId && isAuthenticated) {
           try {
-            suppressDirtyTrackingRef.current = true
-            baseLoadConfig(target.config)
-            setStickers(Array.isArray(target.stickers) ? target.stickers : [])
-            setDbCustomizationId(target.dbCustomizationId || target.customization_id || null)
-          } catch (e) {
-            console.error('Failed to load build config for editing:', e)
-          } finally {
-            suppressDirtyTrackingRef.current = false
+            const res = await adminApi.getMyCustomizations()
+            const matchingCustomization = (res.data || []).find(customization => customization.customization_id === targetCustomizationId)
+
+            if (!cancelled && matchingCustomization?.is_locked) {
+              setIsLockedCustomization(true)
+              navigate('/dashboard', {
+                replace: true,
+                state: {
+                  section: 'my-guitar',
+                  message: 'This build is already in an active order. You can track it in My Guitar, but it can no longer be edited.',
+                },
+              })
+              return
+            }
+          } catch (error) {
+            console.error('Failed to validate customization lock status:', error)
           }
-          break
         }
+
+        try {
+          suppressDirtyTrackingRef.current = true
+          baseLoadConfig(target.config)
+          setStickers(Array.isArray(target.stickers) ? target.stickers : [])
+          setDbCustomizationId(targetCustomizationId)
+          setIsLockedCustomization(false)
+        } catch (e) {
+          console.error('Failed to load build config for editing:', e)
+        } finally {
+          suppressDirtyTrackingRef.current = false
+        }
+        break
       }
     }
-  }, [editBuildId, baseLoadConfig])
+
+    void loadExistingBuild()
+
+    return () => {
+      cancelled = true
+    }
+  }, [editBuildId, baseLoadConfig, isAuthenticated, navigate])
 
   const shouldBlockNavigation = Boolean(editBuildId) && hasUnsavedChanges && !bypassNavigationBlockRef.current
   const blocker = useBlocker(
@@ -565,6 +601,11 @@ export function CustomizePage() {
   }, [toastMessage])
 
   const saveBuild = async ({ shouldNavigate = true, continueBlockedNavigation = false } = {}) => {
+    if (isLockedCustomization) {
+      setToastMessage('This build is already in an active order and can no longer be edited.')
+      return
+    }
+
     const buildId = editBuildId || `build-${Date.now()}`
     const baseBuild = {
       id: buildId,
@@ -660,6 +701,17 @@ export function CustomizePage() {
       }
     } catch (error) {
       console.error('Database save failed (local backup retained):', error)
+      if (String(error?.message || '').toLowerCase().includes('active order')) {
+        setIsLockedCustomization(true)
+        navigate('/dashboard', {
+          replace: true,
+          state: {
+            section: 'my-guitar',
+            message: 'This build is already in an active order. You can track it in My Guitar, but it can no longer be edited.',
+          },
+        })
+        return
+      }
       setToastMessage('Saved locally. Database sync failed.')
     }
     

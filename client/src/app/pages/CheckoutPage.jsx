@@ -1282,6 +1282,37 @@ export function CheckoutPage() {
     if (!validatePayment(paymentMethod, receipt)) return
 
     setIsProcessing(true)
+
+    const persistOrderedCustomBuildLinks = (orderedCustomBuilds = []) => {
+      if (!Array.isArray(orderedCustomBuilds) || orderedCustomBuilds.length === 0) return
+
+      for (const storageKey of ['cosmoscraft_saved_builds', 'cosmoscraft_saved_bass_builds']) {
+        const storedBuilds = JSON.parse(window.localStorage.getItem(storageKey) || '[]')
+        if (!Array.isArray(storedBuilds) || storedBuilds.length === 0) continue
+
+        let didChange = false
+        const nextStoredBuilds = storedBuilds.map((build) => {
+          const matchedBuild = orderedCustomBuilds.find((entry) =>
+            entry?.build_id &&
+            entry?.customization_id &&
+            String(entry.build_id) === String(build.id)
+          )
+
+          if (!matchedBuild) return build
+
+          didChange = true
+          return {
+            ...build,
+            dbCustomizationId: matchedBuild.customization_id,
+            customization_id: matchedBuild.customization_id,
+          }
+        })
+
+        if (didChange) {
+          window.localStorage.setItem(storageKey, JSON.stringify(nextStoredBuilds))
+        }
+      }
+    }
     
     const selectedAddress = uniqueAddresses.find(a => a.address_id === selectedAddressId)
     
@@ -1341,6 +1372,7 @@ export function CheckoutPage() {
               notes: item.notes || '',
               customization: itemIsCustomBuild ? {
                 buildId: item.id,
+                customizationId: itemCustomSource.dbCustomizationId || itemCustomSource.customization_id || null,
                 name: item.name || 'Custom Build',
                 config: itemCustomSource.config || {},
                 summary: itemCustomSource.summary || {},
@@ -1363,8 +1395,10 @@ export function CheckoutPage() {
       console.log('Order response:', response.status, data)
 
       if (response.ok) {
-        const orderId = data.data.order.order_id
-        const orderTotalAmount = Number(data.data.order.total_amount) || fullPaymentTotal
+        const createdOrder = data?.data?.order || {}
+        const orderId = createdOrder.order_id
+        const orderTotalAmount = Number(createdOrder.total_amount) || fullPaymentTotal
+        persistOrderedCustomBuildLinks(createdOrder.ordered_custom_builds)
         const currentPaymentAmount = selectedPaymentTerms === 'full'
           ? orderTotalAmount
           : Number((orderTotalAmount * CUSTOM_BUILD_DOWN_PAYMENT_RATE).toFixed(2))

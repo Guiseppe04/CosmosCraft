@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
-import { CheckCircle, Circle, ChevronDown, ChevronRight, Plus, Trash2, Edit, User, Clock, AlertCircle, Guitar, Package, Search } from 'lucide-react';
+import { CheckCircle, Circle, ChevronDown, ChevronRight, Plus, Trash2, Edit, User, Clock, AlertCircle, Guitar, Package, Search, Calendar } from 'lucide-react';
 import { adminApi } from '../../utils/adminApi';
 import { formatCurrency } from '../../utils/formatCurrency';
 
@@ -69,8 +69,10 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
     });
   };
 
+  const resolvedParts = parts.length > 0 ? parts : (Array.isArray(hierarchy?.parts) ? hierarchy.parts : []);
+
   // Group parts by category
-  const groupedParts = parts.reduce((groups, part) => {
+  const groupedParts = resolvedParts.reduce((groups, part) => {
     const category = part.type_mapping || part.part_category || 'Other';
     if (!groups[category]) {
       groups[category] = [];
@@ -94,12 +96,14 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
   };
 
   const getStockColor = (stock) => {
+    if (stock === null || stock === undefined || Number.isNaN(Number(stock))) return 'text-slate-300';
     if (stock === 0) return 'text-red-400';
     if (stock <= 5) return 'text-amber-400';
     return 'text-emerald-400';
   };
 
   const getStockDot = (stock) => {
+    if (stock === null || stock === undefined || Number.isNaN(Number(stock))) return 'bg-slate-400';
     if (stock === 0) return 'bg-red-500';
     if (stock <= 5) return 'bg-amber-500';
     return 'bg-emerald-500';
@@ -178,7 +182,7 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
           
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h2 className="text-white text-2xl font-bold">{hierarchy.name}</h2>
+              <h2 className="text-white text-2xl font-bold">{hierarchy.name || hierarchy.title || projectName || 'Project Tracker'}</h2>
               <p className="text-[var(--text-muted)] text-sm">{hierarchy.customer_name ? `For: ${hierarchy.customer_name}` : '—'}</p>
             </div>
             <div className="text-right">
@@ -407,7 +411,7 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
           <Guitar className="w-5 h-5 text-[var(--gold-primary)]" />
           <h3 className="text-white font-bold text-lg">Project Parts</h3>
           <span className="ml-auto px-2 py-0.5 bg-[var(--gold-primary)]/20 text-[var(--gold-primary)] text-xs font-bold rounded-full">
-            {parts.length}
+            {resolvedParts.length}
           </span>
         </div>
 
@@ -425,7 +429,7 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
 
         {/* Parts List */}
         <div className="flex-1 overflow-y-auto pr-2 space-y-3 custom-scrollbar">
-          {parts.length === 0 ? (
+          {resolvedParts.length === 0 ? (
             <div className="text-center py-12 flex flex-col items-center justify-center">
               <Guitar className="w-12 h-12 text-[var(--text-muted)]/30 mb-3" />
               <p className="text-[var(--text-muted)] text-sm font-semibold">No parts linked to this project yet.</p>
@@ -472,9 +476,10 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
                         className="space-y-2 mt-2"
                       >
                         {categoryParts.map((part) => {
-                          const stock = Number(part.stock ?? 0);
-                          const isLowStock = stock > 0 && stock <= 5;
-                          const isOutOfStock = stock === 0;
+                          const stock = part.stock === null || part.stock === undefined ? null : Number(part.stock);
+                          const hasInventoryState = Number.isFinite(stock);
+                          const isLowStock = hasInventoryState && stock > 0 && stock <= 5;
+                          const isOutOfStock = hasInventoryState && stock === 0;
 
                           return (
                             <div
@@ -517,7 +522,9 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
                                 <div className="flex items-center gap-1">
                                   <span className={`w-2 h-2 rounded-full ${getStockDot(stock)}`} />
                                   <span className={`text-xs font-semibold ${getStockColor(stock)}`}>
-                                    {isOutOfStock
+                                    {!hasInventoryState
+                                      ? 'Configured'
+                                      : isOutOfStock
                                       ? 'Out of stock'
                                       : isLowStock
                                       ? `Low: ${stock}`
