@@ -723,7 +723,7 @@ export function DashboardPage() {
                       </span>
                     </div>
                     {apt.location_id && (
-                      <div>
+                      <div> 
                         <span className="block text-[var(--text-muted)] mb-1">Branch</span>
                         <span className="text-white capitalize">{apt.location_id}</span>
                       </div>
@@ -805,12 +805,7 @@ export function DashboardPage() {
                       <span className="text-[var(--gold-primary)] font-bold text-sm">{project.progress}% Complete</span>
                     </div>
                   </div>
-                  <button
-                    onClick={() => setActiveProjectView(project)}
-                    className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-bold shadow-[0_0_10px_rgba(212,175,55,0.3)] hover:shadow-[0_0_15px_rgba(212,175,55,0.5)] transition-all flex items-center gap-2"
-                  >
-                    <Activity className="w-4 h-4" /> Track Progress
-                  </button>
+                  
                 </div>
                 <div className="flex gap-2 mt-4 pt-4 border-t border-[var(--border)]">
                   {project.progress < 80 && project.status !== 'Cancelled' && (
@@ -821,7 +816,14 @@ export function DashboardPage() {
                       Cancel Project
                     </button>
                   )}
+                  <button
+                    onClick={() => setActiveProjectView(project)}
+                    className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-bold shadow-[0_0_10px_rgba(212,175,55,0.3)] hover:shadow-[0_0_15px_rgba(212,175,55,0.5)] transition-all flex items-center gap-2"
+                  >
+                    <Activity className="w-4 h-4" /> Track Progress
+                  </button>
                 </div>
+                
               </div>
             ))}
           </div>

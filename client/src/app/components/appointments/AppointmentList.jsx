@@ -294,7 +294,7 @@ export default function AppointmentList({
                       ? apt.services.map(s => s.replace(/-/g, ' ')).join(', ')
                       : apt.services}
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-3 text-white">
                     <div>{formatAppointmentDate(apt.scheduled_at)}</div>
                   </td>
                   <td className="px-4 py-3">
