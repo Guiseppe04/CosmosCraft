@@ -4177,16 +4177,7 @@ export function AdminPage() {
                     <option value="stock_low">Stock (Low to High)</option>
                     <option value="stock_high">Stock (High to Low)</option>
                   </select>
-                  {(user?.role === 'super_admin' || user?.role === 'staff') && (
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab('pos')}
-                      className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-cyan-500 to-sky-500 px-5 py-2.5 text-sm font-semibold text-white shadow-[0_10px_30px_rgba(14,165,233,0.18)] hover:shadow-[0_12px_35px_rgba(14,165,233,0.25)] transition-all"
-                    >
-                      <ShoppingBag className="w-4 h-4" />
-                      POS
-                    </button>
-                  )}
+                  
                 </div>
               </div>
 

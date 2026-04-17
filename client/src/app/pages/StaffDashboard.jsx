@@ -118,6 +118,7 @@ function AdjustStockModal({ modal, form, setForm, errors, setErrors, onClose, on
         <div>
           <h2 className="text-xl font-bold text-white">Adjust Stock</h2>
           <p className="text-sm text-[var(--text-muted)]">{modal.data?.name}</p>
+          <p className="text-xs text-[var(--text-muted)] mt-1">ID: {modal.data?.product_id || modal.data?.part_id}</p>
         </div>
         <button type="button" onClick={onClose} className="rounded-xl p-2 text-[var(--text-muted)] hover:bg-white/10 hover:text-white"><X className="h-5 w-5" /></button>
       </div>
@@ -415,12 +416,22 @@ export function StaffDashboard() {
     setIsSaving(true)
     try {
       const productId = form.product_id || modal.data?.product_id
+      const partId = form.part_id || modal.data?.part_id
       const quantity = Number(form.quantity || 0)
       const current = Number(modal.data?.stock || 0)
       const notes = [form.reason, form.notes].filter(Boolean).join(' - ')
-      if (form.change_type === 'stock_in') await staffApi.addStock({ product_id: productId, quantity, notes })
-      else if (form.change_type === 'stock_out') await staffApi.deductStock({ product_id: productId, quantity, notes })
-      else await staffApi.adjustStock({ product_id: productId, quantity: quantity - current, notes })
+      
+      if (partId) {
+        if (form.change_type === 'stock_in') await staffApi.updateBuilderPart(partId, { stock: current + quantity })
+        else if (form.change_type === 'stock_out') await staffApi.updateBuilderPart(partId, { stock: Math.max(0, current - quantity) })
+        else await staffApi.updateBuilderPart(partId, { stock: quantity })
+      } else if (productId) {
+        if (form.change_type === 'stock_in') await staffApi.addStock({ product_id: productId, quantity, notes })
+        else if (form.change_type === 'stock_out') await staffApi.deductStock({ product_id: productId, quantity, notes })
+        else await staffApi.adjustStock({ product_id: productId, quantity: quantity - current, notes })
+      } else {
+        throw new Error('No product or part ID specified')
+      }
       setModal({ open: false, type: null, data: null })
       setForm({})
       await loadInventoryBundle()
@@ -526,7 +537,7 @@ export function StaffDashboard() {
           <Topbar title={pageTitle} userRole={user?.role || 'staff'} />
           <main className="flex-1 p-6">
             <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-              
+
             </div>
             {activeTab === 'overview' && <div className="space-y-6">
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -679,7 +690,8 @@ export function StaffDashboard() {
                   <div className="flex flex-wrap gap-2"><button type="button" onClick={() => { setInventorySubTab('products'); setInventoryPage(1) }} className={`rounded-2xl px-4 py-2.5 text-sm font-semibold ${inventorySubTab === 'products' ? 'bg-[var(--gold-primary)] text-black' : 'border border-[var(--border)] text-[var(--text-muted)]'}`}>Products</button><button type="button" onClick={() => { setInventorySubTab('parts'); setInventoryPage(1) }} className={`rounded-2xl px-4 py-2.5 text-sm font-semibold ${inventorySubTab === 'parts' ? 'bg-[var(--gold-primary)] text-black' : 'border border-[var(--border)] text-[var(--text-muted)]'}`}>Builder Parts</button></div>
                   <div className="flex items-center gap-2"><select value={inventoryStatusFilter} onChange={(e) => setInventoryStatusFilter(e.target.value)} className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-3 py-2 text-sm text-white"><option value="all">All</option><option value="healthy">Healthy</option><option value="warning">Warning</option><option value="critical">Critical</option><option value="out_of_stock">Out of Stock</option></select><select value={inventorySort} onChange={(e) => setInventorySort(e.target.value)} className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-3 py-2 text-sm text-white"><option value="name">Name</option><option value="sku">SKU / Mapping</option><option value="stock_low">Stock low-high</option><option value="stock_high">Stock high-low</option></select></div>
                 </div>
-                {loadingInventory ? <div className="py-16 text-center text-[var(--text-muted)]">Loading inventory...</div> : filteredInventory.length === 0 ? <EmptyState icon={Package} label="No inventory items found" description="Try another search or filter." /> : <div className="space-y-3">{pagedInventory.map((item) => { const state = getInventoryState(Number(item.stock || 0), Number(item.low_stock_threshold || 10)); return <div key={item.product_id || item.part_id} className="flex flex-col gap-4 rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)]/60 p-4 md:flex-row md:items-center md:justify-between"><div><p className="font-semibold text-white">{item.name}</p><p className="mt-1 text-sm text-[var(--text-muted)]">{inventorySubTab === 'products' ? item.sku || 'No SKU' : item.type_mapping || 'No mapping'}</p></div><div className="flex items-center gap-3"><span className="font-mono text-white">{item.stock}</span><StatusBadge label={state.label} variant={state.variant} />{inventorySubTab === 'products' ? <button type="button" onClick={() => { setForm({ product_id: item.product_id, quantity: '', change_type: '', reason: '', notes: '' }); setFormErrors({}); setModal({ open: true, type: 'inventory', data: { product_id: item.product_id, name: item.name, stock: item.stock } }) }} className="rounded-xl p-2 text-[var(--text-muted)] hover:bg-[var(--gold-primary)]/10 hover:text-[var(--gold-primary)]"><Edit className="h-4 w-4" /></button> : <div className="flex items-center gap-2"><button type="button" onClick={() => updatePartStock(item, -1)} className="rounded-xl border border-[var(--border)] px-3 py-1 text-sm text-[var(--text-muted)]">-1</button><button type="button" onClick={() => updatePartStock(item, 1)} className="rounded-xl border border-[var(--border)] px-3 py-1 text-sm text-[var(--text-muted)]">+1</button></div>}</div></div> })}</div>}
+                {loadingInventory ? 
+                <div className="py-16 text-center text-[var(--text-muted)]">Loading inventory...</div> : filteredInventory.length === 0 ? <EmptyState icon={Package} label="No inventory items found" description="Try another search or filter." /> : <div className="space-y-3">{pagedInventory.map((item) => { const state = getInventoryState(Number(item.stock || 0), Number(item.low_stock_threshold || 10)); return ( <div key={item.product_id || item.part_id} className="flex flex-col gap-4 rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)]/60 p-4 md:flex-row md:items-center md:justify-between" > <div> <p className="font-semibold text-white">{item.name}</p> <p className="mt-1 text-sm text-[var(--text-muted)]"> {inventorySubTab === 'products' ? item.sku || 'No SKU' : item.type_mapping || 'No mapping'} </p> </div> <div className="flex items-center gap-3"> <span className="font-mono text-white">{item.stock}</span> <StatusBadge label={state.label} variant={state.variant} /> <button type="button" onClick={() => { if (inventorySubTab === 'products') { setForm({ product_id: item.product_id, quantity: '', change_type: '', reason: '', notes: '' }); setModal({ open: true, type: 'inventory', data: { product_id: item.product_id, name: item.name, stock: item.stock } }); } else { setForm({ part_id: item.part_id, quantity: '', change_type: '', reason: '', notes: '' }); setModal({ open: true, type: 'inventory', data: { part_id: item.part_id, name: item.name, stock: item.stock } }); } setFormErrors({}); }} className="rounded-xl p-2 text-[var(--text-muted)] hover:bg-[var(--gold-primary)]/10 hover:text-[var(--gold-primary)]" > <Edit className="h-4 w-4" /> </button> </div> </div> ); })}</div>}
                 {filteredInventory.length > 0 && <div className="mt-6 flex items-center justify-between border-t border-[var(--border)] pt-4"><p className="text-sm text-[var(--text-muted)]">Showing {(inventoryPage - 1) * pageSize + 1}-{Math.min(inventoryPage * pageSize, filteredInventory.length)} of {filteredInventory.length}</p><div className="flex items-center gap-2"><button type="button" onClick={() => setInventoryPage((p) => Math.max(1, p - 1))} disabled={inventoryPage === 1} className="rounded-xl border border-[var(--border)] p-2 text-[var(--text-muted)] disabled:opacity-40"><ChevronLeft className="h-4 w-4" /></button><span className="text-sm text-white">{inventoryPage} / {totalPages}</span><button type="button" onClick={() => setInventoryPage((p) => Math.min(totalPages, p + 1))} disabled={inventoryPage >= totalPages} className="rounded-xl border border-[var(--border)] p-2 text-[var(--text-muted)] disabled:opacity-40"><ChevronRight className="h-4 w-4" /></button></div></div>}
               </div>
             </div>}
@@ -688,7 +700,7 @@ export function StaffDashboard() {
               <PosWorkspace
                 inventoryItems={visibleInventory}
                 showToast={showToast}
-                
+
               />
             )}
             {activeTab === 'schedule' && (appointments.length === 0 ? <EmptyState icon={Clock} label="No scheduled items" description="Appointments and project deadlines will appear here." /> : <div className="space-y-6"><div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6"><h3 className="text-lg font-semibold text-white">Upcoming schedule</h3><div className="mt-4 space-y-3">{appointments.map((item) => <div key={item.appointment_id} className="flex items-center justify-between rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)]/60 p-4"><div><p className="font-semibold text-white">{item.customer_name || item.user_name || 'Service customer'}</p><p className="mt-1 text-sm text-[var(--text-muted)]">{item.scheduled_at ? new Date(item.scheduled_at).toLocaleString() : 'TBD'}</p></div><StatusBadge label={item.status || 'pending'} variant={statusVariant(item.status)} /></div>)}</div></div><div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6"><h3 className="text-lg font-semibold text-white">Project deadlines</h3><div className="mt-4 space-y-3">{projects.filter((item) => item.estimated_completion_date).length === 0 ? <p className="text-sm text-[var(--text-muted)]">No project deadlines available.</p> : projects.filter((item) => item.estimated_completion_date).map((item) => <div key={item.project_id} className="flex items-center justify-between rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)]/60 p-4"><div><p className="font-semibold text-white">{item.name || item.title}</p><p className="mt-1 text-sm text-[var(--text-muted)]">Due {new Date(item.estimated_completion_date).toLocaleDateString()}</p></div><StatusBadge label={item.status || 'pending'} variant={statusVariant(item.status)} /></div>)}</div></div></div>)}

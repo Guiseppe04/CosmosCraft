@@ -1,8 +1,36 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { CheckCircle, Circle, ChevronDown, ChevronRight, User, Clock, AlertCircle, Calendar, Truck, Store, ShieldCheck } from 'lucide-react';
+import { CheckCircle, Circle, ChevronDown, ChevronRight, User, Clock, AlertCircle, Calendar, Truck, Store, ShieldCheck, X, Lock } from 'lucide-react';
 import { adminApi } from '../../utils/adminApi';
 import { useAuth } from '../../context/AuthContext';
+
+const SHOP_INFO = {
+  name: 'CosmosCraft Guitar Shop',
+  address: '123 Guitar Street, Music City, Philippines',
+  availableDays: 'Monday to Friday',
+  availableTime: '9:00 AM to 6:00 PM',
+};
+
+const isValidBusinessDay = (dateStr, unavailableDates = []) => {
+  if (!dateStr) return false;
+  const date = new Date(dateStr);
+  const day = date.getDay();
+  if (day === 0 || day === 6) return false; // Weekend
+  const dateStrFormatted = date.toISOString().split('T')[0];
+  return !unavailableDates.includes(dateStrFormatted);
+};
+
+const isDateUnavailable = (dateStr, unavailableDates = []) => {
+  if (!dateStr || !unavailableDates.length) return false;
+  const dateStrFormatted = new Date(dateStr).toISOString().split('T')[0];
+  return unavailableDates.includes(dateStrFormatted);
+};
+
+const getDayName = (dateStr) => {
+  if (!dateStr) return '';
+  const date = new Date(dateStr + 'T00:00:00');
+  return date.toLocaleDateString('en-PH', { weekday: 'long' });
+};
 
 const formatStatusLabel = (status) => String(status || '')
   .replace(/_/g, ' ')
@@ -84,11 +112,30 @@ export default function ProjectTaskTracker({ projectId, projectName, showTracker
   const [fulfillmentSaving, setFulfillmentSaving] = useState(false);
   const [fulfillmentFeedback, setFulfillmentFeedback] = useState(null);
 
+  // Confirmation modal state
+  const [showConfirmationModal, setShowConfirmationModal] = useState(false);
+  const [confirmedSelection, setConfirmedSelection] = useState(null);
+  const [unavailableDates, setUnavailableDates] = useState([]);
+
   useEffect(() => {
     if (projectId) {
       loadData();
     }
   }, [projectId]);
+
+  useEffect(() => {
+    fetchUnavailableDates();
+  }, []);
+
+  const fetchUnavailableDates = async () => {
+    try {
+      const res = await adminApi.getUnavailableDates();
+      const dates = res.data?.unavailable_dates || [];
+      setUnavailableDates(dates);
+    } catch (e) {
+      console.error('Failed to fetch unavailable dates:', e);
+    }
+  };
 
   const loadData = async () => {
     try {
@@ -344,22 +391,33 @@ export default function ProjectTaskTracker({ projectId, projectName, showTracker
               ].map((option) => {
                 const Icon = option.icon;
                 const isSelected = selectedFulfillmentMethod === option.id;
+                const isConfirmed = confirmedSelection !== null;
+                const isThisConfirmed = confirmedSelection === option.id;
 
                 return (
                   <button
                     key={option.id}
                     type="button"
-                    disabled={option.disabled}
-                    onClick={() => setSelectedFulfillmentMethod(option.id)}
-                    className={`rounded-2xl border p-4 text-left transition-all ${
+                    disabled={option.disabled || isConfirmed}
+                    onClick={() => !isConfirmed && setSelectedFulfillmentMethod(option.id)}
+                    className={`rounded-2xl border p-4 text-left transition-all relative ${
                       option.disabled
                         ? 'cursor-not-allowed border-[var(--border)] bg-[var(--bg-primary)] opacity-50'
+                        : isThisConfirmed
+                        ? 'border-emerald-500/50 bg-emerald-500/10 shadow-[0_0_20px_rgba(16,185,129,0.12)]'
                         : isSelected
                         ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)]/10 shadow-[0_0_20px_rgba(212,175,55,0.12)]'
+                        : isConfirmed
+                        ? 'cursor-not-allowed border-[var(--border)] bg-[var(--bg-primary)] opacity-50'
                         : 'border-[var(--border)] bg-[var(--bg-primary)] hover:border-[var(--gold-primary)]/40'
                     }`}
                   >
-                    <Icon className={`mb-3 h-5 w-5 ${isSelected ? 'text-[var(--gold-primary)]' : 'text-[var(--text-muted)]'}`} />
+                    {isThisConfirmed && (
+                      <div className="absolute top-2 right-2 flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-bold">
+                        <Lock className="w-3 h-3" /> Confirmed
+                      </div>
+                    )}
+                    <Icon className={`mb-3 h-5 w-5 ${isThisConfirmed ? 'text-emerald-400' : isSelected ? 'text-[var(--gold-primary)]' : 'text-[var(--text-muted)]'}`} />
                     <p className="text-sm font-bold text-white">{option.title}</p>
                     <p className="mt-2 text-xs leading-relaxed text-[var(--text-muted)]">{option.description}</p>
                   </button>
@@ -378,63 +436,80 @@ export default function ProjectTaskTracker({ projectId, projectName, showTracker
             )}
 
             <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] p-5 space-y-4">
-              {selectedFulfillmentMethod === 'pickup_appointment' ? (
-                <>
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <label className="space-y-2 text-sm">
-                      <span className="font-semibold text-white">Pickup Date</span>
-                      <input
-                        type="date"
-                        min={formatInputDate(new Date())}
-                        value={pickupDate}
-                        onChange={(e) => setPickupDate(e.target.value)}
-                        className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] px-4 py-3 text-white focus:border-[var(--gold-primary)] focus:outline-none"
-                      />
-                    </label>
-                    <label className="space-y-2 text-sm">
-                      <span className="font-semibold text-white">Pickup Time</span>
-                      <select
-                        value={pickupTime}
-                        onChange={(e) => setPickupTime(e.target.value)}
-                        className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] px-4 py-3 text-white focus:border-[var(--gold-primary)] focus:outline-none"
-                      >
-                        <option value="" disabled>Select a time</option>
-                        {pickupTimeSlots.map((slot) => (
-                          <option key={slot.value} value={slot.value}>{slot.label}</option>
-                        ))}
-                      </select>
-                    </label>
+              {(() => {
+                const isConfirmed = confirmedSelection !== null;
+                return selectedFulfillmentMethod === 'pickup_appointment' ? (
+                  <>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <label className="space-y-2 text-sm">
+                        <span className="font-semibold text-white">Pickup Date</span>
+                        <input
+                          type="date"
+                          min={formatInputDate(new Date())}
+                          value={pickupDate}
+                          onChange={(e) => {
+                            const newDate = e.target.value;
+                            if (newDate && !isValidBusinessDay(newDate, unavailableDates)) {
+                              if (isDateUnavailable(newDate, unavailableDates)) {
+                                alert('That date is unavailable. Please select another date.');
+                                return;
+                              }
+                              alert(`Please select a weekday (${SHOP_INFO.availableDays}).`);
+                              return;
+                            }
+                            setPickupDate(newDate);
+                          }}
+                          disabled={isConfirmed}
+                          className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] px-4 py-3 text-white focus:border-[var(--gold-primary)] focus:outline-none disabled:opacity-50"
+                        />
+                      </label>
+                      <label className="space-y-2 text-sm">
+                        <span className="font-semibold text-white">Pickup Time</span>
+                        <select
+                          value={pickupTime}
+                          onChange={(e) => setPickupTime(e.target.value)}
+                          disabled={isConfirmed}
+                          className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] px-4 py-3 text-white focus:border-[var(--gold-primary)] focus:outline-none disabled:opacity-50"
+                        >
+                          <option value="" disabled>Select a time</option>
+                          {pickupTimeSlots.map((slot) => (
+                            <option key={slot.value} value={slot.value}>{slot.label}</option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+                    <p className="text-xs text-[var(--text-muted)]">
+                      The appointment will be tagged to this project so the team can prepare your finished instrument for release.
+                    </p>
+                  </>
+                ) : (
+                  <div className="space-y-2">
+                    <p className="text-sm font-semibold text-white">
+                      {selectedFulfillmentMethod === 'external_delivery'
+                        ? 'Courier Instructions'
+                        : 'Delivery Notes'}
+                    </p>
+                    <p className="text-xs text-[var(--text-muted)]">
+                      {selectedFulfillmentMethod === 'external_delivery'
+                        ? 'Add courier, rider, or coordination instructions so the team knows who will pick up the project.'
+                        : 'Add landmarks, preferred contact details, or any special delivery instructions for the shop team.'}
+                    </p>
                   </div>
-                  <p className="text-xs text-[var(--text-muted)]">
-                    The appointment will be tagged to this project so the team can prepare your finished instrument for release.
-                  </p>
-                </>
-              ) : (
-                <div className="space-y-2">
-                  <p className="text-sm font-semibold text-white">
-                    {selectedFulfillmentMethod === 'external_delivery'
-                      ? 'Courier Instructions'
-                      : 'Delivery Notes'}
-                  </p>
-                  <p className="text-xs text-[var(--text-muted)]">
-                    {selectedFulfillmentMethod === 'external_delivery'
-                      ? 'Add courier, rider, or coordination instructions so the team knows who will pick up the project.'
-                      : 'Add landmarks, preferred contact details, or any special delivery instructions for the shop team.'}
-                  </p>
-                </div>
-              )}
+                );
+              })()}
 
               <label className="space-y-2 text-sm block">
                 <span className="font-semibold text-white">Notes</span>
                 <textarea
                   value={fulfillmentNotes}
                   onChange={(e) => setFulfillmentNotes(e.target.value)}
+                  disabled={confirmedSelection !== null}
                   placeholder={selectedFulfillmentMethod === 'external_delivery'
                     ? 'Example: Lalamove booked under Juan Dela Cruz, call before handoff.'
                     : selectedFulfillmentMethod === 'shop_delivery'
                     ? 'Example: Gate code, landmark, or preferred delivery contact.'
                     : 'Add any preferred pickup instructions.'}
-                  className="min-h-[110px] w-full rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] px-4 py-3 text-white placeholder:text-[var(--text-muted)] focus:border-[var(--gold-primary)] focus:outline-none"
+                  className="min-h-[110px] w-full rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] px-4 py-3 text-white placeholder:text-[var(--text-muted)] focus:border-[var(--gold-primary)] focus:outline-none disabled:opacity-50"
                 />
               </label>
 
@@ -455,12 +530,30 @@ export default function ProjectTaskTracker({ projectId, projectName, showTracker
               </p>
               <button
                 type="button"
-                onClick={handleSubmitFulfillment}
-                disabled={fulfillmentSaving || (selectedFulfillmentMethod === 'shop_delivery' && !hierarchy.shop_delivery_eligible)}
+                onClick={() => {
+                  if (selectedFulfillmentMethod === 'pickup_appointment') {
+                    if (!pickupDate || !pickupTime) {
+                      alert('Please select both a pickup date and time.');
+                      return;
+                    }
+                    if (!isValidBusinessDay(pickupDate, unavailableDates)) {
+                      if (isDateUnavailable(pickupDate, unavailableDates)) {
+                        alert('Sorry, that date is unavailable. Please select another date.');
+                      } else {
+                        alert(`Sorry, we are closed on weekends. Please select a weekday (${SHOP_INFO.availableDays}).`);
+                      }
+                      return;
+                    }
+                  }
+                  setShowConfirmationModal(true);
+                }}
+                disabled={fulfillmentSaving || (selectedFulfillmentMethod === 'shop_delivery' && !hierarchy.shop_delivery_eligible) || confirmedSelection !== null}
                 className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] px-5 py-3 text-sm font-bold text-black disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <CheckCircle className="h-4 w-4" />
-                {fulfillmentSaving
+                {confirmedSelection !== null
+                  ? 'Selection Confirmed'
+                  : fulfillmentSaving
                   ? 'Saving...'
                   : selectedFulfillmentMethod === 'pickup_appointment'
                   ? (hierarchy.pickup_appointment ? 'Update Pickup Appointment' : 'Schedule Pickup Appointment')
@@ -471,6 +564,132 @@ export default function ProjectTaskTracker({ projectId, projectName, showTracker
             </div>
           </div>
 )}
+
+        {/* Confirmation Modal */}
+        <AnimatePresence>
+          {showConfirmationModal && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+            >
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.9, opacity: 0 }}
+                className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6 max-w-md w-full space-y-5"
+              >
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xl font-bold text-white">Confirm Your Choice</h3>
+                  <button
+                    onClick={() => setShowConfirmationModal(false)}
+                    className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+                  >
+                    <X className="w-5 h-5 text-[var(--text-muted)]" />
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  {/* Release Method Details */}
+                  <div className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl p-4">
+                    <p className="text-xs uppercase tracking-[0.2em] text-[var(--text-muted)] mb-2">Selected Release Method</p>
+                    <div className="flex items-center gap-3">
+                      {selectedFulfillmentMethod === 'pickup_appointment' ? (
+                        <Store className="w-6 h-6 text-[var(--gold-primary)]" />
+                      ) : selectedFulfillmentMethod === 'external_delivery' ? (
+                        <Truck className="w-6 h-6 text-[var(--gold-primary)]" />
+                      ) : (
+                        <ShieldCheck className="w-6 h-6 text-[var(--gold-primary)]" />
+                      )}
+                      <p className="text-lg font-bold text-white">{formatFulfillmentLabel(selectedFulfillmentMethod)}</p>
+                    </div>
+                  </div>
+
+                  {/* Pickup Details (if pickup appointment) */}
+                  {selectedFulfillmentMethod === 'pickup_appointment' && (
+                    <div className="space-y-3">
+                      <div className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl p-4">
+                        <p className="text-xs uppercase tracking-[0.2em] text-[var(--text-muted)] mb-2">Shop Details</p>
+                        <div className="space-y-2">
+                          <p className="text-white font-semibold">{SHOP_INFO.name}</p>
+                          <p className="text-sm text-[var(--text-muted)]">{SHOP_INFO.address}</p>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl p-4">
+                          <p className="text-xs uppercase tracking-[0.2em] text-[var(--text-muted)] mb-1">Available Days</p>
+                          <p className="text-white font-semibold">{SHOP_INFO.availableDays}</p>
+                        </div>
+                        <div className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl p-4">
+                          <p className="text-xs uppercase tracking-[0.2em] text-[var(--text-muted)] mb-1">Available Time</p>
+                          <p className="text-white font-semibold">{SHOP_INFO.availableTime}</p>
+                        </div>
+                      </div>
+                      {/* Selected Date/Time */}
+                      <div className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl p-4">
+                        <p className="text-xs uppercase tracking-[0.2em] text-[var(--text-muted)] mb-1">Your Selected Schedule</p>
+                        <div className="flex items-center gap-3">
+                          <Calendar className="w-5 h-5 text-[var(--gold-primary)]" />
+                          <div>
+                            <p className="text-white font-semibold">
+                              {pickupDate && new Date(pickupDate + 'T00:00:00').toLocaleDateString('en-PH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                            </p>
+                            <p className="text-sm text-[var(--gold-primary)]">{pickupTime && new Date(`2000-01-01T${pickupTime}:00`).toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' })}</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Delivery Details (if shop delivery) */}
+                  {selectedFulfillmentMethod === 'shop_delivery' && (
+                    <div className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl p-4">
+                      <p className="text-xs uppercase tracking-[0.2em] text-[var(--text-muted)] mb-2">Delivery Address</p>
+                      <p className="text-white">{shippingAddressLabel}</p>
+                    </div>
+                  )}
+
+                  {/* Notes (if any) */}
+                  {fulfillmentNotes && (
+                    <div className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl p-4">
+                      <p className="text-xs uppercase tracking-[0.2em] text-[var(--text-muted)] mb-2">Your Notes</p>
+                      <p className="text-white">{fulfillmentNotes}</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Confirmation Text */}
+                <p className="text-center text-[var(--text-muted)]">
+                  Please verify your choice above. Once confirmed, this selection cannot be changed.
+                </p>
+
+                {/* Action Buttons */}
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmationModal(false)}
+                    className="flex-1 py-3 px-4 rounded-xl border border-[var(--border)] text-white font-semibold hover:bg-white/5 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setShowConfirmationModal(false);
+                      setConfirmedSelection(selectedFulfillmentMethod);
+                      await handleSubmitFulfillment();
+                    }}
+                    disabled={fulfillmentSaving}
+                    className="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black font-bold disabled:opacity-60"
+                  >
+                    {fulfillmentSaving ? 'Confirming...' : 'Confirm Selection'}
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Milestones Accordion - Only show when showTracker is true (My Guitar section) */}
         {showTracker && (
