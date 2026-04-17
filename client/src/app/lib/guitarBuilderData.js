@@ -23,7 +23,7 @@ export const GUITAR_TYPE_OPTIONS = [
   { id: 'bass', label: 'Bass Guitar' },
 ]
 
-export const BASE_PRICE = 1299
+export const BASE_PRICE = 25000
 
 export const BODY_OPTIONS = {
   strat: {
