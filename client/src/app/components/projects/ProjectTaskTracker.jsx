@@ -725,9 +725,6 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
                                   <div className="flex-1">
                                     <p className={`font-medium ${isCompleted ? 'text-[var(--text-muted)] line-through' : 'text-white'}`}>{subtask.title}</p>
                                     <div className="flex flex-wrap items-center gap-3 mt-1.5">
-                                      {subtask.is_customer_updatable && (
-                                        <span className="px-2 py-0.5 bg-blue-500/10 text-blue-400 text-[10px] uppercase font-bold tracking-wider rounded">CUSTOMER ACTION REQ</span>
-                                      )}
                                       {subtask.assignee_first && (
                                         <span className="flex items-center gap-1 text-xs text-[var(--text-muted)]">
                                           <User className="w-3 h-3" /> {subtask.assignee_first} {subtask.assignee_last}
@@ -757,7 +754,7 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
                                 <input autoFocus type="text" placeholder="Task description..." value={form.subtaskTitle || ''} onChange={e => setForm({...form, subtaskTitle: e.target.value})} className="w-full bg-transparent text-white border-b border-[var(--border)] focus:border-[var(--gold-primary)] px-2 py-1 outline-none mb-3" />
                                 <label className="flex items-center gap-2 mb-4 cursor-pointer w-fit">
                                   <input type="checkbox" checked={form.isCustomerUpdatable || false} onChange={e => setForm({...form, isCustomerUpdatable: e.target.checked})} className="w-4 h-4" />
-                                  <span className="text-sm text-[var(--text-muted)]">Customer can mark this complete</span>
+                                  <span className="text-sm text-[var(--text-muted)]">Click to mark this complete</span>
                                 </label>
                                 <div className="flex gap-2">
                                   <button onClick={() => handleAddSubtask(milestone.milestone_id)} className="px-4 py-1.5 bg-[var(--gold-primary)] text-black font-bold text-sm rounded-lg">Save Task</button>

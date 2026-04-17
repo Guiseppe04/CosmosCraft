@@ -32,7 +32,7 @@ export const BASS_TYPE_OPTIONS = [
 ]
 
 // Base price in PHP (Philippine Peso) - approximately 1500 USD equivalent
-export const BASS_BASE_PRICE = 89999
+export const BASS_BASE_PRICE = 35000
 
 export const BASS_BODY_OPTIONS = {
   vader: {

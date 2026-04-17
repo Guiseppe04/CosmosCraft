@@ -1,29 +1,38 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { CheckCircle, Circle, ChevronDown, ChevronRight, User, Clock, AlertCircle, Calendar, Truck, Store, ShieldCheck, X, Lock } from 'lucide-react';
+import { CheckCircle, Circle, ChevronDown, ChevronRight, User, Clock, AlertCircle, Calendar, Truck, Store, ShieldCheck, X, Lock, AlertTriangle } from 'lucide-react';
 import { adminApi } from '../../utils/adminApi';
 import { useAuth } from '../../context/AuthContext';
 
 const SHOP_INFO = {
   name: 'CosmosCraft Guitar Shop',
   address: '123 Guitar Street, Music City, Philippines',
-  availableDays: 'Monday to Friday',
+  availableDays: 'Monday to Saturday',
   availableTime: '9:00 AM to 6:00 PM',
 };
 
 const isValidBusinessDay = (dateStr, unavailableDates = []) => {
   if (!dateStr) return false;
-  const date = new Date(dateStr);
+  const targetDate = dateStr.split('T')[0];
+  const date = new Date(targetDate + 'T00:00:00');
   const day = date.getDay();
-  if (day === 0 || day === 6) return false; // Weekend
-  const dateStrFormatted = date.toISOString().split('T')[0];
-  return !unavailableDates.includes(dateStrFormatted);
+  if (day === 0) return false; // Only Sunday is closed
+  const isUnavailable = unavailableDates.some(d => {
+    const unavailableDate = typeof d === 'object' ? d?.date : d;
+    if (!unavailableDate) return false;
+    return unavailableDate.split('T')[0] === targetDate;
+  });
+  return !isUnavailable;
 };
 
 const isDateUnavailable = (dateStr, unavailableDates = []) => {
   if (!dateStr || !unavailableDates.length) return false;
-  const dateStrFormatted = new Date(dateStr).toISOString().split('T')[0];
-  return unavailableDates.includes(dateStrFormatted);
+  const targetDate = dateStr.split('T')[0];
+  return unavailableDates.some(d => {
+    const unavailableDate = typeof d === 'object' ? d?.date : d;
+    if (!unavailableDate) return false;
+    return unavailableDate.split('T')[0] === targetDate;
+  });
 };
 
 const getDayName = (dateStr) => {
@@ -117,6 +126,94 @@ export default function ProjectTaskTracker({ projectId, projectName, showTracker
   const [confirmedSelection, setConfirmedSelection] = useState(null);
   const [unavailableDates, setUnavailableDates] = useState([]);
 
+  // Validation state
+  const [validationErrors, setValidationErrors] = useState({});
+
+  // Validation helpers
+  const validateRequired = (value, fieldName) => {
+    if (!value || (typeof value === 'string' && !value.trim())) {
+      return `${fieldName} is required`;
+    }
+    return null;
+  };
+
+  const validateDate = (dateStr, fieldName) => {
+    if (!dateStr) return `${fieldName} is required`;
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return `${fieldName} is invalid`;
+    if (date < new Date()) return `${fieldName} cannot be in the past`;
+    return null;
+  };
+
+  const validateTime = (timeStr, fieldName) => {
+    if (!timeStr) return `${fieldName} is required`;
+    const timeRegex = /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/;
+    if (!timeRegex.test(timeStr)) return `${fieldName} format is invalid`;
+    return null;
+  };
+
+  const validateBusinessHours = (timeStr) => {
+    if (!timeStr) return null;
+    const [hours, minutes] = timeStr.split(':').map(Number);
+    const totalMinutes = hours * 60 + minutes;
+    const openMinutes = 9 * 60; // 9:00 AM
+    const closeMinutes = 18 * 60; // 6:00 PM
+    return totalMinutes >= openMinutes && totalMinutes <= closeMinutes ? null : 'Time must be between 9:00 AM and 6:00 PM';
+  };
+
+  const validateAddress = (address, fieldName) => {
+    if (!address?.line1) return `${fieldName} is required`;
+    if (!address?.city) return 'City is required';
+    if (!address?.province) return 'Province is required';
+    if (!address?.postal_code) return 'Postal code is required';
+    return null;
+  };
+
+  const validateAllFields = () => {
+    const errors = {};
+    
+    if (selectedFulfillmentMethod === 'pickup_appointment') {
+      const dateError = validateRequired(pickupDate, 'Pickup date');
+      if (!dateError) {
+        if (!isValidBusinessDay(pickupDate, unavailableDates)) {
+          if (isDateUnavailable(pickupDate, unavailableDates)) {
+            errors.pickupDate = 'Selected date is unavailable';
+          } else {
+            errors.pickupDate = 'Please select a weekday or Saturday (Monday to Saturday)';
+          }
+        }
+      } else {
+        errors.pickupDate = dateError;
+      }
+      
+      const timeError = validateRequired(pickupTime, 'Pickup time');
+      if (!timeError) {
+        const businessHoursError = validateBusinessHours(pickupTime);
+        if (businessHoursError) {
+          errors.pickupTime = businessHoursError;
+        }
+      } else {
+        errors.pickupTime = timeError;
+      }
+    } else if (selectedFulfillmentMethod === 'shop_delivery') {
+      const addressError = validateAddress(shippingAddress, 'Delivery address');
+      if (addressError) {
+        errors.deliveryAddress = addressError;
+      }
+    }
+    
+    setValidationErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const clearValidationError = (field) => {
+    setValidationErrors(prev => {
+      const newErrors = { ...prev };
+      delete newErrors[field];
+      return newErrors;
+    });
+  };
+
   useEffect(() => {
     if (projectId) {
       loadData();
@@ -166,6 +263,11 @@ export default function ProjectTaskTracker({ projectId, projectName, showTracker
     setPickupDate(existingPickupAt ? formatInputDate(existingPickupAt) : formatInputDate(new Date(Date.now() + 86400000)));
     setPickupTime(existingPickupAt ? formatInputTime(existingPickupAt) : '10:00');
     setFulfillmentNotes(hierarchy.fulfillment_notes || '');
+    
+    // If there's an existing fulfillment method, lock the selection
+    if (hierarchy.fulfillment_method) {
+      setConfirmedSelection(hierarchy.fulfillment_method);
+    }
   }, [hierarchy]);
 
   const toggleMilestone = (mId) => {
@@ -443,39 +545,69 @@ export default function ProjectTaskTracker({ projectId, projectName, showTracker
                     <div className="grid gap-4 md:grid-cols-2">
                       <label className="space-y-2 text-sm">
                         <span className="font-semibold text-white">Pickup Date</span>
-                        <input
-                          type="date"
-                          min={formatInputDate(new Date())}
-                          value={pickupDate}
-                          onChange={(e) => {
-                            const newDate = e.target.value;
-                            if (newDate && !isValidBusinessDay(newDate, unavailableDates)) {
-                              if (isDateUnavailable(newDate, unavailableDates)) {
-                                alert('That date is unavailable. Please select another date.');
+                        <div className="relative">
+                          <input
+                            type="date"
+                            min={formatInputDate(new Date())}
+                            value={pickupDate}
+                            onChange={(e) => {
+                              const newDate = e.target.value;
+                              if (newDate && !isValidBusinessDay(newDate, unavailableDates)) {
+                                if (isDateUnavailable(newDate, unavailableDates)) {
+                                  setValidationErrors(prev => ({ ...prev, pickupDate: 'That date is unavailable. Please select another date.' }));
+                                  return;
+                                }
+                                setValidationErrors(prev => ({ ...prev, pickupDate: 'Please select a weekday or Saturday (Monday to Saturday).' }));
                                 return;
                               }
-                              alert(`Please select a weekday (${SHOP_INFO.availableDays}).`);
-                              return;
-                            }
-                            setPickupDate(newDate);
-                          }}
-                          disabled={isConfirmed}
-                          className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] px-4 py-3 text-white focus:border-[var(--gold-primary)] focus:outline-none disabled:opacity-50"
-                        />
+                              setPickupDate(newDate);
+                              clearValidationError('pickupDate');
+                            }}
+                            disabled={confirmedSelection !== null}
+                            className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] px-4 py-3 text-white focus:border-[var(--gold-primary)] focus:outline-none disabled:opacity-50"
+                          />
+                          {pickupDate && (
+                            <div className="absolute right-12 top-1/2 -translate-y-1/2 pointer-events-none">
+                              <Calendar className="w-4 h-4 text-[var(--gold-primary)]" />
+                            </div>
+                          )}
+                        </div>
+                        {validationErrors.pickupDate && (
+                          <p className="text-sm text-red-400 flex items-center gap-1">
+                            <AlertTriangle className="w-3 h-3" />
+                            {validationErrors.pickupDate}
+                          </p>
+                        )}
                       </label>
                       <label className="space-y-2 text-sm">
                         <span className="font-semibold text-white">Pickup Time</span>
-                        <select
-                          value={pickupTime}
-                          onChange={(e) => setPickupTime(e.target.value)}
-                          disabled={isConfirmed}
-                          className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] px-4 py-3 text-white focus:border-[var(--gold-primary)] focus:outline-none disabled:opacity-50"
-                        >
-                          <option value="" disabled>Select a time</option>
-                          {pickupTimeSlots.map((slot) => (
-                            <option key={slot.value} value={slot.value}>{slot.label}</option>
-                          ))}
-                        </select>
+                        <div className="relative">
+                          <select
+                            value={pickupTime}
+                            onChange={(e) => {
+                              setPickupTime(e.target.value);
+                              clearValidationError('pickupTime');
+                            }}
+                            disabled={confirmedSelection !== null}
+                            className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] px-4 py-3 text-white focus:border-[var(--gold-primary)] focus:outline-none disabled:opacity-50"
+                          >
+                            <option value="" disabled>Select a time</option>
+                            {pickupTimeSlots.map((slot) => (
+                              <option key={slot.value} value={slot.value}>{slot.label}</option>
+                            ))}
+                          </select>
+                          {pickupTime && (
+                            <div className="absolute right-12 top-1/2 -translate-y-1/2 pointer-events-none">
+                              <Clock className="w-4 h-4 text-[var(--gold-primary)]" />
+                            </div>
+                          )}
+                        </div>
+                        {validationErrors.pickupTime && (
+                          <p className="text-sm text-red-400 flex items-center gap-1">
+                            <AlertTriangle className="w-3 h-3" />
+                            {validationErrors.pickupTime}
+                          </p>
+                        )}
                       </label>
                     </div>
                     <p className="text-xs text-[var(--text-muted)]">
@@ -520,6 +652,12 @@ export default function ProjectTaskTracker({ projectId, projectName, showTracker
                   <p className="mt-2 text-amber-300">Add a saved address to your profile if you want the shop to deliver your build.</p>
                 )}
               </div>
+              {validationErrors.deliveryAddress && (
+                <p className="text-sm text-red-400 flex items-center gap-1 mt-2">
+                  <AlertTriangle className="w-3 h-3" />
+                  {validationErrors.deliveryAddress}
+                </p>
+              )}
             </div>
 
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -531,17 +669,14 @@ export default function ProjectTaskTracker({ projectId, projectName, showTracker
               <button
                 type="button"
                 onClick={() => {
+                  if (!validateAllFields()) {
+                    return;
+                  }
                   if (selectedFulfillmentMethod === 'pickup_appointment') {
                     if (!pickupDate || !pickupTime) {
-                      alert('Please select both a pickup date and time.');
                       return;
                     }
                     if (!isValidBusinessDay(pickupDate, unavailableDates)) {
-                      if (isDateUnavailable(pickupDate, unavailableDates)) {
-                        alert('Sorry, that date is unavailable. Please select another date.');
-                      } else {
-                        alert(`Sorry, we are closed on weekends. Please select a weekday (${SHOP_INFO.availableDays}).`);
-                      }
                       return;
                     }
                   }
