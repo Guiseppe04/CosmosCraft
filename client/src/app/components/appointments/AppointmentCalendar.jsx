@@ -510,7 +510,7 @@ export default function AppointmentCalendar({
         )}
       </AnimatePresence>
 
-      {!showTimeGrid && (
+      {/* {!showTimeGrid && (
         <div className="rounded-3xl border border-[var(--border)] bg-[var(--bg-primary)] p-6 shadow-[0_20px_60px_rgba(0,0,0,0.14)]">
           <div className="flex flex-col gap-1 mb-5">
             <h3 className="text-lg font-semibold text-white">
@@ -558,7 +558,7 @@ export default function AppointmentCalendar({
           </div>
         )}
       </div>
-    )}
+    )} */}
     </div>
   )
 }
