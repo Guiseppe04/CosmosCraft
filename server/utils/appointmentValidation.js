@@ -176,6 +176,32 @@ const appointmentValidation = {
       .trim(),
   }),
 
+  updateStatusSchema: Joi.object({
+    new_status: Joi.string()
+      .valid('pending', 'confirmed', 'in_progress', 'completed', 'ready_for_pickup', 'cancelled')
+      .optional(),
+
+    status: Joi.string()
+      .valid('pending', 'confirmed', 'in_progress', 'completed', 'ready_for_pickup', 'cancelled')
+      .optional(),
+
+    reason: Joi.string()
+      .max(300)
+      .optional()
+      .trim()
+      .allow(''),
+
+    confirmation_notes: Joi.string()
+      .max(500)
+      .optional()
+      .trim()
+      .allow(''),
+  })
+    .or('new_status', 'status')
+    .messages({
+      'object.missing': 'Status is required',
+    }),
+
   // ─── LIST APPOINTMENTS (Multi-Filter) ────────────────────────────────────
 
   listAppointmentsSchema: Joi.object({

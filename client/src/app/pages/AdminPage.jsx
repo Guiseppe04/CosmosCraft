@@ -21,6 +21,7 @@ import AppointmentList from '../components/appointments/AppointmentList'
 import AppointmentModal from '../components/appointments/AppointmentModal'
 import AppointmentForm from '../components/appointments/AppointmentForm'
 import UnavailableDatesManager from '../components/appointments/UnavailableDatesManager'
+import { PosWorkspace } from '../components/pos/PosWorkspace'
 import { useAuth } from '../context/AuthContext'
 import { useNavigate } from 'react-router'
 import { Topbar } from '../components/admin/Topbar'
@@ -1647,144 +1648,6 @@ export function AdminPage() {
   const [selectedConversation, setSelectedConversation] = useState(null)
   const [appointmentBranchAddress, setAppointmentBranchAddress] = useState(DEFAULT_APPOINTMENT_BRANCH.address)
 
-  // POS Drawer state
-  const [posDrawerOpen, setPosDrawerOpen] = useState(false)
-  const [posDrawerState, setPosDrawerState] = useState({
-    isOpen: false,
-    openedAt: null,
-    openingCash: 0,
-    closedAt: null,
-    closingCash: 0,
-    status: 'closed', // closed, open, settling
-  })
-  const [posCart, setPosCart] = useState([])
-  const [posSearchQuery, setPosSearchQuery] = useState('')
-  const [posSelectedCategory, setPosSelectedCategory] = useState('all')
-  const [posPaymentMethod, setPosPaymentMethod] = useState('cash')
-  const [posCashReceived, setPosCashReceived] = useState('')
-  const [posShowCloseConfirm, setPosShowCloseConfirm] = useState(false)
-  const [posDenominations, setPosDenominations] = useState({
-    '1000': 0, '500': 0, '200': 0, '100': 0, '50': 0, '20': 0, '10': 0, '5': 0, '1': 0, '0.25': 0, '0.10': 0, '0.05': 0,
-  })
-  const TAX_RATE = 0.12
-
-  // POS helper functions
-  const openPosDrawer = (openingCash) => {
-    setPosDrawerState(prev => ({
-      ...prev,
-      isOpen: true,
-      openedAt: new Date().toISOString(),
-      openingCash: Number(openingCash),
-      status: 'open',
-    }))
-    setPosDenominations({ '1000': 0, '500': 0, '200': 0, '100': 0, '50': 0, '20': 0, '10': 0, '5': 0, '1': 0, '0.25': 0, '0.10': 0, '0.05': 0 })
-    setPosCart([])
-  }
-
-  const closePosDrawer = () => {
-    setPosDrawerState(prev => ({
-      ...prev,
-      isOpen: false,
-      closedAt: new Date().toISOString(),
-      closingCash: calculateTotalCash(),
-      status: 'closed',
-    }))
-    setPosShowCloseConfirm(false)
-  }
-
-  const calculateTotalCash = () => {
-    const bills = { '1000': 1000, '500': 500, '200': 200, '100': 100, '50': 50, '20': 20, '10': 10, '5': 5, '1': 1, '0.25': 0.25, '0.10': 0.10, '0.05': 0.05 }
-    let total = posDrawerState.openingCash
-    Object.entries(posDenominations).forEach(([denom, qty]) => {
-      total += (bills[denom] || 0) * qty
-    })
-    return total
-  }
-
-  const calculateSalesTotal = () => {
-    return posCart.reduce((sum, item) => sum + (item.price * item.quantity), 0)
-  }
-
-  const calculateTax = () => calculateSalesTotal() * TAX_RATE
-
-  const calculateGrandTotal = () => calculateSalesTotal() + calculateTax()
-
-  const calculateChange = () => {
-    const received = Number(posCashReceived) || 0
-    const total = calculateGrandTotal()
-    return Math.max(0, received - total)
-  }
-
-  const addToCart = (product) => {
-    setPosCart(prev => {
-      const existing = prev.find(item => item.product_id === product.product_id)
-      if (existing) {
-        return prev.map(item => item.product_id === product.product_id ? { ...item, quantity: item.quantity + 1 } : item)
-      }
-      return [...prev, { ...product, quantity: 1 }]
-    })
-  }
-
-  const removeFromCart = (productId) => {
-    setPosCart(prev => {
-      const existing = prev.find(item => item.product_id === productId)
-      if (existing && existing.quantity > 1) {
-        return prev.map(item => item.product_id === productId ? { ...item, quantity: item.quantity - 1 } : item)
-      }
-      return prev.filter(item => item.product_id !== productId)
-    })
-  }
-
-  const removeEntireItem = (productId) => {
-    setPosCart(prev => prev.filter(item => item.product_id !== productId))
-  }
-
-  const clearCart = () => setPosCart([])
-
-  const processSale = () => {
-    const total = calculateGrandTotal()
-    const received = Number(posCashReceived)
-    if (received < total) {
-      showToast('Insufficient payment', 'error')
-      return
-    }
-    if (posPaymentMethod === 'cash' && received < total && received > 0) {
-      showToast('Exact cash required for cash payments', 'error')
-      return
-    }
-    if (posPaymentMethod === 'cash' && received >= total) {
-      const change = calculateChange()
-      const denominations = { ...posDenominations }
-      let changeRemaining = change * 100
-      const bills = [1000, 500, 200, 100, 50, 20, 10, 5, 1, 0.25, 0.10, 0.05]
-      bills.forEach(bill => {
-        const key = String(bill)
-        while (changeRemaining >= bill * 100 && denominations[key] > 0) {
-          denominations[key]--
-          changeRemaining -= bill * 100
-        }
-      })
-      setPosDenominations(denominations)
-    }
-    const newItem = {
-      id: Date.now(),
-      items: [...posCart],
-      subtotal: calculateSalesTotal(),
-      tax: calculateTax(),
-      total: total,
-      paymentMethod: posPaymentMethod,
-      cashReceived: received,
-      change: posPaymentMethod === 'cash' ? calculateChange() : 0,
-      createdAt: new Date().toISOString(),
-    }
-    showToast('Sale completed!')
-    setPosCart([])
-    setPosCashReceived('')
-    setPaymentHistory(prev => [newItem, ...prev])
-  }
-
-  const [paymentHistory, setPaymentHistory] = useState([])
-
   // ── Derived / filtered views ─────────────────────────────────────────────
   const visibleProducts = products || []
   const visibleParts = parts || []
@@ -2125,12 +1988,31 @@ export function AdminPage() {
   }, [debouncedSearch, showToast, appointments, appointmentPagination.limit, appointmentPagination.page])
 
   const fetchServices = useCallback(async () => {
+    setServicesLoading(true)
     try {
-      const res = await adminApi.getServices()
+      const params = {
+        sort: serviceQuery.sortBy === 'duration_minutes' ? 'duration' : serviceQuery.sortBy,
+        order: serviceQuery.sortDir,
+        limit: serviceQuery.pageSize,
+        offset: (serviceQuery.page - 1) * serviceQuery.pageSize,
+      }
+      if (debouncedSearch) params.search = debouncedSearch
+      if (serviceQuery.is_active !== '') params.is_active = serviceQuery.is_active
+
+      const res = await adminApi.getServices(params)
       const newData = Array.isArray(res.data) ? res.data : res.data?.services || []
       updateIfChanged(services, newData, setServices)
-    } catch (e) { console.error('Failed to fetch services:', e) }
-  }, [showToast, services])
+      const total = res.pagination?.total || newData.length
+      const totalPages = Math.max(Math.ceil(total / serviceQuery.pageSize), 1)
+      setServicesPagination({
+        page: serviceQuery.page,
+        pageSize: serviceQuery.pageSize,
+        total,
+        totalPages,
+      })
+    } catch (e) { showToast(e.message, 'error') }
+    finally { setServicesLoading(false) }
+  }, [debouncedSearch, serviceQuery, services, showToast])
 
   const fetchUnavailableDates = useCallback(async () => {
     try {
@@ -2238,6 +2120,7 @@ export function AdminPage() {
       'projects': fetchProjects,
       'appointments': () => { fetchAppointments(); fetchServices(); fetchUnavailableDates(); },
       'inventory': () => { fetchInventory(); fetchParts(); },
+      'pos': fetchInventory,
       'sales-report': fetchSalesReport,
       'dashboard': () => { fetchOrders(); fetchProjects(); fetchAppointments() },
     }
@@ -2260,6 +2143,7 @@ export function AdminPage() {
      if (activeTab === 'projects') fetchProjects()
      if (activeTab === 'appointments') fetchAppointments()
      if (activeTab === 'inventory') { fetchInventory(); fetchParts(); }
+     if (activeTab === 'pos') fetchInventory()
    }, [debouncedSearch]) // eslint-disable-line
 
   useEffect(() => {
@@ -2286,13 +2170,14 @@ export function AdminPage() {
        'services': fetchServices,
        'appointments': fetchAppointments,
        'inventory': fetchInventory,
+       'pos': fetchInventory,
        'sales-report': fetchSalesReport,
        'dashboard': async () => { await fetchOrders(); await fetchProjects(); await fetchAppointments() },
      }
      return map[activeTab]?.()
    }, [activeTab, fetchProducts, fetchParts, fetchCategories, fetchUsers, fetchOrders, fetchProjects, fetchServices, fetchAppointments, fetchInventory, fetchSalesReport])
 
-  const pollingEnabled = ['dashboard', 'orders', 'inventory', 'projects', 'appointments'].includes(activeTab)
+  const pollingEnabled = ['dashboard', 'orders', 'inventory', 'pos', 'projects', 'appointments'].includes(activeTab)
   useSmartPolling(pollingFn, { interval: 5000, maxInterval: 60000, backoffFactor: 1.5, enabled: pollingEnabled })
 
   const handleRefresh = () => {
@@ -2324,7 +2209,14 @@ export function AdminPage() {
      setFormErrors({})
      setModal({ open: true, type, data })
    }
-  const closeModal = () => { setModal({ open: false, type: null, data: null }); setFormErrors({}); setOrderStatusDropdownOpen(false); setPaymentStatusDropdownOpen(false) }
+  const closeModal = () => {
+    const shouldRefreshProjects = modal.type === 'project_tasks'
+    setModal({ open: false, type: null, data: null })
+    setFormErrors({})
+    setOrderStatusDropdownOpen(false)
+    setPaymentStatusDropdownOpen(false)
+    if (shouldRefreshProjects) fetchProjects()
+  }
 
   // ── Form validation helper ───────────────────────────────────────────────
   const validateAndSave = (rules, saveFn) => async () => {
@@ -2759,12 +2651,12 @@ export function AdminPage() {
 
    const deleteService = (id, title) => {
      openConfirm({
-       title: 'Delete Service?',
-       description: `"${title}" will be permanently removed.`,
+       title: 'Deactivate Service?',
+       description: `"${title}" will be marked inactive and hidden from new bookings.`,
        variant: 'danger',
        onConfirm: async () => {
          await adminApi.deleteService(id)
-         showToast('Service deleted')
+         showToast('Service deactivated')
          fetchServices()
        },
      })
@@ -2859,6 +2751,7 @@ export function AdminPage() {
     { id: 'product-categories', label: 'Product Categories', icon: Tag },
     { id: 'orders', label: 'Orders', icon: ShoppingBag },
     { id: 'inventory', label: 'Inventory', icon: Activity },
+    { id: 'pos', label: 'POS', icon: Wallet },
     ...(isSuperAdmin ? [
       { id: 'sales-report', label: 'Sales Report', icon: PieChart },
     ] : []),
@@ -2937,6 +2830,8 @@ export function AdminPage() {
         onCancel={closeConfirm}
       />
 
+      {false && (
+        <>
       {/* POS Drawer Modal */}
       <AnimatePresence>
         {posDrawerOpen && (
@@ -3258,6 +3153,8 @@ export function AdminPage() {
           </motion.div>
         )}
       </AnimatePresence>
+        </>
+      )}
 
       {/* Sidebar */}
       <aside className={`fixed left-0 top-0 h-screen bg-[var(--surface-dark)] border-r border-[var(--border)] transition-all duration-300 z-40 flex flex-col ${sidebarCollapsed ? 'w-20' : 'w-64'}`}>
@@ -3854,6 +3751,138 @@ export function AdminPage() {
           )}
 
           {/* ── USERS ──────────────────────────────────────────────────────── */}
+          {activeTab === 'projects' && (
+            <motion.div key="projects" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+              <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-6">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+                  <div>
+                    <h2 className="text-white text-xl font-semibold">Projects</h2>
+                    <p className="mt-1 text-sm text-[var(--text-muted)]">
+                      Open a project to manage milestones and subtasks for the build.
+                    </p>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-3">
+                      <p className="text-[var(--text-muted)] text-sm">Total</p>
+                      <p className="text-white text-lg font-semibold">{visibleProjects.length}</p>
+                    </div>
+                    <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-3">
+                      <p className="text-[var(--text-muted)] text-sm">In Progress</p>
+                      <p className="text-white text-lg font-semibold">{visibleProjects.filter((project) => project.status === 'in_progress').length}</p>
+                    </div>
+                    <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-3">
+                      <p className="text-[var(--text-muted)] text-sm">Completed</p>
+                      <p className="text-white text-lg font-semibold">{visibleProjects.filter((project) => project.status === 'completed').length}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {visibleProjects.length === 0 ? (
+                <EmptyState
+                  icon={Briefcase}
+                  label={debouncedSearch ? 'No projects match your search' : 'No projects found'}
+                  action={isSuperAdmin ? () => openModal('project') : undefined}
+                  actionLabel="Create Project"
+                />
+              ) : (
+                <div className="grid gap-6 xl:grid-cols-2">
+                  {visibleProjects.map((project) => {
+                    const status = String(project.status || 'not_started').toLowerCase()
+                    const progress = Number.isFinite(Number(project.progress)) ? Math.max(0, Math.min(100, Number(project.progress))) : 0
+                    const statusClass = {
+                      not_started: 'bg-slate-500/10 text-slate-300 border-slate-500/30',
+                      in_progress: 'bg-blue-500/10 text-blue-300 border-blue-500/30',
+                      completed: 'bg-green-500/10 text-green-300 border-green-500/30',
+                    }[status] || 'bg-slate-500/10 text-slate-300 border-slate-500/30'
+
+                    return (
+                      <div key={project.project_id} className="rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-6 shadow-[0_18px_50px_rgba(0,0,0,0.12)]">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="min-w-0">
+                            <p className="text-[var(--gold-primary)] text-xs font-semibold uppercase tracking-[0.25em]">
+                              {project.order_number || 'Project'}
+                            </p>
+                            <h3 className="mt-2 truncate text-xl font-semibold text-white">
+                              {project.name || project.title || 'Untitled Project'}
+                            </h3>
+                            <p className="mt-2 text-sm text-[var(--text-muted)]">
+                              Customer: <span className="text-white">{project.customer_name || 'Unassigned'}</span>
+                            </p>
+                          </div>
+                          <span className={`shrink-0 rounded-full border px-3 py-1 text-xs font-semibold capitalize ${statusClass}`}>
+                            {status.replace(/_/g, ' ')}
+                          </span>
+                        </div>
+
+                        <div className="mt-5 rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] p-4">
+                          <div className="mb-2 flex items-center justify-between">
+                            <span className="text-sm text-[var(--text-muted)]">Progress</span>
+                            <span className="text-sm font-semibold text-white">{progress}%</span>
+                          </div>
+                          <div className="h-2 overflow-hidden rounded-full bg-[var(--surface-dark)]">
+                            <div
+                              className="h-full rounded-full bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)]"
+                              style={{ width: `${progress}%` }}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                          <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] p-4">
+                            <p className="text-xs uppercase tracking-[0.18em] text-[var(--text-muted)]">Estimated completion</p>
+                            <p className="mt-2 font-medium text-white">
+                              {project.estimated_completion_date ? new Date(project.estimated_completion_date).toLocaleDateString() : 'Not set'}
+                            </p>
+                          </div>
+                          <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] p-4">
+                            <p className="text-xs uppercase tracking-[0.18em] text-[var(--text-muted)]">Notes</p>
+                            <p className="mt-2 line-clamp-2 text-sm text-white">
+                              {project.description || project.notes || 'No project notes yet.'}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="mt-5 flex flex-wrap gap-3">
+                          <button
+                            type="button"
+                            onClick={() => openModal('project_tasks', project)}
+                            className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] px-4 py-2.5 text-sm font-semibold text-black transition-all hover:shadow-[0_0_20px_rgba(212,175,55,0.35)]"
+                          >
+                            <CheckCircle className="w-4 h-4" />
+                            Manage Tasks
+                          </button>
+                          {isSuperAdmin && (
+                            <button
+                              type="button"
+                              onClick={() => openModal('project', project)}
+                              className="inline-flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)]"
+                            >
+                              <Edit className="w-4 h-4" />
+                              Edit
+                            </button>
+                          )}
+                          {isSuperAdmin && (
+                            <button
+                              type="button"
+                              onClick={() => deleteProject(project.project_id, project.name || project.title || 'Project')}
+                              className="inline-flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-2.5 text-sm font-semibold text-red-300 transition-colors hover:bg-red-500/20"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                              Archive
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </motion.div>
+          )}
+
+          {activeTab === 'services' && <ServicesTab />}
+
           {activeTab === 'users' && (
             <motion.div key="users" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
               <div className="flex flex-col sm:flex-row gap-4 p-4 bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl">
@@ -4148,16 +4177,7 @@ export function AdminPage() {
                     <option value="stock_low">Stock (Low to High)</option>
                     <option value="stock_high">Stock (High to Low)</option>
                   </select>
-                  {(user?.role === 'super_admin' || user?.role === 'staff') && (
-                    <button
-                      type="button"
-                      onClick={() => setPosDrawerOpen(true)}
-                      className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-cyan-500 to-sky-500 px-5 py-2.5 text-sm font-semibold text-white shadow-[0_10px_30px_rgba(14,165,233,0.18)] hover:shadow-[0_12px_35px_rgba(14,165,233,0.25)] transition-all"
-                    >
-                      <ShoppingBag className="w-4 h-4" />
-                      POS
-                    </button>
-                  )}
+                  
                 </div>
               </div>
 
@@ -4368,6 +4388,16 @@ export function AdminPage() {
           )}
 
           {/* ── SALES REPORT ───────────────────────────────────────────────── */}
+          {activeTab === 'pos' && (
+            <motion.div key="pos" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+              <PosWorkspace
+                inventoryItems={visibleInventory}
+                showToast={showToast}
+                description="Create and record walk-in sales."
+              />
+            </motion.div>
+          )}
+
           {activeTab === 'sales-report' && (
             <motion.div key="sales-report" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
               {salesReport ? (
@@ -5567,7 +5597,10 @@ export function AdminPage() {
                           <option value="completed">Completed</option>
                         </select>
                       </div>
-                      <FormField label="Progress (%)" type="number" value={form.progress ?? 0} onChange={v => setForm(f => ({ ...f, progress: Math.min(100, Math.max(0, Number(v))) }))} />
+                      <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-3">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-[var(--text-muted)]">Progress</p>
+                        <p className="mt-2 text-sm text-white">Calculated automatically from completed project tasks.</p>
+                      </div>
                     </div>
                     <FormField label="Estimated Completion" type="date" value={form.estimated_completion_date || form.end_date || ''} onChange={v => setForm(f => ({ ...f, estimated_completion_date: v, end_date: v }))} />
                   </div>

@@ -46,7 +46,7 @@ const authenticateToken = async (req, res, next) => {
                   message: 'Invalid token',
                 });
               }
-              req.user = decoded;
+              req.user = { ...decoded, user_id: decoded.id };
               next();
             });
           } catch (refreshErr) {
@@ -64,7 +64,7 @@ const authenticateToken = async (req, res, next) => {
           });
         }
       } else {
-        req.user = user;
+        req.user = { ...user, user_id: user.id };
         next();
       }
     });

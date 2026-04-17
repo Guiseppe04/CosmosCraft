@@ -129,6 +129,9 @@ export const adminApi = {
     return request(`/api/services${qs ? '?' + qs : ''}`)
   },
   getService: (id) => request(`/api/services/${id}`),
+  createService: (body) => request('/api/services', { method: 'POST', body }),
+  updateService: (id, body) => request(`/api/services/${id}`, { method: 'PUT', body }),
+  deleteService: (id) => request(`/api/services/${id}`, { method: 'DELETE' }),
 
   // Unavailable Dates
   getUnavailableDates: () => request('/api/appointments/unavailable-dates'),
@@ -165,13 +168,15 @@ export const adminApi = {
   // Project Hierarchy & Activity
   getProjectHierarchy: (id) => request(`/api/projects/${id}/hierarchy`),
   getProjectActivity: (id) => request(`/api/projects/${id}/activity`),
+  submitProjectFulfillment: (id, body) => request(`/api/projects/${id}/fulfillment`, { method: 'POST', body }),
 
   // Milestones & Subtasks
   createMilestone: (projectId, body) => request(`/api/projects/${projectId}/milestones`, { method: 'POST', body }),
-  deleteMilestone: (projectId, milestoneId) => request(`/api/projects/${projectId}/milestones/${milestoneId}`, { method: 'DELETE' }),
-  createSubtask: (milestoneId, body) => request(`/api/milestones/${milestoneId}/subtasks`, { method: 'POST', body }),
-  deleteSubtask: (subtaskId) => request(`/api/subtasks/${subtaskId}`, { method: 'DELETE' }),
-  updateSubtask: (subtaskId, body) => request(`/api/subtasks/${subtaskId}`, { method: 'PUT', body }),
+  updateMilestone: (milestoneId, body) => request(`/api/projects/milestones/${milestoneId}`, { method: 'PUT', body }),
+  deleteMilestone: (milestoneId) => request(`/api/projects/milestones/${milestoneId}`, { method: 'DELETE' }),
+  createSubtask: (milestoneId, body) => request(`/api/projects/milestones/${milestoneId}/subtasks`, { method: 'POST', body }),
+  deleteSubtask: (subtaskId) => request(`/api/projects/subtasks/${subtaskId}`, { method: 'DELETE' }),
+  updateSubtask: (subtaskId, body) => request(`/api/projects/subtasks/${subtaskId}`, { method: 'PATCH', body }),
 
   // User Addresses
   updateAddress: (addressId, body) => request(`/api/users/me/addresses/${addressId}`, { method: 'PUT', body }),

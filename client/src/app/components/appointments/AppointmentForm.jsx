@@ -1,12 +1,34 @@
-import { useState, useEffect, useMemo } from 'react'
-import { motion, AnimatePresence } from 'motion/react'
+import { useEffect, useMemo, useState } from 'react'
+import { motion } from 'motion/react'
 import {
-  X, Calendar, Clock, User, Mail, Phone, FileText, Search,
-  ChevronDown, Loader2, AlertCircle, CheckCircle
+  X, Search, Loader2, CheckCircle, CalendarDays, Clock3, User,
 } from 'lucide-react'
 import { format } from 'date-fns'
 
-// Main AppointmentForm component
+function buildTimeSlots(dateValue) {
+  if (!dateValue) return []
+
+  const date = new Date(dateValue)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  const isToday = date.toDateString() === today.toDateString()
+  const startHour = isToday ? Math.max(9, new Date().getHours() + 1) : 9
+  const slots = []
+
+  for (let hour = startHour; hour < 18; hour += 1) {
+    for (let minute = 0; minute < 60; minute += 30) {
+      const value = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
+      slots.push({
+        value,
+        label: format(new Date(`2000-01-01T${value}`), 'h:mm a'),
+      })
+    }
+  }
+
+  return slots
+}
+
 export default function AppointmentForm({
   open,
   isOpen,
@@ -18,193 +40,118 @@ export default function AppointmentForm({
   loading = false,
   selectedDate = null,
 }) {
+  const modalOpen = isOpen ?? open
+  const isEditing = Boolean(initialData?.appointment_id)
   const [formData, setFormData] = useState({
-    customer_type: 'existing', // 'existing' or 'new'
     user_id: '',
-    customer_name: '',
-    customer_email: '',
-    customer_phone: '',
     service_id: '',
     scheduled_date: '',
     scheduled_time: '',
     notes: '',
-    status: 'approved',
   })
-  const [availableSlots, setAvailableSlots] = useState([])
-  const [loadingSlots, setLoadingSlots] = useState(false)
-  const [searchUsers, setSearchUsers] = useState('')
-  const [showUserDropdown, setShowUserDropdown] = useState(false)
   const [errors, setErrors] = useState({})
-  const modalOpen = isOpen ?? open
+  const [userSearch, setUserSearch] = useState('')
+  const [showUserDropdown, setShowUserDropdown] = useState(false)
 
-  // Reset form when opening
   useEffect(() => {
-    if (modalOpen) {
-      if (initialData) {
-        // Edit mode
-        const scheduledAt = new Date(initialData.scheduled_at || initialData.scheduledAt)
-        setFormData({
-          customer_type: initialData.user_id ? 'existing' : 'new',
-          user_id: initialData.user_id || '',
-          customer_name: initialData.customer_name || initialData.user_name || '',
-          customer_email: initialData.customer_email || initialData.user_email || '',
-          customer_phone: initialData.customer_phone || initialData.user_phone || '',
-          service_id: initialData.service_id || '',
-          scheduled_date: format(scheduledAt, 'yyyy-MM-dd'),
-          scheduled_time: format(scheduledAt, 'HH:mm'),
-          notes: initialData.notes || '',
-          status: initialData.status || 'approved',
-        })
-      } else {
-        // Create mode
-        setFormData({
-          customer_type: 'existing',
-          user_id: '',
-          customer_name: '',
-          customer_email: '',
-          customer_phone: '',
-          service_id: '',
-          scheduled_date: selectedDate || format(new Date(), 'yyyy-MM-dd'),
-          scheduled_time: '',
-          notes: '',
-          status: 'approved',
-        })
-      }
-      setErrors({})
-    }
+    if (!modalOpen) return
+
+    const scheduledAtValue = initialData?.scheduled_at || initialData?.scheduledAt
+    const scheduledAt = scheduledAtValue ? new Date(scheduledAtValue) : null
+    const firstServiceId = initialData?.service_id || initialData?.services?.[0] || ''
+
+    setFormData({
+      user_id: initialData?.user_id || '',
+      service_id: firstServiceId,
+      scheduled_date: scheduledAt ? format(scheduledAt, 'yyyy-MM-dd') : (selectedDate || format(new Date(), 'yyyy-MM-dd')),
+      scheduled_time: scheduledAt ? format(scheduledAt, 'HH:mm') : '',
+      notes: initialData?.notes || '',
+    })
+    setErrors({})
+    setUserSearch('')
+    setShowUserDropdown(false)
   }, [modalOpen, initialData, selectedDate])
 
-  // Filter users based on search
+  const availableSlots = useMemo(
+    () => buildTimeSlots(formData.scheduled_date),
+    [formData.scheduled_date]
+  )
+
+  const selectedUser = useMemo(
+    () => users.find((candidate) => candidate.user_id === formData.user_id) || null,
+    [users, formData.user_id]
+  )
+
   const filteredUsers = useMemo(() => {
-    if (!searchUsers) return users.slice(0, 10)
-    const query = searchUsers.toLowerCase()
-    return users.filter(user =>
-      user.email?.toLowerCase().includes(query) ||
-      user.first_name?.toLowerCase().includes(query) ||
-      user.last_name?.toLowerCase().includes(query)
-    ).slice(0, 10)
-  }, [users, searchUsers])
-
-  // Load available slots when date or service changes
-  useEffect(() => {
-    if (formData.scheduled_date && formData.service_id) {
-      loadAvailableSlots()
-    }
-  }, [formData.scheduled_date, formData.service_id])
-
-  const loadAvailableSlots = async () => {
-    setLoadingSlots(true)
-    try {
-      // This would call the API to get available slots
-      // For now, we'll generate some mock slots
-      const slots = generateTimeSlots(formData.scheduled_date)
-      setAvailableSlots(slots)
-    } catch (error) {
-      console.error('Failed to load slots:', error)
-    } finally {
-      setLoadingSlots(false)
-    }
-  }
-
-  const generateTimeSlots = (date) => {
-    const slots = []
-    const dateObj = new Date(date)
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    
-    // Only generate future slots
-    const isToday = dateObj.toDateString() === today.toDateString()
-    const startHour = isToday ? Math.max(9, new Date().getHours() + 1) : 9
-    
-    for (let hour = startHour; hour < 18; hour++) {
-      for (let min = 0; min < 60; min += 30) {
-        const time = `${hour.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`
-        slots.push({
-          value: time,
-          label: format(new Date(`2000-01-01T${time}`), 'h:mm a'),
-        })
-      }
-    }
-    return slots
-  }
+    if (!userSearch.trim()) return users.slice(0, 8)
+    const query = userSearch.trim().toLowerCase()
+    return users.filter((candidate) => {
+      const fullName = `${candidate.first_name || ''} ${candidate.last_name || ''}`.trim().toLowerCase()
+      return fullName.includes(query) || candidate.email?.toLowerCase().includes(query)
+    }).slice(0, 8)
+  }, [users, userSearch])
 
   const handleInputChange = (field, value) => {
-    setFormData(prev => ({ ...prev, [field]: value }))
-    // Clear error when user types
+    setFormData((prev) => ({ ...prev, [field]: value }))
     if (errors[field]) {
-      setErrors(prev => ({ ...prev, [field]: null }))
+      setErrors((prev) => ({ ...prev, [field]: null }))
     }
-  }
-
-  const handleUserSelect = (user) => {
-    setFormData(prev => ({
-      ...prev,
-      user_id: user.user_id,
-      customer_name: `${user.first_name || ''} ${user.last_name || ''}`.trim(),
-      customer_email: user.email || '',
-      customer_phone: user.phone || '',
-    }))
-    setSearchUsers('')
-    setShowUserDropdown(false)
   }
 
   const validateForm = () => {
-    const newErrors = {}
+    const nextErrors = {}
 
-    if (formData.customer_type === 'existing' && !formData.user_id) {
-      newErrors.user_id = 'Please select a customer'
+    if (!formData.service_id) {
+      nextErrors.service_id = 'Please select a service'
     }
-
-    if (formData.customer_type === 'new') {
-      if (!formData.customer_name.trim()) {
-        newErrors.customer_name = 'Customer name is required'
-      }
-      if (!formData.customer_email.trim()) {
-        newErrors.customer_email = 'Email is required'
-      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.customer_email)) {
-        newErrors.customer_email = 'Invalid email format'
-      }
-    }
-
     if (!formData.scheduled_date) {
-      newErrors.scheduled_date = 'Date is required'
+      nextErrors.scheduled_date = 'Date is required'
     }
-
     if (!formData.scheduled_time) {
-      newErrors.scheduled_time = 'Time is required'
+      nextErrors.scheduled_time = 'Time is required'
     }
 
-    setErrors(newErrors)
-    return Object.keys(newErrors).length === 0
+    setErrors(nextErrors)
+    return Object.keys(nextErrors).length === 0
   }
 
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-    
+  const handleUserSelect = (selected) => {
+    setFormData((prev) => ({ ...prev, user_id: selected.user_id }))
+    setUserSearch('')
+    setShowUserDropdown(false)
+  }
+
+  const clearSelectedUser = () => {
+    setFormData((prev) => ({ ...prev, user_id: '' }))
+    setUserSearch('')
+  }
+
+  const handleSubmit = async (event) => {
+    event.preventDefault()
     if (!validateForm()) return
 
     const scheduledAt = `${formData.scheduled_date}T${formData.scheduled_time}:00`
-    
-    const data = {
-      scheduled_at: scheduledAt,
-      status: formData.status,
-      notes: formData.notes || null,
-      services: formData.service_id ? [formData.service_id] : [],
-    }
-
-    if (formData.customer_type === 'existing') {
-      data.user_id = formData.user_id
-    } else {
-      data.customer_name = formData.customer_name
-      data.customer_email = formData.customer_email
-      data.customer_phone = formData.customer_phone || null
-    }
+    const payload = isEditing
+      ? {
+        scheduled_at: scheduledAt,
+        notes: formData.notes || '',
+      }
+      : {
+        appointment_type: 'service_in_shop',
+        services: [formData.service_id],
+        scheduled_at: scheduledAt,
+        notes: formData.notes || '',
+        ...(formData.user_id ? { user_id: formData.user_id } : {}),
+      }
 
     try {
-      await onSubmit?.(data)
-      onClose()
+      await onSubmit?.(payload)
+      onClose?.()
     } catch (error) {
-      console.error('Failed to create appointment:', error)
+      setErrors((prev) => ({
+        ...prev,
+        form: error?.message || 'Unable to save appointment',
+      }))
     }
   }
 
@@ -228,182 +175,202 @@ export default function AppointmentForm({
         onClick={onClose}
       >
         <div
-          className="w-full max-w-[460px] max-h-[92vh] overflow-y-auto rounded-[28px] bg-[#413b3b] border border-white/10 shadow-2xl"
-          onClick={(e) => e.stopPropagation()}
+          className="w-full max-w-[520px] max-h-[92vh] overflow-y-auto rounded-[28px] border border-white/10 bg-[#413b3b] shadow-2xl"
+          onClick={(event) => event.stopPropagation()}
         >
-          {/* Header */}
-          <div className="sticky top-0 z-10 bg-[#413b3b] border-b border-white/10 px-4 py-4 sm:px-6">
+          <div className="sticky top-0 z-10 border-b border-white/10 bg-[#413b3b] px-5 py-4 sm:px-6">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-[31px] leading-none sm:text-[32px] font-semibold text-white">
-                  {initialData ? 'Edit Appointment' : 'New Appointment'}
+                <h2 className="text-[28px] font-semibold text-white sm:text-[32px]">
+                  {isEditing ? 'Edit Appointment' : 'New Appointment'}
                 </h2>
-                <p className="text-[#d4d0d0] text-sm mt-2">
-                  {initialData ? 'Update appointment details' : 'Schedule a new appointment'}
+                <p className="mt-2 text-sm text-[#d4d0d0]">
+                  {isEditing ? 'Update the schedule and notes for this appointment.' : 'Create a new in-shop service appointment.'}
                 </p>
               </div>
               <button
+                type="button"
                 onClick={onClose}
-                className="p-2.5 rounded-2xl border border-white/10 bg-white/5 text-[#d1cbcb] hover:bg-white/10 hover:text-white transition-colors"
+                className="rounded-2xl border border-white/10 bg-white/5 p-2.5 text-[#d1cbcb] transition-colors hover:bg-white/10 hover:text-white"
               >
-                <X className="w-5 h-5" />
+                <X className="h-5 w-5" />
               </button>
             </div>
           </div>
 
-          {/* Form */}
-          <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-6">
-          {/* Customer Information */}
-          <div className="space-y-4">
-              <div>
-                <label className="block text-sm text-[#d4d0d0] mb-2">Name *</label>
-                <input
-                  type="text"
-                  value={formData.customer_name}
-                  onChange={(e) => handleInputChange('customer_name', e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border border-white/10 bg-[#3a3535] text-white placeholder:text-[#9aa4ad] focus:border-white/20 focus:outline-none"
-                  placeholder="Customer name"
-                />
-                {errors.customer_name && (
-                  <p className="mt-2 text-sm text-red-400">{errors.customer_name}</p>
+          <form onSubmit={handleSubmit} className="space-y-6 p-5 sm:p-6">
+            {users.length > 0 && !isEditing && (
+              <div className="space-y-3">
+                <label className="block text-sm text-[#d4d0d0]">Customer account</label>
+                {selectedUser ? (
+                  <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-[#3a3535] px-4 py-3">
+                    <div>
+                      <p className="font-medium text-white">
+                        {`${selectedUser.first_name || ''} ${selectedUser.last_name || ''}`.trim() || selectedUser.email}
+                      </p>
+                      <p className="text-sm text-[#d4d0d0]">{selectedUser.email}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={clearSelectedUser}
+                      className="text-sm font-medium text-[#ffd21c]"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9aa4ad]" />
+                    <input
+                      type="text"
+                      value={userSearch}
+                      onChange={(event) => {
+                        setUserSearch(event.target.value)
+                        setShowUserDropdown(true)
+                      }}
+                      onFocus={() => setShowUserDropdown(true)}
+                      placeholder="Search user by name or email"
+                      className="w-full rounded-xl border border-white/10 bg-[#3a3535] py-3 pl-10 pr-4 text-white placeholder:text-[#9aa4ad] focus:border-white/20 focus:outline-none"
+                    />
+                    {showUserDropdown && filteredUsers.length > 0 && (
+                      <div className="absolute left-0 right-0 top-full z-20 mt-2 overflow-hidden rounded-2xl border border-white/10 bg-[#2f2a2a] shadow-xl">
+                        {filteredUsers.map((candidate) => (
+                          <button
+                            key={candidate.user_id}
+                            type="button"
+                            onClick={() => handleUserSelect(candidate)}
+                            className="flex w-full items-center gap-3 border-b border-white/5 px-4 py-3 text-left transition-colors last:border-b-0 hover:bg-white/5"
+                          >
+                            <div className="rounded-xl bg-white/5 p-2 text-[#ffd21c]">
+                              <User className="h-4 w-4" />
+                            </div>
+                            <div>
+                              <p className="font-medium text-white">
+                                {`${candidate.first_name || ''} ${candidate.last_name || ''}`.trim() || candidate.email}
+                              </p>
+                              <p className="text-sm text-[#d4d0d0]">{candidate.email}</p>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 )}
+                <p className="text-xs text-[#9aa4ad]">
+                  Optional. Leave blank to create an unassigned appointment record.
+                </p>
               </div>
-              <div>
-                <label className="block text-sm text-[#d4d0d0] mb-2">Email *</label>
-                <input
-                  type="email"
-                  value={formData.customer_email}
-                  onChange={(e) => handleInputChange('customer_email', e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border border-white/10 bg-[#3a3535] text-white placeholder:text-[#9aa4ad] focus:border-white/20 focus:outline-none"
-                  placeholder="customer@example.com"
-                />
-                {errors.customer_email && (
-                  <p className="mt-2 text-sm text-red-400">{errors.customer_email}</p>
-                )}
-              </div>
-              <div>
-                <label className="block text-sm text-[#d4d0d0] mb-2">Phone</label>
-                <input
-                  type="tel"
-                  value={formData.customer_phone}
-                  onChange={(e) => handleInputChange('customer_phone', e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border border-white/10 bg-[#3a3535] text-white placeholder:text-[#9aa4ad] focus:border-white/20 focus:outline-none"
-                  placeholder="+63 912 345 6789"
-                />
-              </div>
-            </div>
+            )}
 
-          {/* Service Selection */}
-          <div>
-            <label className="block text-sm text-[#d4d0d0] mb-2">Service</label>
-            <select
-              value={formData.service_id}
-              onChange={(e) => handleInputChange('service_id', e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border border-white/10 bg-[#3a3535] text-white focus:border-white/20 focus:outline-none"
-            >
-              <option value="">Select a service...</option>
-              {services.map(service => (
-                <option key={service.service_id} value={service.service_id}>
-                  {service.name} {service.duration_minutes ? `(${service.duration_minutes} min)` : ''}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Date & Time */}
-          <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm text-[#d4d0d0] mb-2">Date *</label>
-              <input
-                type="date"
-                value={formData.scheduled_date}
-                onChange={(e) => handleInputChange('scheduled_date', e.target.value)}
-                min={format(new Date(), 'yyyy-MM-dd')}
-                className="w-full px-4 py-3 rounded-xl border border-white/10 bg-[#3a3535] text-white focus:border-white/20 focus:outline-none"
-              />
-              {errors.scheduled_date && (
-                <p className="mt-2 text-sm text-red-400">{errors.scheduled_date}</p>
+              <label className="mb-2 block text-sm text-[#d4d0d0]">Service *</label>
+              <select
+                value={formData.service_id}
+                onChange={(event) => handleInputChange('service_id', event.target.value)}
+                disabled={isEditing}
+                className="w-full rounded-xl border border-white/10 bg-[#3a3535] px-4 py-3 text-white focus:border-white/20 focus:outline-none disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                <option value="">Select a service...</option>
+                {services.map((service) => (
+                  <option key={service.service_id} value={service.service_id}>
+                    {service.name} {service.duration_minutes ? `(${service.duration_minutes} min)` : ''}
+                  </option>
+                ))}
+              </select>
+              {isEditing && (
+                <p className="mt-2 text-xs text-[#9aa4ad]">
+                  Service changes are handled outside this modal. Use the appointment actions for status and payment updates.
+                </p>
+              )}
+              {errors.service_id && (
+                <p className="mt-2 text-sm text-red-400">{errors.service_id}</p>
               )}
             </div>
-            <div>
-              <label className="block text-sm text-[#d4d0d0] mb-2">Time *</label>
-              {loadingSlots ? (
-                <div className="w-full px-4 py-3 rounded-xl border border-white/10 bg-[#3a3535] flex items-center justify-center">
-                  <Loader2 className="w-5 h-5 text-[var(--text-muted)] animate-spin" />
-                </div>
-              ) : (
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <label className="mb-2 flex items-center gap-2 text-sm text-[#d4d0d0]">
+                  <CalendarDays className="h-4 w-4" />
+                  Date *
+                </label>
+                <input
+                  type="date"
+                  value={formData.scheduled_date}
+                  onChange={(event) => handleInputChange('scheduled_date', event.target.value)}
+                  min={format(new Date(), 'yyyy-MM-dd')}
+                  className="w-full rounded-xl border border-white/10 bg-[#3a3535] px-4 py-3 text-white focus:border-white/20 focus:outline-none"
+                />
+                {errors.scheduled_date && (
+                  <p className="mt-2 text-sm text-red-400">{errors.scheduled_date}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="mb-2 flex items-center gap-2 text-sm text-[#d4d0d0]">
+                  <Clock3 className="h-4 w-4" />
+                  Time *
+                </label>
                 <select
                   value={formData.scheduled_time}
-                  onChange={(e) => handleInputChange('scheduled_time', e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border border-white/10 bg-[#3a3535] text-white focus:border-white/20 focus:outline-none"
+                  onChange={(event) => handleInputChange('scheduled_time', event.target.value)}
+                  className="w-full rounded-xl border border-white/10 bg-[#3a3535] px-4 py-3 text-white focus:border-white/20 focus:outline-none"
                 >
                   <option value="">Select time...</option>
-                  {availableSlots.map(slot => (
+                  {availableSlots.map((slot) => (
                     <option key={slot.value} value={slot.value}>
                       {slot.label}
                     </option>
                   ))}
                 </select>
-              )}
-              {errors.scheduled_time && (
-                <p className="mt-2 text-sm text-red-400">{errors.scheduled_time}</p>
-              )}
+                {errors.scheduled_time && (
+                  <p className="mt-2 text-sm text-red-400">{errors.scheduled_time}</p>
+                )}
+              </div>
             </div>
-          </div>
 
-          {/* Status */}
-          <div>
-            <label className="block text-sm text-[#d4d0d0] mb-2">Initial Status</label>
-            <select
-              value={formData.status}
-              onChange={(e) => handleInputChange('status', e.target.value)}
-              className="w-full px-4 py-3 rounded-xl border border-white/10 bg-[#3a3535] text-white focus:border-white/20 focus:outline-none"
-            >
-              <option value="pending">Pending</option>
-              <option value="approved">Approved</option>
-              <option value="confirmed">Confirmed</option>
-            </select>
-          </div>
+            <div>
+              <label className="mb-2 block text-sm text-[#d4d0d0]">Notes</label>
+              <textarea
+                value={formData.notes}
+                onChange={(event) => handleInputChange('notes', event.target.value)}
+                rows={4}
+                className="w-full resize-none rounded-xl border border-white/10 bg-[#3a3535] px-4 py-3 text-white placeholder:text-[#9aa4ad] focus:border-white/20 focus:outline-none"
+                placeholder="Add workshop notes, prep details, or instructions..."
+              />
+            </div>
 
-          {/* Notes */}
-          <div>
-            <label className="block text-sm text-[#d4d0d0] mb-2">Notes</label>
-            <textarea
-              value={formData.notes}
-              onChange={(e) => handleInputChange('notes', e.target.value)}
-              rows={4}
-              className="w-full px-4 py-3 rounded-xl border border-white/10 bg-[#3a3535] text-white placeholder:text-[#9aa4ad] focus:border-white/20 focus:outline-none resize-none"
-              placeholder="Add any special requests or notes..."
-            />
-          </div>
+            {errors.form && (
+              <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+                {errors.form}
+              </div>
+            )}
 
-          {/* Actions */}
-          <div className="flex justify-end gap-3 pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-6 py-3 rounded-xl border border-white/10 bg-white/5 text-[#d4d0d0] hover:bg-white/10 hover:text-white transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="flex items-center gap-2 px-6 py-3 rounded-xl bg-[#ffd21c] text-black font-semibold hover:bg-[#ffda3a] transition-colors disabled:opacity-50"
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Saving...
-                </>
-              ) : (
-                <>
-                  <CheckCircle className="w-4 h-4" />
-                  {initialData ? 'Update Appointment' : 'Create Appointment'}
-                </>
-              )}
-            </button>
-          </div>
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-xl border border-white/10 bg-white/5 px-6 py-3 text-[#d4d0d0] transition-colors hover:bg-white/10 hover:text-white"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={loading}
+                className="flex items-center gap-2 rounded-xl bg-[#ffd21c] px-6 py-3 font-semibold text-black transition-colors hover:bg-[#ffda3a] disabled:opacity-50"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="h-4 w-4" />
+                    {isEditing ? 'Update Appointment' : 'Create Appointment'}
+                  </>
+                )}
+              </button>
+            </div>
           </form>
         </div>
       </motion.div>

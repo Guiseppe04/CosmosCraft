@@ -1,4 +1,5 @@
 const { pool } = require('../config/database');
+const { AppError } = require('../middleware/errorHandler');
 
 const normalizeProjectStatus = (status) => {
   const normalized = String(status || '').trim().toLowerCase().replace(/\s+/g, '_')
@@ -17,6 +18,12 @@ const PROJECT_BASE_SELECT = `
     p.notes AS description,
     o.user_id AS customer_id,
     o.order_number,
+    a.line1 AS shipping_line1,
+    a.line2 AS shipping_line2,
+    a.city AS shipping_city,
+    a.province AS shipping_province,
+    a.postal_code AS shipping_postal_code,
+    a.country AS shipping_country,
     CONCAT(
       COALESCE(u.first_name, ''),
       CASE
@@ -27,29 +34,156 @@ const PROJECT_BASE_SELECT = `
     ) AS customer_name
   FROM projects p
   JOIN orders o ON o.order_id = p.order_id
+  LEFT JOIN addresses a ON a.address_id = o.shipping_address_id
   LEFT JOIN users u ON u.user_id = o.user_id
 `
 
+const LUZON_LOCATION_KEYWORDS = [
+  'abra', 'apayao', 'bataan', 'batanes', 'batangas', 'benguet', 'bulacan', 'cagayan',
+  'camarines norte', 'camarines sur', 'catanduanes', 'cavite', 'ifugao', 'ilocos norte',
+  'ilocos sur', 'isabela', 'kalinga', 'la union', 'laguna', 'marinduque', 'masbate',
+  'metro manila', 'metropolitan manila', 'mountain province', 'ncr', 'nueva ecija',
+  'nueva vizcaya', 'occidental mindoro', 'oriental mindoro', 'palawan', 'pampanga',
+  'pangasinan', 'quezon', 'quirino', 'rizal', 'romblon', 'sorsogon', 'tarlac', 'zambales',
+  'albay', 'aurora', 'laguna', 'camarines', 'manila', 'quezon city', 'caloocan', 'las pinas',
+  'makati', 'malabon', 'mandaluyong', 'marikina', 'muntinlupa', 'navotas', 'paranaque',
+  'pasay', 'pasig', 'pateros', 'san juan', 'taguig', 'valenzuela'
+];
+
+const normalizeLocation = (value) => String(value || '')
+  .trim()
+  .toLowerCase()
+  .replace(/[^a-z0-9]+/g, ' ')
+  .replace(/\s+/g, ' ')
+  .trim();
+
+const isLuzonLocation = (project) => {
+  const country = String(project.shipping_country || '').trim().toUpperCase();
+  if (country && country !== 'PH' && country !== 'PHILIPPINES') {
+    return false;
+  }
+
+  const haystack = [
+    project.shipping_province,
+    project.shipping_city,
+  ]
+    .map(normalizeLocation)
+    .filter(Boolean)
+    .join(' ');
+
+  if (!haystack) return false;
+  return LUZON_LOCATION_KEYWORDS.some((keyword) => haystack.includes(keyword));
+};
+
+const buildShippingAddress = (project) => ({
+  line1: project.shipping_line1 || null,
+  line2: project.shipping_line2 || null,
+  city: project.shipping_city || null,
+  province: project.shipping_province || null,
+  postal_code: project.shipping_postal_code || null,
+  country: project.shipping_country || null,
+});
+
+const attachFulfillmentDetails = (project, pickupAppointment = null) => {
+  const shipping_address = buildShippingAddress(project);
+  const shop_delivery_eligible = isLuzonLocation(project);
+
+  return {
+    ...project,
+    shipping_address,
+    fulfillment_method: project.fulfillment_method || null,
+    fulfillment_status: project.fulfillment_status || null,
+    fulfillment_notes: project.fulfillment_notes || null,
+    fulfillment_selected_at: project.fulfillment_selected_at || null,
+    pickup_appointment_id: project.pickup_appointment_id || null,
+    pickup_appointment: pickupAppointment,
+    shop_delivery_eligible,
+  };
+};
+
+const buildFulfillmentAppointmentNotes = (project, method, notes) => {
+  const lines = [
+    `Project release for ${project.name || project.title}`,
+    `Order ${project.order_number}`,
+    `Method: ${method}`,
+  ];
+
+  if (notes) lines.push(`Customer notes: ${notes}`);
+  return lines.join(' | ');
+};
+
+const getProjectTaskStats = async (db, projectId) => {
+  const result = await db.query(
+    `SELECT
+       COUNT(*)::int AS total,
+       COUNT(CASE WHEN ps.status = 'completed' THEN 1 END)::int AS completed
+     FROM project_subtasks ps
+     JOIN project_milestones pm ON ps.milestone_id = pm.milestone_id
+     WHERE pm.project_id = $1`,
+    [projectId]
+  );
+
+  return {
+    total: result.rows[0]?.total || 0,
+    completed: result.rows[0]?.completed || 0,
+  };
+};
+
+const buildProjectTaskTracking = ({ total, completed }, currentStatus) => {
+  const progress = total === 0 ? 0 : Math.round((completed / total) * 100);
+  const normalizedCurrentStatus = normalizeProjectStatus(currentStatus);
+
+  let status = normalizedCurrentStatus || 'not_started';
+  if (total > 0) {
+    if (completed === total) status = 'completed';
+    else if (completed > 0) status = 'in_progress';
+    else status = 'not_started';
+  }
+
+  return {
+    progress,
+    status,
+    task_summary: {
+      total,
+      completed,
+      pending: Math.max(total - completed, 0),
+    },
+  };
+};
+
+const applyProjectTaskTracking = async (db, project, { stats = null, persist = false } = {}) => {
+  const resolvedStats = stats || await getProjectTaskStats(db, project.project_id);
+  const tracking = buildProjectTaskTracking(resolvedStats, project.status);
+
+  if (persist) {
+    const currentProgress = Number.isFinite(Number(project.progress)) ? Number(project.progress) : 0;
+    if (currentProgress !== tracking.progress || project.status !== tracking.status) {
+      await db.query(
+        `UPDATE projects
+         SET progress = $1,
+             status = $2,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE project_id = $3`,
+        [tracking.progress, tracking.status, project.project_id]
+      );
+    }
+  }
+
+  return {
+    ...project,
+    ...tracking,
+  };
+};
+
 exports.getProjects = async () => {
   const result = await pool.query(`${PROJECT_BASE_SELECT} ORDER BY p.created_at DESC`);
-  
-  // To get proper progress, we calculate it dynamically for each project
-  for (let p of result.rows) {
-    const stats = await pool.query(`
-      SELECT 
-        COUNT(*) as total, 
-        COUNT(CASE WHEN ps.status = 'completed' THEN 1 END) as completed
-      FROM project_subtasks ps
-      JOIN project_milestones pm ON ps.milestone_id = pm.milestone_id
-      WHERE pm.project_id = $1
-    `, [p.project_id]);
-    
-    const total = parseInt(stats.rows[0].total) || 0;
-    const completed = parseInt(stats.rows[0].completed) || 0;
-    p.progress = total === 0 ? 0 : Math.round((completed / total) * 100);
-  }
-  
-  return result.rows;
+
+  return Promise.all(
+    result.rows.map(async (project) => {
+      const trackedProject = await applyProjectTaskTracking(pool, project, { persist: true });
+      return attachFulfillmentDetails(trackedProject);
+    })
+  );
 };
 
 exports.getProjectById = async (projectId) => {
@@ -58,22 +192,8 @@ exports.getProjectById = async (projectId) => {
     [projectId]
   );
   if (result.rows.length === 0) return null;
-  const project = result.rows[0];
-
-  const stats = await pool.query(`
-    SELECT 
-      COUNT(*) as total, 
-      COUNT(CASE WHEN ps.status = 'completed' THEN 1 END) as completed
-    FROM project_subtasks ps
-    JOIN project_milestones pm ON ps.milestone_id = pm.milestone_id
-    WHERE pm.project_id = $1
-  `, [projectId]);
-  
-  const total = parseInt(stats.rows[0].total) || 0;
-  const completed = parseInt(stats.rows[0].completed) || 0;
-  project.progress = total === 0 ? 0 : Math.round((completed / total) * 100);
-  
-  return project;
+  const trackedProject = await applyProjectTaskTracking(pool, result.rows[0], { persist: true });
+  return attachFulfillmentDetails(trackedProject);
 };
 
 exports.getMyProjects = async (userId) => {
@@ -84,24 +204,21 @@ exports.getMyProjects = async (userId) => {
     [userId]
   );
   for (let p of result.rows) {
-    const stats = await pool.query(`
-      SELECT COUNT(*) as total, COUNT(CASE WHEN ps.status = 'completed' THEN 1 END) as completed
-      FROM project_subtasks ps
-      JOIN project_milestones pm ON ps.milestone_id = pm.milestone_id
-      WHERE pm.project_id = $1
-    `, [p.project_id]);
+    const stats = await getProjectTaskStats(pool, p.project_id);
     const customizationsRes = await pool.query(
       `SELECT DISTINCT customization_id
        FROM order_items
-       WHERE order_id = $1
+      WHERE order_id = $1
          AND customization_id IS NOT NULL`,
       [p.order_id]
     );
-    const total = parseInt(stats.rows[0].total) || 0;
-    const completed = parseInt(stats.rows[0].completed) || 0;
-    p.progress = total === 0 ? 0 : Math.round((completed / total) * 100);
+    const tracking = await applyProjectTaskTracking(pool, p, { stats, persist: true });
     p.customization_ids = customizationsRes.rows.map(row => row.customization_id);
     p.primary_customization_id = p.customization_ids[0] || null;
+    p.progress = tracking.progress;
+    p.status = tracking.status;
+    p.task_summary = tracking.task_summary;
+    Object.assign(p, attachFulfillmentDetails(p));
   }
   return result.rows;
 };
@@ -201,6 +318,7 @@ exports.getProjectHierarchy = async (projectId) => {
     const customizationResult = await client.query(
       `SELECT DISTINCT
          c.customization_id,
+         c.created_at,
          c.name,
          c.guitar_type,
          c.body_wood,
@@ -213,7 +331,7 @@ exports.getProjectHierarchy = async (projectId) => {
        FROM order_items oi
        JOIN customizations c ON c.customization_id = oi.customization_id
        WHERE oi.order_id = $1
-       ORDER BY c.created_at ASC`,
+      ORDER BY c.created_at ASC`,
       [project.order_id]
     );
 
@@ -313,18 +431,187 @@ exports.getProjectHierarchy = async (projectId) => {
     });
 
     project.milestones = Object.values(milestoneMap);
-    project.progress = totalSubtasks === 0 ? 0 : Math.round((completedSubtasks / totalSubtasks) * 100);
-    
-    // Auto-update project base status if completed
-    if (totalSubtasks > 0 && totalSubtasks === completedSubtasks && project.status !== 'Completed') {
-       await client.query("UPDATE projects SET status = 'Completed' WHERE project_id = $1", [projectId]);
-       project.status = 'Completed';
-    } else if (completedSubtasks > 0 && totalSubtasks !== completedSubtasks && project.status === 'Pending') {
-       await client.query("UPDATE projects SET status = 'In Progress' WHERE project_id = $1", [projectId]);
-       project.status = 'In Progress';
+
+    let pickupAppointment = null;
+    if (project.pickup_appointment_id) {
+      const pickupResult = await client.query(
+        `SELECT appointment_id, appointment_type, order_id, location_id, scheduled_at, status, notes, confirmation_notes
+         FROM appointments
+         WHERE appointment_id = $1`,
+        [project.pickup_appointment_id]
+      );
+      pickupAppointment = pickupResult.rows[0] || null;
     }
 
-    return project;
+    const trackedProject = await applyProjectTaskTracking(
+      client,
+      project,
+      {
+        stats: { total: totalSubtasks, completed: completedSubtasks },
+        persist: true,
+      }
+    );
+    return attachFulfillmentDetails(trackedProject, pickupAppointment);
+  } finally {
+    client.release();
+  }
+};
+
+exports.submitFulfillmentChoice = async (projectId, userId, userRole, data = {}) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const projectResult = await client.query(
+      `${PROJECT_BASE_SELECT} WHERE p.project_id = $1`,
+      [projectId]
+    );
+
+    if (projectResult.rows.length === 0) {
+      throw new AppError('Project not found', 404);
+    }
+
+    const project = projectResult.rows[0];
+    const isPrivileged = ['staff', 'admin', 'super_admin'].includes(userRole);
+    if (!isPrivileged && project.customer_id !== userId) {
+      throw new AppError('You do not have access to this project', 403);
+    }
+
+    if (Number(project.progress || 0) < 100) {
+      throw new AppError('Fulfillment options unlock once the project is completed', 400);
+    }
+
+    const method = String(data.method || '').trim();
+    const notes = data.notes?.trim() || null;
+    const allowedMethods = ['pickup_appointment', 'external_delivery', 'shop_delivery'];
+
+    if (!allowedMethods.includes(method)) {
+      throw new AppError('Invalid fulfillment method', 400);
+    }
+
+    const shop_delivery_eligible = isLuzonLocation(project);
+    if (method === 'shop_delivery' && !shop_delivery_eligible) {
+      throw new AppError('Shop delivery is only available for Luzon addresses', 400);
+    }
+
+    let pickupAppointmentId = project.pickup_appointment_id || null;
+    let pickupAppointment = null;
+
+    if (method === 'pickup_appointment') {
+      if (!data.scheduled_at) {
+        throw new AppError('Pickup appointment date and time are required', 400);
+      }
+
+      const scheduledAt = new Date(data.scheduled_at);
+      if (Number.isNaN(scheduledAt.getTime()) || scheduledAt <= new Date()) {
+        throw new AppError('Pickup appointment must be scheduled in the future', 400);
+      }
+
+      const appointmentNotes = buildFulfillmentAppointmentNotes(project, 'pickup appointment', notes);
+      const appointmentPayload = [
+        project.customer_id,
+        'pickup',
+        project.order_id,
+        JSON.stringify([]),
+        'shop',
+        JSON.stringify({
+          project_id: project.project_id,
+          project_name: project.name || project.title,
+          order_number: project.order_number,
+          fulfillment_method: method,
+        }),
+        scheduledAt.toISOString(),
+        appointmentNotes,
+        notes,
+      ];
+
+      if (pickupAppointmentId) {
+        const updatedAppointment = await client.query(
+          `UPDATE appointments
+           SET user_id = $1,
+               appointment_type = $2,
+               order_id = $3,
+               services = $4,
+               location_id = $5,
+               guitar_details = $6,
+               scheduled_at = $7,
+               notes = $8,
+               confirmation_notes = $9,
+               status = CASE WHEN status = 'cancelled' THEN 'pending' ELSE status END,
+               updated_at = now()
+           WHERE appointment_id = $10
+           RETURNING appointment_id, appointment_type, order_id, location_id, scheduled_at, status, notes, confirmation_notes`,
+          [...appointmentPayload, pickupAppointmentId]
+        );
+
+        if (updatedAppointment.rows.length > 0) {
+          pickupAppointment = updatedAppointment.rows[0];
+        } else {
+          pickupAppointmentId = null;
+        }
+      }
+
+      if (!pickupAppointment) {
+        const insertedAppointment = await client.query(
+          `INSERT INTO appointments (
+             user_id, appointment_type, order_id, services, location_id, guitar_details,
+             scheduled_at, status, notes, confirmation_notes, created_at, updated_at
+           )
+           VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', $8, $9, now(), now())
+           RETURNING appointment_id, appointment_type, order_id, location_id, scheduled_at, status, notes, confirmation_notes`,
+          appointmentPayload
+        );
+        pickupAppointment = insertedAppointment.rows[0];
+        pickupAppointmentId = pickupAppointment.appointment_id;
+      }
+    } else if (pickupAppointmentId) {
+      await client.query(
+        `UPDATE appointments
+         SET status = CASE WHEN status IN ('completed', 'cancelled') THEN status ELSE 'cancelled' END,
+             notes = COALESCE(notes, '') || CASE WHEN COALESCE(notes, '') = '' THEN '' ELSE ' | ' END || $1,
+             updated_at = now()
+         WHERE appointment_id = $2`,
+        [`Customer switched fulfillment to ${method.replace(/_/g, ' ')}`, pickupAppointmentId]
+      );
+      pickupAppointmentId = null;
+    }
+
+    const fulfillmentStatus = method === 'pickup_appointment'
+      ? 'pickup_scheduled'
+      : method === 'external_delivery'
+      ? 'awaiting_external_pickup'
+      : 'shop_delivery_requested';
+
+    await client.query(
+      `UPDATE projects
+       SET fulfillment_method = $1,
+           fulfillment_status = $2,
+           fulfillment_notes = $3,
+           fulfillment_selected_at = now(),
+           pickup_appointment_id = $4,
+           updated_at = now()
+       WHERE project_id = $5`,
+      [method, fulfillmentStatus, notes, pickupAppointmentId, projectId]
+    );
+
+    await logActivity(client, projectId, userId, 'fulfillment_updated', { method, fulfillmentStatus });
+
+    await client.query('COMMIT');
+
+    return attachFulfillmentDetails(
+      {
+        ...project,
+        fulfillment_method: method,
+        fulfillment_status: fulfillmentStatus,
+        fulfillment_notes: notes,
+        fulfillment_selected_at: new Date(),
+        pickup_appointment_id: pickupAppointmentId,
+      },
+      pickupAppointment
+    );
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
   } finally {
     client.release();
   }

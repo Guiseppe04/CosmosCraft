@@ -64,6 +64,14 @@ exports.getDashboardSummary = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+exports.getSalesReport = async (req, res, next) => {
+  try {
+    const { start_date, end_date } = req.query;
+    const result = await reportService.getSalesReport({ start_date, end_date });
+    res.json({ status: 'success', data: result });
+  } catch (err) { next(err); }
+};
+
 exports.getRevenueReport = async (req, res, next) => {
   try {
     const { start_date, end_date, group_by } = req.query;

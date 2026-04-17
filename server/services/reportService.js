@@ -502,6 +502,265 @@ async function getRevenueReport(filters = {}) {
   };
 }
 
+async function getSalesReport(filters = {}) {
+  const startDate = parseDate(filters.start_date);
+  const endDate = parseDate(filters.end_date);
+
+  const buildRange = (column) => {
+    const conditions = [];
+    const params = [];
+    let idx = 1;
+
+    if (startDate) {
+      conditions.push(`${column} >= $${idx++}`);
+      params.push(startDate);
+    }
+
+    if (endDate) {
+      conditions.push(`${column} <= $${idx++}`);
+      params.push(endDate);
+    }
+
+    return {
+      clause: conditions.length ? ` AND ${conditions.join(' AND ')}` : '',
+      params,
+    };
+  };
+
+  const ordersRange = buildRange('o.created_at');
+  const posRange = buildRange('ps.created_at');
+  const itemsRange = buildRange('src.created_at');
+
+  const now = new Date();
+  const todayStart = new Date(now);
+  todayStart.setHours(0, 0, 0, 0);
+
+  const weekStart = new Date(todayStart);
+  weekStart.setDate(weekStart.getDate() - 6);
+
+  const monthStart = new Date(todayStart.getFullYear(), todayStart.getMonth(), 1);
+
+  const [
+    walkInSummary,
+    onlineSummary,
+    customizationSummary,
+    dailyOrders,
+    dailyPos,
+    weeklyOrders,
+    weeklyPos,
+    monthlyOrders,
+    monthlyPos,
+    bestSellingProducts,
+    customizationTypes,
+  ] = await Promise.all([
+    pool.query(
+      `SELECT
+          COUNT(*)::int AS transactions,
+          COALESCE(SUM(ps.total_amount), 0)::numeric AS sales
+       FROM pos_sales ps
+       WHERE ps.status = 'completed'
+       ${posRange.clause}`,
+      posRange.params
+    ),
+    pool.query(
+      `SELECT
+          COUNT(*)::int AS transactions,
+          COALESCE(SUM(o.total_amount), 0)::numeric AS sales
+       FROM orders o
+       WHERE o.status = 'completed'
+         AND NOT EXISTS (
+           SELECT 1
+           FROM order_items oi
+           WHERE oi.order_id = o.order_id
+             AND oi.customization_id IS NOT NULL
+         )
+       ${ordersRange.clause}`,
+      ordersRange.params
+    ),
+    pool.query(
+      `SELECT
+          COUNT(*)::int AS transactions,
+          COALESCE(SUM(o.total_amount), 0)::numeric AS sales
+       FROM orders o
+       WHERE o.status = 'completed'
+         AND EXISTS (
+           SELECT 1
+           FROM order_items oi
+           WHERE oi.order_id = o.order_id
+             AND oi.customization_id IS NOT NULL
+         )
+       ${ordersRange.clause}`,
+      ordersRange.params
+    ),
+    pool.query(
+      `SELECT
+          COUNT(*)::int AS transactions,
+          COALESCE(SUM(total_amount), 0)::numeric AS sales
+       FROM orders
+       WHERE status = 'completed' AND created_at >= $1`,
+      [todayStart]
+    ),
+    pool.query(
+      `SELECT
+          COUNT(*)::int AS transactions,
+          COALESCE(SUM(total_amount), 0)::numeric AS sales
+       FROM pos_sales
+       WHERE status = 'completed' AND created_at >= $1`,
+      [todayStart]
+    ),
+    pool.query(
+      `SELECT
+          COUNT(*)::int AS transactions,
+          COALESCE(SUM(total_amount), 0)::numeric AS sales
+       FROM orders
+       WHERE status = 'completed' AND created_at >= $1`,
+      [weekStart]
+    ),
+    pool.query(
+      `SELECT
+          COUNT(*)::int AS transactions,
+          COALESCE(SUM(total_amount), 0)::numeric AS sales
+       FROM pos_sales
+       WHERE status = 'completed' AND created_at >= $1`,
+      [weekStart]
+    ),
+    pool.query(
+      `SELECT
+          COUNT(*)::int AS transactions,
+          COALESCE(SUM(total_amount), 0)::numeric AS sales
+       FROM orders
+       WHERE status = 'completed' AND created_at >= $1`,
+      [monthStart]
+    ),
+    pool.query(
+      `SELECT
+          COUNT(*)::int AS transactions,
+          COALESCE(SUM(total_amount), 0)::numeric AS sales
+       FROM pos_sales
+       WHERE status = 'completed' AND created_at >= $1`,
+      [monthStart]
+    ),
+    pool.query(
+      `WITH combined_sales AS (
+         SELECT
+           COALESCE(oi.product_id::text, oi.product_sku, oi.product_name) AS product_key,
+           COALESCE(p.name, oi.product_name, 'Product') AS name,
+           COALESCE(cat.name, 'Uncategorized') AS category,
+           oi.quantity::int AS units,
+           (oi.quantity * oi.unit_price)::numeric AS revenue,
+           o.created_at
+         FROM order_items oi
+         JOIN orders o ON o.order_id = oi.order_id
+         LEFT JOIN products p ON p.product_id = oi.product_id
+         LEFT JOIN categories cat ON cat.category_id = p.category_id
+         WHERE o.status = 'completed'
+           AND oi.product_id IS NOT NULL
+
+         UNION ALL
+
+         SELECT
+           COALESCE(psi.product_id::text, 'pos:' || psi.item_name) AS product_key,
+           COALESCE(p.name, psi.item_name, 'Product') AS name,
+           COALESCE(cat.name, 'Uncategorized') AS category,
+           psi.quantity::int AS units,
+           COALESCE(psi.subtotal, psi.quantity * psi.unit_price)::numeric AS revenue,
+           ps.created_at
+         FROM pos_sale_items psi
+         JOIN pos_sales ps ON ps.sale_id = psi.sale_id
+         LEFT JOIN products p ON p.product_id = psi.product_id
+         LEFT JOIN categories cat ON cat.category_id = p.category_id
+         WHERE ps.status = 'completed'
+           AND psi.product_id IS NOT NULL
+       )
+       SELECT
+         name,
+         category,
+         SUM(units)::int AS units,
+         COALESCE(SUM(revenue), 0)::numeric AS revenue
+       FROM combined_sales src
+       WHERE 1 = 1${itemsRange.clause}
+       GROUP BY product_key, name, category
+       ORDER BY units DESC, revenue DESC
+       LIMIT 10`,
+      itemsRange.params
+    ),
+    pool.query(
+      `SELECT
+          c.guitar_type AS type,
+          COUNT(DISTINCT o.order_id)::int AS orders,
+          COALESCE(SUM(oi.quantity * oi.unit_price), 0)::numeric AS revenue
+       FROM order_items oi
+       JOIN orders o ON o.order_id = oi.order_id
+       JOIN customizations c ON c.customization_id = oi.customization_id
+       WHERE o.status = 'completed'
+       ${ordersRange.clause}
+       GROUP BY c.guitar_type
+       ORDER BY revenue DESC, orders DESC`,
+      ordersRange.params
+    ),
+  ]);
+
+  const walkInSales = parseFloat(walkInSummary.rows[0]?.sales || 0);
+  const walkInTransactions = parseInt(walkInSummary.rows[0]?.transactions || 0, 10);
+  const onlineSales = parseFloat(onlineSummary.rows[0]?.sales || 0);
+  const onlineTransactions = parseInt(onlineSummary.rows[0]?.transactions || 0, 10);
+  const customizationSales = parseFloat(customizationSummary.rows[0]?.sales || 0);
+  const customizationTransactions = parseInt(customizationSummary.rows[0]?.transactions || 0, 10);
+
+  const totalGrossSales = walkInSales + onlineSales + customizationSales;
+  const totalTransactions = walkInTransactions + onlineTransactions + customizationTransactions;
+
+  const dailySales = parseFloat(dailyOrders.rows[0]?.sales || 0) + parseFloat(dailyPos.rows[0]?.sales || 0);
+  const dailyTransactions = parseInt(dailyOrders.rows[0]?.transactions || 0, 10) + parseInt(dailyPos.rows[0]?.transactions || 0, 10);
+  const weeklySales = parseFloat(weeklyOrders.rows[0]?.sales || 0) + parseFloat(weeklyPos.rows[0]?.sales || 0);
+  const weeklyTransactions = parseInt(weeklyOrders.rows[0]?.transactions || 0, 10) + parseInt(weeklyPos.rows[0]?.transactions || 0, 10);
+  const monthlySales = parseFloat(monthlyOrders.rows[0]?.sales || 0) + parseFloat(monthlyPos.rows[0]?.sales || 0);
+  const monthlyTransactions = parseInt(monthlyOrders.rows[0]?.transactions || 0, 10) + parseInt(monthlyPos.rows[0]?.transactions || 0, 10);
+
+  const pct = (value, total) => (total > 0 ? Number(((value / total) * 100).toFixed(1)) : 0);
+  const avg = (value, count) => (count > 0 ? Number((value / count).toFixed(2)) : 0);
+
+  return {
+    totalGrossSales: Number(totalGrossSales.toFixed(2)),
+    totalTransactions,
+    averagePerTransaction: avg(totalGrossSales, totalTransactions),
+    customizationOrders: customizationTransactions,
+    walkInSales: Number(walkInSales.toFixed(2)),
+    walkInTransactions,
+    walkInAvg: avg(walkInSales, walkInTransactions),
+    walkInPercentage: pct(walkInSales, totalGrossSales),
+    onlineSales: Number(onlineSales.toFixed(2)),
+    onlineTransactions,
+    onlineAvg: avg(onlineSales, onlineTransactions),
+    onlinePercentage: pct(onlineSales, totalGrossSales),
+    customizationSales: Number(customizationSales.toFixed(2)),
+    customizationTransactions,
+    customizationAvg: avg(customizationSales, customizationTransactions),
+    customizationPercentage: pct(customizationSales, totalGrossSales),
+    dailySales: Number(dailySales.toFixed(2)),
+    dailyTransactions,
+    weeklySales: Number(weeklySales.toFixed(2)),
+    weeklyTransactions,
+    monthlySales: Number(monthlySales.toFixed(2)),
+    monthlyTransactions,
+    bestSellingProducts: bestSellingProducts.rows.map((row) => ({
+      name: row.name,
+      units: parseInt(row.units || 0, 10),
+      revenue: parseFloat(row.revenue || 0),
+      category: row.category,
+    })),
+    customizationTypes: customizationTypes.rows.map((row) => ({
+      type: row.type,
+      orders: parseInt(row.orders || 0, 10),
+      revenue: parseFloat(row.revenue || 0),
+    })),
+    customizationRevenue: Number(customizationSales.toFixed(2)),
+    avgCustomization: avg(customizationSales, customizationTransactions),
+    walkInConversion: pct(walkInTransactions, totalTransactions),
+    onlineConversion: pct(onlineTransactions, totalTransactions),
+  };
+}
+
 async function getCustomizationReport(filters = {}) {
   const { start_date, end_date } = filters;
   const { conditions, params } = buildDateFilter(parseDate(start_date), parseDate(end_date));
@@ -558,6 +817,7 @@ module.exports = {
   getCartReport,
   getUserReport,
   getDashboardSummary,
+  getSalesReport,
   getRevenueReport,
   getCustomizationReport,
   exportReport,

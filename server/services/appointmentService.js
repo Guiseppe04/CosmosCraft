@@ -25,6 +25,8 @@ function formatAppointmentResponse(appointment) {
     user_email: appointment.user_email,
     user_name: appointment.user_name,
     user_phone: appointment.user_phone,
+    appointment_type: appointment.appointment_type || 'service_in_shop',
+    order_id: appointment.order_id || null,
     customer_name: appointment.customer_name || null,
     customer_email: appointment.customer_email || null,
     customer_phone: appointment.customer_phone || null,
@@ -38,13 +40,14 @@ function formatAppointmentResponse(appointment) {
     payment_method: appointment.payment_method || null,
     payment_proof_url: appointment.payment_proof_url || null,
     notes: appointment.notes,
+    confirmation_notes: appointment.confirmation_notes || null,
     time_until_appointment_minutes: appointment.time_until_appointment_minutes || null,
     created_at: appointment.created_at,
     updated_at: appointment.updated_at,
   };
 }
 
-exports.createAppointment = async ({ services, location_id, guitar_details, scheduled_at, notes, user_id }) => {
+exports.createAppointment = async ({ appointment_type = 'service_in_shop', services = [], location_id, guitar_details, scheduled_at, notes, user_id, order_id = null, confirmation_notes = null }) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -55,10 +58,20 @@ exports.createAppointment = async ({ services, location_id, guitar_details, sche
     }
 
     const appointmentResult = await client.query(
-      `INSERT INTO appointments (user_id, services, location_id, guitar_details, scheduled_at, status, notes, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, 'approved', $6, now(), now())
+      `INSERT INTO appointments (user_id, appointment_type, order_id, services, location_id, guitar_details, scheduled_at, status, notes, confirmation_notes, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', $8, $9, now(), now())
        RETURNING *`,
-      [user_id || null, JSON.stringify(services), location_id, JSON.stringify(guitar_details), scheduled_at, notes || null]
+      [
+        user_id || null,
+        appointment_type,
+        order_id,
+        JSON.stringify(Array.isArray(services) ? services : []),
+        location_id || null,
+        JSON.stringify(guitar_details || {}),
+        scheduled_at,
+        notes || null,
+        confirmation_notes || null,
+      ]
     );
 
     await client.query('COMMIT');
@@ -88,12 +101,13 @@ exports.getAppointmentById = async (appointmentId) => {
   return formatAppointmentResponse(result.rows[0]);
 };
 
-exports.listAppointments = async ({ user_id, status, date_from, date_to, search, sort_by = 'scheduled_at', sort_order = 'asc', limit = 20, offset = 0 } = {}) => {
+exports.listAppointments = async ({ user_id, appointment_type, status, date_from, date_to, search, sort_by = 'scheduled_at', sort_order = 'asc', limit = 20, offset = 0 } = {}) => {
   let where = [];
   let params = [];
   let idx = 1;
 
   if (user_id) { where.push(`a.user_id = $${idx++}`); params.push(user_id); }
+  if (appointment_type) { where.push(`a.appointment_type = $${idx++}`); params.push(appointment_type); }
   if (status) { where.push(`a.status = $${idx++}`); params.push(status); }
   if (date_from) { where.push(`a.scheduled_at >= $${idx++}`); params.push(date_from); }
   if (date_to) { where.push(`a.scheduled_at <= $${idx++}`); params.push(date_to); }
@@ -129,6 +143,7 @@ exports.getAppointmentsCount = async (filters = {}) => {
   let idx = 1;
 
   if (filters.user_id) { where.push(`a.user_id = $${idx++}`); params.push(filters.user_id); }
+  if (filters.appointment_type) { where.push(`a.appointment_type = $${idx++}`); params.push(filters.appointment_type); }
   if (filters.status) { where.push(`a.status = $${idx++}`); params.push(filters.status); }
   if (filters.search) {
     where.push(`(u.first_name ILIKE $${idx} OR u.last_name ILIKE $${idx} OR u.email ILIKE $${idx} OR a.notes ILIKE $${idx} OR CAST(a.appointment_id AS TEXT) ILIKE $${idx})`);
@@ -166,7 +181,7 @@ exports.getUserUpcomingAppointments = async (userId) => {
 exports.getAppointmentsByDateRange = async (startDate, endDate, filters = {}) => this.listAppointments({ ...filters, date_from: startDate, date_to: endDate });
 
 exports.updateAppointment = async (appointmentId, updates) => {
-  const { scheduled_at, status, notes } = updates;
+  const { scheduled_at, status, notes, confirmation_notes } = updates;
   const currentAppt = await this.getAppointmentById(appointmentId);
   if (!currentAppt) throw new AppError('Appointment not found', 404);
   
@@ -177,6 +192,7 @@ exports.updateAppointment = async (appointmentId, updates) => {
   if (scheduled_at) { setClauses.push(`scheduled_at = $${idx++}`); params.push(scheduled_at); }
   if (status !== undefined) { setClauses.push(`status = $${idx++}`); params.push(status); }
   if (notes !== undefined) { setClauses.push(`notes = $${idx++}`); params.push(notes || null); }
+  if (confirmation_notes !== undefined) { setClauses.push(`confirmation_notes = $${idx++}`); params.push(confirmation_notes || null); }
 
   if (setClauses.length === 0) return currentAppt;
   setClauses.push(`updated_at = now()`);
