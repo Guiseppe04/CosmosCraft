@@ -1,7 +1,5 @@
 const { pool } = require('../config/database');
 const { AppError } = require('../middleware/errorHandler');
-const inventoryService = require('./inventoryService');
-
 /**
  * POS SERVICE
  * Manages Point of Sale transactions for walk-in customers
@@ -28,9 +26,22 @@ const generateSaleNumber = async () => {
 
 /**
  * Create a new POS sale
- * Returns a pending sale ready for items to be added
+ * Inserts a POS sale record directly into pos_sales.
  */
-exports.createSale = async (staffId, { customerName = null, customerPhone = null, notes = null } = {}) => {
+exports.createSale = async (
+  staffId,
+  {
+    customerName = null,
+    customerPhone = null,
+    notes = null,
+    subtotal = 0,
+    taxAmount = 0,
+    totalAmount = 0,
+    paymentMethod = 'cash',
+    referenceNumber = null,
+    status = 'completed'
+  } = {}
+) => {
   // Validate staff exists
   const staffRes = await pool.query(
     'SELECT user_id FROM users WHERE user_id = $1 AND is_active = true',
@@ -40,18 +51,40 @@ exports.createSale = async (staffId, { customerName = null, customerPhone = null
     throw new AppError('Staff member not found or inactive', 404);
   }
 
+  const normalizedPaymentMethod = ['cash', 'gcash', 'bank_transfer'].includes(paymentMethod) ? paymentMethod : 'cash';
+  const normalizedStatus = ['pending', 'completed', 'cancelled'].includes(status) ? status : 'completed';
+  const normalizedSubtotal = Math.max(0, Number(subtotal || 0));
+  const normalizedTaxAmount = Math.max(0, Number(taxAmount || 0));
+  const normalizedTotalAmount = Math.max(0, Number(totalAmount || 0));
+  const paymentStatus = normalizedPaymentMethod === 'cash' ? 'verified' : 'pending';
+  const completedAt = normalizedStatus === 'completed' ? new Date() : null;
   const saleNumber = await generateSaleNumber();
 
   const res = await pool.query(
     `INSERT INTO pos_sales (
-      sale_number, staff_id, customer_name, customer_phone, 
-      total_amount, payment_method, notes
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+      sale_number, staff_id, customer_name, customer_phone,
+      subtotal, tax_amount, total_amount,
+      payment_method, payment_status, status, reference_number, notes, completed_at
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
     RETURNING 
       sale_id, sale_number, staff_id, customer_name, customer_phone,
       subtotal, discount_amount, tax_amount, total_amount,
-      payment_method, status, created_at`,
-    [saleNumber, staffId, customerName, customerPhone, 0, 'cash', notes]
+      payment_method, payment_status, status, reference_number, created_at, completed_at`,
+    [
+      saleNumber,
+      staffId,
+      customerName,
+      customerPhone,
+      normalizedSubtotal,
+      normalizedTaxAmount,
+      normalizedTotalAmount,
+      normalizedPaymentMethod,
+      paymentStatus,
+      normalizedStatus,
+      referenceNumber,
+      notes,
+      completedAt
+    ]
   );
 
   return res.rows[0];

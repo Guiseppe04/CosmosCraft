@@ -30,26 +30,75 @@ const PROJECT_BASE_SELECT = `
   LEFT JOIN users u ON u.user_id = o.user_id
 `
 
+const getProjectTaskStats = async (db, projectId) => {
+  const result = await db.query(
+    `SELECT
+       COUNT(*)::int AS total,
+       COUNT(CASE WHEN ps.status = 'completed' THEN 1 END)::int AS completed
+     FROM project_subtasks ps
+     JOIN project_milestones pm ON ps.milestone_id = pm.milestone_id
+     WHERE pm.project_id = $1`,
+    [projectId]
+  );
+
+  return {
+    total: result.rows[0]?.total || 0,
+    completed: result.rows[0]?.completed || 0,
+  };
+};
+
+const buildProjectTaskTracking = ({ total, completed }, currentStatus) => {
+  const progress = total === 0 ? 0 : Math.round((completed / total) * 100);
+  const normalizedCurrentStatus = normalizeProjectStatus(currentStatus);
+
+  let status = normalizedCurrentStatus || 'not_started';
+  if (total > 0) {
+    if (completed === total) status = 'completed';
+    else if (completed > 0) status = 'in_progress';
+    else status = 'not_started';
+  }
+
+  return {
+    progress,
+    status,
+    task_summary: {
+      total,
+      completed,
+      pending: Math.max(total - completed, 0),
+    },
+  };
+};
+
+const applyProjectTaskTracking = async (db, project, { stats = null, persist = false } = {}) => {
+  const resolvedStats = stats || await getProjectTaskStats(db, project.project_id);
+  const tracking = buildProjectTaskTracking(resolvedStats, project.status);
+
+  if (persist) {
+    const currentProgress = Number.isFinite(Number(project.progress)) ? Number(project.progress) : 0;
+    if (currentProgress !== tracking.progress || project.status !== tracking.status) {
+      await db.query(
+        `UPDATE projects
+         SET progress = $1,
+             status = $2,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE project_id = $3`,
+        [tracking.progress, tracking.status, project.project_id]
+      );
+    }
+  }
+
+  return {
+    ...project,
+    ...tracking,
+  };
+};
+
 exports.getProjects = async () => {
   const result = await pool.query(`${PROJECT_BASE_SELECT} ORDER BY p.created_at DESC`);
-  
-  // To get proper progress, we calculate it dynamically for each project
-  for (let p of result.rows) {
-    const stats = await pool.query(`
-      SELECT 
-        COUNT(*) as total, 
-        COUNT(CASE WHEN ps.status = 'completed' THEN 1 END) as completed
-      FROM project_subtasks ps
-      JOIN project_milestones pm ON ps.milestone_id = pm.milestone_id
-      WHERE pm.project_id = $1
-    `, [p.project_id]);
-    
-    const total = parseInt(stats.rows[0].total) || 0;
-    const completed = parseInt(stats.rows[0].completed) || 0;
-    p.progress = total === 0 ? 0 : Math.round((completed / total) * 100);
-  }
-  
-  return result.rows;
+
+  return Promise.all(
+    result.rows.map((project) => applyProjectTaskTracking(pool, project, { persist: true }))
+  );
 };
 
 exports.getProjectById = async (projectId) => {
@@ -58,22 +107,7 @@ exports.getProjectById = async (projectId) => {
     [projectId]
   );
   if (result.rows.length === 0) return null;
-  const project = result.rows[0];
-
-  const stats = await pool.query(`
-    SELECT 
-      COUNT(*) as total, 
-      COUNT(CASE WHEN ps.status = 'completed' THEN 1 END) as completed
-    FROM project_subtasks ps
-    JOIN project_milestones pm ON ps.milestone_id = pm.milestone_id
-    WHERE pm.project_id = $1
-  `, [projectId]);
-  
-  const total = parseInt(stats.rows[0].total) || 0;
-  const completed = parseInt(stats.rows[0].completed) || 0;
-  project.progress = total === 0 ? 0 : Math.round((completed / total) * 100);
-  
-  return project;
+  return applyProjectTaskTracking(pool, result.rows[0], { persist: true });
 };
 
 exports.getMyProjects = async (userId) => {
@@ -84,24 +118,20 @@ exports.getMyProjects = async (userId) => {
     [userId]
   );
   for (let p of result.rows) {
-    const stats = await pool.query(`
-      SELECT COUNT(*) as total, COUNT(CASE WHEN ps.status = 'completed' THEN 1 END) as completed
-      FROM project_subtasks ps
-      JOIN project_milestones pm ON ps.milestone_id = pm.milestone_id
-      WHERE pm.project_id = $1
-    `, [p.project_id]);
+    const stats = await getProjectTaskStats(pool, p.project_id);
     const customizationsRes = await pool.query(
       `SELECT DISTINCT customization_id
        FROM order_items
-       WHERE order_id = $1
+      WHERE order_id = $1
          AND customization_id IS NOT NULL`,
       [p.order_id]
     );
-    const total = parseInt(stats.rows[0].total) || 0;
-    const completed = parseInt(stats.rows[0].completed) || 0;
-    p.progress = total === 0 ? 0 : Math.round((completed / total) * 100);
+    const tracking = await applyProjectTaskTracking(pool, p, { stats, persist: true });
     p.customization_ids = customizationsRes.rows.map(row => row.customization_id);
     p.primary_customization_id = p.customization_ids[0] || null;
+    p.progress = tracking.progress;
+    p.status = tracking.status;
+    p.task_summary = tracking.task_summary;
   }
   return result.rows;
 };
@@ -201,6 +231,7 @@ exports.getProjectHierarchy = async (projectId) => {
     const customizationResult = await client.query(
       `SELECT DISTINCT
          c.customization_id,
+         c.created_at,
          c.name,
          c.guitar_type,
          c.body_wood,
@@ -213,7 +244,7 @@ exports.getProjectHierarchy = async (projectId) => {
        FROM order_items oi
        JOIN customizations c ON c.customization_id = oi.customization_id
        WHERE oi.order_id = $1
-       ORDER BY c.created_at ASC`,
+      ORDER BY c.created_at ASC`,
       [project.order_id]
     );
 
@@ -313,18 +344,15 @@ exports.getProjectHierarchy = async (projectId) => {
     });
 
     project.milestones = Object.values(milestoneMap);
-    project.progress = totalSubtasks === 0 ? 0 : Math.round((completedSubtasks / totalSubtasks) * 100);
-    
-    // Auto-update project base status if completed
-    if (totalSubtasks > 0 && totalSubtasks === completedSubtasks && project.status !== 'Completed') {
-       await client.query("UPDATE projects SET status = 'Completed' WHERE project_id = $1", [projectId]);
-       project.status = 'Completed';
-    } else if (completedSubtasks > 0 && totalSubtasks !== completedSubtasks && project.status === 'Pending') {
-       await client.query("UPDATE projects SET status = 'In Progress' WHERE project_id = $1", [projectId]);
-       project.status = 'In Progress';
-    }
 
-    return project;
+    return applyProjectTaskTracking(
+      client,
+      project,
+      {
+        stats: { total: totalSubtasks, completed: completedSubtasks },
+        persist: true,
+      }
+    );
   } finally {
     client.release();
   }

@@ -1,1712 +1,483 @@
-import { useState, useCallback, useMemo, useEffect } from 'react'
-import { motion, AnimatePresence } from 'motion/react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { AnimatePresence, motion } from 'motion/react'
 import {
-  BarChart3, Calendar, CheckCircle, XCircle, AlertCircle,
-  Clock, Package, Briefcase, Users, X,
-  Eye, TrendingUp, ChevronLeft, ChevronRight, User,
-  Activity, ShoppingBag, RefreshCw, ArrowUpRight, Edit,
-  ArrowUpCircle, ArrowDownCircle, ArrowUpDown,
-  Search, Plus, ChevronUp, ChevronDown, Wallet, CalendarX,
+  AlertCircle,
+  ArrowDownCircle,
+  ArrowUpCircle,
+  ArrowUpDown,
+  BarChart3,
+  Briefcase,
+  Calendar,
+  CalendarX,
+  CheckCircle,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  Edit,
+  Package,
+  Plus,
+  RefreshCw,
+  Search,
+  ShoppingBag,
+  Wallet,
+  X,
 } from 'lucide-react'
-import { useAuth } from '../context/AuthContext'
-import { staffApi } from '../utils/staffApi'
-import { formatCurrency } from '../utils/formatCurrency'
-import { ConfirmModal } from '../components/ui/ConfirmModal'
-import { useSmartPolling } from '../hooks/useSmartPolling'
-import { useDebounce } from '../hooks/useDebounce'
-import ProjectTaskTracker from '../components/projects/ProjectTaskTracker'
-import AppointmentCalendar from '../components/appointments/AppointmentCalendar'
-import AppointmentList from '../components/appointments/AppointmentList'
-import AppointmentModal from '../components/appointments/AppointmentModal'
-import AppointmentForm from '../components/appointments/AppointmentForm'
-import UnavailableDatesManager from '../components/appointments/UnavailableDatesManager'
 import { Topbar } from '../components/admin/Topbar'
 import { OrderManagement } from '../components/admin/OrderManagement'
-
-// ── Skeleton Loader ──────────────────────────────────────────────────────────
-function SkeletonRow({ cols = 5 }) {
-  return (
-    <tr className="border-b border-[var(--border)]/30">
-      {Array.from({ length: cols }).map((_, i) => (
-        <td key={i} className="py-4 px-6">
-          <div className="h-4 bg-white/10 animate-pulse rounded" />
-        </td>
-      ))}
-    </tr>
-  )
-}
-
-function SkeletonCard() {
-  return (
-    <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6 animate-pulse">
-      <div className="h-4 bg-white/10 rounded w-3/4 mb-3" />
-      <div className="h-3 bg-white/10 rounded w-1/2 mb-4" />
-      <div className="h-2 bg-white/10 rounded mb-1" />
-      <div className="h-2 bg-white/10 rounded w-4/5" />
-    </div>
-  )
-}
+import AppointmentCalendar from '../components/appointments/AppointmentCalendar'
+import AppointmentForm from '../components/appointments/AppointmentForm'
+import AppointmentList from '../components/appointments/AppointmentList'
+import AppointmentModal from '../components/appointments/AppointmentModal'
+import UnavailableDatesManager from '../components/appointments/UnavailableDatesManager'
+import { PosWorkspace } from '../components/pos/PosWorkspace'
+import { useAuth } from '../context/AuthContext'
+import { useDebounce } from '../hooks/useDebounce'
+import { useSmartPolling } from '../hooks/useSmartPolling'
+import { formatCurrency } from '../utils/formatCurrency'
+import { staffApi } from '../utils/staffApi'
 
 function EmptyState({ icon: Icon, label, description }) {
   return (
-    <div className="text-center py-16 bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl">
-      <div className="w-16 h-16 rounded-2xl bg-[var(--gold-primary)]/10 flex items-center justify-center mx-auto mb-4">
-        <Icon className="w-8 h-8 text-[var(--gold-primary)]" />
+    <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] py-16 text-center">
+      <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--gold-primary)]/10">
+        <Icon className="h-7 w-7 text-[var(--gold-primary)]" />
       </div>
-      <p className="text-white font-semibold">{label}</p>
-      {description && <p className="text-[var(--text-muted)] text-sm mt-1">{description}</p>}
+      <p className="font-semibold text-white">{label}</p>
+      {description && <p className="mt-1 text-sm text-[var(--text-muted)]">{description}</p>}
     </div>
   )
 }
 
 function StatusBadge({ label, variant = 'default' }) {
-  const map = {
-    default: 'bg-gray-500/20 text-gray-400 border-gray-500/30',
-    success: 'bg-green-500/20 text-green-400 border-green-500/30',
-    warning: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
-    danger: 'bg-red-500/20 text-red-400 border-red-500/30',
-    info: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-    gold: 'bg-[var(--gold-primary)]/20 text-[var(--gold-primary)] border-[var(--gold-primary)]/30',
+  const cls = {
+    default: 'border-gray-500/30 bg-gray-500/20 text-gray-300',
+    success: 'border-green-500/30 bg-green-500/20 text-green-300',
+    warning: 'border-amber-500/30 bg-amber-500/20 text-amber-300',
+    danger: 'border-red-500/30 bg-red-500/20 text-red-300',
+    info: 'border-blue-500/30 bg-blue-500/20 text-blue-300',
+    gold: 'border-[var(--gold-primary)]/30 bg-[var(--gold-primary)]/20 text-[var(--gold-primary)]',
   }
-  return (
-    <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold border ${map[variant] || map.default}`}>
-      {label}
-    </span>
-  )
+  return <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${cls[variant] || cls.default}`}>{label}</span>
+}
+
+function normalizeArray(payload, key) {
+  if (Array.isArray(payload?.data)) return payload.data
+  if (Array.isArray(payload?.data?.[key])) return payload.data[key]
+  return []
 }
 
 function statusVariant(status) {
-  const map = {
-    completed: 'success', complete: 'success', approved: 'success', active: 'success',
-    in_progress: 'info', processing: 'info', ongoing: 'info',
-    pending: 'gold', scheduled: 'gold', not_started: 'default',
-    cancelled: 'danger', failed: 'danger', rejected: 'danger', no_show: 'warning',
-  }
-  return map[status?.toLowerCase()] || 'default'
+  const value = String(status || '').toLowerCase()
+  if (['completed', 'paid'].includes(value)) return 'success'
+  if (['pending', 'approved', 'confirmed', 'ready_for_pickup'].includes(value)) return 'gold'
+  if (['processing', 'in_progress'].includes(value)) return 'info'
+  if (['cancelled', 'failed', 'rejected'].includes(value)) return 'danger'
+  return 'default'
+}
+
+function getInventoryState(stock, threshold = 10) {
+  if (stock === 0) return { label: 'Out of Stock', variant: 'danger' }
+  if (stock <= threshold) return { label: 'Critical', variant: 'warning' }
+  if (stock <= threshold * 2) return { label: 'Warning', variant: 'info' }
+  return { label: 'Healthy', variant: 'success' }
 }
 
 const ADJUSTMENT_REASONS = [
-  { value: 'restocking', label: 'Restocking', group: 'Inventory', requiresNotes: false },
-  { value: 'received_shipment', label: 'Received Shipment', group: 'Inventory', requiresNotes: false },
-  { value: 'returned_items', label: 'Returned Items', group: 'Sales', requiresNotes: false },
-  { value: 'sale_adjustment', label: 'Sales Reconciliation', group: 'Sales', requiresNotes: false },
-  { value: 'damaged_goods', label: 'Damaged/Defective', group: 'Loss', requiresNotes: true },
-  { value: 'lost_missing', label: 'Lost/Missing', group: 'Loss', requiresNotes: true },
-  { value: 'cycle_count', label: 'Cycle Count Correction', group: 'Adjustment', requiresNotes: true },
-  { value: 'transfer_in', label: 'Transfer In', group: 'Transfer', requiresNotes: true },
-  { value: 'transfer_out', label: 'Transfer Out', group: 'Transfer', requiresNotes: true },
-  { value: 'sample_item', label: 'Sample Item', group: 'Other', requiresNotes: true },
-  { value: 'other', label: 'Other', group: 'Other', requiresNotes: true },
+  ['restocking', 'Restocking'],
+  ['received_shipment', 'Received Shipment'],
+  ['sale_adjustment', 'Sales Reconciliation'],
+  ['damaged_goods', 'Damaged Goods'],
+  ['lost_missing', 'Lost or Missing'],
+  ['cycle_count', 'Cycle Count Correction'],
+  ['other', 'Other'],
 ]
 
-const ADJUSTMENT_TYPE_LABELS = {
-  stock_in: { label: 'Stock In (Add)', color: 'text-green-400', bg: 'bg-green-500/20', icon: ArrowUpCircle },
-  stock_out: { label: 'Stock Out (Remove)', color: 'text-red-400', bg: 'bg-red-500/20', icon: ArrowDownCircle },
-  adjustment: { label: 'Manual Set', color: 'text-amber-400', bg: 'bg-amber-500/20', icon: ArrowUpDown },
-}
+function AdjustStockModal({ modal, form, setForm, errors, setErrors, onClose, onSave, saving }) {
+  const current = Number(modal.data?.stock || 0)
+  const quantity = Number(form.quantity || 0)
+  const projected = form.change_type === 'stock_in' ? current + quantity : form.change_type === 'stock_out' ? current - quantity : quantity
 
-function StockVisualizer({ currentStock, newStock, threshold = 10, showDelta = true }) {
-  const delta = newStock - currentStock
-  const isIncrease = delta > 0
-  const isDecrease = delta < 0
-  const isWarning = currentStock > 0 && currentStock <= threshold * 2
-  const isCritical = currentStock === 0
-  
-  const currentColor = isCritical ? 'bg-red-500' : isWarning ? 'bg-amber-500' : 'bg-green-500'
-  const currentTextColor = isCritical ? 'text-red-400' : isWarning ? 'text-amber-400' : 'text-green-400'
-  
-  const newColor = isIncrease ? 'bg-green-500' : isDecrease ? 'bg-red-500' : currentColor
-  const deltaColor = isIncrease ? 'text-green-400' : isDecrease ? 'text-red-400' : 'text-white'
-  
-  const maxStock = Math.max(currentStock, newStock, threshold * 3, 50)
-  const currentPct = Math.min((currentStock / maxStock) * 100, 100)
-  const newPct = Math.min((newStock / maxStock) * 100, 100)
-  
-  return (
-    <div className="grid grid-cols-2 gap-4">
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-[var(--text-muted)] uppercase tracking-wider">Current</span>
-          <span className={`text-xs px-2 py-0.5 rounded-full ${isCritical ? 'bg-red-500/20 text-red-400' : isWarning ? 'bg-amber-500/20 text-amber-400' : 'bg-green-500/20 text-green-400'}`}>
-            {isCritical ? 'Out of Stock' : isWarning ? 'Low Stock' : 'In Stock'}
-          </span>
-        </div>
-        <div className={`text-3xl font-bold ${currentTextColor}`}>{currentStock}</div>
-        <div className={`h-2 rounded-full overflow-hidden ${currentColor}/30`}>
-          <motion.div 
-            className={`h-full ${currentColor}`}
-            initial={{ width: 0 }}
-            animate={{ width: `${currentPct}%` }}
-            transition={{ duration: 0.5, ease: 'easeOut' }}
-          />
-        </div>
-      </div>
-      
-      {showDelta && newStock !== currentStock && (
-        <motion.div 
-          className="space-y-2"
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          key={newStock}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-[var(--text-muted)] uppercase tracking-wider">New Stock</span>
-            <span className={`text-xs px-2 py-0.5 rounded-full ${isIncrease ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
-              {isIncrease ? `+${delta}` : delta}
-            </span>
-          </div>
-          <div className={`text-3xl font-bold ${deltaColor}`}>{newStock}</div>
-          <div className="h-2 rounded-full overflow-hidden bg-gray-700">
-            <motion.div 
-              className={`h-full ${newColor}`}
-              initial={{ width: 0 }}
-              animate={{ width: `${newPct}%` }}
-              transition={{ duration: 0.3, ease: 'easeOut' }}
-            />
-          </div>
-        </motion.div>
-      )}
-    </div>
-  )
-}
-
-function QuantityStepper({ value, onChange, maxValue, minValue = 1, disabled = false }) {
-  const handleDecrement = () => {
-    if (!disabled && value > (minValue || 1)) {
-      onChange(value - 1)
-    }
-  }
-  
-  const handleIncrement = () => {
-    if (!disabled && (!maxValue || value < maxValue)) {
-      onChange(value + 1)
-    }
-  }
-  
-  const handleInputChange = (e) => {
-    const val = parseInt(e.target.value) || 0
-    const validVal = Math.max(minValue || 1, Math.min(maxValue || 9999, val))
-    onChange(validVal)
-  }
-  
-  return (
-    <div className="flex items-center gap-2">
-      <button
-        type="button"
-        onClick={handleDecrement}
-        disabled={disabled || value <= (minValue || 1)}
-        className="w-12 h-12 rounded-xl bg-[var(--bg-primary)] border border-[var(--border)] text-white text-xl font-bold hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center"
-      >
-        −
-      </button>
-      <input
-        type="number"
-        value={value}
-        onChange={handleInputChange}
-        disabled={disabled}
-        min={minValue}
-        max={maxValue}
-        className="flex-1 h-12 px-4 bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl text-white text-center font-mono text-lg focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] disabled:opacity-50"
-      />
-      <button
-        type="button"
-        onClick={handleIncrement}
-        disabled={disabled || (maxValue && value >= maxValue)}
-        className="w-12 h-12 rounded-xl bg-[var(--bg-primary)] border border-[var(--border)] text-white text-xl font-bold hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center"
-      >
-        +
-      </button>
-    </div>
-  )
-}
-
-function ReasonSelector({ value, onChange }) {
-  const groupedReasons = useMemo(() => {
-    const groups = {}
-    ADJUSTMENT_REASONS.forEach(r => {
-      if (!groups[r.group]) groups[r.group] = []
-      groups[r.group].push(r)
-    })
-    return groups
-  }, [])
-  
-  const selectedReason = ADJUSTMENT_REASONS.find(r => r.value === value)
-  const needsNotes = selectedReason?.requiresNotes
-  
-  return (
-    <div className="space-y-2">
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full px-4 py-3 bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
-      >
-        <option value="">— Select Reason —</option>
-        {Object.entries(groupedReasons).map(([group, reasons]) => (
-          <optgroup key={group} label={group}>
-            {reasons.map(r => (
-              <option key={r.value} value={r.value}>{r.label}</option>
-            ))}
-          </optgroup>
-        ))}
-      </select>
-      {needsNotes && (
-        <p className="text-xs text-amber-400 flex items-center gap-1">
-          Notes required for this reason
-        </p>
-      )}
-    </div>
-  )
-}
-
-function AdjustStockModal({ visibleProducts, modal, form, setForm, formErrors, setFormErrors, closeModal, isSaving, saveStockAdjust, showToast, formatCurrency }) {
-  const [selectedProduct, setSelectedProduct] = useState(null)
-  const [localNotes, setLocalNotes] = useState('')
-  const [isReady, setIsReady] = useState(false)
-  
-  const preSelectedId = modal.data?.product_id
-  const adjustmentType = form.change_type || ''
-  const quantity = parseInt(form.quantity) || 0
-  
-  // Calculate new stock - always call useMemo unconditionally
-  const calculatedNewStock = useMemo(() => {
-    if (!selectedProduct || !adjustmentType || !quantity) return null
-    const current = selectedProduct.stock || 0
-    if (adjustmentType === 'stock_in') return current + quantity
-    if (adjustmentType === 'stock_out') return current - quantity
-    if (adjustmentType === 'adjustment') return quantity
-    return current
-  }, [selectedProduct, adjustmentType, quantity])
-
-  const canSubmit = selectedProduct && adjustmentType && quantity > 0
-  
-  const selectedReason = ADJUSTMENT_REASONS.find(r => r.value === form.reason)
-  const needsNotes = selectedReason?.requiresNotes
-  
-  // Initialize on mount or when modal data changes
-  useEffect(() => {
-    if (!preSelectedId) {
-      setIsReady(true)
+  const submit = async (event) => {
+    event.preventDefault()
+    const next = {}
+    if (!form.change_type) next.change_type = 'Select a stock action'
+    if (form.quantity === '' || form.quantity === undefined) next.quantity = 'Enter a quantity'
+    if (form.change_type === 'stock_out' && quantity > current) next.quantity = `Only ${current} units available`
+    if (!form.reason) next.reason = 'Select a reason'
+    if (Object.keys(next).length) {
+      setErrors(next)
       return
     }
-    
-    const found = visibleProducts?.find(p => p.product_id === preSelectedId)
-    if (found) {
-      setSelectedProduct(found)
-      setForm(f => ({ ...f, product_id: preSelectedId, current_stock: found.stock }))
-    } else {
-      setSelectedProduct({
-        product_id: preSelectedId,
-        name: modal.data?.name || 'Unknown',
-        stock: modal.data?.stock || 0,
-        low_stock_threshold: 10,
-      })
-      setForm(f => ({ ...f, product_id: preSelectedId, current_stock: modal.data?.stock || 0 }))
-    }
-    setIsReady(true)
-  }, [preSelectedId, visibleProducts, modal.data, setForm])
-  
-  const handleProductSelect = (productId, product) => {
-    const selected = product || visibleProducts?.find(p => p.product_id === productId)
-    setSelectedProduct(selected)
-    setForm(f => ({ 
-      ...f, 
-      product_id: productId, 
-      current_stock: selected?.stock || 0,
-      change_type: '',
-      quantity: '',
-    }))
-    setFormErrors(e => ({ ...e, product_id: null }))
+    await onSave()
   }
 
-  const handleSubmit = async () => {
-    const errors = {}
-    
-    if (!selectedProduct) errors.product_id = 'Please select a product'
-    if (!adjustmentType) errors.change_type = 'Please select adjustment type'
-    if (!quantity || quantity < 1) errors.quantity = 'Quantity must be greater than 0'
-    if (adjustmentType === 'stock_out' && quantity > selectedProduct?.stock) {
-      errors.quantity = `Insufficient stock. Available: ${selectedProduct?.stock || 0}`
-    }
-    if (adjustmentType === 'stock_out' && calculatedNewStock < 0) {
-      errors.quantity = 'Stock cannot be negative'
-    }
-    if (needsNotes && !localNotes.trim()) {
-      errors.notes = 'Notes are required for this reason'
-    }
-    
-    if (Object.keys(errors).length > 0) {
-      setFormErrors(errors)
-      return
-    }
-    
-    setForm(f => ({ ...f, reason: form.reason, notes: localNotes }))
-    await saveStockAdjust()
-  }
-  
-  // Show loading state
-  if (!isReady) {
-    return (
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.95 }}
-        className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-3xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto"
-      >
-        <div className="flex items-center justify-center py-20">
-          <RefreshCw className="w-8 h-8 text-[var(--gold-primary)] animate-spin" />
-        </div>
-      </motion.div>
-    )
-  }
-  
   return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.95 }}
-      className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-3xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto"
-    >
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-white text-xl font-bold">Adjust Stock</h2>
-        <button onClick={closeModal} className="p-2 hover:bg-white/10 rounded-lg transition-colors">
-          <X className="w-5 h-5 text-[var(--text-muted)]" />
-        </button>
+    <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.96 }} className="w-full max-w-lg rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-6">
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-bold text-white">Adjust Stock</h2>
+          <p className="text-sm text-[var(--text-muted)]">{modal.data?.name}</p>
+        </div>
+        <button type="button" onClick={onClose} className="rounded-xl p-2 text-[var(--text-muted)] hover:bg-white/10 hover:text-white"><X className="h-5 w-5" /></button>
       </div>
-      
-      <div className="space-y-5">
-        <div>
-          <label className="block text-sm font-semibold text-[var(--text-muted)] mb-2">Product *</label>
-          <input
-            type="text"
-            value={modal.data?.name || ''}
-            disabled
-            className="w-full px-4 py-3 bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl text-white text-sm opacity-60"
-          />
-          <input type="hidden" value={form.product_id || ''} />
+      <form onSubmit={submit} className="space-y-4">
+        <div className="grid grid-cols-2 gap-4 rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)]/60 p-4">
+          <div><p className="text-xs uppercase tracking-[0.2em] text-[var(--text-muted)]">Current</p><p className="mt-2 text-3xl font-bold text-white">{current}</p></div>
+          <div><p className="text-xs uppercase tracking-[0.2em] text-[var(--text-muted)]">Projected</p><p className={`mt-2 text-3xl font-bold ${projected < 0 ? 'text-red-300' : 'text-[var(--gold-primary)]'}`}>{projected}</p></div>
         </div>
-        
-        {selectedProduct && (
-          <div className="p-4 bg-[var(--bg-primary)]/50 rounded-xl border border-[var(--border)]">
-            <StockVisualizer
-              currentStock={selectedProduct.stock || 0}
-              newStock={calculatedNewStock}
-              threshold={selectedProduct.low_stock_threshold || 10}
-            />
-          </div>
-        )}
-        
-        <div>
-          <label className="block text-sm font-semibold text-[var(--text-muted)] mb-2">Adjustment Type *</label>
-          <div className="grid grid-cols-3 gap-2">
-            {Object.entries(ADJUSTMENT_TYPE_LABELS).map(([key, { label, color, bg, icon: Icon }]) => (
-              <button
-                key={key}
-                type="button"
-                onClick={() => {
-                  setForm(f => ({ ...f, change_type: key }))
-                  setFormErrors(e => ({ ...e, change_type: null }))
-                }}
-                className={`py-3 px-3 rounded-xl text-sm font-medium transition-all border ${
-                  adjustmentType === key 
-                    ? 'bg-[var(--gold-primary)] text-black border-[var(--gold-primary)]' 
-                    : 'bg-[var(--bg-primary)] text-[var(--text-muted)] border-[var(--border)] hover:border-[var(--gold-primary)]/50'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          {formErrors.change_type && (
-            <p className="mt-1 text-xs text-red-400">{formErrors.change_type}</p>
-          )}
+        <div className="grid grid-cols-3 gap-2">
+          {[
+            ['stock_in', 'Stock In', ArrowUpCircle],
+            ['stock_out', 'Stock Out', ArrowDownCircle],
+            ['adjustment', 'Set Stock', ArrowUpDown],
+          ].map(([value, label, Icon]) => (
+            <button key={value} type="button" onClick={() => { setForm((p) => ({ ...p, change_type: value })); setErrors((p) => ({ ...p, change_type: null })) }} className={`rounded-2xl border px-3 py-3 text-sm font-semibold ${form.change_type === value ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)] text-black' : 'border-[var(--border)] bg-[var(--bg-primary)] text-[var(--text-muted)]'}`}>
+              <div className="flex items-center justify-center gap-2"><Icon className="h-4 w-4" /><span>{label}</span></div>
+            </button>
+          ))}
         </div>
-        
-        <div>
-          <label className="block text-sm font-semibold text-[var(--text-muted)] mb-2">Quantity *</label>
-          <QuantityStepper
-            value={quantity}
-            onChange={(val) => {
-              setForm(f => ({ ...f, quantity: val }))
-              setFormErrors(e => ({ ...e, quantity: null }))
-            }}
-            maxValue={adjustmentType === 'stock_out' ? selectedProduct?.stock : undefined}
-            disabled={!selectedProduct || !adjustmentType}
-          />
-          {formErrors.quantity && (
-            <p className="mt-1 text-xs text-red-400">{formErrors.quantity}</p>
-          )}
+        {errors.change_type && <p className="text-sm text-red-400">{errors.change_type}</p>}
+        <input type="number" min="0" value={form.quantity ?? ''} onChange={(e) => { setForm((p) => ({ ...p, quantity: e.target.value })); setErrors((p) => ({ ...p, quantity: null })) }} placeholder={form.change_type === 'adjustment' ? 'New stock level' : 'Quantity'} className="w-full rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-3 text-white focus:border-[var(--gold-primary)] focus:outline-none" />
+        {errors.quantity && <p className="text-sm text-red-400">{errors.quantity}</p>}
+        <select value={form.reason || ''} onChange={(e) => { setForm((p) => ({ ...p, reason: e.target.value })); setErrors((p) => ({ ...p, reason: null })) }} className="w-full rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-3 text-white focus:border-[var(--gold-primary)] focus:outline-none">
+          <option value="">Select a reason</option>
+          {ADJUSTMENT_REASONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+        </select>
+        {errors.reason && <p className="text-sm text-red-400">{errors.reason}</p>}
+        <textarea rows={3} value={form.notes || ''} onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))} placeholder="Optional notes" className="w-full resize-none rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-3 text-white focus:border-[var(--gold-primary)] focus:outline-none" />
+        <div className="flex justify-end gap-3">
+          <button type="button" onClick={onClose} className="rounded-xl border border-[var(--border)] px-4 py-2.5 text-[var(--text-muted)]">Cancel</button>
+          <button type="submit" disabled={saving} className="rounded-xl bg-[var(--gold-primary)] px-4 py-2.5 font-semibold text-black disabled:opacity-60">{saving ? 'Saving...' : 'Save Changes'}</button>
         </div>
-        
-        <div>
-          <label className="block text-sm font-semibold text-[var(--text-muted)] mb-2">Reason *</label>
-          <ReasonSelector
-            value={form.reason || ''}
-            onChange={(val) => {
-              setForm(f => ({ ...f, reason: val }))
-              setFormErrors(e => ({ ...e, reason: null }))
-            }}
-          />
-          {formErrors.reason && (
-            <p className="mt-1 text-xs text-red-400">{formErrors.reason}</p>
-          )}
-        </div>
-        
-        <div>
-          <label className="block text-sm font-semibold text-[var(--text-muted)] mb-2">
-            Notes {needsNotes && <span className="text-red-400">*</span>}
-          </label>
-          <textarea
-            value={localNotes}
-            onChange={(e) => {
-              setLocalNotes(e.target.value)
-              setFormErrors(e => ({ ...e, notes: null }))
-            }}
-            placeholder={needsNotes ? "Please provide additional details..." : "Add any additional details (optional)"}
-            className="w-full h-20 px-4 py-3 bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl text-white text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
-          />
-          {formErrors.notes && (
-            <p className="mt-1 text-xs text-red-400">{formErrors.notes}</p>
-          )}
-        </div>
-      </div>
-      
-      <div className="flex gap-3 mt-6 pt-4 border-t border-[var(--border)]">
-        <button
-          onClick={closeModal}
-          disabled={isSaving}
-          className="flex-1 py-3 rounded-xl bg-[var(--bg-primary)] text-white font-semibold hover:bg-white/10 transition-colors disabled:opacity-50"
-        >
-          Cancel
-        </button>
-        <button
-          onClick={handleSubmit}
-          disabled={isSaving || !canSubmit}
-          className="flex-1 py-3 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black font-semibold hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-        >
-          {isSaving ? (
-            <>
-              <RefreshCw className="w-4 h-4 animate-spin" /> Saving...
-            </>
-          ) : (
-            'Save Changes'
-          )}
-        </button>
-      </div>
+      </form>
     </motion.div>
   )
 }
 
-// ── StaffDashboard ───────────────────────────────────────────────────────────
 export function StaffDashboard() {
   const { user } = useAuth()
   const [activeTab, setActiveTab] = useState('overview')
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [toast, setToast] = useState(null)
-  const [isLoading, setIsLoading] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const debouncedSearch = useDebounce(searchQuery, 300)
-
-  // Data
   const [projects, setProjects] = useState([])
   const [orders, setOrders] = useState([])
+  const [products, setProducts] = useState([])
+  const [parts, setParts] = useState([])
   const [inventory, setInventory] = useState([])
   const [appointments, setAppointments] = useState([])
+  const [services, setServices] = useState([])
   const [inventoryStats, setInventoryStats] = useState(null)
+  const [inventoryAlerts, setInventoryAlerts] = useState([])
+  const [unavailableDates, setUnavailableDates] = useState([])
 
-  // Loading states
-  const [loadingProjects, setLoadingProjects] = useState(false)
-  const [loadingOrders, setLoadingOrders] = useState(false)
   const [loadingInventory, setLoadingInventory] = useState(false)
   const [loadingAppointments, setLoadingAppointments] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
 
-  // Appointment filter state
-  const [appointmentFilter, setAppointmentFilter] = useState('all')
-  const [isApprovingRejecting, setIsApprovingRejecting] = useState(false)
+  const [inventorySubTab, setInventorySubTab] = useState('products')
+  const [inventoryStatusFilter, setInventoryStatusFilter] = useState('all')
+  const [inventorySort, setInventorySort] = useState('name')
+  const [inventoryPage, setInventoryPage] = useState(1)
+
   const [selectedAppointment, setSelectedAppointment] = useState(null)
   const [appointmentModalOpen, setAppointmentModalOpen] = useState(false)
   const [appointmentFormOpen, setAppointmentFormOpen] = useState(false)
   const [appointmentFormData, setAppointmentFormData] = useState(null)
   const [selectedCalendarDate, setSelectedCalendarDate] = useState(null)
-  const [appointmentPagination, setAppointmentPagination] = useState({ page: 1, limit: 10, total: 0 })
   const [unavailableDatesOpen, setUnavailableDatesOpen] = useState(false)
-  const [unavailableDates, setUnavailableDates] = useState([])
+  const [appointmentPagination, setAppointmentPagination] = useState({ page: 1, limit: 20, total: 0, pages: 1 })
 
-  // Modal state
   const [modal, setModal] = useState({ open: false, type: null, data: null })
-  const [confirm, setConfirm] = useState({ open: false, title: '', description: '', onConfirm: null, isBusy: false, variant: 'warning' })
   const [form, setForm] = useState({})
   const [formErrors, setFormErrors] = useState({})
-  const [isSaving, setIsSaving] = useState(false)
 
-  // POS Drawer state
-  const [posDrawerOpen, setPosDrawerOpen] = useState(false)
-  const [posDrawerState, setPosDrawerState] = useState({
-    isOpen: false,
-    openedAt: null,
-    openingCash: 0,
-    closedAt: null,
-    closingCash: 0,
-    status: 'closed',
-  })
-  const [posCart, setPosCart] = useState([])
-  const [posSearchQuery, setPosSearchQuery] = useState('')
-  const [posSelectedCategory, setPosSelectedCategory] = useState('all')
-  const [posPaymentMethod, setPosPaymentMethod] = useState('cash')
-  const [posCashReceived, setPosCashReceived] = useState('')
-  const [posShowCloseConfirm, setPosShowCloseConfirm] = useState(false)
-  const [posDenominations, setPosDenominations] = useState({
-    '1000': 0, '500': 0, '200': 0, '100': 0, '50': 0, '20': 0, '10': 0, '5': 0, '1': 0, '0.25': 0, '0.10': 0, '0.05': 0,
-  })
-  const TAX_RATE = 0.12
+  const tabs = [
+    ['overview', 'Overview', BarChart3],
+    ['projects', 'Projects', Briefcase],
+    ['orders', 'Orders', ShoppingBag],
+    ['inventory', 'Inventory', Package],
+    ['appointments', 'Appointments', Calendar],
+    ['pos', 'POS', Wallet],
+    ['schedule', 'Schedule', Clock],
+  ]
 
-  // POS helper functions
-  const openPosDrawer = (openingCash) => {
-    setPosDrawerState(prev => ({
-      ...prev,
-      isOpen: true,
-      openedAt: new Date().toISOString(),
-      openingCash: Number(openingCash),
-      status: 'open',
-    }))
-    setPosDenominations({ '1000': 0, '500': 0, '200': 0, '100': 0, '50': 0, '20': 0, '10': 0, '5': 0, '1': 0, '0.25': 0, '0.10': 0, '0.05': 0 })
-    setPosCart([])
-  }
-
-  const closePosDrawer = () => {
-    setPosDrawerState(prev => ({
-      ...prev,
-      isOpen: false,
-      closedAt: new Date().toISOString(),
-      closingCash: calculateTotalCash(),
-      status: 'closed',
-    }))
-    setPosShowCloseConfirm(false)
-  }
-
-  const calculateTotalCash = () => {
-    const bills = { '1000': 1000, '500': 500, '200': 200, '100': 100, '50': 50, '20': 20, '10': 10, '5': 5, '1': 1, '0.25': 0.25, '0.10': 0.10, '0.05': 0.05 }
-    let total = posDrawerState.openingCash
-    Object.entries(posDenominations).forEach(([denom, qty]) => {
-      total += (bills[denom] || 0) * qty
-    })
-    return total
-  }
-
-  const calculateGrandTotal = () => {
-    const subtotal = posCart.reduce((sum, item) => sum + (item.price * item.quantity), 0)
-    const tax = subtotal * TAX_RATE
-    return subtotal + tax
-  }
-
-  const calculateChange = () => {
-    const received = Number(posCashReceived) || 0
-    const total = calculateGrandTotal()
-    return Math.max(0, received - total)
-  }
-
-  const addToPosCart = (product) => {
-    const existing = posCart.find(item => item.product_id === product.product_id)
-    if (existing) {
-      setPosCart(posCart.map(item =>
-        item.product_id === product.product_id
-          ? { ...item, quantity: item.quantity + 1 }
-          : item
-      ))
-    } else {
-      setPosCart([...posCart, { ...product, quantity: 1 }])
-    }
-  }
-
-  const removeFromPosCart = (productId) => {
-    setPosCart(posCart.filter(item => item.product_id !== productId))
-  }
-
-  const updatePosCartQuantity = (productId, quantity) => {
-    if (quantity <= 0) {
-      removeFromPosCart(productId)
-      return
-    }
-    setPosCart(posCart.map(item =>
-      item.product_id === productId ? { ...item, quantity } : item
-    ))
-  }
-
-  const processPosPayment = async () => {
-    const received = Number(posCashReceived)
-    const total = calculateGrandTotal()
-    
-    if (posPaymentMethod === 'cash' && received < total && received > 0) {
-      showToast('Insufficient payment', 'error')
-      return
-    }
-    if (posPaymentMethod === 'cash' && received >= total) {
-      const denominations = { ...posDenominations }
-      let change = calculateChange()
-      const changeBreakdown = {}
-      const bills = [1000, 500, 200, 100, 50, 20, 10, 5, 1, 0.25, 0.10, 0.05]
-      
-      bills.forEach(bill => {
-        const billStr = String(bill)
-        while (change >= bill && denominations[billStr] > 0) {
-          change -= bill
-          change = Math.round(change * 100) / 100
-          changeBreakdown[billStr] = (changeBreakdown[billStr] || 0) + 1
-          denominations[billStr]--
-        }
-      })
-    }
-    
-    try {
-      await staffApi.createOrder({
-        items: [...posCart],
-        paymentMethod: posPaymentMethod,
-        totalAmount: calculateGrandTotal(),
-        change: posPaymentMethod === 'cash' ? calculateChange() : 0,
-        status: 'completed',
-      })
-      showToast('Payment processed successfully!')
-      closePosDrawer()
-      fetchOrders()
-    } catch (e) {
-      showToast(e.message, 'error')
-    }
-  }
-
-  // ── Toast ──────────────────────────────────────────────────────────────
-  const showToast = useCallback((msg, type = 'success') => {
-    setToast({ msg, type })
-    setTimeout(() => setToast(null), 3500)
+  const showToast = useCallback((message, type = 'success') => {
+    setToast({ message, type })
+    window.clearTimeout(showToast.timeoutId)
+    showToast.timeoutId = window.setTimeout(() => setToast(null), 2600)
   }, [])
 
-  // ── Confirm helpers ────────────────────────────────────────────────────
-  const openConfirm = ({ title, description, onConfirm, variant = 'warning' }) =>
-    setConfirm({ open: true, title, description, onConfirm, isBusy: false, variant })
-  const closeConfirm = () => setConfirm(c => ({ ...c, open: false }))
-  const handleConfirmAction = async () => {
-    setConfirm(c => ({ ...c, isBusy: true }))
-    try { await confirm.onConfirm() }
-    finally { setConfirm(c => ({ ...c, open: false, isBusy: false })) }
-  }
-
-  // ── Modal helpers ──────────────────────────────────────────────────────
-  const openModal = (type, data = null) => { setForm(data ? { ...data } : {}); setModal({ open: true, type, data }) }
-  const closeModal = () => setModal({ open: false, type: null, data: null })
-
-  // ── Data fetchers ──────────────────────────────────────────────────────
-  const fetchProjects = useCallback(async () => {
-    setLoadingProjects(true)
+  const loadInventoryBundle = useCallback(async () => {
+    setLoadingInventory(true)
     try {
-      const res = await staffApi.getAllProjects()
-      setProjects(Array.isArray(res.data) ? res.data : res.data?.projects || [])
-    } catch (e) { showToast(e.message, 'error') }
-    finally { setLoadingProjects(false) }
-  }, [showToast])
-
-  const fetchOrders = useCallback(async () => {
-    setLoadingOrders(true)
-    try {
-      const res = await staffApi.getOrders()
-      setOrders(Array.isArray(res.data) ? res.data : res.data?.orders || [])
-    } catch (e) { showToast(e.message, 'error') }
-    finally { setLoadingOrders(false) }
-  }, [showToast])
-
-  const fetchInventory = useCallback(async () => {
-    try {
-      const statsRes = await staffApi.getInventorySummary()
-      setInventoryStats(statsRes.data || {})
-      const prodsRes = await staffApi.getInventoryProducts({ search: debouncedSearch })
-      setInventory(Array.isArray(prodsRes.data) ? prodsRes.data : prodsRes.data?.products || [])
-    } catch (e) { showToast(e.message, 'error') }
-    finally { setLoadingInventory(false) }
+      const [productsRes, partsRes, inventoryRes, summaryRes, alertsRes] = await Promise.all([
+        staffApi.getProducts({ search: debouncedSearch, page: 1, pageSize: 200 }),
+        staffApi.getBuilderParts({ search: debouncedSearch, page: 1, pageSize: 500 }),
+        staffApi.getInventoryProducts({ search: debouncedSearch }),
+        staffApi.getInventorySummary(),
+        staffApi.getLowStockAlerts({ limit: 8 }),
+      ])
+      setProducts(normalizeArray(productsRes, 'products'))
+      setParts(normalizeArray(partsRes, 'parts'))
+      setInventory(normalizeArray(inventoryRes, 'products'))
+      setInventoryStats(summaryRes.data || null)
+      setInventoryAlerts(normalizeArray(alertsRes, 'alerts'))
+    } catch (error) {
+      showToast(error.message, 'error')
+    } finally {
+      setLoadingInventory(false)
+    }
   }, [debouncedSearch, showToast])
 
-  const fetchAppointments = useCallback(async () => {
-    setLoadingAppointments(true)
+  const fetchProjects = useCallback(async () => {
     try {
-      const res = await staffApi.getAppointments()
-      setAppointments(Array.isArray(res.data) ? res.data : res.data?.appointments || [])
-    } catch (e) { showToast(e.message, 'error') }
-    finally { setLoadingAppointments(false) }
+      const res = await staffApi.getAllProjects({ search: debouncedSearch })
+      setProjects(normalizeArray(res, 'projects'))
+    } catch (error) {
+      showToast(error.message, 'error')
+    }
+  }, [debouncedSearch, showToast])
+
+  const fetchOrders = useCallback(async () => {
+    try {
+      const res = await staffApi.getOrders({ search: debouncedSearch, include_items: true })
+      setOrders(normalizeArray(res, 'orders'))
+    } catch (error) {
+      showToast(error.message, 'error')
+    }
+  }, [debouncedSearch, showToast])
+
+  const fetchServices = useCallback(async () => {
+    try {
+      const res = await staffApi.getServices()
+      setServices(normalizeArray(res, 'services'))
+    } catch (error) {
+      showToast(error.message, 'error')
+    }
   }, [showToast])
 
   const fetchUnavailableDates = useCallback(async () => {
     try {
       const res = await staffApi.getUnavailableDates()
-      const newData = res.data || []
-      if (JSON.stringify(unavailableDates) !== JSON.stringify(newData)) {
-        setUnavailableDates(newData)
-      }
-    } catch (e) { showToast(e.message, 'error') }
-  }, [showToast, unavailableDates])
+      setUnavailableDates(res.data?.unavailable_dates || [])
+    } catch (error) {
+      showToast(error.message, 'error')
+    }
+  }, [showToast])
 
-  // ── CRUD: Inventory ──────────────────────────────────────────────────────
-  const saveStockAdjust = async () => {
+  const fetchAppointments = useCallback(async () => {
+    setLoadingAppointments(true)
+    try {
+      const res = await staffApi.getAppointments({
+        search: debouncedSearch,
+        limit: appointmentPagination.limit,
+        offset: (appointmentPagination.page - 1) * appointmentPagination.limit,
+      })
+      const rows = normalizeArray(res, 'appointments')
+      const total = res.data?.pagination?.total || rows.length
+      const pages = res.data?.pagination?.pages || Math.max(Math.ceil(total / appointmentPagination.limit), 1)
+      setAppointments(rows)
+      setAppointmentPagination((p) => ({ ...p, total, pages }))
+    } catch (error) {
+      showToast(error.message, 'error')
+    } finally {
+      setLoadingAppointments(false)
+    }
+  }, [appointmentPagination.limit, appointmentPagination.page, debouncedSearch, showToast])
+
+  useEffect(() => {
+    if (activeTab === 'overview') { fetchProjects(); fetchOrders(); fetchAppointments(); loadInventoryBundle() }
+    if (activeTab === 'projects') fetchProjects()
+    if (activeTab === 'orders') fetchOrders()
+    if (activeTab === 'inventory' || activeTab === 'pos') loadInventoryBundle()
+    if (activeTab === 'appointments') { fetchAppointments(); fetchServices(); fetchUnavailableDates() }
+    if (activeTab === 'schedule') { fetchAppointments(); fetchProjects() }
+  }, [activeTab, fetchAppointments, fetchOrders, fetchProjects, fetchServices, fetchUnavailableDates, loadInventoryBundle])
+
+  useSmartPolling(useCallback(async () => {
+    if (activeTab === 'overview') { await Promise.all([fetchAppointments(), loadInventoryBundle()]); return }
+    if (activeTab === 'inventory' || activeTab === 'pos') { await loadInventoryBundle(); return }
+    if (activeTab === 'appointments' || activeTab === 'schedule') { await Promise.all([fetchAppointments(), fetchUnavailableDates()]) }
+  }, [activeTab, fetchAppointments, fetchUnavailableDates, loadInventoryBundle]), { interval: 10000, maxInterval: 60000, backoffFactor: 1.5, enabled: true })
+
+  const visibleInventory = useMemo(() => {
+    const lookup = Object.fromEntries(products.map((item) => [item.product_id, item]))
+    return (inventory.length ? inventory : products).map((item) => ({ ...(lookup[item.product_id] || {}), ...item, stock: Number(item.stock || 0), low_stock_threshold: Number(item.low_stock_threshold || 10), price: Number(item.price || lookup[item.product_id]?.price || 0) }))
+  }, [inventory, products])
+
+  const visibleParts = useMemo(() => parts.map((item) => ({ ...item, stock: Number(item.stock ?? item.quantity ?? 0), low_stock_threshold: 10 })), [parts])
+  const inventoryRows = inventorySubTab === 'products' ? visibleInventory : visibleParts
+  const filteredInventory = useMemo(() => {
+    const rows = inventoryRows.filter((item) => {
+      const state = getInventoryState(Number(item.stock || 0), Number(item.low_stock_threshold || 10))
+      if (inventoryStatusFilter === 'all') return true
+      if (inventoryStatusFilter === 'healthy') return state.label === 'Healthy'
+      if (inventoryStatusFilter === 'warning') return state.label === 'Warning'
+      if (inventoryStatusFilter === 'critical') return state.label === 'Critical'
+      if (inventoryStatusFilter === 'out_of_stock') return state.label === 'Out of Stock'
+      return true
+    })
+    rows.sort((a, b) => inventorySort === 'stock_low' ? Number(a.stock || 0) - Number(b.stock || 0) : inventorySort === 'stock_high' ? Number(b.stock || 0) - Number(a.stock || 0) : inventorySort === 'sku' ? String(a.sku || a.type_mapping || '').localeCompare(String(b.sku || b.type_mapping || '')) : String(a.name || '').localeCompare(String(b.name || '')))
+    return rows
+  }, [inventoryRows, inventorySort, inventoryStatusFilter])
+
+  const pageSize = 10
+  const totalPages = Math.max(Math.ceil(filteredInventory.length / pageSize), 1)
+  const pagedInventory = filteredInventory.slice((inventoryPage - 1) * pageSize, inventoryPage * pageSize)
+  const pendingAppointments = appointments.filter((item) => ['pending', 'approved', 'confirmed'].includes(String(item.status || '').toLowerCase()))
+  const todayAppointments = appointments.filter((item) => item.scheduled_at && new Date(item.scheduled_at).toDateString() === new Date().toDateString())
+
+  const refreshCurrentTab = useCallback(async () => {
+    setRefreshing(true)
+    try {
+      if (activeTab === 'overview') await Promise.all([fetchProjects(), fetchOrders(), fetchAppointments(), loadInventoryBundle()])
+      if (activeTab === 'projects') await fetchProjects()
+      if (activeTab === 'orders') await fetchOrders()
+      if (activeTab === 'inventory' || activeTab === 'pos') await loadInventoryBundle()
+      if (activeTab === 'appointments') await Promise.all([fetchAppointments(), fetchServices(), fetchUnavailableDates()])
+      if (activeTab === 'schedule') await Promise.all([fetchAppointments(), fetchProjects()])
+    } finally {
+      setRefreshing(false)
+    }
+  }, [activeTab, fetchAppointments, fetchOrders, fetchProjects, fetchServices, fetchUnavailableDates, loadInventoryBundle])
+
+  const saveStockAdjust = useCallback(async () => {
     setIsSaving(true)
     try {
-      const { product_id, change_type, quantity, reason, notes } = form
-      if (!product_id || !change_type || !quantity) {
-        showToast('Please fill all required fields', 'error'); return
-      }
-      const payload = { 
-        productId: product_id, 
-        quantity: Number(quantity), 
-        reason: reason || notes,
-        notes: notes 
-      }
-      if (change_type === 'stock_in') await staffApi.addStock(payload)
-      else if (change_type === 'stock_out') await staffApi.deductStock(payload)
-      else await staffApi.adjustStock(payload)
-      showToast('Stock adjusted!')
-      fetchInventory()
-      closeModal()
-    } catch (e) { showToast(e.message, 'error') }
-    finally { setIsSaving(false) }
-  }
-
-  // ── Polling: fetch all on load, poll active tab ────────────────────────
-  const pollingFn = useCallback(async () => {
-    const map = {
-      overview: async () => { await fetchProjects(); await fetchAppointments() },
-      projects: fetchProjects,
-      orders: fetchOrders,
-      inventory: fetchInventory,
-      appointments: async () => { await fetchAppointments(); await fetchUnavailableDates() },
-      schedule: fetchAppointments,
-    }
-    return map[activeTab]?.()
-  }, [activeTab, fetchProjects, fetchOrders, fetchInventory, fetchAppointments, fetchUnavailableDates])
-
-  useSmartPolling(pollingFn, { interval: 5000, maxInterval: 60000, backoffFactor: 1.5, enabled: true })
-
-  const handleRefresh = () => {
-    setIsLoading(true)
-    pollingFn()?.finally(() => setIsLoading(false))
-  }
-
-  // ── Aggregated counts for overview tab ────────────────────────────────
-  const totalProjects = projects.length
-  const inProgressProjects = projects.filter(p => p.status === 'in_progress').length
-  const completedProjects = projects.filter(p => p.status === 'completed').length
-  const todayAppts = appointments.filter(a => {
-    const d = a.scheduled_at || a.date
-    return d && new Date(d).toDateString() === new Date().toDateString()
-  }).length
-
-  // ── Pending appointments ──────────────────────────────────────────────────
-  const pendingAppointments = appointments.filter(a => a.status === 'pending')
-
-  // ── Approve/Reject appointment handlers ─────────────────────────────
-  const handleApproveAppointment = async (appointmentId) => {
-    setIsApprovingRejecting(true)
-    try {
-      await staffApi.updateAppointmentStatus(appointmentId, 'approved')
-      showToast('Appointment approved successfully!')
-      fetchAppointments()
-    } catch (e) {
-      showToast(e.message, 'error')
+      const productId = form.product_id || modal.data?.product_id
+      const quantity = Number(form.quantity || 0)
+      const current = Number(modal.data?.stock || 0)
+      const notes = [form.reason, form.notes].filter(Boolean).join(' - ')
+      if (form.change_type === 'stock_in') await staffApi.addStock({ product_id: productId, quantity, notes })
+      else if (form.change_type === 'stock_out') await staffApi.deductStock({ product_id: productId, quantity, notes })
+      else await staffApi.adjustStock({ product_id: productId, quantity: quantity - current, notes })
+      setModal({ open: false, type: null, data: null })
+      setForm({})
+      await loadInventoryBundle()
+      showToast('Inventory updated')
+    } catch (error) {
+      showToast(error.message, 'error')
     } finally {
-      setIsApprovingRejecting(false)
+      setIsSaving(false)
     }
-  }
+  }, [form, loadInventoryBundle, modal.data, showToast])
 
-  const handleRejectAppointment = async (appointmentId) => {
-    setIsApprovingRejecting(true)
+  const updatePartStock = useCallback(async (part, delta) => {
     try {
-      await staffApi.updateAppointmentStatus(appointmentId, 'cancelled')
-      showToast('Appointment rejected')
-      fetchAppointments()
-    } catch (e) {
-      showToast(e.message, 'error')
-    } finally {
-      setIsApprovingRejecting(false)
+      await staffApi.updateBuilderPart(part.part_id, { ...part, stock: Math.max(0, Number(part.stock || 0) + delta) })
+      await loadInventoryBundle()
+      showToast('Builder part stock updated')
+    } catch (error) {
+      showToast(error.message, 'error')
     }
-  }
+  }, [loadInventoryBundle, showToast])
 
-  // ── Tabs ───────────────────────────────────────────────────────────────
-  const tabs = [
-    { id: 'overview', label: 'My Tasks', icon: BarChart3 },
-    { id: 'projects', label: 'Projects', icon: Briefcase },
-    { id: 'orders', label: 'Orders', icon: ShoppingBag },
-    { id: 'inventory', label: 'Inventory', icon: Package },
+  const updateAppointmentStatus = useCallback(async (id, status, reason) => {
+    try { await staffApi.updateAppointmentStatus(id, status, reason); showToast('Appointment status updated'); await fetchAppointments() } catch (error) { showToast(error.message, 'error') }
+  }, [fetchAppointments, showToast])
+  const updateAppointmentPaymentStatus = useCallback(async (id, paymentStatus) => {
+    try { await staffApi.updateAppointmentPaymentStatus(id, paymentStatus); showToast('Payment status updated'); await fetchAppointments() } catch (error) { showToast(error.message, 'error') }
+  }, [fetchAppointments, showToast])
+  const rescheduleAppointment = useCallback(async (id, scheduledAt, reason) => {
+    try { await staffApi.rescheduleAppointment(id, scheduledAt, reason); showToast('Appointment rescheduled'); await fetchAppointments() } catch (error) { showToast(error.message, 'error') }
+  }, [fetchAppointments, showToast])
+  const cancelAppointment = useCallback(async (id, reason) => {
+    try { await staffApi.cancelAppointment(id, reason); showToast('Appointment cancelled'); await fetchAppointments() } catch (error) { showToast(error.message, 'error') }
+  }, [fetchAppointments, showToast])
+  const submitAppointment = useCallback(async (payload) => {
+    try {
+      if (appointmentFormData?.appointment_id) await staffApi.updateAppointment(appointmentFormData.appointment_id, payload)
+      else await staffApi.createAppointment(payload)
+      showToast(appointmentFormData?.appointment_id ? 'Appointment updated' : 'Appointment created')
+      await fetchAppointments()
+    } catch (error) {
+      showToast(error.message, 'error')
+      throw error
+    }
+  }, [appointmentFormData, fetchAppointments, showToast])
 
-    { id: 'appointments', label: 'Appointments', icon: Calendar },
-    { id: 'schedule', label: 'Schedule', icon: Clock },
-  ]
-
-  // ── Input styles ───────────────────────────────────────────────────────
-  const inputCls = 'w-full px-4 py-3 bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl text-[var(--text-light)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] text-sm'
-  const labelCls = 'block text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-2'
+  const pageTitle = tabs.find(([id]) => id === activeTab)?.[1] || 'Staff Dashboard'
 
   return (
     <div className="min-h-screen bg-[var(--bg-primary)]">
-
-      {/* Toast */}
       <AnimatePresence>
         {toast && (
-          <motion.div
-            initial={{ opacity: 0, y: -30 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -30 }}
-            className={`fixed top-24 right-6 z-[200] px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-3 text-sm font-semibold border ${toast.type === 'error'
-              ? 'bg-red-500/10 border-red-500/30 text-red-400'
-              : 'bg-green-500/10 border-green-500/30 text-green-400'
-              }`}
-          >
-            {toast.type === 'error' ? <AlertCircle className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
-            {toast.msg}
+          <motion.div initial={{ opacity: 0, y: -24 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -24 }} className={`fixed right-6 top-24 z-[200] flex items-center gap-3 rounded-2xl border px-5 py-3 text-sm font-semibold ${toast.type === 'error' ? 'border-red-500/30 bg-red-500/10 text-red-300' : 'border-green-500/30 bg-green-500/10 text-green-300'}`}>
+            {toast.type === 'error' ? <AlertCircle className="h-4 w-4" /> : <CheckCircle className="h-4 w-4" />}
+            {toast.message}
           </motion.div>
         )}
       </AnimatePresence>
-
-      {/* Confirm Modal */}
-      <ConfirmModal
-        open={confirm.open}
-        title={confirm.title}
-        description={confirm.description}
-        variant={confirm.variant}
-        isBusy={confirm.isBusy}
-        onConfirm={handleConfirmAction}
-        onCancel={closeConfirm}
-      />
-
-      {/* Sidebar */}
-      <aside className={`fixed left-0 top-0 h-screen bg-[var(--surface-dark)] border-r border-[var(--border)] transition-all duration-300 z-40 ${sidebarCollapsed ? 'w-20' : 'w-64'}`}>
-        <button
-          onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-          className="absolute -right-3 top-6 w-6 h-6 bg-[var(--surface-dark)] border border-[var(--border)] rounded-full flex items-center justify-center hover:bg-[var(--gold-primary)] hover:border-[var(--gold-primary)] transition-all"
-        >
-          {sidebarCollapsed ? <ChevronRight className="w-4 h-4 text-[var(--text-light)]" /> : <ChevronLeft className="w-4 h-4 text-[var(--text-light)]" />}
-        </button>
-
-        <div className="h-24 px-4 py-4 border-b border-[var(--border)] flex items-center justify-between relative">
-          {!sidebarCollapsed && (
-            <div className="flex items-center gap-3">
-              <img src="/favicon.png" alt="CosmosCraft" className="w-10 h-10 flex-shrink-0" />
-              <div className="min-w-0">
-                <p className="text-[var(--text-light)] font-black text-lg tracking-tight">CosmosCraft</p>
-              </div>
+      <div className="flex min-h-screen">
+        <aside className={`${sidebarCollapsed ? 'w-24' : 'w-72'} border-r border-[var(--border)] bg-[var(--surface-dark)] transition-all`}>
+          <div className="flex items-center justify-between border-b border-[var(--border)] px-5 py-5">
+            {!sidebarCollapsed && <div><p className="text-xs uppercase tracking-[0.28em] text-[var(--text-muted)]">CosmosCraft</p><h2 className="mt-2 text-xl font-bold text-white">Staff Hub</h2></div>}
+            <button type="button" onClick={() => setSidebarCollapsed((p) => !p)} className="rounded-xl border border-[var(--border)] p-2 text-[var(--text-muted)]">{sidebarCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}</button>
+          </div>
+          <nav className="space-y-2 p-4">
+            {tabs.map(([id, label, Icon]) => <button key={id} type="button" onClick={() => setActiveTab(id)} className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left ${activeTab === id ? 'bg-[var(--gold-primary)] text-black' : 'text-[var(--text-muted)] hover:bg-white/5 hover:text-white'}`}><Icon className="h-5 w-5" />{!sidebarCollapsed && <span className="font-medium">{label}</span>}</button>)}
+          </nav>
+        </aside>
+        <div className="flex min-h-screen flex-1 flex-col">
+          <Topbar title={pageTitle} userRole={user?.role || 'staff'} />
+          <main className="flex-1 p-6">
+            <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              
             </div>
-          )}
-          {sidebarCollapsed && (
-            <img src="/favicon.png" alt="CosmosCraft" className="w-10 h-10 flex-shrink-0 mx-auto" />
-          )}
-        </div>
-
-        <nav className="p-4 space-y-1 overflow-y-auto flex-1">
-          {tabs.map((tab) => {
-            const Icon = tab.icon
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl font-medium transition-all duration-200 ${activeTab === tab.id
-                  ? 'bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] border-2 border-[var(--gold-primary)] shadow-[0_0_15px_rgba(212,175,55,0.3)]'
-                  : 'text-[var(--text-muted)] hover:bg-[var(--surface-elevated)] hover:text-[var(--text-light)] border-2 border-transparent'
-                  }`}
-              >
-                <Icon className={`w-5 h-5 flex-shrink-0 ${activeTab === tab.id ? 'text-[var(--text-dark)]' : 'text-[var(--text-muted)]'}`} />
-                {!sidebarCollapsed && <span className="truncate">{tab.label}</span>}
-              </button>
-            )
-          })}
-        </nav>
-
-      </aside>
-
-      {/* Main Content */}
-      <div className={`transition-all duration-300 bg-[var(--bg-primary)] ${sidebarCollapsed ? 'ml-20' : 'ml-64'}`}>
-        <Topbar title={tabs.find(t => t.id === activeTab)?.label || 'Dashboard'} userRole="staff" />
-        <main className="p-6 pt-6 space-y-6">
-
-          {/* ── OVERVIEW ──────────────────────────────────────────────── */}
-          {activeTab === 'overview' && (
-            <motion.div key="overview" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-              <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-3xl p-6">
-                <p className="text-[var(--gold-primary)] text-sm font-semibold uppercase tracking-widest mb-2">Staff Portal</p>
-                <h2 className="text-3xl font-bold text-white">Welcome back, {user?.firstName || user?.first_name || 'Staff'}</h2>
-                <p className="text-[var(--text-muted)] mt-1">Here's a summary of your assigned work.</p>
-
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-6">
-                  {[
-                    { label: 'Total Projects', value: totalProjects, color: 'text-white', icon: Briefcase },
-                    { label: 'In Progress', value: inProgressProjects, color: 'text-blue-400', icon: Activity },
-                    { label: 'Completed', value: completedProjects, color: 'text-green-400', icon: CheckCircle },
-                    { label: "Pending Requests", value: pendingAppointments.length, color: 'text-amber-400', icon: Clock },
-                  ].map(stat => {
-                    const Icon = stat.icon
-                    return (
-                      <div key={stat.label} className="p-4 rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)]">
-                        <Icon className="w-5 h-5 text-[var(--text-muted)] mb-3" />
-                        <p className={`text-2xl font-bold ${stat.color}`}>{stat.value}</p>
-                        <p className="text-[var(--text-muted)] text-sm mt-1">{stat.label}</p>
-                      </div>
-                    )
-                  })}
-                </div>
+            {activeTab === 'overview' && <div className="space-y-6">
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6"><p className="text-sm text-[var(--text-muted)]">Open projects</p><p className="mt-3 text-3xl font-bold text-white">{projects.filter((p) => p.status !== 'completed').length}</p></div>
+                <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6"><p className="text-sm text-[var(--text-muted)]">Pending appointments</p><p className="mt-3 text-3xl font-bold text-white">{pendingAppointments.length}</p></div>
+                <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6"><p className="text-sm text-[var(--text-muted)]">Today&apos;s schedule</p><p className="mt-3 text-3xl font-bold text-white">{todayAppointments.length}</p></div>
+                <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6"><p className="text-sm text-[var(--text-muted)]">Low stock alerts</p><p className="mt-3 text-3xl font-bold text-white">{inventoryAlerts.length}</p></div>
               </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-white font-semibold text-lg">Recent Projects</h3>
-                    <button onClick={() => setActiveTab('projects')} className="text-[var(--gold-primary)] text-sm hover:underline">View all</button>
-                  </div>
-                  {loadingProjects ? (
-                    <div className="space-y-3">{[...Array(3)].map((_, i) => <SkeletonCard key={i} />)}</div>
-                  ) : projects.length === 0 ? (
-                    <EmptyState icon={Briefcase} label="No projects assigned" />
-                  ) : (
-                    <div className="space-y-3">
-                      {projects.slice(0, 4).map(p => (
-                        <div key={p.project_id} className="p-4 rounded-xl bg-[var(--bg-primary)] border border-[var(--border)]">
-                          <div className="flex items-start justify-between mb-2">
-                            <p className="text-white font-medium">{p.name || p.title}</p>
-                            <StatusBadge label={(p.status || 'N/A').replace('_', ' ')} variant={statusVariant(p.status)} />
-                          </div>
-                          {p.progress !== undefined && (
-                            <div>
-                              <div className="flex justify-between text-xs mb-1">
-                                <span className="text-[var(--text-muted)]">Progress</span>
-                                <span className="text-[var(--gold-primary)]">{p.progress}%</span>
-                              </div>
-                              <div className="h-1.5 bg-white/10 rounded-full">
-                                <div className="h-full bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] rounded-full" style={{ width: `${p.progress}%` }} />
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
+              <div className="grid gap-6 xl:grid-cols-[1.2fr,0.8fr]">
+                <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6">
+                  <div className="mb-5 flex items-center justify-between"><h3 className="text-lg font-semibold text-white">Upcoming appointments</h3><button type="button" onClick={() => setActiveTab('appointments')} className="text-sm font-medium text-[var(--gold-primary)]">View all</button></div>
+                  {appointments.length === 0 ? <EmptyState icon={Calendar} label="No appointments queued" description="New bookings will appear here." /> : <div className="space-y-3">{appointments.slice(0, 5).map((item) => <button key={item.appointment_id} type="button" onClick={() => { setSelectedAppointment(item); setAppointmentModalOpen(true) }} className="flex w-full items-center justify-between rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)]/60 p-4 text-left"><div><p className="font-semibold text-white">{item.customer_name || item.user_name || 'Walk-in customer'}</p><p className="mt-1 text-sm text-[var(--text-muted)]">{item.service_name || (Array.isArray(item.services) ? item.services.join(', ') : 'Service appointment')}</p></div><StatusBadge label={item.status || 'pending'} variant={statusVariant(item.status)} /></button>)}</div>}
                 </div>
-
-                <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-white font-semibold text-lg">Today's Appointments</h3>
-                    <button onClick={() => setActiveTab('appointments')} className="text-[var(--gold-primary)] text-sm hover:underline">View all</button>
-                  </div>
-                  {loadingAppointments ? (
-                    <div className="space-y-3">{[...Array(3)].map((_, i) => <SkeletonCard key={i} />)}</div>
-                  ) : appointments.length === 0 ? (
-                    <EmptyState icon={Calendar} label="No appointments today" />
-                  ) : (
-                    <div className="space-y-3">
-                      {appointments.slice(0, 4).map(a => {
-                        const d = a.scheduled_at || a.date
-                        return (
-                          <div key={a.appointment_id} className="p-4 rounded-xl bg-[var(--bg-primary)] border border-[var(--border)]">
-                            <div className="flex items-start justify-between">
-                              <div>
-                                <p className="text-white font-medium">{a.guitar_details ? `${a.guitar_details.brand} ${a.guitar_details.model}` : (a.title || a.service_name || 'Appointment')}</p>
-                                <p className="text-[var(--text-muted)] text-sm">{a.customer_name || a.user_name || 'Customer'}</p>
-                              </div>
-                              <div className="text-right">
-                                <p className="text-[var(--gold-primary)] font-semibold text-sm">{d ? new Date(d).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}</p>
-                                <StatusBadge label={a.status || 'pending'} variant={statusVariant(a.status)} />
-                              </div>
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  )}
-                </div>
+                <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6"><h3 className="text-lg font-semibold text-white">Unread stock alerts</h3><div className="mt-4 space-y-3">{inventoryAlerts.length === 0 ? <p className="text-sm text-[var(--text-muted)]">No low-stock alerts right now.</p> : inventoryAlerts.slice(0, 5).map((alert) => <div key={alert.alert_id} className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4"><p className="font-semibold text-white">{alert.name}</p><p className="mt-1 text-sm text-[var(--text-muted)]">{alert.current_stock} left, threshold {alert.threshold}</p></div>)}</div></div>
               </div>
-            </motion.div>
-          )}
-
-          {/* ── PROJECTS ──────────────────────────────────────────────── */}
-          {activeTab === 'projects' && (
-            <motion.div key="projects" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-              {loadingProjects ? (
-                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {[...Array(6)].map((_, i) => <SkeletonCard key={i} />)}
+            </div>}
+            {activeTab === 'projects' && (projects.length === 0 ? <EmptyState icon={Briefcase} label="No projects assigned" description="Project work will appear here when it is assigned to staff." /> : <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{projects.map((project) => <div key={project.project_id} className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6"><div className="flex items-start justify-between gap-3"><div><h3 className="text-lg font-semibold text-white">{project.name || project.title}</h3><p className="mt-1 text-sm text-[var(--text-muted)]">{project.client_name || project.customer_name || 'Client not specified'}</p></div><StatusBadge label={String(project.status || 'pending').replace(/_/g, ' ')} variant={statusVariant(project.status)} /></div><p className="mt-4 text-sm leading-6 text-[var(--text-muted)]">{project.description || 'No project notes yet.'}</p></div>)}</div>)}
+            {activeTab === 'orders' && <OrderManagement orders={orders} onRefresh={fetchOrders} user={user} />}
+            {activeTab === 'inventory' && <div className="space-y-6">
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6"><p className="text-sm text-[var(--text-muted)]">Tracked products</p><p className="mt-3 text-3xl font-bold text-white">{inventoryStats?.total_products || visibleInventory.length}</p></div>
+                <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6"><p className="text-sm text-[var(--text-muted)]">Low stock</p><p className="mt-3 text-3xl font-bold text-white">{inventoryStats?.low_stock_count || inventoryAlerts.length}</p></div>
+                <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6"><p className="text-sm text-[var(--text-muted)]">Out of stock</p><p className="mt-3 text-3xl font-bold text-white">{inventoryStats?.out_of_stock_count || 0}</p></div>
+                <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6"><p className="text-sm text-[var(--text-muted)]">Inventory value</p><p className="mt-3 text-3xl font-bold text-white">{formatCurrency(Number(inventoryStats?.total_inventory_value || 0))}</p></div>
+              </div>
+              <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6">
+                <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="flex flex-wrap gap-2"><button type="button" onClick={() => { setInventorySubTab('products'); setInventoryPage(1) }} className={`rounded-2xl px-4 py-2.5 text-sm font-semibold ${inventorySubTab === 'products' ? 'bg-[var(--gold-primary)] text-black' : 'border border-[var(--border)] text-[var(--text-muted)]'}`}>Products</button><button type="button" onClick={() => { setInventorySubTab('parts'); setInventoryPage(1) }} className={`rounded-2xl px-4 py-2.5 text-sm font-semibold ${inventorySubTab === 'parts' ? 'bg-[var(--gold-primary)] text-black' : 'border border-[var(--border)] text-[var(--text-muted)]'}`}>Builder Parts</button></div>
+                  <div className="flex items-center gap-2"><select value={inventoryStatusFilter} onChange={(e) => setInventoryStatusFilter(e.target.value)} className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-3 py-2 text-sm text-white"><option value="all">All</option><option value="healthy">Healthy</option><option value="warning">Warning</option><option value="critical">Critical</option><option value="out_of_stock">Out of Stock</option></select><select value={inventorySort} onChange={(e) => setInventorySort(e.target.value)} className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-3 py-2 text-sm text-white"><option value="name">Name</option><option value="sku">SKU / Mapping</option><option value="stock_low">Stock low-high</option><option value="stock_high">Stock high-low</option></select></div>
                 </div>
-              ) : projects.length === 0 ? (
-                <EmptyState icon={Briefcase} label="No projects available" description="Check back later or contact your admin." />
-              ) : (
-                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {projects.map(p => (
-                    <motion.div key={p.project_id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-                      className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6 hover:border-[var(--gold-primary)]/50 transition-all"
-                    >
-                      <div className="flex items-start justify-between mb-3">
-                        <div>
-                          <h3 className="text-white font-semibold">{p.name || p.title || 'Untitled'}</h3>
-                          <p className="text-[var(--text-muted)] text-xs">{p.customer_name || p.user_name || '—'}</p>
-                        </div>
-                        <StatusBadge label={(p.status || 'N/A').replace('_', ' ')} variant={statusVariant(p.status)} />
-                      </div>
-
-                      {p.progress !== undefined && (
-                        <div className="mb-4">
-                          <div className="flex justify-between text-xs mb-1">
-                            <span className="text-[var(--text-muted)]">Progress</span>
-                            <span className="text-[var(--gold-primary)]">{p.progress}%</span>
-                          </div>
-                          <div className="h-2 bg-[var(--bg-primary)] rounded-full">
-                            <div className="h-full bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] rounded-full" style={{ width: `${p.progress}%` }} />
-                          </div>
-                        </div>
-                      )}
-
-                      {p.estimated_completion_date && (
-                        <p className="text-[var(--text-muted)] text-xs mb-4">
-                          Due: {new Date(p.estimated_completion_date).toLocaleDateString()}
-                        </p>
-                      )}
-
-                      {/* Stage update controls - Read Only */}
-                      <div className="space-y-2 pt-4 border-t border-[var(--border)]">
-                        <label className="text-[var(--text-muted)] text-xs uppercase tracking-wider">Current Stage</label>
-                        <div className="flex gap-2">
-                          <div className="flex-1 py-2 text-xs font-semibold bg-gray-500/10 text-gray-400 border border-gray-500/30 rounded-lg text-center">
-                            {p.status === 'in_progress' ? 'In Progress' : p.status === 'completed' ? 'Completed' : 'Not Started'}
-                          </div>
-                        </div>
-                        <div className="w-full py-2 text-xs font-semibold bg-[var(--gold-primary)]/10 text-[var(--gold-primary)] border border-[var(--gold-primary)]/30 rounded-lg text-center">
-                          <Activity className="w-3 h-3 inline mr-1" /> View Tasks
-                        </div>
-                      </div>
-                    </motion.div>
-                  ))}
-                </div>
-              )}
-            </motion.div>
-          )}
-
-          {/* ── ORDERS ────────────────────────────────────────────────── */}
-          {activeTab === 'orders' && (
-            <motion.div key="orders" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-              <OrderManagement
-                orders={orders}
-                onRefresh={fetchOrders}
-                user={user}
+                {loadingInventory ? <div className="py-16 text-center text-[var(--text-muted)]">Loading inventory...</div> : filteredInventory.length === 0 ? <EmptyState icon={Package} label="No inventory items found" description="Try another search or filter." /> : <div className="space-y-3">{pagedInventory.map((item) => { const state = getInventoryState(Number(item.stock || 0), Number(item.low_stock_threshold || 10)); return <div key={item.product_id || item.part_id} className="flex flex-col gap-4 rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)]/60 p-4 md:flex-row md:items-center md:justify-between"><div><p className="font-semibold text-white">{item.name}</p><p className="mt-1 text-sm text-[var(--text-muted)]">{inventorySubTab === 'products' ? item.sku || 'No SKU' : item.type_mapping || 'No mapping'}</p></div><div className="flex items-center gap-3"><span className="font-mono text-white">{item.stock}</span><StatusBadge label={state.label} variant={state.variant} />{inventorySubTab === 'products' ? <button type="button" onClick={() => { setForm({ product_id: item.product_id, quantity: '', change_type: '', reason: '', notes: '' }); setFormErrors({}); setModal({ open: true, type: 'inventory', data: { product_id: item.product_id, name: item.name, stock: item.stock } }) }} className="rounded-xl p-2 text-[var(--text-muted)] hover:bg-[var(--gold-primary)]/10 hover:text-[var(--gold-primary)]"><Edit className="h-4 w-4" /></button> : <div className="flex items-center gap-2"><button type="button" onClick={() => updatePartStock(item, -1)} className="rounded-xl border border-[var(--border)] px-3 py-1 text-sm text-[var(--text-muted)]">-1</button><button type="button" onClick={() => updatePartStock(item, 1)} className="rounded-xl border border-[var(--border)] px-3 py-1 text-sm text-[var(--text-muted)]">+1</button></div>}</div></div> })}</div>}
+                {filteredInventory.length > 0 && <div className="mt-6 flex items-center justify-between border-t border-[var(--border)] pt-4"><p className="text-sm text-[var(--text-muted)]">Showing {(inventoryPage - 1) * pageSize + 1}-{Math.min(inventoryPage * pageSize, filteredInventory.length)} of {filteredInventory.length}</p><div className="flex items-center gap-2"><button type="button" onClick={() => setInventoryPage((p) => Math.max(1, p - 1))} disabled={inventoryPage === 1} className="rounded-xl border border-[var(--border)] p-2 text-[var(--text-muted)] disabled:opacity-40"><ChevronLeft className="h-4 w-4" /></button><span className="text-sm text-white">{inventoryPage} / {totalPages}</span><button type="button" onClick={() => setInventoryPage((p) => Math.min(totalPages, p + 1))} disabled={inventoryPage >= totalPages} className="rounded-xl border border-[var(--border)] p-2 text-[var(--text-muted)] disabled:opacity-40"><ChevronRight className="h-4 w-4" /></button></div></div>}
+              </div>
+            </div>}
+            {activeTab === 'appointments' && <div className="space-y-6"><div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"><div><h3 className="text-lg font-semibold text-white">Appointment desk</h3><p className="text-sm text-[var(--text-muted)]">Staff uses the same appointment action model as admin now.</p></div><div className="flex flex-wrap gap-2"><button type="button" onClick={() => setUnavailableDatesOpen(true)} className="inline-flex items-center gap-2 rounded-2xl bg-[var(--surface-dark)] px-4 py-2.5 text-sm font-semibold text-white"><CalendarX className="h-4 w-4" />Mark unavailable</button><button type="button" onClick={() => { setAppointmentFormData(null); setSelectedCalendarDate(null); setAppointmentFormOpen(true) }} className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] px-4 py-2.5 text-sm font-semibold text-black"><Plus className="h-4 w-4" />New appointment</button></div></div><AppointmentCalendar appointments={appointments} unavailableDates={unavailableDates.map((entry) => entry?.date || entry).filter(Boolean)} isAdminMode onAppointmentClick={(item) => { setSelectedAppointment(item); setAppointmentModalOpen(true) }} onCreateAppointment={(_, date) => { setSelectedCalendarDate(date); setAppointmentFormData(null); setAppointmentFormOpen(true) }} /><div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6"><AppointmentList appointments={appointments} loading={loadingAppointments} onRefresh={fetchAppointments} onViewDetails={(item) => { setSelectedAppointment(item); setAppointmentModalOpen(true) }} onEdit={(item) => { setAppointmentFormData(item); setAppointmentFormOpen(true) }} onCreateNew={() => { setAppointmentFormData(null); setAppointmentFormOpen(true) }} pagination={appointmentPagination} onPageChange={(page) => setAppointmentPagination((p) => ({ ...p, page }))} selectedDate={selectedCalendarDate} /></div></div>}
+            {activeTab === 'pos' && (
+              <PosWorkspace
+                inventoryItems={visibleInventory}
+                showToast={showToast}
+                
               />
-            </motion.div>
-          )}
-
-{/* ── INVENTORY ─────────────────────────────────────────────── */}
-          {activeTab === 'inventory' && (
-            <motion.div key="inventory" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-              {loadingInventory ? (
-                <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl overflow-hidden">
-                  <table className="w-full"><tbody>{[...Array(5)].map((_, i) => <SkeletonRow cols={6} key={i} />)}</tbody></table>
-                </div>
-              ) : inventory.length === 0 ? (
-                <EmptyState icon={Package} label="No inventory data" description="Inventory is managed by admin." />
-              ) : (
-                <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl overflow-hidden">
-                  {/* Filters */}
-                  <div className="p-6 border-b border-[var(--border)]">
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                      <div>
-                        <h3 className="text-white font-semibold text-lg">Inventory Management</h3>
-                        <p className="text-[var(--text-muted)] text-sm">View and manage stock levels.</p>
-                      </div>
-                      {/* <button
-                        onClick={() => openModal('inventory', {})}
-                        className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black rounded-xl font-semibold text-sm hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all"
-                      >
-                        <Package className="w-4 h-4" /> Adjust Stock
-                      </button> */}
-                    </div>
-                  </div>
-                  
-                  {/* Status Filters */}
-                  <div className="px-6 py-4 border-b border-[var(--border)]">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <div className="flex flex-wrap gap-2 flex-1">
-                        {[
-                          { id: 'all', label: 'All' },
-                          { id: 'healthy', label: 'Healthy', cls: 'text-green-400' },
-                          { id: 'warning', label: 'Warning', cls: 'text-amber-400' },
-                          { id: 'critical', label: 'Critical', cls: 'text-orange-400' },
-                          { id: 'out_of_stock', label: 'Out of Stock', cls: 'text-red-400' },
-                        ].map((status) => (
-                          <button
-                            key={status.id}
-                            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                              status.id === 'all' 
-                                ? 'bg-[var(--gold-primary)] text-black'
-                                : status.id === 'healthy'
-                                  ? 'bg-green-500/20 text-green-400 border border-green-500/30'
-                                  : status.id === 'warning'
-                                    ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                                    : status.id === 'critical'
-                                      ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30'
-                                      : 'bg-red-500/20 text-red-400 border border-red-500/30'
-                            }`}
-                          >
-                            {status.label}
-                          </button>
-                        ))}
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setPosDrawerOpen(true)}
-                        className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-cyan-500 to-sky-500 px-5 py-2.5 text-sm font-semibold text-white shadow-[0_10px_30px_rgba(14,165,233,0.18)] hover:shadow-[0_12px_35px_rgba(14,165,233,0.25)] transition-all"
-                      >
-                        <ShoppingBag className="w-4 h-4" />
-                        POS
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left">
-                        <thead className="border-b border-[var(--border)]/50">
-                          <tr>
-                            {['Product', 'SKU', 'Stock Level', 'Threshold', 'Status', 'Actions'].map(c => (
-                              <th key={c} className="py-4 px-6 text-[var(--text-muted)] text-xs font-bold uppercase tracking-[0.2em]">{c}</th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {inventory.map((item, i) => {
-                            const itemName = item.name
-                            const sku = item.sku || '—'
-                            const stock = Number(item.stock ?? item.qty ?? 0)
-                            const threshold = Number(item.low_stock_threshold ?? 10)
-                            const isOutOfStock = stock === 0
-                            const isCritical = stock > 0 && stock <= threshold
-                            const isWarning = stock > threshold && stock <= threshold * 2
-                            const statusLabel = isOutOfStock ? 'Out of Stock' : isCritical ? 'Critical' : isWarning ? 'Warning' : 'Healthy'
-                            const statusCls = isOutOfStock
-                              ? 'bg-red-500/20 text-red-400 border border-red-500/30'
-                              : isCritical
-                                ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30'
-                                : isWarning
-                                  ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                                  : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-
-                            const maxCapacity = Math.max(stock * 2, threshold * 4, 20)
-                            const pct = Math.min((stock / maxCapacity) * 100, 100)
-
-                            return (
-                              <tr key={item.product_id || i} className="border-b border-[var(--border)]/30 hover:bg-white/5 transition-colors group">
-                                <td className="py-4 px-6">
-                                  <div className="flex items-center gap-3">
-                                    {item.primary_image ? (
-                                      <img src={item.primary_image} alt="" className="w-10 h-10 rounded-lg object-cover bg-[var(--bg-primary)]" />
-                                    ) : (
-                                      <div className="w-10 h-10 rounded-lg bg-[var(--bg-primary)] flex items-center justify-center">
-                                        <Package className="w-5 h-5 text-[var(--text-muted)]" />
-                                      </div>
-                                    )}
-                                    <div>
-                                      <p className="text-white font-medium">{itemName}</p>
-                                      <p className="text-[var(--text-muted)] text-xs">{item.category_name || 'Uncategorized'}</p>
-                                    </div>
-                                  </div>
-                                </td>
-                                <td className="py-4 px-6 text-[var(--text-muted)] font-mono text-sm">{sku}</td>
-                                
-                                <td className="py-4 px-6 w-48">
-                                  <div className="flex items-center gap-3">
-                                    <div className="flex-1 h-2 bg-gray-800 rounded-full overflow-hidden">
-                                      <div 
-                                        className={`h-full rounded-full transition-all ${
-                                          isOutOfStock ? 'bg-red-500' : 
-                                          isCritical ? 'bg-orange-400' : 
-                                          isWarning ? 'bg-amber-400' : 'bg-emerald-400'
-                                        }`} 
-                                        style={{ width: `${pct}%` }} 
-                                      />
-                                    </div>
-                                    <span className={`text-sm font-mono font-bold ${isOutOfStock ? 'text-red-400' : 'text-white'}`}>{stock}</span>
-                                  </div>
-                                </td>
-
-                                <td className="py-4 px-6 text-[var(--text-muted)] text-sm font-mono">{threshold}</td>
-                                
-                                <td className="py-4 px-6">
-                                  <span className={`inline-flex items-center rounded-lg px-2.5 py-1 text-xs uppercase font-bold tracking-wider ${statusCls}`}>{statusLabel}</span>
-                                </td>
-                                
-                                <td className="py-4 px-6">
-                                  <div className="flex items-center gap-2">
-                                    <button
-                                      onClick={() => openModal('inventory', { product_id: item.product_id, name: item.name, stock: item.stock })}
-                                      className="p-2 hover:bg-[var(--gold-primary)]/10 rounded-lg transition-colors"
-                                      title="Adjust Stock"
-                                    >
-                                      <Edit className="w-4 h-4 text-[var(--text-muted)] hover:text-[var(--gold-primary)]" />
-                                    </button>
-                                  </div>
-                                </td>
-                              </tr>
-                            )
-                          })}
-                        </tbody>
-                      </table>
-                  </div>
-                </div>
-)}
-            </motion.div>
-          )}
-
-          {/* ── APPOINTMENTS ──────────────────────────────────────────── */}
-          {activeTab === 'appointments' && (
-            <motion.div key="appointments" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-
-              {/* Header */}
-              <div className="flex items-center justify-between mb-6">
-                <div>
-                  <h2 className="text-white text-xl font-semibold">Appointments</h2>
-                  <p className="text-[var(--text-muted)] text-sm">Manage customer appointments and schedules</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setUnavailableDatesOpen(true)}
-                    className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black rounded-xl font-semibold text-sm hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all"
-                  >
-                    <CalendarX className="w-4 h-4" />
-                    Mark Unavailable
-                  </button>
-                  <button
-                    onClick={() => setAppointmentFormOpen(true)}
-                    className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black rounded-xl font-semibold text-sm hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all"
-                  >
-                    <Calendar className="w-4 h-4" />
-                    New Appointment
-                  </button>
-                </div>
-              </div>
-
-              {/* Calendar View */}
-              <AppointmentCalendar
-                appointments={appointments}
-                onAppointmentClick={(apt) => {
-                  setSelectedAppointment(apt)
-                  setAppointmentModalOpen(true)
-                }}
-                holidays={unavailableDates.map(d => {
-                  const date = d.date instanceof Date ? d.date : new Date(d.date)
-                  return date.toISOString().slice(0, 10)
-                })}
-              />
-
-              {/* Appointment List */}
-              <div className="mt-8">
-                <AppointmentList
-                  appointments={appointments}
-                  loading={loadingAppointments}
-                  onRefresh={fetchAppointments}
-                  onViewDetails={(apt) => {
-                    setSelectedAppointment(apt)
-                    setAppointmentModalOpen(true)
-                  }}
-                  onEdit={(apt) => {
-                    setAppointmentFormData(apt)
-                    setAppointmentFormOpen(true)
-                  }}
-                  onCreateNew={() => setAppointmentFormOpen(true)}
-                  pagination={appointmentPagination}
-                  onPageChange={(page) => setAppointmentPagination(prev => ({ ...prev, page }))}
-                  selectedDate={selectedCalendarDate}
-                />
-              </div>
-            </motion.div>
-          )}
-
-          {/* ── SCHEDULE ──────────────────────────────────────────────── */}
-          {activeTab === 'schedule' && (
-            <motion.div key="schedule" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-              <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6">
-                <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-white font-semibold text-lg">Upcoming Schedule</h3>
-                  <p className="text-[var(--text-muted)] text-sm">{new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
-                </div>
-                {loadingAppointments ? (
-                  <div className="space-y-3">{[...Array(4)].map((_, i) => <SkeletonCard key={i} />)}</div>
-                ) : appointments.length === 0 ? (
-                  <EmptyState icon={Clock} label="No scheduled items" description="Your appointments and project deadlines will appear here." />
-                ) : (
-                  <div className="space-y-4">
-                    {appointments.map(apt => {
-                      const d = apt.scheduled_at || apt.date
-                      const isToday = d && new Date(d).toDateString() === new Date().toDateString()
-                      return (
-                        <div key={apt.appointment_id} className={`flex items-center gap-5 p-4 rounded-xl border transition-all ${isToday ? 'border-[var(--gold-primary)]/40 bg-[var(--gold-primary)]/5' : 'border-[var(--border)] bg-[var(--bg-primary)]'}`}>
-                          <div className={`text-center rounded-xl p-3 min-w-[56px] ${isToday ? 'bg-[var(--gold-primary)] text-black' : 'bg-[var(--bg-primary)] border border-[var(--border)] text-white'}`}>
-                            <p className="text-xs font-semibold">{d ? new Date(d).toLocaleDateString('en-US', { month: 'short' }) : '—'}</p>
-                            <p className="text-xl font-bold leading-none">{d ? new Date(d).getDate() : '—'}</p>
-                          </div>
-                          <div className="flex-1">
-                            <p className="text-white font-semibold">{apt.title || apt.service_name || 'Appointment'}</p>
-                            <p className="text-[var(--text-muted)] text-sm">{apt.customer_name || apt.user_name || 'Customer'} • {d ? new Date(d).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}</p>
-                          </div>
-                          <StatusBadge label={apt.status || 'pending'} variant={statusVariant(apt.status)} />
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-
-              {/* Project deadlines */}
-              {projects.filter(p => p.estimated_completion_date).length > 0 && (
-                <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6">
-                  <h3 className="text-white font-semibold text-lg mb-4">Project Deadlines</h3>
-                  <div className="space-y-3">
-                    {projects.filter(p => p.estimated_completion_date).slice(0, 5).map(p => {
-                      const deadline = new Date(p.estimated_completion_date)
-                      const isPast = deadline < new Date()
-                      const isSoon = !isPast && (deadline - new Date()) < 7 * 24 * 60 * 60 * 1000
-                      return (
-                        <div key={p.project_id} className="flex items-center gap-4 p-3 rounded-xl bg-[var(--bg-primary)] border border-[var(--border)]">
-                          <div className={`w-3 h-3 rounded-full flex-shrink-0 ${isPast ? 'bg-red-400' : isSoon ? 'bg-amber-400' : 'bg-green-400'}`} />
-                          <div className="flex-1">
-                            <p className="text-white text-sm font-medium">{p.name || p.title}</p>
-                            <p className="text-[var(--text-muted)] text-xs">{deadline.toLocaleDateString()}</p>
-                          </div>
-                          <StatusBadge
-                            label={isPast ? 'Overdue' : isSoon ? 'Due Soon' : 'On Track'}
-                            variant={isPast ? 'danger' : isSoon ? 'warning' : 'success'}
-                          />
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              )}
-            </motion.div>
-          )}
-        </main>
-
-        {/* POS Drawer Modal */}
-        <AnimatePresence>
-          {posDrawerOpen && (
-            <motion.div
-              key="pos-drawer"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[150] flex items-center justify-center bg-black/80 backdrop-blur-sm"
-              onClick={(e) => { if (e.target === e.currentTarget) setPosDrawerOpen(false) }}
-            >
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95, y: 20 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-3xl w-full max-w-[95vw] h-[90vh] overflow-hidden flex flex-col"
-              >
-                <div className="flex items-center justify-between p-4 border-b border-[var(--border)] bg-[var(--bg-primary)]/50">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500 to-sky-600 flex items-center justify-center">
-                      <ShoppingBag className="w-5 h-5 text-white" />
-                    </div>
-                    <div>
-                      <h2 className="text-white font-bold text-lg">POS Cash Drawer</h2>
-                      <p className="text-xs text-[var(--text-muted)]">
-                        {posDrawerState.isOpen 
-                          ? `Opened at ${new Date(posDrawerState.openedAt).toLocaleTimeString()}`
-                          : 'Drawer is closed'}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {posDrawerState.isOpen && (
-                      <button onClick={() => setPosShowCloseConfirm(true)} className="px-3 py-2 rounded-lg border border-[var(--border)] text-sm text-red-400 hover:bg-red-500/10 transition-colors">
-                        Close Drawer
-                      </button>
-                    )}
-                    <button onClick={() => setPosDrawerOpen(false)} className="p-2 hover:bg-white/10 rounded-lg transition-colors">
-                      <X className="w-5 h-5 text-[var(--text-muted)]" />
-                    </button>
-                  </div>
-                </div>
-
-                {!posDrawerState.isOpen ? (
-                  <div className="flex-1 flex flex-col items-center justify-center p-8">
-                    <div className="w-24 h-24 rounded-full bg-gradient-to-br from-cyan-500/20 to-sky-600/20 flex items-center justify-center mb-6">
-                      <Wallet className="w-12 h-12 text-cyan-400" />
-                    </div>
-                    <h3 className="text-white text-xl font-bold mb-2">Open the Cash Drawer</h3>
-                    <p className="text-[var(--text-muted)] text-center mb-6 max-w-md">
-                      Set the opening cash amount to start POS transactions. This will be used as the starting float for the day.
-                    </p>
-                    <div className="w-full max-w-sm space-y-4">
-                      <div>
-                        <label className="block text-sm font-semibold text-[var(--text-muted)] mb-2">Opening Cash Amount</label>
-                        <input
-                          type="number"
-                          id="openingCash"
-                          placeholder="0.00"
-                          className="w-full px-4 py-3 bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl text-white text-lg font-mono focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                        />
-                      </div>
-                      <button
-                        onClick={(e) => {
-                          const amount = Number(e.target.closest('button')?.previousSibling?.querySelector('input')?.value) || 0
-                          openPosDrawer(amount)
-                        }}
-                        className="w-full py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-sky-600 text-white font-bold hover:shadow-[0_8px_25px_rgba(6,182,212,0.35)] transition-all"
-                      >
-                        Open Drawer
-                      </button>
-                    </div>
-                  </div>
-) : (
-                    <div className="flex-1 flex overflow-hidden">
-                      <div className="w-1/2 border-r border-[var(--border)] flex flex-col">
-                        <div className="p-3 border-b border-[var(--border)]">
-                          <div className="relative">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
-                            <input
-                              type="text"
-                              placeholder="Search products..."
-                              value={posSearchQuery}
-                              onChange={(e) => setPosSearchQuery(e.target.value)}
-                              className="w-full pl-10 pr-4 py-2.5 bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                            />
-                          </div>
-                        </div>
-                        <div className="flex-1 overflow-y-auto p-2 space-y-1">
-                          {inventory
-                            .filter(p => p.stock > 0)
-                            .filter(p => !posSearchQuery || p.name?.toLowerCase().includes(posSearchQuery.toLowerCase()) || p.sku?.toLowerCase().includes(posSearchQuery.toLowerCase()))
-                            .slice(0, 20)
-                            .map(product => (
-                              <button
-                                key={product.product_id}
-                                onClick={() => addToPosCart(product)}
-                                className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-white/5 transition-colors text-left group"
-                              >
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-white font-medium truncate">{product.name}</p>
-                                  <p className="text-xs text-[var(--text-muted)]">{product.sku}</p>
-                                </div>
-                                <div className="flex items-center gap-3">
-                                  <span className="text-cyan-400 font-mono">{formatCurrency(product.price)}</span>
-                                  <span className="text-xs text-[var(--text-muted)]">×{product.stock}</span>
-                                  <Plus className="w-4 h-4 text-[var(--text-muted)] opacity-0 group-hover:opacity-100 transition-opacity" />
-                                </div>
-                              </button>
-                            ))}
-                        </div>
-                      </div>
-
-                      <div className="w-1/2 flex flex-col">
-                        <div className="flex-1 overflow-y-auto border-b border-[var(--border)]">
-                          {posCart.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center h-full text-[var(--text-muted)]">
-                              <ShoppingBag className="w-10 h-10 mb-2 opacity-30" />
-                              <p className="text-sm">Add items to cart</p>
-                            </div>
-                          ) : (
-                            <div className="p-2 space-y-1">
-                              {posCart.map(item => (
-                                <div key={item.product_id} className="flex items-center justify-between p-2 rounded-lg bg-[var(--bg-primary)]/50">
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-white font-medium truncate text-sm">{item.name}</p>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <button onClick={() => {
-                                      const newQty = item.quantity - 1
-                                      if (newQty <= 0) removeFromPosCart(item.product_id)
-                                      else updatePosCartQuantity(item.product_id, newQty)
-                                    }} className="p-1 hover:bg-white/10 rounded">
-                                      <ChevronDown className="w-4 h-4 text-[var(--text-muted)]" />
-                                    </button>
-                                    <span className="text-white font-mono w-6 text-center">{item.quantity}</span>
-                                    <button onClick={() => updatePosCartQuantity(item.product_id, item.quantity + 1)} className="p-1 hover:bg-white/10 rounded">
-                                      <ChevronUp className="w-4 h-4 text-[var(--text-muted)]" />
-                                    </button>
-                                    <span className="text-cyan-400 font-mono w-20 text-right">{formatCurrency(item.price * item.quantity)}</span>
-                                    <button onClick={() => removeFromPosCart(item.product_id)} className="p-1 hover:bg-red-500/20 rounded">
-                                      <X className="w-4 h-4 text-red-400" />
-                                    </button>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="p-3 border-b border-[var(--border)] space-y-1">
-                          <div className="flex justify-between text-sm">
-                            <span className="text-[var(--text-muted)]">Subtotal</span>
-                            <span className="text-white font-mono">{formatCurrency(posCart.reduce((sum, item) => sum + (item.price * item.quantity), 0))}</span>
-                          </div>
-                          <div className="flex justify-between text-sm">
-                            <span className="text-[var(--text-muted)]">Tax (12%)</span>
-                            <span className="text-white font-mono">{formatCurrency(posCart.reduce((sum, item) => sum + (item.price * item.quantity), 0) * TAX_RATE)}</span>
-                          </div>
-                          <div className="flex justify-between text-lg font-bold pt-2 border-t border-[var(--border)]">
-                            <span className="text-white">Total</span>
-                            <span className="text-cyan-400">{formatCurrency(calculateGrandTotal())}</span>
-                          </div>
-                        </div>
-
-                        <div className="p-3 space-y-2">
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => setPosPaymentMethod('cash')}
-                              className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${posPaymentMethod === 'cash' ? 'bg-cyan-500 text-black' : 'bg-[var(--bg-primary)] text-[var(--text-muted)] hover:text-white'}`}
-                            >
-                              Cash
-                            </button>
-                            <button
-                              onClick={() => setPosPaymentMethod('card')}
-                              className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${posPaymentMethod === 'card' ? 'bg-cyan-500 text-black' : 'bg-[var(--bg-primary)] text-[var(--text-muted)] hover:text-white'}`}
-                            >
-                              Card
-                            </button>
-                            <button
-                              onClick={() => setPosPaymentMethod('gcash')}
-                              className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${posPaymentMethod === 'gcash' ? 'bg-cyan-500 text-black' : 'bg-[var(--bg-primary)] text-[var(--text-muted)] hover:text-white'}`}
-                            >
-                              GCash
-                            </button>
-                          </div>
-                          
-                          {posPaymentMethod === 'cash' && (
-                            <>
-                              <div>
-                                <label className="block text-xs text-[var(--text-muted)] mb-1">Cash Received</label>
-                                <input
-                                  type="number"
-                                  value={posCashReceived}
-                                  onChange={(e) => setPosCashReceived(e.target.value)}
-                                  placeholder="0.00"
-                                  className="w-full px-3 py-2 bg-[var(--bg-primary)] border border-[var(--border)] rounded-lg text-white font-mono focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                                />
-                              </div>
-                              {posCashReceived && (
-                                <div className="flex justify-between text-sm py-2 border-t border-[var(--border)]">
-                                  <span className="text-[var(--text-muted)]">Change</span>
-                                  <span className="text-green-400 font-mono">{formatCurrency(calculateChange())}</span>
-                                </div>
-                              )}
-                            </>
-                          )}
-                          
-                          <button
-                            onClick={processPosPayment}
-                            disabled={posCart.length === 0 || calculateGrandTotal() === 0}
-                            className="w-full py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-sky-600 text-white font-bold disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-[0_8px_25px_rgba(6,182,212,0.35)] transition-all"
-                          >
-                            {posPaymentMethod === 'cash' ? `Receive ${formatCurrency(Number(posCashReceived) || 0)}` : 'Process Payment'}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </motion.div>
-              </motion.div>
             )}
-          </AnimatePresence>
-
-          {/* Inventory Adjust Modal */}
-          {modal.open && modal.type === 'inventory' && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[150] flex items-center justify-center bg-black/80 backdrop-blur-sm"
-              onClick={(e) => { if (e.target === e.currentTarget) closeModal() }}
-            >
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95, y: 20 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                className="w-full max-w-lg"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <AdjustStockModal
-                  visibleProducts={inventory}
-                  modal={modal}
-                  form={form}
-                  setForm={setForm}
-                  formErrors={formErrors}
-                  setFormErrors={setFormErrors}
-                  closeModal={closeModal}
-                  isSaving={isSaving}
-                  saveStockAdjust={saveStockAdjust}
-                  showToast={showToast}
-                  formatCurrency={formatCurrency}
-                />
-
-                {/* Appointment Modal */}
-                <AppointmentModal
-                  appointment={selectedAppointment}
-                  open={appointmentModalOpen}
-                  onClose={() => {
-                    setAppointmentModalOpen(false)
-                    setSelectedAppointment(null)
-                  }}
-                  onUpdate={(updated) => {
-                    showToast('Appointment updated successfully!')
-                    fetchAppointments()
-                    setAppointmentModalOpen(false)
-                    setSelectedAppointment(null)
-                  }}
-                  onDelete={(id) => {
-                    showToast('Appointment deleted')
-                    fetchAppointments()
-                    setAppointmentModalOpen(false)
-                    setSelectedAppointment(null)
-                  }}
-                />
-
-                {/* Appointment Form Modal */}
-                <AppointmentForm
-                  isOpen={appointmentFormOpen}
-                  onClose={() => {
-                    setAppointmentFormOpen(false)
-                    setAppointmentFormData(null)
-                  }}
-                  onSubmit={async (data) => {
-                    try {
-                      if (appointmentFormData?.appointment_id) {
-                        await staffApi.updateAppointment(appointmentFormData.appointment_id, data)
-                        showToast('Appointment updated successfully!')
-                      } else {
-                        await staffApi.createAppointment(data)
-                        showToast('Appointment created successfully!')
-                      }
-                      fetchAppointments()
-                      setAppointmentFormOpen(false)
-                      setAppointmentFormData(null)
-                    } catch (e) {
-                      showToast(e.message, 'error')
-                    }
-                  }}
-                  initialData={appointmentFormData}
-                  services={services}
-                  users={users}
-                  loading={loadingAppointments}
-                  selectedDate={selectedCalendarDate}
-                />
-
-                {/* Unavailable Dates Manager */}
-                <UnavailableDatesManager
-                  isOpen={unavailableDatesOpen}
-                  onClose={() => setUnavailableDatesOpen(false)}
-                  unavailableDates={unavailableDates}
-                  onAddUnavailable={async (date, reason) => {
-                    try {
-                      await staffApi.addUnavailableDate({ date, reason })
-                      showToast('Unavailable date added!')
-                      fetchUnavailableDates()
-                    } catch (e) { showToast(e.message, 'error') }
-                  }}
-                  onRemoveUnavailable={async (id) => {
-                    try {
-                      await staffApi.removeUnavailableDate(id)
-                      showToast('Unavailable date removed!')
-                      fetchUnavailableDates()
-                    } catch (e) { showToast(e.message, 'error') }
-                  }}
-                  loading={loadingAppointments}
-                />
-              </motion.div>
-            </motion.div>
-          )}
+            {activeTab === 'schedule' && (appointments.length === 0 ? <EmptyState icon={Clock} label="No scheduled items" description="Appointments and project deadlines will appear here." /> : <div className="space-y-6"><div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6"><h3 className="text-lg font-semibold text-white">Upcoming schedule</h3><div className="mt-4 space-y-3">{appointments.map((item) => <div key={item.appointment_id} className="flex items-center justify-between rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)]/60 p-4"><div><p className="font-semibold text-white">{item.customer_name || item.user_name || 'Service customer'}</p><p className="mt-1 text-sm text-[var(--text-muted)]">{item.scheduled_at ? new Date(item.scheduled_at).toLocaleString() : 'TBD'}</p></div><StatusBadge label={item.status || 'pending'} variant={statusVariant(item.status)} /></div>)}</div></div><div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6"><h3 className="text-lg font-semibold text-white">Project deadlines</h3><div className="mt-4 space-y-3">{projects.filter((item) => item.estimated_completion_date).length === 0 ? <p className="text-sm text-[var(--text-muted)]">No project deadlines available.</p> : projects.filter((item) => item.estimated_completion_date).map((item) => <div key={item.project_id} className="flex items-center justify-between rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)]/60 p-4"><div><p className="font-semibold text-white">{item.name || item.title}</p><p className="mt-1 text-sm text-[var(--text-muted)]">Due {new Date(item.estimated_completion_date).toLocaleDateString()}</p></div><StatusBadge label={item.status || 'pending'} variant={statusVariant(item.status)} /></div>)}</div></div></div>)}
+          </main>
         </div>
       </div>
-    )
-  }
+      <AnimatePresence>{modal.open && modal.type === 'inventory' && <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[150] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm" onClick={(e) => { if (e.target === e.currentTarget) setModal({ open: false, type: null, data: null }) }}><AdjustStockModal modal={modal} form={form} setForm={setForm} errors={formErrors} setErrors={setFormErrors} onClose={() => setModal({ open: false, type: null, data: null })} onSave={saveStockAdjust} saving={isSaving} /></motion.div>}</AnimatePresence>
+      <AppointmentModal isOpen={appointmentModalOpen} onClose={() => { setAppointmentModalOpen(false); setSelectedAppointment(null) }} appointment={selectedAppointment} onStatusChange={updateAppointmentStatus} onPaymentStatusChange={updateAppointmentPaymentStatus} onReschedule={rescheduleAppointment} onCancel={cancelAppointment} loading={loadingAppointments} />
+      <AppointmentForm isOpen={appointmentFormOpen} onClose={() => { setAppointmentFormOpen(false); setAppointmentFormData(null); setSelectedCalendarDate(null) }} onSubmit={submitAppointment} initialData={appointmentFormData} services={services} users={[]} loading={loadingAppointments} selectedDate={selectedCalendarDate} />
+      <UnavailableDatesManager isOpen={unavailableDatesOpen} onClose={() => setUnavailableDatesOpen(false)} unavailableDates={unavailableDates} onAddUnavailable={async (date, reason) => { try { await staffApi.addUnavailableDate({ date, reason }); showToast('Date marked unavailable'); await fetchUnavailableDates() } catch (error) { showToast(error.message, 'error') } }} onRemoveUnavailable={async (id) => { try { await staffApi.removeUnavailableDate(id); showToast('Date reopened'); await fetchUnavailableDates() } catch (error) { showToast(error.message, 'error') } }} loading={loadingAppointments} />
+    </div>
+  )
+}
 
 export default StaffDashboard

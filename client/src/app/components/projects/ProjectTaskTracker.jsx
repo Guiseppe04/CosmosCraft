@@ -1,9 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { motion, AnimatePresence } from 'motion/react';
-import { CheckCircle, Circle, ChevronDown, ChevronRight, Plus, Trash2, Edit, User, Clock, AlertCircle, Guitar, Package, Search, Calendar } from 'lucide-react';
+import { CheckCircle, Circle, ChevronDown, ChevronRight, Plus, Trash2, User, Clock, AlertCircle, Guitar, Package, Search, Calendar } from 'lucide-react';
 import { adminApi } from '../../utils/adminApi';
 import { formatCurrency } from '../../utils/formatCurrency';
+
+const formatStatusLabel = (status) => String(status || '')
+  .replace(/_/g, ' ')
+  .replace(/\b\w/g, (char) => char.toUpperCase());
 
 export default function ProjectTaskTracker({ projectId, projectName, isAdmin = false, parts = [], projectData = null }) {
   const [hierarchy, setHierarchy] = useState(null);
@@ -70,6 +74,7 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
   };
 
   const resolvedParts = parts.length > 0 ? parts : (Array.isArray(hierarchy?.parts) ? hierarchy.parts : []);
+  const taskSummary = hierarchy?.task_summary || { total: 0, completed: 0, pending: 0 };
 
   // Group parts by category
   const groupedParts = resolvedParts.reduce((groups, part) => {
@@ -188,7 +193,7 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
             <div className="text-right">
               <span className="text-[var(--gold-primary)] text-3xl font-black">{hierarchy.progress}%</span>
               <p className="text-white font-semibold flex items-center justify-end gap-2">
-                {hierarchy.status}
+                {formatStatusLabel(hierarchy.status)}
               </p>
             </div>
           </div>
@@ -202,7 +207,11 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
              />
           </div>
           <div className="flex items-center justify-between mt-4">
-            <p className="text-[var(--text-muted)] text-xs">Total Completion</p>
+            <p className="text-[var(--text-muted)] text-xs">
+              {taskSummary.total > 0
+                ? `${taskSummary.completed} of ${taskSummary.total} tasks completed`
+                : 'No tasks added yet'}
+            </p>
             
             {/* Customer Book Appointment Action */}
             {!isAdmin && (
@@ -251,6 +260,7 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
               const mProgress = milestone.subtasks?.length 
                 ? Math.round((milestone.subtasks.filter(s => s.status === 'completed').length / milestone.subtasks.length) * 100)
                 : 0;
+              const milestoneStatusLabel = mProgress === 100 ? 'Done' : mProgress > 0 ? 'In Progress' : 'Pending';
               
               return (
                 <div key={milestone.milestone_id} className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl overflow-hidden transition-all hover:border-[var(--gold-primary)]/30">
@@ -269,8 +279,8 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
                       <div className="flex-1">
                         <h3 className="text-white font-semibold text-lg">{milestone.title}</h3>
                         <div className="flex items-center gap-4 mt-1">
-                          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${milestone.status === 'completed' ? 'bg-green-500/10 text-green-400' : 'bg-blue-500/10 text-blue-400'}`}>
-                            {milestone.status === 'completed' ? 'Done' : 'Pending'}
+                          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${mProgress === 100 ? 'bg-green-500/10 text-green-400' : mProgress > 0 ? 'bg-blue-500/10 text-blue-400' : 'bg-slate-500/10 text-slate-300'}`}>
+                            {milestoneStatusLabel}
                           </span>
                           <div className="flex items-center gap-2 flex-1 max-w-[200px]">
                             <div className="h-1.5 flex-1 bg-[var(--bg-primary)] rounded-full overflow-hidden">

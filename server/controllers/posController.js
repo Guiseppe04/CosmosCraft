@@ -11,16 +11,36 @@ const { AppError } = require('../middleware/errorHandler');
 /**
  * POST /pos/sales
  * Create a new POS sale
- * Body: { customerName?, customerPhone?, notes? }
+ * Body: {
+ *   customerName?, customerPhone?, notes?,
+ *   subtotal?, taxAmount?, totalAmount?,
+ *   paymentMethod?, referenceNumber?, status?
+ * }
  */
 exports.createSale = async (req, res, next) => {
   try {
-    const { customerName, customerPhone, notes } = req.body;
+    const {
+      customerName,
+      customerPhone,
+      notes,
+      subtotal,
+      taxAmount,
+      totalAmount,
+      paymentMethod,
+      referenceNumber,
+      status
+    } = req.body;
 
     const sale = await posService.createSale(req.user.user_id, {
       customerName,
       customerPhone,
-      notes
+      notes,
+      subtotal,
+      taxAmount,
+      totalAmount,
+      paymentMethod,
+      referenceNumber,
+      status
     });
 
     res.status(201).json({

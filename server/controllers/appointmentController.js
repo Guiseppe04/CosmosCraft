@@ -261,7 +261,7 @@ exports.updateStatus = async (req, res, next) => {
     // Perform status update
     const updated = await appointmentService.updateStatus(
       id,
-      validated.new_status,
+      validated.new_status || validated.status,
       validated.reason
     );
 
