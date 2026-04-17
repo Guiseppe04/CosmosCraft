@@ -39,7 +39,8 @@ exports.createSale = async (
     totalAmount = 0,
     paymentMethod = 'cash',
     referenceNumber = null,
-    status = 'completed'
+    status = 'completed',
+    items = []
   } = {}
 ) => {
   // Validate staff exists
@@ -60,34 +61,96 @@ exports.createSale = async (
   const completedAt = normalizedStatus === 'completed' ? new Date() : null;
   const saleNumber = await generateSaleNumber();
 
-  const res = await pool.query(
-    `INSERT INTO pos_sales (
-      sale_number, staff_id, customer_name, customer_phone,
-      subtotal, tax_amount, total_amount,
-      payment_method, payment_status, status, reference_number, notes, completed_at
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-    RETURNING 
-      sale_id, sale_number, staff_id, customer_name, customer_phone,
-      subtotal, discount_amount, tax_amount, total_amount,
-      payment_method, payment_status, status, reference_number, created_at, completed_at`,
-    [
-      saleNumber,
-      staffId,
-      customerName,
-      customerPhone,
-      normalizedSubtotal,
-      normalizedTaxAmount,
-      normalizedTotalAmount,
-      normalizedPaymentMethod,
-      paymentStatus,
-      normalizedStatus,
-      referenceNumber,
-      notes,
-      completedAt
-    ]
-  );
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
 
-  return res.rows[0];
+    const saleRes = await client.query(
+      `INSERT INTO pos_sales (
+        sale_number, staff_id, customer_name, customer_phone,
+        subtotal, tax_amount, total_amount,
+        payment_method, payment_status, status, reference_number, notes, completed_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+      RETURNING 
+        sale_id, sale_number, staff_id, customer_name, customer_phone,
+        subtotal, discount_amount, tax_amount, total_amount,
+        payment_method, payment_status, status, reference_number, created_at, completed_at`,
+      [
+        saleNumber,
+        staffId,
+        customerName,
+        customerPhone,
+        normalizedSubtotal,
+        normalizedTaxAmount,
+        normalizedTotalAmount,
+        normalizedPaymentMethod,
+        paymentStatus,
+        normalizedStatus,
+        referenceNumber,
+        notes,
+        completedAt
+      ]
+    );
+
+    const sale = saleRes.rows[0];
+
+    if (items && items.length > 0) {
+      for (const item of items) {
+        await client.query(
+          `INSERT INTO pos_sale_items (
+            sale_id, product_id, service_id, item_name, quantity, unit_price, subtotal, notes
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [
+            sale.sale_id,
+            item.product_id || null,
+            item.service_id || null,
+            item.name || item.item_name || 'Item',
+            Math.max(1, Number(item.quantity || 1)),
+            Math.max(0, Number(item.price || 0)),
+            Math.max(0, Number(item.subtotal || (item.price * item.quantity))),
+            item.notes || null
+          ]
+        );
+
+        if (item.product_id) {
+          const itemQuantity = Math.max(1, Number(item.quantity || 1));
+          
+          const invRes = await client.query(
+            'SELECT stock FROM inventory WHERE product_id = $1 FOR UPDATE',
+            [item.product_id]
+          );
+          
+          if (!invRes.rows[0]) {
+            throw new AppError(`Product inventory not found for ${item.name || item.item_name}`, 404);
+          }
+          
+          const currentStock = invRes.rows[0].stock;
+          if (currentStock < itemQuantity) {
+            throw new AppError(`Insufficient stock for ${item.name || item.item_name}. Available: ${currentStock}, Requested: ${itemQuantity}`, 400);
+          }
+
+          await client.query(
+            `UPDATE inventory SET stock = stock - $1, updated_at = now() WHERE product_id = $2`,
+            [itemQuantity, item.product_id]
+          );
+
+          await client.query(
+            `INSERT INTO inventory_logs (product_id, change_type, quantity, reference_type, reference_id, notes, created_by)
+             VALUES ($1, 'stock_out', $2, 'pos_sale', $3, $4, $5)`,
+            [item.product_id, -itemQuantity, sale.sale_id, `POS Sale ${sale.sale_number}`, staffId]
+          );
+        }
+      }
+    }
+
+    await client.query('COMMIT');
+    return sale;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 };
 
 /**

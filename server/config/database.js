@@ -34,9 +34,21 @@ async function runStartupMigrations(client) {
     ADD COLUMN IF NOT EXISTS customer_name VARCHAR(100),
     ADD COLUMN IF NOT EXISTS customer_email VARCHAR(100),
     ADD COLUMN IF NOT EXISTS customer_phone VARCHAR(20),
+    ADD COLUMN IF NOT EXISTS appointment_type VARCHAR(50) DEFAULT 'service_in_shop',
+    ADD COLUMN IF NOT EXISTS order_id UUID,
+    ADD COLUMN IF NOT EXISTS confirmation_notes TEXT,
     ADD COLUMN IF NOT EXISTS payment_status VARCHAR(50) DEFAULT 'pending',
     ADD COLUMN IF NOT EXISTS payment_method VARCHAR(50),
     ADD COLUMN IF NOT EXISTS payment_proof_url TEXT;
+  `);
+
+  await client.query(`
+    ALTER TABLE projects
+    ADD COLUMN IF NOT EXISTS fulfillment_method VARCHAR(50),
+    ADD COLUMN IF NOT EXISTS fulfillment_status VARCHAR(50),
+    ADD COLUMN IF NOT EXISTS fulfillment_notes TEXT,
+    ADD COLUMN IF NOT EXISTS fulfillment_selected_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS pickup_appointment_id UUID;
   `);
 
   await client.query(`
@@ -47,6 +59,21 @@ async function runStartupMigrations(client) {
   await client.query(`
     CREATE INDEX IF NOT EXISTS idx_appointments_payment_status
     ON appointments(payment_status);
+  `);
+
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS idx_appointments_appointment_type
+    ON appointments(appointment_type);
+  `);
+
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS idx_appointments_order_id
+    ON appointments(order_id);
+  `);
+
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS idx_projects_fulfillment_method
+    ON projects(fulfillment_method);
   `);
 }
 

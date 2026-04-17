@@ -61,12 +61,15 @@ exports.createAppointment = async (req, res, next) => {
     const userId = validated.user_id || req.user.id;
 
     const appointment = await appointmentService.createAppointment({
+      appointment_type: validated.appointment_type,
       services: validated.services,
       location_id: validated.location_id,
       guitar_details: validated.guitar_details,
       scheduled_at: validated.scheduled_at,
       notes: validated.notes,
       user_id: userId,
+      order_id: validated.order_id,
+      confirmation_notes: validated.confirmation_notes,
     });
 
     res.status(201).json({

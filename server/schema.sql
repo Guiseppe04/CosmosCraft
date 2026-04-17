@@ -492,6 +492,8 @@ CREATE INDEX idx_services_is_active ON services(is_active);
 CREATE TABLE appointments (
     appointment_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID,
+    appointment_type VARCHAR(50) NOT NULL DEFAULT 'service_in_shop',
+    order_id UUID,
     services JSONB DEFAULT '[]'::jsonb,
     location_id VARCHAR(50),
     guitar_details JSONB,
@@ -505,14 +507,18 @@ CREATE TABLE appointments (
     payment_method VARCHAR(50),
     payment_proof_url TEXT,
     notes TEXT,
+    confirmation_notes TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE SET NULL,
+    FOREIGN KEY (order_id) REFERENCES orders(order_id) ON DELETE SET NULL,
     CHECK (estimated_end_at IS NULL OR estimated_end_at > scheduled_at)
 );
 
 CREATE INDEX idx_appointments_user_id ON appointments(user_id);
+CREATE INDEX idx_appointments_order_id ON appointments(order_id);
+CREATE INDEX idx_appointments_type ON appointments(appointment_type);
 CREATE INDEX idx_appointments_services_gin ON appointments USING GIN (services);
 CREATE INDEX idx_appointments_scheduled_at ON appointments(scheduled_at);
 CREATE INDEX idx_appointments_status ON appointments(status);
@@ -551,14 +557,21 @@ CREATE TABLE projects (
     progress SMALLINT NOT NULL DEFAULT 0 CHECK (progress >= 0 AND progress <= 100),
     estimated_completion_date DATE,
     notes TEXT,
+    fulfillment_method VARCHAR(50),
+    fulfillment_status VARCHAR(50),
+    fulfillment_notes TEXT,
+    fulfillment_selected_at TIMESTAMPTZ,
+    pickup_appointment_id UUID,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     
-    FOREIGN KEY (order_id) REFERENCES orders(order_id) ON DELETE CASCADE
+    FOREIGN KEY (order_id) REFERENCES orders(order_id) ON DELETE CASCADE,
+    FOREIGN KEY (pickup_appointment_id) REFERENCES appointments(appointment_id) ON DELETE SET NULL
 );
 
 CREATE INDEX idx_projects_order_id ON projects(order_id);
 CREATE INDEX idx_projects_status ON projects(status);
+CREATE INDEX idx_projects_fulfillment_method ON projects(fulfillment_method);
 
 
 -- =============================================

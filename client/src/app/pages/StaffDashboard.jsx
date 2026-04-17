@@ -29,6 +29,7 @@ import AppointmentForm from '../components/appointments/AppointmentForm'
 import AppointmentList from '../components/appointments/AppointmentList'
 import AppointmentModal from '../components/appointments/AppointmentModal'
 import UnavailableDatesManager from '../components/appointments/UnavailableDatesManager'
+import ProjectTaskTracker from '../components/projects/ProjectTaskTracker'
 import { PosWorkspace } from '../components/pos/PosWorkspace'
 import { useAuth } from '../context/AuthContext'
 import { useDebounce } from '../hooks/useDebounce'
@@ -150,6 +151,72 @@ function AdjustStockModal({ modal, form, setForm, errors, setErrors, onClose, on
           <button type="submit" disabled={saving} className="rounded-xl bg-[var(--gold-primary)] px-4 py-2.5 font-semibold text-black disabled:opacity-60">{saving ? 'Saving...' : 'Save Changes'}</button>
         </div>
       </form>
+    </motion.div>
+  )
+}
+
+function ProjectEditModal({ form, setForm, errors, onClose, onSave, saving }) {
+  return (
+    <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.96 }} className="w-full max-w-lg rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-6">
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-bold text-white">Edit Project</h2>
+          <p className="text-sm text-[var(--text-muted)]">Update project details for the team.</p>
+        </div>
+        <button type="button" onClick={onClose} className="rounded-xl p-2 text-[var(--text-muted)] hover:bg-white/10 hover:text-white"><X className="h-5 w-5" /></button>
+      </div>
+      <div className="space-y-4">
+        <div>
+          <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Project Name *</label>
+          <input
+            type="text"
+            value={form.name || form.title || ''}
+            onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value, title: e.target.value }))}
+            className="w-full rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-3 text-sm text-white focus:border-[var(--gold-primary)] focus:outline-none"
+          />
+          {errors.name && <p className="mt-2 text-sm text-red-400">{errors.name}</p>}
+        </div>
+        <div>
+          <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Description</label>
+          <textarea
+            rows={4}
+            value={form.description || form.notes || ''}
+            onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value, notes: e.target.value }))}
+            className="w-full resize-none rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-3 text-sm text-white focus:border-[var(--gold-primary)] focus:outline-none"
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Status</label>
+            <select
+              value={form.status || 'not_started'}
+              onChange={(e) => setForm((prev) => ({ ...prev, status: e.target.value }))}
+              className="w-full rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-3 text-sm text-white focus:border-[var(--gold-primary)] focus:outline-none"
+            >
+              <option value="not_started">Not Started</option>
+              <option value="in_progress">In Progress</option>
+              <option value="completed">Completed</option>
+            </select>
+          </div>
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-3">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-[var(--text-muted)]">Progress</p>
+            <p className="mt-2 text-sm text-white">Calculated automatically from completed project tasks.</p>
+          </div>
+        </div>
+        <div>
+          <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Estimated Completion</label>
+          <input
+            type="date"
+            value={form.estimated_completion_date || form.end_date || ''}
+            onChange={(e) => setForm((prev) => ({ ...prev, estimated_completion_date: e.target.value, end_date: e.target.value }))}
+            className="w-full rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-3 text-sm text-white focus:border-[var(--gold-primary)] focus:outline-none"
+          />
+        </div>
+        <div className="flex justify-end gap-3">
+          <button type="button" onClick={onClose} className="rounded-xl border border-[var(--border)] px-4 py-2.5 text-[var(--text-muted)]">Cancel</button>
+          <button type="button" onClick={onSave} disabled={saving} className="rounded-xl bg-[var(--gold-primary)] px-4 py-2.5 font-semibold text-black disabled:opacity-60">{saving ? 'Saving...' : 'Save Changes'}</button>
+        </div>
+      </div>
     </motion.div>
   )
 }
@@ -399,6 +466,40 @@ export function StaffDashboard() {
     }
   }, [appointmentFormData, fetchAppointments, showToast])
 
+  const closeStaffModal = useCallback(() => {
+    setModal({ open: false, type: null, data: null })
+    setForm({})
+    setFormErrors({})
+  }, [])
+
+  const saveProject = useCallback(async () => {
+    const nextErrors = {}
+    if (!String(form.name || form.title || '').trim()) nextErrors.name = 'Project name is required'
+    if (Object.keys(nextErrors).length) {
+      setFormErrors(nextErrors)
+      return
+    }
+
+    setIsSaving(true)
+    try {
+      await staffApi.updateProject(modal.data.project_id, {
+        name: String(form.name || form.title || '').trim(),
+        title: String(form.title || form.name || '').trim(),
+        description: form.description || form.notes || '',
+        notes: form.notes || form.description || '',
+        status: form.status || 'not_started',
+        estimated_completion_date: form.estimated_completion_date || null,
+      })
+      showToast('Project updated')
+      await fetchProjects()
+      closeStaffModal()
+    } catch (error) {
+      showToast(error.message, 'error')
+    } finally {
+      setIsSaving(false)
+    }
+  }, [closeStaffModal, fetchProjects, form, modal.data, showToast])
+
   const pageTitle = tabs.find(([id]) => id === activeTab)?.[1] || 'Staff Dashboard'
 
   return (
@@ -442,7 +543,129 @@ export function StaffDashboard() {
                 <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6"><h3 className="text-lg font-semibold text-white">Unread stock alerts</h3><div className="mt-4 space-y-3">{inventoryAlerts.length === 0 ? <p className="text-sm text-[var(--text-muted)]">No low-stock alerts right now.</p> : inventoryAlerts.slice(0, 5).map((alert) => <div key={alert.alert_id} className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4"><p className="font-semibold text-white">{alert.name}</p><p className="mt-1 text-sm text-[var(--text-muted)]">{alert.current_stock} left, threshold {alert.threshold}</p></div>)}</div></div>
               </div>
             </div>}
-            {activeTab === 'projects' && (projects.length === 0 ? <EmptyState icon={Briefcase} label="No projects assigned" description="Project work will appear here when it is assigned to staff." /> : <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{projects.map((project) => <div key={project.project_id} className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6"><div className="flex items-start justify-between gap-3"><div><h3 className="text-lg font-semibold text-white">{project.name || project.title}</h3><p className="mt-1 text-sm text-[var(--text-muted)]">{project.client_name || project.customer_name || 'Client not specified'}</p></div><StatusBadge label={String(project.status || 'pending').replace(/_/g, ' ')} variant={statusVariant(project.status)} /></div><p className="mt-4 text-sm leading-6 text-[var(--text-muted)]">{project.description || 'No project notes yet.'}</p></div>)}</div>)}
+            {activeTab === 'projects' && (
+              <motion.div key="projects" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+                <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-6">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+                    <div>
+                      <h2 className="text-white text-xl font-semibold">Projects</h2>
+                      <p className="mt-1 text-sm text-[var(--text-muted)]">
+                        Open a project to review progress, milestones, and subtasks for the build.
+                      </p>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-3">
+                        <p className="text-[var(--text-muted)] text-sm">Total</p>
+                        <p className="text-white text-lg font-semibold">{projects.length}</p>
+                      </div>
+                      <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-3">
+                        <p className="text-[var(--text-muted)] text-sm">In Progress</p>
+                        <p className="text-white text-lg font-semibold">{projects.filter((project) => project.status === 'in_progress').length}</p>
+                      </div>
+                      <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-3">
+                        <p className="text-[var(--text-muted)] text-sm">Completed</p>
+                        <p className="text-white text-lg font-semibold">{projects.filter((project) => project.status === 'completed').length}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {projects.length === 0 ? (
+                  <EmptyState icon={Briefcase} label="No projects assigned" description="Project work will appear here when it is assigned to staff." />
+                ) : (
+                  <div className="grid gap-6 xl:grid-cols-2">
+                    {projects.map((project) => {
+                      const status = String(project.status || 'not_started').toLowerCase()
+                      const progress = Number.isFinite(Number(project.progress)) ? Math.max(0, Math.min(100, Number(project.progress))) : 0
+                      const statusClass = {
+                        not_started: 'bg-slate-500/10 text-slate-300 border-slate-500/30',
+                        in_progress: 'bg-blue-500/10 text-blue-300 border-blue-500/30',
+                        completed: 'bg-green-500/10 text-green-300 border-green-500/30',
+                      }[status] || 'bg-slate-500/10 text-slate-300 border-slate-500/30'
+
+                      return (
+                        <div key={project.project_id} className="rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-6 shadow-[0_18px_50px_rgba(0,0,0,0.12)]">
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="min-w-0">
+                              <p className="text-[var(--gold-primary)] text-xs font-semibold uppercase tracking-[0.25em]">
+                                {project.order_number || 'Project'}
+                              </p>
+                              <h3 className="mt-2 truncate text-xl font-semibold text-white">
+                                {project.name || project.title || 'Untitled Project'}
+                              </h3>
+                              <p className="mt-2 text-sm text-[var(--text-muted)]">
+                                Customer: <span className="text-white">{project.client_name || project.customer_name || 'Unassigned'}</span>
+                              </p>
+                            </div>
+                            <span className={`shrink-0 rounded-full border px-3 py-1 text-xs font-semibold capitalize ${statusClass}`}>
+                              {status.replace(/_/g, ' ')}
+                            </span>
+                          </div>
+
+                          <div className="mt-5 rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] p-4">
+                            <div className="mb-2 flex items-center justify-between">
+                              <span className="text-sm text-[var(--text-muted)]">Progress</span>
+                              <span className="text-sm font-semibold text-white">{progress}%</span>
+                            </div>
+                            <div className="h-2 overflow-hidden rounded-full bg-[var(--surface-dark)]">
+                              <div
+                                className="h-full rounded-full bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)]"
+                                style={{ width: `${progress}%` }}
+                              />
+                            </div>
+                          </div>
+
+                          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                            <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] p-4">
+                              <p className="text-xs uppercase tracking-[0.18em] text-[var(--text-muted)]">Estimated completion</p>
+                              <p className="mt-2 font-medium text-white">
+                                {project.estimated_completion_date ? new Date(project.estimated_completion_date).toLocaleDateString() : 'Not set'}
+                              </p>
+                            </div>
+                            <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] p-4">
+                              <p className="text-xs uppercase tracking-[0.18em] text-[var(--text-muted)]">Notes</p>
+                              <p className="mt-2 line-clamp-2 text-sm text-white">
+                                {project.description || project.notes || 'No project notes yet.'}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="mt-5 flex flex-wrap gap-3">
+                            <button
+                              type="button"
+                              onClick={() => setModal({ open: true, type: 'project_tasks', data: project })}
+                              className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] px-4 py-2.5 text-sm font-semibold text-black transition-all hover:shadow-[0_0_20px_rgba(212,175,55,0.35)]"
+                            >
+                              <CheckCircle className="w-4 h-4" />
+                              View Tasks
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setForm({
+                                  ...project,
+                                  name: project.name || project.title || '',
+                                  title: project.title || project.name || '',
+                                  description: project.description || project.notes || '',
+                                  notes: project.notes || project.description || '',
+                                  estimated_completion_date: project.estimated_completion_date ? String(project.estimated_completion_date).slice(0, 10) : '',
+                                })
+                                setFormErrors({})
+                                setModal({ open: true, type: 'project', data: project })
+                              }}
+                              className="inline-flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)]"
+                            >
+                              <Edit className="w-4 h-4" />
+                              Edit
+                            </button>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </motion.div>
+            )}
             {activeTab === 'orders' && <OrderManagement orders={orders} onRefresh={fetchOrders} user={user} />}
             {activeTab === 'inventory' && <div className="space-y-6">
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -472,7 +695,64 @@ export function StaffDashboard() {
           </main>
         </div>
       </div>
-      <AnimatePresence>{modal.open && modal.type === 'inventory' && <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[150] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm" onClick={(e) => { if (e.target === e.currentTarget) setModal({ open: false, type: null, data: null }) }}><AdjustStockModal modal={modal} form={form} setForm={setForm} errors={formErrors} setErrors={setFormErrors} onClose={() => setModal({ open: false, type: null, data: null })} onSave={saveStockAdjust} saving={isSaving} /></motion.div>}</AnimatePresence>
+      <AnimatePresence>
+        {modal.open && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[150] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
+            onClick={(e) => { if (e.target === e.currentTarget) closeStaffModal() }}
+          >
+            {modal.type === 'inventory' && (
+              <AdjustStockModal
+                modal={modal}
+                form={form}
+                setForm={setForm}
+                errors={formErrors}
+                setErrors={setFormErrors}
+                onClose={closeStaffModal}
+                onSave={saveStockAdjust}
+                saving={isSaving}
+              />
+            )}
+            {modal.type === 'project' && (
+              <ProjectEditModal
+                form={form}
+                setForm={setForm}
+                errors={formErrors}
+                onClose={closeStaffModal}
+                onSave={saveProject}
+                saving={isSaving}
+              />
+            )}
+            {modal.type === 'project_tasks' && modal.data && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.96 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.96 }}
+                className="h-[90vh] w-full max-w-6xl overflow-y-auto rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-6 shadow-2xl"
+              >
+                <div className="mb-6 flex items-center justify-between">
+                  <div>
+                    <h2 className="text-xl font-bold text-white">Project Tasks</h2>
+                    <p className="text-sm text-[var(--text-muted)]">{modal.data.name || modal.data.title || 'Project'}</p>
+                  </div>
+                  <button type="button" onClick={closeStaffModal} className="rounded-xl p-2 text-[var(--text-muted)] hover:bg-white/10 hover:text-white">
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+                <ProjectTaskTracker
+                  projectId={modal.data.project_id}
+                  projectName={modal.data.name || modal.data.title}
+                  isAdmin
+                  projectData={modal.data}
+                />
+              </motion.div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
       <AppointmentModal isOpen={appointmentModalOpen} onClose={() => { setAppointmentModalOpen(false); setSelectedAppointment(null) }} appointment={selectedAppointment} onStatusChange={updateAppointmentStatus} onPaymentStatusChange={updateAppointmentPaymentStatus} onReschedule={rescheduleAppointment} onCancel={cancelAppointment} loading={loadingAppointments} />
       <AppointmentForm isOpen={appointmentFormOpen} onClose={() => { setAppointmentFormOpen(false); setAppointmentFormData(null); setSelectedCalendarDate(null) }} onSubmit={submitAppointment} initialData={appointmentFormData} services={services} users={[]} loading={loadingAppointments} selectedDate={selectedCalendarDate} />
       <UnavailableDatesManager isOpen={unavailableDatesOpen} onClose={() => setUnavailableDatesOpen(false)} unavailableDates={unavailableDates} onAddUnavailable={async (date, reason) => { try { await staffApi.addUnavailableDate({ date, reason }); showToast('Date marked unavailable'); await fetchUnavailableDates() } catch (error) { showToast(error.message, 'error') } }} onRemoveUnavailable={async (id) => { try { await staffApi.removeUnavailableDate(id); showToast('Date reopened'); await fetchUnavailableDates() } catch (error) { showToast(error.message, 'error') } }} loading={loadingAppointments} />

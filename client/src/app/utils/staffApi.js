@@ -31,6 +31,7 @@ export const staffApi = {
     const qs = new URLSearchParams(params).toString()
     return request(`/api/projects${qs ? `?${qs}` : ''}`)
   },
+  updateProject: (id, body) => request(`/api/projects/${id}`, { method: 'PUT', body }),
   updateProjectStage: (id, body) => request(`/api/projects/${id}`, { method: 'PUT', body }),
 
   // Orders

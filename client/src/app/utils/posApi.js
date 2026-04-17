@@ -14,11 +14,11 @@ async function request(path, options = {}) {
 }
 
 export const posApi = {
-  createSale: (body) => request('/pos/sales', { method: 'POST', body }),
+  createSale: (body) => request('/api/pos/sales', { method: 'POST', body }),
   listSales: (params = {}) => {
     const qs = new URLSearchParams(params).toString()
-    return request(`/pos/sales${qs ? `?${qs}` : ''}`)
+    return request(`/api/pos/sales${qs ? `?${qs}` : ''}`)
   },
-  getSale: (id) => request(`/pos/sales/${id}`),
-  getDailySummary: (date) => request(`/pos/reports/daily-summary${date ? `?date=${date}` : ''}`),
+  getSale: (id) => request(`/api/pos/sales/${id}`),
+  getDailySummary: (date) => request(`/api/pos/reports/daily-summary${date ? `?date=${date}` : ''}`),
 }

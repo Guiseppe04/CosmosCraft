@@ -48,6 +48,16 @@ exports.getProjectHierarchy = asyncHandler(async (req, res, next) => {
   res.json({ status: 'success', data: hierarchy });
 });
 
+exports.submitFulfillmentChoice = asyncHandler(async (req, res, next) => {
+  const result = await projectService.submitFulfillmentChoice(
+    req.params.id,
+    req.user.id,
+    req.user.role,
+    req.body
+  );
+  res.json({ status: 'success', data: result, message: 'Fulfillment preference saved' });
+});
+
 // --- MILESTONES ---
 exports.createMilestone = asyncHandler(async (req, res, next) => {
   const milestone = await projectService.addMilestone(req.params.id, req.body, req.user.id);

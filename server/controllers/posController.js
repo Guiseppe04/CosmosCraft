@@ -28,7 +28,8 @@ exports.createSale = async (req, res, next) => {
       totalAmount,
       paymentMethod,
       referenceNumber,
-      status
+      status,
+      items
     } = req.body;
 
     const sale = await posService.createSale(req.user.user_id, {
@@ -40,7 +41,8 @@ exports.createSale = async (req, res, next) => {
       totalAmount,
       paymentMethod,
       referenceNumber,
-      status
+      status,
+      items
     });
 
     res.status(201).json({

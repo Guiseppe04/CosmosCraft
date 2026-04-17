@@ -1988,12 +1988,31 @@ export function AdminPage() {
   }, [debouncedSearch, showToast, appointments, appointmentPagination.limit, appointmentPagination.page])
 
   const fetchServices = useCallback(async () => {
+    setServicesLoading(true)
     try {
-      const res = await adminApi.getServices()
+      const params = {
+        sort: serviceQuery.sortBy === 'duration_minutes' ? 'duration' : serviceQuery.sortBy,
+        order: serviceQuery.sortDir,
+        limit: serviceQuery.pageSize,
+        offset: (serviceQuery.page - 1) * serviceQuery.pageSize,
+      }
+      if (debouncedSearch) params.search = debouncedSearch
+      if (serviceQuery.is_active !== '') params.is_active = serviceQuery.is_active
+
+      const res = await adminApi.getServices(params)
       const newData = Array.isArray(res.data) ? res.data : res.data?.services || []
       updateIfChanged(services, newData, setServices)
-    } catch (e) { console.error('Failed to fetch services:', e) }
-  }, [showToast, services])
+      const total = res.pagination?.total || newData.length
+      const totalPages = Math.max(Math.ceil(total / serviceQuery.pageSize), 1)
+      setServicesPagination({
+        page: serviceQuery.page,
+        pageSize: serviceQuery.pageSize,
+        total,
+        totalPages,
+      })
+    } catch (e) { showToast(e.message, 'error') }
+    finally { setServicesLoading(false) }
+  }, [debouncedSearch, serviceQuery, services, showToast])
 
   const fetchUnavailableDates = useCallback(async () => {
     try {
@@ -2632,12 +2651,12 @@ export function AdminPage() {
 
    const deleteService = (id, title) => {
      openConfirm({
-       title: 'Delete Service?',
-       description: `"${title}" will be permanently removed.`,
+       title: 'Deactivate Service?',
+       description: `"${title}" will be marked inactive and hidden from new bookings.`,
        variant: 'danger',
        onConfirm: async () => {
          await adminApi.deleteService(id)
-         showToast('Service deleted')
+         showToast('Service deactivated')
          fetchServices()
        },
      })
@@ -3861,6 +3880,8 @@ export function AdminPage() {
               )}
             </motion.div>
           )}
+
+          {activeTab === 'services' && <ServicesTab />}
 
           {activeTab === 'users' && (
             <motion.div key="users" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">

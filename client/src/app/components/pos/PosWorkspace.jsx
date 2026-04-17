@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Package, Plus, Search, UserRound, Wallet, X } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react'
+import { Package, Plus, Search, UserRound, Wallet, X, Printer, Download } from 'lucide-react'
 import { posApi } from '../../utils/posApi'
 import { formatCurrency } from '../../utils/formatCurrency'
+import { useSmartPolling } from '../../hooks/useSmartPolling'
 
 function EmptyState({ icon: Icon, label, description }) {
   return (
@@ -55,6 +56,8 @@ export function PosWorkspace({
   const [dailySummary, setDailySummary] = useState(null)
   const [loadingRecent, setLoadingRecent] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [selectedSale, setSelectedSale] = useState(null)
+  const [loadingSaleDetails, setLoadingSaleDetails] = useState(false)
 
   const visibleInventory = useMemo(
     () => inventoryItems
@@ -104,6 +107,7 @@ export function PosWorkspace({
       ])
       setRecentSales(normalizeSales(salesRes))
       setDailySummary(summaryRes?.data || null)
+      return salesRes
     } catch (error) {
       showToast?.(error.message, 'error')
     } finally {
@@ -111,9 +115,43 @@ export function PosWorkspace({
     }
   }, [showToast])
 
-  useEffect(() => {
-    loadRecentSales()
-  }, [loadRecentSales])
+  const loadSaleDetails = useCallback(async (saleId) => {
+    setLoadingSaleDetails(true)
+    try {
+      const res = await posApi.getSale(saleId)
+      setSelectedSale(res?.data || null)
+    } catch (error) {
+      showToast?.(error.message, 'error')
+    } finally {
+      setLoadingSaleDetails(false)
+    }
+  }, [showToast])
+
+  const lastSaleTimestampRef = useRef(null)
+  const prevSalesRef = useRef(null)
+
+  const pollRecentSales = useCallback(async () => {
+    const result = await loadRecentSales()
+    if (result?.data?.length > 0) {
+      const latestSale = result.data[0]
+      const latestTimestamp = latestSale.created_at
+      
+      if (lastSaleTimestampRef.current && new Date(latestTimestamp) > new Date(lastSaleTimestampRef.current)) {
+        lastSaleTimestampRef.current = latestTimestamp
+        showToast?.(`New sale: ${latestSale.sale_number}`, 'info')
+      } else if (!lastSaleTimestampRef.current) {
+        lastSaleTimestampRef.current = latestTimestamp
+      }
+      prevSalesRef.current = result.data
+    }
+    return result
+  }, [loadRecentSales, showToast])
+
+  useSmartPolling(pollRecentSales, {
+    interval: 5000,
+    maxInterval: 60000,
+    backoffFactor: 1.5,
+  })
 
   const addToCart = useCallback((product) => {
     setCart((prev) => {
@@ -162,6 +200,13 @@ export function PosWorkspace({
         totalAmount: total,
         paymentMethod,
         referenceNumber: paymentMethod === 'cash' ? null : (referenceNumber.trim() || null),
+        items: cart.map(item => ({
+          product_id: item.product_id,
+          name: item.name,
+          quantity: item.quantity,
+          price: item.price,
+          subtotal: item.price * item.quantity
+        }))
       }
 
       const result = await posApi.createSale(payload)
@@ -445,7 +490,11 @@ export function PosWorkspace({
                   </div>
                 ) : (
                   recentSales.map((entry) => (
-                    <div key={entry.sale_id} className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)]/60 p-4">
+                    <div 
+                      key={entry.sale_id} 
+                      onClick={() => loadSaleDetails(entry.sale_id)}
+                      className="cursor-pointer rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)]/60 p-4 hover:border-cyan-500/50"
+                    >
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <p className="font-semibold text-white">{entry.sale_number}</p>
@@ -467,6 +516,125 @@ export function PosWorkspace({
                 )}
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {selectedSale && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onClick={() => setSelectedSale(null)}
+        >
+          <div 
+            className="w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-white">Receipt</h3>
+              <button 
+                onClick={() => setSelectedSale(null)}
+                className="rounded-lg p-1 text-[var(--text-muted)] hover:bg-[var(--bg-primary)]"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {loadingSaleDetails ? (
+              <div className="py-8 text-center text-[var(--text-muted)]">Loading...</div>
+            ) : (
+              <>
+                <div className="mt-4 space-y-2 border-b border-[var(--border)] pb-4">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-[var(--text-muted)]">Sale #</span>
+                    <span className="font-semibold text-white">{selectedSale.sale_number}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-[var(--text-muted)]">Date</span>
+                    <span className="text-white">{new Date(selectedSale.created_at).toLocaleString()}</span>
+                  </div>
+                  {selectedSale.customer_name && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-[var(--text-muted)]">Customer</span>
+                      <span className="text-white">{selectedSale.customer_name}</span>
+                    </div>
+                  )}
+                  {selectedSale.customer_phone && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-[var(--text-muted)]">Contact</span>
+                      <span className="text-white">{selectedSale.customer_phone}</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="mt-4 space-y-2">
+                  <p className="text-sm font-semibold text-white">Items</p>
+                  {(selectedSale.items || []).map((item, idx) => (
+                    <div key={idx} className="flex justify-between text-sm">
+                      <div className="flex-1 text-[var(--text-muted)]">
+                        <span className="text-white">{item.item_name}</span>
+                        <span className="ml-2">x{item.quantity}</span>
+                      </div>
+                      <span className="text-white">{formatCurrency(Number(item.subtotal || 0))}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-4 space-y-2 border-t border-[var(--border)] pt-4">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-[var(--text-muted)]">Subtotal</span>
+                    <span className="text-white">{formatCurrency(Number(selectedSale.subtotal || 0))}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-[var(--text-muted)]">Tax</span>
+                    <span className="text-white">{formatCurrency(Number(selectedSale.tax_amount || 0))}</span>
+                  </div>
+                  <div className="flex justify-between text-base font-semibold">
+                    <span className="text-white">Total</span>
+                    <span className="text-cyan-300">{formatCurrency(Number(selectedSale.total_amount || 0))}</span>
+                  </div>
+                </div>
+
+                <div className="mt-4 space-y-2 border-t border-[var(--border)] pt-4">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-[var(--text-muted)]">Payment Method</span>
+                    <span className="text-white capitalize">{String(selectedSale.payment_method || '').replace(/_/g, ' ')}</span>
+                  </div>
+                  {selectedSale.reference_number && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-[var(--text-muted)]">Reference</span>
+                      <span className="text-white">{selectedSale.reference_number}</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="mt-6 flex gap-3">
+                  <button
+                    type="button"
+                    className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-[var(--border)] px-4 py-2 text-sm font-semibold text-[var(--text-muted)] hover:text-white"
+                    onClick={() => window.print()}
+                  >
+                    <Printer className="h-4 w-4" />
+                    Print
+                  </button>
+                  <button
+                    type="button"
+                    className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-[var(--border)] px-4 py-2 text-sm font-semibold text-[var(--text-muted)] hover:text-white"
+                    onClick={() => {
+                      const content = document.getElementById('receipt-content')
+                      if (content) {
+                        const printWindow = window.open('', '_blank')
+                        printWindow.document.write(content.innerHTML)
+                        printWindow.document.close()
+                        printWindow.print()
+                      }
+                    }}
+                  >
+                    <Download className="h-4 w-4" />
+                    Download
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
