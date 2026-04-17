@@ -6,7 +6,7 @@ import { useAuth } from '../context/AuthContext.jsx'
 import { useCart } from '../context/CartContext.jsx'
 import { BASE_PRICE, BODY_OPTIONS, BODY_WOOD_OPTIONS, BODY_FINISH_OPTIONS, NECK_OPTIONS, FRETBOARD_OPTIONS, HEADSTOCK_OPTIONS, HEADSTOCK_WOOD_OPTIONS, INLAY_OPTIONS, BRIDGE_OPTIONS, PICKGUARD_OPTIONS_BY_BODY, KNOB_OPTIONS_BY_BODY, HARDWARE_OPTIONS, PICKUP_OPTIONS } from '../lib/guitarBuilderData.js'
 import { adminApi } from '../utils/adminApi.js'
-import ProjectTaskTracker from '../components/projects/ProjectTaskTrackerCustomer.jsx'
+import ProjectTaskTracker from '../components/projects/ProjectTaskTracker.jsx'
 import { getAllProvinces, getMunicipalitiesByProvince, getBarangaysByMunicipality } from '@aivangogh/ph-address'
 import { Country } from 'country-state-city'
 import { ConfirmModal } from '../components/ui/ConfirmModal'
@@ -527,7 +527,7 @@ export function DashboardPage() {
 
     return (
       <div className="space-y-8">
-        {renderProjectsContent()}
+        {/* {renderProjectsContent()} */}
 
         <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-8">
         <h2 className="text-2xl font-bold text-white mb-1">My Purchase</h2>

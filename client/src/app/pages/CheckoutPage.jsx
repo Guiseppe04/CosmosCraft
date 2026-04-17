@@ -110,44 +110,61 @@ function CartItemCard({
         </div>
 
         <div className="flex items-center gap-4 flex-shrink-0">
-          {!isCustomBuild && !isBuyNow ? (
-            <div className="flex items-center gap-2 bg-[var(--bg-primary)] border border-white/10 rounded-full px-3 py-1.5">
-              <button
-                onClick={() => onUpdateQuantity(item.id, Math.max(1, item.quantity - 1))}
-                className="text-[var(--text-muted)] hover:text-white p-0.5 transition-colors"
-              >
-                <Minus className="w-3 h-3" />
-              </button>
-              <span className="text-sm font-semibold w-5 text-center text-white">{item.quantity}</span>
-              <button
-                onClick={() => onUpdateQuantity(item.id, item.quantity + 1)}
-                className="text-[var(--text-muted)] hover:text-[var(--gold-primary)] p-0.5 transition-colors"
-                disabled={item.quantity >= item.stock}
-              >
-                <Plus className="w-3 h-3" />
-              </button>
-            </div>
-          ) : (
-            <div className="px-3 py-1.5 bg-[var(--bg-primary)]/50 rounded-full">
-              <span className="text-sm text-[var(--text-muted)]">Qty: 1</span>
-            </div>
-          )}
+            {!isCustomBuild && !isBuyNow && item.stock > 1 ? (
+              <div className="flex flex-col items-end gap-1">
+                <div className="flex items-center gap-2 bg-[var(--bg-primary)] border border-white/10 rounded-full px-3 py-1.5">
+                  <button
+                    onClick={() => onUpdateQuantity(item.id, Math.max(1, item.quantity - 1))}
+                    disabled={item.quantity <= 1}
+                    className="text-[var(--text-muted)] hover:text-white p-0.5 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                  >
+                    <Minus className="w-3 h-3" />
+                  </button>
+                  <span className="text-sm font-semibold w-5 text-center text-white">{item.quantity}</span>
+                  <button
+                    onClick={() => onUpdateQuantity(item.id, item.quantity + 1)}
+                    disabled={item.quantity >= item.stock}
+                    className="text-[var(--text-muted)] hover:text-[var(--gold-primary)] p-0.5 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                  >
+                    <Plus className="w-3 h-3" />
+                  </button>
+                </div>
+                {item.stock > 0 && (
+                  <span className="text-[10px] text-[var(--text-muted)]">
+                    {item.stock - item.quantity >= 0 ? `${item.stock - item.quantity} left` : 'Max reached'}
+                  </span>
+                )}
+              </div>
+            ) : !isCustomBuild && !isBuyNow ? (
+              <div className="flex flex-col items-end gap-1">
+                <div className="px-3 py-1.5 bg-[var(--bg-primary)]/50 rounded-full">
+                  <span className="text-sm text-[var(--text-muted)]">Qty: {item.quantity}</span>
+                </div>
+                {item.stock <= 1 && (
+                  <span className="text-[10px] text-amber-400">Last item</span>
+                )}
+              </div>
+            ) : (
+              <div className="px-3 py-1.5 bg-[var(--bg-primary)]/50 rounded-full">
+                <span className="text-sm text-[var(--text-muted)]">Qty: 1</span>
+              </div>
+            )}
 
-          <div className="w-24 text-right">
-            <p className="font-bold text-white text-sm tracking-tight">
-              ₱{(item.price * item.quantity).toLocaleString('en-PH')}
-            </p>
+            <div className="w-24 text-right">
+              <p className="font-bold text-white text-sm tracking-tight">
+                ₱{(item.price * item.quantity).toLocaleString('en-PH')}
+              </p>
+            </div>
+
+            {!isCustomBuild && !isBuyNow && (
+              <button
+                onClick={() => onRemove(item.id, item.quantity)}
+                className="p-2 text-[var(--text-muted)] hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            )}
           </div>
-
-          {!isCustomBuild && !isBuyNow && (
-            <button
-              onClick={() => onRemove(item.id, item.quantity)}
-              className="p-2 text-[var(--text-muted)] hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
-          )}
-        </div>
         </div>
       </div>
 
