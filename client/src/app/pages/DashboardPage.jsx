@@ -791,7 +791,7 @@ export function DashboardPage() {
             <p className="text-sm text-[var(--text-muted)] mb-6">
               When you order a custom build or repair, it will appear here.
             </p>
-          </div>
+          </div>       
         ) : (
           <div className="grid gap-6">
             {myProjects.map((project) => (

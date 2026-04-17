@@ -374,7 +374,7 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
   if (!hierarchy) return null;
 
   return (
-    <div className="grid lg:grid-cols-[1fr_350px] gap-6">
+    <div className={resolvedParts.length > 0 ? "grid lg:grid-cols-[1fr_350px] gap-6" : "space-y-6"}>
       
       {/* ── MAIN TRACKER SECTION ── */}
       <div className="space-y-6">
@@ -804,6 +804,7 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
       </div>
 
       {/* ── GUITAR PARTS PANEL ── */}
+      {resolvedParts.length > 0 && (
       <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-5 flex flex-col">
         <div className="flex items-center gap-2 mb-4">
           <Guitar className="w-5 h-5 text-[var(--gold-primary)]" />
