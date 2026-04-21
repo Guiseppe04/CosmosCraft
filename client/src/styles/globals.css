@@ -154,6 +154,20 @@ body,
   color: var(--text-light);
 }
 
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+* {
+  min-width: 0;
+}
+
+body {
+  overflow-x: hidden;
+}
+
 html {
   scroll-behavior: smooth;
 }
@@ -304,6 +318,19 @@ html[data-theme="light"] .min-h-screen {
   select {
     color: var(--color-dark);              /* Dark text in form fields */
     border-color: var(--color-gray-700);   /* Darker border for dark mode inputs */
+  }
+}
+
+/* Responsive baseline */
+@media (max-width: 1024px) {
+  html {
+    font-size: 15px;
+  }
+}
+
+@media (max-width: 640px) {
+  html {
+    font-size: 14px;
   }
 }
 

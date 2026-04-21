@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
 import {
   Guitar,
@@ -166,7 +166,7 @@ export function Header() {
           </span>
         </Link>
 
-        <nav className="hidden flex-1 items-center justify-center gap-1 xl:flex">
+        <nav className="hidden flex-1 items-center justify-center gap-1 lg:flex">
           {!isAdminOrStaff && (
             <>
               {navLinksBeforeCustomize.map((link) => (
@@ -234,7 +234,7 @@ export function Header() {
           )}
         </nav>
 
-        <div className="ml-auto hidden items-center gap-2 xl:flex">
+        <div className="ml-auto hidden items-center gap-2 lg:flex">
           {!isLanding && (
             <button className="rounded-full p-2 text-[var(--text-muted)] hover:bg-[var(--surface-elevated)] hover:text-[var(--gold-primary)]">
               <Search className="h-4 w-4" />
@@ -380,10 +380,27 @@ export function Header() {
           )}
         </div>
 
+        {isAuthenticated && (
+          <button
+            type="button"
+            onClick={() => navigate('/dashboard', { state: { section: 'profile' } })}
+            className="rounded-full border border-[var(--border)] p-1 text-[var(--text-light)] transition-colors duration-200 hover:bg-[var(--surface-elevated)] lg:hidden"
+            aria-label="Open profile"
+          >
+            {userAvatar ? (
+              <img src={userAvatar} alt="Profile" className="h-8 w-8 rounded-full object-cover" />
+            ) : (
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--gold-primary)] text-xs font-bold text-[var(--text-dark)]">
+                {profileInitials.slice(0, 1)}
+              </div>
+            )}
+          </button>
+        )}
+
         <button
           type="button"
           onClick={() => setMobileMenuOpen((prev) => !prev)}
-          className="rounded-lg p-2 text-[var(--gold-primary)] transition-colors duration-200 hover:bg-[var(--surface-elevated)] xl:hidden"
+          className="rounded-lg p-2 text-[var(--gold-primary)] transition-colors duration-200 hover:bg-[var(--surface-elevated)] lg:hidden"
           aria-label="Toggle navigation menu"
         >
           {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
@@ -396,7 +413,7 @@ export function Header() {
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
-            className="border-t border-[var(--border)] bg-[var(--bg-primary)] xl:hidden"
+            className="border-t border-[var(--border)] bg-[var(--bg-primary)] lg:hidden"
           >
             <nav className="space-y-2 px-4 py-4">
               {!isAdminOrStaff &&
@@ -455,6 +472,18 @@ export function Header() {
                 >
                   <ShoppingCart className="h-5 w-5" />
                 </button>
+                {isAuthenticated && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigate('/dashboard', { state: { section: 'profile' } })
+                      setMobileMenuOpen(false)
+                    }}
+                    className="rounded-full border border-[var(--border)] px-4 py-2 text-sm font-medium text-[var(--text-light)]"
+                  >
+                    My Profile
+                  </button>
+                )}
                 {!isAuthenticated && (
                   <button
                     type="button"
@@ -475,3 +504,4 @@ export function Header() {
     </header>
   )
 }
+

@@ -507,16 +507,16 @@ export function AppointmentPage() {
               </div>
 
               {/* Calendar Grid */}
-              <div className="grid grid-cols-7 gap-2 text-sm text-[var(--text-muted)] mb-3 font-medium">
+              <div className="grid grid-cols-7 gap-1 sm:gap-2 text-xs sm:text-sm text-[var(--text-muted)] mb-3 font-medium">
                 {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
                   <span key={d} className="text-center pb-2">{d}</span>
                 ))}
               </div>
 
-              <div className="grid grid-cols-7 gap-2 mb-8">
+              <div className="grid grid-cols-7 gap-1 sm:gap-2 mb-8">
                 {monthMatrix.map((week, wIdx) =>
                   week.map((day, dIdx) => {
-                    if (!day.inCurrentMonth) return <div key={`empty-${wIdx}-${dIdx}`} className="h-10" />
+                    if (!day.inCurrentMonth) return <div key={`empty-${wIdx}-${dIdx}`} className="h-9 sm:h-10" />
 
                     const isSelected = selectedDateId === day.id
                     const isUnavailable = !day.isAvailable
@@ -532,7 +532,7 @@ export function AppointmentPage() {
                       return (
                         <div 
                           key={day.id}
-                          className={`flex items-center justify-center h-10 rounded-xl text-sm font-medium transition-colors ${disabledStyle} cursor-not-allowed`}>
+                          className={`flex items-center justify-center h-9 sm:h-10 rounded-xl text-xs sm:text-sm font-medium transition-colors ${disabledStyle} cursor-not-allowed`}>
                           {day.dayNumber}
                         </div>
                       )
@@ -542,7 +542,7 @@ export function AppointmentPage() {
                       <button
                         key={day.id}
                         onClick={() => setSelectedDateId(day.id)}
-                        className={`flex items-center justify-center h-10 rounded-xl text-sm font-medium transition-all ${
+                        className={`flex items-center justify-center h-9 sm:h-10 rounded-xl text-xs sm:text-sm font-medium transition-all ${
                           isSelected
                             ? 'bg-[#08CB00] text-black shadow-lg shadow-[#08CB00]/20 scale-105 border border-[#08CB00]/40'
                             : 'bg-[var(--surface-dark)] text-[var(--text-light)] border border-[var(--border)] hover:bg-[#08CB00]/10 hover:border-[#08CB00]/40'
@@ -663,7 +663,7 @@ export function AppointmentPage() {
 
   return (
     <div className="min-h-screen pt-16 bg-[var(--bg-primary)]">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10">
         
         {/* Header Back Button */}
         <button
@@ -674,10 +674,10 @@ export function AppointmentPage() {
           <span className="font-medium text-sm">Back to Dashboard</span>
         </button>
 
-        <div className="grid lg:grid-cols-[280px_1fr] gap-8 xl:gap-12 min-h-[600px]">
+        <div className="grid xl:grid-cols-[280px_1fr] gap-6 lg:gap-8 xl:gap-12 min-h-[600px]">
           
           {/* LEFT SIDEBAR (STEPPER) */}
-          <div className="bg-theme-surface-deep border border-[var(--border)] rounded-3xl p-8 relative overflow-hidden flex flex-col justify-between">
+          <div className="bg-theme-surface-deep border border-[var(--border)] rounded-3xl p-5 sm:p-8 relative overflow-hidden flex flex-col justify-between">
              {/* Gradient splash mimicking reference */}
              <div className="absolute -top-32 -left-32 w-64 h-64 bg-[#d4af37]/10 blur-[100px] rounded-full pointer-events-none" />
              <div className="absolute -bottom-32 -right-32 w-64 h-64 bg-[#d4af37]/5 blur-[100px] rounded-full pointer-events-none" />
@@ -816,3 +816,4 @@ export function AppointmentPage() {
     </div>
   )
 }
+

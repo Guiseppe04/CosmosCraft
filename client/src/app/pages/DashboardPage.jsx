@@ -530,7 +530,7 @@ export function DashboardPage() {
       <div className="space-y-8">
         {/* {renderProjectsContent()} */}
 
-        <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-8">
+        <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-5 sm:p-8">
         <h2 className="text-2xl font-bold text-white mb-1">My Purchase</h2>
         <p className="text-sm text-[var(--text-muted)] mb-8">Track and manage your orders</p>
 
@@ -645,7 +645,7 @@ export function DashboardPage() {
   }
 
   const renderAppointmentsContent = () => (
-    <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-8">
+    <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-5 sm:p-8">
       <div className="flex justify-between items-center mb-6">
         <div>
           <h2 className="text-2xl font-bold text-white mb-1">My Appointments</h2>
@@ -769,7 +769,7 @@ export function DashboardPage() {
   const renderProjectsContent = () => {
     if (activeProjectView) {
       return (
-        <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-8">
+        <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-5 sm:p-8">
           <button onClick={() => setActiveProjectView(null)} className="mb-6 text-[var(--gold-primary)] hover:underline flex items-center gap-2 text-sm font-semibold">
             ← Back to Build Projects
           </button>
@@ -779,7 +779,7 @@ export function DashboardPage() {
     }
 
     return (
-      <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-8">
+      <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-5 sm:p-8">
         <h2 className="text-2xl font-bold text-white mb-1">Build Projects</h2>
         <p className="text-sm text-[var(--text-muted)] mb-8">Track progress on your custom builds and repairs</p>
 
@@ -850,7 +850,7 @@ export function DashboardPage() {
       <div className="space-y-8">
         {renderProjectsContent()}
 
-        <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-8">
+        <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-5 sm:p-8">
         <div className="flex items-center justify-between mb-6">
           <div>
             <h2 className="text-2xl font-bold text-white mb-1">My Saved Builds</h2>
@@ -1010,7 +1010,7 @@ export function DashboardPage() {
     const cartCount = getCartCount()
 
     return (
-      <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-8">
+      <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-5 sm:p-8">
         <div className="flex items-center justify-between mb-6">
           <div>
             <h2 className="text-2xl font-bold text-white mb-1">My Cart</h2>
@@ -1268,7 +1268,7 @@ export function DashboardPage() {
     const fullName = [profileData.firstName, profileData.middleName, profileData.lastName].filter(Boolean).join(' ') || 'User'
     if (profileLoading) {
       return (
-        <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-8">
+        <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-5 sm:p-8">
           <div className="flex items-center justify-center py-12">
             <Loader2 className="w-6 h-6 text-[var(--gold-primary)] animate-spin" />
           </div>
@@ -1276,7 +1276,7 @@ export function DashboardPage() {
       )
     }
     return (
-      <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-8">
+      <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-5 sm:p-8">
         <h2 className="text-2xl font-bold text-white mb-6">My Profile</h2>
         <div className="flex items-center gap-6 mb-10 pb-8 border-b border-[var(--border)]">
           <div className="w-20 h-20 rounded-full overflow-hidden bg-[var(--bg-primary)] border-2 border-[var(--gold-primary)]">
@@ -1344,7 +1344,7 @@ export function DashboardPage() {
   }
 
   const renderPlaceholderSection = (title, description) => (
-    <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-8 text-center">
+    <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-5 sm:p-8 text-center">
       <h2 className="text-2xl font-bold text-white mb-2">{title}</h2>
       <p className="text-sm text-[var(--text-muted)]">{description}</p>
     </div>
@@ -1355,7 +1355,7 @@ export function DashboardPage() {
 
     if (addressesLoading) {
       return (
-        <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-8">
+        <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-5 sm:p-8">
           <div className="flex items-center justify-center py-12">
             <Loader2 className="w-6 h-6 text-[var(--gold-primary)] animate-spin" />
           </div>
@@ -1363,7 +1363,7 @@ export function DashboardPage() {
       )
     }
     return (
-    <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-8">
+    <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-5 sm:p-8">
       <div className="flex justify-between items-center mb-6">
         <div>
           <h2 className="text-2xl font-bold text-white mb-1">My Addresses</h2>
@@ -1599,27 +1599,27 @@ export function DashboardPage() {
         onCancel={closeDeleteConfirm}
       />
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-        <div className="grid md:grid-cols-[1fr_1.4fr] gap-6 items-start">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10">
+        <div className="grid xl:grid-cols-[1fr_1.4fr] gap-4 sm:gap-6 items-start">
           {/* Sidebar */}
           <motion.aside
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
-            className="h-fit bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl overflow-hidden"
+            className="hidden xl:block h-fit bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl overflow-hidden"
           >
-            <div className="px-6 py-5 border-b border-white/20 flex items-center gap-3">
+            <div className="px-4 sm:px-6 py-4 sm:py-5 border-b border-white/20 flex items-center gap-3">
               <div className="w-10 h-10 rounded-full overflow-hidden bg-[var(--bg-primary)] border-2 border-white flex-shrink-0">
                 <img src={profileImage || `https://ui-avatars.com/api/?name=${encodeURIComponent([profileData.firstName, profileData.lastName].filter(Boolean).join(' '))}&background=D4AF55&color=1a1a1a&bold=true`} alt="User" className="w-full h-full object-cover" />
               </div>
-              <div>
-                <p className="text-sm font-bold text-white">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-bold text-white">
                   {[profileData.firstName, profileData.lastName].filter(Boolean).join(' ') || 'User'}
                 </p>
-                <p className="text-xs text-white/60">{profileData.email}</p>
+                <p className="truncate text-xs text-white/60">{profileData.email}</p>
               </div>
             </div>
 
-            <div className="px-3 py-4 space-y-6 text-sm">
+            <div className="px-2 sm:px-3 py-3 sm:py-4 space-y-4 sm:space-y-6 text-sm">
               <div>
                 <p className="px-3 mb-2 text-[11px] font-semibold text-[var(--text-muted)] tracking-wide">
                   MY ACCOUNT
@@ -1697,12 +1697,52 @@ export function DashboardPage() {
             key={activeSection}
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
-            className="h-full flex flex-col space-y-4"
+            className="flex flex-col space-y-4"
           >
+            <div className="xl:hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-3">
+              <div className="mb-2 text-[11px] font-semibold tracking-wide text-[var(--text-muted)]">
+                SECTIONS
+              </div>
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {menuItems
+                  .filter(item => item.id !== 'logout')
+                  .map(item => {
+                    const Icon = item.icon
+                    const active = activeSection === item.id
+                    return (
+                      <button
+                        key={`mobile-${item.id}`}
+                        type="button"
+                        onClick={() => setActiveSection(item.id)}
+                        className={`inline-flex shrink-0 items-center gap-2 rounded-full border px-3 py-2 text-xs font-medium transition-colors ${
+                          active
+                            ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)] text-[var(--text-dark)]'
+                            : 'border-[var(--border)] bg-[var(--bg-primary)] text-[var(--text-muted)]'
+                        }`}
+                      >
+                        <Icon className="h-3.5 w-3.5" />
+                        <span>{item.label}</span>
+                      </button>
+                    )
+                  })}
+                <button
+                  type="button"
+                  onClick={() => {
+                    logout()
+                    navigate('/')
+                  }}
+                  className="inline-flex shrink-0 items-center gap-2 rounded-full border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs font-medium text-red-400 transition-colors hover:bg-red-500/20"
+                >
+                  <User className="h-3.5 w-3.5" />
+                  <span>Logout</span>
+                </button>
+              </div>
+            </div>
+
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[var(--text-muted)]">Dashboard</p>
-                <h1 className="mt-2 text-2xl font-bold text-white">{currentMenu?.label || 'Profile'}</h1>
+                <h1 className="mt-2 text-xl sm:text-2xl font-bold text-white">{currentMenu?.label || 'Profile'}</h1>
               </div>
             </div>
 
@@ -1714,7 +1754,7 @@ export function DashboardPage() {
 
             {activeSection === 'addresses' && renderAddressesContent()}
             {activeSection === 'password' && (
-              <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-8">
+              <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-5 sm:p-8">
                 <h2 className="text-2xl font-bold text-white mb-1">Change Password</h2>
                 <p className="text-sm text-[var(--text-muted)] mb-10">
                   Update your password regularly for security
@@ -1795,7 +1835,7 @@ export function DashboardPage() {
             {activeSection === 'privacy' &&
               renderPlaceholderSection('Privacy Settings', 'Control your privacy and security preferences.')}
             {activeSection === 'notifications' && (
-              <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-8">
+              <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-5 sm:p-8">
                 <h2 className="text-2xl font-bold text-white mb-1">Notification Settings</h2>
                 <p className="text-sm text-[var(--text-muted)] mb-8">Manage how you receive notifications</p>
                 <div className="space-y-4">
@@ -2090,3 +2130,4 @@ export function DashboardPage() {
 }
 
 export default DashboardPage
+
