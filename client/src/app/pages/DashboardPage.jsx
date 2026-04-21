@@ -669,7 +669,7 @@ export function DashboardPage() {
           <p className="text-sm text-[var(--text-muted)] mb-6">Book a service appointment to see it here</p>
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="max-h-[62vh] space-y-4 overflow-y-auto pr-2">
           {myAppointments.map(apt => {
             const apptDate = apt.scheduled_at || apt.date;
             
@@ -1605,7 +1605,7 @@ export function DashboardPage() {
           <motion.aside
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
-            className="h-full bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl overflow-hidden"
+            className="h-fit bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl overflow-hidden"
           >
             <div className="px-6 py-5 border-b border-white/20 flex items-center gap-3">
               <div className="w-10 h-10 rounded-full overflow-hidden bg-[var(--bg-primary)] border-2 border-white flex-shrink-0">

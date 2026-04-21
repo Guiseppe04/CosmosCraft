@@ -94,19 +94,19 @@ export function RGBColorPicker({ value, onChange, label = 'Select Color' }) {
           <label className="block text-xs font-medium text-[var(--text-muted)] mb-1.5">
             HEX Value
           </label>
-          <div className="flex gap-2">
+          <div className="flex min-w-0 flex-col gap-2 overflow-x-hidden">
             <input
               type="text"
               value={hexValue}
               onChange={handleHexChange}
               placeholder="#1a1a1a"
               maxLength={7}
-              className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] px-3 py-2 text-sm text-[var(--text-light)] placeholder:text-[var(--text-muted)] outline-none focus:border-[var(--gold-primary)] transition-colors font-mono"
+              className="min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] px-3 py-2 text-sm text-[var(--text-light)] placeholder:text-[var(--text-muted)] outline-none focus:border-[var(--gold-primary)] transition-colors font-mono"
             />
             <button
               type="button"
               onClick={copyToClipboard}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] text-sm text-[var(--text-light)] hover:border-[var(--gold-primary)] hover:bg-[var(--surface-dark)] transition-colors flex-shrink-0"
+              className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 py-2 text-sm text-[var(--text-light)] transition-colors hover:border-[var(--gold-primary)] hover:bg-[var(--surface-dark)]"
             >
               {showCopied ? (
                 <>

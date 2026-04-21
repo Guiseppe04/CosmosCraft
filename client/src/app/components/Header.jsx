@@ -324,7 +324,7 @@ export function Header() {
                           className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[var(--text-light)] transition-colors hover:bg-[var(--surface-elevated)]"
                         >
                           <LayoutDashboard className="h-4 w-4 text-[var(--gold-primary)]" />
-                          <span className="text-sm font-medium">Dashboard</span>
+                          <span className="text-sm font-medium">Admin Dashboard</span>
                         </button>
                       )}
 
@@ -337,7 +337,7 @@ export function Header() {
                         className="mt-1 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[var(--text-light)] transition-colors hover:bg-[var(--surface-elevated)]"
                       >
                         <Settings className="h-4 w-4 text-[var(--gold-primary)]" />
-                        <span className="text-sm font-medium">Edit Profile</span>
+                        <span className="text-sm font-medium">My Profile</span>
                       </button>
 
                       <button
