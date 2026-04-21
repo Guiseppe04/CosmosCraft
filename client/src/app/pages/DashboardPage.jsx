@@ -99,7 +99,7 @@ function NotificationRow({ setting }) {
 export function DashboardPage() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { logout, user } = useAuth()
+  const { logout, user, updateUser } = useAuth()
   const { cart, addToCart, removeFromCart, updateQuantity, getTotalPrice, getCartCount } = useCart()
   const initialSection = location.state?.section || 'profile'
   const VALID_SECTIONS = new Set(['profile', 'my-guitar', 'appointments', 'cart', 'purchases', 'addresses', 'password', 'privacy', 'notifications'])
@@ -417,7 +417,8 @@ export function DashboardPage() {
             gender: 'male',
             birthDate: u.birthDate ? String(u.birthDate).split('T')[0] : '',
           })
-          if (u.avatar) setProfileImage(u.avatar)
+          const resolvedAvatar = u.avatar || u.avatarUrl || u.avatar_url || ''
+          if (resolvedAvatar) setProfileImage(resolvedAvatar)
         }
       } catch (err) {
         console.error('Failed to load profile:', err)
@@ -1119,14 +1120,31 @@ export function DashboardPage() {
 
   const handleSaveProfile = async () => {
     try {
+      const avatarPayload = profileImage && profileImage.startsWith('data:')
+        ? { avatarUrl: profileImage }
+        : {}
+
       await adminApi.updateProfile({
         firstName: profileData.firstName,
         middleName: profileData.middleName,
         lastName: profileData.lastName,
         phone: profileData.phone,
         birthDate: profileData.birthDate || null,
-        avatarUrl: profileImage && profileImage.startsWith('data:') ? profileImage : undefined
+        ...avatarPayload,
       })
+
+      // Refresh profile from backend so persisted avatar URL is reflected everywhere (header pill included).
+      const latestProfile = await adminApi.getProfile()
+      const latestUser = latestProfile?.data?.user
+      if (latestUser) {
+        const resolvedAvatar = latestUser.avatar || latestUser.avatarUrl || latestUser.avatar_url || ''
+        if (resolvedAvatar) setProfileImage(resolvedAvatar)
+        updateUser({
+          ...latestUser,
+          avatar: latestUser.avatar || latestUser.avatarUrl || latestUser.avatar_url || '',
+        })
+      }
+
       setToastMessage('Profile updated successfully!')
       setIsEditingProfile(false)
     } catch (err) {

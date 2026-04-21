@@ -1,4 +1,4 @@
-import { Link } from 'react-router'
+﻿import { Link } from 'react-router'
 import {
   ArrowRight,
   Phone,
@@ -17,12 +17,12 @@ const serviceCards = [
   {
     title: 'Refinishing',
     text: 'Professional refinishing services to restore and elevate your instrument look.',
-    image: '/assets/landing/480910451_1131367925452470_1495967192517161973_n.jpg',
+    image: '/assets/landing/499948200_1197883048800957_5172319103702371821_n.jpg',
   },
   {
     title: 'Repair & Restoration',
     text: 'Reliable structural and cosmetic restoration handled by skilled technicians.',
-    image: '/assets/landing/481447234_1131367952119134_4042649922426111342_n.jpg',
+    image: '/assets/landing/615157658_1389213549667905_4695629074825690570_n.jpg',
   },
   {
     title: 'Electronics Upgrades',
@@ -176,7 +176,7 @@ export function LandingPage() {
             <div className="relative mx-auto w-full max-w-[420px] h-auto">
               <article className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] shadow-xl">
                 <ImageWithFallback
-                  src="/assets/landing/615157658_1389213549667905_4695629074825690570_n.jpg"
+                  src="/assets/landing/481447234_1131367952119134_4042649922426111342_n.jpg"
                   alt="About visual primary"
                   className="h-[200px] sm:h-[260px] md:h-[320px] w-full object-cover"
                 />
@@ -184,7 +184,7 @@ export function LandingPage() {
 
               <article className="hidden sm:block absolute -bottom-8 -right-4 w-[58%] rotate-6 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] shadow-2xl sm:-right-8">
                 <ImageWithFallback
-                  src="/assets/landing/499948200_1197883048800957_5172319103702371821_n.jpg"
+                  src="/assets/landing/480692297_1131061212149808_7300796434822753967_n.jpg"
                   alt="About visual secondary"
                   className="h-[160px] w-full object-cover sm:h-[190px]"
                 />

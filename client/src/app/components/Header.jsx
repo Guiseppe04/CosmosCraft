@@ -101,6 +101,8 @@ export function Header() {
       .join('')
       .slice(0, 2) || (user?.email || 'G').charAt(0).toUpperCase()
 
+  const userAvatar = user?.avatar || user?.avatarUrl || user?.avatar_url || ''
+
   const navLinksBeforeCustomize = [{ label: 'Home', to: '/' }]
   const navLinksAfterCustomize = [
     { label: 'Shop', to: '/shop' },
@@ -261,8 +263,8 @@ export function Header() {
                 onClick={() => setProfileMenuOpen((prev) => !prev)}
                 className="flex items-center gap-2 rounded-full bg-[var(--surface-elevated)] px-3 py-1.5 text-[var(--text-light)] transition-colors duration-200 hover:text-[var(--gold-primary)]"
               >
-                {user?.avatar ? (
-                  <img src={user.avatar} alt="Profile" className="h-7 w-7 rounded-full object-cover" />
+                {userAvatar ? (
+                  <img src={userAvatar} alt="Profile" className="h-7 w-7 rounded-full object-cover" />
                 ) : (
                   <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[var(--gold-primary)] text-xs font-bold text-[var(--text-dark)]">
                     {profileInitials.slice(0, 1)}
@@ -279,9 +281,9 @@ export function Header() {
                     className="absolute right-0 top-[calc(100%+10px)] z-50 w-[300px] overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] shadow-[0_18px_44px_rgba(0,0,0,0.28)]"
                   >
                     <div className="flex items-center gap-3 px-5 py-5">
-                      {user?.avatar ? (
+                      {userAvatar ? (
                         <img
-                          src={user.avatar}
+                          src={userAvatar}
                           alt="Profile"
                           className="h-14 w-14 rounded-full border border-[var(--border)] object-cover"
                         />
