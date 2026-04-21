@@ -6,7 +6,7 @@ import { useAuth } from '../context/AuthContext.jsx'
 import { useCart } from '../context/CartContext.jsx'
 import { BASE_PRICE, BODY_OPTIONS, BODY_WOOD_OPTIONS, BODY_FINISH_OPTIONS, NECK_OPTIONS, FRETBOARD_OPTIONS, HEADSTOCK_OPTIONS, HEADSTOCK_WOOD_OPTIONS, INLAY_OPTIONS, BRIDGE_OPTIONS, PICKGUARD_OPTIONS_BY_BODY, KNOB_OPTIONS_BY_BODY, HARDWARE_OPTIONS, PICKUP_OPTIONS } from '../lib/guitarBuilderData.js'
 import { adminApi } from '../utils/adminApi.js'
-import ProjectTaskTracker from '../components/projects/ProjectTaskTrackerCustomer.jsx'
+import ProjectTaskTracker from '../components/projects/ProjectTaskTracker.jsx'
 import { getAllProvinces, getMunicipalitiesByProvince, getBarangaysByMunicipality } from '@aivangogh/ph-address'
 import { Country } from 'country-state-city'
 import { ConfirmModal } from '../components/ui/ConfirmModal'
@@ -527,7 +527,7 @@ export function DashboardPage() {
 
     return (
       <div className="space-y-8">
-        {renderProjectsContent()}
+        {/* {renderProjectsContent()} */}
 
         <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-8">
         <h2 className="text-2xl font-bold text-white mb-1">My Purchase</h2>
@@ -723,7 +723,7 @@ export function DashboardPage() {
                       </span>
                     </div>
                     {apt.location_id && (
-                      <div>
+                      <div> 
                         <span className="block text-[var(--text-muted)] mb-1">Branch</span>
                         <span className="text-white capitalize">{apt.location_id}</span>
                       </div>
@@ -805,12 +805,7 @@ export function DashboardPage() {
                       <span className="text-[var(--gold-primary)] font-bold text-sm">{project.progress}% Complete</span>
                     </div>
                   </div>
-                  <button
-                    onClick={() => setActiveProjectView(project)}
-                    className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-bold shadow-[0_0_10px_rgba(212,175,55,0.3)] hover:shadow-[0_0_15px_rgba(212,175,55,0.5)] transition-all flex items-center gap-2"
-                  >
-                    <Activity className="w-4 h-4" /> Track Progress
-                  </button>
+                  
                 </div>
                 <div className="flex gap-2 mt-4 pt-4 border-t border-[var(--border)]">
                   {project.progress < 80 && project.status !== 'Cancelled' && (
@@ -821,7 +816,14 @@ export function DashboardPage() {
                       Cancel Project
                     </button>
                   )}
+                  <button
+                    onClick={() => setActiveProjectView(project)}
+                    className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-bold shadow-[0_0_10px_rgba(212,175,55,0.3)] hover:shadow-[0_0_15px_rgba(212,175,55,0.5)] transition-all flex items-center gap-2"
+                  >
+                    <Activity className="w-4 h-4" /> Track Progress
+                  </button>
                 </div>
+                
               </div>
             ))}
           </div>
