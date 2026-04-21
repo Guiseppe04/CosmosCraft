@@ -90,10 +90,10 @@ function getAppointmentBranch() {
 }
 
 const STEPS = [
-  { id: 1, label: 'Service' },
-  { id: 2, label: 'Guitar Details' },
-  { id: 3, label: 'Location' },
-  { id: 4, label: 'Appointment' },
+  { id: 1, label: 'Appointment' },
+  { id: 2, label: 'Service' },
+  { id: 3, label: 'Guitar Details' },
+  { id: 4, label: 'Location' },
   { id: 5, label: 'Confirmation' },
 ]
 
@@ -183,7 +183,7 @@ export function AppointmentPage() {
   
   // Selections
   const [selectedServicesByCategory, setSelectedServicesByCategory] = useState({})
-  const [guitarDetails, setGuitarDetails] = useState({ brand: '', model: '', serial: '', notes: '' })
+  const [guitarDetails, setGuitarDetails] = useState({ brand: '', model: '', referenceImage: '', referenceImageName: '', notes: '' })
   const [selectedBranchId] = useState(branches[0].id)
   const [selectedDateId, setSelectedDateId] = useState('')
   const [selectedTime, setSelectedTime] = useState('')
@@ -230,11 +230,33 @@ export function AppointmentPage() {
 
   // Validation
   const canProceed = () => {
-    if (currentStep === 1) return selectedServices.length > 0
-    if (currentStep === 2) return guitarDetails.brand.trim() && guitarDetails.model.trim() && guitarDetails.serial.trim()
-    if (currentStep === 3) return !!selectedBranchId
-    if (currentStep === 4) return selectedDateId && selectedTime
+    if (currentStep === 1) return selectedDateId && selectedTime
+    if (currentStep === 2) return selectedServices.length > 0
+    if (currentStep === 3) return guitarDetails.brand.trim() && guitarDetails.model.trim()
+    if (currentStep === 4) return !!selectedBranchId
     return true
+  }
+
+  const handleReferenceImageUpload = (event) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      alert('Please upload a valid image file.')
+      event.target.value = ''
+      return
+    }
+
+    const reader = new FileReader()
+    reader.onload = () => {
+      const dataUrl = typeof reader.result === 'string' ? reader.result : ''
+      setGuitarDetails(prev => ({
+        ...prev,
+        referenceImage: dataUrl,
+        referenceImageName: file.name,
+      }))
+    }
+    reader.readAsDataURL(file)
+    event.target.value = ''
   }
 
   // Handlers
@@ -281,7 +303,7 @@ export function AppointmentPage() {
           guitar_details: {
             brand: guitarDetails.brand,
             model: guitarDetails.model,
-            serial: guitarDetails.serial,
+            reference_image: guitarDetails.referenceImage || '',
             notes: guitarDetails.notes || ''
           },
           scheduled_at: scheduledAt.toISOString(),
@@ -310,7 +332,7 @@ export function AppointmentPage() {
 
   const renderStepContent = () => {
     switch (currentStep) {
-      case 1:
+      case 2:
         return (
           <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
             <div>
@@ -355,7 +377,7 @@ export function AppointmentPage() {
           </motion.div>
         )
 
-      case 2:
+      case 3:
         return (
           <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
             <div>
@@ -385,14 +407,19 @@ export function AppointmentPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-white mb-1.5">Serial Number <span className="text-red-400">*</span></label>
+                <label className="block text-sm font-medium text-white mb-1.5">Upload Image (Optional)</label>
                 <input
-                  type="text"
-                  value={guitarDetails.serial}
-                  onChange={e => setGuitarDetails({ ...guitarDetails, serial: e.target.value })}
-                  className="w-full px-4 py-3 bg-[var(--surface-dark)] text-[var(--text-light)] border border-[var(--border)] rounded-xl text-sm focus:outline-none focus:border-[#d4af37] transition-colors placeholder:text-[var(--text-muted)]"
-                  placeholder="Required for shop tracking and liability"
+                  type="file"
+                  accept="image/*"
+                  onChange={handleReferenceImageUpload}
+                  className="w-full px-4 py-3 bg-[var(--surface-dark)] text-[var(--text-light)] border border-[var(--border)] rounded-xl text-sm focus:outline-none focus:border-[#d4af37] transition-colors file:mr-3 file:rounded-lg file:border-0 file:bg-[#d4af37] file:px-3 file:py-1.5 file:text-xs file:font-bold file:text-black"
                 />
+                <p className="mt-1 text-xs text-[var(--text-muted)]">
+                  Add a guitar photo reference if you want service/customization based on your existing instrument.
+                </p>
+                {guitarDetails.referenceImageName && (
+                  <p className="mt-2 text-xs text-[#d4af37]">Selected: {guitarDetails.referenceImageName}</p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-white mb-1.5">Issues & Notes</label>
@@ -407,7 +434,7 @@ export function AppointmentPage() {
           </motion.div>
         )
 
-      case 3:
+      case 4:
         return (
           <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
              <div>
@@ -441,7 +468,7 @@ export function AppointmentPage() {
           </motion.div>
         )
 
-      case 4:
+      case 1:
         return (
           <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
             <div>
@@ -609,7 +636,7 @@ export function AppointmentPage() {
                     <div className="space-y-1 text-sm bg-[var(--surface-dark)] p-3 rounded-lg border border-[var(--border)]">
                       <p><span className="text-[var(--text-muted)]">Brand:</span> <span className="text-[var(--text-light)]">{guitarDetails.brand}</span></p>
                       <p><span className="text-[var(--text-muted)]">Model:</span> <span className="text-[var(--text-light)]">{guitarDetails.model}</span></p>
-                      <p><span className="text-[var(--text-muted)]">Serial:</span> <span className="text-[var(--text-light)]">{guitarDetails.serial}</span></p>
+                      <p><span className="text-[var(--text-muted)]">Reference Image:</span> <span className="text-[var(--text-light)]">{guitarDetails.referenceImageName || 'None uploaded'}</span></p>
                     </div>
                  </div>
                </div>
@@ -700,7 +727,16 @@ export function AppointmentPage() {
              </div>
 
              <div className="relative z-10 mt-12 text-center text-xs text-[var(--text-muted)]">
-               Need help with booking?<br/>Contact our support
+               Need help with booking?
+               <br />
+               <a
+                 href="https://www.facebook.com/messages/t/CosmosGuitars"
+                 target="_blank"
+                 rel="noopener noreferrer"
+                 className="font-semibold text-[#d4af37] hover:text-[#ffe270] transition-colors"
+               >
+                 Contact our support
+               </a>
              </div>
           </div>
 
@@ -730,7 +766,7 @@ export function AppointmentPage() {
                    disabled={!canProceed()}
                    className="px-8 py-2.5 rounded-xl text-sm font-bold bg-[#d4af37] text-black hover:bg-[#ffe270] transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-[#d4af37]/10"
                  >
-                   Next {currentStep === 4 && 'Step'}
+                   Next
                  </button>
                ) : (
                  <button

@@ -1,43 +1,34 @@
-import { Sun, Moon } from 'lucide-react'
-import { motion } from 'motion/react'
+﻿import { Moon, Sun } from 'lucide-react'
 import { useTheme } from '../context/ThemeContext.jsx'
 
 export function ThemeToggle() {
   const { theme, toggleTheme, mounted } = useTheme()
 
   if (!mounted) {
-    return (
-      <button
-        type="button"
-        className="relative p-2 rounded-lg text-[var(--text-muted)] hover:text-[var(--gold-primary)] hover:bg-[var(--surface-elevated)] transition-all duration-200"
-        aria-label="Toggle theme"
-      >
-        <span className="w-5 h-5 block" />
-      </button>
-    )
+    return <div className="h-8 w-[62px] rounded-full border border-[var(--border)] bg-[var(--surface-dark)]" />
   }
+
+  const isDark = theme === 'dark'
 
   return (
     <button
       type="button"
       onClick={toggleTheme}
-      className="relative p-2 rounded-lg text-[var(--text-muted)] hover:text-[var(--gold-primary)] hover:bg-[var(--surface-elevated)] transition-all duration-200"
-      aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+      aria-label={`Switch to ${isDark ? 'light' : 'dark'} mode`}
+      className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-dark)] px-2 py-1.5 text-xs font-medium text-[var(--text-muted)] transition-colors duration-200 hover:border-[var(--gold-primary)]"
     >
-      <motion.div
-        initial={false}
-        animate={{ rotate: theme === 'dark' ? 0 : 180 }}
-        transition={{ duration: 0.3, ease: 'easeInOut' }}
+      <span
+        className={`relative inline-flex h-5 w-10 items-center rounded-full transition-colors ${
+          isDark ? 'bg-[var(--gold-primary)]/85' : 'bg-[var(--surface-elevated)]'
+        }`}
       >
-        {theme === 'dark' ? (
-          <Moon className="w-5 h-5" />
-        ) : (
-          <Sun className="w-5 h-5" />
-        )}
-      </motion.div>
-      <span className="sr-only">
-        {theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+        <span
+          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+            isDark ? 'translate-x-5' : 'translate-x-0.5'
+          }`}
+        />
       </span>
+      {isDark ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
     </button>
   )
 }

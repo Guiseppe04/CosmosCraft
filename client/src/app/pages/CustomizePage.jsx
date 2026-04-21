@@ -12,6 +12,7 @@ import { useAuth } from '../context/AuthContext.jsx'
 import { useCart } from '../context/CartContext.jsx'
 import useGuitarConfig from '../hooks/useGuitarConfig.js'
 import GuitarPreview from '../components/guitar/GuitarPreview.jsx'
+import { RGBColorPicker } from '../components/options/RGBColorPicker.jsx'
 
 // Configuration categories with icons and tooltips
 const CATEGORIES = [
@@ -953,17 +954,13 @@ export function CustomizePage() {
                   
                   {/* Body Finish */}
                   <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Body Finish</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.bodyFinishOptions?.map((opt) => (
-                        <OptionButton
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.bodyFinish === opt.value}
-                          onClick={() => updateConfig({ bodyFinish: opt.value })}
-                        />
-                      ))}
-                    </div>
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-3">Body Finish Color</h3>
+                    <RGBColorPicker
+                      value={config.bodyFinish || '#1a1a1a'}
+                      onChange={(color) => updateConfig({ bodyFinish: color })}
+                      label="Select Guitar Body Color"
+                    />
+                    <p className="text-xs text-white/40 mt-3">Choose any custom color for your guitar body using the RGB picker or enter a hex value.</p>
                   </div>
                   
                   {/* Pickguard */}
@@ -1610,7 +1607,16 @@ export function CustomizePage() {
                       Need Help?
                     </h4>
                     <p className="mt-1 text-xs text-white/40 leading-relaxed">
-                      Each option is carefully crafted to deliver premium quality. Hover over category names for more details, or contact our support team.
+                      Each option is carefully crafted to deliver premium quality. Hover over category names for more details, or{' '}
+                      <a
+                        href="https://www.facebook.com/messages/t/CosmosGuitars"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-semibold text-[#d4af37] hover:text-[#ffe270] transition-colors"
+                      >
+                        contact our support team
+                      </a>
+                      .
                     </p>
                   </div>
                 </div>
