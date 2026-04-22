@@ -1,14 +1,14 @@
-import { createContext, useContext, useState, useEffect } from 'react'
+﻿import { createContext, useContext, useState, useEffect } from 'react'
 
 const ThemeContext = createContext()
 
 const THEME_KEY = 'cosmoscraft-theme'
 
 function getInitialTheme() {
-  if (typeof window === 'undefined') return 'light'
+  if (typeof window === 'undefined') return 'dark'
   const stored = localStorage.getItem(THEME_KEY)
   if (stored) return stored
-  return 'light'
+  return 'dark'
 }
 
 export function ThemeProvider({ children }) {
@@ -44,3 +44,4 @@ export function useTheme() {
   }
   return context
 }
+

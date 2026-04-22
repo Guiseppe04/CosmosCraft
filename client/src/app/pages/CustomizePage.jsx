@@ -12,6 +12,7 @@ import { useAuth } from '../context/AuthContext.jsx'
 import { useCart } from '../context/CartContext.jsx'
 import useGuitarConfig from '../hooks/useGuitarConfig.js'
 import GuitarPreview from '../components/guitar/GuitarPreview.jsx'
+import { RGBColorPicker } from '../components/options/RGBColorPicker.jsx'
 
 // Configuration categories with icons and tooltips
 const CATEGORIES = [
@@ -69,7 +70,7 @@ function AnimatedPrice({ price }) {
   return (
     <div className="relative">
       <span 
-        className={`text-5xl font-bold tracking-tight transition-all duration-300 ${
+        className={`text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight transition-all duration-300 ${
           price > 0 ? 'text-transparent bg-clip-text bg-gradient-to-r from-[#d4af37] via-[#f4d03f] to-[#d4af37]' : 'text-white/30'
         }`}
       >
@@ -819,7 +820,7 @@ export function CustomizePage() {
   }
 
   return (
-    <div className="h-screen overflow-hidden bg-[var(--bg-primary)] pt-16 text-[var(--text-light)] relative">
+    <div className="min-h-screen bg-[var(--bg-primary)] pt-16 text-[var(--text-light)] relative xl:h-screen xl:overflow-hidden">
       <AnimatePresence>
         {toastMessage && (
           <motion.div
@@ -836,7 +837,7 @@ export function CustomizePage() {
       <div className="mx-auto flex h-full max-w-[2000px] flex-col px-3 pb-3 sm:px-4 lg:px-6 lg:pb-6">
         
         {/* Main layout: Left panel - Center guitar - Right panel */}
-        <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[340px_minmax(0,1fr)_400px]">
+        <div className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[340px_minmax(0,1fr)_400px]">
           
 {/* LEFT PANEL - Configuration Categories */}
 <aside className="min-h-0 rounded-2xl border border-white/10 bg-[var(--bg-primary)] overflow-hidden flex flex-col">
@@ -953,17 +954,13 @@ export function CustomizePage() {
                   
                   {/* Body Finish */}
                   <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Body Finish</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.bodyFinishOptions?.map((opt) => (
-                        <OptionButton
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.bodyFinish === opt.value}
-                          onClick={() => updateConfig({ bodyFinish: opt.value })}
-                        />
-                      ))}
-                    </div>
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-3">Body Finish Color</h3>
+                    <RGBColorPicker
+                      value={config.bodyFinish || '#1a1a1a'}
+                      onChange={(color) => updateConfig({ bodyFinish: color })}
+                      label="Select Guitar Body Color"
+                    />
+                    <p className="text-xs text-white/40 mt-3">Choose any custom color for your guitar body using the RGB picker or enter a hex value.</p>
                   </div>
                   
                   {/* Pickguard */}
@@ -1393,7 +1390,7 @@ export function CustomizePage() {
               </div>
 
               {/* Sticker controls */}
-              <div className="absolute top-4 right-4 w-[360px] max-w-[calc(100%-2rem)] space-y-2 rounded-lg border border-white/10 bg-black/35 p-2 backdrop-blur-sm">
+              <div className="absolute top-4 right-2 sm:right-4 w-[calc(100%-1rem)] sm:w-[360px] sm:max-w-[calc(100%-2rem)] space-y-2 rounded-lg border border-white/10 bg-black/35 p-2 backdrop-blur-sm">
                 <input
                   ref={stickerFileInputRef}
                   type="file"
@@ -1610,7 +1607,16 @@ export function CustomizePage() {
                       Need Help?
                     </h4>
                     <p className="mt-1 text-xs text-white/40 leading-relaxed">
-                      Each option is carefully crafted to deliver premium quality. Hover over category names for more details, or contact our support team.
+                      Each option is carefully crafted to deliver premium quality. Hover over category names for more details, or{' '}
+                      <a
+                        href="https://www.facebook.com/messages/t/CosmosGuitars"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-semibold text-[#d4af37] hover:text-[#ffe270] transition-colors"
+                      >
+                        contact our support team
+                      </a>
+                      .
                     </p>
                   </div>
                 </div>

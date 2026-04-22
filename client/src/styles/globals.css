@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
+﻿@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -58,33 +58,33 @@
 }
 
 :root {
-  /* ─── Base Color Palette ───────────────────────────────────────────────── */
-  --color-gold: #FFD700;        /* Primary brand color — CTAs, links, highlights */
-  --color-gold-light: #FFED4E;  /* Hover state for gold elements */
-  --color-gold-dark: #E6C200;   /* Active/pressed state for gold elements */
-  --color-dark: #1E201E;        /* Sidebar dark — primary dark surface */
-  --color-dark-light: #3d3a3b;  /* Elevated dark surface — cards, modals */
-  --color-light: #F5F5F5;       /* Primary light — bg on dark themes, light text */
-  --color-light-dark: #D0D0D0;  /* Muted light — borders, dividers, scrollbar track */
+  /* â”€â”€â”€ Base Color Palette â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+  --color-gold: #EECD5C;        /* Primary brand color â€” CTAs, links, highlights */
+  --color-gold-light: #D2A63C;  /* Hover state for gold elements */
+  --color-gold-dark: #BB8525;   /* Active/pressed state for gold elements */
+  --color-dark: #1D1912;        /* Sidebar dark â€” primary dark surface */
+  --color-dark-light: #2B251B;  /* Elevated dark surface â€” cards, modals */
+  --color-light: #F3F3E6;       /* Primary light â€” bg on dark themes, light text */
+  --color-light-dark: #D9D4C5;  /* Muted light â€” borders, dividers, scrollbar track */
 
-  /* ─── Figma Theme Tokens ───────────────────────────────────────────────── */
-  --gold-primary: #FFD700;      /* Main gold — buttons, icons, accents (bright yellow) */
-  --gold-secondary: #FFED4E;    /* Lighter gold — hover/active on primary gold */
-  --gold-accent: #FFF44F;       /* Lightest gold — subtle highlights, badges */
-  --black-deep: #454040;        /* Deepest dark — page background, footers */
-  --surface-dark: #3A3737;      /* Default dark surface — base layer bg (darker than bg-primary) */
-  --surface-elevated: #5A5555;  /* Raised dark surface — cards, dropdowns (lighter for elevation) */
-  --text-light: #F5F5F5;        /* Primary text on dark backgrounds (brighter for visibility) */
-  --text-muted: #C8C8C8;        /* Secondary/placeholder text on dark backgrounds (lighter for contrast) */
-  --text-dark: #454040;         /* Primary text on light backgrounds */
-  --bg-primary: #454040;        /* Root page background color */
-  --border: #5A5555;            /* Subtle lighter gray borders (more visible) */
+  /* â”€â”€â”€ Figma Theme Tokens â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+  --gold-primary: #EECD5C;      /* Main gold â€” buttons, icons, accents (bright yellow) */
+  --gold-secondary: #D2A63C;    /* Lighter gold â€” hover/active on primary gold */
+  --gold-accent: #BB8525;       /* Lightest gold â€” subtle highlights, badges */
+  --black-deep: #1D1912;        /* Deepest dark â€” page background, footers */
+  --surface-dark: #2B251B;      /* Default dark surface â€” base layer bg (darker than bg-primary) */
+  --surface-elevated: #3A3124;  /* Raised dark surface â€” cards, dropdowns (lighter for elevation) */
+  --text-light: #F3F3E6;        /* Primary text on dark backgrounds (brighter for visibility) */
+  --text-muted: #D6CFBB;        /* Secondary/placeholder text on dark backgrounds (lighter for contrast) */
+  --text-dark: #1D1912;         /* Primary text on light backgrounds */
+  --bg-primary: #1D1912;        /* Root page background color */
+  --border: rgba(243, 243, 230, 0.14);            /* Subtle lighter gray borders (more visible) */
 
-  /* ─── Neutrals ─────────────────────────────────────────────────────────── */
-  --color-white: #ffffff;       /* Pure white — overlays, cards on dark bg */
-  --color-black: #000000;       /* Pure black — use sparingly for max contrast */
+  /* â”€â”€â”€ Neutrals â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+  --color-white: #ffffff;       /* Pure white â€” overlays, cards on dark bg */
+  --color-black: #000000;       /* Pure black â€” use sparingly for max contrast */
 
-  /* ─── Gray Scale ────────────────────────────────────────────────────────── */
+  /* â”€â”€â”€ Gray Scale â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
   --color-gray-100: #f9fafb;    /* Page bg on light theme */
   --color-gray-200: #f3f4f6;    /* Subtle section backgrounds */
   --color-gray-300: #e5e7eb;    /* Input borders, dividers */
@@ -95,78 +95,103 @@
   --color-gray-800: #374151;    /* Strong secondary text */
   --color-gray-900: #1f2937;    /* Near-black text, dark surface alt */
 
-  /* ─── Spacing Scale ─────────────────────────────────────────────────────── */
-  --spacing-xs: 0.25rem;   /* 4px  — tight gaps, icon padding */
-  --spacing-sm: 0.5rem;    /* 8px  — small gaps, tag padding */
-  --spacing-md: 1rem;      /* 16px — default padding, form fields */
-  --spacing-lg: 1.5rem;    /* 24px — section inner padding */
-  --spacing-xl: 2rem;      /* 32px — button padding, card gaps */
-  --spacing-2xl: 3rem;     /* 48px — section spacing */
-  --spacing-3xl: 4rem;     /* 64px — large section separators */
+  /* â”€â”€â”€ Spacing Scale â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+  --spacing-xs: 0.25rem;   /* 4px  â€” tight gaps, icon padding */
+  --spacing-sm: 0.5rem;    /* 8px  â€” small gaps, tag padding */
+  --spacing-md: 1rem;      /* 16px â€” default padding, form fields */
+  --spacing-lg: 1.5rem;    /* 24px â€” section inner padding */
+  --spacing-xl: 2rem;      /* 32px â€” button padding, card gaps */
+  --spacing-2xl: 3rem;     /* 48px â€” section spacing */
+  --spacing-3xl: 4rem;     /* 64px â€” large section separators */
 
-  /* ─── Typography ────────────────────────────────────────────────────────── */
+  /* â”€â”€â”€ Typography â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
   --font-family-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif; /* UI/body text */
   --font-family-serif: 'Georgia', 'Garamond', serif; /* Editorial/decorative headings */
 
-  /* ─── Font Sizes ────────────────────────────────────────────────────────── */
-  --font-size-xs: 0.75rem;    /* 12px — labels, captions, badges */
-  --font-size-sm: 0.875rem;   /* 14px — secondary text, helper text */
-  --font-size-base: 1rem;     /* 16px — body copy */
-  --font-size-lg: 1.125rem;   /* 18px — lead text, card descriptions */
-  --font-size-xl: 1.25rem;    /* 20px — h5, small headings */
-  --font-size-2xl: 1.5rem;    /* 24px — h4, section subheadings */
-  --font-size-3xl: 1.875rem;  /* 30px — h3, feature headings */
-  --font-size-4xl: 2.25rem;   /* 36px — h2, page subheadings */
-  --font-size-5xl: 3rem;      /* 48px — h1, hero headings */
+  /* â”€â”€â”€ Font Sizes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+  --font-size-xs: 0.75rem;    /* 12px â€” labels, captions, badges */
+  --font-size-sm: 0.875rem;   /* 14px â€” secondary text, helper text */
+  --font-size-base: 1rem;     /* 16px â€” body copy */
+  --font-size-lg: 1.125rem;   /* 18px â€” lead text, card descriptions */
+  --font-size-xl: 1.25rem;    /* 20px â€” h5, small headings */
+  --font-size-2xl: 1.5rem;    /* 24px â€” h4, section subheadings */
+  --font-size-3xl: 1.875rem;  /* 30px â€” h3, feature headings */
+  --font-size-4xl: 2.25rem;   /* 36px â€” h2, page subheadings */
+  --font-size-5xl: 3rem;      /* 48px â€” h1, hero headings */
 
-  /* ─── Line Heights ────────────────────────────────────────────────────────── */
+  /* â”€â”€â”€ Line Heights â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
   --line-height-tight: 1.2;     /* Headings */
   --line-height-snug: 1.375;    /* Subheadings, short text */
   --line-height-normal: 1.5;    /* Body text */
   --line-height-relaxed: 1.625; /* Long-form readable text */
   --line-height-loose: 2;       /* Spacious layouts, captions */
 
-  /* ─── Border Radius ─────────────────────────────────────────────────────── */
-  --radius-sm: 0.25rem;    /* 4px  — subtle rounding, tags */
-  --radius-md: 0.375rem;   /* 6px  — inputs, small buttons */
-  --radius-lg: 0.5rem;     /* 8px  — cards, standard buttons */
-  --radius-xl: 0.75rem;    /* 12px — modals, panels */
-  --radius-2xl: 1rem;      /* 16px — large cards */
-  --radius-3xl: 1.5rem;    /* 24px — hero sections, big chips */
-  --radius-full: 9999px;   /* Fully rounded — pills, avatars, scrollbar thumb */
+  /* â”€â”€â”€ Border Radius â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+  --radius-sm: 0.25rem;    /* 4px  â€” subtle rounding, tags */
+  --radius-md: 0.375rem;   /* 6px  â€” inputs, small buttons */
+  --radius-lg: 0.5rem;     /* 8px  â€” cards, standard buttons */
+  --radius-xl: 0.75rem;    /* 12px â€” modals, panels */
+  --radius-2xl: 1rem;      /* 16px â€” large cards */
+  --radius-3xl: 1.5rem;    /* 24px â€” hero sections, big chips */
+  --radius-full: 9999px;   /* Fully rounded â€” pills, avatars, scrollbar thumb */
 
-  /* ─── Shadows ───────────────────────────────────────────────────────────── */
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);          /* Subtle lift — inputs, small cards */
+  /* â”€â”€â”€ Shadows â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);          /* Subtle lift â€” inputs, small cards */
   --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);        /* Standard card elevation */
   --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);      /* Hover state lift, dropdowns */
   --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1);      /* Modals, overlays */
 
-  /* ─── Transitions ───────────────────────────────────────────────────────── */
-  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);  /* Micro-interactions — icon swaps */
-  --transition-base: 200ms cubic-bezier(0.4, 0, 0.2, 1);  /* Default — buttons, links, inputs */
+  /* â”€â”€â”€ Transitions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);  /* Micro-interactions â€” icon swaps */
+  --transition-base: 200ms cubic-bezier(0.4, 0, 0.2, 1);  /* Default â€” buttons, links, inputs */
   --transition-slow: 300ms cubic-bezier(0.4, 0, 0.2, 1);  /* Panels, modals, page transitions */
+}
+
+html,
+body,
+#root {
+  background-color: var(--bg-primary);
+  color: var(--text-light);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+* {
+  min-width: 0;
+}
+
+body {
+  overflow-x: hidden;
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 /* Light theme overrides - applied to html element for full coverage */
 [data-theme="light"],
 .light-mode,
 html[data-theme="light"] {
-  background-color: #f9fafb;
-  --bg-primary: #f9fafb;
-  --black-deep: #e5e7eb;
-  --surface-dark: #ffffff;
-  --surface-elevated: #f3f4f6;
-  --surface-deep: #f3f4f6;
-  --text-light: #231f20;
-  --text-muted: #6b7280;
-  --text-dark: #231f20;
-  --border: rgba(0, 0, 0, 0.1);
+  background-color: #F3F3E6;
+  --bg-primary: #F3F3E6;
+  --black-deep: #EFEBDD;
+  --surface-dark: #FFFFFF;
+  --surface-elevated: #F8F5EC;
+  --surface-deep: #F8F5EC;
+  --text-light: #1D1912;
+  --text-muted: #6E6554;
+  --text-dark: #1D1912;
+  --border: rgba(29, 25, 18, 0.14);
   --border-strong: rgba(0, 0, 0, 0.2);
-  --color-dark: #231f20;
-  --color-dark-light: #3d3a3b;
-  --color-light: #eff1f3;
-  --color-white: #231f20;
-  --color-gold: #b8941d;
+  --color-dark: #1D1912;
+  --color-dark-light: #3A3124;
+  --color-light: #F3F3E6;
+  --color-white: #1D1912;
+  --color-gold: #EECD5C;
   --overlay-dark: rgba(0, 0, 0, 0.05);
   --overlay-darker: rgba(0, 0, 0, 0.1);
   --overlay-deep: rgba(0, 0, 0, 0.15);
@@ -175,14 +200,14 @@ html[data-theme="light"] {
 }
 
 html[data-theme="light"] {
-  background-color: #f9fafb;
-  color: #231f20;
+  background-color: #F3F3E6;
+  color: #1D1912;
 }
 
 html[data-theme="light"] body,
 html[data-theme="light"] .min-h-screen {
-  background-color: #f9fafb !important;
-  color: #231f20;
+  background-color: #F3F3E6 !important;
+  color: #1D1912;
 }
 
 [data-theme="light"] p,
@@ -194,13 +219,13 @@ html[data-theme="light"] .min-h-screen {
 [data-theme="light"] h5,
 [data-theme="light"] h6,
 [data-theme="light"] label {
-  color: #231f20;
+  color: #1D1912;
 }
 
 [data-theme="light"] .text-white,
 [data-theme="light"] .text-gray-300,
 [data-theme="light"] .text-gray-400 {
-  color: #231f20 !important;
+  color: #1D1912 !important;
 }
 
 [data-theme="light"] .text-white\/60,
@@ -295,3 +320,17 @@ html[data-theme="light"] .min-h-screen {
     border-color: var(--color-gray-700);   /* Darker border for dark mode inputs */
   }
 }
+
+/* Responsive baseline */
+@media (max-width: 1024px) {
+  html {
+    font-size: 15px;
+  }
+}
+
+@media (max-width: 640px) {
+  html {
+    font-size: 14px;
+  }
+}
+

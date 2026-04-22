@@ -98,7 +98,9 @@ function BassPreview({ config, view, onViewChange }) {
     const resolvedAssets = {
       bodyModel,
       bodyWood: bassBuilder.BODY_WOOD_OPTIONS[resolvedConfig.bodyWood],
-      bodyFinish: bassBuilder.BODY_FINISH_OPTIONS[resolvedConfig.bodyFinish],
+      bodyFinish: resolvedConfig.bodyFinish && typeof resolvedConfig.bodyFinish === 'string' && resolvedConfig.bodyFinish.startsWith('#')
+        ? { color: resolvedConfig.bodyFinish, texture: null }
+        : bassBuilder.BODY_FINISH_OPTIONS[resolvedConfig.bodyFinish],
       neck: bassBuilder.NECK_OPTIONS[resolvedConfig.neck],
       fretboard: bassBuilder.FRETBOARD_OPTIONS[resolvedConfig.fretboard],
       headstockWood: bassBuilder.HEADSTOCK_WOOD_OPTIONS[resolvedConfig.headstockWood],
