@@ -196,6 +196,7 @@ export function CustomizePage() {
     summary,
     pricingBreakdown,
     exportConfig,
+    loadConfig: baseLoadConfig,
     builder,
     options,
     refreshPrices,

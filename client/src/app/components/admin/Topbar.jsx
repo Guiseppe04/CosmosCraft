@@ -54,6 +54,7 @@ export function Topbar({
       <div className="flex items-center justify-between px-4 py-3">
         {/* Left Section */}
         <div className="flex items-center gap-4">
+          <img src="/logo-cosmos.png" alt="CosmosCraft Logo" className="h-8 w-auto object-contain" />
           {/* Page Title */}
           <div>
             <h1 className="text-lg font-bold text-white">{title}</h1>

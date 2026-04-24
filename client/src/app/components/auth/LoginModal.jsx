@@ -98,6 +98,9 @@ export function LoginModal() {
             </button>
 
             <div className="mb-6">
+              <div className="mb-4 flex justify-center">
+                <img src="/logo-cosmos.png" alt="CosmosCraft Logo" className="h-12 w-auto object-contain" />
+              </div>
               <h2 className="text-2xl font-bold text-[var(--text-light)] mb-1">Login to CosmosCraft</h2>
               <p className="text-sm text-[var(--text-muted)]">Sign in to continue your purchase</p>
             </div>

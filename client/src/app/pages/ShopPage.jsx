@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
-import { Filter, Search, ShoppingCart, Zap, Star, Heart, ChevronDown, ChevronRight, Folder, Tag, X, SlidersHorizontal, Package, Wrench } from 'lucide-react'
+import { Filter, Search, ShoppingCart, Zap, Star, ChevronDown, ChevronRight, Folder, Tag, X, SlidersHorizontal, Package, Wrench } from 'lucide-react'
 import { useCart } from '../context/CartContext.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useNavigate } from 'react-router'
@@ -555,17 +555,9 @@ export function ShopPage() {
                 </div>
               </div>
               
-              <div className="text-lg sm:text-xl mb-10 max-w-lg font-light leading-relaxed drop-shadow-lg opacity-90" style={{ color: '#f3f4f6' }}>
+              <div className="text-lg sm:text-xl max-w-lg font-light leading-relaxed drop-shadow-lg opacity-90" style={{ color: '#f3f4f6' }}>
                 Experience unparalleled craftsmanship with our curated selection of premium instruments, hardware, and essential accessories.
               </div>
-              
-              <button 
-                type="button" 
-                onClick={() => document.getElementById('shop-collection')?.scrollIntoView({ behavior: 'smooth' })}
-                className="px-10 py-4 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black font-bold text-sm tracking-wide uppercase hover:scale-105 transition-all duration-300 rounded-full shadow-[0_0_30px_rgba(212,175,55,0.3)]"
-              >
-                Shop Collection
-              </button>
             </motion.div>
           </div>
         </section>
@@ -673,10 +665,6 @@ export function ShopPage() {
                           className="w-full h-full object-cover filter brightness-90 group-hover:scale-105 group-hover:brightness-100 transition-all duration-700 ease-out"
                         />
                         
-                        <div className="absolute top-3 right-3 w-8 h-8 rounded-full bg-[var(--surface-dark)] flex items-center justify-center cursor-pointer hover:bg-white text-[var(--gold-primary)] transition-colors shadow-sm">
-                          <Heart className="w-4 h-4 hover:fill-[var(--gold-primary)] transition-colors" />
-                        </div>
-
                         {outOfStock && (
                           <div className="absolute top-3 left-3">
                             <span className="px-3 py-1 bg-red-500 text-white text-[10px] uppercase tracking-widest font-black rounded-full shadow-md">
