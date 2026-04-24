@@ -173,7 +173,7 @@ function getMonthMatrix(year, month, maxLeadTimeDays) {
 
 export function AppointmentPage() {
   const navigate = useNavigate()
-  const { user } = useAuth()
+  const { user, isAuthenticated, isLoadingUser, openLogin } = useAuth()
   const today = new Date()
   const branch = useMemo(() => getAppointmentBranch(), [])
   const branches = useMemo(() => [branch], [branch])
@@ -315,6 +315,10 @@ export function AppointmentPage() {
   }
 
   const handleSubmit = async () => {
+    if (!isAuthenticated) {
+      openLogin(() => navigate('/appointments', { replace: true }))
+      return
+    }
     if (!canProceed()) return
     setBookingComplete(true)
     
@@ -366,6 +370,47 @@ export function AppointmentPage() {
       setBookingComplete(false);
       alert(`Failed to book appointment: ${error.message}`);
     }
+  }
+
+  if (isLoadingUser) {
+    return (
+      <div className="min-h-screen pt-16 bg-[var(--bg-primary)]">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+          <div className="rounded-2xl border border-[var(--border)] bg-theme-surface-deep p-8 text-center">
+            <p className="text-sm text-[var(--text-muted)]">Checking your session...</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen pt-16 bg-[var(--bg-primary)]">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+          <div className="rounded-2xl border border-[var(--border)] bg-theme-surface-deep p-8 text-center space-y-5">
+            <h1 className="text-2xl font-bold text-white">Sign in to book an appointment</h1>
+            <p className="text-sm text-[var(--text-muted)]">Booking is available only for authenticated users.</p>
+            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+              <button
+                type="button"
+                onClick={() => openLogin(() => navigate('/appointments', { replace: true }))}
+                className="px-6 py-2.5 rounded-xl text-sm font-bold bg-[#d4af37] text-black hover:bg-[#ffe270] transition-colors"
+              >
+                Login to Continue
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate('/login')}
+                className="px-6 py-2.5 rounded-xl text-sm font-bold text-[var(--text-light)] bg-[var(--surface-dark)] border border-[var(--border)] hover:bg-[var(--surface-elevated)] transition-colors"
+              >
+                Go to Login Page
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   // --- RENDERS ---

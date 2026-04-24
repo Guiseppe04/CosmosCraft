@@ -135,12 +135,14 @@ exports.emailSignupSchema = Joi.object({
       'any.required': 'Phone number is required',
     }),
   password: Joi.string()
-    .min(12)
+    .min(8)
     .max(64)
+    .pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*[^A-Za-z0-9]).{8,64}$/)
     .required()
     .messages({
-      'string.min': 'Password must be at least 12 characters',
+      'string.min': 'Password must be at least 8 characters',
       'string.max': 'Password must not exceed 64 characters',
+      'string.pattern.base': 'Password must include uppercase, lowercase, and special character',
       'any.required': 'Password is required',
     }),
   confirmPassword: Joi.string()

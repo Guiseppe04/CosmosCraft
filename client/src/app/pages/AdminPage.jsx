@@ -3509,14 +3509,14 @@ export function AdminPage() {
 
           {!sidebarCollapsed && (
             <div className="flex items-center gap-3">
-              <img src="/favicon.png" alt="CosmosCraft" className="w-10 h-10 flex-shrink-0" />
+              <img src="/logo-cosmos.png" alt="CosmosCraft" className="w-10 h-10 object-contain flex-shrink-0" />
               <div className="min-w-0">
                 <p className="text-[var(--text-light)] font-black text-lg tracking-tight">CosmosCraft</p>
               </div>
             </div>
           )}
           {sidebarCollapsed && (
-            <img src="/favicon.png" alt="CosmosCraft" className="w-10 h-10 flex-shrink-0 mx-auto" />
+            <img src="/logo-cosmos.png" alt="CosmosCraft" className="w-10 h-10 object-contain flex-shrink-0 mx-auto" />
           )}
         </div>
 

@@ -12,6 +12,7 @@ import { useCart } from '../context/CartContext.jsx'
 import useBassConfig from '../hooks/useBassConfig.js'
 import BassPreview from '../components/bass/BassPreview.jsx'
 import { exportMaskedPreview } from '../utils/exportMaskedPreview.js'
+import { RGBColorPicker } from '../components/options/RGBColorPicker.jsx'
 
 const CATEGORIES = [
   { 
@@ -93,19 +94,19 @@ function OptionButton({ option, isSelected, onClick }) {
         </div>
       )}
       
-      <div className="space-y-1">
-        <div className={`text-sm font-semibold transition-colors duration-200 ${
-          isSelected ? 'text-[var(--text-light)]' : 'text-[var(--text-muted)] group-hover:text-[var(--text-light)]'
+      <div className="space-y-1.5">
+        <div className={`text-[15px] font-bold leading-tight tracking-tight transition-colors duration-200 ${
+          isSelected ? 'text-[var(--text-light)]' : 'text-[var(--text-light)] group-hover:text-white'
         }`}>
           {option.label}
         </div>
         {option.note && (
-          <div className="text-xs text-white/40 line-clamp-1">
+          <div className="text-[11px] leading-relaxed text-[var(--text-muted)] line-clamp-2">
             {option.note}
           </div>
         )}
         {option.price > 0 && (
-          <div className={`text-xs font-semibold ${
+          <div className={`text-[11px] font-semibold ${
             isSelected ? 'text-[#d4af37]' : 'text-[#d4af37]/70'
           }`}>
             +₱{option.price.toLocaleString('en-PH')}
@@ -124,7 +125,7 @@ function VisualCard({ option, isSelected, onClick, previewImage }) {
       className={`group relative overflow-hidden rounded-xl border transition-all duration-300 ${
         isSelected
           ? 'border-[#d4af37] shadow-lg shadow-[#d4af37]/20 ring-2 ring-[#d4af37]/30'
-          : 'border-white/10 hover:border-white/20'
+          : 'border-[var(--border)] hover:border-[var(--gold-primary)]/40'
       }`}
     >
       <div className="relative h-16 w-full overflow-hidden">
@@ -144,16 +145,21 @@ function VisualCard({ option, isSelected, onClick, previewImage }) {
         <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
       </div>
       
-      <div className={`p-2.5 transition-colors duration-200 ${
-        isSelected ? 'bg-[#d4af37]/10' : 'bg-[#151515]'
+      <div className={`border-t border-[var(--border)] p-2.5 transition-colors duration-200 ${
+        isSelected ? 'bg-[#d4af37]/10' : 'bg-[var(--surface-elevated)]'
       }`}>
-        <div className={`text-xs font-semibold transition-colors duration-200 ${
-          isSelected ? 'text-white' : 'text-white/80'
+        <div className={`text-sm font-bold leading-tight tracking-tight transition-colors duration-200 ${
+          isSelected ? 'text-[var(--text-light)]' : 'text-[var(--text-light)]'
         }`}>
           {option.label}
         </div>
+        {option.note && (
+          <div className="mt-1 text-[11px] leading-relaxed text-[var(--text-muted)] line-clamp-2">
+            {option.note}
+          </div>
+        )}
         {option.price > 0 && (
-          <div className={`text-[10px] font-medium ${
+          <div className={`mt-1 text-[11px] font-semibold ${
             isSelected ? 'text-[#d4af37]' : 'text-[#d4af37]/70'
           }`}>
             +₱{option.price.toLocaleString('en-PH')}
@@ -295,6 +301,7 @@ export function BassCustomizePage() {
   }, [options.knobOptions, config.bassType])
 
   const [toastMessage, setToastMessage] = useState(null)
+  const isCustomBodyColor = typeof config.bodyFinish === 'string' && config.bodyFinish.startsWith('#')
 
   useEffect(() => {
     if (toastMessage) {
@@ -612,19 +619,17 @@ export function BassCustomizePage() {
                   </div>
                   
                   <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Body Finish</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.bodyFinishOptions?.map((opt) => (
-                        <OptionButton
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.bodyFinish === opt.value}
-                          onClick={() => updateConfig({ bodyFinish: opt.value })}
-                        />
-                      ))}
-                    </div>
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-3">Body Finish Color</h3>
+                    <RGBColorPicker
+                      value={isCustomBodyColor ? config.bodyFinish : '#1A1A1A'}
+                      onChange={(color) => updateConfig({ bodyFinish: color })}
+                      label="Select Bass Body Color"
+                    />
+                    <p className="text-xs text-white/40 mt-3">
+                      Choose any custom color for your bass body using the RGB picker or enter a hex value.
+                    </p>
                   </div>
-                  
+
                   <div>
                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Pickguard</h3>
                     <div className="grid grid-cols-2 gap-2">
