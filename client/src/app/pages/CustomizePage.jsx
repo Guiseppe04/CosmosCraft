@@ -99,19 +99,19 @@ function OptionButton({ option, isSelected, onClick }) {
         </div>
       )}
       
-      <div className="space-y-1">
-        <div className={`text-sm font-semibold transition-colors duration-200 ${
-          isSelected ? 'text-[var(--text-light)]' : 'text-[var(--text-muted)] group-hover:text-[var(--text-light)]'
+      <div className="space-y-1.5">
+        <div className={`text-[15px] font-bold leading-tight tracking-tight transition-colors duration-200 ${
+          isSelected ? 'text-[var(--text-light)]' : 'text-[var(--text-light)] group-hover:text-white'
         }`}>
           {option.label}
         </div>
         {option.note && (
-          <div className="text-xs text-white/40 line-clamp-1">
+          <div className="text-[11px] leading-relaxed text-[var(--text-muted)] line-clamp-2">
             {option.note}
           </div>
         )}
         {option.price > 0 && (
-          <div className={`text-xs font-semibold ${
+          <div className={`text-[11px] font-semibold ${
             isSelected ? 'text-[#d4af37]' : 'text-[#d4af37]/70'
           }`}>
             +₱{option.price.toLocaleString('en-PH')}
@@ -131,7 +131,7 @@ function VisualCard({ option, isSelected, onClick, previewImage }) {
       className={`group relative overflow-hidden rounded-xl border transition-all duration-300 ${
         isSelected
           ? 'border-[#d4af37] shadow-lg shadow-[#d4af37]/20 ring-2 ring-[#d4af37]/30'
-          : 'border-white/10 hover:border-white/20'
+          : 'border-[var(--border)] hover:border-[var(--gold-primary)]/40'
       }`}
     >
       {/* Preview image/gradient */}
@@ -155,16 +155,21 @@ function VisualCard({ option, isSelected, onClick, previewImage }) {
       </div>
       
       {/* Content */}
-      <div className={`p-2.5 transition-colors duration-200 ${
-        isSelected ? 'bg-[#d4af37]/10' : 'bg-[#151515]'
+      <div className={`border-t border-[var(--border)] p-2.5 transition-colors duration-200 ${
+        isSelected ? 'bg-[#d4af37]/10' : 'bg-[var(--surface-elevated)]'
       }`}>
-        <div className={`text-xs font-semibold transition-colors duration-200 ${
-          isSelected ? 'text-white' : 'text-white/80'
+        <div className={`text-sm font-bold leading-tight tracking-tight transition-colors duration-200 ${
+          isSelected ? 'text-[var(--text-light)]' : 'text-[var(--text-light)]'
         }`}>
           {option.label}
         </div>
+        {option.note && (
+          <div className="mt-1 text-[11px] leading-relaxed text-[var(--text-muted)] line-clamp-2">
+            {option.note}
+          </div>
+        )}
         {option.price > 0 && (
-          <div className={`text-[10px] font-medium ${
+          <div className={`mt-1 text-[11px] font-semibold ${
             isSelected ? 'text-[#d4af37]' : 'text-[#d4af37]/70'
           }`}>
             +₱{option.price.toLocaleString('en-PH')}

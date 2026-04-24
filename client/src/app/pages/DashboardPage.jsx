@@ -521,7 +521,6 @@ export function DashboardPage() {
     { id: 'appointments', label: 'Appointments', icon: Calendar, group: 'orders' },
     { id: 'cart', label: 'My Cart', icon: ShoppingBag, group: 'orders' },
     { id: 'purchases', label: 'My Purchase', icon: Package, group: 'orders' },
-    { id: 'logout', label: 'Logout', icon: User, group: 'orders' },
   ]
 
   const renderPurchasesContent = () => {
@@ -1676,7 +1675,6 @@ export function DashboardPage() {
             className="hidden xl:block h-fit bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl overflow-hidden"
           >
             <div className="px-4 sm:px-6 py-4 sm:py-5 border-b border-white/20 flex items-center gap-3">
-              <img src="/logo-cosmos.png" alt="CosmosCraft Logo" className="h-8 w-auto object-contain" />
               <div className="w-10 h-10 rounded-full overflow-hidden bg-[var(--bg-primary)] border-2 border-white flex-shrink-0">
                 <img src={profileImage || `https://ui-avatars.com/api/?name=${encodeURIComponent([profileData.firstName, profileData.lastName].filter(Boolean).join(' '))}&background=D4AF55&color=1a1a1a&bold=true`} alt="User" className="w-full h-full object-cover" />
               </div>
@@ -1729,29 +1727,20 @@ export function DashboardPage() {
                     .map(item => {
                       const Icon = item.icon
                       const active = activeSection === item.id
-                      const isLogout = item.id === 'logout'
                       return (
                         <button
                           key={item.id}
                           type="button"
-                          onClick={() => {
-                            if (isLogout) {
-                              setIsLogoutConfirmOpen(true)
-                            } else {
-                              setActiveSection(item.id)
-                            }
-                          }}
+                          onClick={() => setActiveSection(item.id)}
                           className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 ${
-                            isLogout
-                              ? 'text-red-400 hover:bg-red-500/10 border-2 border-transparent'
-                              : active
-                                ? 'bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-medium border-2 border-[var(--gold-primary)] shadow-[0_0_15px_rgba(212,175,55,0.3)]'
-                                : 'text-[var(--text-muted)] hover:bg-[var(--bg-primary)] hover:text-white border-2 border-transparent'
+                            active
+                              ? 'bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-medium border-2 border-[var(--gold-primary)] shadow-[0_0_15px_rgba(212,175,55,0.3)]'
+                              : 'text-[var(--text-muted)] hover:bg-[var(--bg-primary)] hover:text-white border-2 border-transparent'
                           }`}
                         >
-                          <Icon className={`w-4 h-4 ${isLogout ? 'text-red-400' : ''}`} />
+                          <Icon className="w-4 h-4" />
                           <span className="flex-1 text-left">{item.label}</span>
-                          {!isLogout && <ChevronRight className="w-3.5 h-3.5" />}
+                          <ChevronRight className="w-3.5 h-3.5" />
                         </button>
                       )
                     })}
@@ -1793,16 +1782,6 @@ export function DashboardPage() {
                       </button>
                     )
                   })}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsLogoutConfirmOpen(true)
-                  }}
-                  className="inline-flex shrink-0 items-center gap-2 rounded-full border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs font-medium text-red-400 transition-colors hover:bg-red-500/20"
-                >
-                  <User className="h-3.5 w-3.5" />
-                  <span>Logout</span>
-                </button>
               </div>
             </div>
 

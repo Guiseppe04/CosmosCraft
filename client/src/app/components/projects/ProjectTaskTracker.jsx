@@ -213,6 +213,14 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
   }, [hierarchy?.parts, parts]);
   const taskSummary = hierarchy?.task_summary || { total: 0, completed: 0, pending: 0 };
   const pickupTimeSlots = useMemo(() => buildPickupTimeSlots(pickupDate), [pickupDate]);
+  const trackerTitle = hierarchy?.name || hierarchy?.title || projectName || 'Project Tracker';
+  const orderReference = [
+    hierarchy?.order_number,
+    hierarchy?.orderNumber,
+    hierarchy?.order_no,
+    hierarchy?.reference,
+    hierarchy?.reference_no,
+  ].find((value) => typeof value === 'string' && value.trim());
   const defaultAddress = Array.isArray(user?.addresses)
     ? user.addresses.find((address) => address.is_default) || user.addresses[0] || null
     : null;
@@ -374,7 +382,7 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
   if (!hierarchy) return null;
 
   return (
-    <div className={resolvedParts.length > 0 ? "grid lg:grid-cols-[1fr_350px] gap-6" : "space-y-6"}>
+    <div className={resolvedParts.length > 0 ? "grid lg:grid-cols-[minmax(0,1fr)_minmax(300px,350px)] gap-6 xl:gap-8 items-start" : "space-y-6"}>
       
       {/* ── MAIN TRACKER SECTION ── */}
       <div className="space-y-6">
@@ -383,14 +391,19 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
         <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6 relative overflow-hidden">
           <div className="absolute top-0 right-0 w-64 h-64 bg-[var(--gold-primary)]/5 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none"></div>
           
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="text-white text-2xl font-bold">{hierarchy.name || hierarchy.title || projectName || 'Project Tracker'}</h2>
-              <p className="text-[var(--text-muted)] text-sm">{hierarchy.customer_name ? `For: ${hierarchy.customer_name}` : '—'}</p>
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <h2 className="text-white text-xl sm:text-2xl font-bold leading-tight break-words">{trackerTitle}</h2>
+              {orderReference && (
+                <p className="mt-1 text-xs font-medium text-[var(--text-muted)] break-all">
+                  Order: {orderReference}
+                </p>
+              )}
+              <p className="mt-1 text-[var(--text-muted)] text-sm">{hierarchy.customer_name ? `For: ${hierarchy.customer_name}` : '—'}</p>
             </div>
-            <div className="text-right">
+            <div className="text-left sm:text-right shrink-0">
               <span className="text-[var(--gold-primary)] text-3xl font-black">{hierarchy.progress}%</span>
-              <p className="text-white font-semibold flex items-center justify-end gap-2">
+              <p className="text-white font-semibold flex items-center gap-2 sm:justify-end">
                 {formatStatusLabel(hierarchy.status)}
               </p>
             </div>
@@ -404,7 +417,7 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
                className="h-full bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)]" 
              />
           </div>
-          <div className="flex items-center justify-between mt-4">
+          <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-[var(--text-muted)] text-xs">
               {taskSummary.total > 0
                 ? `${taskSummary.completed} of ${taskSummary.total} tasks completed`
@@ -804,7 +817,7 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
 
       {/* ── GUITAR PARTS PANEL ── */}
       {resolvedParts.length > 0 && (
-      <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-5 flex flex-col">
+      <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-5 flex flex-col self-start">
         <div className="flex items-center gap-2 mb-4">
           <Guitar className="w-5 h-5 text-[var(--gold-primary)]" />
           <h3 className="text-white font-bold text-lg">Project Parts</h3>
