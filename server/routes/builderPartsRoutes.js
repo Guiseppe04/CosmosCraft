@@ -10,6 +10,7 @@ router.get('/:id', builderPartsController.getPart);
 
 // Admin / Staff specific CRUD actions
 router.post('/', authenticateToken, authorize('staff', 'admin', 'super_admin'), builderPartsController.createPart);
+router.post('/import-models', authenticateToken, authorize('admin', 'super_admin'), builderPartsController.importPartsFromModels);
 router.put('/:id', authenticateToken, authorize('staff', 'admin', 'super_admin'), builderPartsController.updatePart);
 router.delete('/:id', authenticateToken, authorize('staff', 'admin', 'super_admin'), builderPartsController.deletePart);
 

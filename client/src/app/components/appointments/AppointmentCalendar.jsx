@@ -439,7 +439,7 @@ export default function AppointmentCalendar({
                     : isHolidayCell
                       ? 'border-[#758A93]/30 bg-[#758A93]/10 text-[#c9d2db] cursor-not-allowed'
                       : isSundayClosed || isPastDate
-                        ? 'border-[#444] bg-[#121518] text-[#f8fafc] cursor-not-allowed'
+                        ? 'border-slate-500/35 bg-slate-700/30 text-slate-100 cursor-not-allowed'
                         : isUnavailableCell
                           ? 'border-amber-500/30 bg-amber-500/10 text-amber-200 cursor-pointer hover:border-amber-400 hover:bg-amber-500/20'
                           : bookingCount
@@ -449,7 +449,7 @@ export default function AppointmentCalendar({
                   const badgeClasses = isHolidayCell
                     ? 'bg-[#758A93]/15 text-[#c9d2db] border border-[#758A93]/20'
                     : isSundayClosed || isPastDate
-                      ? 'bg-[#23272e] text-[#e2e8f0] border border-[#39404c]'
+                      ? 'bg-slate-600/35 text-slate-100 border border-slate-400/35'
                       : isUnavailableCell
                         ? 'bg-amber-500/15 text-amber-200 border border-amber-500/20'
                         : bookingCount
@@ -468,7 +468,7 @@ export default function AppointmentCalendar({
                       <div className="flex w-full items-center justify-between">
                         <span className="text-lg font-semibold">{day.dayNumber}</span>
                         {isPast && (
-                          <span className="rounded-full bg-[#272a30] px-2 py-1 text-[10px] uppercase tracking-[0.2em] text-[var(--text-muted)]">
+                          <span className="rounded-full border border-slate-400/30 bg-slate-700/35 px-2 py-1 text-[10px] uppercase tracking-[0.2em] text-slate-200">
                             Past
                           </span>
                         )}

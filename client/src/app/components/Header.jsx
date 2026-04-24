@@ -10,12 +10,12 @@ import {
   Settings,
   LogOut,
   LayoutDashboard,
-  Search,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'motion/react'
 import { useCart } from '../context/CartContext.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
 import { ThemeToggle } from './ThemeToggle.jsx'
+import { ConfirmModal } from './ui/ConfirmModal.jsx'
 import { GUITAR_TYPE_OPTIONS } from '../lib/guitarBuilderData.js'
 
 export function Header() {
@@ -24,6 +24,7 @@ export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [customizeOpen, setCustomizeOpen] = useState(false)
   const [profileMenuOpen, setProfileMenuOpen] = useState(false)
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
   const [isScrolled, setIsScrolled] = useState(false)
   const customizeRef = useRef(null)
   const profileMenuRef = useRef(null)
@@ -150,6 +151,13 @@ export function Header() {
     }, 80)
   }
 
+  const handleConfirmLogout = () => {
+    setShowLogoutConfirm(false)
+    setProfileMenuOpen(false)
+    logout()
+    navigate('/')
+  }
+
   return (
     <header
       className={`fixed inset-x-0 top-0 z-50 transition-all duration-300 ${
@@ -235,12 +243,6 @@ export function Header() {
         </nav>
 
         <div className="ml-auto hidden items-center gap-2 lg:flex">
-          {!isLanding && (
-            <button className="rounded-full p-2 text-[var(--text-muted)] hover:bg-[var(--surface-elevated)] hover:text-[var(--gold-primary)]">
-              <Search className="h-4 w-4" />
-            </button>
-          )}
-
           {!isAuthenticated && <ThemeToggle />}
 
           <button
@@ -343,9 +345,7 @@ export function Header() {
                       <button
                         type="button"
                         onClick={() => {
-                          setProfileMenuOpen(false)
-                          logout()
-                          navigate('/')
+                          setShowLogoutConfirm(true)
                         }}
                         className="mt-1 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-red-400 transition-colors hover:bg-red-500/10"
                       >
@@ -406,6 +406,16 @@ export function Header() {
           {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
         </button>
       </div>
+      <ConfirmModal
+        open={showLogoutConfirm}
+        title="Logout"
+        description="Are you sure you want to log out?"
+        confirmLabel="Logout"
+        cancelLabel="Cancel"
+        variant="warning"
+        onConfirm={handleConfirmLogout}
+        onCancel={() => setShowLogoutConfirm(false)}
+      />
 
       <AnimatePresence>
         {mobileMenuOpen && (

@@ -11,6 +11,7 @@ router.delete('/customizations/:id',   authenticateToken, authorize('super_admin
 router.get('/my-customizations',       authenticateToken, authorize('customer', 'staff', 'admin', 'super_admin'), ctrl.getMyCustomizations);
 router.post('/my-customizations',      authenticateToken, authorize('customer', 'staff', 'admin', 'super_admin'), ctrl.createMyCustomization);
 router.put('/my-customizations/:id',   authenticateToken, authorize('customer', 'staff', 'admin', 'super_admin'), ctrl.updateMyCustomization);
+router.delete('/my-customizations/:id', authenticateToken, authorize('customer', 'staff', 'admin', 'super_admin'), ctrl.deleteMyCustomization);
 
 // ─── GUITAR PARTS ────────────────────────────────────────────────────────────
 router.get('/parts',       authenticateToken, authorize('staff', 'admin', 'super_admin'), ctrl.getParts);

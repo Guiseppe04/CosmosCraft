@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react'
-import { Package, Plus, Search, UserRound, Wallet, X, Printer, Download } from 'lucide-react'
+import { Package, Search, X, Printer, Download, ArrowUpDown, Grid3X3, List } from 'lucide-react'
 import { posApi } from '../../utils/posApi'
 import { formatCurrency } from '../../utils/formatCurrency'
 import { useSmartPolling } from '../../hooks/useSmartPolling'
@@ -42,10 +42,11 @@ export function PosWorkspace({
   heading = 'Point of Sale',
   description = 'Create and record walk-in sales.',
 }) {
-  const [drawerOpen, setDrawerOpen] = useState(false)
-  const [openingCash, setOpeningCash] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [paymentMethod, setPaymentMethod] = useState('cash')
+  const [catalogSort, setCatalogSort] = useState('name_asc')
+  const [categoryFilter, setCategoryFilter] = useState('all')
+  const [catalogView, setCatalogView] = useState('grid')
   const [cashReceived, setCashReceived] = useState('')
   const [customerName, setCustomerName] = useState('')
   const [customerPhone, setCustomerPhone] = useState('')
@@ -70,20 +71,57 @@ export function PosWorkspace({
     [inventoryItems]
   )
 
+  const categoryOptions = useMemo(() => {
+    const map = new Map()
+    visibleInventory.forEach((item) => {
+      const id = String(item.category_id || '').trim()
+      const label = String(item.category_name || item.category || '').trim()
+      if (id || label) {
+        map.set(id || label, { value: id || label, label: label || 'Uncategorized' })
+      }
+    })
+    return Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label))
+  }, [visibleInventory])
+
   const catalog = useMemo(() => {
     const query = searchQuery.trim().toLowerCase()
-    return visibleInventory
+    const filtered = visibleInventory
       .filter((item) => {
+        if (categoryFilter !== 'all') {
+          const categoryKey = String(item.category_id || item.category_name || item.category || '').trim()
+          if (categoryKey !== categoryFilter) return false
+        }
         if (!query) return true
         return String(item.name || '').toLowerCase().includes(query) || String(item.sku || '').toLowerCase().includes(query)
       })
-      .slice(0, 24)
-  }, [searchQuery, visibleInventory])
+      .sort((a, b) => {
+        if (catalogSort === 'price_asc') return Number(a.price || 0) - Number(b.price || 0)
+        if (catalogSort === 'price_desc') return Number(b.price || 0) - Number(a.price || 0)
+        if (catalogSort === 'stock_desc') return Number(b.stock || 0) - Number(a.stock || 0)
+        return String(a.name || '').localeCompare(String(b.name || ''))
+      })
+
+    return filtered.slice(0, 30)
+  }, [searchQuery, visibleInventory, catalogSort, categoryFilter])
 
   const subtotal = useMemo(
     () => cart.reduce((sum, item) => sum + (Number(item.price || 0) * Number(item.quantity || 0)), 0),
     [cart]
   )
+  const resolveCatalogImage = useCallback((item) => {
+    if (!item) return null
+    if (item.primary_image) return item.primary_image
+    if (item.image_url) return item.image_url
+    if (item.product_image) return item.product_image
+    if (item.preview_url) return item.preview_url
+    if (item.image) return item.image
+    if (Array.isArray(item.images) && item.images.length > 0) {
+      const first = item.images[0]
+      if (typeof first === 'string') return first
+      if (first?.url) return first.url
+    }
+    return null
+  }, [])
   const tax = subtotal * 0.12
   const total = subtotal + tax
   const change = Math.max(0, Number(cashReceived || 0) - total)
@@ -222,293 +260,350 @@ export function PosWorkspace({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-        <div>
-          <h3 className="text-lg font-semibold text-white">{heading}</h3>
-          <p className="text-sm text-[var(--text-muted)]">{description}</p>
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] px-4 py-3">
-            <p className="text-xs uppercase tracking-[0.22em] text-[var(--text-muted)]">Today</p>
-            <p className="mt-2 text-2xl font-bold text-white">{formatCurrency(Number(dailySummary?.total_sales || 0))}</p>
-            <p className="mt-1 text-sm text-[var(--text-muted)]">{Number(dailySummary?.total_transactions || 0)} completed sales</p>
+      <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <h3 className="text-lg font-semibold text-white">{heading}</h3>
+            <p className="text-sm text-[var(--text-muted)]">{description}</p>
           </div>
-          <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] px-4 py-3">
-            <p className="text-xs uppercase tracking-[0.22em] text-[var(--text-muted)]">Drawer</p>
-            <p className="mt-2 text-2xl font-bold text-white">{drawerOpen ? 'Open' : 'Closed'}</p>
-            <p className="mt-1 text-sm text-[var(--text-muted)]">
-              {drawerOpen ? `Float ${formatCurrency(Number(openingCash || 0))}` : 'Open the drawer to begin'}
-            </p>
+          <div className="grid grid-cols-2 gap-3 sm:w-auto">
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]/60 px-4 py-2.5">
+              <p className="text-[11px] uppercase tracking-[0.16em] text-[var(--text-muted)]">Today</p>
+              <p className="text-sm font-semibold text-white">{formatCurrency(Number(dailySummary?.total_sales || 0))}</p>
+            </div>
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]/60 px-4 py-2.5">
+              <p className="text-[11px] uppercase tracking-[0.16em] text-[var(--text-muted)]">Sales</p>
+              <p className="text-sm font-semibold text-white">{Number(dailySummary?.total_transactions || 0)} today</p>
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="flex flex-col gap-4 rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6 lg:flex-row lg:items-end lg:justify-between">
-        <div className="flex-1">
-          <p className="text-sm font-semibold text-white">Cash drawer</p>
-          <p className="mt-1 text-sm text-[var(--text-muted)]">This page replaces the old overlay flow and records completed sales to the database.</p>
-        </div>
-        {!drawerOpen ? (
-          <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
-            <input
-              type="number"
-              min="0"
-              value={openingCash}
-              onChange={(event) => setOpeningCash(event.target.value)}
-              placeholder="Opening cash"
-              className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-2.5 text-white"
-            />
-            <button
-              type="button"
-              onClick={() => {
-                setDrawerOpen(true)
-                showToast?.(`Drawer opened with ${formatCurrency(Number(openingCash || 0))}`)
-              }}
-              className="rounded-2xl bg-gradient-to-r from-cyan-500 to-sky-500 px-4 py-2.5 text-sm font-semibold text-white"
-            >
-              Open drawer
-            </button>
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={() => {
-              setDrawerOpen(false)
-              setOpeningCash('')
-              resetSaleForm()
-              showToast?.('Drawer closed')
-            }}
-            className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-2.5 text-sm font-semibold text-red-300"
-          >
-            Close drawer
-          </button>
-        )}
-      </div>
+        <div className="grid gap-6 xl:grid-cols-[1.35fr,0.95fr]">
+          <div className="space-y-5">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-4">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--text-muted)]">Total Products</p>
+                <p className="mt-2 text-2xl font-bold text-white">{visibleInventory.length}</p>
+              </div>
+              <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-4">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--text-muted)]">Categories</p>
+                <p className="mt-2 text-2xl font-bold text-white">{categoryOptions.length}</p>
+              </div>
+              <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-4">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--text-muted)]">Transactions</p>
+                <p className="mt-2 text-2xl font-bold text-white">{Number(dailySummary?.total_transactions || 0)}</p>
+              </div>
+              <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-4">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--text-muted)]">Cart Items</p>
+                <p className="mt-2 text-2xl font-bold text-white">{cart.reduce((acc, item) => acc + Number(item.quantity || 0), 0)}</p>
+              </div>
+            </div>
 
-      {!drawerOpen ? (
-        <EmptyState icon={Wallet} label="POS drawer is closed" description="Open the drawer to start walk-in sales." />
-      ) : (
-        <div className="grid gap-6 xl:grid-cols-[1.15fr,0.85fr]">
-          <div className="space-y-6">
-            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6">
-              <div className="mb-4 flex items-center gap-3">
-                <Search className="h-4 w-4 text-[var(--text-muted)]" />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(event) => setSearchQuery(event.target.value)}
-                  placeholder="Search products by name or SKU"
-                  className="w-full rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-2.5 text-white"
-                />
+            <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-5">
+              <div className="mb-3 flex items-center justify-between">
+                <h4 className="text-lg font-semibold text-white">All Products</h4>
+                <button
+                  type="button"
+                  onClick={() => { setCategoryFilter('all'); setSearchQuery('') }}
+                  className="text-xs font-semibold text-cyan-300 hover:text-cyan-200"
+                >
+                  See all
+                </button>
+              </div>
+
+              <div className="mb-4 flex flex-wrap items-center gap-2 overflow-x-auto">
+                <button
+                  type="button"
+                  onClick={() => setCategoryFilter('all')}
+                  className={`rounded-xl px-3 py-2 text-xs font-semibold transition-colors ${categoryFilter === 'all' ? 'bg-cyan-500 text-black' : 'border border-[var(--border)] text-[var(--text-muted)] hover:text-white'}`}
+                >
+                  All
+                </button>
+                {categoryOptions.map((cat) => (
+                  <button
+                    key={cat.value}
+                    type="button"
+                    onClick={() => setCategoryFilter(cat.value)}
+                    className={`whitespace-nowrap rounded-xl px-3 py-2 text-xs font-semibold transition-colors ${categoryFilter === cat.value ? 'bg-cyan-500 text-black' : 'border border-[var(--border)] text-[var(--text-muted)] hover:text-white'}`}
+                  >
+                    {cat.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="mb-4 grid gap-3 lg:grid-cols-[150px_minmax(0,1fr)_auto_auto]">
+                <div className="relative">
+                  <ArrowUpDown className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]" />
+                  <select
+                    value={catalogSort}
+                    onChange={(event) => setCatalogSort(event.target.value)}
+                    className="w-full appearance-none rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] py-2.5 pl-9 pr-8 text-sm text-white"
+                  >
+                    <option value="name_asc">Name A-Z</option>
+                    <option value="price_asc">Price Low-High</option>
+                    <option value="price_desc">Price High-Low</option>
+                    <option value="stock_desc">Most Stock</option>
+                  </select>
+                </div>
+
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(event) => setSearchQuery(event.target.value)}
+                    placeholder="Search products"
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] py-2.5 pl-9 pr-4 text-sm text-white"
+                  />
+                </div>
+
+                <div className="flex overflow-hidden rounded-xl border border-[var(--border)]">
+                  <button
+                    type="button"
+                    onClick={() => setCatalogView('grid')}
+                    className={`px-3 py-2 ${catalogView === 'grid' ? 'bg-cyan-500 text-black' : 'bg-[var(--bg-primary)] text-[var(--text-muted)] hover:text-white'}`}
+                    title="Grid view"
+                  >
+                    <Grid3X3 className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCatalogView('list')}
+                    className={`px-3 py-2 ${catalogView === 'list' ? 'bg-cyan-500 text-black' : 'bg-[var(--bg-primary)] text-[var(--text-muted)] hover:text-white'}`}
+                    title="List view"
+                  >
+                    <List className="h-4 w-4" />
+                  </button>
+                </div>
+
+                <div className="rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-xs font-semibold text-cyan-300">
+                  {catalog.length} Items
+                </div>
               </div>
 
               {catalog.length === 0 ? (
                 <EmptyState icon={Package} label="No sellable products found" description="Try another search term." />
               ) : (
-                <div className="grid gap-3 md:grid-cols-2">
+                <div className="max-h-[560px] overflow-y-auto pr-1">
+                  <div className={`grid gap-3 ${catalogView === 'list' ? 'grid-cols-1' : 'sm:grid-cols-2 xl:grid-cols-3'}`}>
                   {catalog.map((item) => (
-                    <button
+                    <div
                       key={item.product_id}
-                      type="button"
-                      onClick={() => addToCart(item)}
-                      className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)]/60 p-4 text-left"
+                      className={`rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)]/70 p-3 ${catalogView === 'list' ? 'flex items-center justify-between gap-3' : ''}`}
                     >
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="font-semibold text-white">{item.name}</p>
-                          <p className="mt-1 text-sm text-[var(--text-muted)]">{item.sku || 'No SKU'} · {item.stock} in stock</p>
+                      <div className={`min-w-0 ${catalogView === 'list' ? 'flex-1' : ''}`}>
+                        <div className={`mb-2 ${catalogView === 'list' ? 'hidden' : 'flex h-20 items-center justify-center rounded-xl bg-[var(--surface-dark)]'}`}>
+                          {resolveCatalogImage(item) ? (
+                            <img src={resolveCatalogImage(item)} alt={item.name} className="h-16 w-16 rounded-lg object-cover" loading="lazy" />
+                          ) : (
+                            <Package className="h-7 w-7 text-[var(--text-muted)]" />
+                          )}
                         </div>
-                        <Plus className="h-4 w-4 text-cyan-300" />
+                        <p className="truncate text-sm font-semibold text-white">{item.name}</p>
+                        <p className="mt-1 text-xs text-[var(--text-muted)]">{item.sku || 'No SKU'} - {item.stock} in stock</p>
+                        <p className="mt-2 text-sm font-bold text-cyan-300">{formatCurrency(Number(item.price || 0))}</p>
                       </div>
-                      <p className="mt-4 font-semibold text-cyan-300">{formatCurrency(Number(item.price || 0))}</p>
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => addToCart(item)}
+                        className="rounded-lg bg-cyan-500 px-3 py-1.5 text-xs font-semibold text-black hover:bg-cyan-400"
+                      >
+                        Add to cart
+                      </button>
+                    </div>
                   ))}
+                  </div>
                 </div>
               )}
             </div>
+          </div>
 
-            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6">
-              <div className="mb-4 flex items-center gap-3">
-                <UserRound className="h-4 w-4 text-[var(--text-muted)]" />
-                <h4 className="font-semibold text-white">Customer and payment details</h4>
+          <div className="space-y-5">
+            <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-5">
+              <h4 className="text-lg font-semibold text-white">Order Summary</h4>
+              <p className="mt-1 text-xs text-[var(--text-muted)]">Transaction preview and checkout controls.</p>
+
+              <div className="mt-4 max-h-[280px] space-y-2 overflow-y-auto pr-1">
+                {cart.length === 0 ? (
+                  <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]/50 p-4 text-sm text-[var(--text-muted)]">
+                    Add products from the left panel.
+                  </div>
+                ) : (
+                  cart.map((item) => (
+                    <div key={item.product_id} className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]/70 p-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-white">{item.name}</p>
+                          <p className="text-xs text-[var(--text-muted)]">{formatCurrency(Number(item.price || 0))} each</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => updateQuantity(item.product_id, 0, item.stock)}
+                          className="rounded-md p-1 text-red-300 hover:bg-red-500/10"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                      <div className="mt-2 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => updateQuantity(item.product_id, item.quantity - 1, item.stock)}
+                            className="rounded-md border border-[var(--border)] px-2 py-1 text-xs text-[var(--text-muted)]"
+                          >
+                            -
+                          </button>
+                          <span className="min-w-[1.75rem] text-center text-sm font-semibold text-white">{item.quantity}</span>
+                          <button
+                            type="button"
+                            onClick={() => updateQuantity(item.product_id, item.quantity + 1, item.stock)}
+                            className="rounded-md border border-[var(--border)] px-2 py-1 text-xs text-[var(--text-muted)]"
+                          >
+                            +
+                          </button>
+                        </div>
+                        <span className="text-sm font-semibold text-white">{formatCurrency(Number(item.price || 0) * item.quantity)}</span>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
 
-              <div className="grid gap-3 md:grid-cols-2">
-                <input
-                  type="text"
-                  value={customerName}
-                  onChange={(event) => setCustomerName(event.target.value)}
-                  placeholder="Customer name"
-                  className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-3 text-white"
-                />
-                <input
-                  type="text"
-                  value={customerPhone}
-                  onChange={(event) => setCustomerPhone(event.target.value)}
-                  placeholder="Customer phone"
-                  className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-3 text-white"
-                />
+              <div className="mt-4 space-y-2 border-t border-[var(--border)] pt-4 text-sm">
+                <div className="flex justify-between text-[var(--text-muted)]"><span>Subtotal</span><span>{formatCurrency(subtotal)}</span></div>
+                <div className="flex justify-between text-[var(--text-muted)]"><span>Tax 12%</span><span>{formatCurrency(tax)}</span></div>
+                <div className="flex justify-between text-base font-bold text-white"><span>Total</span><span className="text-cyan-300">{formatCurrency(total)}</span></div>
               </div>
 
               <div className="mt-4 grid gap-2 sm:grid-cols-3">
                 {[
                   ['cash', 'Cash'],
-                  ['gcash', 'GCash'],
-                  ['bank_transfer', 'Bank Transfer'],
+                  ['gcash', 'QRIS'],
+                  ['bank_transfer', 'Debit Card'],
                 ].map(([method, label]) => (
                   <button
                     key={method}
                     type="button"
                     onClick={() => setPaymentMethod(method)}
-                    className={`rounded-xl px-3 py-2 text-sm font-semibold ${paymentMethod === method ? 'bg-cyan-500 text-black' : 'border border-[var(--border)] text-[var(--text-muted)]'}`}
+                    className={`rounded-lg px-3 py-2 text-xs font-semibold ${paymentMethod === method ? 'bg-cyan-500 text-black' : 'border border-[var(--border)] text-[var(--text-muted)] hover:text-white'}`}
                   >
                     {label}
                   </button>
                 ))}
               </div>
 
+              <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                <input
+                  type="text"
+                  value={customerName}
+                  onChange={(event) => setCustomerName(event.target.value)}
+                  placeholder="Customer name"
+                  className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-white"
+                />
+                <input
+                  type="text"
+                  value={customerPhone}
+                  onChange={(event) => setCustomerPhone(event.target.value)}
+                  placeholder="Phone"
+                  className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-white"
+                />
+              </div>
+
               {paymentMethod === 'cash' ? (
-                <div className="mt-4">
+                <div className="mt-3">
                   <input
                     type="number"
                     min="0"
                     value={cashReceived}
                     onChange={(event) => setCashReceived(event.target.value)}
                     placeholder="Cash received"
-                    className="w-full rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-3 text-white"
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-white"
                   />
-                  <p className="mt-2 text-sm text-[var(--text-muted)]">Change: {formatCurrency(change)}</p>
+                  <p className="mt-1 text-xs text-[var(--text-muted)]">Change: {formatCurrency(change)}</p>
                 </div>
               ) : (
-                <div className="mt-4">
+                <div className="mt-3">
                   <input
                     type="text"
                     value={referenceNumber}
                     onChange={(event) => setReferenceNumber(event.target.value)}
                     placeholder="Reference number"
-                    className="w-full rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-3 text-white"
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-white"
                   />
                 </div>
               )}
 
               <textarea
-                rows={3}
+                rows={2}
                 value={saleNotes}
                 onChange={(event) => setSaleNotes(event.target.value)}
-                placeholder="Sale notes"
-                className="mt-4 w-full resize-none rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-3 text-white"
+                placeholder="Notes"
+                className="mt-3 w-full resize-none rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-white"
               />
-            </div>
-          </div>
 
-          <div className="space-y-6">
-            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6">
-              <h4 className="font-semibold text-white">Current cart</h4>
-              {cart.length === 0 ? (
-                <p className="mt-4 text-sm text-[var(--text-muted)]">Add items from the catalog to begin a sale.</p>
-              ) : (
-                <div className="mt-4 space-y-3">
-                  {cart.map((item) => (
-                    <div key={item.product_id} className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)]/60 p-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="font-semibold text-white">{item.name}</p>
-                          <p className="mt-1 text-sm text-[var(--text-muted)]">{formatCurrency(Number(item.price || 0))} each</p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => updateQuantity(item.product_id, 0, item.stock)}
-                          className="rounded-xl p-1 text-red-300"
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
-                      </div>
-                      <div className="mt-4 flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => updateQuantity(item.product_id, item.quantity - 1, item.stock)}
-                            className="rounded-xl border border-[var(--border)] px-3 py-1 text-sm text-[var(--text-muted)]"
-                          >
-                            -
-                          </button>
-                          <span className="min-w-[2rem] text-center font-semibold text-white">{item.quantity}</span>
-                          <button
-                            type="button"
-                            onClick={() => updateQuantity(item.product_id, item.quantity + 1, item.stock)}
-                            className="rounded-xl border border-[var(--border)] px-3 py-1 text-sm text-[var(--text-muted)]"
-                          >
-                            +
-                          </button>
-                        </div>
-                        <span className="font-semibold text-white">{formatCurrency(Number(item.price || 0) * item.quantity)}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              <div className="mt-6 space-y-2 border-t border-[var(--border)] pt-4">
-                <div className="flex justify-between text-sm text-[var(--text-muted)]"><span>Subtotal</span><span>{formatCurrency(subtotal)}</span></div>
-                <div className="flex justify-between text-sm text-[var(--text-muted)]"><span>Tax</span><span>{formatCurrency(tax)}</span></div>
-                <div className="flex justify-between text-lg font-semibold text-white"><span>Total</span><span>{formatCurrency(total)}</span></div>
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  className="flex items-center justify-center gap-2 rounded-xl border border-[var(--border)] px-3 py-2 text-sm font-semibold text-[var(--text-muted)] hover:text-white"
+                  onClick={() => window.print()}
+                >
+                  <Printer className="h-4 w-4" />
+                  Print
+                </button>
+                <button
+                  type="button"
+                  onClick={completeSale}
+                  disabled={submitting || cart.length === 0}
+                  className="rounded-xl bg-gradient-to-r from-cyan-500 to-sky-500 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                >
+                  {submitting ? 'Saving...' : 'Place Order'}
+                </button>
               </div>
-
-              <button
-                type="button"
-                onClick={completeSale}
-                disabled={submitting || cart.length === 0}
-                className="mt-6 w-full rounded-2xl bg-gradient-to-r from-cyan-500 to-sky-500 px-4 py-3 font-semibold text-white disabled:opacity-60"
-              >
-                {submitting ? 'Saving sale...' : 'Complete sale'}
-              </button>
             </div>
 
-            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6">
-              <div className="flex items-center justify-between gap-3">
+            <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-5">
+              <div className="mb-3 flex items-center justify-between gap-3">
                 <div>
-                  <h4 className="font-semibold text-white">Recent POS activity</h4>
-                  <p className="mt-1 text-sm text-[var(--text-muted)]">Latest sales pulled from the database.</p>
+                  <h4 className="font-semibold text-white">Recent Orders</h4>
+                  <p className="text-xs text-[var(--text-muted)]">Latest POS transactions</p>
                 </div>
                 <button
                   type="button"
                   onClick={loadRecentSales}
-                  className="rounded-xl border border-[var(--border)] px-3 py-2 text-sm text-[var(--text-muted)] hover:text-white"
+                  className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-semibold text-[var(--text-muted)] hover:text-white"
                 >
                   Refresh
                 </button>
               </div>
-
-              <div className="mt-4 space-y-3">
+              <div className="space-y-2">
                 {loadingRecent ? (
-                  <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)]/40 px-4 py-6 text-center text-sm text-[var(--text-muted)]">
+                  <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]/50 px-4 py-5 text-center text-sm text-[var(--text-muted)]">
                     Loading recent sales...
                   </div>
                 ) : recentSales.length === 0 ? (
-                  <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)]/40 px-4 py-6 text-center text-sm text-[var(--text-muted)]">
+                  <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]/50 px-4 py-5 text-center text-sm text-[var(--text-muted)]">
                     No POS sales recorded yet.
                   </div>
                 ) : (
-                  recentSales.map((entry) => (
-                    <div 
-                      key={entry.sale_id} 
+                  recentSales.slice(0, 4).map((entry) => (
+                    <div
+                      key={entry.sale_id}
                       onClick={() => loadSaleDetails(entry.sale_id)}
-                      className="cursor-pointer rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)]/60 p-4 hover:border-cyan-500/50"
+                      className="cursor-pointer rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]/60 p-3 hover:border-cyan-500/50"
                     >
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="font-semibold text-white">{entry.sale_number}</p>
-                          <p className="mt-1 text-sm text-[var(--text-muted)]">
-                            {entry.customer_name || 'Walk-in customer'} · {new Date(entry.created_at).toLocaleString()}
-                          </p>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-white">{entry.sale_number}</p>
+                          <p className="text-xs text-[var(--text-muted)]">{entry.customer_name || 'Walk-in customer'} - {new Date(entry.created_at).toLocaleString()}</p>
                         </div>
                         <StatusBadge
                           label={String(entry.status || 'pending').replace(/_/g, ' ')}
                           variant={String(entry.status || '').toLowerCase() === 'completed' ? 'success' : 'warning'}
                         />
                       </div>
-                      <div className="mt-3 flex items-center justify-between">
-                        <span className="text-sm text-[var(--text-muted)]">{entry.item_count} items · {String(entry.payment_method || '').replace(/_/g, ' ')}</span>
+                      <div className="mt-2 flex items-center justify-between text-xs">
+                        <span className="text-[var(--text-muted)]">{entry.item_count} items - {String(entry.payment_method || '').replace(/_/g, ' ')}</span>
                         <span className="font-semibold text-cyan-300">{formatCurrency(Number(entry.total_amount || 0))}</span>
                       </div>
                     </div>
@@ -518,7 +613,6 @@ export function PosWorkspace({
             </div>
           </div>
         </div>
-      )}
 
       {selectedSale && (
         <div 
@@ -641,3 +735,4 @@ export function PosWorkspace({
     </div>
   )
 }
+

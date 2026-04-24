@@ -58,6 +58,15 @@ exports.updateMyCustomization = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+exports.deleteMyCustomization = async (req, res, next) => {
+  try {
+    const userId = req.user?.id || req.user?.user_id;
+    const data = await guitarService.deleteMyCustomization(req.params.id, userId);
+    if (!data) throw new AppError('Customization not found', 404);
+    res.json({ status: 'success', message: 'Customization deleted', data });
+  } catch (err) { next(err); }
+};
+
 // ─── GUITAR PARTS ────────────────────────────────────────────────────────────
 
 exports.getParts = async (req, res, next) => {
