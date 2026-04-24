@@ -254,6 +254,7 @@ exports.logout = asyncHandler(async (req, res, next) => {
 
 exports.checkAuth = asyncHandler(async (req, res, next) => {
   const user = await userService.getUserById(req.user.id);
+  const authInfo = await userService.getUserAuthInfo(req.user.id);
   res.status(200).json({ 
     status: 'success', 
     data: { 
@@ -263,7 +264,10 @@ exports.checkAuth = asyncHandler(async (req, res, next) => {
         email: user.email, 
         name: { firstName: user.first_name, lastName: user.last_name },
         avatar: user.avatar_url,
-        role: user.role
+        role: user.role,
+        provider: authInfo.provider,
+        identityProviders: authInfo.identity_providers || [],
+        hasLocalPassword: authInfo.has_local_password,
       } 
     } 
   });

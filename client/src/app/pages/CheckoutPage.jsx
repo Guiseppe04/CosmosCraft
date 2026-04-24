@@ -516,9 +516,10 @@ function CheckoutSummaryCard({
   onPlaceOrder,
   isProcessing,
   disabled,
-  showTermsAndConditions = false,
   onViewTerms,
-  termsAccepted = false
+  onToggleTerms,
+  termsAccepted = false,
+  termsError = ''
 }) {
   const safeSubtotal = Number.isFinite(Number(subtotal)) ? Number(subtotal) : 0
   const safeShippingCost = Number.isFinite(Number(shippingCost)) ? Number(shippingCost) : 0
@@ -586,29 +587,31 @@ function CheckoutSummaryCard({
         )}
       </div>
 
-      <div className="flex items-center gap-2 text-xs text-[var(--text-muted)]">
-        <ShieldCheck className="w-4 h-4 text-[var(--gold-primary)]" />
-        <span>Secure checkout — your data is protected</span>
+      <div className="rounded-xl border border-[var(--gold-primary)]/30 bg-[var(--gold-primary)]/10 p-4">
+        <button
+          type="button"
+          onClick={onViewTerms}
+          className="text-sm font-medium text-[var(--gold-primary)] hover:underline"
+        >
+          Terms and Conditions
+        </button>
+        <label className="mt-2 flex items-start gap-2 text-sm text-[var(--text-muted)]">
+          <input
+            type="checkbox"
+            checked={termsAccepted}
+            onChange={(event) => onToggleTerms(event.target.checked)}
+            className="mt-0.5 h-4 w-4 rounded border-[var(--border)] bg-[var(--bg-primary)] text-[var(--gold-primary)] focus:ring-[var(--gold-primary)]"
+          />
+          <span>I have read and agree to the Terms and Conditions.</span>
+        </label>
+        {termsError && (
+          <p className="mt-2 text-xs font-medium text-red-400">{termsError}</p>
+        )}
       </div>
-
-      {showTermsAndConditions && (
-        <div className="rounded-xl border border-[var(--gold-primary)]/30 bg-[var(--gold-primary)]/10 p-4">
-          <p className="text-sm text-[var(--text-muted)]">
-            I agree to{' '}
-            <button
-              type="button"
-              onClick={onViewTerms}
-              className="text-[var(--gold-primary)] hover:underline font-medium"
-            >
-              Terms and Conditions
-            </button>
-          </p>
-        </div>
-      )}
 
       <button
         onClick={onPlaceOrder}
-        disabled={isProcessing || disabled || (showTermsAndConditions && !termsAccepted)}
+        disabled={isProcessing || disabled}
         className="w-full py-4 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-bold rounded-lg hover:shadow-[0_0_25px_rgba(212,175,55,0.5)] transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
       >
         {isProcessing ? (
@@ -626,7 +629,6 @@ function CheckoutSummaryCard({
     </div>
   )
 }
-
 function EmptyCart() {
   const navigate = useNavigate()
   return (
@@ -1051,7 +1053,7 @@ export function CheckoutPage() {
   const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [showTermsModal, setShowTermsModal] = useState(false)
   const [acceptedTerms, setAcceptedTerms] = useState(false)
-  const [shouldOpenPaymentAfterTerms, setShouldOpenPaymentAfterTerms] = useState(false)
+  const [termsError, setTermsError] = useState('')
   const [selectedItemIds, setSelectedItemIds] = useState(null)
   const [selectionError, setSelectionError] = useState(false)
   const [generatedCustomItemId] = useState(() => `custom-${Date.now()}`)
@@ -1122,6 +1124,7 @@ export function CheckoutPage() {
   const itemCount = checkoutItems.reduce((a, b) => a + b.quantity, 0)
   const totalCartItemCount = baseCheckoutItems.reduce((a, b) => a + b.quantity, 0)
   const hasSelectedItems = checkoutItems.length > 0
+  const canUseCashOnDelivery = hasSelectedItems && !hasSelectedCustomBuild
   const canAddMoreAddresses = uniqueAddresses.length < MAX_USER_ADDRESSES
   const allSelectableItemsSelected = !isCustomBuild && !isBuyNow && checkoutItems.length === baseCheckoutItems.length
 
@@ -1159,22 +1162,19 @@ export function CheckoutPage() {
     setSelectionError(false)
   }
 
-  const handleOpenTermsModal = (continueToPayment = false) => {
-    setShouldOpenPaymentAfterTerms(continueToPayment)
+  const handleOpenTermsModal = () => {
     setShowTermsModal(true)
   }
 
   const handleCloseTermsModal = () => {
     setShowTermsModal(false)
-    setAcceptedTerms(true)
+  }
 
-    if (shouldOpenPaymentAfterTerms) {
-      setShouldOpenPaymentAfterTerms(false)
-      setShowPaymentModal(true)
-      return
+  const handleToggleTerms = (checked) => {
+    setAcceptedTerms(Boolean(checked))
+    if (checked) {
+      setTermsError('')
     }
-
-    setShouldOpenPaymentAfterTerms(false)
   }
 
   const handleSaveAddress = async (addressData) => {
@@ -1269,6 +1269,10 @@ export function CheckoutPage() {
 
   const validatePayment = (paymentMethod, receipt) => {
     if (!paymentMethod) return false
+    if (paymentMethod === 'cash' && hasSelectedCustomBuild) {
+      setOrderError('COD is only available for regular product orders. Customized guitars require down payment.')
+      return false
+    }
     if (paymentMethod === 'gcash' || paymentMethod === 'bank') {
       return !!receipt
     }
@@ -1288,10 +1292,11 @@ export function CheckoutPage() {
       setAddressError(true)
       return
     }
-    if (hasSelectedCustomBuild && !acceptedTerms) {
-      handleOpenTermsModal(true)
+    if (!acceptedTerms) {
+      setTermsError('You must agree to the Terms and Conditions before placing your order.')
       return
     }
+    setTermsError('')
     setShowPaymentModal(true)
   }
 
@@ -1348,7 +1353,8 @@ export function CheckoutPage() {
       // Map payment method names to backend values
       const methodMap = {
         'gcash': 'gcash',
-        'bank': 'bank_transfer'
+        'bank': 'bank_transfer',
+        'cash': 'cash'
       }
       const mappedPaymentMethod = methodMap[paymentMethod] || paymentMethod
       const selectedPaymentTerms = hasSelectedCustomBuild
@@ -1403,6 +1409,7 @@ export function CheckoutPage() {
           shippingMethod,
           paymentMethod: mappedPaymentMethod,
           paymentTerms: selectedPaymentTerms,
+          termsAccepted: acceptedTerms,
           billingAddress: finalAddress
         })
       })
@@ -1419,42 +1426,45 @@ export function CheckoutPage() {
         const currentPaymentAmount = selectedPaymentTerms === 'full'
           ? orderTotalAmount
           : Number((orderTotalAmount * CUSTOM_BUILD_DOWN_PAYMENT_RATE).toFixed(2))
-        let paymentCreated = false
+        const isCodCheckout = mappedPaymentMethod === 'cash'
+        let paymentCreated = isCodCheckout
 
-        // 2. Create payment record with proof
-        try {
-          const paymentResponse = await fetch(`${API}/api/payments`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify({
-              order_id: orderId,
-              method: mappedPaymentMethod,
-              amount: currentPaymentAmount,
-              currency: 'PHP',
-              reference_number: `PROOF-${Date.now()}`,
-              proof_url: receipt // Include the receipt image
+        // 2. Create payment record with proof when payment is not COD
+        if (!isCodCheckout) {
+          try {
+            const paymentResponse = await fetch(`${API}/api/payments`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify({
+                order_id: orderId,
+                method: mappedPaymentMethod,
+                amount: currentPaymentAmount,
+                currency: 'PHP',
+                reference_number: `PROOF-${Date.now()}`,
+                proof_url: receipt // Include the receipt image
+              })
             })
-          })
 
-          const paymentData = await paymentResponse.json()
-          console.log('Payment response:', paymentResponse.status, paymentData)
+            const paymentData = await paymentResponse.json()
+            console.log('Payment response:', paymentResponse.status, paymentData)
 
-          if (!paymentResponse.ok) {
-            console.error('Payment creation failed:', paymentData)
+            if (!paymentResponse.ok) {
+              console.error('Payment creation failed:', paymentData)
+              setOrderError('Order created, but payment record could not be created. Please contact support.')
+              setIsProcessing(false)
+              setShowPaymentModal(false)
+              return
+            }
+
+            paymentCreated = true
+          } catch (paymentError) {
+            console.error('Payment creation error:', paymentError)
             setOrderError('Order created, but payment record could not be created. Please contact support.')
             setIsProcessing(false)
             setShowPaymentModal(false)
             return
           }
-
-          paymentCreated = true
-        } catch (paymentError) {
-          console.error('Payment creation error:', paymentError)
-          setOrderError('Order created, but payment record could not be created. Please contact support.')
-          setIsProcessing(false)
-          setShowPaymentModal(false)
-          return
         }
 
         // 3. Only show success if both order and payment were created
@@ -1662,9 +1672,10 @@ export function CheckoutPage() {
                   onPlaceOrder={handlePlaceOrderClick}
                   isProcessing={isProcessing}
                   disabled={hasNoAddresses || !hasSelectedItems}
-                  showTermsAndConditions={hasSelectedCustomBuild}
-                  onViewTerms={() => handleOpenTermsModal(false)}
+                  onViewTerms={handleOpenTermsModal}
+                  onToggleTerms={handleToggleTerms}
                   termsAccepted={acceptedTerms}
+                  termsError={termsError}
                 />
               </motion.div>
             </div>
@@ -1692,6 +1703,7 @@ export function CheckoutPage() {
         isProcessing={isProcessing}
         requiresCustomTerms={hasSelectedCustomBuild}
         downPaymentRate={CUSTOM_BUILD_DOWN_PAYMENT_RATE}
+        allowCashOnDelivery={canUseCashOnDelivery}
       />
 
       <SuccessModal isOpen={showSuccessModal} onClose={handleSuccessModalClose} />

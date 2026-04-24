@@ -1,3 +1,5 @@
+import { useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'motion/react'
 import { AlertTriangle, AlertCircle, Info, X } from 'lucide-react'
 
@@ -25,6 +27,7 @@ export function ConfirmModal({
   onConfirm,
   onCancel,
 }) {
+  const cancelButtonRef = useRef(null)
   const variants = {
     danger: {
       icon: AlertTriangle,
@@ -52,7 +55,24 @@ export function ConfirmModal({
   const config = variants[variant] || variants.danger
   const Icon = config.icon
 
-  return (
+  useEffect(() => {
+    if (!open) return undefined
+
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        onCancel?.()
+      }
+    }
+
+    document.addEventListener('keydown', onKeyDown)
+    cancelButtonRef.current?.focus()
+
+    return () => {
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [open, onCancel])
+
+  const modalContent = (
     <AnimatePresence>
       {open && (
         <motion.div
@@ -69,9 +89,13 @@ export function ConfirmModal({
             initial={{ opacity: 0, scale: 0.92, y: 16 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.92, y: 16 }}
-            transition={{ duration: 0.2, ease: 'easeOut' }}
-            className={`relative bg-[var(--surface-dark)] border ${config.borderAccent} rounded-3xl p-8 w-full max-w-md shadow-2xl`}
-          >
+          transition={{ duration: 0.2, ease: 'easeOut' }}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="confirm-modal-title"
+          aria-describedby="confirm-modal-description"
+          className={`relative bg-[var(--surface-dark)] border ${config.borderAccent} rounded-3xl p-8 w-full max-w-md shadow-2xl`}
+        >
             {/* Close X */}
             <button
               onClick={onCancel}
@@ -86,14 +110,15 @@ export function ConfirmModal({
             </div>
 
             {/* Content */}
-            <h3 className="text-white text-xl font-bold mb-2">{title}</h3>
+            <h3 id="confirm-modal-title" className="text-white text-xl font-bold mb-2">{title}</h3>
             {description && (
-              <p className="text-[var(--text-muted)] text-sm leading-relaxed mb-7">{description}</p>
+              <p id="confirm-modal-description" className="text-[var(--text-muted)] text-sm leading-relaxed mb-7">{description}</p>
             )}
 
             {/* Actions */}
             <div className="flex gap-3">
               <button
+                ref={cancelButtonRef}
                 onClick={onCancel}
                 disabled={isBusy}
                 className="flex-1 py-3 bg-white/5 border border-white/10 rounded-xl text-white font-medium text-sm hover:bg-white/10 transition-all disabled:opacity-50"
@@ -116,4 +141,10 @@ export function ConfirmModal({
       )}
     </AnimatePresence>
   )
+
+  if (typeof document === 'undefined') {
+    return modalContent
+  }
+
+  return createPortal(modalContent, document.body)
 }

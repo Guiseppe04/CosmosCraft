@@ -309,10 +309,8 @@ exports.updateProfileSchema = Joi.object({
 // Change Password
 exports.changePasswordSchema = Joi.object({
   oldPassword: Joi.string()
-    .required()
-    .messages({
-      'any.required': 'Current password is required',
-    }),
+    .optional()
+    .allow(''),
   newPassword: Joi.string()
     .min(8)
     .required()

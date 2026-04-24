@@ -13,6 +13,13 @@ const resolveProductId = (...values) => {
   return null
 }
 
+const hasCustomBuildItems = (items = []) => items.some((item) => Boolean(
+  item?.customization ||
+  item?.customization_id ||
+  String(item?.type || '').toLowerCase() === 'customization' ||
+  String(item?.type || '').toLowerCase() === 'custom_build'
+))
+
 const normalizePositiveQuantity = (value, fallback = 1) => {
   const quantity = Number(value)
 
@@ -313,7 +320,7 @@ const STATUS_FIELD_REQUIREMENTS = {
 }
 
 exports.createOrder = async (orderData) => {
-  const { userId, items, notes, shippingMethod, paymentMethod, billingAddress } = orderData
+  const { userId, items, notes, shippingMethod, paymentMethod, billingAddress, termsAccepted } = orderData
   
   const client = await pool.connect()
   
@@ -326,6 +333,10 @@ exports.createOrder = async (orderData) => {
     }
     if (!billingAddress.street || !billingAddress.city) {
       throw new Error('Address must include street and city')
+    }
+
+    if (paymentMethod === 'cash' && hasCustomBuildItems(items)) {
+      throw new Error('COD is only available for regular product orders. Customized guitars require down payment.')
     }
 
     // Calculate totals
@@ -420,6 +431,9 @@ exports.createOrder = async (orderData) => {
 
     // Append payment method details to notes
     let finalNotes = notes || ''
+    if (termsAccepted === true) {
+      finalNotes += `${finalNotes ? '\n\n' : ''}Terms and Conditions accepted: yes`
+    }
     if (paymentMethod) {
       finalNotes += `${finalNotes ? '\n\n' : ''}Payment Method: ${paymentMethod}`
     }

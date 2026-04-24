@@ -34,6 +34,43 @@ import { uploadToCloudinary } from '../utils/cloudinary'
 import { ConfirmModal } from '../components/ui/ConfirmModal'
 import { useDebounce } from '../hooks/useDebounce'
 import { useSmartPolling } from '../hooks/useSmartPolling'
+import {
+  BODY_OPTIONS,
+  BODY_WOOD_OPTIONS,
+  BODY_FINISH_OPTIONS,
+  NECK_OPTIONS,
+  FRETBOARD_OPTIONS,
+  HEADSTOCK_OPTIONS,
+  HEADSTOCK_WOOD_OPTIONS,
+  INLAY_OPTIONS,
+  BRIDGE_OPTIONS,
+  PICKGUARD_OPTIONS_BY_BODY,
+  KNOB_OPTIONS_BY_BODY,
+  HARDWARE_OPTIONS,
+  PICKUP_OPTIONS,
+} from '../lib/guitarBuilderData'
+import {
+  BASS_BODY_OPTIONS,
+  BASS_BODY_WOOD_OPTIONS,
+  BASS_BODY_FINISH_OPTIONS,
+  BASS_NECK_OPTIONS,
+  BASS_FRETBOARD_OPTIONS,
+  BASS_HEADSTOCK_WOOD_OPTIONS,
+  BASS_HEADSTOCK_STYLE_OPTIONS,
+  BASS_INLAY_OPTIONS,
+  BASS_HARDWARE_OPTIONS,
+  BASS_BRIDGE_OPTIONS,
+  BASS_PICKGUARD_OPTIONS,
+  BASS_KNOB_OPTIONS,
+  BASS_PICKUP_OPTIONS,
+  BASS_PICKUP_TYPE_STYLE_OPTIONS,
+  BASS_PICKUP_CONFIG_OPTIONS,
+  BASS_STRING_OPTIONS,
+  BASS_LOGO_OPTIONS,
+  BASS_BACKPLATE_OPTIONS,
+  BASS_PICKUP_SCREW_OPTIONS,
+  BASS_CONTROL_PLATE_OPTIONS,
+} from '../lib/bassBuilderData'
 
 // ── Category Tree Helpers ─────────────────────────────────────────────────────
 function buildCategoryTree(categories) {
@@ -170,6 +207,9 @@ const PART_CATEGORY_LABELS = {
   bridge: 'Bridge',
   knobs: 'Knobs',
   pickups: 'Pickups',
+  electronics: 'Electronics',
+  tuners: 'Tuners',
+  strings: 'Strings',
   pickguard: 'Pickguard',
   wood_type: 'Wood Type',
   finish: 'Finish',
@@ -177,15 +217,15 @@ const PART_CATEGORY_LABELS = {
   misc: 'Miscellaneous',
 }
 const PART_CATEGORIES_BY_GUITAR_TYPE = {
-  electric: ['body', 'neck', 'fretboard', 'headstock', 'hardware', 'bridge', 'knobs', 'pickups', 'pickguard', 'wood_type', 'finish', 'inlays', 'misc'],
-  acoustic: ['body', 'neck', 'fretboard', 'headstock', 'hardware', 'bridge', 'knobs', 'pickups', 'pickguard', 'wood_type', 'finish', 'inlays', 'misc'],
-  bass: ['body', 'neck', 'fretboard', 'headstock', 'hardware', 'bridge', 'knobs', 'pickups', 'pickguard', 'wood_type', 'finish', 'inlays', 'misc'],
-  ukulele: ['body', 'neck', 'fretboard', 'headstock', 'hardware', 'bridge', 'knobs', 'pickups', 'wood_type', 'finish', 'misc'],
-  general: ['body', 'neck', 'fretboard', 'headstock', 'hardware', 'bridge', 'knobs', 'pickups', 'pickguard', 'wood_type', 'finish', 'inlays', 'misc'],
+  electric: ['body', 'neck', 'fretboard', 'headstock', 'hardware', 'bridge', 'knobs', 'pickups', 'electronics', 'tuners', 'strings', 'pickguard', 'wood_type', 'finish', 'inlays', 'misc'],
+  acoustic: ['body', 'neck', 'fretboard', 'headstock', 'hardware', 'bridge', 'knobs', 'pickups', 'electronics', 'tuners', 'strings', 'pickguard', 'wood_type', 'finish', 'inlays', 'misc'],
+  bass: ['body', 'neck', 'fretboard', 'headstock', 'hardware', 'bridge', 'knobs', 'pickups', 'electronics', 'tuners', 'strings', 'pickguard', 'wood_type', 'finish', 'inlays', 'misc'],
+  ukulele: ['body', 'neck', 'fretboard', 'headstock', 'hardware', 'bridge', 'knobs', 'pickups', 'electronics', 'tuners', 'strings', 'wood_type', 'finish', 'misc'],
+  general: ['body', 'neck', 'fretboard', 'headstock', 'hardware', 'bridge', 'knobs', 'pickups', 'electronics', 'tuners', 'strings', 'pickguard', 'wood_type', 'finish', 'inlays', 'misc'],
 }
 
 function GuitarPartAccordion({ parts, expandedGuitarTypes, onToggleGuitarType, expandedPartCategories, onTogglePartCategory, onEdit, onDelete, onQuickAdd, density }) {
-  const guitarTypes = ['electric', 'acoustic', 'bass', 'general']
+  const guitarTypes = ['electric', 'bass', 'general']
   const densityClass = density === 'compact' ? 'text-xs' : 'text-sm'
   
   const getPartsByGuitarTypeAndCategory = (guitarType, category) => {
@@ -206,7 +246,19 @@ function GuitarPartAccordion({ parts, expandedGuitarTypes, onToggleGuitarType, e
       {guitarTypes.map(guitarType => {
         const isExpanded = expandedGuitarTypes.has(guitarType)
         const typeLabel = GUITAR_TYPE_LABELS[guitarType] || guitarType
-        const categories = PART_CATEGORIES_BY_GUITAR_TYPE[guitarType] || []
+        const baseCategories = PART_CATEGORIES_BY_GUITAR_TYPE[guitarType] || []
+        const dataCategories = Array.from(
+          new Set(
+            parts
+              .filter((p) =>
+                guitarType === 'general'
+                  ? (!p.guitar_type || p.guitar_type === 'general' || p.guitar_type === '')
+                  : p.guitar_type === guitarType
+              )
+              .map((p) => p.part_category || 'misc')
+          )
+        )
+        const categories = Array.from(new Set([...baseCategories, ...dataCategories]))
         
         return (
           <div key={guitarType} className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl overflow-hidden">
@@ -734,6 +786,192 @@ const SLOT_TO_PART_CATEGORY = {
   knobs: 'hardware',
   pickups: 'pickups',
 }
+const normalizePartText = (value) => String(value || '').trim().toLowerCase()
+const makePartIdentityKey = (part) =>
+  `${normalizePartText(part.guitar_type)}|${normalizePartText(part.type_mapping)}|${normalizePartText(part.name)}`
+const ELECTRIC_BODY_KEYS = Object.entries(BODY_OPTIONS || {})
+  .filter(([, option]) => Array.isArray(option?.types) ? option.types.includes('electric') : true)
+  .map(([bodyKey]) => bodyKey)
+
+const pickOptionImage = (option) => {
+  if (!option || typeof option !== 'object') return null
+  if (option.src) return option.src
+  if (option.texture) return option.texture
+  if (option.bodySrc) return option.bodySrc
+  if (option.assets && typeof option.assets === 'object') {
+    const asset = option.assets.chrome || option.assets.black || option.assets.gold || Object.values(option.assets)[0]
+    return asset || null
+  }
+  return null
+}
+
+const buildElectricPartSeedPayloads = () => {
+  const payloads = []
+
+  const pushPayload = ({ name, description, typeMapping, partCategory, imageUrl, price, metadata }) => {
+    payloads.push({
+      name,
+      description,
+      guitar_type: 'electric',
+      part_category: partCategory,
+      folder_key: `electric/${partCategory}`,
+      type_mapping: typeMapping,
+      price: Number(price || 0),
+      stock: 30,
+      image_url: imageUrl || null,
+      metadata: { ...(metadata || {}), import_category: 'electric_guitar' },
+      is_active: true,
+    })
+  }
+
+  const addFlatOptions = (options, config) => {
+    Object.entries(options || {}).forEach(([optionKey, option]) => {
+      if (optionKey === 'none') return
+      if (Array.isArray(config.allowedOptionKeys) && config.allowedOptionKeys.length > 0 && !config.allowedOptionKeys.includes(optionKey)) return
+      const label = option?.label || optionKey
+      pushPayload({
+        name: `Electric ${config.label} - ${label}`,
+        description: option?.note || `${config.label} option for Electric guitar builder`,
+        typeMapping: config.typeMapping,
+        partCategory: config.partCategory,
+        imageUrl: pickOptionImage(option),
+        price: option?.price || 0,
+        metadata: { source: 'guitarBuilderData', group: config.group, option_key: optionKey },
+      })
+    })
+  }
+
+  const addNestedOptions = (options, config) => {
+    Object.entries(options || {}).forEach(([variantKey, variantOptions]) => {
+      if (Array.isArray(config.allowedVariants) && config.allowedVariants.length > 0 && !config.allowedVariants.includes(variantKey)) return
+      Object.entries(variantOptions || {}).forEach(([optionKey, option]) => {
+        if (optionKey === 'none') return
+        const label = option?.label || optionKey
+        pushPayload({
+          name: `Electric ${config.label} - ${variantKey.toUpperCase()} - ${label}`,
+          description: option?.note || `${config.label} option for ${variantKey.toUpperCase()} electric`,
+          typeMapping: config.typeMapping,
+          partCategory: config.partCategory,
+          imageUrl: pickOptionImage(option),
+          price: option?.price || 0,
+          metadata: { source: 'guitarBuilderData', group: config.group, variant: variantKey, option_key: optionKey },
+        })
+      })
+    })
+  }
+
+  addFlatOptions(BODY_OPTIONS, { label: 'Body', typeMapping: 'body', partCategory: 'body', group: 'BODY_OPTIONS', allowedOptionKeys: ELECTRIC_BODY_KEYS })
+  addFlatOptions(BODY_WOOD_OPTIONS, { label: 'Body Wood', typeMapping: 'bodyWood', partCategory: 'wood_type', group: 'BODY_WOOD_OPTIONS' })
+  addFlatOptions(BODY_FINISH_OPTIONS, { label: 'Body Finish', typeMapping: 'bodyFinish', partCategory: 'finish', group: 'BODY_FINISH_OPTIONS' })
+  addFlatOptions(NECK_OPTIONS, { label: 'Neck', typeMapping: 'neck', partCategory: 'neck', group: 'NECK_OPTIONS' })
+  addFlatOptions(FRETBOARD_OPTIONS, { label: 'Fretboard', typeMapping: 'fretboard', partCategory: 'fretboard', group: 'FRETBOARD_OPTIONS' })
+  addFlatOptions(HEADSTOCK_OPTIONS, { label: 'Headstock Style', typeMapping: 'headstock', partCategory: 'misc', group: 'HEADSTOCK_OPTIONS' })
+  addFlatOptions(HEADSTOCK_WOOD_OPTIONS, { label: 'Headstock Wood', typeMapping: 'headstockWood', partCategory: 'wood_type', group: 'HEADSTOCK_WOOD_OPTIONS' })
+  addFlatOptions(INLAY_OPTIONS, { label: 'Inlays', typeMapping: 'inlays', partCategory: 'misc', group: 'INLAY_OPTIONS' })
+  addFlatOptions(BRIDGE_OPTIONS, { label: 'Bridge', typeMapping: 'bridge', partCategory: 'bridge', group: 'BRIDGE_OPTIONS' })
+  addFlatOptions(HARDWARE_OPTIONS, { label: 'Hardware', typeMapping: 'hardware', partCategory: 'hardware', group: 'HARDWARE_OPTIONS' })
+  addFlatOptions(PICKUP_OPTIONS, { label: 'Pickup Set', typeMapping: 'pickups', partCategory: 'pickups', group: 'PICKUP_OPTIONS' })
+
+  addNestedOptions(PICKGUARD_OPTIONS_BY_BODY, {
+    label: 'Pickguard',
+    typeMapping: 'pickguard',
+    partCategory: 'pickguard',
+    group: 'PICKGUARD_OPTIONS_BY_BODY',
+    allowedVariants: ELECTRIC_BODY_KEYS,
+  })
+  addNestedOptions(KNOB_OPTIONS_BY_BODY, {
+    label: 'Knobs',
+    typeMapping: 'knobs',
+    partCategory: 'hardware',
+    group: 'KNOB_OPTIONS_BY_BODY',
+    allowedVariants: ELECTRIC_BODY_KEYS,
+  })
+
+  return payloads
+}
+
+const buildBassPartSeedPayloads = () => {
+  const payloads = []
+
+  const pushPayload = ({ name, description, typeMapping, partCategory, imageUrl, price, metadata }) => {
+    payloads.push({
+      name,
+      description,
+      guitar_type: 'bass',
+      part_category: partCategory,
+      folder_key: `bass/${partCategory}`,
+      type_mapping: typeMapping,
+      price: Number(price || 0),
+      stock: 30,
+      image_url: imageUrl || null,
+      metadata: { ...(metadata || {}), import_category: 'bass_guitar' },
+      is_active: true,
+    })
+  }
+
+  const addFlatOptions = (options, config) => {
+    Object.entries(options || {}).forEach(([optionKey, option]) => {
+      if (optionKey === 'none') return
+      const label = option?.label || optionKey
+      pushPayload({
+        name: `Bass ${config.label} - ${label}`,
+        description: option?.note || `${config.label} option for Bass builder`,
+        typeMapping: config.typeMapping,
+        partCategory: config.partCategory,
+        imageUrl: pickOptionImage(option),
+        price: option?.price || 0,
+        metadata: { source: 'bassBuilderData', group: config.group, option_key: optionKey },
+      })
+    })
+  }
+
+  const addNestedOptions = (options, config) => {
+    Object.entries(options || {}).forEach(([variantKey, variantOptions]) => {
+      Object.entries(variantOptions || {}).forEach(([optionKey, option]) => {
+        if (optionKey === 'none') return
+        const label = option?.label || optionKey
+        pushPayload({
+          name: `Bass ${config.label} - ${variantKey.toUpperCase()} - ${label}`,
+          description: option?.note || `${config.label} option for ${variantKey.toUpperCase()} bass`,
+          typeMapping: config.typeMapping,
+          partCategory: config.partCategory,
+          imageUrl: pickOptionImage(option),
+          price: option?.price || 0,
+          metadata: { source: 'bassBuilderData', group: config.group, variant: variantKey, option_key: optionKey },
+        })
+      })
+    })
+  }
+
+  addFlatOptions(BASS_BODY_OPTIONS, { label: 'Body', typeMapping: 'body', partCategory: 'body', group: 'BASS_BODY_OPTIONS' })
+  addFlatOptions(BASS_BODY_WOOD_OPTIONS, { label: 'Body Wood', typeMapping: 'bodyWood', partCategory: 'wood_type', group: 'BASS_BODY_WOOD_OPTIONS' })
+  addFlatOptions(BASS_BODY_FINISH_OPTIONS, { label: 'Body Finish', typeMapping: 'bodyFinish', partCategory: 'finish', group: 'BASS_BODY_FINISH_OPTIONS' })
+  addFlatOptions(BASS_NECK_OPTIONS, { label: 'Neck', typeMapping: 'neck', partCategory: 'neck', group: 'BASS_NECK_OPTIONS' })
+  addFlatOptions(BASS_FRETBOARD_OPTIONS, { label: 'Fretboard', typeMapping: 'fretboard', partCategory: 'fretboard', group: 'BASS_FRETBOARD_OPTIONS' })
+  addFlatOptions(BASS_HEADSTOCK_WOOD_OPTIONS, { label: 'Headstock Wood', typeMapping: 'headstockWood', partCategory: 'wood_type', group: 'BASS_HEADSTOCK_WOOD_OPTIONS' })
+  addFlatOptions(BASS_HEADSTOCK_STYLE_OPTIONS, { label: 'Headstock Style', typeMapping: 'headstock', partCategory: 'misc', group: 'BASS_HEADSTOCK_STYLE_OPTIONS' })
+  addFlatOptions(BASS_INLAY_OPTIONS, { label: 'Inlays', typeMapping: 'inlays', partCategory: 'misc', group: 'BASS_INLAY_OPTIONS' })
+  addFlatOptions(BASS_HARDWARE_OPTIONS, { label: 'Hardware', typeMapping: 'hardware', partCategory: 'hardware', group: 'BASS_HARDWARE_OPTIONS' })
+  addFlatOptions(BASS_PICKUP_OPTIONS, { label: 'Pickup Set', typeMapping: 'pickups', partCategory: 'pickups', group: 'BASS_PICKUP_OPTIONS' })
+  addFlatOptions(BASS_PICKUP_TYPE_STYLE_OPTIONS, { label: 'Pickup Type Style', typeMapping: 'pickupTypeStyle', partCategory: 'pickups', group: 'BASS_PICKUP_TYPE_STYLE_OPTIONS' })
+  addFlatOptions(BASS_PICKUP_CONFIG_OPTIONS, { label: 'Pickup Config', typeMapping: 'pickupConfig', partCategory: 'pickups', group: 'BASS_PICKUP_CONFIG_OPTIONS' })
+  addFlatOptions(BASS_STRING_OPTIONS, { label: 'String Setup', typeMapping: 'strings', partCategory: 'strings', group: 'BASS_STRING_OPTIONS' })
+  addFlatOptions(BASS_CONTROL_PLATE_OPTIONS, { label: 'Control Plate', typeMapping: 'controlPlate', partCategory: 'hardware', group: 'BASS_CONTROL_PLATE_OPTIONS' })
+
+  addNestedOptions(BASS_BRIDGE_OPTIONS, { label: 'Bridge', typeMapping: 'bridge', partCategory: 'bridge', group: 'BASS_BRIDGE_OPTIONS' })
+  addNestedOptions(BASS_PICKGUARD_OPTIONS, { label: 'Pickguard', typeMapping: 'pickguard', partCategory: 'pickguard', group: 'BASS_PICKGUARD_OPTIONS' })
+  addNestedOptions(BASS_KNOB_OPTIONS, { label: 'Knobs', typeMapping: 'knobs', partCategory: 'hardware', group: 'BASS_KNOB_OPTIONS' })
+  addNestedOptions(BASS_LOGO_OPTIONS, { label: 'Logo', typeMapping: 'logo', partCategory: 'misc', group: 'BASS_LOGO_OPTIONS' })
+  addNestedOptions(BASS_BACKPLATE_OPTIONS, { label: 'Backplate', typeMapping: 'backplate', partCategory: 'misc', group: 'BASS_BACKPLATE_OPTIONS' })
+  addNestedOptions(BASS_PICKUP_SCREW_OPTIONS, { label: 'Pickup Screws', typeMapping: 'pickupScrews', partCategory: 'hardware', group: 'BASS_PICKUP_SCREW_OPTIONS' })
+
+  return payloads
+}
+const IMPORT_SEED_PAYLOAD_BUILDERS = {
+  electric: buildElectricPartSeedPayloads,
+  bass: buildBassPartSeedPayloads,
+}
+
 const PROJECT_RULES = {
   name: [required('Project Name')],
 }
@@ -1630,6 +1868,8 @@ export function AdminPage() {
   const [expandedPartCategories, setExpandedPartCategories] = useState(new Set())
   const [partDensity, setPartDensity] = useState('comfortable')
   const [partSearchQuery, setPartSearchQuery] = useState('')
+  const [isImportingElectricParts, setIsImportingElectricParts] = useState(false)
+  const [isImportingBassParts, setIsImportingBassParts] = useState(false)
 
   // Services section state
   const [serviceViewMode, setServiceViewMode] = useState('grid')
@@ -1651,12 +1891,28 @@ export function AdminPage() {
   // ── Derived / filtered views ─────────────────────────────────────────────
   const visibleProducts = products || []
   const visibleParts = parts || []
+  const productImageById = useMemo(
+    () =>
+      new Map(
+        (products || []).map((product) => [
+          product.product_id,
+          product.primary_image || product.image_url || product.product_image || null,
+        ])
+      ),
+    [products]
+  )
   const categoryTree = useMemo(() => buildCategoryTree(categories || []), [categories])
   const visibleCategories = useMemo(() => flattenCategoryTreeForAdmin(categoryTree), [categoryTree])
   const visibleOrders = orders || []
   const visibleProjects = projects || []
   const visibleAppointments = appointments || []
-  const visibleInventory = (inventory && inventory.length > 0) ? inventory : (products || [])
+  const visibleInventory = useMemo(() => {
+    const source = (inventory && inventory.length > 0) ? inventory : (products || [])
+    return source.map((item) => ({
+      ...item,
+      primary_image: item.primary_image || item.image_url || item.product_image || productImageById.get(item.product_id) || null,
+    }))
+  }, [inventory, products, productImageById])
 
   const visibleUsers = (users || []).filter(u => {
     if (userRoleFilter !== 'all' && u.role !== userRoleFilter) return false
@@ -1768,6 +2024,13 @@ export function AdminPage() {
   const filteredProductsInventory = useMemo(() => {
     const prods = visibleInventory.map(p => ({ ...p, type: 'product', stock: p.stock, name: p.name, sku: p.sku, low_stock_threshold: p.low_stock_threshold, part_id: p.product_id }))
     let result = [...prods]
+    const searchTerm = String(productsInventoryFilter.search || '').trim().toLowerCase()
+    if (searchTerm) {
+      result = result.filter((item) =>
+        String(item.name || '').toLowerCase().includes(searchTerm) ||
+        String(item.sku || '').toLowerCase().includes(searchTerm)
+      )
+    }
     const statusFilter = productsInventoryFilter.status
     if (statusFilter !== 'all') {
       result = result.filter(item => {
@@ -1799,6 +2062,13 @@ export function AdminPage() {
   const filteredPartsInventory = useMemo(() => {
     const pts = visibleParts.map(p => ({ ...p, type: 'part', stock: p.quantity, name: p.name, sku: p.type_mapping, low_stock_threshold: 10 }))
     let result = [...pts]
+    const searchTerm = String(partsInventoryFilter.search || '').trim().toLowerCase()
+    if (searchTerm) {
+      result = result.filter((item) =>
+        String(item.name || '').toLowerCase().includes(searchTerm) ||
+        String(item.sku || '').toLowerCase().includes(searchTerm)
+      )
+    }
     const statusFilter = partsInventoryFilter.status
     if (statusFilter !== 'all') {
       result = result.filter(item => {
@@ -1832,7 +2102,7 @@ export function AdminPage() {
   }, [filteredInventory, inventoryPage])
 
   const guitarTypeOptions = useMemo(
-    () => ['electric', 'bass', 'acoustic', 'ukulele'].sort(),
+    () => ['electric', 'bass', 'ukulele'].sort(),
     []
   )
 
@@ -2084,10 +2354,20 @@ export function AdminPage() {
       const statsRes = await adminApi.getInventorySummary()
       updateIfChanged(inventoryStats, statsRes.data || {}, setInventoryStats)
       const prodsRes = await adminApi.getInventoryProducts()
-      const newData = Array.isArray(prodsRes.data) ? prodsRes.data : prodsRes.data?.products || []
+      const rawData = Array.isArray(prodsRes.data) ? prodsRes.data : prodsRes.data?.products || []
+      const productImageMap = new Map(
+        (products || []).map((product) => [
+          product.product_id,
+          product.primary_image || product.image_url || product.product_image || null,
+        ])
+      )
+      const newData = rawData.map((item) => ({
+        ...item,
+        primary_image: item.primary_image || item.image_url || item.product_image || productImageMap.get(item.product_id) || null,
+      }))
       updateIfChanged(inventory, newData, setInventory)
     } catch (e) { showToast(e.message, 'error') }
-  }, [showToast, inventoryStats, inventory])
+  }, [showToast, inventoryStats, inventory, products])
 
   const fetchSalesReport = useCallback(async () => {
     try {
@@ -2119,24 +2399,24 @@ export function AdminPage() {
       'orders': fetchOrders,
       'projects': fetchProjects,
       'appointments': () => { fetchAppointments(); fetchServices(); fetchUnavailableDates(); },
-      'inventory': () => { fetchInventory(); fetchParts(); },
-      'pos': fetchInventory,
+      'inventory': () => { fetchInventory(); fetchParts(); fetchProducts(); },
+      'pos': () => { fetchInventory(); fetchProducts(); },
       'sales-report': fetchSalesReport,
       'dashboard': () => { fetchOrders(); fetchProjects(); fetchAppointments() },
     }
     loaders[activeTab]?.()
-  }, [activeTab, fetchAppointments, fetchServices, fetchUnavailableDates]) // eslint-disable-line
+  }, [activeTab]) // run only when switching tabs
 
    // ── Re-fetch when debounced search changes ───────────────────────────────
    useEffect(() => {
      if (activeTab === 'products') {
-       setProductQuery((prev) => ({ ...prev, page: 1 }))
+       setProductQuery((prev) => (prev.page === 1 ? prev : { ...prev, page: 1 }))
      }
      if (activeTab === 'guitar-parts') {
-       setPartQuery((prev) => ({ ...prev, page: 1 }))
+       setPartQuery((prev) => (prev.page === 1 ? prev : { ...prev, page: 1 }))
      }
      if (activeTab === 'services') {
-       setServiceQuery(prev => ({ ...prev, page: 1 }))
+       setServiceQuery(prev => (prev.page === 1 ? prev : { ...prev, page: 1 }))
      }
      if (activeTab === 'users') fetchUsers()
      if (activeTab === 'orders') fetchOrders()
@@ -2421,6 +2701,45 @@ export function AdminPage() {
         showToast('Builder Part deactivated')
         fetchParts()
       },
+    })
+  }
+
+  const importBuilderPartsByType = async ({ guitarType, label, setImporting }) => {
+    setImporting(true)
+    try {
+      const response = await adminApi.importBuilderPartsFromModels(guitarType)
+      const stats = response?.data?.imported || {}
+      await fetchParts()
+      if ((stats.failed || 0) > 0) {
+        showToast(
+          `${label} import done: ${stats.created || 0} added, ${stats.updated || 0} updated, ${stats.failed || 0} failed.`,
+          'error'
+        )
+      } else {
+        showToast(`${label} import done: ${stats.created || 0} added, ${stats.updated || 0} updated.`)
+      }
+    } catch (error) {
+      showToast(error.message || `Failed to import ${label.toLowerCase()} parts`, 'error')
+    } finally {
+      setImporting(false)
+    }
+  }
+
+  const importElectricParts = async () => {
+    if (isImportingElectricParts) return
+    await importBuilderPartsByType({
+      guitarType: 'electric',
+      label: 'Electric Guitar',
+      setImporting: setIsImportingElectricParts,
+    })
+  }
+
+  const importBassParts = async () => {
+    if (isImportingBassParts) return
+    await importBuilderPartsByType({
+      guitarType: 'bass',
+      label: 'Bass Guitar',
+      setImporting: setIsImportingBassParts,
     })
   }
 
@@ -2797,6 +3116,27 @@ export function AdminPage() {
        </motion.div>
      )
    }
+
+  const inventoryIsProducts = inventorySubTab === 'products'
+  const inventoryCurrentFilter = inventoryIsProducts ? productsInventoryFilter : partsInventoryFilter
+  const inventoryCurrentRows = inventoryIsProducts ? filteredProductsInventory : filteredPartsInventory
+  const inventoryCurrentPageRows = inventoryIsProducts ? paginatedProductsInventory : paginatedPartsInventory
+  const inventoryTotalPages = Math.max(1, Math.ceil(inventoryCurrentRows.length / INVENTORY_PAGE_SIZE))
+  const resolveInventoryImage = (item) => {
+    if (!item) return null
+    if (item.primary_image) return item.primary_image
+    if (item.image_url) return item.image_url
+    if (item.product_image) return item.product_image
+    if (item.product_id && productImageById.has(item.product_id)) return productImageById.get(item.product_id)
+    if (item.preview_url) return item.preview_url
+    if (item.image) return item.image
+    if (Array.isArray(item.images) && item.images.length > 0) {
+      const first = item.images[0]
+      if (typeof first === 'string') return first
+      if (first?.url) return first.url
+    }
+    return null
+  }
 
    // ── JSX ──────────────────────────────────────────────────────────────────
   return (
@@ -3208,11 +3548,12 @@ export function AdminPage() {
       <div className={`transition-all duration-300 bg-[var(--bg-primary)] ${sidebarCollapsed ? 'ml-20' : 'ml-64'}`}>
         <Topbar title={tabs.find(t => t.id === activeTab)?.label || 'Dashboard'} userRole={user?.role} />
 
-        <main className="p-6 pt-28">
+        <main className={`p-6 ${activeTab === 'pos' ? 'pt-19' : 'pt-5'}`}>
 
           {/* Actions bar */}
+          {activeTab !== 'pos' && activeTab !== 'inventory' && (
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
-            {['products', 'guitar-parts', 'users', 'product-categories', 'orders', 'projects', 'services', 'appointments'].includes(activeTab) && (
+            {['products', 'users', 'product-categories', 'projects', 'services', 'appointments'].includes(activeTab) && (
               <div className="relative max-w-sm w-full">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
                 <input
@@ -3226,8 +3567,8 @@ export function AdminPage() {
             )}
 
             <div className="flex items-center gap-2 ml-auto">
-              {/* Refresh button — always shown */}
-              {activeTab !== 'dashboard' && (
+              {/* Refresh button (hidden on dashboard/inventory) */}
+              {activeTab !== 'dashboard' && activeTab !== 'inventory' && activeTab !== 'guitar-parts' && activeTab !== 'orders' && (
                 <button onClick={handleRefresh} className="p-2 border border-[var(--border)] rounded-lg hover:border-[var(--gold-primary)] hover:bg-[var(--gold-primary)]/10 transition-all" title="Refresh">
                   <RefreshCw className={`w-4 h-4 text-[var(--text-muted)] ${isLoading ? 'animate-spin' : ''}`} />
                 </button>
@@ -3268,14 +3609,29 @@ export function AdminPage() {
                    </button>
                  </div>
                )}
+              {activeTab === 'guitar-parts' && isSuperAdmin && (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={importElectricParts}
+                    disabled={isImportingElectricParts || isImportingBassParts}
+                    className="flex items-center gap-2 px-4 py-2.5 border border-[var(--border)] rounded-xl font-semibold text-sm text-[var(--text-light)] hover:border-[var(--gold-primary)] hover:bg-[var(--gold-primary)]/10 transition-all disabled:opacity-60"
+                  >
+                    {isImportingElectricParts ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowUpCircle className="w-4 h-4" />}
+                    {isImportingElectricParts ? 'Importing Electric Guitar Parts...' : 'Import Electric Guitar'}
+                  </button>
+                  <button
+                    onClick={importBassParts}
+                    disabled={isImportingElectricParts || isImportingBassParts}
+                    className="flex items-center gap-2 px-4 py-2.5 border border-[var(--border)] rounded-xl font-semibold text-sm text-[var(--text-light)] hover:border-[var(--gold-primary)] hover:bg-[var(--gold-primary)]/10 transition-all disabled:opacity-60"
+                  >
+                    {isImportingBassParts ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowDownCircle className="w-4 h-4" />}
+                    {isImportingBassParts ? 'Importing Bass Guitar Parts...' : 'Import Bass Guitar'}
+                  </button>
+                </div>
+              )}
               {activeTab === 'products' && isSuperAdmin && (
                 <button onClick={() => openModal('product')} className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black rounded-xl font-semibold text-sm hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all">
                   <Plus className="w-4 h-4" /> Add Product
-                </button>
-              )}
-              {activeTab === 'guitar-parts' && isSuperAdmin && (
-                <button onClick={() => openModal('part')} className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black rounded-xl font-semibold text-sm hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all">
-                  <Plus className="w-4 h-4" /> Add Builder Part
                 </button>
               )}
               {activeTab === 'product-categories' && isSuperAdmin && (
@@ -3288,13 +3644,6 @@ export function AdminPage() {
                   <Plus className="w-4 h-4" /> New Project
                 </button>
               )}
-
-               {activeTab === 'inventory' && (
-                 <button onClick={() => openModal('inventory')} className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black rounded-xl font-semibold text-sm hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all">
-                   <Plus className="w-4 h-4" /> Adjust Stock
-                 </button>
-               )}
-
                {activeTab === 'services' && isSuperAdmin && (
                  <button onClick={() => openModal('service')} className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black rounded-xl font-semibold text-sm hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all">
                    <Plus className="w-4 h-4" /> Add Service
@@ -3302,6 +3651,7 @@ export function AdminPage() {
                )}
             </div>
           </div>
+          )}
 
           {/* ── DASHBOARD ──────────────────────────────────────────────────── */}
           {activeTab === 'dashboard' && (
@@ -4098,296 +4448,241 @@ export function AdminPage() {
           {/* ── INVENTORY ──────────────────────────────────────────────────── */}
           {activeTab === 'inventory' && (
             <motion.div key="inventory" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-              {/* Inventory Sub-Tabs */}
-              <div className="flex border-b border-[var(--border)] mb-6 gap-4 pb-0">
-                {INVENTORY_SUB_TABS.map(tab => {
-                  const tabIsActive = inventorySubTab === tab.id
-                  const TabIcon = tab.icon
-                  const count = tab.id === 'products' 
-                    ? visibleInventory.length 
-                    : visibleParts.length
-                  return (
-                    <button key={tab.id}
-                      onClick={() => {
-                        setInventorySubTab(tab.id)
-                        setInventoryPage(1)
-                      }}
-                      className={`px-4 py-3 text-sm font-semibold uppercase tracking-wider transition-all relative flex items-center gap-2 ${tabIsActive ? 'text-[var(--gold-primary)]' : 'text-[var(--text-muted)] hover:text-white'}`}
+              <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-6">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <h2 className="text-xl font-semibold text-white">Inventory</h2>
+                    <p className="mt-1 text-sm text-[var(--text-muted)]">Manage your product inventory and listings.</p>
+                  </div>
+                  {isSuperAdmin && (
+                    <button
+                      onClick={() => openModal('product')}
+                      className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] px-4 py-2 text-sm font-semibold text-black"
                     >
-                      <TabIcon className="w-4 h-4" />
-                      {tab.label}
-                      <span className={`ml-1 px-2 py-0.5 rounded-full text-xs ${tabIsActive ? 'bg-[var(--gold-primary)] text-black' : 'bg-[var(--surface-dark)]'}`}>
-                        {count}
-                      </span>
-                      {tabIsActive && (
-                        <motion.div layoutId="inventory-tab-indicator" className="absolute bottom-0 left-0 right-0 h-[2px] bg-[var(--gold-primary)]" />
-                      )}
+                      <Plus className="h-4 w-4" />
+                      Add New Product
                     </button>
-                  )
-                })}
-              </div>
-
-              {/* Filters & Sort */}
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-                <div className="flex flex-wrap gap-2">
-                  {[
-                    { id: 'all', label: 'All' },
-                    { id: 'healthy', label: 'Healthy', cls: 'text-green-400' },
-                    { id: 'warning', label: 'Warning', cls: 'text-amber-400' },
-                    { id: 'critical', label: 'Critical', cls: 'text-orange-400' },
-                    { id: 'out_of_stock', label: 'Out of Stock', cls: 'text-red-400' },
-                  ].map((status) => {
-                    const currentFilter = inventorySubTab === 'products' ? productsInventoryFilter : partsInventoryFilter
-                    const isActive = currentFilter.status === status.id
-                    const setFilter = inventorySubTab === 'products' ? setProductsInventoryFilter : setPartsInventoryFilter
-                    return (
-                      <button
-                        key={status.id}
-                        onClick={() => { setFilter(prev => ({ ...prev, status: status.id, page: 1 })); setInventoryPage(1) }}
-                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                          isActive
-                            ? status.id === 'all' ? 'bg-[var(--gold-primary)] text-black'
-                              : status.id === 'healthy' ? 'bg-green-500/20 text-green-400 border border-green-500/30'
-                              : status.id === 'warning' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                              : status.id === 'critical' ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30'
-                              : 'bg-red-500/20 text-red-400 border border-red-500/30'
-                            : 'bg-[var(--surface-dark)] text-[var(--text-muted)] hover:text-white'
-                        }`}
-                      >
-                        {status.label}
-                      </button>
-                    )
-                  })}
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-[var(--text-muted)] text-sm">Sort:</span>
-                  <select
-                    value={inventorySubTab === 'products' ? productsInventoryFilter.sort : partsInventoryFilter.sort}
-                    onChange={(e) => {
-                      if (inventorySubTab === 'products') {
-                        setProductsInventoryFilter(prev => ({ ...prev, sort: e.target.value }))
-                      } else {
-                        setPartsInventoryFilter(prev => ({ ...prev, sort: e.target.value }))
-                      }
-                    }}
-                    className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
-                  >
-                    <option value="name">Name (A-Z)</option>
-                    <option value="sku">SKU</option>
-                    <option value="stock_low">Stock (Low to High)</option>
-                    <option value="stock_high">Stock (High to Low)</option>
-                  </select>
-                  
-                </div>
-              </div>
-
-              {/* Inventory List */}
-              {(inventorySubTab === 'products' ? filteredProductsInventory : filteredPartsInventory).length === 0 ? (
-                <div className="text-center py-16 text-[var(--text-muted)]">
-                  {inventorySubTab === 'products' ? (
-                    <>
-                      <Package className="w-12 h-12 mx-auto mb-4 opacity-20" />
-                      <p className="font-semibold text-lg">No products found.</p>
-                    </>
-                  ) : (
-                    <>
-                      <Guitar className="w-12 h-12 mx-auto mb-4 opacity-20" />
-                      <p className="font-semibold text-lg">No guitar parts found.</p>
-                    </>
                   )}
                 </div>
-              ) : (
-                <div className="space-y-2">
-                  {(inventorySubTab === 'products' ? paginatedProductsInventory : paginatedPartsInventory).map((item) => {
-                    const isExpanded = expandedInventoryIds.has(item.product_id || item.part_id)
-                    const toggleExpand = () => {
-                      setExpandedInventoryIds(prev => {
-                        const next = new Set(prev)
-                        const id = item.product_id || item.part_id
-                        if (next.has(id)) next.delete(id)
-                        else next.add(id)
-                        return next
-                      })
-                    }
-                    const stock = Number(item.stock ?? 0)
-                    const threshold = item.type === 'product' ? Number(item.low_stock_threshold ?? 10) : 10
-                    const isCritical = stock <= threshold && stock > 0
-                    const isWarning = !isCritical && stock <= threshold * 2 && stock > threshold
-                    const isOutOfStock = stock === 0
-                    const statusLabel = isOutOfStock ? 'Out of Stock' : isCritical ? 'Critical' : isWarning ? 'Warning' : 'Healthy'
-                    const statusDotColors = {
-                      'Healthy': 'bg-green-400',
-                      'Warning': 'bg-amber-400',
-                      'Critical': 'bg-orange-400',
-                      'Out of Stock': 'bg-red-400',
-                    }
-                    const statusBgColors = {
-                      'Healthy': 'bg-green-400/10 text-green-400',
-                      'Warning': 'bg-amber-400/10 text-amber-400',
-                      'Critical': 'bg-orange-400/10 text-orange-400',
-                      'Out of Stock': 'bg-red-400/10 text-red-400',
-                    }
-                    const maxCapacity = Math.max(stock * 2, threshold * 4, 20)
-                    const pct = Math.min((stock / maxCapacity) * 100, 100)
 
-                    const handleQuickAdjust = async (amount) => {
-                      if (item.type === 'product') {
-                        await adminApi.adjustStock({ product_id: item.product_id, quantity: amount, notes: 'Quick adjustment from table' })
-                        fetchInventory()
-                      } else {
-                        await adminApi.updateBuilderPart(item.part_id, { ...item, stock: stock + amount })
-                        fetchParts()
-                      }
-                    }
-
+                <div className="mt-6 flex flex-wrap items-center gap-2">
+                  {INVENTORY_SUB_TABS.map((tab) => {
+                    const isActive = inventorySubTab === tab.id
+                    const TabIcon = tab.icon
                     return (
-                      <motion.div
-                        key={item.product_id || item.part_id}
-                        initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-                        className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl overflow-hidden"
+                      <button
+                        key={tab.id}
+                        onClick={() => {
+                          setInventorySubTab(tab.id)
+                          setInventoryPage(1)
+                        }}
+                        className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold transition-colors ${
+                          isActive
+                            ? 'bg-[var(--gold-primary)] text-black'
+                            : 'border border-[var(--border)] text-[var(--text-muted)] hover:text-white'
+                        }`}
                       >
-                        {/* Collapsed Row */}
-                        <div
-                          className="flex items-center gap-4 px-5 py-4 cursor-pointer hover:bg-white/5 transition-colors"
-                          onClick={toggleExpand}
-                        >
-                          <div className="w-8 flex-shrink-0">
-                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${inventorySubTab === 'products' ? 'bg-blue-500/10 text-blue-400' : 'bg-purple-500/10 text-purple-400'}`}>
-                              {inventorySubTab === 'products' ? <Package className="w-4 h-4" /> : <Guitar className="w-4 h-4" />}
-                            </div>
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-white text-sm font-medium truncate">{item.name}</p>
-                            <p className="text-[var(--text-muted)] text-xs truncate">{inventorySubTab === 'products' ? 'Product' : 'Guitar Part'} • {item.sku || '—'}</p>
-                          </div>
-                          <div className="w-32 flex-shrink-0">
-                            <div className="flex items-center gap-2">
-                              <div className="flex-1 h-1.5 bg-gray-800 rounded-full overflow-hidden">
-                                <div className={`h-full rounded-full ${isOutOfStock ? 'bg-red-500' : isCritical ? 'bg-orange-400' : isWarning ? 'bg-amber-400' : 'bg-emerald-400'}`} style={{ width: `${pct}%` }} />
-                              </div>
-                            </div>
-                          </div>
-                          <div className="w-24 text-center">
-                            <span className={`inline-flex px-3 py-1.5 rounded-full text-xs font-semibold ${statusBgColors[statusLabel]}`}>
-                              {statusLabel}
-                            </span>
-                          </div>
-                          <div className="w-16 text-right">
-                            <span className="text-white text-sm font-mono">{stock}</span>
-                          </div>
-                          {inventorySubTab === 'products' && (user?.role === 'super_admin' || user?.role === 'staff') && (
-                            <button
-                              onClick={(e) => { e.stopPropagation(); openModal('inventory', { product_id: item.product_id, name: item.name }) }}
-                              className="p-2 hover:bg-[var(--gold-primary)]/10 rounded transition-colors"
-                            >
-                              <Edit className="w-4 h-4 text-[var(--text-muted)] hover:text-[var(--gold-primary)]" />
-                            </button>
-                          )}
-                          <button className="p-1 text-[var(--text-muted)] hover:text-white transition-colors">
-                            {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-                          </button>
-                        </div>
-
-                        {/* Expanded Details */}
-                        <AnimatePresence>
-                          {isExpanded && (
-                            <motion.div
-                              key={`inventory-details-${item.product_id || item.part_id}`}
-                              initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
-                              className="border-t border-[var(--border)] bg-[var(--bg-primary)]/50"
-                            >
-                              <div className="p-5 space-y-4">
-                                {/* Metadata Row */}
-                                <div className="flex flex-wrap gap-6 text-sm">
-                                  <div className="flex items-center gap-2 text-[var(--text-muted)]">
-                                    <span className="text-xs uppercase tracking-wider">Type:</span>
-                                    <span className="text-white">{inventorySubTab === 'products' ? 'Standard Product' : 'Custom Builder Part'}</span>
-                                  </div>
-                                  <div className="flex items-center gap-2 text-[var(--text-muted)]">
-                                    <span className="text-xs uppercase tracking-wider">SKU:</span>
-                                    <span className="text-white font-mono text-xs">{item.sku || '—'}</span>
-                                  </div>
-                                  <div className="flex items-center gap-2 text-[var(--text-muted)]">
-                                    <span className="text-xs uppercase tracking-wider">Threshold:</span>
-                                    <span className="text-white">{threshold}</span>
-                                  </div>
-                                  {inventorySubTab === 'products' && item.primary_image && (
-                                    <div className="flex items-center gap-2">
-                                      <img src={item.primary_image} alt="" className="w-12 h-12 rounded-lg object-cover bg-[var(--surface-dark)]" />
-                                    </div>
-                                  )}
-                                  {inventorySubTab === 'guitar-parts' && item.image_url && (
-                                    <div className="flex items-center gap-2">
-                                      <img src={item.image_url} alt="" className="w-12 h-12 rounded-lg object-cover bg-[var(--surface-dark)]" />
-                                    </div>
-                                  )}
-                                </div>
-
-                                {/* Stock Details */}
-                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4 border-t border-[var(--border)]">
-                                  <div className="bg-[var(--surface-dark)] rounded-lg p-4">
-                                    <p className="text-[var(--text-muted)] text-xs uppercase tracking-wider mb-1">Current Stock</p>
-                                    <p className={`text-2xl font-bold ${isOutOfStock ? 'text-red-400' : isCritical ? 'text-orange-400' : isWarning ? 'text-amber-400' : 'text-white'}`}>{stock}</p>
-                                  </div>
-                                  <div className="bg-[var(--surface-dark)] rounded-lg p-4">
-                                    <p className="text-[var(--text-muted)] text-xs uppercase tracking-wider mb-1">Low Stock Threshold</p>
-                                    <p className="text-white text-2xl font-bold">{threshold}</p>
-                                  </div>
-                                  <div className="bg-[var(--surface-dark)] rounded-lg p-4">
-                                    <p className="text-[var(--text-muted)] text-xs uppercase tracking-wider mb-1">Capacity</p>
-                                    <p className="text-white text-2xl font-bold">{Math.round(pct)}%</p>
-                                  </div>
-                                </div>
-                              </div>
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
-                      </motion.div>
+                        <TabIcon className="h-4 w-4" />
+                        {tab.label}
+                      </button>
                     )
                   })}
                 </div>
-              )}
 
-              {/* Pagination */}
-              {(inventorySubTab === 'products' ? filteredProductsInventory : filteredPartsInventory).length > 0 && (
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mt-6 pt-4 border-t border-[var(--border)]">
-                  <p className="text-[var(--text-muted)] text-sm">
-                    Showing {(inventoryPage - 1) * INVENTORY_PAGE_SIZE + 1}–{Math.min(inventoryPage * INVENTORY_PAGE_SIZE, (inventorySubTab === 'products' ? filteredProductsInventory : filteredPartsInventory).length)} of {(inventorySubTab === 'products' ? filteredProductsInventory : filteredPartsInventory).length} items
-                  </p>
-                  <div className="flex items-center gap-1 mt-4 sm:mt-0">
-                    <button
-                      onClick={() => setInventoryPage(p => Math.max(1, p - 1))}
-                      disabled={inventoryPage === 1}
-                      className="p-2 rounded-lg border border-[var(--border)] text-[var(--text-muted)] hover:text-white hover:border-[var(--gold-primary)] disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                    >
-                      <ChevronLeft className="w-4 h-4" />
-                    </button>
-                    {Array.from({ length: Math.ceil((inventorySubTab === 'products' ? filteredProductsInventory : filteredPartsInventory).length / INVENTORY_PAGE_SIZE) }, (_, i) => i + 1).slice(
-                      Math.max(0, inventoryPage - 3),
-                      Math.min(Math.ceil((inventorySubTab === 'products' ? filteredProductsInventory : filteredPartsInventory).length / INVENTORY_PAGE_SIZE), inventoryPage + 2)
-                    ).map(page => (
-                      <button
-                        key={page}
-                        onClick={() => setInventoryPage(page)}
-                        className={`w-10 h-10 rounded-lg text-sm font-medium transition-all ${inventoryPage === page ? 'bg-[var(--gold-primary)] text-black' : 'border border-[var(--border)] text-[var(--text-muted)] hover:text-white hover:border-[var(--gold-primary)]'}`}
-                      >
-                        {page}
-                      </button>
-                    ))}
-                    <button
-                      onClick={() => setInventoryPage(p => Math.min(Math.ceil((inventorySubTab === 'products' ? filteredProductsInventory : filteredPartsInventory).length / INVENTORY_PAGE_SIZE), p + 1))}
-                      disabled={inventoryPage >= Math.ceil((inventorySubTab === 'products' ? filteredProductsInventory : filteredPartsInventory).length / INVENTORY_PAGE_SIZE)}
-                      className="p-2 rounded-lg border border-[var(--border)] text-[var(--text-muted)] hover:text-white hover:border-[var(--gold-primary)] disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                    >
-                      <ChevronRight className="w-4 h-4" />
-                    </button>
+                <div className="mt-5 grid gap-3 lg:grid-cols-[1.2fr_auto_auto]">
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]" />
+                    <input
+                      type="text"
+                      value={inventoryCurrentFilter.search || ''}
+                      onChange={(e) => {
+                        if (inventoryIsProducts) {
+                          setProductsInventoryFilter((prev) => ({ ...prev, search: e.target.value }))
+                        } else {
+                          setPartsInventoryFilter((prev) => ({ ...prev, search: e.target.value }))
+                        }
+                        setInventoryPage(1)
+                      }}
+                      placeholder={`Search ${inventoryIsProducts ? 'products' : 'parts'}...`}
+                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] py-2.5 pl-9 pr-3 text-sm text-white"
+                    />
                   </div>
+
+                  <div className="relative">
+                    <Filter className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]" />
+                    <select
+                      value={inventoryCurrentFilter.status}
+                      onChange={(e) => {
+                        if (inventoryIsProducts) {
+                          setProductsInventoryFilter((prev) => ({ ...prev, status: e.target.value }))
+                        } else {
+                          setPartsInventoryFilter((prev) => ({ ...prev, status: e.target.value }))
+                        }
+                        setInventoryPage(1)
+                      }}
+                      className="appearance-none rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] py-2.5 pl-9 pr-8 text-sm text-white"
+                    >
+                      <option value="all">All Status</option>
+                      <option value="healthy">Healthy</option>
+                      <option value="warning">Low Stock</option>
+                      <option value="critical">Critical</option>
+                      <option value="out_of_stock">Out of Stock</option>
+                    </select>
+                  </div>
+
+                  <select
+                    value={inventoryCurrentFilter.sort}
+                    onChange={(e) => {
+                      if (inventoryIsProducts) {
+                        setProductsInventoryFilter((prev) => ({ ...prev, sort: e.target.value }))
+                      } else {
+                        setPartsInventoryFilter((prev) => ({ ...prev, sort: e.target.value }))
+                      }
+                    }}
+                    className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-white"
+                  >
+                    <option value="name">Sorted by Name</option>
+                    <option value="sku">Sorted by SKU</option>
+                    <option value="stock_high">Stock High-Low</option>
+                    <option value="stock_low">Stock Low-High</option>
+                  </select>
                 </div>
-              )}
+
+                <div className="mt-5 overflow-x-auto rounded-2xl border border-[var(--border)]">
+                  <table className="min-w-full text-sm">
+                    <thead className="bg-[var(--bg-primary)]/70">
+                      <tr className="border-b border-[var(--border)]">
+                        <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">Product</th>
+                        <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">Category</th>
+                        <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">SKU</th>
+                        <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">Price</th>
+                        <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">Stock</th>
+                        <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">Status</th>
+                        <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--text-muted)]">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {inventoryCurrentPageRows.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="px-4 py-10 text-center text-[var(--text-muted)]">
+                            No inventory items found.
+                          </td>
+                        </tr>
+                      ) : (
+                        inventoryCurrentPageRows.map((item) => {
+                          const stock = Number(item.stock ?? 0)
+                          const threshold = Number(item.low_stock_threshold ?? 10)
+                          const isOutOfStock = stock <= 0
+                          const isCritical = !isOutOfStock && stock <= threshold
+                          const isLowStock = stock > threshold && stock <= threshold * 2
+                          const statusLabel = isOutOfStock
+                            ? 'Out of Stock'
+                            : isCritical
+                            ? 'Critical'
+                            : isLowStock
+                            ? 'Low Stock'
+                            : 'Healthy'
+                          const statusClass = isOutOfStock || isCritical
+                            ? 'bg-red-500/15 text-red-400 border-red-500/25'
+                            : isLowStock
+                            ? 'bg-amber-500/15 text-amber-300 border-amber-500/25'
+                            : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/25'
+                          const rowId = item.product_id || item.part_id || item.id
+
+                          return (
+                            <tr key={rowId} className="border-b border-[var(--border)]/70 last:border-b-0 hover:bg-white/5">
+                              <td className="px-4 py-3">
+                                <div className="flex items-center gap-3">
+                                  <div className="h-9 w-9 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--bg-primary)]">
+                                    {resolveInventoryImage(item) ? (
+                                      <img src={resolveInventoryImage(item)} alt={item.name} className="h-full w-full object-cover" />
+                                    ) : (
+                                      <div className="flex h-full w-full items-center justify-center">
+                                        <Package className="h-4 w-4 text-[var(--text-muted)]" />
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className="min-w-0">
+                                    <p className="truncate font-medium text-white">{item.name}</p>
+                                    <p className="truncate text-xs text-[var(--text-muted)]">{inventoryIsProducts ? 'Product' : 'Guitar Part'}</p>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 text-[var(--text-muted)]">
+                                {inventoryIsProducts
+                                  ? (item.category_name || 'Uncategorized')
+                                  : (PART_CATEGORY_LABELS[item.part_category] || item.part_category || 'General')}
+                              </td>
+                              <td className="px-4 py-3 font-mono text-xs text-[var(--text-muted)]">{item.sku || '�'}</td>
+                              <td className="px-4 py-3 font-semibold text-white">{formatCurrency(Number(item.price || 0))}</td>
+                              <td className="px-4 py-3 text-white">{stock}</td>
+                              <td className="px-4 py-3">
+                                <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${statusClass}`}>
+                                  {statusLabel}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3">
+                                <button
+                                  onClick={() => {
+                                    if (inventoryIsProducts) {
+                                      openModal('inventory', { product_id: item.product_id, name: item.name })
+                                    } else {
+                                      openModal('part', item)
+                                    }
+                                  }}
+                                  className="rounded-lg border border-[var(--border)] p-2 text-[var(--text-muted)] hover:text-white"
+                                >
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </button>
+                              </td>
+                            </tr>
+                          )
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="mt-4 flex flex-col gap-3 border-t border-[var(--border)] pt-4 text-sm sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-[var(--text-muted)]">{INVENTORY_PAGE_SIZE} rows per page</p>
+                  {inventoryCurrentRows.length > 0 && (
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => setInventoryPage((p) => Math.max(1, p - 1))}
+                        disabled={inventoryPage === 1}
+                        className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-[var(--text-muted)] disabled:opacity-40"
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </button>
+                      {Array.from({ length: inventoryTotalPages }, (_, i) => i + 1)
+                        .slice(Math.max(0, inventoryPage - 2), Math.min(inventoryTotalPages, inventoryPage + 1))
+                        .map((page) => (
+                          <button
+                            key={page}
+                            onClick={() => setInventoryPage(page)}
+                            className={`h-9 w-9 rounded-lg border text-sm ${
+                              page === inventoryPage
+                                ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)] text-black'
+                                : 'border-[var(--border)] text-[var(--text-muted)]'
+                            }`}
+                          >
+                            {page}
+                          </button>
+                        ))}
+                      <button
+                        onClick={() => setInventoryPage((p) => Math.min(inventoryTotalPages, p + 1))}
+                        disabled={inventoryPage >= inventoryTotalPages}
+                        className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-[var(--text-muted)] disabled:opacity-40"
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
             </motion.div>
           )}
 
-          {/* ── SALES REPORT ───────────────────────────────────────────────── */}
           {activeTab === 'pos' && (
             <motion.div key="pos" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
               <PosWorkspace
@@ -5351,7 +5646,7 @@ export function AdminPage() {
                             <div>
                               <label className={labelCls}>Guitar Type</label>
                               <select value={form.guitar_type || 'electric'} onChange={(e) => setForm((f) => ({ ...f, guitar_type: e.target.value }))} className={inputCls}>
-                                {['electric', 'bass', 'acoustic', 'ukulele'].map((t) => (
+                                {['electric', 'bass', 'ukulele'].map((t) => (
                                   <option key={t} value={t}>
                                     {t.replace(/\b\w/g, (l) => l.toUpperCase())}
                                   </option>
@@ -6564,3 +6859,15 @@ function ImageUploadWidget({ label, imageUrl, previewUrl, isUploading, onUpload,
     </div>
   )
 }
+
+
+
+
+
+
+
+
+
+
+
+

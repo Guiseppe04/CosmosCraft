@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 import { motion, AnimatePresence } from 'motion/react'
-import { User, CreditCard, MapPin, Lock, Settings, Bell, Package, Calendar, ChevronRight, Upload, Save, Wallet, ShoppingBag, ShoppingCart, Trash2, Minus, Plus, MessageSquare, Send, Guitar, Clock, Truck, CheckCircle, XCircle, Briefcase, Activity, Star, Loader2, Edit, AlertCircle } from 'lucide-react'
+import { User, CreditCard, MapPin, Lock, Package, Calendar, ChevronRight, Upload, Save, Wallet, ShoppingBag, ShoppingCart, Trash2, Minus, Plus, MessageSquare, Send, Guitar, Clock, Truck, CheckCircle, XCircle, Briefcase, Activity, Star, Loader2, Edit, AlertCircle } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useCart } from '../context/CartContext.jsx'
 import { BASE_PRICE, BODY_OPTIONS, BODY_WOOD_OPTIONS, BODY_FINISH_OPTIONS, NECK_OPTIONS, FRETBOARD_OPTIONS, HEADSTOCK_OPTIONS, HEADSTOCK_WOOD_OPTIONS, INLAY_OPTIONS, BRIDGE_OPTIONS, PICKGUARD_OPTIONS_BY_BODY, KNOB_OPTIONS_BY_BODY, HARDWARE_OPTIONS, PICKUP_OPTIONS } from '../lib/guitarBuilderData.js'
@@ -16,6 +16,7 @@ const PHILIPPINES = ALL_COUNTRIES.find(c => c.isoCode === 'PH')
 const OTHER_COUNTRIES = ALL_COUNTRIES.filter(c => c.isoCode !== 'PH')
 const COUNTRIES = PHILIPPINES ? [PHILIPPINES, ...OTHER_COUNTRIES] : ALL_COUNTRIES
 const MAX_USER_ADDRESSES = 2
+const MAX_SAVED_GUITAR_BUILDS = 10
 
 const getOldConfigData = (key, val, bodyType) => {
     let price;
@@ -69,40 +70,13 @@ const formatStatus = (status) => {
   return status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
 }
 
-function NotificationRow({ setting }) {
-  const [enabled, setEnabled] = useState(setting.defaultOn)
-
-  return (
-    <div className="flex items-center justify-between gap-4 px-5 py-4 rounded-xl border-2 border-[var(--border)] bg-[var(--surface-dark)] hover:border-[var(--gold-primary)] transition-all duration-200">
-      <div>
-        <p className="text-sm font-semibold text-white">{setting.title}</p>
-        <p className="text-xs text-[var(--text-muted)]">{setting.desc}</p>
-      </div>
-      <button
-        type="button"
-        onClick={() => setEnabled(prev => !prev)}
-        className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${
-          enabled ? 'bg-[var(--gold-primary)]' : 'bg-[var(--border)]'
-        }`}
-        aria-pressed={enabled}
-      >
-        <span
-          className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition ${
-            enabled ? 'translate-x-5' : 'translate-x-1'
-          }`}
-        />
-      </button>
-    </div>
-  )
-}
-
 export function DashboardPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const { logout, user, updateUser } = useAuth()
   const { cart, addToCart, removeFromCart, updateQuantity, getTotalPrice, getCartCount } = useCart()
   const initialSection = location.state?.section || 'profile'
-  const VALID_SECTIONS = new Set(['profile', 'my-guitar', 'appointments', 'cart', 'purchases', 'addresses', 'password', 'privacy', 'notifications'])
+  const VALID_SECTIONS = new Set(['profile', 'my-guitar', 'appointments', 'cart', 'purchases', 'addresses', 'password'])
   const [activeSection, setActiveSection] = useState(initialSection)
   const [profileImage, setProfileImage] = useState('')
   const [showSelectInstrumentModal, setShowSelectInstrumentModal] = useState(false)
@@ -161,7 +135,8 @@ export function DashboardPage() {
   useEffect(() => {
     if (activeSection !== 'password') {
       setPasswordError('')
-      setPasswordSuccess(false)
+      setPasswordSuccessMessage('')
+      setIsPasswordConfirmOpen(false)
     }
   }, [activeSection])
 
@@ -292,21 +267,36 @@ export function DashboardPage() {
     }
   };
 
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (!buildToDelete) return;
+
+    let deletedCustomizationId = null
+
     for (const storageKey of ['cosmoscraft_saved_builds', 'cosmoscraft_saved_bass_builds']) {
       const builds = JSON.parse(window.localStorage.getItem(storageKey) || '[]');
+      const deletedBuild = builds.find(b => b.id === buildToDelete)
       const filtered = builds.filter(b => b.id !== buildToDelete);
       if (builds.length !== filtered.length) {
         window.localStorage.setItem(storageKey, JSON.stringify(filtered));
+        deletedCustomizationId = deletedBuild?.dbCustomizationId || deletedBuild?.customization_id || null
         if (window.localStorage.getItem('cosmoscraft_target_build_id') === buildToDelete) {
           window.localStorage.removeItem('cosmoscraft_target_build_id');
         }
-        setRefreshCounter(prev => prev + 1);
-        setToastMessage('Build deleted successfully');
         break;
       }
     }
+
+    if (deletedCustomizationId) {
+      try {
+        await adminApi.deleteMyCustomization(deletedCustomizationId)
+      } catch (error) {
+        console.error('Failed to delete customization in database:', error)
+      }
+    }
+
+    setRefreshCounter(prev => prev + 1);
+    fetchMyCustomizations()
+    setToastMessage('Build deleted successfully');
     setBuildToDelete(null);
   };
 
@@ -370,8 +360,9 @@ export function DashboardPage() {
     confirmPassword: '',
   })
   const [passwordError, setPasswordError] = useState('')
-  const [passwordSuccess, setPasswordSuccess] = useState(false)
+  const [passwordSuccessMessage, setPasswordSuccessMessage] = useState('')
   const [isPasswordLoading, setIsPasswordLoading] = useState(false)
+  const [isPasswordConfirmOpen, setIsPasswordConfirmOpen] = useState(false)
   
   const [addressData, setAddressData] = useState({
     category: 'Home',
@@ -398,6 +389,7 @@ export function DashboardPage() {
   const [isEditingProfile, setIsEditingProfile] = useState(false)
   const [profileLoading, setProfileLoading] = useState(false)
   const [confirm, setConfirm] = useState({ open: false, addressId: null, isBusy: false })
+  const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false)
 
   // Fetch profile data from API
   useEffect(() => {
@@ -419,6 +411,11 @@ export function DashboardPage() {
           })
           const resolvedAvatar = u.avatar || u.avatarUrl || u.avatar_url || ''
           if (resolvedAvatar) setProfileImage(resolvedAvatar)
+          updateUser({
+            provider: u.provider,
+            identityProviders: u.identityProviders || [],
+            hasLocalPassword: u.hasLocalPassword,
+          })
         }
       } catch (err) {
         console.error('Failed to load profile:', err)
@@ -501,12 +498,25 @@ export function DashboardPage() {
     setProfileData(prev => ({ ...prev, [field]: value }))
   }
 
+  const handleConfirmLogout = () => {
+    setIsLogoutConfirmOpen(false)
+    logout()
+    navigate('/')
+  }
+
+  const accountProvider = String(user?.provider || '').toLowerCase()
+  const hasLocalPassword = Boolean(user?.hasLocalPassword)
+  const isSocialProvider = accountProvider === 'google' || accountProvider === 'facebook'
+  const isSocialOnlyAccount = isSocialProvider && !hasLocalPassword
+  const providerLabel = accountProvider === 'facebook' ? 'Facebook' : 'Google'
+  const providerManageUrl = accountProvider === 'facebook'
+    ? 'https://www.facebook.com/settings?tab=security'
+    : 'https://myaccount.google.com/security'
+
   const menuItems = [
     { id: 'profile', label: 'Profile', icon: User, group: 'account' },
     { id: 'addresses', label: 'Addresses', icon: MapPin, group: 'account' },
     { id: 'password', label: 'Change Password', icon: Lock, group: 'account' },
-    { id: 'privacy', label: 'Privacy Settings', icon: Settings, group: 'account' },
-    { id: 'notifications', label: 'Notification Settings', icon: Bell, group: 'account' },
     { id: 'my-guitar', label: 'My Guitar', icon: Guitar, group: 'orders' },
     { id: 'appointments', label: 'Appointments', icon: Calendar, group: 'orders' },
     { id: 'cart', label: 'My Cart', icon: ShoppingBag, group: 'orders' },
@@ -841,6 +851,7 @@ export function DashboardPage() {
     const savedGuitarBuilds = JSON.parse(window.localStorage.getItem('cosmoscraft_saved_builds') || '[]').map(b => ({...b, isBass: false}))
     const savedBassBuilds = JSON.parse(window.localStorage.getItem('cosmoscraft_saved_bass_builds') || '[]').map(b => ({...b, isBass: true}))
     const allBuilds = [...savedGuitarBuilds, ...savedBassBuilds].sort((a, b) => new Date(b.savedAt || 0) - new Date(a.savedAt || 0))
+    const isBuildLimitReached = allBuilds.length >= MAX_SAVED_GUITAR_BUILDS
 
     const deleteBuild = (buildId) => {
       setBuildToDelete(buildId);
@@ -854,18 +865,39 @@ export function DashboardPage() {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h2 className="text-2xl font-bold text-white mb-1">My Saved Builds</h2>
-            <p className="text-sm text-[var(--text-muted)]">Manage your custom guitar and bass designs</p>
+            <p className="text-sm text-[var(--text-muted)]">
+              Manage your custom guitar and bass designs ({allBuilds.length}/{MAX_SAVED_GUITAR_BUILDS})
+            </p>
           </div>
           <div className="flex gap-3">
             <button
-              onClick={() => setShowSelectInstrumentModal(true)}
-              className="px-4 py-2 rounded-lg bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-semibold text-sm hover:shadow-[0_0_15px_rgba(212,175,55,0.4)] transition-all flex items-center gap-2"
+              onClick={() => {
+                if (isBuildLimitReached) {
+                  setToastMessage('You can only save up to 10 guitar builds. Please delete an existing build before creating a new one.')
+                  return
+                }
+                setShowSelectInstrumentModal(true)
+              }}
+              disabled={isBuildLimitReached}
+              className={`px-4 py-2 rounded-lg font-semibold text-sm transition-all flex items-center gap-2 ${
+                isBuildLimitReached
+                  ? 'bg-[var(--surface-light)] text-[var(--text-muted)] cursor-not-allowed'
+                  : 'bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] hover:shadow-[0_0_15px_rgba(212,175,55,0.4)]'
+              }`}
             >
               <Guitar className="w-4 h-4" />
               Create New
             </button>
           </div>
         </div>
+
+        {isBuildLimitReached && (
+          <div className="mb-6 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3">
+            <p className="text-amber-300 text-sm font-medium">
+              You can only save up to 10 guitar builds. Please delete an existing build before creating a new one.
+            </p>
+          </div>
+        )}
 
         {allBuilds.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-10">
@@ -1106,6 +1138,7 @@ export function DashboardPage() {
               </div>
               <button
                 type="button"
+                onClick={() => navigate('/checkout')}
                 className="w-full py-3 px-6 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-semibold hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all flex items-center justify-center gap-2"
               >
                 <ShoppingBag className="w-5 h-5" />
@@ -1152,12 +1185,17 @@ export function DashboardPage() {
     }
   }
 
-  const handleChangePassword = async () => {
+  const handleChangePassword = () => {
     setPasswordError('')
-    setPasswordSuccess(false)
+    setPasswordSuccessMessage('')
     
-    if (!passwordData.oldPassword || !passwordData.newPassword || !passwordData.confirmPassword) {
-      setPasswordError('All password fields are required')
+    if (!passwordData.newPassword || !passwordData.confirmPassword) {
+      setPasswordError('New password and confirmation are required')
+      return
+    }
+
+    if (!isSocialOnlyAccount && !passwordData.oldPassword) {
+      setPasswordError('Current password is required')
       return
     }
 
@@ -1171,16 +1209,32 @@ export function DashboardPage() {
       return
     }
 
-    if (!/[A-Z]/.test(passwordData.newPassword) || !/[0-9]/.test(passwordData.newPassword)) {
-      setPasswordError('Password must contain at least one uppercase letter and one number')
+    if (!/[A-Z]/.test(passwordData.newPassword) || !/[a-z]/.test(passwordData.newPassword) || !/[0-9]/.test(passwordData.newPassword) || !/[@$!%*?&]/.test(passwordData.newPassword)) {
+      setPasswordError('Password must contain uppercase, lowercase, number, and special character')
       return
     }
 
+    setIsPasswordConfirmOpen(true)
+  }
+
+  const handleConfirmPasswordChange = async () => {
+    setIsPasswordConfirmOpen(false)
     setIsPasswordLoading(true)
+
     try {
-      await adminApi.changePassword(passwordData)
-      setPasswordSuccess(true)
+      const payload = {
+        newPassword: passwordData.newPassword,
+        confirmPassword: passwordData.confirmPassword,
+      }
+
+      if (!isSocialOnlyAccount) {
+        payload.oldPassword = passwordData.oldPassword
+      }
+
+      const response = await adminApi.changePassword(payload)
+      setPasswordSuccessMessage(response?.message || (isSocialOnlyAccount ? 'Local password set successfully.' : 'Password changed successfully.'))
       setPasswordData({ oldPassword: '', newPassword: '', confirmPassword: '' })
+      updateUser({ hasLocalPassword: true })
     } catch (err) {
       const errorMsg = err.message || 'Failed to process password change'
       if (errorMsg.toLowerCase().includes('incorrect')) {
@@ -1190,7 +1244,7 @@ export function DashboardPage() {
       } else if (errorMsg.toLowerCase().includes('match')) {
         setPasswordError('Passwords do not match')
       } else if (errorMsg.toLowerCase().includes('8')) {
-        setPasswordError('Password must be at least 8 characters with uppercase and numbers')
+        setPasswordError('Password must be at least 8 characters with uppercase, lowercase, number, and special character')
       } else {
         setPasswordError(errorMsg)
       }
@@ -1342,13 +1396,6 @@ export function DashboardPage() {
       </div>
     )
   }
-
-  const renderPlaceholderSection = (title, description) => (
-    <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-5 sm:p-8 text-center">
-      <h2 className="text-2xl font-bold text-white mb-2">{title}</h2>
-      <p className="text-sm text-[var(--text-muted)]">{description}</p>
-    </div>
-  )
 
   const renderAddressesContent = () => {
     const canAddMoreAddresses = addresses.length < MAX_USER_ADDRESSES
@@ -1598,6 +1645,27 @@ export function DashboardPage() {
         onConfirm={handleDeleteAddress}
         onCancel={closeDeleteConfirm}
       />
+      <ConfirmModal
+        open={isLogoutConfirmOpen}
+        title="Logout"
+        description="Are you sure you want to log out?"
+        confirmLabel="Logout"
+        cancelLabel="Cancel"
+        variant="warning"
+        onConfirm={handleConfirmLogout}
+        onCancel={() => setIsLogoutConfirmOpen(false)}
+      />
+      <ConfirmModal
+        open={isPasswordConfirmOpen}
+        title={isSocialOnlyAccount ? 'Set Local Password' : 'Change Password'}
+        description="Are you sure you want to change your password?"
+        confirmLabel="Confirm"
+        cancelLabel="Cancel"
+        variant="warning"
+        isBusy={isPasswordLoading}
+        onConfirm={handleConfirmPasswordChange}
+        onCancel={() => setIsPasswordConfirmOpen(false)}
+      />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10">
         <div className="grid xl:grid-cols-[1fr_1.4fr] gap-4 sm:gap-6 items-start">
@@ -1667,8 +1735,7 @@ export function DashboardPage() {
                           type="button"
                           onClick={() => {
                             if (isLogout) {
-                              logout()
-                              navigate('/')
+                              setIsLogoutConfirmOpen(true)
                             } else {
                               setActiveSection(item.id)
                             }
@@ -1728,8 +1795,7 @@ export function DashboardPage() {
                 <button
                   type="button"
                   onClick={() => {
-                    logout()
-                    navigate('/')
+                    setIsLogoutConfirmOpen(true)
                   }}
                   className="inline-flex shrink-0 items-center gap-2 rounded-full border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs font-medium text-red-400 transition-colors hover:bg-red-500/20"
                 >
@@ -1757,12 +1823,31 @@ export function DashboardPage() {
               <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-5 sm:p-8">
                 <h2 className="text-2xl font-bold text-white mb-1">Change Password</h2>
                 <p className="text-sm text-[var(--text-muted)] mb-10">
-                  Update your password regularly for security
+                  {isSocialOnlyAccount
+                    ? `You signed in using ${providerLabel}. Password changes must be done through your ${providerLabel} account.`
+                    : 'Update your password regularly for security'}
                 </p>
-                {passwordSuccess && (
+
+                {isSocialOnlyAccount && (
+                  <div className="mb-6 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-3">
+                    <p className="text-sm text-[var(--text-muted)]">
+                      You can still set a local password for this account if you want to sign in with email/password.
+                    </p>
+                    <a
+                      href={providerManageUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-2 inline-flex text-sm font-semibold text-[var(--gold-primary)] hover:underline"
+                    >
+                      Manage {providerLabel} Account
+                    </a>
+                  </div>
+                )}
+
+                {passwordSuccessMessage && (
                   <div className="mb-6 p-4 rounded-xl bg-green-500/10 border border-green-500/30">
                     <p className="text-green-400 text-sm font-medium">
-                      We've sent a confirmation email. Please check your inbox to complete the password change.
+                      {passwordSuccessMessage}
                     </p>
                   </div>
                 )}
@@ -1772,23 +1857,25 @@ export function DashboardPage() {
                   </div>
                 )}
                 <div className="space-y-5 max-w-md">
+                  {!isSocialOnlyAccount && (
+                    <div>
+                      <label className="block text-xs font-semibold text-white mb-2">
+                        Current Password
+                      </label>
+                      <input
+                        type="password"
+                        value={passwordData.oldPassword}
+                        onChange={e => {
+                          setPasswordData(prev => ({ ...prev, oldPassword: e.target.value }))
+                          setPasswordError('')
+                        }}
+                        className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
+                      />
+                    </div>
+                  )}
                   <div>
                     <label className="block text-xs font-semibold text-white mb-2">
-                      Current Password
-                    </label>
-                    <input
-                      type="password"
-                      value={passwordData.oldPassword}
-                      onChange={e => {
-                        setPasswordData(prev => ({ ...prev, oldPassword: e.target.value }))
-                        setPasswordError('')
-                      }}
-                      className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-white mb-2">
-                      New Password
+                      {isSocialOnlyAccount ? 'Set Password' : 'New Password'}
                     </label>
                     <input
                       type="password"
@@ -1827,47 +1914,9 @@ export function DashboardPage() {
                       Processing...
                     </>
                   ) : (
-                    'Request Password Change'
+                    isSocialOnlyAccount ? 'Set Local Password' : 'Change Password'
                   )}
                 </button>
-              </div>
-            )}
-            {activeSection === 'privacy' &&
-              renderPlaceholderSection('Privacy Settings', 'Control your privacy and security preferences.')}
-            {activeSection === 'notifications' && (
-              <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-5 sm:p-8">
-                <h2 className="text-2xl font-bold text-white mb-1">Notification Settings</h2>
-                <p className="text-sm text-[var(--text-muted)] mb-8">Manage how you receive notifications</p>
-                <div className="space-y-4">
-                  <NotificationRow
-                    setting={{
-                      title: 'Email Notifications',
-                      desc: 'Receive updates about your orders via email',
-                      defaultOn: true,
-                    }}
-                  />
-                  <NotificationRow
-                    setting={{
-                      title: 'SMS Notifications',
-                      desc: 'Receive text messages for order updates',
-                      defaultOn: false,
-                    }}
-                  />
-                  <NotificationRow
-                    setting={{
-                      title: 'Push Notifications',
-                      desc: 'Get real-time alerts on your device',
-                      defaultOn: true,
-                    }}
-                  />
-                  <NotificationRow
-                    setting={{
-                      title: 'Marketing Emails',
-                      desc: 'Receive promotional offers and updates',
-                      defaultOn: false,
-                    }}
-                  />
-                </div>
               </div>
             )}
           </motion.main>

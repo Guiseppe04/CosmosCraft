@@ -84,6 +84,7 @@ export function PaymentModal({
   isProcessing,
   requiresCustomTerms = false,
   downPaymentRate = 0.5,
+  allowCashOnDelivery = false,
 }) {
   const [paymentMethod, setPaymentMethod] = useState('bank')
   const [paymentPlan, setPaymentPlan] = useState('down_payment')
@@ -93,11 +94,11 @@ export function PaymentModal({
   useEffect(() => {
     if (!isOpen) return
 
-    setPaymentMethod('bank')
+    setPaymentMethod(allowCashOnDelivery && !requiresCustomTerms ? 'cash' : 'bank')
     setPaymentPlan(requiresCustomTerms ? 'down_payment' : 'full')
     setReceipt(null)
     setError('')
-  }, [isOpen, requiresCustomTerms])
+  }, [isOpen, requiresCustomTerms, allowCashOnDelivery])
 
   const downPaymentAmount = Number.isFinite(Number(total)) ? Number(total) : 0
   const fullPaymentAmount = Number.isFinite(Number(fullTotal)) ? Number(fullTotal) : downPaymentAmount
@@ -262,21 +263,38 @@ export function PaymentModal({
 
               <div className="space-y-4">
                 <p className="text-sm font-bold text-slate-900 sm:text-base">Select Payment Method</p>
+                <div className="space-y-2">
+                  <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
+                    COD is only available for regular product orders.
+                  </p>
+                  {requiresCustomTerms && (
+                    <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                      Customized guitars require down payment.
+                    </p>
+                  )}
+                </div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
                   {[
-                    { value: 'gcash', title: 'GCash', subtitle: 'Upload receipt' },
-                    { value: 'bank', title: 'Bank Transfer', subtitle: 'BDO account' }
+                    { value: 'gcash', title: 'GCash', subtitle: 'Upload receipt', disabled: false },
+                    { value: 'bank', title: 'Bank Transfer', subtitle: 'BDO account', disabled: false },
+                    { value: 'cash', title: 'Cash on Delivery', subtitle: 'Pay upon delivery', disabled: !allowCashOnDelivery || requiresCustomTerms }
                   ].map((option) => (
                     <motion.button
                       key={option.value}
                       whileHover={{ scale: 1.02 }}
                       whileTap={{ scale: 0.98 }}
                       type="button"
-                      onClick={() => handleMethodChange(option.value)}
+                      onClick={() => {
+                        if (option.disabled) return
+                        handleMethodChange(option.value)
+                      }}
+                      disabled={option.disabled}
                       className={`relative rounded-2xl border-2 p-5 text-left transition-all duration-300 ${
                         paymentMethod === option.value
                           ? 'border-yellow-400 bg-yellow-50 shadow-lg shadow-yellow-200/50'
-                          : 'border-slate-200 bg-white hover:border-yellow-300 hover:shadow-md'
+                          : option.disabled
+                            ? 'border-slate-200 bg-slate-100 opacity-60 cursor-not-allowed'
+                            : 'border-slate-200 bg-white hover:border-yellow-300 hover:shadow-md'
                       }`}
                     >
                       <div className="flex items-start justify-between gap-3">
@@ -352,6 +370,24 @@ export function PaymentModal({
                     Transfer the exact amount of PHP {amountDue.toLocaleString('en-PH', { maximumFractionDigits: 2 })} to this account and upload proof of payment below.
                   </p>
                   <ReceiptUpload label="Upload bank proof" image={receipt} onUpload={setReceipt} onRemove={() => setReceipt(null)} />
+                </motion.div>
+              )}
+
+              {paymentMethod === 'cash' && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  transition={{ duration: 0.2 }}
+                  className="space-y-3 rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white p-6"
+                >
+                  <p className="font-bold text-slate-900">Cash on Delivery</p>
+                  <p className="text-sm text-slate-700">
+                    Your order will be placed now. Payment is collected upon delivery.
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    No receipt upload is needed for COD orders.
+                  </p>
                 </motion.div>
               )}
             </div>
