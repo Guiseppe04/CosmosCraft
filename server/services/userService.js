@@ -106,6 +106,42 @@ exports.getUserById = async (userId) => {
   return user;
 };
 
+exports.getUserAuthInfo = async (userId) => {
+  const userRes = await pool.query(
+    'SELECT user_id, email, password_hash FROM users WHERE user_id = $1',
+    [userId]
+  );
+
+  if (userRes.rows.length === 0) {
+    throw new Error('User not found');
+  }
+
+  const identitiesRes = await pool.query(
+    'SELECT provider FROM user_identities WHERE user_id = $1',
+    [userId]
+  );
+
+  const identityProviders = identitiesRes.rows
+    .map((row) => String(row.provider || '').toLowerCase())
+    .filter(Boolean);
+
+  const hasLocalPassword = Boolean(userRes.rows[0].password_hash);
+  const primaryProvider = hasLocalPassword
+    ? 'local'
+    : (identityProviders.includes('google')
+      ? 'google'
+      : identityProviders.includes('facebook')
+        ? 'facebook'
+        : 'local');
+
+  return {
+    ...userRes.rows[0],
+    has_local_password: hasLocalPassword,
+    provider: primaryProvider,
+    identity_providers: identityProviders,
+  };
+};
+
 exports.getUserByEmail = async (email) => {
   const res = await pool.query('SELECT * FROM users WHERE email = $1', [email.toLowerCase().trim()]);
   return res.rows[0] || null;
@@ -242,6 +278,15 @@ exports.updatePassword = async (userId, oldPassword, newPassword) => {
   
   const hashedPassword = await bcrypt.hash(newPassword, 12);
   await pool.query('UPDATE users SET password_hash = $1, updated_at = now() WHERE user_id = $2', [hashedPassword, userId]);
+  return { message: 'Password updated successfully' };
+};
+
+exports.setPassword = async (userId, newPassword) => {
+  const hashedPassword = await bcrypt.hash(newPassword, 12);
+  await pool.query(
+    'UPDATE users SET password_hash = $1, updated_at = now() WHERE user_id = $2',
+    [hashedPassword, userId]
+  );
   return { message: 'Password updated successfully' };
 };
 

@@ -328,13 +328,22 @@ export function BassCustomizePage() {
       }
     }
 
+    const totalSavedBuildCount = ['cosmoscraft_saved_builds', 'cosmoscraft_saved_bass_builds']
+      .map((key) => JSON.parse(window.localStorage.getItem(key) || '[]'))
+      .reduce((total, entries) => total + (Array.isArray(entries) ? entries.length : 0), 0)
+
+    if (existingIndex === -1 && totalSavedBuildCount >= 10) {
+      setToastMessage('You can only save up to 10 guitar builds. Please delete an existing build before creating a new one.')
+      return
+    }
+
     if (existingIndex !== -1) {
       stored[existingIndex] = { ...stored[existingIndex], ...build }
     } else {
       stored.unshift(build)
     }
 
-    if (stored.length > 20) stored = stored.slice(0, 20)
+    if (stored.length > 10) stored = stored.slice(0, 10)
     window.localStorage.setItem(storedKey, JSON.stringify(stored))
     setHasUnsavedChanges(false)
     

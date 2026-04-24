@@ -190,9 +190,7 @@ export function LoginModal() {
                   onClick={() => window.location.href = `${API}/auth/google`}
                   className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border border-[var(--border)] text-sm font-medium text-[var(--text-light)] hover:bg-[var(--surface-elevated)]"
                 >
-                  <span className="w-5 h-5 rounded-full bg-white border border-gray-300 flex items-center justify-center text-[10px] font-bold text-red-500">
-                    G
-                  </span>
+                  <img src="/google.svg" alt="" aria-hidden="true" className="h-4 w-4 object-contain" />
                   Google
                 </button>
                 <button
@@ -200,9 +198,7 @@ export function LoginModal() {
                   onClick={() => window.location.href = `${API}/auth/facebook`}
                   className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border border-[var(--border)] text-sm font-medium text-[var(--text-light)] hover:bg-[var(--surface-elevated)]"
                 >
-                  <span className="w-5 h-5 rounded-full bg-[#1877f2] text-white flex items-center justify-center text-[10px] font-bold">
-                    f
-                  </span>
+                  <img src="/facebook.svg" alt="" aria-hidden="true" className="h-4 w-4 object-contain" />
                   Facebook
                 </button>
               </div>

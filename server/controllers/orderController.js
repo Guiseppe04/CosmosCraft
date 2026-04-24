@@ -8,7 +8,7 @@ exports.createOrder = asyncHandler(async (req, res, next) => {
     throw new AppError('You must be logged in to place an order', 401)
   }
 
-  const { items, notes, shippingMethod, paymentMethod, billingAddress } = req.body
+  const { items, notes, shippingMethod, paymentMethod, billingAddress, termsAccepted } = req.body
 
   // Validate required fields
   if (!items || items.length === 0) {
@@ -31,6 +31,15 @@ exports.createOrder = asyncHandler(async (req, res, next) => {
     throw new AppError('Payment method is required', 400)
   }
 
+  if (termsAccepted !== true) {
+    throw new AppError('You must agree to the Terms and Conditions before placing your order.', 400)
+  }
+
+  const normalizedPaymentMethod = paymentMethod === 'cod' ? 'cash' : paymentMethod
+  if (!['gcash', 'bank_transfer', 'cash'].includes(normalizedPaymentMethod)) {
+    throw new AppError('Invalid payment method', 400)
+  }
+
   const user = await userService.getUserById(userId)
   if (!user) {
     throw new AppError('User not found', 404)
@@ -41,8 +50,9 @@ exports.createOrder = asyncHandler(async (req, res, next) => {
     items,
     notes,
     shippingMethod,
-    paymentMethod,
-    billingAddress
+    paymentMethod: normalizedPaymentMethod,
+    billingAddress,
+    termsAccepted,
   })
 
   res.status(201).json({
