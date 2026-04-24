@@ -57,8 +57,13 @@ exports.createAppointment = async (req, res, next) => {
     // Validate request
     const validated = validate(req.body, appointmentValidation.createAppointmentSchema);
 
-    // Use authenticated user's ID if not provided (customer booking for self)
-    const userId = validated.user_id || req.user.id;
+    const isPrivilegedRole = ['admin', 'super_admin', 'staff'].includes(req.user.role);
+    if (!isPrivilegedRole && validated.user_id && validated.user_id !== req.user.id) {
+      throw new AppError('Customers can only create appointments for their own account', 403);
+    }
+
+    // Customers always book for self; staff/admin may book on behalf of users.
+    const userId = isPrivilegedRole ? (validated.user_id || req.user.id) : req.user.id;
 
     const appointment = await appointmentService.createAppointment({
       appointment_type: validated.appointment_type,

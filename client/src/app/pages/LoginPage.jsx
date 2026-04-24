@@ -86,7 +86,7 @@ export function LoginPage() {
           className="mb-6"
         >
           <div className="flex justify-center mb-6">
-            <img src="/logo-cosmos.png" alt="CosmosCraft Logo" className="h-16 w-auto" />
+            <img src="/logo-cosmos.png" alt="CosmosCraft Logo" className="h-16 w-auto object-contain" />
           </div>
           <h1 className="text-4xl font-bold text-white mb-2 text-center">Welcome Back</h1>
           <p className="text-[var(--text-muted)] text-center">Sign in to continue to CosmosCraft</p>

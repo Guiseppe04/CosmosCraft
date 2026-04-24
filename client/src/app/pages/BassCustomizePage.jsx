@@ -12,6 +12,7 @@ import { useCart } from '../context/CartContext.jsx'
 import useBassConfig from '../hooks/useBassConfig.js'
 import BassPreview from '../components/bass/BassPreview.jsx'
 import { exportMaskedPreview } from '../utils/exportMaskedPreview.js'
+import { RGBColorPicker } from '../components/options/RGBColorPicker.jsx'
 
 const CATEGORIES = [
   { 
@@ -295,6 +296,7 @@ export function BassCustomizePage() {
   }, [options.knobOptions, config.bassType])
 
   const [toastMessage, setToastMessage] = useState(null)
+  const isCustomBodyColor = typeof config.bodyFinish === 'string' && config.bodyFinish.startsWith('#')
 
   useEffect(() => {
     if (toastMessage) {
@@ -612,19 +614,17 @@ export function BassCustomizePage() {
                   </div>
                   
                   <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Body Finish</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.bodyFinishOptions?.map((opt) => (
-                        <OptionButton
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.bodyFinish === opt.value}
-                          onClick={() => updateConfig({ bodyFinish: opt.value })}
-                        />
-                      ))}
-                    </div>
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-3">Body Finish Color</h3>
+                    <RGBColorPicker
+                      value={isCustomBodyColor ? config.bodyFinish : '#1A1A1A'}
+                      onChange={(color) => updateConfig({ bodyFinish: color })}
+                      label="Select Bass Body Color"
+                    />
+                    <p className="text-xs text-white/40 mt-3">
+                      Choose any custom color for your bass body using the RGB picker or enter a hex value.
+                    </p>
                   </div>
-                  
+
                   <div>
                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Pickguard</h3>
                     <div className="grid grid-cols-2 gap-2">

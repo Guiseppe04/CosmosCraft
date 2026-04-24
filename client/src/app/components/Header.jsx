@@ -168,7 +168,7 @@ export function Header() {
     >
       <div className="mx-auto flex h-16 max-w-7xl items-center gap-3 px-4 sm:px-6 lg:px-8">
         <Link to="/" className="flex items-center gap-2">
-          <img src="/logo-cosmos.png" alt="CosmosCraft Logo" className="h-9 w-auto" />
+          <img src="/logo-cosmos.png" alt="CosmosCraft Logo" className="h-9 w-auto object-contain" />
           <span className="hidden text-lg font-semibold text-[var(--text-light)] sm:block">
             Cosmos Craft
           </span>
