@@ -571,7 +571,7 @@ async function getSalesReport(filters = {}) {
          AND NOT EXISTS (
            SELECT 1
            FROM order_items oi
-           WHERE oi.order_id = o.order_id
+           WHERE oi.order_id::text = o.order_id::text
              AND oi.customization_id IS NOT NULL
          )
        ${ordersRange.clause}`,
@@ -586,7 +586,7 @@ async function getSalesReport(filters = {}) {
          AND EXISTS (
            SELECT 1
            FROM order_items oi
-           WHERE oi.order_id = o.order_id
+           WHERE oi.order_id::text = o.order_id::text
              AND oi.customization_id IS NOT NULL
          )
        ${ordersRange.clause}`,
@@ -650,8 +650,8 @@ async function getSalesReport(filters = {}) {
            (oi.quantity * oi.unit_price)::numeric AS revenue,
            o.created_at
          FROM order_items oi
-         JOIN orders o ON o.order_id = oi.order_id
-         LEFT JOIN products p ON p.product_id = oi.product_id
+         JOIN orders o ON o.order_id::text = oi.order_id::text
+         LEFT JOIN products p ON p.product_id::text = oi.product_id::text
          LEFT JOIN categories cat ON cat.category_id = p.category_id
          WHERE o.status = 'completed'
            AND oi.product_id IS NOT NULL
@@ -666,8 +666,8 @@ async function getSalesReport(filters = {}) {
            COALESCE(psi.subtotal, psi.quantity * psi.unit_price)::numeric AS revenue,
            ps.created_at
          FROM pos_sale_items psi
-         JOIN pos_sales ps ON ps.sale_id = psi.sale_id
-         LEFT JOIN products p ON p.product_id = psi.product_id
+         JOIN pos_sales ps ON ps.sale_id::text = psi.sale_id::text
+         LEFT JOIN products p ON p.product_id::text = psi.product_id::text
          LEFT JOIN categories cat ON cat.category_id = p.category_id
          WHERE ps.status = 'completed'
            AND psi.product_id IS NOT NULL
@@ -690,8 +690,8 @@ async function getSalesReport(filters = {}) {
           COUNT(DISTINCT o.order_id)::int AS orders,
           COALESCE(SUM(oi.quantity * oi.unit_price), 0)::numeric AS revenue
        FROM order_items oi
-       JOIN orders o ON o.order_id = oi.order_id
-       JOIN customizations c ON c.customization_id = oi.customization_id
+       JOIN orders o ON o.order_id::text = oi.order_id::text
+       JOIN customizations c ON c.customization_id::text = oi.customization_id::text
        WHERE o.status = 'completed'
        ${ordersRange.clause}
        GROUP BY c.guitar_type

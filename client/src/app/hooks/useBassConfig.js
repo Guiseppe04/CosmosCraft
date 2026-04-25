@@ -92,23 +92,43 @@ export default function useBassConfig() {
 
   const priceOverrides = useMemo(() => {
     const overrides = {}
+    const registerOverride = (key, value) => {
+      if (!key) return
+      if (overrides[key] === undefined) {
+        overrides[key] = value
+      }
+    }
+
     builderParts.forEach(part => {
       const partType = typeof part.guitar_type === 'string' ? part.guitar_type.trim().toLowerCase() : ''
       const matchesType = !partType || partType === 'bass'
       if (matchesType && part.price !== undefined) {
+        const metadata = part?.metadata && typeof part.metadata === 'object' ? part.metadata : {}
         const normalizedCategory = typeof part.part_category === 'string' ? part.part_category.trim().toLowerCase() : ''
         const normalizedTypeMapping = typeof part.type_mapping === 'string' ? part.type_mapping.trim() : ''
         const normalizedNameKey = typeof part.name === 'string' ? part.name.trim().toLowerCase().replace(/\s+/g, '') : ''
+        const normalizedOptionKey = typeof metadata.option_key === 'string' ? metadata.option_key.trim().toLowerCase() : ''
+        const normalizedVariant = typeof metadata.variant === 'string' ? metadata.variant.trim().toLowerCase() : ''
+        const overrideValue = { price: Number(part.price), partCategory: normalizedCategory || part.part_category }
 
         if (normalizedTypeMapping) {
-          overrides[normalizedTypeMapping] = { price: Number(part.price), partCategory: normalizedCategory || part.part_category }
-          overrides[normalizedTypeMapping.toLowerCase()] = { price: Number(part.price), partCategory: normalizedCategory || part.part_category }
+          registerOverride(normalizedTypeMapping, overrideValue)
+          registerOverride(normalizedTypeMapping.toLowerCase(), overrideValue)
+        }
+        if (normalizedOptionKey) {
+          registerOverride(normalizedOptionKey, overrideValue)
+          if (normalizedCategory) {
+            registerOverride(`catname:${normalizedCategory}:${normalizedOptionKey}`, overrideValue)
+          }
+          if (normalizedCategory && normalizedVariant) {
+            registerOverride(`variant:${normalizedCategory}:${normalizedVariant}:${normalizedOptionKey}`, overrideValue)
+          }
         }
         if (normalizedCategory && normalizedNameKey) {
-          overrides[`catname:${normalizedCategory}:${normalizedNameKey}`] = { price: Number(part.price), partCategory: normalizedCategory }
+          registerOverride(`catname:${normalizedCategory}:${normalizedNameKey}`, overrideValue)
         }
         if (normalizedCategory) {
-          overrides[`cat:${normalizedCategory}`] = { price: Number(part.price), partCategory: normalizedCategory }
+          registerOverride(`cat:${normalizedCategory}`, overrideValue)
         }
       }
     })
@@ -126,10 +146,12 @@ export default function useBassConfig() {
   }, [modelImages])
 
   const getCategoryPrice = (cat) => priceOverrides[`cat:${cat}`]?.price
-  const getOptionOverride = (category, optionKey) => {
+  const getOptionOverride = (category, optionKey, variant = '') => {
     const key = String(optionKey || '').trim()
     const normalized = key.toLowerCase()
+    const normalizedVariant = String(variant || '').trim().toLowerCase()
     return (
+      priceOverrides[`variant:${category}:${normalizedVariant}:${normalized}`]?.price ??
       priceOverrides[`catname:${category}:${normalized}`]?.price ??
       priceOverrides[key]?.price ??
       priceOverrides[normalized]?.price
@@ -243,7 +265,7 @@ export default function useBassConfig() {
     Object.keys(BASS_LOGO_OPTIONS).forEach(bodyKey => {
       merged[bodyKey] = { ...BASS_LOGO_OPTIONS[bodyKey] }
       Object.keys(merged[bodyKey]).forEach(key => {
-        const specific = getOptionOverride('misc', key)
+        const specific = getOptionOverride('misc', key, bodyKey)
         if (specific !== undefined) {
           merged[bodyKey][key] = { ...merged[bodyKey][key], price: specific }
         }
@@ -292,7 +314,7 @@ export default function useBassConfig() {
     Object.keys(BASS_BRIDGE_OPTIONS).forEach(bodyKey => {
       merged[bodyKey] = { ...BASS_BRIDGE_OPTIONS[bodyKey] }
       Object.keys(merged[bodyKey]).forEach(key => {
-        const specific = getOptionOverride('bridge', key)
+        const specific = getOptionOverride('bridge', key, bodyKey)
         const finalPrice = specific !== undefined ? specific : bridgeCatPrice
         if (finalPrice !== undefined) {
           merged[bodyKey][key] = { ...merged[bodyKey][key], price: finalPrice }
@@ -308,7 +330,7 @@ export default function useBassConfig() {
     Object.keys(BASS_PICKGUARD_OPTIONS).forEach(bodyKey => {
       merged[bodyKey] = { ...BASS_PICKGUARD_OPTIONS[bodyKey] }
       Object.keys(merged[bodyKey]).forEach(key => {
-        const specific = getOptionOverride('pickguard', key)
+        const specific = getOptionOverride('pickguard', key, bodyKey)
         const finalPrice = specific !== undefined ? specific : pickguardCatPrice
         if (finalPrice !== undefined) {
           merged[bodyKey][key] = { ...merged[bodyKey][key], price: finalPrice }
@@ -325,7 +347,7 @@ export default function useBassConfig() {
     Object.keys(BASS_KNOB_OPTIONS).forEach(bodyKey => {
       merged[bodyKey] = { ...BASS_KNOB_OPTIONS[bodyKey] }
       Object.keys(merged[bodyKey]).forEach(key => {
-        const specific = getOptionOverride('knobs', key) ?? getOptionOverride('hardware', key)
+        const specific = getOptionOverride('knobs', key, bodyKey) ?? getOptionOverride('hardware', key, bodyKey)
         const finalPrice = specific !== undefined ? specific : (knobsCatPrice !== undefined ? knobsCatPrice : hardwareCatPrice)
         if (finalPrice !== undefined) {
           merged[bodyKey][key] = { ...merged[bodyKey][key], price: finalPrice }

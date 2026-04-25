@@ -84,24 +84,44 @@ export default function useGuitarConfig() {
 
   const priceOverrides = useMemo(() => {
     const overrides = {}
+    const registerOverride = (key, value) => {
+      if (!key) return
+      if (overrides[key] === undefined) {
+        overrides[key] = value
+      }
+    }
+
     builderParts.forEach(part => {
       const partType = typeof part.guitar_type === 'string' ? part.guitar_type.trim().toLowerCase() : ''
       const configType = typeof config.guitarType === 'string' ? config.guitarType.trim().toLowerCase() : ''
       const matchesType = !partType || partType === configType
       if (matchesType && part.price !== undefined) {
+        const metadata = part?.metadata && typeof part.metadata === 'object' ? part.metadata : {}
         const normalizedCategory = typeof part.part_category === 'string' ? part.part_category.trim().toLowerCase() : ''
         const normalizedTypeMapping = typeof part.type_mapping === 'string' ? part.type_mapping.trim() : ''
         const normalizedNameKey = typeof part.name === 'string' ? part.name.trim().toLowerCase().replace(/\s+/g, '') : ''
+        const normalizedOptionKey = typeof metadata.option_key === 'string' ? metadata.option_key.trim().toLowerCase() : ''
+        const normalizedVariant = typeof metadata.variant === 'string' ? metadata.variant.trim().toLowerCase() : ''
+        const overrideValue = { price: Number(part.price), partCategory: normalizedCategory || part.part_category }
 
         if (normalizedTypeMapping) {
-          overrides[normalizedTypeMapping] = { price: Number(part.price), partCategory: normalizedCategory || part.part_category }
-          overrides[normalizedTypeMapping.toLowerCase()] = { price: Number(part.price), partCategory: normalizedCategory || part.part_category }
+          registerOverride(normalizedTypeMapping, overrideValue)
+          registerOverride(normalizedTypeMapping.toLowerCase(), overrideValue)
+        }
+        if (normalizedOptionKey) {
+          registerOverride(normalizedOptionKey, overrideValue)
+          if (normalizedCategory) {
+            registerOverride(`catname:${normalizedCategory}:${normalizedOptionKey}`, overrideValue)
+          }
+          if (normalizedCategory && normalizedVariant) {
+            registerOverride(`variant:${normalizedCategory}:${normalizedVariant}:${normalizedOptionKey}`, overrideValue)
+          }
         }
         if (normalizedCategory && normalizedNameKey) {
-          overrides[`catname:${normalizedCategory}:${normalizedNameKey}`] = { price: Number(part.price), partCategory: normalizedCategory }
+          registerOverride(`catname:${normalizedCategory}:${normalizedNameKey}`, overrideValue)
         }
         if (normalizedCategory) {
-          overrides[`cat:${normalizedCategory}`] = { price: Number(part.price), partCategory: normalizedCategory }
+          registerOverride(`cat:${normalizedCategory}`, overrideValue)
         }
       }
     })
@@ -126,10 +146,12 @@ export default function useGuitarConfig() {
     return staticOptions[configKey]?.price ?? 0
   }
 
-  const getOptionOverride = (category, optionKey) => {
+  const getOptionOverride = (category, optionKey, variant = '') => {
     const key = String(optionKey || '').trim()
     const normalized = key.toLowerCase()
+    const normalizedVariant = String(variant || '').trim().toLowerCase()
     return (
+      priceOverrides[`variant:${category}:${normalizedVariant}:${normalized}`]?.price ??
       priceOverrides[`catname:${category}:${normalized}`]?.price ??
       priceOverrides[key]?.price ??
       priceOverrides[normalized]?.price
@@ -271,7 +293,7 @@ export default function useGuitarConfig() {
   const pickguardOptions = useMemo(
     () =>
       Object.entries(PICKGUARD_OPTIONS_BY_BODY[config.body] ?? PICKGUARD_OPTIONS_BY_BODY.strat).map(([value, option]) => {
-        const specific = getOptionOverride('pickguard', value)
+        const specific = getOptionOverride('pickguard', value, config.body)
         const catPrice = getCategoryPrice('pickguard')
         const finalPrice = specific !== undefined ? specific : catPrice
         return { value, ...(finalPrice !== undefined ? { ...option, price: finalPrice } : option), preview: option.src }
@@ -281,7 +303,7 @@ export default function useGuitarConfig() {
   const knobOptions = useMemo(
     () =>
       Object.entries(KNOB_OPTIONS_BY_BODY[config.body] ?? KNOB_OPTIONS_BY_BODY.strat).map(([value, option]) => {
-        const specific = getOptionOverride('hardware', value) ?? getOptionOverride('knobs', value)
+        const specific = getOptionOverride('hardware', value, config.body) ?? getOptionOverride('knobs', value, config.body)
         const catPrice = getCategoryPrice('knobs')
         const finalPrice = specific !== undefined ? specific : catPrice
         return { value, ...(finalPrice !== undefined ? { ...option, price: finalPrice } : option), preview: option.src }

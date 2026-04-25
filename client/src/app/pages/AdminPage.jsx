@@ -1914,8 +1914,6 @@ export function AdminPage() {
   const [expandedPartCategories, setExpandedPartCategories] = useState(new Set())
   const [partDensity, setPartDensity] = useState('comfortable')
   const [partSearchQuery, setPartSearchQuery] = useState('')
-  const [isImportingElectricParts, setIsImportingElectricParts] = useState(false)
-  const [isImportingBassParts, setIsImportingBassParts] = useState(false)
 
   // Services section state
   const [serviceViewMode, setServiceViewMode] = useState('grid')
@@ -2803,38 +2801,6 @@ export function AdminPage() {
         showToast('Builder Part deactivated')
         fetchParts()
       },
-    })
-  }
-
-  const importBuilderPartsByType = async ({ guitarType, label, setImporting }) => {
-    setImporting(true)
-    try {
-      const response = await adminApi.seedCustomizeBuilderParts(guitarType)
-      const stats = response?.data?.seeded || {}
-      await fetchParts()
-      showToast(`${label} seed done: ${stats.created || 0} added, ${stats.updated || 0} updated.`)
-    } catch (error) {
-      showToast(error.message || `Failed to seed ${label.toLowerCase()} customize parts`, 'error')
-    } finally {
-      setImporting(false)
-    }
-  }
-
-  const importElectricParts = async () => {
-    if (isImportingElectricParts) return
-    await importBuilderPartsByType({
-      guitarType: 'electric',
-      label: 'Electric Guitar',
-      setImporting: setIsImportingElectricParts,
-    })
-  }
-
-  const importBassParts = async () => {
-    if (isImportingBassParts) return
-    await importBuilderPartsByType({
-      guitarType: 'bass',
-      label: 'Bass Guitar',
-      setImporting: setIsImportingBassParts,
     })
   }
 
@@ -3762,26 +3728,6 @@ export function AdminPage() {
                    </button>
                  </div>
                )}
-              {activeTab === 'guitar-parts' && isSuperAdmin && (
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={importElectricParts}
-                    disabled={isImportingElectricParts || isImportingBassParts}
-                    className="flex items-center gap-2 px-4 py-2.5 border border-[var(--border)] rounded-xl font-semibold text-sm text-[var(--text-light)] hover:border-[var(--gold-primary)] hover:bg-[var(--gold-primary)]/10 transition-all disabled:opacity-60"
-                  >
-                    {isImportingElectricParts ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowUpCircle className="w-4 h-4" />}
-                    {isImportingElectricParts ? 'Seeding Electric Customize Parts...' : 'Seed Electric Customize Parts'}
-                  </button>
-                  <button
-                    onClick={importBassParts}
-                    disabled={isImportingElectricParts || isImportingBassParts}
-                    className="flex items-center gap-2 px-4 py-2.5 border border-[var(--border)] rounded-xl font-semibold text-sm text-[var(--text-light)] hover:border-[var(--gold-primary)] hover:bg-[var(--gold-primary)]/10 transition-all disabled:opacity-60"
-                  >
-                    {isImportingBassParts ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowDownCircle className="w-4 h-4" />}
-                    {isImportingBassParts ? 'Seeding Bass Customize Parts...' : 'Seed Bass Customize Parts'}
-                  </button>
-                </div>
-              )}
               {activeTab === 'products' && isSuperAdmin && (
                 <button onClick={() => openModal('product')} className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black rounded-xl font-semibold text-sm hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all">
                   <Plus className="w-4 h-4" /> Add Product
