@@ -1,6 +1,7 @@
 const paymentService = require('../services/paymentService');
 const { AppError } = require('../middleware/errorHandler');
 const paymentValidation = require('../utils/paymentValidation');
+const { hasRole } = require('../utils/roles');
 
 const validate = (data, schema) => {
   const { error, value } = schema.validate(data, { abortEarly: false });
@@ -18,7 +19,7 @@ async function checkPaymentAccess(paymentId, userId, userRole) {
     throw new AppError('Payment not found', 404);
   }
 
-  if (['admin', 'staff'].includes(userRole)) {
+  if (hasRole(userRole, 'admin', 'staff')) {
     return payment;
   }
 
@@ -152,7 +153,7 @@ exports.verifyPayment = async (req, res, next) => {
     await validate({ id }, paymentValidation.paymentIdParamSchema);
     await validate({ notes }, paymentValidation.verifyPaymentSchema);
 
-    if (!['admin', 'staff'].includes(req.user.role)) {
+    if (!hasRole(req.user.role, 'admin', 'staff')) {
       throw new AppError('Only admins and staff can verify payments', 403);
     }
 
@@ -182,7 +183,7 @@ exports.rejectPayment = async (req, res, next) => {
     await validate({ id }, paymentValidation.paymentIdParamSchema);
     await validate({ reason, notes }, paymentValidation.rejectPaymentSchema);
 
-    if (!['admin', 'staff'].includes(req.user.role)) {
+    if (!hasRole(req.user.role, 'admin', 'staff')) {
       throw new AppError('Only admins and staff can reject payments', 403);
     }
 
@@ -320,7 +321,7 @@ exports.getUserPayments = async (req, res, next) => {
 
 exports.getPaymentStats = async (req, res, next) => {
   try {
-    if (!['admin', 'staff'].includes(req.user.role)) {
+    if (!hasRole(req.user.role, 'admin', 'staff')) {
       throw new AppError('Only admins and staff can view payment statistics', 403);
     }
 
@@ -356,7 +357,7 @@ exports.refundPayment = async (req, res, next) => {
     const { id } = req.params;
     const { reason } = req.body;
 
-    if (!['admin'].includes(req.user.role)) {
+    if (!hasRole(req.user.role, 'admin')) {
       throw new AppError('Only admins can process refunds', 403);
     }
 

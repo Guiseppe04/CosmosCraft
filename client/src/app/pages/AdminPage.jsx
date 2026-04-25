@@ -23,6 +23,7 @@ import AppointmentForm from '../components/appointments/AppointmentForm'
 import UnavailableDatesManager from '../components/appointments/UnavailableDatesManager'
 import { PosWorkspace } from '../components/pos/PosWorkspace'
 import { useAuth } from '../context/AuthContext'
+import { hasRole } from '../utils/roles.js'
 import { useNavigate } from 'react-router'
 import { Topbar } from '../components/admin/Topbar'
 import { MessagePanel } from '../components/admin/MessagePanel'
@@ -1792,7 +1793,7 @@ function ServiceGridView({ services, onEdit, onDelete }) {
 export function AdminPage() {
   const { user, isAuthenticated } = useAuth()
   const navigate = useNavigate()
-  const isSuperAdmin = user?.role === 'super_admin'
+  const isSuperAdmin = hasRole(user?.role, 'admin')
 
   useEffect(() => {
     if (!isAuthenticated) {

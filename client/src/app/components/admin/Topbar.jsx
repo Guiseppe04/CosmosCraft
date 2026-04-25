@@ -8,6 +8,7 @@ import {
 import { useTheme } from '../../context/ThemeContext.jsx'
 import { useAuth } from '../../context/AuthContext'
 import { ConfirmModal } from '../ui/ConfirmModal.jsx'
+import { getRoleLabel } from '../../utils/roles.js'
 
 /**
  * Topbar Component for Admin Dashboard
@@ -116,7 +117,7 @@ export function Topbar({
                     {user?.email || 'user@cosmoscraft.com'}
                   </p>
                   <p className="mt-1 text-xs text-[var(--text-muted)]">
-                    {user?.role === 'super_admin' ? 'Super Admin' : user?.role === 'admin' ? 'Admin' : user?.role === 'staff' ? 'Staff' : user?.role || userRole}
+                    {getRoleLabel(user?.role) || userRole}
                   </p>
                 </div>
                 <div className="p-2">

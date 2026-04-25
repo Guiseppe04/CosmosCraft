@@ -96,13 +96,15 @@ const handleAuth = async (req, res, next, { required }) => {
   }
 };
 
+const { hasRole } = require('../utils/roles');
+
 const authenticateToken = async (req, res, next) => handleAuth(req, res, next, { required: true });
 
 const optionalAuthenticateToken = async (req, res, next) => handleAuth(req, res, next, { required: false });
 
 const authorize = (...allowedRoles) => {
   return (req, res, next) => {
-    if (!req.user || !allowedRoles.includes(req.user.role)) {
+    if (!req.user || !hasRole(req.user.role, ...allowedRoles)) {
       return res.status(403).json({
         status: 'error',
         message: 'Insufficient permissions',
