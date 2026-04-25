@@ -5,7 +5,23 @@ import { useCart } from '../context/CartContext.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useNavigate } from 'react-router'
 import { ProductRatingModal } from '../components/ProductRatingModal.jsx'
-import { adminApi } from '../utils/adminApi.js'
+import { API } from '../utils/apiConfig.js'
+
+async function fetchPublicJson(path) {
+  const response = await fetch(`${API}${path}`, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+    },
+  })
+
+  const payload = await response.json()
+  if (!response.ok) {
+    throw new Error(payload?.message || 'Request failed')
+  }
+
+  return payload
+}
 
 function buildCategoryTree(categories) {
   const map = new Map()
@@ -390,7 +406,8 @@ export function ShopPage() {
           let totalPages = 1
 
           do {
-            const res = await adminApi.getProducts({ page, pageSize, is_active: 'true' })
+            const qs = new URLSearchParams({ page, pageSize, is_active: 'true' }).toString()
+            const res = await fetchPublicJson(`/api/products?${qs}`)
             const pageItems = Array.isArray(res?.data) ? res.data : []
             for (const item of pageItems) {
               const id = item?.product_id || item?.id
@@ -408,7 +425,7 @@ export function ShopPage() {
 
         const [productsRes, categoriesRes] = await Promise.all([
           fetchAllActiveProducts(),
-          adminApi.getCategories()
+          fetchPublicJson('/api/products/categories')
         ])
 
         const fetchedProducts = (productsRes || []).map(p => ({

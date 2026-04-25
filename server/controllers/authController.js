@@ -253,6 +253,16 @@ exports.logout = asyncHandler(async (req, res, next) => {
 });
 
 exports.checkAuth = asyncHandler(async (req, res, next) => {
+  if (!req.user?.id) {
+    return res.status(200).json({
+      status: 'success',
+      data: {
+        isAuthenticated: false,
+        user: null,
+      }
+    });
+  }
+
   const user = await userService.getUserById(req.user.id);
   const authInfo = await userService.getUserAuthInfo(req.user.id);
   res.status(200).json({ 

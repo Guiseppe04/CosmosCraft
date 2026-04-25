@@ -1,12 +1,17 @@
 const jwt = require('jsonwebtoken');
 const { generateTokens, verifyRefreshToken } = require('../utils/generateTokens');
 
-const authenticateToken = async (req, res, next) => {
+const handleAuth = async (req, res, next, { required }) => {
   try {
     const accessToken = req.cookies.accessToken;
     const refreshToken = req.cookies.refreshToken;
 
     if (!accessToken) {
+      if (!required) {
+        req.user = null;
+        return next();
+      }
+
       return res.status(401).json({
         status: 'error',
         message: 'Access token not found. Please sign in.',
@@ -50,6 +55,11 @@ const authenticateToken = async (req, res, next) => {
               next();
             });
           } catch (refreshErr) {
+            if (!required) {
+              req.user = null;
+              return next();
+            }
+
             return res.status(401).json({
               status: 'error',
               message: 'Session expired. Please sign in again.',
@@ -57,6 +67,11 @@ const authenticateToken = async (req, res, next) => {
             });
           }
         } else {
+          if (!required) {
+            req.user = null;
+            return next();
+          }
+
           return res.status(401).json({
             status: 'error',
             message: err.name === 'TokenExpiredError' ? 'Access token expired' : 'Invalid token',
@@ -69,12 +84,21 @@ const authenticateToken = async (req, res, next) => {
       }
     });
   } catch (error) {
+    if (!required) {
+      req.user = null;
+      return next();
+    }
+
     return res.status(500).json({
       status: 'error',
       message: 'Authentication error',
     });
   }
 };
+
+const authenticateToken = async (req, res, next) => handleAuth(req, res, next, { required: true });
+
+const optionalAuthenticateToken = async (req, res, next) => handleAuth(req, res, next, { required: false });
 
 const authorize = (...allowedRoles) => {
   return (req, res, next) => {
@@ -88,4 +112,4 @@ const authorize = (...allowedRoles) => {
   };
 };
 
-module.exports = { authenticateToken, authorize };
+module.exports = { authenticateToken, optionalAuthenticateToken, authorize };

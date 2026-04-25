@@ -133,6 +133,10 @@ export function AuthProvider({ children }) {
           )
           return userData
         }
+
+        setIsAuthenticated(false)
+        setUser(null)
+        window.localStorage.removeItem('cosmoscraft_auth')
       } else if (response.status === 401) {
         setIsAuthenticated(false)
         setUser(null)

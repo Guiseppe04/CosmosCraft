@@ -25,6 +25,11 @@ function buildDateFilter(startDate, endDate, column = 'created_at') {
   return { conditions, params };
 }
 
+function orderRevenueExpr(alias = null) {
+  const prefix = alias ? `${alias}.` : '';
+  return `COALESCE(${prefix}total_amount, 0) - COALESCE(${prefix}tax_amount, 0)`;
+}
+
 async function getOrderReport(filters = {}) {
   const { start_date, end_date, status, group_by = 'day' } = filters;
   const { conditions, params } = buildDateFilter(parseDate(start_date), parseDate(end_date));
@@ -47,12 +52,12 @@ async function getOrderReport(filters = {}) {
   const result = await pool.query(
     `SELECT ${dateGroup} as period,
             COUNT(*) as total_orders,
-            SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed,
+            SUM(CASE WHEN status = 'delivered' THEN 1 ELSE 0 END) as completed,
             SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled,
             SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
             SUM(CASE WHEN status = 'processing' THEN 1 ELSE 0 END) as processing,
-            SUM(total_amount) as revenue,
-            AVG(total_amount) as avg_order_value
+            SUM(${orderRevenueExpr()}) as revenue,
+            AVG(${orderRevenueExpr()}) as avg_order_value
      FROM orders ${whereClause}
      GROUP BY ${dateGroup}
      ORDER BY period DESC`,
@@ -62,9 +67,9 @@ async function getOrderReport(filters = {}) {
   const summaryResult = await pool.query(
     `SELECT 
         COUNT(*) as total_orders,
-        SUM(total_amount) as total_revenue,
-        AVG(total_amount) as avg_order_value,
-        SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed_orders,
+        SUM(${orderRevenueExpr()}) as total_revenue,
+        AVG(${orderRevenueExpr()}) as avg_order_value,
+        SUM(CASE WHEN status = 'delivered' THEN 1 ELSE 0 END) as completed_orders,
         SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled_orders
      FROM orders ${whereClause}`,
     params
@@ -433,9 +438,9 @@ async function getDashboardSummary() {
   const [todayOrders, yesterdayOrders, monthOrders, todayRevenue, monthRevenue, activeUsers, pendingAppointments, pendingPayments] = await Promise.all([
     pool.query(`SELECT COUNT(*) as count FROM orders WHERE created_at >= $1`, [todayStr]),
     pool.query(`SELECT COUNT(*) as count FROM orders WHERE created_at >= $1 AND created_at < $2`, [yesterdayStr, todayStr]),
-    pool.query(`SELECT COUNT(*) as count, SUM(total_amount) as revenue FROM orders WHERE created_at >= $1`, [thisMonthStart]),
-    pool.query(`SELECT SUM(total_amount) as revenue FROM orders WHERE created_at >= $1 AND status = 'completed'`, [todayStr]),
-    pool.query(`SELECT SUM(total_amount) as revenue FROM orders WHERE created_at >= $1 AND status = 'completed'`, [thisMonthStart]),
+    pool.query(`SELECT COUNT(*) as count, SUM(${orderRevenueExpr()}) as revenue FROM orders WHERE created_at >= $1`, [thisMonthStart]),
+    pool.query(`SELECT SUM(${orderRevenueExpr()}) as revenue FROM orders WHERE created_at >= $1 AND status = 'delivered'`, [todayStr]),
+    pool.query(`SELECT SUM(${orderRevenueExpr()}) as revenue FROM orders WHERE created_at >= $1 AND status = 'delivered'`, [thisMonthStart]),
     pool.query(`SELECT COUNT(*) as count FROM users WHERE is_active = true`),
     pool.query(`SELECT COUNT(*) as count FROM appointments WHERE status = 'pending'`),
     pool.query(`SELECT COUNT(*) as count FROM payments WHERE status = 'pending'`),
@@ -469,11 +474,11 @@ async function getRevenueReport(filters = {}) {
 
   const result = await pool.query(
     `SELECT ${dateGroup} as period,
-            SUM(o.total_amount) as revenue,
+            SUM(${orderRevenueExpr('o')}) as revenue,
             COUNT(o.order_id) as orders,
-            AVG(o.total_amount) as avg_order_value
+            AVG(${orderRevenueExpr('o')}) as avg_order_value
      FROM orders o
-     WHERE o.status = 'completed'
+     WHERE o.status = 'delivered'
      ${conditions.length > 0 ? 'AND ' + conditions.join(' AND ') : ''}
      GROUP BY ${dateGroup}
      ORDER BY period DESC`,
@@ -482,11 +487,11 @@ async function getRevenueReport(filters = {}) {
 
   const totalResult = await pool.query(
     `SELECT 
-        SUM(total_amount) as total_revenue,
-        AVG(total_amount) as overall_avg_order,
+        SUM(${orderRevenueExpr()}) as total_revenue,
+        AVG(${orderRevenueExpr()}) as overall_avg_order,
         COUNT(*) as total_orders
      FROM orders
-     WHERE status = 'completed'
+     WHERE status = 'delivered'
      ${conditions.length > 0 ? 'AND ' + conditions.join(' AND ') : ''}`,
     params
   );
@@ -565,9 +570,9 @@ async function getSalesReport(filters = {}) {
     pool.query(
       `SELECT
           COUNT(*)::int AS transactions,
-          COALESCE(SUM(o.total_amount), 0)::numeric AS sales
+          COALESCE(SUM(${orderRevenueExpr('o')}), 0)::numeric AS sales
        FROM orders o
-       WHERE o.status = 'completed'
+       WHERE o.status = 'delivered'
          AND NOT EXISTS (
            SELECT 1
            FROM order_items oi
@@ -580,9 +585,9 @@ async function getSalesReport(filters = {}) {
     pool.query(
       `SELECT
           COUNT(*)::int AS transactions,
-          COALESCE(SUM(o.total_amount), 0)::numeric AS sales
+          COALESCE(SUM(${orderRevenueExpr('o')}), 0)::numeric AS sales
        FROM orders o
-       WHERE o.status = 'completed'
+       WHERE o.status = 'delivered'
          AND EXISTS (
            SELECT 1
            FROM order_items oi
@@ -595,15 +600,15 @@ async function getSalesReport(filters = {}) {
     pool.query(
       `SELECT
           COUNT(*)::int AS transactions,
-          COALESCE(SUM(total_amount), 0)::numeric AS sales
+          COALESCE(SUM(${orderRevenueExpr()}), 0)::numeric AS sales
        FROM orders
-       WHERE status = 'completed' AND created_at >= $1`,
+       WHERE status = 'delivered' AND created_at >= $1`,
       [todayStart]
     ),
     pool.query(
       `SELECT
           COUNT(*)::int AS transactions,
-          COALESCE(SUM(total_amount), 0)::numeric AS sales
+          COALESCE(SUM(${orderRevenueExpr()}), 0)::numeric AS sales
        FROM pos_sales
        WHERE status = 'completed' AND created_at >= $1`,
       [todayStart]
@@ -611,9 +616,9 @@ async function getSalesReport(filters = {}) {
     pool.query(
       `SELECT
           COUNT(*)::int AS transactions,
-          COALESCE(SUM(total_amount), 0)::numeric AS sales
+          COALESCE(SUM(${orderRevenueExpr()}), 0)::numeric AS sales
        FROM orders
-       WHERE status = 'completed' AND created_at >= $1`,
+       WHERE status = 'delivered' AND created_at >= $1`,
       [weekStart]
     ),
     pool.query(
@@ -627,9 +632,9 @@ async function getSalesReport(filters = {}) {
     pool.query(
       `SELECT
           COUNT(*)::int AS transactions,
-          COALESCE(SUM(total_amount), 0)::numeric AS sales
+          COALESCE(SUM(${orderRevenueExpr()}), 0)::numeric AS sales
        FROM orders
-       WHERE status = 'completed' AND created_at >= $1`,
+       WHERE status = 'delivered' AND created_at >= $1`,
       [monthStart]
     ),
     pool.query(
@@ -653,7 +658,7 @@ async function getSalesReport(filters = {}) {
          JOIN orders o ON o.order_id::text = oi.order_id::text
          LEFT JOIN products p ON p.product_id::text = oi.product_id::text
          LEFT JOIN categories cat ON cat.category_id = p.category_id
-         WHERE o.status = 'completed'
+         WHERE o.status = 'delivered'
            AND oi.product_id IS NOT NULL
 
          UNION ALL
@@ -692,7 +697,7 @@ async function getSalesReport(filters = {}) {
        FROM order_items oi
        JOIN orders o ON o.order_id::text = oi.order_id::text
        JOIN customizations c ON c.customization_id::text = oi.customization_id::text
-       WHERE o.status = 'completed'
+       WHERE o.status = 'delivered'
        ${ordersRange.clause}
        GROUP BY c.guitar_type
        ORDER BY revenue DESC, orders DESC`,

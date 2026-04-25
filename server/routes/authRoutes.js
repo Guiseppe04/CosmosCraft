@@ -1,7 +1,7 @@
 const express = require('express');
 const passport = require('passport');
 const authController = require('../controllers/authController.js');
-const { authenticateToken } = require('../middleware/auth.js');
+const { authenticateToken, optionalAuthenticateToken } = require('../middleware/auth.js');
 const { asyncHandler } = require('../middleware/errorHandler');
 
 const router = express.Router();
@@ -124,6 +124,6 @@ router.post('/resend-otp', authController.resendOTP);
 // Token & Auth Routes
 router.post('/refresh', authController.refreshAccessToken);
 router.post('/logout', authenticateToken, authController.logout);
-router.get('/check', authenticateToken, authController.checkAuth);
+router.get('/check', optionalAuthenticateToken, authController.checkAuth);
 
 module.exports = router;
