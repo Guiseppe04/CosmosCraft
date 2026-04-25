@@ -13,6 +13,7 @@ import useBassConfig from '../hooks/useBassConfig.js'
 import BassPreview from '../components/bass/BassPreview.jsx'
 import { exportMaskedPreview } from '../utils/exportMaskedPreview.js'
 import { RGBColorPicker } from '../components/options/RGBColorPicker.jsx'
+import { optimizeCloudinaryImage } from '../utils/cloudinary.js'
 
 const CATEGORIES = [
   { 
@@ -117,7 +118,15 @@ function OptionButton({ option, isSelected, onClick }) {
   )
 }
 
-function VisualCard({ option, isSelected, onClick, previewImage }) {
+function VisualCard({ option, isSelected, onClick, previewImage, fallbackImage }) {
+  const [displayImage, setDisplayImage] = useState(previewImage || fallbackImage || '')
+
+  useEffect(() => {
+    setDisplayImage(previewImage || fallbackImage || '')
+  }, [previewImage, fallbackImage])
+
+  const optimizedImage = optimizeCloudinaryImage(displayImage, { width: 640 })
+
   return (
     <button
       type="button"
@@ -129,10 +138,19 @@ function VisualCard({ option, isSelected, onClick, previewImage }) {
       }`}
     >
       <div className="relative h-16 w-full overflow-hidden">
-        {previewImage ? (
-          <div 
-            className="absolute inset-0 bg-cover bg-center transition-transform duration-500 group-hover:scale-105"
-            style={{ backgroundImage: `url(${previewImage})` }}
+        {displayImage ? (
+          <img
+            src={optimizedImage}
+            alt={option.label}
+            loading="lazy"
+            onError={() => {
+              if (fallbackImage && displayImage !== fallbackImage) {
+                setDisplayImage(fallbackImage)
+                return
+              }
+              setDisplayImage('')
+            }}
+            className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
           />
         ) : (
           <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-white/5" />
@@ -236,6 +254,11 @@ export function BassCustomizePage() {
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
+
+  const selectedBassModel = useMemo(
+    () => options.bodyOptions?.find((option) => option.value === config.bassType) || null,
+    [options.bodyOptions, config.bassType]
+  )
 
   useEffect(() => {
     const handleVisibility = () => {
@@ -597,7 +620,8 @@ export function BassCustomizePage() {
                           option={opt}
                           isSelected={config.bassType === opt.value}
                           onClick={() => updateConfig({ bassType: opt.value })}
-                          previewImage={opt.bodySrc}
+                          previewImage={opt.previewImageUrl}
+                          fallbackImage={opt.bodySrc}
                         />
                       ))}
                     </div>
@@ -1009,7 +1033,12 @@ export function BassCustomizePage() {
               
               <div className="relative h-full flex items-center justify-center p-6">
                 <div className="w-full max-w-[1100px]">
-                  <BassPreview config={config} view={view} onViewChange={setView} />
+                  <BassPreview
+                    config={config}
+                    view={view}
+                    onViewChange={setView}
+                    modelImageSrc={selectedBassModel?.previewImageUrl || selectedBassModel?.bodySrc || null}
+                  />
                 </div>
               </div>
               

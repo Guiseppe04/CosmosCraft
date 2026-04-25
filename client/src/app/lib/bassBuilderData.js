@@ -1,5 +1,5 @@
-export const bassAsset = path => new URL(`../../../../builder/bass_models/${path}`, import.meta.url).href
-export const bassWoodAsset = path => new URL(`../../../../woodtype/${path}`, import.meta.url).href
+export const bassAsset = path => `/builder/bass_models/${path}`
+export const bassWoodAsset = path => `/woodtype/${path}`
 
 export const BASS_DEFAULT_CONFIG = {
   bassType: 'vader',

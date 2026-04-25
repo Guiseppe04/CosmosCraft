@@ -5,7 +5,7 @@ import {
   Package, CreditCard, RefreshCw, ChevronLeft, ChevronRight,
   CheckCircle, XCircle, Clock, AlertCircle, Loader2,
   FileText, Image as ImageIcon, ExternalLink, Save, User,
-  History, DollarSign, Trash2, Check, X,
+  History, DollarSign, Trash2, Check, X, Printer,
 } from 'lucide-react'
 import { formatCurrency } from '../../utils/formatCurrency'
 import { adminApi } from '../../utils/adminApi'
@@ -58,6 +58,244 @@ function getOrderStatusConfig(status) {
 
 function getPaymentStatusConfig(status) {
   return PAYMENT_STATUS_MAP[status] || PAYMENT_STATUS_LIFECYCLE[1]
+}
+
+function getOrderCustomerName(order) {
+  if (order.first_name && order.last_name) return `${order.first_name} ${order.last_name}`
+  return order.customer_name || order.user_name || order.name || 'N/A'
+}
+
+function getOrderAddress(order) {
+  if (!order.shipping_line1) return 'N/A'
+  return [
+    order.shipping_line1,
+    order.shipping_line2,
+    order.shipping_city,
+    order.shipping_province,
+    order.shipping_postal_code,
+  ].filter(Boolean).join(', ')
+}
+
+function getOrderPaymentMethodLabel(order) {
+  const method = order.payment_method || order.payment?.method || order.payment?.payment_method || 'Unknown'
+  const methodLower = String(method).toLowerCase()
+  if (methodLower.includes('gcash') || methodLower.includes('g-cash')) return 'GCash'
+  if (methodLower.includes('bank') || methodLower.includes('transfer') || methodLower.includes('bdo') || methodLower.includes('bpi') || methodLower.includes('unionbank')) return 'Bank Transfer'
+  if (methodLower.includes('cod') || methodLower.includes('cash')) return 'Cash on Delivery'
+  return String(method).replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase())
+}
+
+function getOrderSubtotal(order) {
+  if (order.subtotal != null) return Number(order.subtotal) || 0
+  if (order.items?.length) {
+    return order.items.reduce((sum, item) => (
+      sum + ((Number(item.unit_price ?? item.price ?? 0) || 0) * (Number(item.quantity ?? item.qty ?? 1) || 1))
+    ), 0)
+  }
+  const total = Number(order.total || order.total_amount || 0) || 0
+  const shipping = Number(order.shipping_cost ?? order.shipping_fee ?? 0) || 0
+  const tax = Number(order.tax_amount || 0) || 0
+  return Math.max(total - shipping - tax, 0)
+}
+
+function getOrderShippingAmount(order) {
+  return Number(order.shipping_cost ?? order.shipping_fee ?? 0) || 0
+}
+
+function getOrderTaxAmount(order) {
+  return Number(order.tax_amount || 0) || 0
+}
+
+function getOrderTotal(order) {
+  return Number(order.total || order.total_amount || 0) || 0
+}
+
+function getOrderRiderDetails(order) {
+  return order.rider_details || [order.rider_name, order.rider_contact].filter(Boolean).join(' • ')
+}
+
+function escapeReceiptHtml(value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;')
+}
+
+function buildReceiptHtml(order) {
+  const customerName = getOrderCustomerName(order)
+  const orderAddress = getOrderAddress(order)
+  const paymentMethod = getOrderPaymentMethodLabel(order)
+  const subtotal = getOrderSubtotal(order)
+  const shipping = getOrderShippingAmount(order)
+  const tax = getOrderTaxAmount(order)
+  const total = getOrderTotal(order)
+  const createdAt = order.created_at ? new Date(order.created_at) : null
+  const receiptDate = createdAt ? createdAt.toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' }) : 'N/A'
+  const receiptTime = createdAt ? createdAt.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }) : 'N/A'
+  const riderDetails = getOrderRiderDetails(order)
+  const itemsMarkup = (order.items || []).map((item) => {
+    const quantity = Number(item.quantity ?? item.qty ?? 1) || 1
+    const unitPrice = Number(item.unit_price ?? item.price ?? 0) || 0
+    const lineTotal = unitPrice * quantity
+    const itemName = item.product_name || item.name || item.product_sku || 'Product'
+
+    return `
+      <tr>
+        <td>${escapeReceiptHtml(itemName)}</td>
+        <td style="text-align:center;">${quantity}</td>
+        <td style="text-align:right;">${formatCurrency(unitPrice)}</td>
+        <td style="text-align:right;">${formatCurrency(lineTotal)}</td>
+      </tr>
+    `
+  }).join('')
+
+  return `
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <title>Receipt ${escapeReceiptHtml(order.order_number || order.order_id || '')}</title>
+        <style>
+          body { font-family: Arial, sans-serif; background: #f6f1e7; color: #161616; margin: 0; padding: 24px; }
+          .receipt { max-width: 820px; margin: 0 auto; background: #fffdf8; border: 1px solid #d6c6a3; border-radius: 18px; padding: 28px; }
+          .topbar { display: flex; justify-content: space-between; gap: 24px; border-bottom: 2px solid #d4af37; padding-bottom: 18px; margin-bottom: 20px; }
+          .brand { font-size: 28px; font-weight: 700; letter-spacing: 0.04em; }
+          .muted { color: #6a6458; }
+          .meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin: 18px 0; }
+          .panel { background: #faf5ea; border: 1px solid #eadcb9; border-radius: 14px; padding: 14px 16px; }
+          .panel h3 { margin: 0 0 10px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.14em; color: #8a7a4e; }
+          .panel p { margin: 4px 0; }
+          table { width: 100%; border-collapse: collapse; margin-top: 18px; }
+          th, td { padding: 12px 8px; border-bottom: 1px solid #ece4d0; font-size: 14px; vertical-align: top; }
+          th { text-align: left; color: #6a6458; font-size: 12px; text-transform: uppercase; letter-spacing: 0.12em; }
+          .totals { margin-top: 20px; margin-left: auto; width: min(100%, 320px); }
+          .totals-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #ece4d0; }
+          .totals-row.total { font-weight: 700; font-size: 18px; color: #7a5d09; border-bottom: 0; padding-top: 14px; }
+          .status { display: inline-block; padding: 6px 10px; border-radius: 999px; background: #f7edd0; color: #7a5d09; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; }
+          .footnote { margin-top: 24px; color: #6a6458; font-size: 12px; text-align: center; }
+          @media print {
+            body { background: #fff; padding: 0; }
+            .receipt { border: 0; border-radius: 0; padding: 0; max-width: none; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="receipt">
+          <div class="topbar">
+            <div>
+              <div class="brand">CosmosCraft</div>
+              <p class="muted">Order receipt</p>
+            </div>
+            <div style="text-align:right;">
+              <p style="margin:0 0 8px;"><strong>Receipt #:</strong> ${escapeReceiptHtml(order.order_number || order.order_id || 'N/A')}</p>
+              <p style="margin:0 0 8px;"><strong>Date:</strong> ${receiptDate}</p>
+              <p style="margin:0;"><strong>Time:</strong> ${receiptTime}</p>
+            </div>
+          </div>
+
+          <div class="meta">
+            <div class="panel">
+              <h3>Customer</h3>
+              <p><strong>${escapeReceiptHtml(customerName)}</strong></p>
+              <p>${escapeReceiptHtml(order.email || 'No email provided')}</p>
+              <p>${escapeReceiptHtml(order.contact_phone || order.customer_phone || order.phone || 'No phone provided')}</p>
+              <p>${escapeReceiptHtml(orderAddress)}</p>
+            </div>
+            <div class="panel">
+              <h3>Order</h3>
+              <p><strong>Status:</strong> <span class="status">${escapeReceiptHtml(String(order.status || 'pending').replace(/_/g, ' '))}</span></p>
+              <p><strong>Payment:</strong> ${escapeReceiptHtml(paymentMethod)}</p>
+              <p><strong>Payment Status:</strong> ${escapeReceiptHtml(String(order.payment_status || 'pending').replace(/_/g, ' '))}</p>
+              ${order.tracking_number ? `<p><strong>Tracking #:</strong> ${escapeReceiptHtml(order.tracking_number)}</p>` : ''}
+              ${riderDetails ? `<p><strong>Rider Details:</strong> ${escapeReceiptHtml(riderDetails)}</p>` : ''}
+            </div>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th style="text-align:center;">Qty</th>
+                <th style="text-align:right;">Unit Price</th>
+                <th style="text-align:right;">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${itemsMarkup || '<tr><td colspan="4" style="text-align:center;" class="muted">No items listed</td></tr>'}
+            </tbody>
+          </table>
+
+          <div class="totals">
+            <div class="totals-row"><span>Subtotal</span><strong>${formatCurrency(subtotal)}</strong></div>
+            <div class="totals-row"><span>Shipping</span><strong>${formatCurrency(shipping)}</strong></div>
+            <div class="totals-row"><span>Tax</span><strong>${formatCurrency(tax)}</strong></div>
+            <div class="totals-row total"><span>Total</span><span>${formatCurrency(total)}</span></div>
+          </div>
+
+          <p class="footnote">Thank you for choosing CosmosCraft.</p>
+        </div>
+      </body>
+    </html>
+  `
+}
+
+function printOrderReceipt(order) {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return
+
+  const receiptHtml = buildReceiptHtml(order)
+  const iframe = document.createElement('iframe')
+
+  iframe.setAttribute('aria-hidden', 'true')
+  iframe.style.position = 'fixed'
+  iframe.style.right = '0'
+  iframe.style.bottom = '0'
+  iframe.style.width = '0'
+  iframe.style.height = '0'
+  iframe.style.border = '0'
+
+  const cleanup = () => {
+    window.setTimeout(() => {
+      if (iframe.parentNode) iframe.parentNode.removeChild(iframe)
+    }, 250)
+  }
+
+  iframe.onload = () => {
+    const frameWindow = iframe.contentWindow
+    if (!frameWindow) {
+      cleanup()
+      return
+    }
+
+    const handleAfterPrint = () => {
+      frameWindow.removeEventListener('afterprint', handleAfterPrint)
+      cleanup()
+    }
+
+    frameWindow.addEventListener('afterprint', handleAfterPrint)
+    frameWindow.focus()
+
+    window.setTimeout(() => {
+      try {
+        frameWindow.print()
+      } catch {
+        handleAfterPrint()
+      }
+    }, 150)
+  }
+
+  document.body.appendChild(iframe)
+
+  const frameDocument = iframe.contentDocument || iframe.contentWindow?.document
+  if (!frameDocument) {
+    cleanup()
+    return
+  }
+
+  frameDocument.open()
+  frameDocument.write(receiptHtml)
+  frameDocument.close()
 }
 
 function ImageZoomModal({ src, alt, onClose }) {
@@ -152,8 +390,161 @@ function ImageZoomModal({ src, alt, onClose }) {
   )
 }
 
-function OrderDetailsModal({ order, onClose, onUpdatePaymentStatus, onUpdateOrderStatus, onVerifyPayment, user }) {
-  const [activeSection, setActiveSection] = useState('details')
+function ReceiptPanel({ order }) {
+  const subtotal = getOrderSubtotal(order)
+  const shipping = getOrderShippingAmount(order)
+  const tax = getOrderTaxAmount(order)
+  const total = getOrderTotal(order)
+  const customerName = getOrderCustomerName(order)
+  const orderAddress = getOrderAddress(order)
+  const riderDetails = getOrderRiderDetails(order)
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-3xl border border-[var(--gold-primary)]/30 bg-gradient-to-br from-[var(--gold-primary)]/10 via-[var(--bg-primary)]/70 to-[var(--surface-dark)] p-5">
+        <div className="mb-5 flex flex-col gap-4 border-b border-[var(--gold-primary)]/20 pb-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.35em] text-[var(--gold-primary)]">CosmosCraft</p>
+            <h3 className="mt-2 text-2xl font-bold text-white">Order Receipt</h3>
+            <p className="mt-1 text-sm text-[var(--text-muted)]">Reference #{order.order_number || order.order_id?.slice(0, 8)}</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => printOrderReceipt(order)}
+              className="inline-flex items-center gap-2 rounded-xl bg-[var(--gold-primary)] px-4 py-2.5 text-sm font-semibold text-black transition-all hover:shadow-[0_0_20px_rgba(212,175,55,0.3)]"
+            >
+              <Printer className="h-4 w-4" />
+              Print Receipt
+            </button>
+          </div>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)]/70 p-4">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[var(--text-muted)]">Customer</p>
+            <p className="mt-3 text-lg font-semibold text-white">{customerName}</p>
+            <p className="mt-1 text-sm text-[var(--text-muted)]">{order.email || 'No email provided'}</p>
+            <p className="mt-1 text-sm text-[var(--text-muted)]">{order.contact_phone || order.customer_phone || order.phone || 'No phone provided'}</p>
+            <p className="mt-3 text-sm leading-6 text-white">{orderAddress}</p>
+          </div>
+
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)]/70 p-4">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[var(--text-muted)]">Order Summary</p>
+            <div className="mt-3 space-y-2 text-sm">
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-[var(--text-muted)]">Created</span>
+                <span className="text-right text-white">{order.created_at ? new Date(order.created_at).toLocaleString() : 'N/A'}</span>
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-[var(--text-muted)]">Status</span>
+                <span className="rounded-full border border-[var(--gold-primary)]/30 bg-[var(--gold-primary)]/10 px-2.5 py-1 text-xs font-semibold uppercase tracking-wider text-[var(--gold-primary)]">
+                  {String(order.status || 'pending').replace(/_/g, ' ')}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-[var(--text-muted)]">Payment Method</span>
+                <span className="text-right text-white">{getOrderPaymentMethodLabel(order)}</span>
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-[var(--text-muted)]">Payment Status</span>
+                <span className="text-right text-white">{String(order.payment_status || 'pending').replace(/_/g, ' ')}</span>
+              </div>
+              {order.tracking_number && (
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-[var(--text-muted)]">Tracking Number</span>
+                  <span className="text-right text-white">{order.tracking_number}</span>
+                </div>
+              )}
+              {riderDetails && (
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-[var(--text-muted)]">Rider Details</span>
+                  <span className="text-right text-white">{riderDetails}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)]/70">
+          <div className="grid grid-cols-[1.6fr_0.5fr_0.8fr_0.8fr] gap-3 border-b border-[var(--border)] px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--text-muted)]">
+            <span>Item</span>
+            <span className="text-center">Qty</span>
+            <span className="text-right">Unit Price</span>
+            <span className="text-right">Amount</span>
+          </div>
+          <div>
+            {(order.items || []).length === 0 ? (
+              <div className="px-4 py-8 text-center text-sm text-[var(--text-muted)]">No items found for this order.</div>
+            ) : (
+              order.items.map((item, idx) => {
+                const quantity = Number(item.quantity ?? item.qty ?? 1) || 1
+                const unitPrice = Number(item.unit_price ?? item.price ?? 0) || 0
+                const amount = unitPrice * quantity
+                return (
+                  <div key={`${item.product_id || item.customization_id || idx}`} className="grid grid-cols-[1.6fr_0.5fr_0.8fr_0.8fr] gap-3 border-b border-[var(--border)]/50 px-4 py-3 text-sm last:border-b-0">
+                    <div className="min-w-0">
+                      <p className="truncate font-medium text-white">{item.product_name || item.name || item.product_sku || 'Product'}</p>
+                      {(item.notes || item.customization_id) && (
+                        <p className="mt-1 truncate text-xs text-[var(--text-muted)]">{item.notes || `Customization ${item.customization_id}`}</p>
+                      )}
+                    </div>
+                    <span className="text-center text-white">{quantity}</span>
+                    <span className="text-right text-white">{formatCurrency(unitPrice)}</span>
+                    <span className="text-right font-semibold text-[var(--gold-primary)]">{formatCurrency(amount)}</span>
+                  </div>
+                )
+              })
+            )}
+          </div>
+        </div>
+
+        <div className="mt-4 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)]/80">
+          <div className="border-b border-[var(--border)] px-4 py-3">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[var(--text-muted)]">
+              Amount Summary
+            </p>
+          </div>
+
+          <div className="px-4 py-4">
+            <div className="ml-auto grid w-full max-w-md grid-cols-[minmax(0,1fr)_auto] items-center gap-x-12 text-sm">
+              <span className="text-right text-[var(--text-muted)]">Subtotal</span>
+              <span className="text-right font-medium tabular-nums text-white">{formatCurrency(subtotal)}</span>
+            </div>
+          </div>
+
+          <div className="border-t border-[var(--border)]/50 px-4 py-4">
+            <div className="ml-auto grid w-full max-w-md grid-cols-[minmax(0,1fr)_auto] items-center gap-x-12 text-sm">
+              <span className="text-right text-[var(--text-muted)]">Shipping</span>
+              <span className="text-right font-medium tabular-nums text-white">{formatCurrency(shipping)}</span>
+            </div>
+          </div>
+
+          <div className="border-t border-[var(--border)]/50 px-4 py-4">
+            <div className="ml-auto grid w-full max-w-md grid-cols-[minmax(0,1fr)_auto] items-center gap-x-12 text-sm">
+              <span className="text-right text-[var(--text-muted)]">Tax</span>
+              <span className="text-right font-medium tabular-nums text-white">{formatCurrency(tax)}</span>
+            </div>
+          </div>
+
+          <div className="border-t border-[var(--gold-primary)]/20 bg-[var(--gold-primary)]/8 px-4 py-4">
+            <div className="ml-auto grid w-full max-w-md grid-cols-[minmax(0,1fr)_auto] items-center gap-x-12">
+              <span className="text-right text-base font-semibold text-white">Total</span>
+              <span className="text-right text-xl font-bold tabular-nums text-[var(--gold-primary)]">{formatCurrency(total)}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function OrderDetailsModal({ order, onClose, onUpdatePaymentStatus, onUpdateOrderStatus, onVerifyPayment, user, initialSection = 'details' }) {
+  const [activeSection, setActiveSection] = useState(initialSection)
+
+  useEffect(() => {
+    setActiveSection(initialSection)
+  }, [initialSection, order.order_id])
 
   const orderStatusConfig = getOrderStatusConfig(order.status || 'pending')
   const paymentConfig = getPaymentStatusConfig(order.payment_status || 'pending')
@@ -202,6 +593,17 @@ function OrderDetailsModal({ order, onClose, onUpdatePaymentStatus, onUpdateOrde
             View Details
           </button>
           <button
+            onClick={() => setActiveSection('receipt')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              activeSection === 'receipt'
+                ? 'bg-[var(--gold-primary)] text-black'
+                : 'text-[var(--text-muted)] hover:text-white'
+            }`}
+          >
+            <FileText className="w-4 h-4 inline mr-2" />
+            Receipt
+          </button>
+          <button
             onClick={() => setActiveSection('payment')}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
               activeSection === 'payment'
@@ -233,11 +635,7 @@ function OrderDetailsModal({ order, onClose, onUpdatePaymentStatus, onUpdateOrde
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <p className="text-[var(--text-muted)] text-xs">Name</p>
-                    <p className="text-white font-medium">
-                      {order.first_name && order.last_name
-                        ? `${order.first_name} ${order.last_name}`
-                        : order.customer_name || order.user_name || order.name || 'N/A'}
-                    </p>
+                    <p className="text-white font-medium">{getOrderCustomerName(order)}</p>
                   </div>
                   <div>
                     <p className="text-[var(--text-muted)] text-xs">Email</p>
@@ -249,11 +647,7 @@ function OrderDetailsModal({ order, onClose, onUpdatePaymentStatus, onUpdateOrde
                   </div>
                   <div>
                     <p className="text-[var(--text-muted)] text-xs">Address</p>
-                    <p className="text-white text-sm">
-                      {order.shipping_line1
-                        ? `${order.shipping_line1}${order.shipping_line2 ? ', ' + order.shipping_line2 : ''}, ${order.shipping_city}${order.shipping_province ? ', ' + order.shipping_province : ''} ${order.shipping_postal_code || ''}`
-                        : 'N/A'}
-                    </p>
+                    <p className="text-white text-sm">{getOrderAddress(order)}</p>
                   </div>
                 </div>
               </div>
@@ -293,16 +687,7 @@ function OrderDetailsModal({ order, onClose, onUpdatePaymentStatus, onUpdateOrde
                 </div>
                 <div className="bg-[var(--bg-primary)]/50 rounded-lg p-4">
                   <p className="text-[var(--text-muted)] text-xs uppercase tracking-wider mb-2">Payment Method</p>
-                  <p className="text-white text-sm">
-                    {(() => {
-                      const method = order.payment_method || order.payment?.method || 'Unknown'
-                      const methodLower = method.toString().toLowerCase()
-                      if (methodLower.includes('gcash') || methodLower.includes('g-cash')) return 'GCash'
-                      if (methodLower.includes('bank') || methodLower.includes('transfer') || methodLower.includes('bdo') || methodLower.includes('bpi') || methodLower.includes('unionbank')) return 'Bank Transfer'
-                      if (methodLower.includes('cod') || methodLower.includes('cash')) return 'Cash on Delivery'
-                      return method.charAt(0).toUpperCase() + method.slice(1)
-                    })()}
-                  </p>
+                  <p className="text-white text-sm">{getOrderPaymentMethodLabel(order)}</p>
                 </div>
                 {order.tracking_number && (
                   <div className="bg-[var(--bg-primary)]/50 rounded-lg p-4">
@@ -310,10 +695,10 @@ function OrderDetailsModal({ order, onClose, onUpdatePaymentStatus, onUpdateOrde
                     <p className="text-white text-sm">{order.tracking_number}</p>
                   </div>
                 )}
-                {order.rider_details && (
+                {getOrderRiderDetails(order) && (
                   <div className="bg-[var(--bg-primary)]/50 rounded-lg p-4">
                     <p className="text-[var(--text-muted)] text-xs uppercase tracking-wider mb-2">Rider Details</p>
-                    <p className="text-white text-sm">{order.rider_details}</p>
+                    <p className="text-white text-sm">{getOrderRiderDetails(order)}</p>
                   </div>
                 )}
               </div>
@@ -365,18 +750,26 @@ function OrderDetailsModal({ order, onClose, onUpdatePaymentStatus, onUpdateOrde
               <div className="bg-[var(--bg-primary)]/50 rounded-lg p-4 space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-[var(--text-muted)]">Subtotal</span>
-                  <span className="text-white">{formatCurrency(order.subtotal || (order.total || order.total_amount || 0) - (order.shipping_fee || 0))}</span>
+                  <span className="text-white">{formatCurrency(getOrderSubtotal(order))}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-[var(--text-muted)]">Shipping</span>
-                  <span className="text-white">{formatCurrency(order.shipping_fee || 0)}</span>
+                  <span className="text-white">{formatCurrency(getOrderShippingAmount(order))}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-[var(--text-muted)]">Tax</span>
+                  <span className="text-white">{formatCurrency(getOrderTaxAmount(order))}</span>
                 </div>
                 <div className="flex justify-between text-sm pt-2 border-t border-[var(--border)]">
                   <span className="text-white font-semibold">Total</span>
-                  <span className="text-[var(--gold-primary)] font-bold">{formatCurrency(order.total || order.total_amount || 0)}</span>
+                  <span className="text-[var(--gold-primary)] font-bold">{formatCurrency(getOrderTotal(order))}</span>
                 </div>
               </div>
             </div>
+          )}
+
+          {activeSection === 'receipt' && (
+            <ReceiptPanel order={order} />
           )}
 
           {activeSection === 'payment' && (
@@ -698,6 +1091,7 @@ export function OrderManagement({ orders, onRefresh, user }) {
   const [sortBy, setSortBy] = useState('newest')
   const [page, setPage] = useState(1)
   const [selectedOrder, setSelectedOrder] = useState(null)
+  const [selectedSection, setSelectedSection] = useState('details')
   const [isUpdatingPayment, setIsUpdatingPayment] = useState(false)
   const [isUpdatingOrder, setIsUpdatingOrder] = useState(false)
 
@@ -916,11 +1310,24 @@ export function OrderManagement({ orders, onRefresh, user }) {
                         <td className="p-4 text-center">
                           <div className="flex items-center justify-center gap-1">
                             <button
-                              onClick={() => setSelectedOrder(order)}
+                              onClick={() => {
+                                setSelectedSection('details')
+                                setSelectedOrder(order)
+                              }}
                               className="p-2 hover:bg-[var(--gold-primary)]/10 rounded-lg transition-colors"
                               title="View Details"
                             >
                               <Eye className="w-4 h-4 text-[var(--text-muted)]" />
+                            </button>
+                            <button
+                              onClick={() => {
+                                setSelectedSection('receipt')
+                                setSelectedOrder(order)
+                              }}
+                              className="p-2 hover:bg-[var(--gold-primary)]/10 rounded-lg transition-colors"
+                              title="View Receipt"
+                            >
+                              <Printer className="w-4 h-4 text-[var(--text-muted)]" />
                             </button>
                           </div>
                         </td>
@@ -970,6 +1377,7 @@ export function OrderManagement({ orders, onRefresh, user }) {
             onUpdateOrderStatus={handleUpdateOrderStatus}
             onVerifyPayment={handleVerifyPayment}
             user={user}
+            initialSection={selectedSection}
           />
         )}
       </AnimatePresence>

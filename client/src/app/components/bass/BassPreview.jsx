@@ -60,7 +60,7 @@ function BassLayer({ src, maskSrc, style, className = '', layerName = '' }) {
   )
 }
 
-function BassPreview({ config, view, onViewChange }) {
+function BassPreview({ config, view, onViewChange, modelImageSrc }) {
   const previewRef = useRef(null)
 
   // ===== CONFIG VALIDATION & RESOLUTION =====
@@ -138,6 +138,7 @@ function BassPreview({ config, view, onViewChange }) {
   }, [resolvedConfig])
 
   const colorKey = assets.hardware?.color ?? 'chrome'
+  const bodyModelSrc = modelImageSrc || assets.bodyModel?.bodySrc || null
 
   // ===== LAYERED RENDERING SYSTEM =====
   // Front view layers
@@ -145,10 +146,10 @@ function BassPreview({ config, view, onViewChange }) {
     const layers = []
 
     // Body + Finish
-    if (assets.bodyModel?.bodySrc) {
+    if (bodyModelSrc) {
       layers.push({
         name: 'body-wood',
-        maskSrc: assets.bodyModel.bodySrc,
+        maskSrc: bodyModelSrc,
         style: {
           backgroundImage: assets.bodyWood?.texture ? `url(${assets.bodyWood.texture})` : undefined,
           opacity: 1,
@@ -161,7 +162,7 @@ function BassPreview({ config, view, onViewChange }) {
     if (assets.bodyFinish?.texture) {
       layers.push({
         name: 'body-finish-texture',
-        maskSrc: assets.bodyModel?.bodySrc,
+        maskSrc: bodyModelSrc,
         style: {
           backgroundImage: `url(${assets.bodyFinish.texture})`,
           opacity: 1,
@@ -172,7 +173,7 @@ function BassPreview({ config, view, onViewChange }) {
     } else if (assets.bodyFinish?.color) {
       layers.push({
         name: 'body-finish-color',
-        maskSrc: assets.bodyModel?.bodySrc,
+        maskSrc: bodyModelSrc,
         style: {
           backgroundColor: assets.bodyFinish.color,
           opacity: 1,
@@ -349,17 +350,17 @@ function BassPreview({ config, view, onViewChange }) {
 
     if (DEBUG) console.log('[FRONT LAYERS]', layers.map(l => l.name))
     return layers
-  }, [assets, colorKey, resolvedConfig.pickguard])
+  }, [assets, bodyModelSrc, colorKey, resolvedConfig.pickguard])
 
   // Rear view layers with strict validation
   const rearLayers = useMemo(() => {
     const layers = []
 
     // Body base
-    if (assets.bodyModel?.bodySrc && assets.bodyWood?.texture) {
+    if (bodyModelSrc && assets.bodyWood?.texture) {
       layers.push({
         name: 'rear-body-wood',
-        maskSrc: assets.bodyModel.bodySrc,
+        maskSrc: bodyModelSrc,
         style: {
           backgroundImage: `url(${assets.bodyWood.texture})`,
           opacity: 1,
@@ -371,7 +372,7 @@ function BassPreview({ config, view, onViewChange }) {
     if (assets.bodyFinish?.texture) {
       layers.push({
         name: 'rear-body-finish-texture',
-        maskSrc: assets.bodyModel?.bodySrc,
+        maskSrc: bodyModelSrc,
         style: {
           backgroundImage: `url(${assets.bodyFinish.texture})`,
           opacity: 1,
@@ -382,7 +383,7 @@ function BassPreview({ config, view, onViewChange }) {
     } else if (assets.bodyFinish?.color) {
       layers.push({
         name: 'rear-body-finish-color',
-        maskSrc: assets.bodyModel?.bodySrc,
+        maskSrc: bodyModelSrc,
         style: {
           backgroundColor: assets.bodyFinish.color,
           opacity: 1,
@@ -471,7 +472,7 @@ function BassPreview({ config, view, onViewChange }) {
 
     if (DEBUG) console.log('[REAR LAYERS]', layers.map(l => l.name))
     return layers
-  }, [assets])
+  }, [assets, bodyModelSrc])
 
   // Transform calculations
   const previewLayout = bassBuilder.PREVIEW_LAYOUTS[resolvedConfig.bassType] ?? { scale: 0.93, x: 0, y: 26 }

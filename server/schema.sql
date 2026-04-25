@@ -683,7 +683,35 @@ ON CONFLICT (guitar_type_code, part_category_code) DO NOTHING;
 
 
 -- =============================================
--- 23. GUITAR BUILDER PARTS
+-- 23. BUILDER MODEL IMAGES
+-- =============================================
+
+CREATE TABLE builder_model_images (
+    model_image_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    guitar_type_code VARCHAR(50) NOT NULL REFERENCES builder_guitar_types(guitar_type_code) ON DELETE CASCADE,
+    model_key VARCHAR(100) NOT NULL,
+    display_name VARCHAR(120) NOT NULL,
+    image_url TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (guitar_type_code, model_key)
+);
+
+CREATE INDEX idx_builder_model_images_guitar_type ON builder_model_images(guitar_type_code);
+
+INSERT INTO builder_model_images (guitar_type_code, model_key, display_name) VALUES
+('electric', 'strat', 'Strat'),
+('electric', 'solo', 'Solo'),
+('electric', 'dc', 'DC'),
+('electric', 'delos', 'Delos'),
+('bass', 'vader', 'Vader'),
+('bass', 'pb', 'Precision'),
+('bass', 'jb', 'Jazz')
+ON CONFLICT (guitar_type_code, model_key) DO NOTHING;
+
+
+-- =============================================
+-- 24. GUITAR BUILDER PARTS
 -- =============================================
 
 CREATE TABLE guitar_builder_parts (

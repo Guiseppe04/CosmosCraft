@@ -43,18 +43,26 @@ export function formatPricePHP(price) {
 export default function useBassConfig() {
   const [config, setConfig] = useState(BASS_DEFAULT_CONFIG)
   const [builderParts, setBuilderParts] = useState([])
+  const [modelImages, setModelImages] = useState([])
   const [loadingPrices, setLoadingPrices] = useState(true)
 
   const fetchBuilderParts = async () => {
     setLoadingPrices(true)
     try {
-      const response = await axios.get(`${API_URL}/api/builder-parts`, {
-        params: { is_active: true, pageSize: 500, _t: Date.now() },
-        headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache', 'Expires': '0' }
-      })
-      if (response.data?.data) {
-        setBuilderParts(response.data.data)
+      const [partsResponse, modelImagesResponse] = await Promise.all([
+        axios.get(`${API_URL}/api/builder-parts`, {
+          params: { is_active: true, guitar_type: 'bass', pageSize: 500, _t: Date.now() },
+          headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache', 'Expires': '0' }
+        }),
+        axios.get(`${API_URL}/api/builder-parts/model-images`, {
+          params: { guitar_type: 'bass', _t: Date.now() },
+          headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache', 'Expires': '0' }
+        }),
+      ])
+      if (partsResponse.data?.data) {
+        setBuilderParts(partsResponse.data.data)
       }
+      setModelImages(Array.isArray(modelImagesResponse.data?.data) ? modelImagesResponse.data.data : [])
     } catch (error) {
       console.error('Failed to fetch builder parts:', error)
     } finally {
@@ -106,6 +114,16 @@ export default function useBassConfig() {
     })
     return overrides
   }, [builderParts])
+
+  const modelImageMap = useMemo(() => {
+    return modelImages.reduce((acc, item) => {
+      const key = String(item?.model_key || '').trim()
+      if (key && item?.image_url) {
+        acc[key] = item.image_url
+      }
+      return acc
+    }, {})
+  }, [modelImages])
 
   const getCategoryPrice = (cat) => priceOverrides[`cat:${cat}`]?.price
   const getOptionOverride = (category, optionKey) => {
@@ -463,8 +481,12 @@ export default function useBassConfig() {
     [mergedBodyFinishOptions],
   )
   const bodyOptions = useMemo(
-    () => Object.entries(mergedBodyOptions).map(([value, option]) => ({ value, ...option })),
-    [mergedBodyOptions],
+    () => Object.entries(mergedBodyOptions).map(([value, option]) => ({
+      value,
+      ...option,
+      previewImageUrl: modelImageMap[value] || null,
+    })),
+    [mergedBodyOptions, modelImageMap],
   )
   const neckOptions = useMemo(
     () => Object.entries(mergedNeckOptions).map(([value, option]) => ({ value, ...option })),

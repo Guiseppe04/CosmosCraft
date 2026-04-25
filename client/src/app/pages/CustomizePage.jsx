@@ -8,6 +8,7 @@ import {
 } from 'lucide-react'
 import { exportMaskedPreview } from '../utils/exportMaskedPreview.js'
 import { adminApi } from '../utils/adminApi.js'
+import { optimizeCloudinaryImage } from '../utils/cloudinary.js'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useCart } from '../context/CartContext.jsx'
 import useGuitarConfig from '../hooks/useGuitarConfig.js'
@@ -123,7 +124,15 @@ function OptionButton({ option, isSelected, onClick }) {
 }
 
 // Visual card option for wood/material selection
-function VisualCard({ option, isSelected, onClick, previewImage }) {
+function VisualCard({ option, isSelected, onClick, previewImage, fallbackImage }) {
+  const [displayImage, setDisplayImage] = useState(previewImage || fallbackImage || '')
+
+  useEffect(() => {
+    setDisplayImage(previewImage || fallbackImage || '')
+  }, [previewImage, fallbackImage])
+
+  const optimizedImage = optimizeCloudinaryImage(displayImage, { width: 640 })
+
   return (
     <button
       type="button"
@@ -136,10 +145,19 @@ function VisualCard({ option, isSelected, onClick, previewImage }) {
     >
       {/* Preview image/gradient */}
       <div className="relative h-16 w-full overflow-hidden">
-        {previewImage ? (
-          <div 
-            className="absolute inset-0 bg-cover bg-center transition-transform duration-500 group-hover:scale-105"
-            style={{ backgroundImage: `url(${previewImage})` }}
+        {displayImage ? (
+          <img
+            src={optimizedImage}
+            alt={option.label}
+            loading="lazy"
+            onError={() => {
+              if (fallbackImage && displayImage !== fallbackImage) {
+                setDisplayImage(fallbackImage)
+                return
+              }
+              setDisplayImage('')
+            }}
+            className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
           />
         ) : (
           <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-white/5" />
@@ -256,6 +274,10 @@ export function CustomizePage() {
   const currentViewStickers = useMemo(
     () => stickers.filter(s => (s.side || 'front') === view),
     [stickers, view]
+  )
+  const selectedBodyModel = useMemo(
+    () => options.bodyOptions?.find((option) => option.value === config.body) || null,
+    [options.bodyOptions, config.body]
   )
 
   const handleStickerUpload = (event) => {
@@ -936,11 +958,13 @@ export function CustomizePage() {
                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Body Shape</h3>
                     <div className="grid grid-cols-2 gap-2">
                       {options.bodyOptions?.map((opt) => (
-                        <OptionButton
+                        <VisualCard
                           key={opt.value}
                           option={opt}
                           isSelected={config.body === opt.value}
                           onClick={() => updateConfig({ body: opt.value })}
+                          previewImage={opt.previewImageUrl}
+                          fallbackImage={opt.bodySrc}
                         />
                       ))}
                     </div>
@@ -1295,7 +1319,12 @@ export function CustomizePage() {
                     willChange: 'transform',
                   }}
                 >
-                  <GuitarPreview config={config} view={view} onViewChange={setView} />
+                  <GuitarPreview
+                    config={config}
+                    view={view}
+                    onViewChange={setView}
+                    modelImageSrc={selectedBodyModel?.previewImageUrl || selectedBodyModel?.bodySrc || null}
+                  />
                   {currentViewStickers.map((stickerItem, index) => {
                     const isSelectedSticker = selectedStickerId === stickerItem.id
                     return (

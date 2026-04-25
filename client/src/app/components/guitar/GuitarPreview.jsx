@@ -50,8 +50,9 @@ function stringsOverlayStyle() {
   }
 }
 
-function GuitarPreview({ config, view, onViewChange }) {
+function GuitarPreview({ config, view, onViewChange, modelImageSrc }) {
   const model = guitarBuilder.BODY_OPTIONS[config.body] ?? guitarBuilder.BODY_OPTIONS.strat
+  const modelBodySrc = modelImageSrc || model.bodySrc
   const bodyWood = guitarBuilder.BODY_WOOD_OPTIONS[config.bodyWood] ?? guitarBuilder.BODY_WOOD_OPTIONS.rosewood
   
   // Handle both predefined finishes and custom hex colors
@@ -120,7 +121,7 @@ function GuitarPreview({ config, view, onViewChange }) {
 
     return [
       {
-        maskSrc: model.bodySrc,
+        maskSrc: modelBodySrc,
         style: {
           backgroundImage: `url(${bodyWood.texture})`,
           opacity: 1,
@@ -129,7 +130,7 @@ function GuitarPreview({ config, view, onViewChange }) {
       },
       bodyFinish.texture
         ? {
-            maskSrc: model.bodySrc,
+            maskSrc: modelBodySrc,
             style: {
               backgroundImage: `url(${bodyFinish.texture})`,
               opacity: 1,
@@ -138,7 +139,7 @@ function GuitarPreview({ config, view, onViewChange }) {
           }
         : bodyFinish.color
         ? {
-            maskSrc: model.bodySrc,
+            maskSrc: modelBodySrc,
             style: {
               backgroundColor: bodyFinish.color,
               opacity: 1,
@@ -182,7 +183,7 @@ function GuitarPreview({ config, view, onViewChange }) {
 
     return [
       {
-        maskSrc: model.bodySrc,
+        maskSrc: modelBodySrc,
         style: {
           backgroundImage: `url(${bodyWood.texture})`,
           opacity: 1,
@@ -191,7 +192,7 @@ function GuitarPreview({ config, view, onViewChange }) {
       },
       bodyFinish.texture
         ? {
-            maskSrc: model.bodySrc,
+            maskSrc: modelBodySrc,
             style: {
               backgroundImage: `url(${bodyFinish.texture})`,
               opacity: 1,
@@ -200,7 +201,7 @@ function GuitarPreview({ config, view, onViewChange }) {
           }
         : bodyFinish.color
         ? {
-            maskSrc: model.bodySrc,
+            maskSrc: modelBodySrc,
             style: {
               backgroundColor: bodyFinish.color,
               opacity: 1,
@@ -233,7 +234,7 @@ function GuitarPreview({ config, view, onViewChange }) {
       },
       { src: headstockTuners, className: 'opacity-95' },
     ].filter(Boolean)
-  }, [bodyFinish.texture, bodyFinish.color, bodyWood.texture, colorKey, fretboard.src, headstock, headstockWood.texture, model.bodySrc, neck.filter, neck.src])
+  }, [bodyFinish.texture, bodyFinish.color, bodyWood.texture, colorKey, fretboard.src, headstock, headstockWood.texture, modelBodySrc, neck.filter, neck.src])
   
   const stringLayer = useMemo(() => {
     return headstock.strings ? { src: headstock.strings, className: 'opacity-95' } : null

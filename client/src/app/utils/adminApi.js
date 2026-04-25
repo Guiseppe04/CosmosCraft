@@ -64,12 +64,20 @@ export const adminApi = {
     const qs = new URLSearchParams(params).toString()
     return request(`/api/builder-parts${qs ? '?' + qs : ''}`)
   },
+  getBuilderModelImages: (params = {}) => {
+    const qs = new URLSearchParams(params).toString()
+    return request(`/api/builder-parts/model-images${qs ? '?' + qs : ''}`)
+  },
   getBuilderPart: (id) => request(`/api/builder-parts/${id}`),
   createBuilderPart: (body) => request('/api/builder-parts', { method: 'POST', body }),
   updateBuilderPart: (id, body) => request(`/api/builder-parts/${id}`, { method: 'PUT', body }),
+  updateBuilderModelImage: (guitarType, modelKey, body) =>
+    request(`/api/builder-parts/model-images/${guitarType}/${modelKey}`, { method: 'PUT', body }),
   deleteBuilderPart: (id) => request(`/api/builder-parts/${id}`, { method: 'DELETE' }),
   importBuilderPartsFromModels: (guitarType) =>
     request('/api/builder-parts/import-models', { method: 'POST', body: { guitarType } }),
+  seedCustomizeBuilderParts: (guitarType) =>
+    request('/api/builder-parts/seed-customize-parts', { method: 'POST', body: { guitarType } }),
 
   // Users / RBAC
   getUsers: (params = {}) => {

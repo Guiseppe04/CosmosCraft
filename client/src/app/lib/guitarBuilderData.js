@@ -1,5 +1,5 @@
-export const asset = path => new URL(`../../../../builder/electric_models/${path}`, import.meta.url).href
-export const woodAsset = path => new URL(`../../../../woodtype/${path}`, import.meta.url).href
+export const asset = path => `/builder/electric_models/${path}`
+export const woodAsset = path => `/woodtype/${path}`
 
 export const DEFAULT_CONFIG = {
   guitarType: 'electric',

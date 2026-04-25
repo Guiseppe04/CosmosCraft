@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { motion } from 'motion/react'
-import { Mail, Lock, ArrowRight } from 'lucide-react'
+import { Mail, Lock, ArrowRight, Eye, EyeOff } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { API } from '../utils/apiConfig'
 
@@ -10,19 +10,41 @@ import { API } from '../utils/apiConfig'
  * Theme: Dark theme with gold accents (matching LandingPage)
  */
 export function LoginPage() {
+  const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [rememberMe, setRememberMe] = useState(false)
   const [error, setError] = useState('')
+  const [emailError, setEmailError] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
 
   const navigate = useNavigate()
   const { login } = useAuth()
+
+  const validateEmail = (value) => emailPattern.test(value.trim())
+
+  const handleEmailChange = (e) => {
+    const nextEmail = e.target.value
+    setEmail(nextEmail)
+    if (emailError) setEmailError('')
+    if (error) setError('')
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     setIsLoading(true)
     setError('')
+
+    if (!validateEmail(email)) {
+      const validationMessage = 'Validation Error: Please enter a valid email address.'
+      setEmailError(validationMessage)
+      setError(validationMessage)
+      setIsLoading(false)
+      return
+    }
+
+    setEmailError('')
 
     try {
       const response = await fetch(`${API}/auth/email-login`, {
@@ -114,11 +136,13 @@ export function LoginPage() {
                 type="email"
                 placeholder="name@example.com"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={handleEmailChange}
                 required
+                aria-invalid={Boolean(emailError)}
                 className="w-full pl-12 pr-4 py-3 bg-[var(--bg-primary)] border border-[var(--border)] rounded-lg text-white placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] focus:border-transparent transition-all duration-200"
               />
             </div>
+            {emailError && <p className="mt-2 text-sm text-red-400">{emailError}</p>}
           </div>
 
           {/* Password */}
@@ -130,13 +154,21 @@ export function LoginPage() {
               <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[var(--text-muted)]" />
               <input
                 id="password"
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                className="w-full pl-12 pr-4 py-3 bg-[var(--bg-primary)] border border-[var(--border)] rounded-lg text-white placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] focus:border-transparent transition-all duration-200"
+                className="w-full pl-12 pr-12 py-3 bg-[var(--bg-primary)] border border-[var(--border)] rounded-lg text-white placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] focus:border-transparent transition-all duration-200"
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword((value) => !value)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1 text-[var(--text-muted)] transition-colors hover:text-white focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              </button>
             </div>
           </div>
 
