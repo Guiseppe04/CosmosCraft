@@ -167,7 +167,7 @@ exports.verifyPayment = async (req, res, next) => {
       data: {
         payment,
       },
-      message: 'Payment verified successfully. Order has been marked as paid.',
+      message: 'Payment verified successfully. Order payment has been approved.',
     });
   } catch (err) {
     next(err);

@@ -1,7 +1,7 @@
 const { pool } = require('../config/database');
 const { AppError } = require('../middleware/errorHandler');
 
-const TAX_RATE = 0.12;
+const TAX_RATE = 0;
 
 async function getOrCreateCart(userId) {
   let result = await pool.query(

@@ -16,6 +16,14 @@ exports.PAYMENT_STATUS = {
   REFUNDED: 'refunded',
 };
 
+const ORDER_PAYMENT_STATUS = {
+  PENDING: 'pending',
+  PROOF_SUBMITTED: 'proof_submitted',
+  APPROVED: 'approved',
+  REJECTED: 'rejected',
+  FAILED: 'failed',
+};
+
 exports.createPayment = createPayment;
 exports.uploadProofOfPayment = uploadProofOfPayment;
 exports.verifyPayment = verifyPayment;
@@ -313,7 +321,7 @@ async function verifyPayment(paymentId, verifiedByUserId, notes) {
 
     await client.query(
       `UPDATE orders SET payment_status = $1, updated_at = $2 WHERE order_id = $3`,
-      ['paid', new Date(), payment.order_id]
+      [ORDER_PAYMENT_STATUS.APPROVED, new Date(), payment.order_id]
     );
 
     await ensureProjectForCustomBuildOrder(client, payment.order_id);
@@ -361,8 +369,8 @@ async function rejectPayment(paymentId, rejectedByUserId, reason, notes) {
     );
 
     await client.query(
-      `UPDATE orders SET payment_status = 'pending', updated_at = $1 WHERE order_id = $2`,
-      [new Date(), payment.order_id]
+      `UPDATE orders SET payment_status = $1, updated_at = $2 WHERE order_id = $3`,
+      [ORDER_PAYMENT_STATUS.PENDING, new Date(), payment.order_id]
     );
 
     await client.query('COMMIT');
@@ -599,8 +607,8 @@ async function refundPayment(paymentId, refundedByUserId, reason) {
     );
 
     await client.query(
-      `UPDATE orders SET payment_status = 'pending', updated_at = $1 WHERE order_id = $2`,
-      [new Date(), payment.order_id]
+      `UPDATE orders SET payment_status = $1, updated_at = $2 WHERE order_id = $3`,
+      [ORDER_PAYMENT_STATUS.PENDING, new Date(), payment.order_id]
     );
 
     await client.query('COMMIT');

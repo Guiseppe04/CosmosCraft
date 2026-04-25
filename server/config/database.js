@@ -75,6 +75,95 @@ async function runStartupMigrations(client) {
     CREATE INDEX IF NOT EXISTS idx_projects_fulfillment_method
     ON projects(fulfillment_method);
   `);
+
+  await client.query(`
+    ALTER TABLE orders
+    ADD COLUMN IF NOT EXISTS payment_reference_number VARCHAR(100),
+    ADD COLUMN IF NOT EXISTS proof_submitted_at TIMESTAMPTZ,
+    ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMPTZ;
+  `);
+
+  await client.query(`
+    CREATE OR REPLACE FUNCTION ensure_payment_for_verification_status()
+    RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+    BEGIN
+      IF NEW.status = 'pending'::payment_status_enum AND (
+        NULLIF(BTRIM(COALESCE(NEW.reference_number, '')), '') IS NOT NULL OR
+        NULLIF(BTRIM(COALESCE(NEW.proof_url, '')), '') IS NOT NULL
+      ) THEN
+        NEW.status := 'for_verification'::payment_status_enum;
+      END IF;
+
+      RETURN NEW;
+    END;
+    $$;
+  `);
+
+  await client.query(`
+    CREATE OR REPLACE FUNCTION sync_order_payment_status_from_payment()
+    RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+    DECLARE
+      next_order_status order_payment_status_enum;
+      next_reference_number TEXT;
+    BEGIN
+      next_reference_number := NULLIF(BTRIM(COALESCE(NEW.reference_number, '')), '');
+
+      next_order_status := CASE
+        WHEN NEW.status = 'verified'::payment_status_enum THEN 'approved'::order_payment_status_enum
+        WHEN NEW.status = 'for_verification'::payment_status_enum THEN 'proof_submitted'::order_payment_status_enum
+        WHEN NEW.status = 'rejected'::payment_status_enum THEN 'rejected'::order_payment_status_enum
+        WHEN NEW.status = 'cancelled'::payment_status_enum THEN 'pending'::order_payment_status_enum
+        WHEN NEW.status = 'refunded'::payment_status_enum THEN 'failed'::order_payment_status_enum
+        WHEN NEW.status = 'pending'::payment_status_enum THEN 'pending'::order_payment_status_enum
+        ELSE NULL
+      END;
+
+      IF next_order_status IS NOT NULL THEN
+        UPDATE orders
+        SET payment_status = next_order_status,
+            payment_reference_number = COALESCE(next_reference_number, payment_reference_number),
+            proof_submitted_at = CASE
+              WHEN next_order_status = 'proof_submitted'::order_payment_status_enum
+                THEN COALESCE(proof_submitted_at, NEW.created_at, now())
+              ELSE proof_submitted_at
+            END,
+            reviewed_at = CASE
+              WHEN next_order_status = 'approved'::order_payment_status_enum
+                THEN COALESCE(reviewed_at, now())
+              ELSE reviewed_at
+            END,
+            updated_at = now()
+        WHERE order_id = NEW.order_id
+          AND (
+            payment_status IS DISTINCT FROM next_order_status OR
+            payment_reference_number IS DISTINCT FROM COALESCE(next_reference_number, payment_reference_number)
+          );
+      END IF;
+
+      RETURN NEW;
+    END;
+    $$;
+  `);
+
+  await client.query(`
+    DROP TRIGGER IF EXISTS trg_payments_force_for_verification ON payments;
+    CREATE TRIGGER trg_payments_force_for_verification
+    BEFORE INSERT OR UPDATE OF status, reference_number, proof_url ON payments
+    FOR EACH ROW
+    EXECUTE FUNCTION ensure_payment_for_verification_status();
+  `);
+
+  await client.query(`
+    DROP TRIGGER IF EXISTS trg_sync_orders_from_payments ON payments;
+    CREATE TRIGGER trg_sync_orders_from_payments
+    AFTER INSERT OR UPDATE OF status, reference_number, proof_url ON payments
+    FOR EACH ROW
+    EXECUTE FUNCTION sync_order_payment_status_from_payment();
+  `);
 }
 
 pool.on('error', (err) => {

@@ -55,8 +55,8 @@ exports.createSale = async (
   const normalizedPaymentMethod = ['cash', 'gcash', 'bank_transfer'].includes(paymentMethod) ? paymentMethod : 'cash';
   const normalizedStatus = ['pending', 'completed', 'cancelled'].includes(status) ? status : 'completed';
   const normalizedSubtotal = Math.max(0, Number(subtotal || 0));
-  const normalizedTaxAmount = Math.max(0, Number(taxAmount || 0));
-  const normalizedTotalAmount = Math.max(0, Number(totalAmount || 0));
+  const normalizedTaxAmount = 0;
+  const normalizedTotalAmount = normalizedSubtotal;
   const paymentStatus = normalizedPaymentMethod === 'cash' ? 'verified' : 'pending';
   const completedAt = normalizedStatus === 'completed' ? new Date() : null;
   const saleNumber = await generateSaleNumber();
@@ -92,7 +92,7 @@ exports.createSale = async (
       ]
     );
 
-    const sale = saleRes.rows[0];
+    let sale = saleRes.rows[0];
 
     if (items && items.length > 0) {
       for (const item of items) {
@@ -141,6 +141,20 @@ exports.createSale = async (
           );
         }
       }
+
+      await recalculateSaleTotals(client, sale.sale_id);
+
+      const updatedSaleRes = await client.query(
+        `SELECT
+          sale_id, sale_number, staff_id, customer_name, customer_phone,
+          subtotal, discount_amount, tax_amount, total_amount,
+          payment_method, payment_status, status, reference_number, created_at, completed_at
+         FROM pos_sales
+         WHERE sale_id = $1`,
+        [sale.sale_id]
+      );
+
+      sale = updatedSaleRes.rows[0] || sale;
     }
 
     await client.query('COMMIT');
@@ -669,7 +683,7 @@ exports.cancelSale = async (saleId, cancelledBy, reason = null) => {
 // ─── HELPER FUNCTIONS ────────────────────────────────────────────────────────
 
 /**
- * Recalculate sale totals (subtotal, tax, total)
+ * Recalculate sale totals (subtotal and total)
  * Assumes transaction context
  */
 const recalculateSaleTotals = async (client, saleId) => {
@@ -683,10 +697,8 @@ const recalculateSaleTotals = async (client, saleId) => {
   const subtotal = parseFloat(itemsRes.rows[0]?.subtotal || 0);
   const discountAmount = parseFloat(itemsRes.rows[0]?.total_discount || 0);
   
-  // Tax calculation (12% default - adjust as needed)
-  const taxableAmount = subtotal;
-  const taxAmount = taxableAmount * 0.12;
-  const totalAmount = subtotal + taxAmount;
+  const taxAmount = 0;
+  const totalAmount = subtotal;
 
   await client.query(
     `UPDATE pos_sales SET 

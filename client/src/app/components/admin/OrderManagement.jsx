@@ -102,12 +102,8 @@ function getOrderShippingAmount(order) {
   return Number(order.shipping_cost ?? order.shipping_fee ?? 0) || 0
 }
 
-function getOrderTaxAmount(order) {
-  return Number(order.tax_amount || 0) || 0
-}
-
 function getOrderTotal(order) {
-  return Number(order.total || order.total_amount || 0) || 0
+  return Math.max(getOrderSubtotal(order) + getOrderShippingAmount(order), 0)
 }
 
 function getOrderRiderDetails(order) {
@@ -129,7 +125,6 @@ function buildReceiptHtml(order) {
   const paymentMethod = getOrderPaymentMethodLabel(order)
   const subtotal = getOrderSubtotal(order)
   const shipping = getOrderShippingAmount(order)
-  const tax = getOrderTaxAmount(order)
   const total = getOrderTotal(order)
   const createdAt = order.created_at ? new Date(order.created_at) : null
   const receiptDate = createdAt ? createdAt.toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' }) : 'N/A'
@@ -230,7 +225,6 @@ function buildReceiptHtml(order) {
           <div class="totals">
             <div class="totals-row"><span>Subtotal</span><strong>${formatCurrency(subtotal)}</strong></div>
             <div class="totals-row"><span>Shipping</span><strong>${formatCurrency(shipping)}</strong></div>
-            <div class="totals-row"><span>Tax</span><strong>${formatCurrency(tax)}</strong></div>
             <div class="totals-row total"><span>Total</span><span>${formatCurrency(total)}</span></div>
           </div>
 
@@ -393,7 +387,6 @@ function ImageZoomModal({ src, alt, onClose }) {
 function ReceiptPanel({ order }) {
   const subtotal = getOrderSubtotal(order)
   const shipping = getOrderShippingAmount(order)
-  const tax = getOrderTaxAmount(order)
   const total = getOrderTotal(order)
   const customerName = getOrderCustomerName(order)
   const orderAddress = getOrderAddress(order)
@@ -517,13 +510,6 @@ function ReceiptPanel({ order }) {
             <div className="ml-auto grid w-full max-w-md grid-cols-[minmax(0,1fr)_auto] items-center gap-x-12 text-sm">
               <span className="text-right text-[var(--text-muted)]">Shipping</span>
               <span className="text-right font-medium tabular-nums text-white">{formatCurrency(shipping)}</span>
-            </div>
-          </div>
-
-          <div className="border-t border-[var(--border)]/50 px-4 py-4">
-            <div className="ml-auto grid w-full max-w-md grid-cols-[minmax(0,1fr)_auto] items-center gap-x-12 text-sm">
-              <span className="text-right text-[var(--text-muted)]">Tax</span>
-              <span className="text-right font-medium tabular-nums text-white">{formatCurrency(tax)}</span>
             </div>
           </div>
 
@@ -755,10 +741,6 @@ function OrderDetailsModal({ order, onClose, onUpdatePaymentStatus, onUpdateOrde
                 <div className="flex justify-between text-sm">
                   <span className="text-[var(--text-muted)]">Shipping</span>
                   <span className="text-white">{formatCurrency(getOrderShippingAmount(order))}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-[var(--text-muted)]">Tax</span>
-                  <span className="text-white">{formatCurrency(getOrderTaxAmount(order))}</span>
                 </div>
                 <div className="flex justify-between text-sm pt-2 border-t border-[var(--border)]">
                   <span className="text-white font-semibold">Total</span>
@@ -1294,7 +1276,7 @@ export function OrderManagement({ orders, onRefresh, user }) {
                           <p className="text-[var(--text-muted)] text-xs">{order.email || order.customer_email || 'N/A'}</p>
                         </td>
                         <td className="p-4 text-right font-bold text-[var(--gold-primary)]">
-                          {formatCurrency(order.total || order.total_amount)}
+                          {formatCurrency(getOrderTotal(order))}
                         </td>
                         <td className="p-4">
                           <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold border ${paymentConfig.bgColor} ${paymentConfig.textColor} ${paymentConfig.borderColor}`}>

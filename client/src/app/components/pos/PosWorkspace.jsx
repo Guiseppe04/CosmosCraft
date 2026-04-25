@@ -122,8 +122,8 @@ export function PosWorkspace({
     }
     return null
   }, [])
-  const tax = subtotal * 0.12
-  const total = subtotal + tax
+  const tax = 0
+  const total = subtotal
   const change = Math.max(0, Number(cashReceived || 0) - total)
 
   const resetSaleForm = useCallback(() => {
@@ -472,7 +472,6 @@ export function PosWorkspace({
 
               <div className="mt-4 space-y-2 border-t border-[var(--border)] pt-4 text-sm">
                 <div className="flex justify-between text-[var(--text-muted)]"><span>Subtotal</span><span>{formatCurrency(subtotal)}</span></div>
-                <div className="flex justify-between text-[var(--text-muted)]"><span>Tax 12%</span><span>{formatCurrency(tax)}</span></div>
                 <div className="flex justify-between text-base font-bold text-white"><span>Total</span><span className="text-cyan-300">{formatCurrency(total)}</span></div>
               </div>
 
@@ -677,10 +676,6 @@ export function PosWorkspace({
                   <div className="flex justify-between text-sm">
                     <span className="text-[var(--text-muted)]">Subtotal</span>
                     <span className="text-white">{formatCurrency(Number(selectedSale.subtotal || 0))}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-[var(--text-muted)]">Tax</span>
-                    <span className="text-white">{formatCurrency(Number(selectedSale.tax_amount || 0))}</span>
                   </div>
                   <div className="flex justify-between text-base font-semibold">
                     <span className="text-white">Total</span>

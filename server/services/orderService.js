@@ -797,7 +797,7 @@ exports.updateShipment = async (orderId, shipmentData) => {
   
   const order = orderRes.rows[0];
   
-  if (order.payment_status !== 'paid') {
+  if (order.payment_status !== exports.PAYMENT_STATUS.APPROVED) {
     throw new Error('Cannot ship order - payment not completed');
   }
   

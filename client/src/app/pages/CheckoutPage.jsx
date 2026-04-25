@@ -22,7 +22,7 @@ const OTHER_COUNTRIES = ALL_COUNTRIES.filter(c => c.isoCode !== 'PH')
 const COUNTRIES = PHILIPPINES ? [PHILIPPINES, ...OTHER_COUNTRIES] : ALL_COUNTRIES
 const CUSTOM_BUILD_DOWN_PAYMENT_RATE = 0.5
 const MAX_USER_ADDRESSES = 2
-const ORDER_TAX_RATE = 0.1
+const ORDER_TAX_RATE = 0
 
 const getAddressSignature = (address = {}) => ([
   address.address_id,
@@ -426,13 +426,6 @@ function OrderSummaryCard({
           {shippingCost === 0 ? 'Free' : `₱${shippingCost}`}
         </span>
       </div>
-      <div className="flex justify-between text-sm">
-        <span className="text-[var(--text-muted)]">Tax (10%)</span>
-        <span className="text-[var(--text-light)] font-medium">
-          PHP {taxAmount.toLocaleString('en-PH', { maximumFractionDigits: 2 })}
-        </span>
-      </div>
-
     </div>
 
     {/* Full total always shown */}
@@ -523,7 +516,6 @@ function CheckoutSummaryCard({
 }) {
   const safeSubtotal = Number.isFinite(Number(subtotal)) ? Number(subtotal) : 0
   const safeShippingCost = Number.isFinite(Number(shippingCost)) ? Number(shippingCost) : 0
-  const safeTaxAmount = Number.isFinite(Number(taxAmount)) ? Number(taxAmount) : 0
   const safeTotal = Number.isFinite(Number(total)) ? Number(total) : 0
   const safeFullTotal = Number.isFinite(Number(fullTotal)) ? Number(fullTotal) : safeTotal
   const safeRemainingBalance = Number.isFinite(Number(remainingBalance)) ? Number(remainingBalance) : 0
@@ -545,12 +537,6 @@ function CheckoutSummaryCard({
           <span className="text-[var(--text-muted)]">Shipping</span>
           <span className={`${safeShippingCost === 0 ? 'text-green-400' : 'text-[var(--text-light)]'}`}>
             {safeShippingCost === 0 ? 'Free' : `PHP ${safeShippingCost.toLocaleString('en-PH')}`}
-          </span>
-        </div>
-        <div className="flex justify-between text-sm">
-          <span className="text-[var(--text-muted)]">Tax (10%)</span>
-          <span className="text-[var(--text-light)] font-medium">
-            PHP {safeTaxAmount.toLocaleString('en-PH', { maximumFractionDigits: 2 })}
           </span>
         </div>
         <div className="flex justify-between text-sm">
