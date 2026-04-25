@@ -364,6 +364,7 @@ export function ShopPage() {
   const [products, setProducts] = useState([])
   const [brands, setBrands] = useState([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
 
   const brandLabels = useMemo(() => {
     const labels = {}
@@ -381,12 +382,36 @@ export function ShopPage() {
     const fetchData = async () => {
       try {
         setLoading(true)
+        setLoadError('')
+        const fetchAllActiveProducts = async () => {
+          const byId = new Map()
+          const pageSize = 100
+          let page = 1
+          let totalPages = 1
+
+          do {
+            const res = await adminApi.getProducts({ page, pageSize, is_active: 'true' })
+            const pageItems = Array.isArray(res?.data) ? res.data : []
+            for (const item of pageItems) {
+              const id = item?.product_id || item?.id
+              if (!id) continue
+              if (!byId.has(id)) byId.set(id, item)
+            }
+
+            const apiTotalPages = Number(res?.pagination?.totalPages || 1)
+            totalPages = Math.max(apiTotalPages, 1)
+            page += 1
+          } while (page <= totalPages)
+
+          return Array.from(byId.values())
+        }
+
         const [productsRes, categoriesRes] = await Promise.all([
-          adminApi.getProducts({ limit: 1000 }),
+          fetchAllActiveProducts(),
           adminApi.getCategories()
         ])
 
-        const fetchedProducts = (productsRes.data || []).map(p => ({
+        const fetchedProducts = (productsRes || []).map(p => ({
           id: p.product_id || p.id,
           name: p.name,
           price: Number(p.price),
@@ -421,6 +446,7 @@ export function ShopPage() {
 
       } catch (err) {
         console.error("Failed to fetch shop data", err)
+        setLoadError(err?.message || 'Failed to load products. Please refresh and try again.')
       } finally {
         setLoading(false)
       }
@@ -616,6 +642,12 @@ export function ShopPage() {
               <span className="text-sm text-[var(--text-muted)]">{filteredProducts.length} products</span>
             </div>
 
+            {loadError && (
+              <div className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+                {loadError}
+              </div>
+            )}
+
             <ActiveFiltersBar 
               selectedCategory={selectedCategory}
               onCategoryClear={() => setSelectedCategory('all')}
@@ -644,7 +676,11 @@ export function ShopPage() {
             </AnimatePresence>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
-              {filteredProducts.length > 0 ? (
+              {loading ? (
+                <div className="col-span-full flex items-center justify-center py-20 bg-[var(--surface-dark)] rounded-2xl border border-white/5">
+                  <p className="text-[var(--text-muted)] text-sm">Loading products...</p>
+                </div>
+              ) : filteredProducts.length > 0 ? (
                 filteredProducts.map((product, index) => {
                   const buttonState = getAddButtonState(product)
                   const outOfStock = isOutOfStock(product.id)
@@ -767,6 +803,12 @@ export function ShopPage() {
 
           <span className="text-sm text-[var(--text-muted)] mb-4 block">{filteredProducts.length} products</span>
 
+          {loadError && (
+            <div className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+              {loadError}
+            </div>
+          )}
+
           <ActiveFiltersBar 
             selectedCategory={selectedCategory}
             onCategoryClear={() => setSelectedCategory('all')}
@@ -781,7 +823,11 @@ export function ShopPage() {
           />
 
           <div className="grid grid-cols-2 gap-4">
-            {filteredProducts.length > 0 ? (
+            {loading ? (
+              <div className="col-span-2 flex items-center justify-center py-12 bg-[var(--surface-dark)] rounded-2xl">
+                <p className="text-[var(--text-muted)] text-sm">Loading products...</p>
+              </div>
+            ) : filteredProducts.length > 0 ? (
               filteredProducts.map((product, index) => {
                 const buttonState = getAddButtonState(product)
                 const outOfStock = isOutOfStock(product.id)

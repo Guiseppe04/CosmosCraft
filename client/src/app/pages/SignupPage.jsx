@@ -301,6 +301,14 @@ export function SignupPage() {
     transition: { duration: 0.4 }
   }
 
+  const passwordChecks = [
+    { label: 'At least 8 characters', isValid: form.password.length >= 8 },
+    { label: 'No more than 64 characters', isValid: form.password.length <= 64 && form.password.length > 0 },
+    { label: 'At least one uppercase letter', isValid: /[A-Z]/.test(form.password) },
+    { label: 'At least one lowercase letter', isValid: /[a-z]/.test(form.password) },
+    { label: 'At least one special character', isValid: /[^A-Za-z0-9]/.test(form.password) },
+  ]
+
   return (
     <div className="min-h-screen bg-[var(--bg-primary)] pt-24 pb-12 px-4 relative overflow-hidden">
       {/* Background decoration */}
@@ -445,6 +453,17 @@ export function SignupPage() {
                       {showPassword ? 'Hide' : 'Show'}
                     </button>
                   </div>
+                  <ul className="mt-2 space-y-1">
+                    {passwordChecks.map((rule) => (
+                      <li
+                        key={rule.label}
+                        className={`text-xs flex items-center gap-1.5 ${rule.isValid ? 'text-green-400' : 'text-[var(--text-muted)]'}`}
+                      >
+                        <CheckCircle2 className={`w-3 h-3 ${rule.isValid ? 'opacity-100' : 'opacity-30'}`} />
+                        <span>{rule.label}</span>
+                      </li>
+                    ))}
+                  </ul>
                   {errors.password && <span className="text-xs text-red-400 mt-1.5 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{errors.password}</span>}
                 </motion.div>
 
