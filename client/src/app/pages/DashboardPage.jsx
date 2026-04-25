@@ -88,6 +88,7 @@ export function DashboardPage() {
   const [myProjects, setMyProjects] = useState([])
   const [myCustomizations, setMyCustomizations] = useState([])
   const [activeProjectView, setActiveProjectView] = useState(null)
+  const [activeBuildTab, setActiveBuildTab] = useState('build-projects')
   
   const [myOrders, setMyOrders] = useState([])
   const [activePurchaseTab, setActivePurchaseTab] = useState('All')
@@ -608,12 +609,12 @@ export function DashboardPage() {
                 
                 <div className="flex justify-between items-end mt-4">
                    <div className="text-sm text-[var(--text-muted)]">
-                      <span className="block">Shipping: ₱{Number(order.shipping_cost || 0).toLocaleString('en-PH')}</span>
-                      <span className="block mt-1">Tax: ₱{Number(order.tax_amount || 0).toLocaleString('en-PH')}</span>
+                      <span className="block">Shipping: â‚±{Number(order.shipping_cost || 0).toLocaleString('en-PH')}</span>
+                      <span className="block mt-1">Tax: â‚±{Number(order.tax_amount || 0).toLocaleString('en-PH')}</span>
                    </div>
                    <div className="text-right items-end flex flex-col">
                      <span className="text-sm text-[var(--text-muted)] mb-1">Total Amount</span>
-                     <span className="text-xl font-bold text-[var(--gold-primary)] block">₱{Number(order.total_amount || 0).toLocaleString('en-PH')}</span>
+                     <span className="text-xl font-bold text-[var(--gold-primary)] block">â‚±{Number(order.total_amount || 0).toLocaleString('en-PH')}</span>
                    </div>
                 </div>
                 {order.status === 'pending' && (
@@ -729,7 +730,7 @@ export function DashboardPage() {
                     <div>
                       <span className="block text-[var(--text-muted)] mb-1">Date & Time</span>
                       <span className="text-white">
-                        {apptDate ? new Date(apptDate).toLocaleDateString() : '—'} at {apt.time || (apptDate ? new Date(apptDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—')}
+                        {apptDate ? new Date(apptDate).toLocaleDateString() : 'â€”'} at {apt.time || (apptDate ? new Date(apptDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'â€”')}
                       </span>
                     </div>
                     {apt.location_id && (
@@ -778,9 +779,9 @@ export function DashboardPage() {
   const renderProjectsContent = () => {
     if (activeProjectView) {
       return (
-        <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-5 sm:p-8">
+        <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-4 sm:p-6 lg:p-7 xl:p-8">
           <button onClick={() => setActiveProjectView(null)} className="mb-6 text-[var(--gold-primary)] hover:underline flex items-center gap-2 text-sm font-semibold">
-            ← Back to Build Projects
+            &larr; Back to Build Projects
           </button>
           <ProjectTaskTracker projectId={activeProjectView.project_id} isAdmin={false} />
         </div>
@@ -789,6 +790,31 @@ export function DashboardPage() {
 
     return (
       <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-5 sm:p-8">
+        <div className="flex flex-wrap gap-6 sm:gap-8 border-b border-[var(--border)] mb-6">
+          {[
+            { id: 'build-projects', label: 'Build Projects' },
+            { id: 'saved-builds', label: 'Saved Builds' },
+          ].map((tab) => {
+            const isActive = activeBuildTab === tab.id
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveBuildTab(tab.id)}
+                className={`relative pb-3 text-sm sm:text-base font-semibold whitespace-nowrap transition-colors ${
+                  isActive ? 'text-white' : 'text-[var(--text-muted)] hover:text-white'
+                }`}
+              >
+                {tab.label}
+                <span
+                  className={`absolute left-0 -bottom-px h-0.5 w-full rounded-full transition-opacity ${
+                    isActive ? 'opacity-100 bg-[var(--gold-primary)]' : 'opacity-0'
+                  }`}
+                />
+              </button>
+            )
+          })}
+        </div>
         <h2 className="text-2xl font-bold text-white mb-1">Build Projects</h2>
         <p className="text-sm text-[var(--text-muted)] mb-8">Track progress on your custom builds and repairs</p>
 
@@ -830,7 +856,16 @@ export function DashboardPage() {
                     onClick={() => setActiveProjectView(project)}
                     className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-bold shadow-[0_0_10px_rgba(212,175,55,0.3)] hover:shadow-[0_0_15px_rgba(212,175,55,0.5)] transition-all flex items-center gap-2"
                   >
-                    <Activity className="w-4 h-4" /> Track Progress
+                    <span className="flex items-center gap-3">
+                      <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-black/10">
+                        <Activity className="w-4 h-4" />
+                      </span>
+                      <span className="flex flex-col items-start leading-tight">
+                        <span className="text-[10px] uppercase tracking-wide text-[var(--text-dark)]/70">Project</span>
+                        <span className="text-sm font-bold">Track Progress</span>
+                      </span>
+                      <ChevronRight className="w-4 h-4 ml-1" />
+                    </span>
                   </button>
                 </div>
                 
@@ -858,9 +893,35 @@ export function DashboardPage() {
 
     return (
       <div className="space-y-8">
-        {renderProjectsContent()}
+        {activeBuildTab === 'build-projects' && renderProjectsContent()}
 
+        {activeBuildTab === 'saved-builds' && (
         <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-5 sm:p-8">
+        <div className="flex flex-wrap gap-6 sm:gap-8 border-b border-[var(--border)] mb-6">
+          {[
+            { id: 'build-projects', label: 'Build Projects' },
+            { id: 'saved-builds', label: 'Saved Builds' },
+          ].map((tab) => {
+            const isActive = activeBuildTab === tab.id
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveBuildTab(tab.id)}
+                className={`relative pb-3 text-sm sm:text-base font-semibold whitespace-nowrap transition-colors ${
+                  isActive ? 'text-white' : 'text-[var(--text-muted)] hover:text-white'
+                }`}
+              >
+                {tab.label}
+                <span
+                  className={`absolute left-0 -bottom-px h-0.5 w-full rounded-full transition-opacity ${
+                    isActive ? 'opacity-100 bg-[var(--gold-primary)]' : 'opacity-0'
+                  }`}
+                />
+              </button>
+            )
+          })}
+        </div>
         <div className="flex items-center justify-between mb-6">
           <div>
             <h2 className="text-2xl font-bold text-white mb-1">My Saved Builds</h2>
@@ -928,7 +989,7 @@ export function DashboardPage() {
                     <p className="text-xs text-[var(--text-muted)] mt-1">Saved on {new Date(build.savedAt || new Date()).toLocaleDateString()}</p>
                   </div>
                   <div className="text-right">
-                    <span className="text-lg font-bold text-[var(--gold-primary)] block">₱{grandTotal.toLocaleString('en-PH')}</span>
+                    <span className="text-lg font-bold text-[var(--gold-primary)] block">â‚±{grandTotal.toLocaleString('en-PH')}</span>
                     {additionalPartsTotal > 0 && <span className="text-xs text-[var(--text-muted)]">Includes Add-ons</span>}
                   </div>
                 </div>
@@ -1002,8 +1063,8 @@ export function DashboardPage() {
                         onClick={() => setActiveProjectView(buildLockState.project)}
                         className="w-full mt-2 py-2.5 px-3 rounded-lg bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-bold text-sm shadow-[0_0_10px_rgba(212,175,55,0.3)] hover:shadow-[0_0_15px_rgba(212,175,55,0.5)] transition-all flex items-center justify-center gap-2"
                       >
-                        <Activity className="w-4 h-4" />
-                        Track Progress
+                        <ShoppingCart className="w-4 h-4" />
+                        Buy Now
                       </button>
                     ) : (
                       <button
@@ -1020,10 +1081,10 @@ export function DashboardPage() {
                       onClick={() => {
                           navigate('/checkout', { state: { checkoutItem: build, isCustomBuild: true } });
                       }}
-                      className="w-full mt-2 py-2.5 px-3 rounded-lg bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-bold text-sm shadow-[0_0_10px_rgba(212,175,55,0.3)] hover:shadow-[0_0_15px_rgba(212,175,55,0.5)] transition-all flex items-center justify-center gap-2"
-                    >
-                      <ShoppingCart className="w-4 h-4" />
-                      Order This Build
+                    className="w-full mt-2 py-2.5 px-3 rounded-lg bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-bold text-sm shadow-[0_0_10px_rgba(212,175,55,0.3)] hover:shadow-[0_0_15px_rgba(212,175,55,0.5)] transition-all flex items-center justify-center gap-2"
+                  >
+                    <ShoppingCart className="w-4 h-4" />
+                      Buy Now
                     </button>
                   )}
                 </div>
@@ -1032,6 +1093,7 @@ export function DashboardPage() {
           </div>
         )}
         </div>
+        )}
       </div>
     )
   }
@@ -1090,7 +1152,7 @@ export function DashboardPage() {
                       <h4 className="font-semibold text-white truncate">{item.name}</h4>
                       <p className="text-xs text-[var(--text-muted)] mt-0.5">{item.category}</p>
                       <p className="text-lg font-bold text-[var(--gold-primary)] mt-1">
-                        ₱{item.price.toLocaleString()}
+                        â‚±{item.price.toLocaleString()}
                       </p>
                     </div>
                     <button
@@ -1123,7 +1185,7 @@ export function DashboardPage() {
                       </button>
                     </div>
                     <span className="text-sm text-[var(--text-muted)]">
-                      Subtotal: <span className="text-white font-medium">₱{(item.price * item.quantity).toLocaleString()}</span>
+                      Subtotal: <span className="text-white font-medium">â‚±{(item.price * item.quantity).toLocaleString()}</span>
                     </span>
                   </div>
                 </div>
@@ -1133,7 +1195,7 @@ export function DashboardPage() {
             <div className="mt-6 pt-6 border-t border-[var(--border)]">
               <div className="flex items-center justify-between mb-6">
                 <span className="text-lg text-[var(--text-muted)]">Total:</span>
-                <span className="text-2xl font-bold text-[var(--gold-primary)]">₱{cartTotal.toLocaleString()}</span>
+                <span className="text-2xl font-bold text-[var(--gold-primary)]">â‚±{cartTotal.toLocaleString()}</span>
               </div>
               <button
                 type="button"
@@ -1433,7 +1495,7 @@ export function DashboardPage() {
         <div className="space-y-4 max-w-xl">
           <div className="flex items-center gap-2 mb-4">
             <button onClick={() => { setIsAddingAddress(false); setEditingAddressId(null); setAddressData({ category: 'Home', country: 'PH', streetLine1: '', streetLine2: '', province: '', city: '', barangay: '', postalZipCode: '', isDefault: true }); setLocationData(prev => ({ ...prev, cities: [], barangays: [] })) }} className="text-[var(--gold-primary)] hover:underline text-sm font-semibold flex items-center gap-1">
-              ← Back
+              â† Back
             </button>
             <span className="text-white font-semibold">{editingAddressId ? 'Edit Address' : 'Add New Address'}</span>
           </div>
@@ -2031,7 +2093,7 @@ export function DashboardPage() {
             <div className="bg-[var(--bg-primary)] rounded-xl p-5 border border-[var(--border)] mb-6">
               <h3 className="text-lg font-bold text-white mb-4 border-b border-[var(--border)] pb-2 flex justify-between">
                 <span>Configuration Breakdown</span>
-                <span className="text-[var(--gold-primary)]">₱{(viewingBuild.price || 0).toLocaleString('en-PH')}</span>
+                <span className="text-[var(--gold-primary)]">â‚±{(viewingBuild.price || 0).toLocaleString('en-PH')}</span>
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-4">
                  {viewingBuild.pricingBreakdown ? Object.entries(viewingBuild.pricingBreakdown).map(([key, price]) => {
@@ -2044,7 +2106,7 @@ export function DashboardPage() {
                            <span className="block font-medium text-white truncate">{label}</span>
                        </div>
 {price > 0 && (
-                          <span className="text-gray-300 shrink-0 font-mono text-right">₱{price.toLocaleString('en-PH')}</span>
+                          <span className="text-gray-300 shrink-0 font-mono text-right">â‚±{price.toLocaleString('en-PH')}</span>
                         )}
                      </div>
                    )
@@ -2055,7 +2117,7 @@ export function DashboardPage() {
                            <span className="block text-xs text-[var(--text-muted)] capitalize mb-0.5">Base Model</span>
                            <span className="block font-medium text-white truncate">Standard Build</span>
                        </div>
-                       <span className="text-gray-300 shrink-0 font-mono text-right">₱{BASE_PRICE.toLocaleString('en-PH')}</span>
+                       <span className="text-gray-300 shrink-0 font-mono text-right">â‚±{BASE_PRICE.toLocaleString('en-PH')}</span>
                      </div>
                      {Object.entries(viewingBuild.config || {}).map(([key, val]) => {
                        if (!val || typeof val !== 'string') return null;
@@ -2067,7 +2129,7 @@ export function DashboardPage() {
                                <span className="block font-medium text-white truncate">{label}</span>
                            </div>
                            {price > 0 && (
-<span className="text-gray-300 shrink-0 font-mono text-right">₱{price.toLocaleString('en-PH')}</span>
+<span className="text-gray-300 shrink-0 font-mono text-right">â‚±{price.toLocaleString('en-PH')}</span>
                            )}
                          </div>
                        )
@@ -2081,7 +2143,7 @@ export function DashboardPage() {
               <div className="bg-[var(--bg-primary)] rounded-xl p-5 border border-[var(--border)] mb-6">
                 <h3 className="text-lg font-bold text-white mb-4 border-b border-[var(--border)] pb-2 flex justify-between">
                   <span>Additional Parts</span>
-                  <span className="text-[var(--gold-primary)]">₱{viewingBuild.additionalParts.reduce((sum, p) => sum + (p.price * p.quantity), 0).toLocaleString('en-PH')}</span>
+                  <span className="text-[var(--gold-primary)]">â‚±{viewingBuild.additionalParts.reduce((sum, p) => sum + (p.price * p.quantity), 0).toLocaleString('en-PH')}</span>
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3">
                   {viewingBuild.additionalParts.map((part, idx) => (
@@ -2097,7 +2159,7 @@ export function DashboardPage() {
                         </div>
                       </div>
                       <div className="flex items-center sm:block sm:text-right shrink-0">
-                        <span className="text-gray-300 font-mono text-sm">₱{(part.price * part.quantity).toLocaleString('en-PH')}</span>
+                        <span className="text-gray-300 font-mono text-sm">â‚±{(part.price * part.quantity).toLocaleString('en-PH')}</span>
                       </div>
                     </div>
                   ))}
@@ -2108,7 +2170,7 @@ export function DashboardPage() {
             <div className="flex justify-between items-center border-t border-[var(--border)] pt-6 mt-4">
                <span className="text-lg text-[var(--text-muted)]">Grand Total</span>
                <span className="text-3xl font-bold text-[var(--gold-primary)]">
-                 ₱{(Number(viewingBuild.price) + (viewingBuild.additionalParts || []).reduce((sum, p) => sum + (p.price * p.quantity), 0)).toLocaleString('en-PH')}
+                 â‚±{(Number(viewingBuild.price) + (viewingBuild.additionalParts || []).reduce((sum, p) => sum + (p.price * p.quantity), 0)).toLocaleString('en-PH')}
                </span>
             </div>
             
@@ -2123,8 +2185,8 @@ export function DashboardPage() {
                   }}
                   className="w-full mt-8 py-4 px-4 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-bold text-lg shadow-[0_0_10px_rgba(212,175,55,0.3)] hover:shadow-[0_0_20px_rgba(212,175,55,0.5)] transition-all flex items-center justify-center gap-3"
                 >
-                  <Activity className="w-6 h-6" />
-                  Track Progress
+                  <ShoppingCart className="w-6 h-6" />
+                  Buy Now
                 </button>
               ) : (
                 <button
@@ -2158,4 +2220,5 @@ export function DashboardPage() {
 }
 
 export default DashboardPage
+
 

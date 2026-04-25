@@ -78,6 +78,7 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
   // Parts panel state
   const [partsSearchQuery, setPartsSearchQuery] = useState('');
   const [expandedPartCategories, setExpandedPartCategories] = useState(new Set());
+  const [isPartsPanelExpanded, setIsPartsPanelExpanded] = useState(true);
 
   // Exanded state for accordions
   const [expandedMilestones, setExpandedMilestones] = useState(new Set());
@@ -268,6 +269,20 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
       ].filter(Boolean).join(', ')
     : 'No delivery address on file';
   const hasSavedFulfillment = Boolean(hierarchy?.fulfillment_method);
+  const clampedProgress = Math.min(Math.max(Number(hierarchy?.progress) || 0, 0), 100);
+  const milestones = Array.isArray(hierarchy?.milestones) ? hierarchy.milestones : [];
+  const totalMilestones = milestones.length;
+  const completedMilestones = milestones.filter((milestone) => {
+    const subtasks = Array.isArray(milestone?.subtasks) ? milestone.subtasks : [];
+    return subtasks.length > 0 && subtasks.every((subtask) => subtask.status === 'completed');
+  }).length;
+  const milestoneCompletionRate = totalMilestones > 0
+    ? Math.round((completedMilestones / totalMilestones) * 100)
+    : 0;
+  const taskCompletionRate = taskSummary.total > 0
+    ? Math.round((taskSummary.completed / taskSummary.total) * 100)
+    : 0;
+  const trackingScore = Math.round((clampedProgress + milestoneCompletionRate + taskCompletionRate) / 3);
 
   // Group parts by category
   const groupedParts = resolvedParts.reduce((groups, part) => {
@@ -404,66 +419,307 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
   if (!hierarchy) return null;
 
   return (
-    <div className={resolvedParts.length > 0 ? "grid lg:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.9fr)] gap-6 xl:gap-10 items-start" : "space-y-6"}>
+    <div className="space-y-6">
       
-      {/* ── MAIN TRACKER SECTION ── */}
+      {/* MAIN TRACKER SECTION */}
       <div className="space-y-6">
         
         {/* Progress Header */}
         <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6 md:p-7 relative overflow-hidden">
           <div className="absolute top-0 right-0 w-64 h-64 bg-[var(--gold-primary)]/5 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none"></div>
-          
-          <div className="mb-5 grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-start">
-            <div className="min-w-0">
+
+          <div className="mb-6 grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(180px,220px)] lg:items-start">
+            <div className="min-w-0 pr-0 lg:pr-2">
               <h2 className="text-white text-2xl sm:text-3xl font-bold leading-tight break-words">
                 {parsedTrackerHeader.title}
               </h2>
               {displayOrderReference && (
-                <p className="mt-2 text-sm font-medium text-[var(--text-muted)] break-all">
+                <p className="mt-2 text-sm font-medium text-[var(--text-muted)] break-words lg:break-normal">
                   Order: {displayOrderReference}
                 </p>
               )}
               <p className="mt-2 text-sm text-[var(--text-muted)]">
-                {hierarchy.customer_name ? `For: ${hierarchy.customer_name}` : '—'}
+                {hierarchy.customer_name ? `For: ${hierarchy.customer_name}` : '-'}
               </p>
             </div>
-            <div className="shrink-0 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-3 text-left md:text-right">
-              <span className="text-[var(--gold-primary)] text-3xl md:text-4xl font-black leading-none">{hierarchy.progress}%</span>
-              <p className="mt-1 text-white font-semibold flex items-center gap-2 md:justify-end">
-                {formatStatusLabel(hierarchy.status)}
-              </p>
+
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-3 text-left lg:text-right whitespace-nowrap">
+              <span className="text-[var(--gold-primary)] text-3xl md:text-4xl font-black leading-none">{clampedProgress}%</span>
+              <p className="mt-1 text-white font-semibold">{formatStatusLabel(hierarchy.status)}</p>
             </div>
           </div>
-          
-          <div className="h-3 w-full bg-[var(--bg-primary)] rounded-full overflow-hidden mb-2">
-             <motion.div 
-               initial={{ width: 0 }} 
-               animate={{ width: `${hierarchy.progress}%` }} 
-               transition={{ duration: 1, ease: 'easeOut' }}
-               className="h-full bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)]" 
-             />
+
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)]/50 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm font-semibold text-white">Total progress</p>
+              <span className="rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] px-3 py-1 text-xs font-semibold text-[var(--text-muted)] whitespace-nowrap">
+                Live tracking
+              </span>
+            </div>
+
+            <div className="mt-7 relative pb-7">
+              <div className="h-2 rounded-full bg-white/10 overflow-hidden">
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${clampedProgress}%` }}
+                  transition={{ duration: 1, ease: 'easeOut' }}
+                  className="h-full bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)]"
+                />
+              </div>
+
+              <div className="pointer-events-none absolute top-0 left-0 h-2 w-full">
+                <div
+                  className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full border border-emerald-400/60 bg-emerald-400/20 p-1"
+                  style={{ left: `${taskCompletionRate}%`, top: '50%' }}
+                  title={`Tasks completed: ${taskCompletionRate}%`}
+                >
+                  <CheckCircle className="h-3 w-3 text-emerald-300" />
+                </div>
+                <div
+                  className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full border border-blue-400/60 bg-blue-400/20 p-1"
+                  style={{ left: `${milestoneCompletionRate}%`, top: '50%' }}
+                  title={`Milestones completed: ${milestoneCompletionRate}%`}
+                >
+                  <Circle className="h-3 w-3 text-blue-300" />
+                </div>
+              </div>
+
+              {[0, 25, 50, 100].map((value) => (
+                <span
+                  key={value}
+                  className={`absolute -bottom-0.5 text-[11px] font-medium text-[var(--text-muted)] ${value === 0 ? 'left-0 translate-x-0' : value === 100 ? 'right-0 translate-x-0' : '-translate-x-1/2'}`}
+                  style={value === 0 || value === 100 ? undefined : { left: `${value}%` }}
+                >
+                  {value}%
+                </span>
+              ))}
+            </div>
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-3">
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] p-4">
+                <p className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">Task progress</p>
+                <p className="mt-2 text-2xl font-bold text-white">{taskSummary.completed}<span className="text-base text-[var(--text-muted)]">/{taskSummary.total || 0}</span></p>
+              </div>
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] p-4">
+                <p className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">Milestones done</p>
+                <p className="mt-2 text-2xl font-bold text-white">{completedMilestones}<span className="text-base text-[var(--text-muted)]">/{totalMilestones}</span></p>
+              </div>
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] p-4">
+                <p className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">Percentage</p>
+                <p className="mt-2 text-2xl font-bold text-white">{trackingScore}<span className="text-base text-[var(--text-muted)]">%</span></p>
+              </div>
+            </div>
           </div>
-          <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+
+          <div className="mt-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <p className="text-[var(--text-muted)] text-xs">
               {taskSummary.total > 0
                 ? `${taskSummary.completed} of ${taskSummary.total} tasks completed`
                 : 'No tasks added yet'}
             </p>
-            
+
             {!isAdmin && (
               <div
-                className={`py-2 px-4 rounded-lg font-bold text-xs flex items-center gap-2 ${
-                  hierarchy.progress === 100
+                className={`py-2 px-4 rounded-lg font-bold text-xs inline-flex items-center gap-2 whitespace-nowrap ${
+                  clampedProgress === 100
                     ? 'bg-[var(--gold-primary)]/15 text-[var(--gold-primary)] border border-[var(--gold-primary)]/30'
                     : 'bg-[var(--surface-elevated)] text-[var(--text-muted)] border border-[var(--border)]'
                 }`}
               >
                 <Calendar className="w-4 h-4" />
-                {hierarchy.progress === 100 ? 'Choose release option below' : 'Release options unlock at 100%'}
+                {clampedProgress === 100 ? 'Choose release option below' : 'Release options unlock at 100%'}
               </div>
             )}
           </div>
         </div>
+
+        {/* GUITAR PARTS PANEL */}
+        {resolvedParts.length > 0 && (
+        <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-5 flex flex-col">
+          <button
+            type="button"
+            onClick={() => setIsPartsPanelExpanded((prev) => !prev)}
+            className="mb-4 w-full flex items-center justify-between gap-3"
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <Guitar className="w-5 h-5 text-[var(--gold-primary)]" />
+              <h3 className="text-white font-bold text-lg">Project Parts</h3>
+              <span className="px-2 py-0.5 bg-[var(--gold-primary)]/20 text-[var(--gold-primary)] text-xs font-bold rounded-full">
+                {resolvedParts.length}
+              </span>
+            </div>
+            <motion.div
+              initial={false}
+              animate={{ rotate: isPartsPanelExpanded ? 180 : 0 }}
+              transition={{ duration: 0.2 }}
+              className="shrink-0"
+            >
+              <ChevronDown className="w-4 h-4 text-[var(--text-muted)]" />
+            </motion.div>
+          </button>
+
+          <AnimatePresence initial={false}>
+            {isPartsPanelExpanded && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="overflow-hidden"
+              >
+                {/* Search Input */}
+                <div className="mb-4 relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
+                  <input
+                    type="text"
+                    placeholder="Filter parts..."
+                    value={partsSearchQuery}
+                    onChange={(e) => setPartsSearchQuery(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2.5 bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl text-white placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] text-sm"
+                  />
+                </div>
+
+                {/* Parts List */}
+                <div className="flex-1 overflow-y-auto pr-2 space-y-3 custom-scrollbar">
+                  {resolvedParts.length === 0 ? (
+                    <div className="text-center py-12 flex flex-col items-center justify-center">
+                      <Guitar className="w-12 h-12 text-[var(--text-muted)]/30 mb-3" />
+                      <p className="text-[var(--text-muted)] text-sm font-semibold">No parts linked to this project yet.</p>
+                    </div>
+                  ) : Object.keys(getFilteredParts()).length === 0 ? (
+                    <div className="text-center py-8">
+                      <Package className="w-8 h-8 text-[var(--text-muted)]/30 mx-auto mb-2" />
+                      <p className="text-[var(--text-muted)] text-xs">No parts match your search.</p>
+                    </div>
+                  ) : (
+                    Object.entries(getFilteredParts()).map(([category, categoryParts]) => {
+                      const isExpanded = expandedPartCategories.has(category) || Object.keys(getFilteredParts()).length === 1;
+                      
+                      return (
+                        <div key={category} className="overflow-hidden">
+                          {/* Category Header */}
+                          <button
+                            onClick={() => togglePartCategory(category)}
+                            className="w-full flex items-center justify-between p-3 bg-[var(--bg-primary)]/60 border-l-2 border-[var(--gold-primary)] hover:bg-[var(--bg-primary)] transition-colors rounded-lg"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="text-white font-semibold text-sm capitalize">{category}</span>
+                              <span className="px-2 py-0.5 bg-[var(--gold-primary)]/20 text-[var(--gold-primary)] text-xs font-bold rounded-full">
+                                {categoryParts.length}
+                              </span>
+                            </div>
+                            <motion.div
+                              initial={false}
+                              animate={{ rotate: isExpanded ? 180 : 0 }}
+                              transition={{ duration: 0.2 }}
+                            >
+                              <ChevronDown className="w-4 h-4 text-[var(--text-muted)]" />
+                            </motion.div>
+                          </button>
+
+                          {/* Parts Cards (Collapsible) */}
+                          <AnimatePresence>
+                            {isExpanded && (
+                              <motion.div
+                                initial={{ height: 0, opacity: 0 }}
+                                animate={{ height: 'auto', opacity: 1 }}
+                                exit={{ height: 0, opacity: 0 }}
+                                transition={{ duration: 0.2 }}
+                                className="space-y-2 mt-2"
+                              >
+                                {categoryParts.map((part) => {
+                                  const stock = part.stock === null || part.stock === undefined ? null : Number(part.stock);
+                                  const hasInventoryState = Number.isFinite(stock);
+                                  const isLowStock = hasInventoryState && stock > 0 && stock <= 5;
+                                  const isOutOfStock = hasInventoryState && stock === 0;
+
+                                  return (
+                                    <div
+                                      key={part.part_id}
+                                      className="p-3 bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl hover:border-[var(--gold-primary)]/30 transition-all"
+                                    >
+                                      {/* Part Header */}
+                                      <div className="flex gap-3 mb-2">
+                                        {/* Image */}
+                                        <div className="w-10 h-10 flex-shrink-0 rounded-lg bg-black/30 overflow-hidden border border-[var(--border)] flex items-center justify-center">
+                                          {part.image_url ? (
+                                            <img
+                                              src={part.image_url}
+                                              alt={part.name}
+                                              className="w-full h-full object-contain"
+                                            />
+                                          ) : (
+                                            <Guitar className="w-5 h-5 text-[var(--text-muted)]/50" />
+                                          )}
+                                        </div>
+
+                                        {/* Info */}
+                                        <div className="flex-1 min-w-0">
+                                          <p className="text-white font-semibold text-xs line-clamp-1">{part.name}</p>
+                                          <div className="flex flex-wrap gap-1 mt-1">
+                                            <span className="px-1.5 py-0.5 bg-[var(--gold-primary)]/20 text-[var(--gold-primary)] text-[10px] font-bold uppercase rounded">
+                                              {category}
+                                            </span>
+                                            {part.guitar_type && (
+                                              <span className="px-1.5 py-0.5 bg-gray-500/20 text-gray-400 text-[10px] font-medium rounded capitalize">
+                                                {part.guitar_type}
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </div>
+
+                                      {/* Stock & Price */}
+                                      <div className="flex items-center justify-between pt-2 border-t border-[var(--border)]/30">
+                                        <div className="flex items-center gap-1">
+                                          <span className={`w-2 h-2 rounded-full ${getStockDot(stock)}`} />
+                                          <span className={`text-xs font-semibold ${getStockColor(stock)}`}>
+                                            {!hasInventoryState
+                                              ? 'Configured'
+                                              : isOutOfStock
+                                              ? 'Out of stock'
+                                              : isLowStock
+                                              ? `Low: ${stock}`
+                                              : `${stock} in stock`}
+                                          </span>
+                                        </div>
+                                        {part.price && (
+                                          <span className="text-[var(--gold-primary)] font-bold text-xs">
+                                            {formatCurrency(part.price, true)}
+                                          </span>
+                                        )}
+                                      </div>
+
+                                      {/* Active Badge */}
+                                      {part.is_active !== undefined && (
+                                        <div className="mt-2 flex justify-end">
+                                          <span
+                                            className={`px-2 py-0.5 text-[10px] font-semibold rounded-full border ${
+                                              part.is_active
+                                                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                                                : 'bg-gray-500/10 text-gray-400 border-gray-500/30'
+                                            }`}
+                                          >
+                                            {part.is_active ? 'Active' : 'Inactive'}
+                                          </span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+        )}
 
         {/* Finished Notification */}
         {!isAdmin && hierarchy.progress === 100 && (
@@ -841,168 +1097,8 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
         )}
       </div>
 
-      {/* ── GUITAR PARTS PANEL ── */}
-      {resolvedParts.length > 0 && (
-      <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-5 flex flex-col self-start">
-        <div className="flex items-center gap-2 mb-4">
-          <Guitar className="w-5 h-5 text-[var(--gold-primary)]" />
-          <h3 className="text-white font-bold text-lg">Project Parts</h3>
-          <span className="ml-auto px-2 py-0.5 bg-[var(--gold-primary)]/20 text-[var(--gold-primary)] text-xs font-bold rounded-full">
-            {resolvedParts.length}
-          </span>
-        </div>
-
-        {/* Search Input */}
-        <div className="mb-4 relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
-          <input
-            type="text"
-            placeholder="Filter parts..."
-            value={partsSearchQuery}
-            onChange={(e) => setPartsSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl text-white placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] text-sm"
-          />
-        </div>
-
-        {/* Parts List */}
-        <div className="flex-1 overflow-y-auto pr-2 space-y-3 custom-scrollbar">
-          {resolvedParts.length === 0 ? (
-            <div className="text-center py-12 flex flex-col items-center justify-center">
-              <Guitar className="w-12 h-12 text-[var(--text-muted)]/30 mb-3" />
-              <p className="text-[var(--text-muted)] text-sm font-semibold">No parts linked to this project yet.</p>
-            </div>
-          ) : Object.keys(getFilteredParts()).length === 0 ? (
-            <div className="text-center py-8">
-              <Package className="w-8 h-8 text-[var(--text-muted)]/30 mx-auto mb-2" />
-              <p className="text-[var(--text-muted)] text-xs">No parts match your search.</p>
-            </div>
-          ) : (
-            Object.entries(getFilteredParts()).map(([category, categoryParts]) => {
-              const isExpanded = expandedPartCategories.has(category) || Object.keys(getFilteredParts()).length === 1;
-              
-              return (
-                <div key={category} className="overflow-hidden">
-                  {/* Category Header */}
-                  <button
-                    onClick={() => togglePartCategory(category)}
-                    className="w-full flex items-center justify-between p-3 bg-[var(--bg-primary)]/60 border-l-2 border-[var(--gold-primary)] hover:bg-[var(--bg-primary)] transition-colors rounded-lg"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="text-white font-semibold text-sm capitalize">{category}</span>
-                      <span className="px-2 py-0.5 bg-[var(--gold-primary)]/20 text-[var(--gold-primary)] text-xs font-bold rounded-full">
-                        {categoryParts.length}
-                      </span>
-                    </div>
-                    <motion.div
-                      initial={false}
-                      animate={{ rotate: isExpanded ? 180 : 0 }}
-                      transition={{ duration: 0.2 }}
-                    >
-                      <ChevronDown className="w-4 h-4 text-[var(--text-muted)]" />
-                    </motion.div>
-                  </button>
-
-                  {/* Parts Cards (Collapsible) */}
-                  <AnimatePresence>
-                    {isExpanded && (
-                      <motion.div
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: 'auto', opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.2 }}
-                        className="space-y-2 mt-2"
-                      >
-                        {categoryParts.map((part) => {
-                          const stock = part.stock === null || part.stock === undefined ? null : Number(part.stock);
-                          const hasInventoryState = Number.isFinite(stock);
-                          const isLowStock = hasInventoryState && stock > 0 && stock <= 5;
-                          const isOutOfStock = hasInventoryState && stock === 0;
-
-                          return (
-                            <div
-                              key={part.part_id}
-                              className="p-3 bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl hover:border-[var(--gold-primary)]/30 transition-all"
-                            >
-                              {/* Part Header */}
-                              <div className="flex gap-3 mb-2">
-                                {/* Image */}
-                                <div className="w-10 h-10 flex-shrink-0 rounded-lg bg-black/30 overflow-hidden border border-[var(--border)] flex items-center justify-center">
-                                  {part.image_url ? (
-                                    <img
-                                      src={part.image_url}
-                                      alt={part.name}
-                                      className="w-full h-full object-contain"
-                                    />
-                                  ) : (
-                                    <Guitar className="w-5 h-5 text-[var(--text-muted)]/50" />
-                                  )}
-                                </div>
-
-                                {/* Info */}
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-white font-semibold text-xs line-clamp-1">{part.name}</p>
-                                  <div className="flex flex-wrap gap-1 mt-1">
-                                    <span className="px-1.5 py-0.5 bg-[var(--gold-primary)]/20 text-[var(--gold-primary)] text-[10px] font-bold uppercase rounded">
-                                      {category}
-                                    </span>
-                                    {part.guitar_type && (
-                                      <span className="px-1.5 py-0.5 bg-gray-500/20 text-gray-400 text-[10px] font-medium rounded capitalize">
-                                        {part.guitar_type}
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-
-                              {/* Stock & Price */}
-                              <div className="flex items-center justify-between pt-2 border-t border-[var(--border)]/30">
-                                <div className="flex items-center gap-1">
-                                  <span className={`w-2 h-2 rounded-full ${getStockDot(stock)}`} />
-                                  <span className={`text-xs font-semibold ${getStockColor(stock)}`}>
-                                    {!hasInventoryState
-                                      ? 'Configured'
-                                      : isOutOfStock
-                                      ? 'Out of stock'
-                                      : isLowStock
-                                      ? `Low: ${stock}`
-                                      : `${stock} in stock`}
-                                  </span>
-                                </div>
-                                {part.price && (
-                                  <span className="text-[var(--gold-primary)] font-bold text-xs">
-                                    {formatCurrency(part.price, true)}
-                                  </span>
-                                )}
-                              </div>
-
-                              {/* Active Badge */}
-                              {part.is_active !== undefined && (
-                                <div className="mt-2 flex justify-end">
-                                  <span
-                                    className={`px-2 py-0.5 text-[10px] font-semibold rounded-full border ${
-                                      part.is_active
-                                        ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-                                        : 'bg-gray-500/10 text-gray-400 border-gray-500/30'
-                                    }`}
-                                  >
-                                    {part.is_active ? 'Active' : 'Inactive'}
-                                  </span>
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
-              );
-            })
-          )}
-        </div>
-      </div>
-      )}
-
     </div>
   );
 }
+
+
