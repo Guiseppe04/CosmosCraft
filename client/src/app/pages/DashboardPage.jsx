@@ -609,12 +609,12 @@ export function DashboardPage() {
                 
                 <div className="flex justify-between items-end mt-4">
                    <div className="text-sm text-[var(--text-muted)]">
-                      <span className="block">Shipping: â‚±{Number(order.shipping_cost || 0).toLocaleString('en-PH')}</span>
-                      <span className="block mt-1">Tax: â‚±{Number(order.tax_amount || 0).toLocaleString('en-PH')}</span>
+                      <span className="block">Shipping: ₱{Number(order.shipping_cost || 0).toLocaleString('en-PH')}</span>
+                      <span className="block mt-1">Tax: ₱{Number(order.tax_amount || 0).toLocaleString('en-PH')}</span>
                    </div>
                    <div className="text-right items-end flex flex-col">
                      <span className="text-sm text-[var(--text-muted)] mb-1">Total Amount</span>
-                     <span className="text-xl font-bold text-[var(--gold-primary)] block">â‚±{Number(order.total_amount || 0).toLocaleString('en-PH')}</span>
+                     <span className="text-xl font-bold text-[var(--gold-primary)] block">₱{Number(order.total_amount || 0).toLocaleString('en-PH')}</span>
                    </div>
                 </div>
                 {order.status === 'pending' && (
@@ -989,7 +989,7 @@ export function DashboardPage() {
                     <p className="text-xs text-[var(--text-muted)] mt-1">Saved on {new Date(build.savedAt || new Date()).toLocaleDateString()}</p>
                   </div>
                   <div className="text-right">
-                    <span className="text-lg font-bold text-[var(--gold-primary)] block">â‚±{grandTotal.toLocaleString('en-PH')}</span>
+                    <span className="text-lg font-bold text-[var(--gold-primary)] block">₱{grandTotal.toLocaleString('en-PH')}</span>
                     {additionalPartsTotal > 0 && <span className="text-xs text-[var(--text-muted)]">Includes Add-ons</span>}
                   </div>
                 </div>
@@ -1152,7 +1152,7 @@ export function DashboardPage() {
                       <h4 className="font-semibold text-white truncate">{item.name}</h4>
                       <p className="text-xs text-[var(--text-muted)] mt-0.5">{item.category}</p>
                       <p className="text-lg font-bold text-[var(--gold-primary)] mt-1">
-                        â‚±{item.price.toLocaleString()}
+                        ₱{item.price.toLocaleString()}
                       </p>
                     </div>
                     <button
@@ -1185,7 +1185,7 @@ export function DashboardPage() {
                       </button>
                     </div>
                     <span className="text-sm text-[var(--text-muted)]">
-                      Subtotal: <span className="text-white font-medium">â‚±{(item.price * item.quantity).toLocaleString()}</span>
+                      Subtotal: <span className="text-white font-medium">₱{(item.price * item.quantity).toLocaleString()}</span>
                     </span>
                   </div>
                 </div>
@@ -1195,7 +1195,7 @@ export function DashboardPage() {
             <div className="mt-6 pt-6 border-t border-[var(--border)]">
               <div className="flex items-center justify-between mb-6">
                 <span className="text-lg text-[var(--text-muted)]">Total:</span>
-                <span className="text-2xl font-bold text-[var(--gold-primary)]">â‚±{cartTotal.toLocaleString()}</span>
+                <span className="text-2xl font-bold text-[var(--gold-primary)]">₱{cartTotal.toLocaleString()}</span>
               </div>
               <button
                 type="button"
@@ -2093,7 +2093,7 @@ export function DashboardPage() {
             <div className="bg-[var(--bg-primary)] rounded-xl p-5 border border-[var(--border)] mb-6">
               <h3 className="text-lg font-bold text-white mb-4 border-b border-[var(--border)] pb-2 flex justify-between">
                 <span>Configuration Breakdown</span>
-                <span className="text-[var(--gold-primary)]">â‚±{(viewingBuild.price || 0).toLocaleString('en-PH')}</span>
+                <span className="text-[var(--gold-primary)]">₱{(viewingBuild.price || 0).toLocaleString('en-PH')}</span>
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-4">
                  {viewingBuild.pricingBreakdown ? Object.entries(viewingBuild.pricingBreakdown).map(([key, price]) => {
@@ -2106,7 +2106,7 @@ export function DashboardPage() {
                            <span className="block font-medium text-white truncate">{label}</span>
                        </div>
 {price > 0 && (
-                          <span className="text-gray-300 shrink-0 font-mono text-right">â‚±{price.toLocaleString('en-PH')}</span>
+                          <span className="text-gray-300 shrink-0 font-mono text-right">₱{price.toLocaleString('en-PH')}</span>
                         )}
                      </div>
                    )
@@ -2117,7 +2117,7 @@ export function DashboardPage() {
                            <span className="block text-xs text-[var(--text-muted)] capitalize mb-0.5">Base Model</span>
                            <span className="block font-medium text-white truncate">Standard Build</span>
                        </div>
-                       <span className="text-gray-300 shrink-0 font-mono text-right">â‚±{BASE_PRICE.toLocaleString('en-PH')}</span>
+                       <span className="text-gray-300 shrink-0 font-mono text-right">₱{BASE_PRICE.toLocaleString('en-PH')}</span>
                      </div>
                      {Object.entries(viewingBuild.config || {}).map(([key, val]) => {
                        if (!val || typeof val !== 'string') return null;
@@ -2129,7 +2129,7 @@ export function DashboardPage() {
                                <span className="block font-medium text-white truncate">{label}</span>
                            </div>
                            {price > 0 && (
-<span className="text-gray-300 shrink-0 font-mono text-right">â‚±{price.toLocaleString('en-PH')}</span>
+<span className="text-gray-300 shrink-0 font-mono text-right">₱{price.toLocaleString('en-PH')}</span>
                            )}
                          </div>
                        )
@@ -2143,7 +2143,7 @@ export function DashboardPage() {
               <div className="bg-[var(--bg-primary)] rounded-xl p-5 border border-[var(--border)] mb-6">
                 <h3 className="text-lg font-bold text-white mb-4 border-b border-[var(--border)] pb-2 flex justify-between">
                   <span>Additional Parts</span>
-                  <span className="text-[var(--gold-primary)]">â‚±{viewingBuild.additionalParts.reduce((sum, p) => sum + (p.price * p.quantity), 0).toLocaleString('en-PH')}</span>
+                  <span className="text-[var(--gold-primary)]">₱{viewingBuild.additionalParts.reduce((sum, p) => sum + (p.price * p.quantity), 0).toLocaleString('en-PH')}</span>
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3">
                   {viewingBuild.additionalParts.map((part, idx) => (
@@ -2159,7 +2159,7 @@ export function DashboardPage() {
                         </div>
                       </div>
                       <div className="flex items-center sm:block sm:text-right shrink-0">
-                        <span className="text-gray-300 font-mono text-sm">â‚±{(part.price * part.quantity).toLocaleString('en-PH')}</span>
+                        <span className="text-gray-300 font-mono text-sm">₱{(part.price * part.quantity).toLocaleString('en-PH')}</span>
                       </div>
                     </div>
                   ))}
@@ -2170,7 +2170,7 @@ export function DashboardPage() {
             <div className="flex justify-between items-center border-t border-[var(--border)] pt-6 mt-4">
                <span className="text-lg text-[var(--text-muted)]">Grand Total</span>
                <span className="text-3xl font-bold text-[var(--gold-primary)]">
-                 â‚±{(Number(viewingBuild.price) + (viewingBuild.additionalParts || []).reduce((sum, p) => sum + (p.price * p.quantity), 0)).toLocaleString('en-PH')}
+                 ₱{(Number(viewingBuild.price) + (viewingBuild.additionalParts || []).reduce((sum, p) => sum + (p.price * p.quantity), 0)).toLocaleString('en-PH')}
                </span>
             </div>
             
