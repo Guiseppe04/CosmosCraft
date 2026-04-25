@@ -86,7 +86,7 @@ export function LoginPage() {
           className="mb-6"
         >
           <div className="flex justify-center mb-6">
-            <img src="/logo-cosmos.png" alt="CosmosCraft Logo" className="h-16 w-auto" />
+            <img src="/logo-cosmos.png" alt="CosmosCraft Logo" className="h-16 w-auto object-contain" />
           </div>
           <h1 className="text-4xl font-bold text-white mb-2 text-center">Welcome Back</h1>
           <p className="text-[var(--text-muted)] text-center">Sign in to continue to CosmosCraft</p>
@@ -190,15 +190,17 @@ export function LoginPage() {
             <button
               type="button"
               onClick={() => handleSocialLogin('Google')}
-              className="w-full border border-[var(--border)] hover:border-[var(--gold-primary)] bg-[var(--bg-primary)] rounded-lg py-3 font-medium text-white transition-all duration-200 hover:bg-[var(--gold-primary)]/10"
+              className="w-full border border-[var(--border)] hover:border-[var(--gold-primary)] bg-[var(--bg-primary)] rounded-lg py-3 font-medium text-white transition-all duration-200 hover:bg-[var(--gold-primary)]/10 flex items-center justify-center gap-2"
             >
+              <img src="/google.svg" alt="" aria-hidden="true" className="h-4 w-4 object-contain" />
               Google
             </button>
             <button
               type="button"
               onClick={() => handleSocialLogin('Facebook')}
-              className="w-full border border-[var(--border)] hover:border-[var(--gold-primary)] bg-[var(--bg-primary)] rounded-lg py-3 font-medium text-white transition-all duration-200 hover:bg-[var(--gold-primary)]/10"
+              className="w-full border border-[var(--border)] hover:border-[var(--gold-primary)] bg-[var(--bg-primary)] rounded-lg py-3 font-medium text-white transition-all duration-200 hover:bg-[var(--gold-primary)]/10 flex items-center justify-center gap-2"
             >
+              <img src="/facebook.svg" alt="" aria-hidden="true" className="h-4 w-4 object-contain" />
               Facebook
             </button>
           </div>

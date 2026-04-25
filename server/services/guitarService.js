@@ -1,5 +1,6 @@
 const { pool } = require('../config/database');
 const { AppError } = require('../middleware/errorHandler');
+const MAX_SAVED_CUSTOMIZATIONS_PER_USER = 10;
 
 let customizationColumnsReady = false;
 let customizationColumnsPromise = null;
@@ -205,6 +206,21 @@ exports.createMyCustomization = async (userId, payload) => {
     preview_image,
   } = payload;
 
+  const countRes = await pool.query(
+    `SELECT COUNT(*)::int AS total
+     FROM customizations
+     WHERE user_id = $1`,
+    [userId]
+  );
+
+  const totalSavedBuilds = Number(countRes.rows[0]?.total || 0);
+  if (totalSavedBuilds >= MAX_SAVED_CUSTOMIZATIONS_PER_USER) {
+    throw new AppError(
+      'You can only save up to 10 guitar builds. Please delete an existing build before creating a new one.',
+      400
+    );
+  }
+
   const res = await pool.query(
     `INSERT INTO customizations (
       user_id, name, guitar_type, body_wood, neck_wood, fingerboard_wood,
@@ -282,6 +298,24 @@ exports.updateMyCustomization = async (customizationId, userId, payload) => {
       preview_image || null,
       customizationId, userId,
     ]
+  );
+
+  return res.rows[0] || null;
+};
+
+exports.deleteMyCustomization = async (customizationId, userId) => {
+  await ensureCustomizationColumns();
+  const lockInfo = await getCustomizationLockInfo(customizationId, userId);
+
+  if (lockInfo?.active_order_id) {
+    throw new AppError('This custom build is already attached to an active order and can no longer be deleted.', 409);
+  }
+
+  const res = await pool.query(
+    `DELETE FROM customizations
+     WHERE customization_id = $1 AND user_id = $2
+     RETURNING customization_id`,
+    [customizationId, userId]
   );
 
   return res.rows[0] || null;

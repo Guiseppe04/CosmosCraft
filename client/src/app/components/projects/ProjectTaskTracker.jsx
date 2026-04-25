@@ -213,6 +213,36 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
   }, [hierarchy?.parts, parts]);
   const taskSummary = hierarchy?.task_summary || { total: 0, completed: 0, pending: 0 };
   const pickupTimeSlots = useMemo(() => buildPickupTimeSlots(pickupDate), [pickupDate]);
+  const trackerTitleRaw = hierarchy?.name || hierarchy?.title || projectName || 'Project Tracker';
+  const parsedTrackerHeader = useMemo(() => {
+    const text = String(trackerTitleRaw || '');
+    const match = text.match(/^(.*?)\s*\((ORD-[^)]+)\)\s*$/i);
+    if (!match) {
+      return {
+        title: text,
+        embeddedOrderRef: '',
+      };
+    }
+    return {
+      title: match[1]?.trim() || text,
+      embeddedOrderRef: match[2]?.trim() || '',
+    };
+  }, [trackerTitleRaw]);
+  const orderReference = [
+    hierarchy?.order_number,
+    hierarchy?.orderNumber,
+    hierarchy?.order_no,
+    hierarchy?.reference,
+    hierarchy?.reference_no,
+    parsedTrackerHeader.embeddedOrderRef,
+  ].find((value) => typeof value === 'string' && value.trim());
+  const displayOrderReference = useMemo(() => {
+    if (!orderReference) return '';
+    if (parsedTrackerHeader.embeddedOrderRef && orderReference === parsedTrackerHeader.embeddedOrderRef) {
+      return orderReference;
+    }
+    return orderReference;
+  }, [orderReference, parsedTrackerHeader.embeddedOrderRef]);
   const defaultAddress = Array.isArray(user?.addresses)
     ? user.addresses.find((address) => address.is_default) || user.addresses[0] || null
     : null;
@@ -374,23 +404,32 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
   if (!hierarchy) return null;
 
   return (
-    <div className={resolvedParts.length > 0 ? "grid lg:grid-cols-[1fr_350px] gap-6" : "space-y-6"}>
+    <div className={resolvedParts.length > 0 ? "grid lg:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.9fr)] gap-6 xl:gap-10 items-start" : "space-y-6"}>
       
       {/* ── MAIN TRACKER SECTION ── */}
       <div className="space-y-6">
         
         {/* Progress Header */}
-        <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6 relative overflow-hidden">
+        <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6 md:p-7 relative overflow-hidden">
           <div className="absolute top-0 right-0 w-64 h-64 bg-[var(--gold-primary)]/5 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none"></div>
           
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="text-white text-2xl font-bold">{hierarchy.name || hierarchy.title || projectName || 'Project Tracker'}</h2>
-              <p className="text-[var(--text-muted)] text-sm">{hierarchy.customer_name ? `For: ${hierarchy.customer_name}` : '—'}</p>
+          <div className="mb-5 grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-start">
+            <div className="min-w-0">
+              <h2 className="text-white text-2xl sm:text-3xl font-bold leading-tight break-words">
+                {parsedTrackerHeader.title}
+              </h2>
+              {displayOrderReference && (
+                <p className="mt-2 text-sm font-medium text-[var(--text-muted)] break-all">
+                  Order: {displayOrderReference}
+                </p>
+              )}
+              <p className="mt-2 text-sm text-[var(--text-muted)]">
+                {hierarchy.customer_name ? `For: ${hierarchy.customer_name}` : '—'}
+              </p>
             </div>
-            <div className="text-right">
-              <span className="text-[var(--gold-primary)] text-3xl font-black">{hierarchy.progress}%</span>
-              <p className="text-white font-semibold flex items-center justify-end gap-2">
+            <div className="shrink-0 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-3 text-left md:text-right">
+              <span className="text-[var(--gold-primary)] text-3xl md:text-4xl font-black leading-none">{hierarchy.progress}%</span>
+              <p className="mt-1 text-white font-semibold flex items-center gap-2 md:justify-end">
                 {formatStatusLabel(hierarchy.status)}
               </p>
             </div>
@@ -404,7 +443,7 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
                className="h-full bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)]" 
              />
           </div>
-          <div className="flex items-center justify-between mt-4">
+          <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-[var(--text-muted)] text-xs">
               {taskSummary.total > 0
                 ? `${taskSummary.completed} of ${taskSummary.total} tasks completed`
@@ -804,7 +843,7 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
 
       {/* ── GUITAR PARTS PANEL ── */}
       {resolvedParts.length > 0 && (
-      <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-5 flex flex-col">
+      <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-5 flex flex-col self-start">
         <div className="flex items-center gap-2 mb-4">
           <Guitar className="w-5 h-5 text-[var(--gold-primary)]" />
           <h3 className="text-white font-bold text-lg">Project Parts</h3>

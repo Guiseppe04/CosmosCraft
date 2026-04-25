@@ -269,12 +269,12 @@ export default function UnavailableDatesManager({
                     : status.type === 'holiday'
                       ? 'border-slate-400/30 bg-slate-400/10'
                       : status.type === 'sunday'
-                        ? 'border-white/5 bg-[#2c2828]'
+                        ? 'border-slate-500/25 bg-slate-700/25'
                         : status.type === 'past'
-                          ? 'border-white/5 bg-[#262222] opacity-50'
+                          ? 'border-slate-600/25 bg-slate-700/20 opacity-70'
                           : status.type === 'unavailable'
                             ? 'border-red-500/30 bg-red-500/10'
-                            : 'border-white/10 bg-[#4a4444] hover:border-white/20'
+                            : 'border-white/15 bg-[#595252] hover:border-white/30'
 
                   return (
                     <button

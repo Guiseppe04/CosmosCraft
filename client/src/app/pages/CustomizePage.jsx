@@ -99,19 +99,19 @@ function OptionButton({ option, isSelected, onClick }) {
         </div>
       )}
       
-      <div className="space-y-1">
-        <div className={`text-sm font-semibold transition-colors duration-200 ${
-          isSelected ? 'text-[var(--text-light)]' : 'text-[var(--text-muted)] group-hover:text-[var(--text-light)]'
+      <div className="space-y-1.5">
+        <div className={`text-[15px] font-bold leading-tight tracking-tight transition-colors duration-200 ${
+          isSelected ? 'text-[var(--text-light)]' : 'text-[var(--text-light)] group-hover:text-white'
         }`}>
           {option.label}
         </div>
         {option.note && (
-          <div className="text-xs text-white/40 line-clamp-1">
+          <div className="text-[11px] leading-relaxed text-[var(--text-muted)] line-clamp-2">
             {option.note}
           </div>
         )}
         {option.price > 0 && (
-          <div className={`text-xs font-semibold ${
+          <div className={`text-[11px] font-semibold ${
             isSelected ? 'text-[#d4af37]' : 'text-[#d4af37]/70'
           }`}>
             +₱{option.price.toLocaleString('en-PH')}
@@ -131,7 +131,7 @@ function VisualCard({ option, isSelected, onClick, previewImage }) {
       className={`group relative overflow-hidden rounded-xl border transition-all duration-300 ${
         isSelected
           ? 'border-[#d4af37] shadow-lg shadow-[#d4af37]/20 ring-2 ring-[#d4af37]/30'
-          : 'border-white/10 hover:border-white/20'
+          : 'border-[var(--border)] hover:border-[var(--gold-primary)]/40'
       }`}
     >
       {/* Preview image/gradient */}
@@ -155,16 +155,21 @@ function VisualCard({ option, isSelected, onClick, previewImage }) {
       </div>
       
       {/* Content */}
-      <div className={`p-2.5 transition-colors duration-200 ${
-        isSelected ? 'bg-[#d4af37]/10' : 'bg-[#151515]'
+      <div className={`border-t border-[var(--border)] p-2.5 transition-colors duration-200 ${
+        isSelected ? 'bg-[#d4af37]/10' : 'bg-[var(--surface-elevated)]'
       }`}>
-        <div className={`text-xs font-semibold transition-colors duration-200 ${
-          isSelected ? 'text-white' : 'text-white/80'
+        <div className={`text-sm font-bold leading-tight tracking-tight transition-colors duration-200 ${
+          isSelected ? 'text-[var(--text-light)]' : 'text-[var(--text-light)]'
         }`}>
           {option.label}
         </div>
+        {option.note && (
+          <div className="mt-1 text-[11px] leading-relaxed text-[var(--text-muted)] line-clamp-2">
+            {option.note}
+          </div>
+        )}
         {option.price > 0 && (
-          <div className={`text-[10px] font-medium ${
+          <div className={`mt-1 text-[11px] font-semibold ${
             isSelected ? 'text-[#d4af37]' : 'text-[#d4af37]/70'
           }`}>
             +₱{option.price.toLocaleString('en-PH')}
@@ -239,13 +244,6 @@ export function CustomizePage() {
       setHasUnsavedChanges(true)
     }
     baseResetConfig()
-  }
-
-  const loadConfig = (raw) => {
-    if (editBuildId && !suppressDirtyTrackingRef.current) {
-      setHasUnsavedChanges(true)
-    }
-    baseLoadConfig(raw)
   }
 
   const handleZoomIn = () => setZoomLevel(prev => Math.min(2, Number((prev + 0.1).toFixed(2))))
@@ -635,6 +633,15 @@ export function CustomizePage() {
       }
     }
 
+    const totalSavedBuildCount = ['cosmoscraft_saved_builds', 'cosmoscraft_saved_bass_builds']
+      .map((key) => JSON.parse(window.localStorage.getItem(key) || '[]'))
+      .reduce((total, entries) => total + (Array.isArray(entries) ? entries.length : 0), 0)
+
+    if (existingIndex === -1 && totalSavedBuildCount >= 10) {
+      setToastMessage('You can only save up to 10 guitar builds. Please delete an existing build before creating a new one.')
+      return
+    }
+
     if (existingIndex !== -1) {
       // Preserve existing properties like additionalParts
       stored[existingIndex] = { ...stored[existingIndex], ...baseBuild }
@@ -642,7 +649,7 @@ export function CustomizePage() {
       stored.unshift(baseBuild)
     }
 
-    if (stored.length > 20) stored = stored.slice(0, 20)
+    if (stored.length > 10) stored = stored.slice(0, 10)
     const persistLocalBuild = (extraPatch = {}) => {
       const nextBuild = { ...baseBuild, ...extraPatch }
       let nextStored = JSON.parse(window.localStorage.getItem(storedKey) || '[]')
@@ -652,7 +659,7 @@ export function CustomizePage() {
       } else {
         nextStored.unshift(nextBuild)
       }
-      if (nextStored.length > 20) nextStored = nextStored.slice(0, 20)
+      if (nextStored.length > 10) nextStored = nextStored.slice(0, 10)
       window.localStorage.setItem(storedKey, JSON.stringify(nextStored))
       return nextBuild
     }
@@ -711,6 +718,10 @@ export function CustomizePage() {
             message: 'This build is already in an active order. You can track it in My Guitar, but it can no longer be edited.',
           },
         })
+        return
+      }
+      if (String(error?.message || '').toLowerCase().includes('up to 10 guitar builds')) {
+        setToastMessage('You can only save up to 10 guitar builds. Please delete an existing build before creating a new one.')
         return
       }
       setToastMessage('Saved locally. Database sync failed.')
@@ -804,13 +815,12 @@ export function CustomizePage() {
   }
 
   const handleLoad = () => {
-    const raw = window.prompt('Paste a saved builder JSON configuration')
-    if (!raw) return
-    try {
-      loadConfig(JSON.parse(raw))
-    } catch {
-      window.alert('Invalid JSON configuration')
-    }
+    navigate('/dashboard', {
+      state: {
+        section: 'my-guitar',
+        message: 'Select a saved build from My Guitar to continue.',
+      },
+    })
   }
 
   // Get current category info
@@ -1163,15 +1173,19 @@ export function CustomizePage() {
                 <RotateCcw className="h-4 w-4" />
                 Reset Configuration
               </button>
-              <button
-                type="button"
-                onClick={handleSave}
-                className="flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] px-4 py-2.5 text-sm font-medium transition-all duration-200 hover:bg-[var(--surface-dark)]"
-                style={{ color: 'var(--text-muted)' }}
-              >
-                <Save className="h-4 w-4" />
-                Save Build
-              </button>
+              {isAuthenticated ? (
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] px-4 py-2.5 text-sm font-medium transition-all duration-200 hover:bg-[var(--surface-dark)]"
+                  style={{ color: 'var(--text-muted)' }}
+                >
+                  <Save className="h-4 w-4" />
+                  Save Build
+                </button>
+              ) : (
+                <div className="h-[42px]" aria-hidden="true" />
+              )}
               <div className={`inline-flex items-center gap-2 rounded-lg px-3 py-1 text-[11px] font-semibold ${
                 hasUnsavedChanges
                   ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
@@ -1657,15 +1671,19 @@ export function CustomizePage() {
             {/* Save Image / Load Config */}
             <div className="border-t border-white/10 p-4 flex-shrink-0">
               <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={handleSaveImage}
-                  className="flex-1 flex items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 py-2 text-xs font-medium transition-all duration-200 hover:bg-[var(--surface-dark)]"
-                  style={{ color: 'var(--text-muted)' }}
-                >
-                  <Image className="h-3.5 w-3.5" />
-                  Save Image
-                </button>
+                {isAuthenticated ? (
+                  <button
+                    type="button"
+                    onClick={handleSaveImage}
+                    className="flex-1 flex items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 py-2 text-xs font-medium transition-all duration-200 hover:bg-[var(--surface-dark)]"
+                    style={{ color: 'var(--text-muted)' }}
+                  >
+                    <Image className="h-3.5 w-3.5" />
+                    Save Image
+                  </button>
+                ) : (
+                  <div className="flex-1" aria-hidden="true" />
+                )}
                 <button
                   type="button"
                   onClick={handleLoad}
@@ -1700,15 +1718,19 @@ export function CustomizePage() {
               >
                 Stay
               </button>
-              <button
-                type="button"
-                onClick={() => {
-                  handleSaveAndLeave()
-                }}
-                className="flex-1 rounded-lg bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] px-4 py-2.5 text-sm font-bold text-[var(--text-dark)]"
-              >
-                Save Build
-              </button>
+              {isAuthenticated ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleSaveAndLeave()
+                  }}
+                  className="flex-1 rounded-lg bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] px-4 py-2.5 text-sm font-bold text-[var(--text-dark)]"
+                >
+                  Save Build
+                </button>
+              ) : (
+                <div className="flex-1" aria-hidden="true" />
+              )}
               <button
                 type="button"
                 onClick={handleConfirmLeave}

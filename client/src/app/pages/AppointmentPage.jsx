@@ -2,15 +2,14 @@ import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router'
 import { motion, AnimatePresence } from 'motion/react'
 import { API } from '../utils/apiConfig'
+import { useAuth } from '../context/AuthContext.jsx'
 import {
   Wrench,
   Paintbrush,
   Settings,
   Sparkles,
   MapPin,
-  Phone,
   Clock as ClockIcon,
-  Calendar,
   ChevronLeft,
   ChevronRight,
   CheckCircle2,
@@ -92,7 +91,7 @@ function getAppointmentBranch() {
 const STEPS = [
   { id: 1, label: 'Appointment' },
   { id: 2, label: 'Service' },
-  { id: 3, label: 'Guitar Details' },
+  { id: 3, label: 'Guitar & Service Type' },
   { id: 4, label: 'Location' },
   { id: 5, label: 'Confirmation' },
 ]
@@ -174,16 +173,29 @@ function getMonthMatrix(year, month, maxLeadTimeDays) {
 
 export function AppointmentPage() {
   const navigate = useNavigate()
+  const { user, isAuthenticated, isLoadingUser, openLogin } = useAuth()
   const today = new Date()
   const branch = useMemo(() => getAppointmentBranch(), [])
   const branches = useMemo(() => [branch], [branch])
+  const userAddresses = Array.isArray(user?.addresses) ? user.addresses : []
+  const savedBuilds = useMemo(() => {
+    if (typeof window === 'undefined') return []
+    const savedGuitarBuilds = JSON.parse(window.localStorage.getItem('cosmoscraft_saved_builds') || '[]').map((build) => ({ ...build, isBass: false }))
+    const savedBassBuilds = JSON.parse(window.localStorage.getItem('cosmoscraft_saved_bass_builds') || '[]').map((build) => ({ ...build, isBass: true }))
+    return [...savedGuitarBuilds, ...savedBassBuilds]
+  }, [])
 
   // State
   const [currentStep, setCurrentStep] = useState(1)
   
   // Selections
+  const [guitarSelectionMode, setGuitarSelectionMode] = useState(savedBuilds.length > 0 ? 'saved' : 'manual')
+  const [selectedBuildId, setSelectedBuildId] = useState('')
+  const [homeServiceOption, setHomeServiceOption] = useState('')
+  const [homeServiceAddressId, setHomeServiceAddressId] = useState('')
+  const [homeServiceContact, setHomeServiceContact] = useState(user?.phone || '')
   const [selectedServicesByCategory, setSelectedServicesByCategory] = useState({})
-  const [guitarDetails, setGuitarDetails] = useState({ brand: '', model: '', referenceImage: '', referenceImageName: '', notes: '' })
+  const [guitarDetails, setGuitarDetails] = useState({ brand: '', model: '', type: '', notes: '' })
   const [selectedBranchId] = useState(branches[0].id)
   const [selectedDateId, setSelectedDateId] = useState('')
   const [selectedTime, setSelectedTime] = useState('')
@@ -202,6 +214,10 @@ export function AppointmentPage() {
     () => Object.values(selectedServicesByCategory).filter(Boolean),
     [selectedServicesByCategory]
   )
+  const selectedBuild = savedBuilds.find((build) => String(build.id) === String(selectedBuildId)) || null
+  const selectedAppointmentType = homeServiceOption === 'yes' ? 'service_home' : homeServiceOption === 'no' ? 'service_in_shop' : ''
+  const hasManualGuitarDetails = Boolean(guitarDetails.brand.trim() && guitarDetails.model.trim() && guitarDetails.type.trim())
+  const hasSelectedGuitar = guitarSelectionMode === 'saved' ? Boolean(selectedBuild) : hasManualGuitarDetails
 
   // Derived calculations
   const { maxLeadTime, totalPrice, selectedDetailedServices } = useMemo(() => {
@@ -228,35 +244,54 @@ export function AppointmentPage() {
     ? `CC-${selectedBranchId.toUpperCase()}-${selectedDateId.replace(/-/g, '')}-${selectedTime.replace(/[:\s]/g, '')}`
     : ''
 
+  const selectedGuitarDetails = useMemo(() => {
+    if (guitarSelectionMode === 'saved' && selectedBuild) {
+      return {
+        brand: selectedBuild.name || 'Saved Build',
+        model: selectedBuild.summary?.body || selectedBuild.config?.body || selectedBuild.config?.bassType || 'Custom Build',
+        type: selectedBuild.isBass ? 'bass' : (selectedBuild.config?.guitarType || 'guitar'),
+        notes: selectedBuild.summary ? `Saved build details: ${Object.values(selectedBuild.summary).filter(Boolean).join(', ')}` : '',
+      }
+    }
+
+    return {
+      brand: guitarDetails.brand.trim(),
+      model: guitarDetails.model.trim(),
+      type: guitarDetails.type.trim(),
+      notes: guitarDetails.notes.trim(),
+    }
+  }, [guitarSelectionMode, selectedBuild, guitarDetails])
+
   // Validation
   const canProceed = () => {
     if (currentStep === 1) return selectedDateId && selectedTime
     if (currentStep === 2) return selectedServices.length > 0
-    if (currentStep === 3) return guitarDetails.brand.trim() && guitarDetails.model.trim()
-    if (currentStep === 4) return !!selectedBranchId
+    if (currentStep === 3) return hasSelectedGuitar && Boolean(selectedAppointmentType)
+    if (currentStep === 4) {
+      if (selectedAppointmentType === 'service_home') {
+        return Boolean(homeServiceAddressId && homeServiceContact.trim())
+      }
+      return !!selectedBranchId
+    }
     return true
   }
 
-  const handleReferenceImageUpload = (event) => {
-    const file = event.target.files?.[0]
-    if (!file) return
-    if (!file.type.startsWith('image/')) {
-      alert('Please upload a valid image file.')
-      event.target.value = ''
-      return
+  const getStepValidationMessage = () => {
+    if (currentStep === 1) {
+      if (!selectedDateId || !selectedTime) return 'Select both appointment date and time.'
     }
-
-    const reader = new FileReader()
-    reader.onload = () => {
-      const dataUrl = typeof reader.result === 'string' ? reader.result : ''
-      setGuitarDetails(prev => ({
-        ...prev,
-        referenceImage: dataUrl,
-        referenceImageName: file.name,
-      }))
+    if (currentStep === 2 && selectedServices.length === 0) {
+      return 'Select at least one service to continue.'
     }
-    reader.readAsDataURL(file)
-    event.target.value = ''
+    if (currentStep === 3) {
+      if (!hasSelectedGuitar) return 'Select a saved guitar or enter manual guitar details before continuing.'
+      if (!selectedAppointmentType) return 'Please choose Home Service: Yes or No.'
+    }
+    if (currentStep === 4 && selectedAppointmentType === 'service_home') {
+      if (!homeServiceAddressId) return 'Select your home service address.'
+      if (!homeServiceContact.trim()) return 'Enter your contact number for home service.'
+    }
+    return ''
   }
 
   // Handlers
@@ -280,6 +315,10 @@ export function AppointmentPage() {
   }
 
   const handleSubmit = async () => {
+    if (!isAuthenticated) {
+      openLogin(() => navigate('/appointments', { replace: true }))
+      return
+    }
     if (!canProceed()) return
     setBookingComplete(true)
     
@@ -297,17 +336,22 @@ export function AppointmentPage() {
         },
         credentials: 'include',
         body: JSON.stringify({
-          appointment_type: 'service_in_shop',
+          appointment_type: selectedAppointmentType,
           services: selectedServices,
           location_id: selectedBranchId,
+          address_id: selectedAppointmentType === 'service_home' ? homeServiceAddressId : undefined,
           guitar_details: {
-            brand: guitarDetails.brand,
-            model: guitarDetails.model,
-            reference_image: guitarDetails.referenceImage || '',
-            notes: guitarDetails.notes || ''
+            brand: selectedGuitarDetails.brand,
+            model: selectedGuitarDetails.model,
+            serial: 'N/A',
+            type: selectedGuitarDetails.type,
+            notes: selectedGuitarDetails.notes || ''
           },
           scheduled_at: scheduledAt.toISOString(),
-          notes: guitarDetails.notes || ''
+          notes: [
+            selectedGuitarDetails.notes || '',
+            selectedAppointmentType === 'service_home' ? `Home service contact: ${homeServiceContact}` : '',
+          ].filter(Boolean).join('\n')
         })
       });
 
@@ -326,6 +370,47 @@ export function AppointmentPage() {
       setBookingComplete(false);
       alert(`Failed to book appointment: ${error.message}`);
     }
+  }
+
+  if (isLoadingUser) {
+    return (
+      <div className="min-h-screen pt-16 bg-[var(--bg-primary)]">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+          <div className="rounded-2xl border border-[var(--border)] bg-theme-surface-deep p-8 text-center">
+            <p className="text-sm text-[var(--text-muted)]">Checking your session...</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen pt-16 bg-[var(--bg-primary)]">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+          <div className="rounded-2xl border border-[var(--border)] bg-theme-surface-deep p-8 text-center space-y-5">
+            <h1 className="text-2xl font-bold text-white">Sign in to book an appointment</h1>
+            <p className="text-sm text-[var(--text-muted)]">Booking is available only for authenticated users.</p>
+            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+              <button
+                type="button"
+                onClick={() => openLogin(() => navigate('/appointments', { replace: true }))}
+                className="px-6 py-2.5 rounded-xl text-sm font-bold bg-[#d4af37] text-black hover:bg-[#ffe270] transition-colors"
+              >
+                Login to Continue
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate('/login')}
+                className="px-6 py-2.5 rounded-xl text-sm font-bold text-[var(--text-light)] bg-[var(--surface-dark)] border border-[var(--border)] hover:bg-[var(--surface-elevated)] transition-colors"
+              >
+                Go to Login Page
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   // --- RENDERS ---
@@ -381,54 +466,113 @@ export function AppointmentPage() {
         return (
           <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
             <div>
-              <h2 className="text-2xl font-bold text-white mb-2">Guitar Details</h2>
-              <p className="text-sm text-[var(--text-muted)]">Tell us about the instrument you're bringing in.</p>
+              <h2 className="text-2xl font-bold text-white mb-2">Select Guitar and Service Type</h2>
+              <p className="text-sm text-[var(--text-muted)]">Choose the guitar first, then select Home Service or In-store service.</p>
             </div>
             
             <div className="bg-theme-surface-deep border border-[var(--border)] p-6 rounded-2xl space-y-5">
+              {savedBuilds.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium text-white mb-1.5">Guitar Source</label>
+                  <div className="grid sm:grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setGuitarSelectionMode('saved')}
+                      className={`rounded-xl border p-3 text-sm font-semibold transition-colors ${guitarSelectionMode === 'saved' ? 'border-[#d4af37] bg-[#d4af37]/10 text-[#d4af37]' : 'border-[var(--border)] text-[var(--text-muted)]'}`}
+                    >
+                      Saved Guitar Build
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setGuitarSelectionMode('manual')}
+                      className={`rounded-xl border p-3 text-sm font-semibold transition-colors ${guitarSelectionMode === 'manual' ? 'border-[#d4af37] bg-[#d4af37]/10 text-[#d4af37]' : 'border-[var(--border)] text-[var(--text-muted)]'}`}
+                    >
+                      Manual Guitar Details
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {guitarSelectionMode === 'saved' && savedBuilds.length > 0 ? (
+                <div>
+                  <label className="block text-sm font-medium text-white mb-1.5">Select Saved Guitar <span className="text-red-400">*</span></label>
+                  <select
+                    value={selectedBuildId}
+                    onChange={(e) => setSelectedBuildId(e.target.value)}
+                    className="w-full px-4 py-3 bg-[var(--surface-dark)] text-[var(--text-light)] border border-[var(--border)] rounded-xl text-sm focus:outline-none focus:border-[#d4af37]"
+                  >
+                    <option value="">Choose a saved build</option>
+                    {savedBuilds.map((build) => (
+                      <option key={build.id} value={build.id}>
+                        {build.name || 'Custom Build'} ({build.isBass ? 'Bass' : 'Guitar'})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <>
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-white mb-1.5">Brand <span className="text-red-400">*</span></label>
+                      <input
+                        type="text"
+                        value={guitarDetails.brand}
+                        onChange={e => setGuitarDetails({ ...guitarDetails, brand: e.target.value })}
+                        className="w-full px-4 py-3 bg-[var(--surface-dark)] text-[var(--text-light)] border border-[var(--border)] rounded-xl text-sm focus:outline-none focus:border-[#d4af37]"
+                        placeholder="e.g. Fender"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-white mb-1.5">Model <span className="text-red-400">*</span></label>
+                      <input
+                        type="text"
+                        value={guitarDetails.model}
+                        onChange={e => setGuitarDetails({ ...guitarDetails, model: e.target.value })}
+                        className="w-full px-4 py-3 bg-[var(--surface-dark)] text-[var(--text-light)] border border-[var(--border)] rounded-xl text-sm focus:outline-none focus:border-[#d4af37]"
+                        placeholder="e.g. Stratocaster"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-white mb-1.5">Type <span className="text-red-400">*</span></label>
+                    <input
+                      type="text"
+                      value={guitarDetails.type}
+                      onChange={e => setGuitarDetails({ ...guitarDetails, type: e.target.value })}
+                      className="w-full px-4 py-3 bg-[var(--surface-dark)] text-[var(--text-light)] border border-[var(--border)] rounded-xl text-sm focus:outline-none focus:border-[#d4af37]"
+                      placeholder="e.g. Electric, Acoustic, Bass"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-white mb-1.5">Notes / Issue Description</label>
+                    <textarea
+                      value={guitarDetails.notes}
+                      onChange={e => setGuitarDetails({ ...guitarDetails, notes: e.target.value })}
+                      className="w-full h-28 px-4 py-3 bg-[var(--surface-dark)] text-[var(--text-light)] border border-[var(--border)] rounded-xl text-sm resize-none focus:outline-none focus:border-[#d4af37]"
+                      placeholder="Describe the issue or service request"
+                    />
+                  </div>
+                </>
+              )}
+
               <div>
-                <label className="block text-sm font-medium text-white mb-1.5">Brand <span className="text-red-400">*</span></label>
-                <input
-                  type="text"
-                  value={guitarDetails.brand}
-                  onChange={e => setGuitarDetails({ ...guitarDetails, brand: e.target.value })}
-                  className="w-full px-4 py-3 bg-[var(--surface-dark)] text-[var(--text-light)] border border-[var(--border)] rounded-xl text-sm focus:outline-none focus:border-[#d4af37] transition-colors placeholder:text-[var(--text-muted)]"
-                  placeholder="e.g. Fender, Gibson, Ibanez"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-white mb-1.5">Model <span className="text-red-400">*</span></label>
-                <input
-                  type="text"
-                  value={guitarDetails.model}
-                  onChange={e => setGuitarDetails({ ...guitarDetails, model: e.target.value })}
-                  className="w-full px-4 py-3 bg-[var(--surface-dark)] text-[var(--text-light)] border border-[var(--border)] rounded-xl text-sm focus:outline-none focus:border-[#d4af37] transition-colors placeholder:text-[var(--text-muted)]"
-                  placeholder="e.g. Stratocaster, Les Paul"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-white mb-1.5">Upload Image (Optional)</label>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleReferenceImageUpload}
-                  className="w-full px-4 py-3 bg-[var(--surface-dark)] text-[var(--text-light)] border border-[var(--border)] rounded-xl text-sm focus:outline-none focus:border-[#d4af37] transition-colors file:mr-3 file:rounded-lg file:border-0 file:bg-[#d4af37] file:px-3 file:py-1.5 file:text-xs file:font-bold file:text-black"
-                />
-                <p className="mt-1 text-xs text-[var(--text-muted)]">
-                  Add a guitar photo reference if you want service/customization based on your existing instrument.
-                </p>
-                {guitarDetails.referenceImageName && (
-                  <p className="mt-2 text-xs text-[#d4af37]">Selected: {guitarDetails.referenceImageName}</p>
-                )}
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-white mb-1.5">Issues & Notes</label>
-                <textarea
-                  value={guitarDetails.notes}
-                  onChange={e => setGuitarDetails({ ...guitarDetails, notes: e.target.value })}
-                  className="w-full h-32 px-4 py-3 bg-[var(--surface-dark)] text-[var(--text-light)] border border-[var(--border)] rounded-xl text-sm resize-none focus:outline-none focus:border-[#d4af37] transition-colors placeholder:text-[var(--text-muted)]"
-                  placeholder="Describe your requested setups, string gauge preferences, or structural issues..."
-                />
+                <label className="block text-sm font-medium text-white mb-1.5">Home Service <span className="text-red-400">*</span></label>
+                <div className="grid sm:grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setHomeServiceOption('yes')}
+                    className={`rounded-xl border p-3 text-sm font-semibold transition-colors ${homeServiceOption === 'yes' ? 'border-[#d4af37] bg-[#d4af37]/10 text-[#d4af37]' : 'border-[var(--border)] text-[var(--text-muted)]'}`}
+                  >
+                    Yes, Home Service
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setHomeServiceOption('no')}
+                    className={`rounded-xl border p-3 text-sm font-semibold transition-colors ${homeServiceOption === 'no' ? 'border-[#d4af37] bg-[#d4af37]/10 text-[#d4af37]' : 'border-[var(--border)] text-[var(--text-muted)]'}`}
+                  >
+                    No, In-store Service
+                  </button>
+                </div>
               </div>
             </div>
           </motion.div>
@@ -437,34 +581,81 @@ export function AppointmentPage() {
       case 4:
         return (
           <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
-             <div>
-              <h2 className="text-2xl font-bold text-white mb-2">Location</h2>
-              <p className="text-sm text-[var(--text-muted)]">Appointments are currently available at our Balagtas branch.</p>
-            </div>
+            {selectedAppointmentType === 'service_home' ? (
+              <>
+                <div>
+                  <h2 className="text-2xl font-bold text-white mb-2">Home Service Details</h2>
+                  <p className="text-sm text-[var(--text-muted)]">Select your address and contact number for home service booking.</p>
+                </div>
 
-            <div className="space-y-3">
-              {branches.map(branch => {
-                const isSelected = selectedBranchId === branch.id
-                return (
-                  <div
-                    key={branch.id}
-                    className="w-full flex items-center justify-between p-5 rounded-2xl border-2 border-[#d4af37] bg-[#d4af37]/5"
-                  >
-                    <div className="flex gap-4 text-left">
-                      <div className="p-3 rounded-full bg-[#d4af37]/20 text-[#d4af37]">
-                        <MapPin className="w-6 h-6" />
-                      </div>
-                      <div>
-                        <h3 className="font-bold text-lg mb-1 text-[var(--text-light)]">{branch.name}</h3>
-                        <p className="text-sm text-[var(--text-muted)]">{branch.address}</p>
-                        <p className="text-sm text-[var(--text-muted)] mt-1">{branch.hours}</p>
-                      </div>
-                    </div>
-                    {isSelected && <CheckCircle2 className="w-6 h-6 text-[#d4af37]" />}
+                {userAddresses.length === 0 ? (
+                  <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-5">
+                    <p className="text-sm text-amber-200">
+                      Home service requires a saved address. Please add an address in your Dashboard profile first.
+                    </p>
                   </div>
-                )
-              })}
-            </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-white mb-1.5">Service Address <span className="text-red-400">*</span></label>
+                      <select
+                        value={homeServiceAddressId}
+                        onChange={(e) => setHomeServiceAddressId(e.target.value)}
+                        className="w-full px-4 py-3 bg-[var(--surface-dark)] text-[var(--text-light)] border border-[var(--border)] rounded-xl text-sm focus:outline-none focus:border-[#d4af37]"
+                      >
+                        <option value="">Select service address</option>
+                        {userAddresses.map((address) => (
+                          <option key={address.address_id} value={address.address_id}>
+                            {address.label || 'Address'} - {[address.street_line1, address.city, address.province].filter(Boolean).join(', ')}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-white mb-1.5">Contact Number <span className="text-red-400">*</span></label>
+                      <input
+                        type="text"
+                        value={homeServiceContact}
+                        onChange={(e) => setHomeServiceContact(e.target.value)}
+                        className="w-full px-4 py-3 bg-[var(--surface-dark)] text-[var(--text-light)] border border-[var(--border)] rounded-xl text-sm focus:outline-none focus:border-[#d4af37]"
+                        placeholder="e.g. 09123456789"
+                      />
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <div>
+                  <h2 className="text-2xl font-bold text-white mb-2">Location</h2>
+                  <p className="text-sm text-[var(--text-muted)]">Appointments are currently available at our Balagtas branch.</p>
+                </div>
+
+                <div className="space-y-3">
+                  {branches.map(branch => {
+                    const isSelected = selectedBranchId === branch.id
+                    return (
+                      <div
+                        key={branch.id}
+                        className="w-full flex items-center justify-between p-5 rounded-2xl border-2 border-[#d4af37] bg-[#d4af37]/5"
+                      >
+                        <div className="flex gap-4 text-left">
+                          <div className="p-3 rounded-full bg-[#d4af37]/20 text-[#d4af37]">
+                            <MapPin className="w-6 h-6" />
+                          </div>
+                          <div>
+                            <h3 className="font-bold text-lg mb-1 text-[var(--text-light)]">{branch.name}</h3>
+                            <p className="text-sm text-[var(--text-muted)]">{branch.address}</p>
+                            <p className="text-sm text-[var(--text-muted)] mt-1">{branch.hours}</p>
+                          </div>
+                        </div>
+                        {isSelected && <CheckCircle2 className="w-6 h-6 text-[#d4af37]" />}
+                      </div>
+                    )
+                  })}
+                </div>
+              </>
+            )}
           </motion.div>
         )
 
@@ -614,7 +805,11 @@ export function AppointmentPage() {
                   </div>
                   <div className="text-right">
                     <p className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-1">Location</p>
-                    <p className="text-sm font-medium text-[var(--text-light)]">{currentBranch.name}</p>
+                    <p className="text-sm font-medium text-[var(--text-light)]">
+                      {selectedAppointmentType === 'service_home'
+                        ? 'Home Service'
+                        : currentBranch.name}
+                    </p>
                   </div>
                </div>
                
@@ -634,9 +829,18 @@ export function AppointmentPage() {
                  <div>
                     <p className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-3">Guitar Details</p>
                     <div className="space-y-1 text-sm bg-[var(--surface-dark)] p-3 rounded-lg border border-[var(--border)]">
-                      <p><span className="text-[var(--text-muted)]">Brand:</span> <span className="text-[var(--text-light)]">{guitarDetails.brand}</span></p>
-                      <p><span className="text-[var(--text-muted)]">Model:</span> <span className="text-[var(--text-light)]">{guitarDetails.model}</span></p>
-                      <p><span className="text-[var(--text-muted)]">Reference Image:</span> <span className="text-[var(--text-light)]">{guitarDetails.referenceImageName || 'None uploaded'}</span></p>
+                      <p><span className="text-[var(--text-muted)]">Brand:</span> <span className="text-[var(--text-light)]">{selectedGuitarDetails.brand}</span></p>
+                      <p><span className="text-[var(--text-muted)]">Model:</span> <span className="text-[var(--text-light)]">{selectedGuitarDetails.model}</span></p>
+                      <p><span className="text-[var(--text-muted)]">Type:</span> <span className="text-[var(--text-light)]">{selectedGuitarDetails.type}</span></p>
+                      {selectedGuitarDetails.notes && (
+                        <p><span className="text-[var(--text-muted)]">Notes:</span> <span className="text-[var(--text-light)]">{selectedGuitarDetails.notes}</span></p>
+                      )}
+                      {selectedAppointmentType === 'service_home' && (
+                        <>
+                          <p><span className="text-[var(--text-muted)]">Address:</span> <span className="text-[var(--text-light)]">{userAddresses.find(a => a.address_id === homeServiceAddressId)?.street_line1 || 'Not selected'}</span></p>
+                          <p><span className="text-[var(--text-muted)]">Contact:</span> <span className="text-[var(--text-light)]">{homeServiceContact || 'Not provided'}</span></p>
+                        </>
+                      )}
                     </div>
                  </div>
                </div>
@@ -751,7 +955,11 @@ export function AppointmentPage() {
             </div>
 
             {/* Pagination Controls */}
-            <div className="mt-8 pt-6 border-t border-[var(--border)] flex items-center justify-between">
+            <div className="mt-8 pt-6 border-t border-[var(--border)]">
+              {currentStep < 5 && !canProceed() && (
+                <p className="mb-4 text-sm font-medium text-red-400">{getStepValidationMessage()}</p>
+              )}
+              <div className="flex items-center justify-between">
                <button
                  onClick={handlePrevStep}
                  disabled={currentStep === 1 || bookingComplete}
@@ -781,6 +989,7 @@ export function AppointmentPage() {
                    )}
                  </button>
                )}
+              </div>
             </div>
           </div>
 

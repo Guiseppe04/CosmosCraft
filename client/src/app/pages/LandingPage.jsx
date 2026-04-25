@@ -85,28 +85,6 @@ export function LandingPage() {
                   </Link>
                 </div>
 
-                <div className="mt-6 flex items-center gap-4">
-                  <div className="flex -space-x-2">
-                    <ImageWithFallback
-                      src="/assets/landing/481274703_1131368092119120_2324710258140716689_n.jpg"
-                      alt="Community member"
-                      className="h-10 w-10 rounded-full border-2 border-[rgba(18,18,18,0.8)] object-cover"
-                    />
-                    <ImageWithFallback
-                      src="/assets/landing/480473076_1131061492149780_4368555505559771502_n.jpg"
-                      alt="Community member"
-                      className="h-10 w-10 rounded-full border-2 border-[rgba(18,18,18,0.8)] object-cover"
-                    />
-                    <ImageWithFallback
-                      src="/assets/landing/481447234_1131367952119134_4042649922426111342_n.jpg"
-                      alt="Community member"
-                      className="h-10 w-10 rounded-full border-2 border-[rgba(18,18,18,0.8)] object-cover"
-                    />
-                  </div>
-                  <p className="text-sm !text-white/90 [text-shadow:0_1px_6px_rgba(0,0,0,0.65)]">
-                    Join with <span className="font-semibold !text-white">50+ Users</span> and start customizing your guitar now
-                  </p>
-                </div>
               </div>
             </div>
           </div>
@@ -165,12 +143,12 @@ export function LandingPage() {
                 effortless, inspiring, and dependable.
               </p>
 
-              <Link
-                to="/appointments"
+              <button
+                type="button"
                 className="mt-7 inline-flex items-center justify-center rounded-full bg-[var(--gold-secondary)] px-6 py-3 text-sm font-semibold text-[var(--text-dark)] transition-colors hover:bg-[var(--gold-primary)]"
               >
                 More About
-              </Link>
+              </button>
             </div>
 
             <div className="relative mx-auto w-full max-w-[420px] h-auto">
@@ -325,6 +303,5 @@ export function LandingPage() {
     </div>
   )
 }
-
 
 

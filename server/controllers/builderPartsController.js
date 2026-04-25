@@ -70,3 +70,15 @@ exports.deletePart = async (req, res, next) => {
     res.json({ status: 'success', message: 'Part deactivated', data: { part } });
   } catch (err) { next(err); }
 };
+
+exports.importPartsFromModels = async (req, res, next) => {
+  try {
+    const guitarType = String(req.body?.guitarType || '').trim().toLowerCase();
+    const result = await builderPartsService.importPartsFromModelFolder({ guitarType });
+    res.json({
+      status: 'success',
+      message: `Imported ${result.imported.created + result.imported.updated} ${guitarType} parts`,
+      data: result,
+    });
+  } catch (err) { next(err); }
+};

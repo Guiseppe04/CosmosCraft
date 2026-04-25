@@ -45,6 +45,7 @@ export const adminApi = {
     return request(`/api/guitars/customizations${qs ? '?' + qs : ''}`)
   },
   getMyCustomizations: () => request('/api/guitars/my-customizations'),
+  deleteMyCustomization: (id) => request(`/api/guitars/my-customizations/${id}`, { method: 'DELETE' }),
   getCustomization: (id) => request(`/api/guitars/customizations/${id}`),
   updateCustomization: (id, body) => request(`/api/guitars/customizations/${id}`, { method: 'PUT', body }),
   deleteCustomization: (id) => request(`/api/guitars/customizations/${id}`, { method: 'DELETE' }),
@@ -67,6 +68,8 @@ export const adminApi = {
   createBuilderPart: (body) => request('/api/builder-parts', { method: 'POST', body }),
   updateBuilderPart: (id, body) => request(`/api/builder-parts/${id}`, { method: 'PUT', body }),
   deleteBuilderPart: (id) => request(`/api/builder-parts/${id}`, { method: 'DELETE' }),
+  importBuilderPartsFromModels: (guitarType) =>
+    request('/api/builder-parts/import-models', { method: 'POST', body: { guitarType } }),
 
   // Users / RBAC
   getUsers: (params = {}) => {

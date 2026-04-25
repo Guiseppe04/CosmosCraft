@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router'
 import { motion } from 'motion/react'
 import { useAuth } from '../context/AuthContext.jsx'
@@ -58,6 +58,40 @@ export function SignupPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
+  const fieldRefs = useRef({})
+
+  const registerFieldRef = (fieldKey) => (element) => {
+    if (element) {
+      fieldRefs.current[fieldKey] = element
+    }
+  }
+
+  const focusFirstInvalidField = (validationErrors) => {
+    const fieldOrder = [
+      'firstName',
+      'lastName',
+      'email',
+      'phone',
+      'password',
+      'confirmPassword',
+      'address.country',
+      'address.streetLine1',
+      'address.stateProvince',
+      'address.city',
+      'address.postalZipCode',
+      'terms',
+    ]
+    const firstKey = fieldOrder.find((key) => validationErrors[key]) || Object.keys(validationErrors)[0]
+    if (!firstKey) return
+
+    const element = fieldRefs.current[firstKey]
+    if (!element) return
+
+    element.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    requestAnimationFrame(() => {
+      element.focus?.({ preventScroll: true })
+    })
+  }
 
   // Helper to update top-level form fields
   const updateField = (field, value) => {
@@ -143,10 +177,16 @@ export function SignupPage() {
     // Password
     if (!form.password) {
       newErrors.password = 'Password is required.'
-    } else if (form.password.length < 12) {
-      newErrors.password = 'Password must be at least 12 characters.'
+    } else if (form.password.length < 8) {
+      newErrors.password = 'Password must be at least 8 characters.'
     } else if (form.password.length > 64) {
       newErrors.password = 'Password must not exceed 64 characters.'
+    } else if (!/[A-Z]/.test(form.password)) {
+      newErrors.password = 'Password must include at least one uppercase letter.'
+    } else if (!/[a-z]/.test(form.password)) {
+      newErrors.password = 'Password must include at least one lowercase letter.'
+    } else if (!/[^A-Za-z0-9]/.test(form.password)) {
+      newErrors.password = 'Password must include at least one special character.'
     }
     if (!form.confirmPassword) {
       newErrors.confirmPassword = 'Please confirm your password.'
@@ -168,6 +208,9 @@ export function SignupPage() {
     if (!form.terms) newErrors.terms = 'You must agree to the terms to continue.'
 
     setErrors(newErrors)
+    if (Object.keys(newErrors).length > 0) {
+      setTimeout(() => focusFirstInvalidField(newErrors), 0)
+    }
     return Object.keys(newErrors).length === 0
   }
 
@@ -216,8 +259,16 @@ export function SignupPage() {
             fieldErrors[err.field] = err.message
           })
           setErrors(fieldErrors)
+          setTimeout(() => focusFirstInvalidField(fieldErrors), 0)
         } else if (data.message) {
-          setErrors({ submit: data.message })
+          const emailExists = /email.*(exist|used|already)/i.test(data.message)
+          if (emailExists) {
+            const emailError = { email: data.message }
+            setErrors(emailError)
+            setTimeout(() => focusFirstInvalidField(emailError), 0)
+          } else {
+            setErrors({ submit: data.message })
+          }
         } else {
           setErrors({ submit: 'Signup failed. Please try again.' })
         }
@@ -249,6 +300,14 @@ export function SignupPage() {
     x: [0, -5, 5, -5, 5, 0],
     transition: { duration: 0.4 }
   }
+
+  const passwordChecks = [
+    { label: 'At least 8 characters', isValid: form.password.length >= 8 },
+    { label: 'No more than 64 characters', isValid: form.password.length <= 64 && form.password.length > 0 },
+    { label: 'At least one uppercase letter', isValid: /[A-Z]/.test(form.password) },
+    { label: 'At least one lowercase letter', isValid: /[a-z]/.test(form.password) },
+    { label: 'At least one special character', isValid: /[^A-Za-z0-9]/.test(form.password) },
+  ]
 
   return (
     <div className="min-h-screen bg-[var(--bg-primary)] pt-24 pb-12 px-4 relative overflow-hidden">
@@ -309,6 +368,7 @@ export function SignupPage() {
                   <input
                     type="text"
                     value={form.firstName}
+                    ref={registerFieldRef('firstName')}
                     onChange={e => updateField('firstName', e.target.value)}
                     className={getInputStyles(errors.firstName)}
                   />
@@ -331,6 +391,7 @@ export function SignupPage() {
                   <input
                     type="text"
                     value={form.lastName}
+                    ref={registerFieldRef('lastName')}
                     onChange={e => updateField('lastName', e.target.value)}
                     className={getInputStyles(errors.lastName)}
                   />
@@ -344,6 +405,7 @@ export function SignupPage() {
                   <input
                     type="email"
                     value={form.email}
+                    ref={registerFieldRef('email')}
                     onChange={e => updateField('email', e.target.value)}
                     className={getInputStyles(errors.email)}
                   />
@@ -355,6 +417,7 @@ export function SignupPage() {
                   <input
                     type="tel"
                     value={form.phone}
+                    ref={registerFieldRef('phone')}
                     onChange={e => updateField('phone', e.target.value)}
                     placeholder="(123) 456-7890"
                     className={getInputStyles(errors.phone)}
@@ -378,6 +441,7 @@ export function SignupPage() {
                     <input
                       type={showPassword ? 'text' : 'password'}
                       value={form.password}
+                      ref={registerFieldRef('password')}
                       onChange={e => updateField('password', e.target.value)}
                       className={getInputStyles(errors.password)}
                     />
@@ -389,6 +453,17 @@ export function SignupPage() {
                       {showPassword ? 'Hide' : 'Show'}
                     </button>
                   </div>
+                  <ul className="mt-2 space-y-1">
+                    {passwordChecks.map((rule) => (
+                      <li
+                        key={rule.label}
+                        className={`text-xs flex items-center gap-1.5 ${rule.isValid ? 'text-green-400' : 'text-[var(--text-muted)]'}`}
+                      >
+                        <CheckCircle2 className={`w-3 h-3 ${rule.isValid ? 'opacity-100' : 'opacity-30'}`} />
+                        <span>{rule.label}</span>
+                      </li>
+                    ))}
+                  </ul>
                   {errors.password && <span className="text-xs text-red-400 mt-1.5 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{errors.password}</span>}
                 </motion.div>
 
@@ -398,6 +473,7 @@ export function SignupPage() {
                     <input
                       type={showConfirm ? 'text' : 'password'}
                       value={form.confirmPassword}
+                      ref={registerFieldRef('confirmPassword')}
                       onChange={e => updateField('confirmPassword', e.target.value)}
                       className={getInputStyles(errors.confirmPassword)}
                     />
@@ -426,6 +502,7 @@ export function SignupPage() {
                 <label className="block text-xs uppercase tracking-wider font-semibold text-[var(--text-muted)] mb-2">Country *</label>
                 <select
                   value={form.address.country}
+                  ref={registerFieldRef('address.country')}
                   onChange={e => updateAddressField('country', e.target.value)}
                   className={`${getInputStyles(errors['address.country'])} appearance-none cursor-pointer`}
                 >
@@ -446,6 +523,7 @@ export function SignupPage() {
                       <label className="block text-xs uppercase tracking-wider font-semibold text-[var(--text-muted)] mb-2">Region *</label>
                       <select
                         value={phRegion}
+                        ref={registerFieldRef('address.stateProvince')}
                         onChange={e => {
                           const opt = phRegions.find(r => r.psgcCode === e.target.value)
                           handlePhRegionChange(e.target.value, opt?.designation || opt?.name || '')
@@ -486,6 +564,7 @@ export function SignupPage() {
                       <label className="block text-xs uppercase tracking-wider font-semibold text-[var(--text-muted)] mb-2">Municipality / City *</label>
                       <select
                         value={phMunicipality}
+                        ref={registerFieldRef('address.city')}
                         disabled={!phProvince}
                         onChange={e => {
                           const opt = phMunicipalities.find(m => m.psgcCode === e.target.value)
@@ -524,6 +603,7 @@ export function SignupPage() {
                     <input
                       type="text"
                       value={form.address.streetLine1}
+                      ref={registerFieldRef('address.streetLine1')}
                       placeholder={phBarangay ? `Brgy. ${phBarangay}, add street/bldg...` : 'e.g. 123 Rizal St.'}
                       onChange={e => updateAddressField('streetLine1', e.target.value)}
                       className={getInputStyles(errors['address.streetLine1'])}
@@ -546,6 +626,7 @@ export function SignupPage() {
                     <input
                       type="text"
                       value={form.address.postalZipCode}
+                      ref={registerFieldRef('address.postalZipCode')}
                       placeholder="e.g. 1000"
                       onChange={e => updateAddressField('postalZipCode', e.target.value)}
                       className={getInputStyles(errors['address.postalZipCode'])}
@@ -561,6 +642,7 @@ export function SignupPage() {
                     <input
                       type="text"
                       value={form.address.streetLine1}
+                      ref={registerFieldRef('address.streetLine1')}
                       onChange={e => updateAddressField('streetLine1', e.target.value)}
                       className={getInputStyles(errors['address.streetLine1'])}
                     />
@@ -586,6 +668,7 @@ export function SignupPage() {
                           return (
                             <select
                               value={form.address.stateProvince}
+                              ref={registerFieldRef('address.stateProvince')}
                               onChange={e => updateAddressField('stateProvince', e.target.value)}
                               className={`${getInputStyles(errors['address.stateProvince'])} appearance-none cursor-pointer`}
                             >
@@ -600,6 +683,7 @@ export function SignupPage() {
                           <input
                             type="text"
                             value={form.address.stateProvince}
+                            ref={registerFieldRef('address.stateProvince')}
                             placeholder="State / Region"
                             onChange={e => updateAddressField('stateProvince', e.target.value)}
                             className={getInputStyles(errors['address.stateProvince'])}
@@ -614,6 +698,7 @@ export function SignupPage() {
                       <input
                         type="text"
                         value={form.address.city}
+                        ref={registerFieldRef('address.city')}
                         onChange={e => updateAddressField('city', e.target.value)}
                         className={getInputStyles(errors['address.city'])}
                       />
@@ -626,6 +711,7 @@ export function SignupPage() {
                     <input
                       type="text"
                       value={form.address.postalZipCode}
+                      ref={registerFieldRef('address.postalZipCode')}
                       onChange={e => updateAddressField('postalZipCode', e.target.value)}
                       className={getInputStyles(errors['address.postalZipCode'])}
                     />
@@ -642,6 +728,7 @@ export function SignupPage() {
                   <input
                     type="checkbox"
                     checked={form.terms}
+                    ref={registerFieldRef('terms')}
                     onChange={e => updateField('terms', e.target.checked)}
                     className="peer sr-only"
                   />
@@ -667,7 +754,7 @@ export function SignupPage() {
                   <div className="w-5 h-5 border-2 border-black/30 border-t-black rounded-full animate-spin" />
                 ) : (
                   <>
-                    Initialize Account
+                    Create Account
                     <ArrowRight className="w-5 h-5" />
                   </>
                 )}

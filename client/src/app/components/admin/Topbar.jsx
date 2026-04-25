@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import { useTheme } from '../../context/ThemeContext.jsx'
 import { useAuth } from '../../context/AuthContext'
+import { ConfirmModal } from '../ui/ConfirmModal.jsx'
 
 /**
  * Topbar Component for Admin Dashboard
@@ -17,6 +18,7 @@ export function Topbar({
   userRole = 'admin'
 }) {
   const [showUserMenu, setShowUserMenu] = useState(false)
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
   const userMenuRef = useRef(null)
   const { theme, toggleTheme, mounted } = useTheme()
   const { user, logout } = useAuth()
@@ -41,11 +43,18 @@ export function Topbar({
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
+  const handleConfirmLogout = () => {
+    setShowLogoutConfirm(false)
+    setShowUserMenu(false)
+    logout()
+  }
+
   return (
     <header className="bg-[var(--bg-primary)] backdrop-blur-md border-b border-[var(--border)]">
       <div className="flex items-center justify-between px-4 py-3">
         {/* Left Section */}
         <div className="flex items-center gap-4">
+          <img src="/logo-cosmos.png" alt="CosmosCraft Logo" className="h-8 w-auto object-contain" />
           {/* Page Title */}
           <div>
             <h1 className="text-lg font-bold text-white">{title}</h1>
@@ -112,7 +121,7 @@ export function Topbar({
                 </div>
                 <div className="p-2">
                   <button
-                    onClick={logout}
+                    onClick={() => setShowLogoutConfirm(true)}
                     className="flex items-center gap-3 w-full px-4 py-3 rounded-xl text-red-400 hover:bg-red-500/10 transition-colors duration-200"
                   >
                     <LogOut className="w-5 h-5" />
@@ -124,6 +133,16 @@ export function Topbar({
           </div>
         </div>
       </div>
+      <ConfirmModal
+        open={showLogoutConfirm}
+        title="Logout"
+        description="Are you sure you want to log out?"
+        confirmLabel="Logout"
+        cancelLabel="Cancel"
+        variant="warning"
+        onConfirm={handleConfirmLogout}
+        onCancel={() => setShowLogoutConfirm(false)}
+      />
     </header>
   )
 }

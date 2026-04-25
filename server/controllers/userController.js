@@ -1,21 +1,13 @@
 const { asyncHandler, AppError } = require('../middleware/errorHandler');
 const userService = require('../services/userService');
-const mailService = require('../services/mailService');
 const { addAddressSchema, updateAddressSchema, updateProfileSchema } = require('../utils/validation');
-
-const getFrontendUrl = () => {
-  const prodUrl = process.env.FRONTEND_URL_PROD;
-  const devUrl = process.env.FRONTEND_URL;
-  if (prodUrl) return prodUrl;
-  if (devUrl) return devUrl;
-  return 'http://localhost:5173';
-};
 
 /**
  * Get Current User Profile
  */
 exports.getCurrentUser = asyncHandler(async (req, res, next) => {
   const user = await userService.getUserById(req.user.id);
+  const authInfo = await userService.getUserAuthInfo(req.user.id);
   
   const { pool } = require('../config/database');
   const addressesRes = await pool.query('SELECT * FROM addresses WHERE user_id = $1', [user.user_id]);
@@ -45,6 +37,9 @@ exports.getCurrentUser = asyncHandler(async (req, res, next) => {
         birthDate: user.birth_date,
         addresses,
         role: user.role,
+        provider: authInfo.provider,
+        identityProviders: authInfo.identity_providers || [],
+        hasLocalPassword: authInfo.has_local_password,
         isProfileComplete: !!user.first_name, // fallback
       },
     },
@@ -254,38 +249,57 @@ exports.reactivateAccount = asyncHandler(async (req, res, next) => {
 });
 
 /**
- * Request Password Change
- * Validates current password, creates a secure token, sends confirmation email
+ * Change Password
+ * For local accounts, current password is required.
+ * For social-only accounts without local password, allows setting a local password.
  */
 exports.requestPasswordChange = asyncHandler(async (req, res, next) => {
   const { oldPassword, newPassword, confirmPassword } = req.body;
-
-  if (!oldPassword || !newPassword || !confirmPassword) {
-    throw new AppError('All password fields are required', 400);
-  }
 
   if (newPassword !== confirmPassword) {
     throw new AppError('New passwords do not match', 400);
   }
 
-  const user = await userService.getUserById(req.user.id);
-  if (!user.password_hash) {
-    throw new AppError('This account does not use password authentication', 400);
+  if (newPassword.length < 8) {
+    throw new AppError('Password must be at least 8 characters', 400);
   }
 
-  const { token, expiresAt } = await userService.requestPasswordChange(req.user.id, oldPassword, newPassword);
+  if (!/[A-Z]/.test(newPassword) || !/[a-z]/.test(newPassword) || !/[0-9]/.test(newPassword) || !/[@$!%*?&]/.test(newPassword)) {
+    throw new AppError('Password must contain uppercase, lowercase, number, and special character', 400);
+  }
 
-  const resetLink = `${getFrontendUrl()}/reset-password?token=${token}&userId=${req.user.id}`;
+  const authInfo = await userService.getUserAuthInfo(req.user.id);
+  const hasLocalPassword = Boolean(authInfo.has_local_password);
 
-  try {
-    await mailService.sendPasswordChangeConfirmationEmail(user.email, resetLink);
-  } catch (mailError) {
-    console.error('Failed to send password change confirmation email:', mailError);
+  if (hasLocalPassword) {
+    if (!oldPassword) {
+      throw new AppError('Current password is required', 400);
+    }
+
+    const isCurrentPasswordValid = await userService.verifyPassword(req.user.id, oldPassword);
+    if (!isCurrentPasswordValid) {
+      throw new AppError('Current password is incorrect', 400);
+    }
+
+    const isSameAsCurrent = await userService.verifyPassword(req.user.id, newPassword);
+    if (isSameAsCurrent) {
+      throw new AppError('New password must be different from current password', 400);
+    }
+
+    await userService.setPassword(req.user.id, newPassword);
+  } else {
+    await userService.setPassword(req.user.id, newPassword);
   }
 
   res.status(200).json({
     status: 'success',
-    message: 'We\'ve sent a confirmation email. Please check your inbox to complete the password change.',
+    message: hasLocalPassword
+      ? 'Password changed successfully.'
+      : 'Local password set successfully.',
+    data: {
+      provider: authInfo.provider,
+      hasLocalPassword: true,
+    },
   });
 });
 
