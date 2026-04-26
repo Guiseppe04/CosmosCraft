@@ -917,6 +917,26 @@ const TIMELINE_STEPS = [
   { status: 'delivered', label: 'Delivered', desc: 'Successfully delivered to customer' },
 ]
 
+const ORDER_STATUS_TRANSITIONS = {
+  pending: ['processing'],
+  processing: ['shipped'],
+  shipped: ['out_for_delivery'],
+  out_for_delivery: ['delivered'],
+  delivered: [],
+  cancelled: [],
+}
+
+const extractOrderPaymentMethod = (order = {}) => {
+  const rawMethod = String(order.payment_method || order.payment?.method || '').toLowerCase()
+  if (!rawMethod) return 'unknown'
+  if (rawMethod.includes('cod') || rawMethod.includes('cash')) return 'cash'
+  if (rawMethod.includes('gcash') || rawMethod.includes('g-cash')) return 'gcash'
+  if (rawMethod.includes('bank') || rawMethod.includes('transfer') || rawMethod.includes('bdo') || rawMethod.includes('bpi') || rawMethod.includes('unionbank')) return 'bank_transfer'
+  return rawMethod
+}
+
+const isCashOnDeliveryOrder = (order = {}) => extractOrderPaymentMethod(order) === 'cash'
+
 // ── Stock Adjustment Components ───────────────────────────────────────────────
 const ADJUSTMENT_REASONS = [
   { value: 'restocking', label: 'Restocking', group: 'Inventory', requiresNotes: false },
@@ -1826,7 +1846,23 @@ export function AdminPage() {
   const [paymentStatusUpdate, setPaymentStatusUpdate] = useState({ loading: false, orderId: null })
 
   // Confirm dialog state
-  const [confirm, setConfirm] = useState({ open: false, title: '', description: '', onConfirm: null, isBusy: false, variant: 'danger' })
+  const [confirm, setConfirm] = useState({
+    open: false,
+    title: '',
+    description: '',
+    confirmLabel: 'Confirm',
+    cancelLabel: 'Cancel',
+    onConfirm: null,
+    isBusy: false,
+    variant: 'danger',
+  })
+  const [projectArchiveFeedback, setProjectArchiveFeedback] = useState({
+    open: false,
+    projectId: null,
+    projectName: '',
+    snapshot: null,
+    busy: false,
+  })
 
   // Filters
   const [userRoleFilter, setUserRoleFilter] = useState('all')
@@ -2237,8 +2273,8 @@ export function AdminPage() {
   }, [appointmentBranchAddress, showToast])
 
   // ── Confirm dialog helper ────────────────────────────────────────────────
-  const openConfirm = ({ title, description, onConfirm, variant = 'danger' }) => {
-    setConfirm({ open: true, title, description, onConfirm, isBusy: false, variant })
+  const openConfirm = ({ title, description, onConfirm, variant = 'danger', confirmLabel = 'Confirm', cancelLabel = 'Cancel' }) => {
+    setConfirm({ open: true, title, description, confirmLabel, cancelLabel, onConfirm, isBusy: false, variant })
   }
   const closeConfirm = () => setConfirm(c => ({ ...c, open: false }))
   const handleConfirmAction = async () => {
@@ -2368,14 +2404,6 @@ export function AdminPage() {
     try {
       await adminApi.updateAppointmentStatus(id, status, reason)
       showToast('Appointment status updated', 'success')
-      fetchAppointments()
-    } catch (e) { showToast(e.message, 'error') }
-  }, [showToast, fetchAppointments])
-
-  const handleAppointmentPaymentStatusChange = useCallback(async (id, paymentStatus) => {
-    try {
-      await adminApi.updateAppointment(id, { payment_status: paymentStatus })
-      showToast('Payment status updated', 'success')
       fetchAppointments()
     } catch (e) { showToast(e.message, 'error') }
   }, [showToast, fetchAppointments])
@@ -2864,6 +2892,13 @@ export function AdminPage() {
   // ── CRUD: Orders ─────────────────────────────────────────────────────────
   const updateOrderStatus = async (orderId, status) => {
     const order = orders.find(o => o.order_id === orderId)
+    const currentStatus = order?.status || 'pending'
+    const allowedTransitions = ORDER_STATUS_TRANSITIONS[currentStatus] || []
+
+    if (!allowedTransitions.includes(status)) {
+      showToast(`Invalid status transition from ${currentStatus} to ${status}.`, 'error')
+      return
+    }
     
     if (status === 'processing') {
       const paymentVerified = normalizePaymentStatus(order?.payment_status || order?.payment?.status) === 'approved'
@@ -2882,6 +2917,10 @@ export function AdminPage() {
 
   const approvePayment = async (orderId) => {
     const order = orders.find(o => o.order_id === orderId)
+    if (order && isCashOnDeliveryOrder(order)) {
+      showToast('COD orders do not require payment verification.', 'error')
+      return
+    }
     if (order?.payment) {
       setForm({
         order_id: order.order_id,
@@ -2900,6 +2939,10 @@ export function AdminPage() {
 
   const updatePaymentStatus = async () => {
     if (!form.order_id) return
+    if (modal.data && isCashOnDeliveryOrder(modal.data)) {
+      showToast('COD orders do not support payment status updates.', 'error')
+      return
+    }
     
     const originalStatus = normalizePaymentStatus(modal.data?.payment_status || modal.data?.payment?.status)
     if (form.payment_status === originalStatus) {
@@ -2943,6 +2986,14 @@ export function AdminPage() {
     if (!orderStatusChanged && !paymentStatusChanged) {
       showToast('No changes detected', 'error')
       return
+    }
+
+    if (orderStatusChanged) {
+      const allowedTransitions = ORDER_STATUS_TRANSITIONS[currentOrderStatus] || []
+      if (!allowedTransitions.includes(newOrderStatus)) {
+        showToast(`Invalid status transition from ${currentOrderStatus} to ${newOrderStatus}.`, 'error')
+        return
+      }
     }
 
     if (newOrderStatus === 'processing' && newPaymentStatus !== 'approved') {
@@ -3000,15 +3051,62 @@ export function AdminPage() {
 
   const deleteProject = (id, name) => {
     openConfirm({
-      title: 'Archive Project?',
-      description: `"${name}" will be soft-deleted and hidden from the project list. Linked tasks will be preserved.`,
+      title: 'Archive Project',
+      description: 'Are you sure you want to delete this project?',
+      confirmLabel: 'Confirm Delete',
+      cancelLabel: 'Cancel',
       variant: 'danger',
       onConfirm: async () => {
-        await adminApi.deleteProject(id)
-        showToast('Project archived')
-        fetchProjects()
+        const existingProject = (projects || []).find((project) => project.project_id === id) || null
+        const response = await adminApi.deleteProject(id)
+        const deletedProject = response?.data || existingProject
+
+        setProjects((prev) => prev.filter((project) => project.project_id !== id))
+        setProjectArchiveFeedback({
+          open: true,
+          projectId: id,
+          projectName: name || deletedProject?.name || deletedProject?.title || 'Project',
+          snapshot: deletedProject,
+          busy: false,
+        })
       },
     })
+  }
+
+  const closeProjectArchiveFeedback = () => {
+    setProjectArchiveFeedback({
+      open: false,
+      projectId: null,
+      projectName: '',
+      snapshot: null,
+      busy: false,
+    })
+  }
+
+  const undoArchivedProject = async () => {
+    if (!projectArchiveFeedback.projectId) return
+    setProjectArchiveFeedback((prev) => ({ ...prev, busy: true }))
+
+    try {
+      const response = await adminApi.restoreProject(projectArchiveFeedback.projectId)
+      const restoredProject = response?.data || projectArchiveFeedback.snapshot
+
+      if (restoredProject) {
+        setProjects((prev) => {
+          const withoutRestored = prev.filter((project) => project.project_id !== restoredProject.project_id)
+          const next = [restoredProject, ...withoutRestored]
+          next.sort((left, right) => new Date(right.created_at || 0).getTime() - new Date(left.created_at || 0).getTime())
+          return next
+        })
+      } else {
+        await fetchProjects()
+      }
+
+      closeProjectArchiveFeedback()
+    } catch (error) {
+      showToast(error.message || 'Failed to restore archived project', 'error')
+      setProjectArchiveFeedback((prev) => ({ ...prev, busy: false }))
+    }
   }
 
   const assignProjectTeam = async (projectId, userIds) => {
@@ -3304,11 +3402,58 @@ export function AdminPage() {
         open={confirm.open}
         title={confirm.title}
         description={confirm.description}
+        confirmLabel={confirm.confirmLabel}
+        cancelLabel={confirm.cancelLabel}
         variant={confirm.variant}
         isBusy={confirm.isBusy}
         onConfirm={handleConfirmAction}
         onCancel={closeConfirm}
       />
+
+      <AnimatePresence>
+        {projectArchiveFeedback.open && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[210] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 12 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 12 }}
+              className="w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6 shadow-2xl"
+            >
+              <div className="mb-5">
+                <h3 className="text-xl font-bold text-white">Project Archived</h3>
+                <p className="mt-2 text-sm text-[var(--text-muted)]">You deleted this project.</p>
+                <p className="mt-1 text-xs text-[var(--text-muted)]/80">
+                  {projectArchiveFeedback.projectName}
+                </p>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={closeProjectArchiveFeedback}
+                  disabled={projectArchiveFeedback.busy}
+                  className="flex-1 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-2.5 text-sm font-semibold text-[var(--text-muted)] transition-colors hover:text-white disabled:opacity-60"
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  onClick={undoArchivedProject}
+                  disabled={projectArchiveFeedback.busy}
+                  className="flex-1 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] px-4 py-2.5 text-sm font-bold text-black transition-all hover:shadow-[0_0_20px_rgba(212,175,55,0.35)] disabled:opacity-60 flex items-center justify-center gap-2"
+                >
+                  {projectArchiveFeedback.busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
+                  Undo / Revert
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {false && (
         <>
@@ -3796,7 +3941,7 @@ export function AdminPage() {
                       { label: 'Revenue this month', value: formatCurrency(salesReport?.monthlySales || 0), badge: salesReport?.monthlySales > 0 ? '+live' : 'Live', badgeCls: 'bg-green-500/10 text-green-400' },
                       { label: 'Total orders', value: visibleOrders.length, badge: 'Order volume', badgeCls: 'bg-blue-500/10 text-blue-400' },
                       { label: 'Active projects', value: visibleProjects.filter(p => p.status === 'in_progress').length, badge: 'In progress', badgeCls: 'bg-purple-500/10 text-purple-400' },
-                      { label: 'Open appointments', value: visibleAppointments.filter(a => a.status === 'pending' || a.status === 'approved').length, badge: 'Action required', badgeCls: 'bg-[var(--gold-primary)]/10 text-[var(--gold-primary)]' },
+                      { label: 'Open appointments', value: visibleAppointments.filter(a => ['pending', 'approved', 'confirmed', 'ready_for_pickup'].includes(a.status)).length, badge: 'Action required', badgeCls: 'bg-[var(--gold-primary)]/10 text-[var(--gold-primary)]' },
                     ].map((stat) => (
                       <div key={stat.label} className="rounded-3xl border border-[var(--border)] bg-[var(--bg-primary)] p-5">
                         <p className="text-[var(--text-muted)] text-sm">{stat.label}</p>
@@ -5019,12 +5164,53 @@ export function AdminPage() {
               {modal.type === 'view_appointment' && modal.data && (() => {
                 const apt = modal.data;
                 const apptDate = apt.scheduled_at || apt.date;
+                let guitarDetails = apt?.guitar_details
+                if (typeof guitarDetails === 'string') {
+                  try {
+                    guitarDetails = JSON.parse(guitarDetails)
+                  } catch {
+                    guitarDetails = null
+                  }
+                }
+
+                const mappedFromDetails = Array.isArray(guitarDetails?.guitars) && guitarDetails.guitars.length > 0
+                  ? guitarDetails.guitars
+                  : (guitarDetails ? [guitarDetails] : [])
+
+                const mappedFromNotes = (typeof apt?.notes === 'string' ? apt.notes.split('\n') : [])
+                  .map((line) => {
+                    const match = line.match(/^Guitar\s+\d+:\s*(.+?)\s+\(([^)]+)\)\s*$/i)
+                    if (!match) return null
+                    const descriptor = match[1]?.trim() || ''
+                    const [brand, ...modelParts] = descriptor.split(' ')
+                    return {
+                      brand: brand || '',
+                      model: modelParts.join(' ') || '',
+                      type: String(match[2] || '').trim().toLowerCase(),
+                      serial: 'N/A',
+                      notes: '',
+                    }
+                  })
+                  .filter(Boolean)
+
+                const appointmentGuitars = (mappedFromDetails.length > 0 ? mappedFromDetails : mappedFromNotes)
+                  .map((guitar) => ({
+                    ...guitar,
+                    brand: guitar?.brand || guitar?.name || '',
+                    model: guitar?.model || guitar?.variant || '',
+                    type: guitar?.type || guitar?.guitar_type || '',
+                    serial: guitar?.serial || guitar?.serialNumber || 'N/A',
+                  }))
+                  .filter((guitar) => guitar.brand || guitar.model || guitar.type || guitar.notes)
+                const primaryGuitar = appointmentGuitars[0] || null;
                 const statusColors = {
                   pending: 'bg-yellow-500/10 text-yellow-500 border-yellow-500/30',
                   approved: 'bg-green-500/10 text-green-400 border-green-500/30',
+                  confirmed: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
+                  in_progress: 'bg-purple-500/10 text-purple-400 border-purple-500/30',
+                  ready_for_pickup: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30',
                   completed: 'bg-blue-500/10 text-blue-400 border-blue-500/30',
                   cancelled: 'bg-red-500/10 text-red-500 border-red-500/30',
-                  'no_show': 'bg-orange-500/10 text-orange-400 border-orange-500/30',
                 };
                 const statusCls = statusColors[apt.status] || 'bg-gray-500/10 text-gray-400 border-gray-500/30';
                 return (
@@ -5035,7 +5221,7 @@ export function AdminPage() {
                         <div className="flex justify-between items-start mb-4">
                           <div>
                             <h3 className="text-xl font-bold text-white mb-1">
-                              {apt.guitar_details ? `${apt.guitar_details.brand} ${apt.guitar_details.model}` : (apt.title || apt.service_name || 'Appointment')}
+                              {primaryGuitar ? `${primaryGuitar.brand || ''} ${primaryGuitar.model || ''}`.trim() : (apt.title || apt.service_name || 'Appointment')}
                             </h3>
                             <p className="text-[var(--text-muted)] font-mono text-xs">ID: {apt.appointment_id || apt.id || 'N/A'}</p>
                           </div>
@@ -5078,22 +5264,22 @@ export function AdminPage() {
 
                         <div className="bg-[var(--bg-primary)] p-5 rounded-xl border border-[var(--border)]">
                            <p className="text-[11px] font-semibold uppercase tracking-widest text-[var(--text-muted)] mb-3">Guitar Details</p>
-                           {apt.guitar_details ? (
+                           {appointmentGuitars.length > 0 ? (
                              <div className="space-y-3">
-                               <div>
-                                 <p className="text-[var(--text-muted)] text-xs mb-0.5">Brand & Model</p>
-                                 <p className="text-white font-medium">{apt.guitar_details.brand} {apt.guitar_details.model}</p>
-                               </div>
-                               <div>
-                                 <p className="text-[var(--text-muted)] text-xs mb-0.5">Serial Number</p>
-                                 <p className="text-white">{apt.guitar_details.serialNumber || '—'}</p>
-                               </div>
-                               {apt.guitar_details.type && (
-                                 <div>
-                                   <p className="text-[var(--text-muted)] text-xs mb-0.5">Type</p>
-                                   <p className="text-white capitalize">{apt.guitar_details.type}</p>
+                               {appointmentGuitars.map((guitar, index) => (
+                                 <div key={`${guitar?.brand || 'guitar'}-${guitar?.model || index}-${index}`} className={index > 0 ? 'pt-3 mt-3 border-t border-[var(--border)]' : ''}>
+                                   <p className="text-[var(--text-muted)] text-xs mb-0.5">Brand & Model</p>
+                                   <p className="text-white font-medium">{guitar?.brand || '—'} {guitar?.model || ''}</p>
+                                   <p className="text-[var(--text-muted)] text-xs mb-0.5 mt-2">Serial Number</p>
+                                   <p className="text-white">{guitar?.serial || guitar?.serialNumber || '—'}</p>
+                                   {guitar?.type && (
+                                     <div className="mt-2">
+                                       <p className="text-[var(--text-muted)] text-xs mb-0.5">Type</p>
+                                       <p className="text-white capitalize">{guitar.type}</p>
+                                     </div>
+                                   )}
                                  </div>
-                               )}
+                               ))}
                              </div>
                            ) : (
                              <p className="text-[var(--text-muted)] text-sm italic">No detailed guitar specs provided.</p>
@@ -5132,19 +5318,25 @@ export function AdminPage() {
               {/* Appointment Status Modal */}
               {modal.type === 'appointment' && modal.data && (() => {
                 const APPOINTMENT_STATUSES = [
-                  { value: 'approved', label: 'Approved (Confirmed)' },
-                  { value: 'completed', label: 'Completed (Showed Up)' },
-                  { value: 'no_show', label: 'No-Show (Missed)' },
+                  { value: 'pending', label: 'Pending' },
+                  { value: 'confirmed', label: 'Confirmed' },
+                  { value: 'in_progress', label: 'In Progress' },
+                  { value: 'ready_for_pickup', label: 'Ready for Pickup' },
+                  { value: 'completed', label: 'Completed' },
                   { value: 'cancelled', label: 'Cancelled' }
                 ];
                 // Use form.status if it was set, else fallback to modal.data.status
-                const currentStatus = form.status || modal.data.status || 'approved';
+                const currentStatus = form.status || modal.data.status || 'pending';
                 return (
                   <>
                     <ModalHeader title="Update Appointment Status" onClose={closeModal} />
                     <div className="mt-6 space-y-6">
                       <div className="p-4 bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl">
-                        <p className="text-white text-lg font-bold mb-1">{modal.data.guitar_details ? `${modal.data.guitar_details.brand} ${modal.data.guitar_details.model}` : (modal.data.title || modal.data.service_name || 'Appointment')}</p>
+                        <p className="text-white text-lg font-bold mb-1">
+                          {Array.isArray(modal.data?.guitar_details?.guitars) && modal.data.guitar_details.guitars.length > 0
+                            ? `${modal.data.guitar_details.guitars[0]?.brand || ''} ${modal.data.guitar_details.guitars[0]?.model || ''}`.trim()
+                            : (modal.data.guitar_details ? `${modal.data.guitar_details.brand} ${modal.data.guitar_details.model}` : (modal.data.title || modal.data.service_name || 'Appointment'))}
+                        </p>
                         <p className="text-[var(--text-muted)] text-sm">Customer: <span className="font-medium text-white">{modal.data.customer_name || modal.data.user_name || '—'}</span></p>
                         <p className="text-[var(--text-muted)] text-sm">Date: <span className="font-medium text-white">{modal.data.scheduled_at ? new Date(modal.data.scheduled_at).toLocaleDateString() : '—'}</span></p>
                       </div>
@@ -5156,6 +5348,7 @@ export function AdminPage() {
                             const isSelected = currentStatus === stat.value;
                             return (
                               <button
+                                type="button"
                                 key={stat.value}
                                 onClick={() => setForm({ ...form, status: stat.value })}
                                 className={`p-4 text-left rounded-xl border flex flex-col gap-1 transition-all ${
@@ -5175,12 +5368,6 @@ export function AdminPage() {
                             );
                           })}
                         </div>
-                        {currentStatus === 'no_show' && (
-                          <p className="mt-4 text-xs flex items-center gap-2 text-orange-400 bg-orange-500/10 p-3 rounded-lg border border-orange-500/20">
-                            <AlertCircle className="w-4 h-4 shrink-0" />
-                            Warning: Marking as No-Show will lock the appointment.
-                          </p>
-                        )}
                         {currentStatus === 'cancelled' && (
                           <p className="mt-4 text-xs flex items-center gap-2 text-red-400 bg-red-500/10 p-3 rounded-lg border border-red-500/20">
                             <AlertCircle className="w-4 h-4 shrink-0" />
@@ -6182,7 +6369,9 @@ export function AdminPage() {
                       <label className={labelCls}>Status</label>
                       <select value={form.status || 'pending'} onChange={e => setForm(f => ({ ...f, status: e.target.value }))} className={inputCls}>
                         <option value="pending">Pending</option>
-                        <option value="approved">Approved</option>
+                        <option value="confirmed">Confirmed</option>
+                        <option value="in_progress">In Progress</option>
+                        <option value="ready_for_pickup">Ready for Pickup</option>
                         <option value="completed">Completed</option>
                         <option value="cancelled">Cancelled</option>
                       </select>
@@ -6608,6 +6797,10 @@ export function AdminPage() {
 
                 {/* Unified Status Update Section */}
                 <div className="bg-[var(--bg-primary)]/50 rounded-xl p-4 border border-[var(--border)]">
+                  {(() => {
+                    const isCODOrder = isCashOnDeliveryOrder(modal.data)
+                    return (
+                      <>
                   <h3 className="text-white font-semibold mb-4 flex items-center gap-2">
                     <RefreshCw className="w-4 h-4 text-[var(--gold-primary)]" />
                     Update Status
@@ -6618,16 +6811,25 @@ export function AdminPage() {
                     <p className="text-[var(--text-muted)] text-xs uppercase tracking-wider mb-2">Order Status</p>
                     <div className="grid grid-cols-3 gap-2">
                       {ORDER_STATUS_LIFECYCLE.filter(s => s.value !== 'out_for_delivery').map((status) => {
+                        const currentOrderStatus = modal.data.status || 'pending'
+                        const allowedTransitions = ORDER_STATUS_TRANSITIONS[currentOrderStatus] || []
                         const isActive = (form.order_status || modal.data.status || 'pending') === status.value
+                        const isAllowed = allowedTransitions.includes(status.value)
                         return (
                           <button
                             key={status.value}
                             type="button"
-                            onClick={() => setForm((f) => ({ ...f, order_status: status.value }))}
+                            onClick={() => {
+                              if (!isAllowed) return
+                              setForm((f) => ({ ...f, order_status: status.value }))
+                            }}
+                            disabled={!isAllowed}
                             className={`p-2 rounded-lg border text-xs font-medium transition-all ${
                               isActive 
                                 ? `${status.bgColor} ${status.textColor} ${status.borderColor}` 
-                                : 'bg-[var(--surface-dark)] border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--gold-primary)]/50'
+                                : isAllowed
+                                  ? 'bg-[var(--surface-dark)] border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--gold-primary)]/50'
+                                  : 'bg-[var(--surface-dark)] border-[var(--border)] text-[var(--text-muted)]/70 font-semibold opacity-60 cursor-not-allowed'
                             }`}
                           >
                             {status.label}
@@ -6637,29 +6839,30 @@ export function AdminPage() {
                     </div>
                   </div>
                   
-                  {/* Payment Status Selector */}
-                  <div className="mb-4">
-                    <p className="text-[var(--text-muted)] text-xs uppercase tracking-wider mb-2">Payment Status</p>
-                    <div className="grid grid-cols-2 gap-2">
-                      {getAllowedPaymentStatuses(modal.data.payment_status || modal.data?.payment?.status).map((status) => {
-                        const isActive = normalizePaymentStatus(form.payment_status || modal.data.payment_status || modal.data?.payment?.status) === status.value
-                        return (
-                          <button
-                            key={status.value}
-                            type="button"
-                            onClick={() => setForm((f) => ({ ...f, payment_status: status.value }))}
-                            className={`p-2 rounded-lg border text-xs font-medium transition-all ${
-                              isActive 
-                                ? `${status.bgColor} ${status.textColor} ${status.borderColor}` 
-                                : 'bg-[var(--surface-dark)] border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--gold-primary)]/50'
-                            }`}
-                          >
-                            {status.label}
-                          </button>
-                        )
-                      })}
+                  {!isCODOrder && (
+                    <div className="mb-4">
+                      <p className="text-[var(--text-muted)] text-xs uppercase tracking-wider mb-2">Payment Status</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        {getAllowedPaymentStatuses(modal.data.payment_status || modal.data?.payment?.status).map((status) => {
+                          const isActive = normalizePaymentStatus(form.payment_status || modal.data.payment_status || modal.data?.payment?.status) === status.value
+                          return (
+                            <button
+                              key={status.value}
+                              type="button"
+                              onClick={() => setForm((f) => ({ ...f, payment_status: status.value }))}
+                              className={`p-2 rounded-lg border text-xs font-medium transition-all ${
+                                isActive 
+                                  ? `${status.bgColor} ${status.textColor} ${status.borderColor}` 
+                                  : 'bg-[var(--surface-dark)] border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--gold-primary)]/50'
+                              }`}
+                            >
+                              {status.label}
+                            </button>
+                          )
+                        })}
+                      </div>
                     </div>
-                  </div>
+                  )}
                   
                   {/* Save Button */}
                   <button
@@ -6681,6 +6884,9 @@ export function AdminPage() {
                       </>
                     )}
                   </button>
+                      </>
+                    )
+                  })()}
                 </div>
               </div>
             </motion.div>
@@ -6716,16 +6922,25 @@ export function AdminPage() {
                   <p className="text-[var(--text-muted)] text-sm mb-3">Select New Order Status</p>
                   <div className="grid grid-cols-2 gap-2">
                     {ORDER_STATUS_LIFECYCLE.map((status) => {
+                      const currentOrderStatus = modal.data.status || 'pending'
+                      const allowedTransitions = ORDER_STATUS_TRANSITIONS[currentOrderStatus] || []
                       const isActive = (form.order_status || modal.data.status || 'pending') === status.value
+                      const isAllowed = allowedTransitions.includes(status.value)
                       return (
                         <button
                           key={status.value}
                           type="button"
-                          onClick={() => setForm((f) => ({ ...f, order_status: status.value }))}
+                          onClick={() => {
+                            if (!isAllowed) return
+                            setForm((f) => ({ ...f, order_status: status.value }))
+                          }}
+                          disabled={!isAllowed}
                           className={`p-3 rounded-xl border text-left transition-all ${
                             isActive 
                               ? `${status.bgColor} ${status.textColor} ${status.borderColor}` 
-                              : 'bg-[var(--bg-primary)] border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--gold-primary)]/50'
+                              : isAllowed
+                                ? 'bg-[var(--bg-primary)] border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--gold-primary)]/50'
+                                : 'bg-[var(--bg-primary)] border-[var(--border)] text-[var(--text-muted)]/70 font-semibold opacity-60 cursor-not-allowed'
                           }`}
                         >
                           <span className="text-sm font-semibold">{status.label}</span>
@@ -6760,6 +6975,13 @@ export function AdminPage() {
                   <button
                     onClick={async () => {
                       if (!form.order_status) return
+                      const currentOrderStatus = modal.data.status || 'pending'
+                      const allowedTransitions = ORDER_STATUS_TRANSITIONS[currentOrderStatus] || []
+                      if (!allowedTransitions.includes(form.order_status)) {
+                        showToast(`Invalid status transition from ${currentOrderStatus} to ${form.order_status}.`, 'error')
+                        return
+                      }
+
                       setIsSaving(true)
                       try {
                         const updateData = { status: form.order_status }
@@ -6777,9 +6999,17 @@ export function AdminPage() {
                         setIsSaving(false)
                       }
                     }}
-                    disabled={isSaving || !form.order_status}
+                    disabled={
+                      isSaving
+                      || !form.order_status
+                      || !(ORDER_STATUS_TRANSITIONS[modal.data.status || 'pending'] || []).includes(form.order_status)
+                    }
                     className={`flex-1 px-4 py-3 bg-gradient-to-r from-purple-500 to-purple-600 rounded-lg text-white font-semibold hover:shadow-[0_0_20px_rgba(147,51,234,0.4)] transition-all flex items-center justify-center gap-2 ${
-                      isSaving || !form.order_status ? 'opacity-50 cursor-not-allowed' : ''
+                      (
+                        isSaving
+                        || !form.order_status
+                        || !(ORDER_STATUS_TRANSITIONS[modal.data.status || 'pending'] || []).includes(form.order_status)
+                      ) ? 'opacity-50 cursor-not-allowed' : ''
                     }`}
                   >
                     {isSaving ? (
@@ -6893,7 +7123,6 @@ export function AdminPage() {
         }}
         appointment={selectedAppointment}
         onStatusChange={handleAppointmentStatusChange}
-        onPaymentStatusChange={handleAppointmentPaymentStatusChange}
         onReschedule={handleAppointmentReschedule}
         onCancel={handleAppointmentCancel}
         loading={appointmentLoading}

@@ -5,6 +5,11 @@
 
 const API_URL = import.meta.env.VITE_API_URL
 
+const normalizeAppointmentStatus = (status) => {
+  if (status === 'approved') return 'confirmed'
+  return status
+}
+
 async function request(path, options = {}) {
   const res = await fetch(`${API_URL}${path}`, {
     headers: { 'Content-Type': 'application/json', ...options.headers },
@@ -113,7 +118,9 @@ export const adminApi = {
   getProject: (id) => request(`/api/projects/${id}`),
   createProject: (body) => request('/api/projects', { method: 'POST', body }),
   updateProject: (id, body) => request(`/api/projects/${id}`, { method: 'PUT', body }),
+  cancelMyProject: (id) => request(`/api/projects/${id}/cancel`, { method: 'POST' }),
   deleteProject: (id) => request(`/api/projects/${id}`, { method: 'DELETE' }),
+  restoreProject: (id) => request(`/api/projects/${id}/restore`, { method: 'PATCH' }),
   assignTeam: (id, userIds) => request(`/api/projects/${id}/team`, { method: 'PUT', body: { user_ids: userIds } }),
 
   // Appointments
@@ -128,7 +135,10 @@ export const adminApi = {
   getAppointment: (id) => request(`/api/appointments/${id}`),
   createAppointment: (body) => request('/api/appointments', { method: 'POST', body }),
   updateAppointment: (id, body) => request(`/api/appointments/${id}`, { method: 'PATCH', body }),
-  updateAppointmentStatus: (id, status, reason) => request(`/api/appointments/${id}/status`, { method: 'PATCH', body: { status, reason } }),
+  updateAppointmentStatus: (id, status, reason) => request(`/api/appointments/${id}/status`, {
+    method: 'PATCH',
+    body: { status: normalizeAppointmentStatus(status), reason },
+  }),
   rescheduleAppointment: (id, newScheduledAt, reason) => request(`/api/appointments/${id}/reschedule`, { method: 'PATCH', body: { new_scheduled_at: newScheduledAt, reason } }),
   cancelAppointment: (id, reason) => request(`/api/appointments/${id}`, { method: 'DELETE', body: reason ? { reason } : {} }),
   getAppointmentStats: (params = {}) => {

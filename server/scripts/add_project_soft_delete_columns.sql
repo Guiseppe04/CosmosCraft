@@ -1,0 +1,10 @@
+ALTER TABLE projects
+ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN NOT NULL DEFAULT false;
+
+ALTER TABLE projects
+ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+
+ALTER TABLE projects
+ADD COLUMN IF NOT EXISTS deleted_by UUID REFERENCES users(user_id) ON DELETE SET NULL;
+
+CREATE INDEX IF NOT EXISTS idx_projects_is_deleted ON projects(is_deleted);

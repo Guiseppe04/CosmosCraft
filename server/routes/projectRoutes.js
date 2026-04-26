@@ -9,6 +9,7 @@ router.use(authenticateToken);
 // Users can view hierarchy and update permitted subtasks
 router.get('/my', ctrl.getMyProjects);
 router.get('/:id/hierarchy', ctrl.getProjectHierarchy);
+router.post('/:id/cancel', ctrl.cancelProject);
 router.post('/:id/fulfillment', ctrl.submitFulfillmentChoice);
 router.patch('/subtasks/:subtaskId', ctrl.updateSubtask);
 router.get('/:id/activity', ctrl.getActivityLogs);
@@ -21,6 +22,7 @@ router.get('/:id', ctrl.getProject);
 router.post('/', ctrl.createProject);
 router.put('/:id', ctrl.updateProject);
 router.delete('/:id', ctrl.deleteProject);
+router.patch('/:id/restore', ctrl.restoreProject);
 router.put('/:id/team', ctrl.assignTeam);
 
 // Milestone routes

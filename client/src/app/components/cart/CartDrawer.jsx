@@ -55,7 +55,12 @@ export function CartDrawer() {
                   <p className="text-xs text-[var(--text-muted)]">Add items to get started</p>
                 </div>
               ) : (
-                cart.map(item => (
+                cart.map(item => {
+                  const stock = Number(item.stock)
+                  const hasStockValue = Number.isFinite(stock) && stock >= 0
+                  const atStockLimit = hasStockValue && item.quantity >= stock
+
+                  return (
                   <motion.div
                     key={item.id}
                     initial={{ opacity: 0, x: 20 }}
@@ -91,11 +96,15 @@ export function CartDrawer() {
                           <button
                             type="button"
                             onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                            className="p-1.5 rounded-lg border border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-light)] hover:bg-[var(--bg-primary)] transition-colors"
+                            disabled={atStockLimit}
+                            className="p-1.5 rounded-lg border border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-light)] hover:bg-[var(--bg-primary)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                           >
                             <Plus className="w-3.5 h-3.5" />
                           </button>
                         </div>
+                        {hasStockValue && (
+                          <p className="mt-1 text-[10px] text-[var(--text-muted)]">Stock: {stock}</p>
+                        )}
                       </div>
                       <div className="text-right flex flex-col justify-between">
                         <div>
@@ -114,7 +123,8 @@ export function CartDrawer() {
                       </div>
                     </div>
                   </motion.div>
-                ))
+                  )
+                })
               )}
             </div>
 

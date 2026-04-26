@@ -27,13 +27,9 @@ router.post('/', appointmentController.createAppointment);
 /**
  * GET /api/appointments/unavailable-dates
  * Get all unavailable dates
- * Access: Admin/Staff only
+ * Access: Any authenticated user
  */
-router.get(
-  '/unavailable-dates',
-  authorize('admin', 'staff', 'super_admin'),
-  appointmentController.getUnavailableDates
-);
+router.get('/unavailable-dates', appointmentController.getUnavailableDates);
 
 /**
  * POST /api/appointments/unavailable-dates

@@ -31,8 +31,8 @@ CREATE TYPE order_payment_status_enum AS ENUM (
     'rejected',           -- proof invalid / denied
     'failed'              -- payment attempt failed (optional fallback)
 );
-CREATE TYPE appointment_status_enum AS ENUM ('pending', 'approved', 'completed', 'cancelled');
-CREATE TYPE project_status_enum AS ENUM ('not_started', 'in_progress', 'completed');
+CREATE TYPE appointment_status_enum AS ENUM ('pending', 'confirmed', 'in_progress', 'ready_for_pickup', 'completed', 'cancelled');
+CREATE TYPE project_status_enum AS ENUM ('not_started', 'in_progress', 'completed', 'cancelled');
 CREATE TYPE notification_type_enum AS ENUM ('order_update', 'appointment_reminder', 'system', 'promotional');
 
 
@@ -562,16 +562,21 @@ CREATE TABLE projects (
     fulfillment_notes TEXT,
     fulfillment_selected_at TIMESTAMPTZ,
     pickup_appointment_id UUID,
+    is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
+    deleted_at TIMESTAMPTZ,
+    deleted_by UUID,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     
     FOREIGN KEY (order_id) REFERENCES orders(order_id) ON DELETE CASCADE,
-    FOREIGN KEY (pickup_appointment_id) REFERENCES appointments(appointment_id) ON DELETE SET NULL
+    FOREIGN KEY (pickup_appointment_id) REFERENCES appointments(appointment_id) ON DELETE SET NULL,
+    FOREIGN KEY (deleted_by) REFERENCES users(user_id) ON DELETE SET NULL
 );
 
 CREATE INDEX idx_projects_order_id ON projects(order_id);
 CREATE INDEX idx_projects_status ON projects(status);
 CREATE INDEX idx_projects_fulfillment_method ON projects(fulfillment_method);
+CREATE INDEX idx_projects_is_deleted ON projects(is_deleted);
 
 
 -- =============================================

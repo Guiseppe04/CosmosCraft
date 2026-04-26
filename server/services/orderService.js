@@ -91,6 +91,26 @@ const createValidationError = (message, statusCode = 400) => {
   return error
 }
 
+const extractPaymentMethodFromNotes = (notes = '') => {
+  const match = String(notes || '').match(/Payment Method:\s*([a-z_]+)/i)
+  return match?.[1] ? String(match[1]).toLowerCase() : ''
+}
+
+const resolveOrderPaymentMethod = (order = {}, payment = null) => {
+  const paymentMethod = String(
+    payment?.method
+    || order?.payment_method
+    || extractPaymentMethodFromNotes(order?.notes)
+    || ''
+  ).toLowerCase()
+
+  if (!paymentMethod) return null
+  if (paymentMethod.includes('cash') || paymentMethod.includes('cod')) return 'cash'
+  if (paymentMethod.includes('gcash')) return 'gcash'
+  if (paymentMethod.includes('bank') || paymentMethod.includes('transfer')) return 'bank_transfer'
+  return paymentMethod
+}
+
 const getAddressSignature = (address = {}) => ([
   address.line1 ?? address.streetLine1 ?? address.street,
   address.line2 ?? address.streetLine2 ?? address.street2,
@@ -295,11 +315,11 @@ const validateAndDeductInventory = async (client, reservations, orderId) => {
     const product = productRes.rows[0]
 
     if (!product) {
-      throw new Error(`Product ${productId} not found`)
+      throw createValidationError(`Product ${productId} not found`, 404)
     }
 
     if (!product.is_active) {
-      throw new Error(`Product "${product.name}" is no longer available`)
+      throw createValidationError(`Product "${product.name}" is no longer available`, 400)
     }
 
     const inventoryRes = await client.query(
@@ -311,14 +331,14 @@ const validateAndDeductInventory = async (client, reservations, orderId) => {
     )
 
     if (inventoryRes.rows.length === 0) {
-      throw new Error(`Inventory record not found for "${product.name}"`)
+      throw createValidationError(`Inventory record not found for "${product.name}"`, 404)
     }
 
     const currentStock = Number(inventoryRes.rows[0].stock) || 0
     const lowStockThreshold = Number(inventoryRes.rows[0].low_stock_threshold) || 10
 
     if (currentStock < quantity) {
-      throw new Error(`Insufficient stock for "${product.name}". Available: ${currentStock}`)
+      throw createValidationError(`Not enough stock for ${product.name}. Available stock: ${currentStock}.`, 400)
     }
 
     const updateRes = await client.query(
@@ -375,12 +395,12 @@ function isValidPaymentStatusTransition(currentStatus, newStatus) {
 }
 
 const VALID_STATUS_TRANSITIONS = {
-  'pending': ['processing', 'cancelled', 'pending'],
-  'processing': ['shipped', 'cancelled', 'processing'],
-  'shipped': ['out_for_delivery', 'cancelled', 'shipped'],
-  'out_for_delivery': ['delivered', 'cancelled', 'out_for_delivery'],
-  'delivered': ['delivered'],
-  'cancelled': ['pending', 'cancelled']
+  'pending': ['processing'],
+  'processing': ['shipped'],
+  'shipped': ['out_for_delivery'],
+  'out_for_delivery': ['delivered'],
+  'delivered': [],
+  'cancelled': []
 }
 
 const STATUS_FIELD_REQUIREMENTS = {
@@ -564,12 +584,28 @@ exports.getUserOrders = async (userId) => {
     return acc
   }, {})
 
+  const paymentsRes = await pool.query(
+    `SELECT DISTINCT ON (order_id) *
+     FROM payments
+     WHERE order_id = ANY($1)
+     ORDER BY order_id, created_at DESC`,
+    [orderIds]
+  )
+
+  const paymentsByOrder = paymentsRes.rows.reduce((acc, payment) => {
+    acc[payment.order_id] = payment
+    return acc
+  }, {})
+
   return res.rows.map((order) => {
     const items = itemsByOrder[order.order_id] || []
+    const payment = paymentsByOrder[order.order_id] || null
 
     return {
       ...order,
       items,
+      payment,
+      payment_method: resolveOrderPaymentMethod(order, payment),
       customization_ids: items
         .map((item) => item.customization_id)
         .filter(Boolean),
@@ -611,6 +647,7 @@ exports.getOrderById = async (orderId, userId) => {
   const order = res.rows[0]
   order.items = itemsRes.rows
   order.payment = paymentRes.rows[0] || null
+  order.payment_method = resolveOrderPaymentMethod(order, order.payment)
 
   return order
 }
@@ -658,15 +695,22 @@ exports.getAllOrders = async (params = {}) => {
         acc[payment.order_id] = payment;
         return acc;
       }, {});
-      return res.rows.map(order => ({
-        ...order,
-        items: itemsByOrder[order.order_id] || [],
-        payment: paymentsByOrder[order.order_id] || null
-      }));
+      return res.rows.map(order => {
+        const payment = paymentsByOrder[order.order_id] || null
+        return {
+          ...order,
+          items: itemsByOrder[order.order_id] || [],
+          payment,
+          payment_method: resolveOrderPaymentMethod(order, payment),
+        }
+      });
     }
   }
   
-  return res.rows;
+  return res.rows.map((order) => ({
+    ...order,
+    payment_method: resolveOrderPaymentMethod(order, null),
+  }));
 }
 
 exports.updateOrder = async (orderId, updateData) => {
@@ -760,13 +804,33 @@ exports.updatePaymentStatus = async (orderId, status, options = {}) => {
 
   // Get current order to check status transition
   const orderRes = await pool.query(
-    'SELECT payment_status, status FROM orders WHERE order_id = $1',
+    `SELECT
+       o.payment_status,
+       o.status,
+       o.notes,
+       (
+         SELECT p.method::text
+         FROM payments p
+         WHERE p.order_id = o.order_id
+         ORDER BY p.created_at DESC
+         LIMIT 1
+       ) AS payment_method
+     FROM orders o
+     WHERE o.order_id = $1`,
     [orderId]
   )
   
   if (orderRes.rows.length === 0) return null
   
   const currentStatus = orderRes.rows[0].payment_status
+  const resolvedPaymentMethod = resolveOrderPaymentMethod(
+    { notes: orderRes.rows[0].notes, payment_method: orderRes.rows[0].payment_method },
+    null
+  )
+
+  if (resolvedPaymentMethod === 'cash') {
+    throw createValidationError('COD orders do not support manual payment verification updates')
+  }
   
   // Validate status transition
   if (!isValidPaymentStatusTransition(currentStatus, status)) {

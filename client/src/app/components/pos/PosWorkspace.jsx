@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react'
-import { Package, Search, X, Printer, Download, ArrowUpDown, Grid3X3, List } from 'lucide-react'
+import { Package, Search, X, Printer, Download, ArrowUpDown, Grid3X3, List, Plus, ImagePlus } from 'lucide-react'
 import { posApi } from '../../utils/posApi'
 import { formatCurrency } from '../../utils/formatCurrency'
 import { useSmartPolling } from '../../hooks/useSmartPolling'
+import { uploadToCloudinary } from '../../utils/cloudinary.js'
+
+const MAX_GCASH_SCREENSHOT_BYTES = 10 * 1024 * 1024
 
 function EmptyState({ icon: Icon, label, description }) {
   return (
@@ -301,6 +304,8 @@ export function PosWorkspace({
   const [customerName, setCustomerName] = useState('')
   const [customerPhone, setCustomerPhone] = useState('')
   const [referenceNumber, setReferenceNumber] = useState('')
+  const [gcashScreenshotFile, setGcashScreenshotFile] = useState(null)
+  const [gcashScreenshotPreviewUrl, setGcashScreenshotPreviewUrl] = useState('')
   const [saleNotes, setSaleNotes] = useState('')
   const [cart, setCart] = useState([])
   const [recentSales, setRecentSales] = useState([])
@@ -375,6 +380,11 @@ export function PosWorkspace({
   const tax = 0
   const total = subtotal
   const change = Math.max(0, Number(cashReceived || 0) - total)
+  const isCashPayment = paymentMethod === 'cash'
+  const isGcashPayment = paymentMethod === 'gcash'
+  const isCashReceivedEmpty = isCashPayment && String(cashReceived || '').trim() === ''
+  const isReferenceEmpty = isGcashPayment && String(referenceNumber || '').trim() === ''
+  const disablePlaceOrder = submitting || cart.length === 0 || isCashReceivedEmpty || isReferenceEmpty
 
   const resetSaleForm = useCallback(() => {
     setCart([])
@@ -382,9 +392,48 @@ export function PosWorkspace({
     setCustomerName('')
     setCustomerPhone('')
     setReferenceNumber('')
+    if (gcashScreenshotPreviewUrl) URL.revokeObjectURL(gcashScreenshotPreviewUrl)
+    setGcashScreenshotFile(null)
+    setGcashScreenshotPreviewUrl('')
     setSaleNotes('')
     setPaymentMethod('cash')
-  }, [])
+  }, [gcashScreenshotPreviewUrl])
+
+  const clearGcashScreenshot = useCallback(() => {
+    if (gcashScreenshotPreviewUrl) URL.revokeObjectURL(gcashScreenshotPreviewUrl)
+    setGcashScreenshotFile(null)
+    setGcashScreenshotPreviewUrl('')
+  }, [gcashScreenshotPreviewUrl])
+
+  const handleGcashScreenshotChange = useCallback((event) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+
+    if (!file.type.startsWith('image/')) {
+      showToast?.('Please upload an image file', 'error')
+      return
+    }
+    if (file.size > MAX_GCASH_SCREENSHOT_BYTES) {
+      showToast?.('Screenshot must be 10MB or less', 'error')
+      return
+    }
+
+    if (gcashScreenshotPreviewUrl) URL.revokeObjectURL(gcashScreenshotPreviewUrl)
+    setGcashScreenshotFile(file)
+    setGcashScreenshotPreviewUrl(URL.createObjectURL(file))
+  }, [gcashScreenshotPreviewUrl, showToast])
+
+  useEffect(() => {
+    if (paymentMethod === 'cash') {
+      clearGcashScreenshot()
+      setReferenceNumber('')
+    }
+  }, [clearGcashScreenshot, paymentMethod])
+
+  useEffect(() => () => {
+    if (gcashScreenshotPreviewUrl) URL.revokeObjectURL(gcashScreenshotPreviewUrl)
+  }, [gcashScreenshotPreviewUrl])
 
   const loadRecentSales = useCallback(async () => {
     setLoadingRecent(true)
@@ -472,6 +521,16 @@ export function PosWorkspace({
       return
     }
 
+    if (paymentMethod === 'cash' && String(cashReceived || '').trim() === '') {
+      showToast?.('Cash received is required for cash payments', 'error')
+      return
+    }
+
+    if (paymentMethod === 'gcash' && !referenceNumber.trim()) {
+      showToast?.('GCash reference number is required', 'error')
+      return
+    }
+
     if (paymentMethod === 'cash' && Number(cashReceived || 0) < total) {
       showToast?.('Cash received is below the total', 'error')
       return
@@ -479,14 +538,27 @@ export function PosWorkspace({
 
     setSubmitting(true)
     try {
+      let gcashScreenshotUrl = ''
+      if (paymentMethod === 'gcash' && gcashScreenshotFile) {
+        gcashScreenshotUrl = await uploadToCloudinary(gcashScreenshotFile, {
+          folder: 'cosmoscraft/pos/gcash-screenshots',
+        })
+      }
+
+      const normalizedNotes = [
+        saleNotes.trim(),
+        gcashScreenshotUrl ? `GCash screenshot: ${gcashScreenshotUrl}` : '',
+      ].filter(Boolean).join('\n')
+
       const payload = {
         customerName: customerName.trim() || null,
         customerPhone: customerPhone.trim() || null,
-        notes: saleNotes.trim() || null,
+        notes: normalizedNotes || null,
         subtotal,
         taxAmount: tax,
         totalAmount: total,
         paymentMethod,
+        cashReceived: paymentMethod === 'cash' ? Number(cashReceived) : null,
         referenceNumber: paymentMethod === 'cash' ? null : (referenceNumber.trim() || null),
         items: cart.map(item => ({
           product_id: item.product_id,
@@ -506,7 +578,7 @@ export function PosWorkspace({
     } finally {
       setSubmitting(false)
     }
-  }, [cart, cashReceived, customerName, customerPhone, loadRecentSales, paymentMethod, referenceNumber, resetSaleForm, saleNotes, showToast, subtotal, tax, total])
+  }, [cart, cashReceived, customerName, customerPhone, gcashScreenshotFile, loadRecentSales, paymentMethod, referenceNumber, resetSaleForm, saleNotes, showToast, subtotal, tax, total])
 
   const handlePrintSaleReceipt = useCallback((sale) => {
     if (!sale) {
@@ -676,9 +748,11 @@ export function PosWorkspace({
                       <button
                         type="button"
                         onClick={() => addToCart(item)}
-                        className="rounded-lg bg-[var(--gold-primary)] px-3 py-1.5 text-xs font-semibold text-[var(--text-dark)] hover:bg-[var(--gold-secondary)]"
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--gold-primary)] text-[var(--text-dark)] hover:bg-[var(--gold-secondary)]"
+                        title={`Add ${item.name}`}
+                        aria-label={`Add ${item.name}`}
                       >
-                        Add to cart
+                        <Plus className="h-4 w-4" />
                       </button>
                     </div>
                   ))}
@@ -744,11 +818,10 @@ export function PosWorkspace({
                 <div className="flex justify-between text-base font-bold text-[var(--text-light)]"><span>Total</span><span className="text-[var(--gold-primary)]">{formatCurrency(total)}</span></div>
               </div>
 
-              <div className="mt-4 grid gap-2 sm:grid-cols-3">
+              <div className="mt-4 grid gap-2 sm:grid-cols-2">
                 {[
                   ['cash', 'Cash'],
-                  ['gcash', 'QRIS'],
-                  ['bank_transfer', 'Debit Card'],
+                  ['gcash', 'GCash'],
                 ].map(([method, label]) => (
                   <button
                     key={method}
@@ -760,6 +833,7 @@ export function PosWorkspace({
                   </button>
                 ))}
               </div>
+              <p className="mt-2 text-xs text-[var(--text-muted)]">Cash and GCash only.</p>
 
               <div className="mt-4 grid gap-2 sm:grid-cols-2">
                 <input
@@ -791,14 +865,48 @@ export function PosWorkspace({
                   <p className="mt-1 text-xs text-[var(--text-muted)]">Change: {formatCurrency(change)}</p>
                 </div>
               ) : (
-                <div className="mt-3">
-                  <input
-                    type="text"
-                    value={referenceNumber}
-                    onChange={(event) => setReferenceNumber(event.target.value)}
-                    placeholder="Reference number"
-                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-light)]"
-                  />
+                <div className="mt-3 space-y-3">
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)]">
+                      Reference Number <span className="text-red-400">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={referenceNumber}
+                      onChange={(event) => setReferenceNumber(event.target.value)}
+                      placeholder="Enter GCash reference number"
+                      className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-light)]"
+                    />
+                  </div>
+
+                  <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]/50 p-3">
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <p className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)]">Upload Screenshot</p>
+                      <span className="text-[11px] text-[var(--text-muted)]">(Optional)</span>
+                    </div>
+                    <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-[var(--border)] px-3 py-2 text-xs font-semibold text-[var(--text-light)] hover:border-[var(--gold-primary)]/40 hover:text-[var(--gold-primary)]">
+                      <ImagePlus className="h-3.5 w-3.5" />
+                      Choose Screenshot
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={handleGcashScreenshotChange}
+                      />
+                    </label>
+                    {gcashScreenshotPreviewUrl && (
+                      <div className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] p-2">
+                        <img src={gcashScreenshotPreviewUrl} alt="GCash screenshot preview" className="h-32 w-full rounded-md object-cover" />
+                        <button
+                          type="button"
+                          onClick={clearGcashScreenshot}
+                          className="mt-2 rounded-md border border-[var(--border)] px-2 py-1 text-xs text-[var(--text-muted)] hover:border-red-400/60 hover:text-red-300"
+                        >
+                          Remove Screenshot
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -814,11 +922,17 @@ export function PosWorkspace({
                 <button
                   type="button"
                   onClick={completeSale}
-                  disabled={submitting || cart.length === 0}
+                  disabled={disablePlaceOrder}
                   className="w-full rounded-xl bg-gradient-to-r from-[var(--gold-secondary)] to-[var(--gold-primary)] px-4 py-2 text-sm font-semibold text-[var(--text-dark)] disabled:opacity-60"
                 >
                   {submitting ? 'Saving...' : 'Place Order'}
                 </button>
+                {isCashReceivedEmpty && (
+                  <p className="mt-2 text-xs text-amber-300">Cash received is required for cash payments.</p>
+                )}
+                {isReferenceEmpty && (
+                  <p className="mt-2 text-xs text-amber-300">Reference number is required for GCash payments.</p>
+                )}
               </div>
             </div>
 

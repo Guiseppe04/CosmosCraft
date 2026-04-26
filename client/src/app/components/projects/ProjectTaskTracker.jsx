@@ -68,6 +68,13 @@ const formatFulfillmentLabel = (method) => {
   }
 };
 
+const formatDisplayDate = (value) => {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleDateString();
+};
+
 export default function ProjectTaskTracker({ projectId, projectName, isAdmin = false, parts = [], projectData = null, showTracker = true }) {
   const { user } = useAuth();
   const [hierarchy, setHierarchy] = useState(null);
@@ -93,6 +100,7 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
   const [fulfillmentNotes, setFulfillmentNotes] = useState('');
   const [fulfillmentSaving, setFulfillmentSaving] = useState(false);
   const [fulfillmentFeedback, setFulfillmentFeedback] = useState(null);
+  const [pendingUncheckSubtask, setPendingUncheckSubtask] = useState(null);
 
   useEffect(() => {
     if (projectId) {
@@ -282,7 +290,12 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
   const taskCompletionRate = taskSummary.total > 0
     ? Math.round((taskSummary.completed / taskSummary.total) * 100)
     : 0;
-  const trackingScore = Math.round((clampedProgress + milestoneCompletionRate + taskCompletionRate) / 3);
+  const estimatedCompletionDisplay = formatDisplayDate(
+    hierarchy?.estimated_completion_date ||
+    hierarchy?.end_date ||
+    projectData?.estimated_completion_date ||
+    projectData?.end_date
+  );
 
   // Group parts by category
   const groupedParts = resolvedParts.reduce((groups, part) => {
@@ -328,9 +341,24 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
     if (!isAdmin && !subtask.is_customer_updatable) return;
 
     try {
+      if (subtask.status === 'completed') {
+        setPendingUncheckSubtask(subtask);
+        return;
+      }
       const newStatus = subtask.status === 'completed' ? 'pending' : 'completed';
       await adminApi.updateSubtask(subtask.subtask_id, { status: newStatus });
       loadData(); // Re-fetch to get new progress %
+    } catch (err) {
+      alert("Failed to update task: " + err.message);
+    }
+  };
+
+  const handleConfirmUncheckSubtask = async () => {
+    if (!pendingUncheckSubtask) return;
+    try {
+      await adminApi.updateSubtask(pendingUncheckSubtask.subtask_id, { status: 'pending' });
+      setPendingUncheckSubtask(null);
+      loadData();
     } catch (err) {
       alert("Failed to update task: " + err.message);
     }
@@ -441,6 +469,12 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
               <p className="mt-2 text-sm text-[var(--text-muted)]">
                 {hierarchy.customer_name ? `For: ${hierarchy.customer_name}` : '-'}
               </p>
+              <p className="mt-2 text-sm text-[var(--text-muted)]">
+                Estimated completion:{' '}
+                <span className="text-white font-medium">
+                  {estimatedCompletionDisplay || 'Not set'}
+                </span>
+              </p>
             </div>
 
             <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-3 text-left lg:text-right whitespace-nowrap">
@@ -506,7 +540,7 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
               </div>
               <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] p-4">
                 <p className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">Percentage</p>
-                <p className="mt-2 text-2xl font-bold text-white">{trackingScore}<span className="text-base text-[var(--text-muted)]">%</span></p>
+                <p className="mt-2 text-2xl font-bold text-white">{clampedProgress}<span className="text-base text-[var(--text-muted)]">%</span></p>
               </div>
             </div>
           </div>
@@ -1097,6 +1131,47 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
         )}
       </div>
 
+      <AnimatePresence>
+        {pendingUncheckSubtask && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-5"
+            >
+              <h3 className="text-lg font-semibold text-white">Uncheck Completed Task?</h3>
+              <p className="mt-2 text-sm text-[var(--text-muted)]">
+                This will move the task back to pending.
+              </p>
+              <p className="mt-2 rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-3 py-2 text-sm text-white">
+                {pendingUncheckSubtask.title}
+              </p>
+              <div className="mt-5 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPendingUncheckSubtask(null)}
+                  className="flex-1 rounded-lg border border-[var(--border)] px-3 py-2 text-sm font-semibold text-[var(--text-light)] hover:bg-[var(--bg-primary)]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmUncheckSubtask}
+                  className="flex-1 rounded-lg bg-[var(--gold-primary)] px-3 py-2 text-sm font-semibold text-black hover:bg-[var(--gold-secondary)]"
+                >
+                  Yes, Uncheck
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
