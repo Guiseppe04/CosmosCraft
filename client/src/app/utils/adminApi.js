@@ -121,6 +121,10 @@ export const adminApi = {
     const qs = new URLSearchParams(params).toString()
     return request(`/api/appointments${qs ? '?' + qs : ''}`)
   },
+  getUserAppointments: (userId, params = {}) => {
+    const qs = new URLSearchParams(params).toString()
+    return request(`/api/appointments/users/${userId}/appointments${qs ? '?' + qs : ''}`)
+  },
   getAppointment: (id) => request(`/api/appointments/${id}`),
   createAppointment: (body) => request('/api/appointments', { method: 'POST', body }),
   updateAppointment: (id, body) => request(`/api/appointments/${id}`, { method: 'PATCH', body }),
