@@ -10,6 +10,15 @@ import { useAuth } from './AuthContext.jsx'
  */
 const CartContext = createContext()
 
+function safeParseJson(value, fallback) {
+  try {
+    return value ? JSON.parse(value) : fallback
+  } catch (error) {
+    console.warn('[CartContext] Invalid JSON in localStorage, resetting value:', error)
+    return fallback
+  }
+}
+
 export function CartProvider({ children }) {
   const { isAuthenticated, isLoadingUser } = useAuth()
   const [globalToast, setGlobalToast] = useState(null)
@@ -46,7 +55,7 @@ export function CartProvider({ children }) {
 
     if (isAuthenticated) {
       const syncCart = async () => {
-        const guestCart = JSON.parse(localStorage.getItem('cosmos_cart') || '[]')
+        const guestCart = safeParseJson(localStorage.getItem('cosmos_cart'), [])
         if (guestCart.length > 0) {
           for (const item of guestCart) {
             try {
@@ -62,7 +71,7 @@ export function CartProvider({ children }) {
       syncCart()
     } else {
       const saved = localStorage.getItem('cosmos_cart')
-      setCart(saved ? JSON.parse(saved) : [])
+      setCart(safeParseJson(saved, []))
     }
   }, [isAuthenticated, isLoadingUser, fetchDbCart])
 
@@ -83,7 +92,7 @@ export function CartProvider({ children }) {
 
     if (targetBuildId) {
       for (const storageKey of ['cosmoscraft_saved_builds', 'cosmoscraft_saved_bass_builds']) {
-        const builds = JSON.parse(localStorage.getItem(storageKey) || '[]')
+        const builds = safeParseJson(localStorage.getItem(storageKey), [])
         const buildIndex = builds.findIndex(b => b.id === targetBuildId)
         if (buildIndex !== -1) {
           if (!builds[buildIndex].additionalParts) builds[buildIndex].additionalParts = []

@@ -1,6 +1,237 @@
 export const bassAsset = path => new URL(`../../../../builder/bass_models/${path}`, import.meta.url).href
 export const bassWoodAsset = path => new URL(`../../../../woodtype/${path}`, import.meta.url).href
 
+const RAW_BASS_ASSET_MODULES = import.meta.glob(
+  '../../../../builder/bass_models/bass/**/*.{png,jpg,jpeg,webp,avif,svg}',
+  { eager: true, import: 'default' },
+)
+const RAW_SHARED_BASS_ASSET_MODULES = import.meta.glob(
+  '../../../../builder/bass_models/all-models/**/*.{png,jpg,jpeg,webp,avif,svg}',
+  { eager: true, import: 'default' },
+)
+
+const createEmptyCatalog = () => ({ all: [], front: {}, back: {} })
+const DEFAULT_BASS_MODELS = ['vader', 'pb', 'jb']
+const ROOT_CATEGORY_KEY = '__root'
+
+const normalizeSegment = (segment = '') => String(segment).trim().toLowerCase().replace(/\\/g, '/')
+const getStem = (assetPath = '') => {
+  const fileName = String(assetPath).split('/').pop() || ''
+  return fileName.replace(/\.[^.]+$/, '').toLowerCase()
+}
+
+const toCatalogRelativePath = (globPath = '') => {
+  const normalized = normalizeSegment(globPath)
+  const marker = '/builder/bass_models/'
+  const markerIndex = normalized.indexOf(marker)
+  if (markerIndex === -1) return null
+  return normalized.slice(markerIndex + marker.length)
+}
+
+const ensureModelCatalog = (catalogs, model) => {
+  if (!catalogs[model]) {
+    catalogs[model] = createEmptyCatalog()
+  }
+  return catalogs[model]
+}
+
+const BASS_MODEL_ENTRY_INDEX = {}
+const SHARED_BASS_ENTRY_INDEX = []
+
+for (const [globPath, importedUrl] of Object.entries(RAW_BASS_ASSET_MODULES)) {
+  const relativePath = toCatalogRelativePath(globPath)
+  if (!relativePath) continue
+
+  const segments = relativePath.split('/').filter(Boolean)
+  if (segments.length < 4 || segments[0] !== 'bass') continue
+
+  const model = segments[1]
+  const view = segments[2]
+  if (view !== 'front' && view !== 'back') continue
+
+  const fileName = segments[segments.length - 1]
+  const categorySegments = segments.slice(3, -1)
+  const category = categorySegments.length ? categorySegments.join('/') : ROOT_CATEGORY_KEY
+
+  const modelCatalog = ensureModelCatalog(BASS_MODEL_ENTRY_INDEX, model)
+  if (!modelCatalog[view][category]) {
+    modelCatalog[view][category] = []
+  }
+
+  const assetUrl = typeof importedUrl === 'string' ? importedUrl : bassAsset(relativePath)
+  const entry = {
+    relativePath,
+    fileName,
+    stem: getStem(relativePath),
+    url: assetUrl,
+  }
+
+  modelCatalog[view][category].push(entry)
+  modelCatalog.all.push(entry)
+}
+
+for (const [globPath, importedUrl] of Object.entries(RAW_SHARED_BASS_ASSET_MODULES)) {
+  const relativePath = toCatalogRelativePath(globPath)
+  if (!relativePath) continue
+
+  const segments = relativePath.split('/').filter(Boolean)
+  if (segments.length < 2 || segments[0] !== 'all-models') continue
+
+  const fileName = segments[segments.length - 1]
+  const assetUrl = typeof importedUrl === 'string' ? importedUrl : bassAsset(relativePath)
+  SHARED_BASS_ENTRY_INDEX.push({
+    relativePath,
+    fileName,
+    stem: getStem(relativePath),
+    url: assetUrl,
+  })
+}
+
+for (const model of DEFAULT_BASS_MODELS) {
+  ensureModelCatalog(BASS_MODEL_ENTRY_INDEX, model)
+}
+
+const mapViewEntriesToUrls = (viewCatalog) =>
+  Object.fromEntries(
+    Object.entries(viewCatalog).map(([category, entries]) => [category, entries.map(entry => entry.url)]),
+  )
+
+export const BASS_MODEL_CATALOG = Object.fromEntries(
+  Object.entries(BASS_MODEL_ENTRY_INDEX).map(([model, catalog]) => [
+    model,
+    {
+      all: catalog.all.map(entry => entry.url),
+      front: mapViewEntriesToUrls(catalog.front),
+      back: mapViewEntriesToUrls(catalog.back),
+    },
+  ]),
+)
+
+export const BASS_SHARED_ASSET_CATALOG = {
+  all: SHARED_BASS_ENTRY_INDEX.map(entry => entry.url),
+}
+
+const getCatalogEntries = (model, view, category = '') => {
+  const normalizedModel = normalizeSegment(model)
+  const normalizedView = normalizeSegment(view)
+  const normalizedCategory = normalizeSegment(category)
+  const modelCatalog = BASS_MODEL_ENTRY_INDEX[normalizedModel]
+  if (!modelCatalog) return []
+
+  const viewCatalog = modelCatalog[normalizedView]
+  if (!viewCatalog) return []
+  if (!normalizedCategory) {
+    return Object.values(viewCatalog).flat()
+  }
+
+  const entries = viewCatalog[normalizedCategory]
+  return Array.isArray(entries) ? entries : []
+}
+
+function resolveBassCatalogAsset(model, view, category = '', options = {}) {
+  const { strings, preferTokens = [] } = options
+  const entries = getCatalogEntries(model, view, category)
+  if (!entries.length) return null
+
+  const normalizedTokens = preferTokens.map(t => normalizeSegment(t)).filter(Boolean)
+  const stringToken = strings ? String(strings) : null
+  const stringTokenMatcher = stringToken
+    ? new RegExp(`(?:^|[\\/_-])${stringToken}(?:$|[\\/_\\.-])`)
+    : null
+  const hasAnyStringToken = /(?:^|[\\/_-])(4|5|6)(?:$|[\\/_\\.-])/
+
+  const scored = entries
+    .filter(entry => {
+      if (!stringTokenMatcher) return true
+      const searchTarget = `${entry.relativePath} ${entry.stem}`
+      if (!hasAnyStringToken.test(searchTarget)) return true
+      return stringTokenMatcher.test(searchTarget)
+    })
+    .map(entry => {
+      const searchTarget = `${entry.relativePath} ${entry.stem}`
+      const tokenScore = normalizedTokens.reduce((score, token) => (searchTarget.includes(token) ? score + 1 : score), 0)
+      return { entry, tokenScore }
+    })
+    .sort((a, b) => b.tokenScore - a.tokenScore)
+
+  return scored[0]?.entry?.url ?? entries[0]?.url ?? null
+}
+
+function resolveBassCatalogVariant(model, view, category = '', strings, colorKey, preferTokens = []) {
+  const tokens = [...preferTokens]
+  if (colorKey) tokens.push(colorKey)
+  return resolveBassCatalogAsset(model, view, category, { strings, preferTokens: tokens })
+}
+
+const hasStringToken = (value) => /(?:^|[\\/_-])(4|5|6)(?:$|[\\/_\\.-])/.test(value)
+
+function resolveSharedBassAsset(scope = '', options = {}) {
+  const {
+    strings,
+    preferTokens = [],
+    requiredTokens = [],
+    rejectTokens = [],
+  } = options
+
+  const normalizedScope = normalizeSegment(scope)
+  const normalizedPrefer = preferTokens.map(t => normalizeSegment(t)).filter(Boolean)
+  const normalizedRequired = requiredTokens.map(t => normalizeSegment(t)).filter(Boolean)
+  const normalizedReject = rejectTokens.map(t => normalizeSegment(t)).filter(Boolean)
+  const stringToken = strings ? String(strings) : null
+  const stringTokenMatcher = stringToken
+    ? new RegExp(`(?:^|[\\/_-])${stringToken}(?:$|[\\/_\\.-])`)
+    : null
+
+  const scopedEntries = SHARED_BASS_ENTRY_INDEX.filter((entry) =>
+    !normalizedScope || entry.relativePath.includes(`/${normalizedScope}/`) || entry.relativePath.endsWith(`/${normalizedScope}`),
+  )
+  if (!scopedEntries.length) return null
+
+  const filtered = scopedEntries.filter((entry) => {
+    const searchTarget = `${entry.relativePath} ${entry.stem}`
+    if (normalizedRequired.some(token => !searchTarget.includes(token))) return false
+    if (normalizedReject.some(token => searchTarget.includes(token))) return false
+
+    if (stringTokenMatcher) {
+      if (!hasStringToken(searchTarget)) return true
+      return stringTokenMatcher.test(searchTarget)
+    }
+    return true
+  })
+  if (!filtered.length) return null
+
+  const scored = filtered
+    .map((entry) => {
+      const searchTarget = `${entry.relativePath} ${entry.stem}`
+      const tokenScore = normalizedPrefer.reduce(
+        (score, token) => (searchTarget.includes(token) ? score + 1 : score),
+        0,
+      )
+      return { entry, tokenScore }
+    })
+    .sort((a, b) => b.tokenScore - a.tokenScore)
+
+  return scored[0]?.entry?.url ?? filtered[0]?.url ?? null
+}
+
+function mapCatalogByStem(model, view, category = '') {
+  const entries = getCatalogEntries(model, view, category)
+  return entries.reduce((acc, entry) => {
+    acc[entry.stem] = entry.url
+    return acc
+  }, {})
+}
+
+function pickColorVariants(model, view, category = '', strings) {
+  const colorKeys = ['chrome', 'black', 'gold']
+  const variants = colorKeys.reduce((acc, color) => {
+    const variantPath = resolveBassCatalogVariant(model, view, category, strings, color)
+    if (variantPath) acc[color] = variantPath
+    return acc
+  }, {})
+  return Object.keys(variants).length ? variants : null
+}
+
 export const BASS_DEFAULT_CONFIG = {
   bassType: 'vader',
   bodyWood: 'maple',
@@ -455,6 +686,12 @@ export const BASS_HEADSTOCK_STYLE_OPTIONS = {
     note: 'Modern reverse design',
     src: bassAsset('all-models/headstocks/bass/4-string/gt4r/'),
     price: 50, specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+  headless: {
+    label: 'Headless',
+    note: 'No headstock',
+    src: null,
+    price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
 }
 
@@ -1098,11 +1335,6 @@ export const BASS_STRING_OPTIONS = {
     note: 'Extended range',
     price: 50, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
-  '6': {
-    label: '6 Strings',
-    note: 'Full extended range',
-    price: 100, specs: { size: '', dimensions: '', material: '', notes: '' }
-  },
 }
 
 export const BASS_PREVIEW_LAYOUTS = {
@@ -1219,7 +1451,9 @@ export const bassBuilder = {
   PREVIEW_LAYOUTS: BASS_PREVIEW_LAYOUTS,
   BODY_LAYER_ASSETS: BASS_BODY_LAYER_ASSETS,
   MODEL_ASSET_CATALOG: BASS_MODEL_CATALOG,
+  SHARED_ASSET_CATALOG: BASS_SHARED_ASSET_CATALOG,
   resolveVariant: resolveBassVariant,
   resolveCatalogAsset: resolveBassCatalogAsset,
   resolveCatalogVariant: resolveBassCatalogVariant,
+  resolveSharedAsset: resolveSharedBassAsset,
 }

@@ -5,6 +5,7 @@ import {
   BASS_NECK_FRETS,
   BASS_NECK_MASK,
   BASS_NECK_NUT,
+  bassAsset,
   resolveBassVariant,
 } from '../../lib/bassBuilderData.js'
 
@@ -82,12 +83,28 @@ const resolvePickupLayers = (resolvedConfig) => {
   const strings = resolvedConfig.strings ?? '4'
   const preferStyle = resolvedConfig.pickupTypeStyle ?? 'j'
   const preferBridgeTone = resolvedConfig.pickups === 'active' ? 'creme' : 'black'
+  const sharedBase = {
+    strings,
+    requiredTokens: ['pickups', 'bass'],
+    rejectTokens: ['mask'],
+    preferTokens: [preferStyle, preferBridgeTone],
+  }
+
+  const sharedBridgePickup = bassBuilder.resolveSharedAsset('pickups/bass', {
+    ...sharedBase,
+    preferTokens: [preferStyle, 'bridge', preferBridgeTone],
+  })
+  const sharedNeckPickup = bassBuilder.resolveSharedAsset('pickups/bass', {
+    ...sharedBase,
+    preferTokens: [preferStyle, 'neck', preferBridgeTone],
+  })
+
   const baseOptions = { strings, preferTokens: [preferStyle, preferBridgeTone] }
-  const bridgePickup = bassBuilder.resolveCatalogAsset(resolvedConfig.bassType, 'front', 'pickups', {
+  const bridgePickup = sharedBridgePickup || bassBuilder.resolveCatalogAsset(resolvedConfig.bassType, 'front', 'pickups', {
     ...baseOptions,
     preferTokens: [preferStyle, 'bridge', preferBridgeTone],
   })
-  const neckPickup = bassBuilder.resolveCatalogAsset(resolvedConfig.bassType, 'front', 'pickups', {
+  const neckPickup = sharedNeckPickup || bassBuilder.resolveCatalogAsset(resolvedConfig.bassType, 'front', 'pickups', {
     ...baseOptions,
     preferTokens: [preferStyle, 'neck', preferBridgeTone],
   })
@@ -95,6 +112,31 @@ const resolvePickupLayers = (resolvedConfig) => {
     bridgePickup,
     neckPickup: neckPickup && neckPickup !== bridgePickup ? neckPickup : null,
   }
+}
+
+const resolveHeadstockStyleForStrings = (headstockStyle, strings = '4') => {
+  const rawStyle = String(headstockStyle || 'ch').trim().toLowerCase()
+  const styleAliases = {
+    classic: 'ch',
+    standard: 'ch',
+    'classic-headstock': 'ch',
+    'classic reverse': 'chr',
+    'classic-reverse': 'chr',
+    classicreverse: 'chr',
+    'gt-4': 'gt4',
+    'gt-4r': 'gt4r',
+    'gt4-reverse': 'gt4r',
+    gt4reverse: 'gt4r',
+    hl: 'headless',
+  }
+  const style = styleAliases[rawStyle] || rawStyle
+  const wantsFive = String(strings) === '5'
+  if (style === 'headless') return 'headless'
+  if (!wantsFive) return style
+
+  if (style === 'gt4') return 'gt5'
+  if (style === 'gt4r') return 'gt5r'
+  return style
 }
 
 function BassPreview({ config, view, onViewChange, modelImageSrc }) {
@@ -137,6 +179,40 @@ function BassPreview({ config, view, onViewChange, modelImageSrc }) {
       return {}
     }
 
+    const isFiveString = String(resolvedConfig.strings) === '5'
+    const normalizedHeadstockStyle = String(resolvedConfig.headstockStyle || 'ch').trim().toLowerCase()
+    const preferredRearNeckMaskToken = isFiveString ? '22f' : '20f'
+    const effectiveHeadstockStyle = resolveHeadstockStyleForStrings(normalizedHeadstockStyle, resolvedConfig.strings)
+    const isHeadless = effectiveHeadstockStyle === 'headless' || resolvedConfig.bassType === 'vader'
+    const preferredFrontFretToken = isHeadless ? '24-fret' : (isFiveString ? '22-fret' : '20-fret')
+    const preferredFrontProfileToken = isHeadless ? 'flat-bottom' : 'round-bottom'
+    const stringCountToken = `${resolvedConfig.strings}-string`
+    const headstockBasePath = `all-models/headstocks/bass/${stringCountToken}`
+    const validHeadstockStyles = new Set(['ch', 'chr', 'gt4', 'gt4r', 'gt5', 'gt5r'])
+    const canUseDirectHeadstockPaths = validHeadstockStyles.has(effectiveHeadstockStyle)
+    const exactStyleFileToken = `/${effectiveHeadstockStyle}.png`
+    const exactStyleFolderToken = `/${effectiveHeadstockStyle}/`
+    const resolvedHeadstockMask = !isHeadless && canUseDirectHeadstockPaths
+      ? bassAsset(`${headstockBasePath}/${effectiveHeadstockStyle}/masks/mask.png`)
+      : null
+    const resolvedHeadstockTuners = !isHeadless && canUseDirectHeadstockPaths
+      ? bassAsset(`${headstockBasePath}/${effectiveHeadstockStyle}/tuners/${resolvedConfig.hardware}.png`)
+      : null
+    const resolvedHeadstockLogo = !isHeadless && canUseDirectHeadstockPaths
+      ? bassAsset(`${headstockBasePath}/${effectiveHeadstockStyle}/logos/bl.png`)
+      : null
+    const resolvedHeadstockStrings = !isHeadless && canUseDirectHeadstockPaths
+      ? bassAsset(`${headstockBasePath}/string-overlays/${effectiveHeadstockStyle}.png`)
+      : null
+
+    const headlessInlayPreset = {
+      whiteDots: { family: 'id', material: 'white-pearl' },
+      luminlay: { family: 'id', material: 'luminlay' },
+      blackDots: { family: 'ib', material: 'white-pearl' },
+      diamondLuminlay: { family: 'idia', material: 'luminlay' },
+      diamondWhite: { family: 'idia', material: 'white-pearl' },
+    }[resolvedConfig.inlays]
+
     const resolvedAssets = {
       bodyModel,
       bodyWood: bassBuilder.BODY_WOOD_OPTIONS[resolvedConfig.bodyWood],
@@ -145,14 +221,103 @@ function BassPreview({ config, view, onViewChange, modelImageSrc }) {
         : bassBuilder.BODY_FINISH_OPTIONS[resolvedConfig.bodyFinish],
       neck: bassBuilder.NECK_OPTIONS[resolvedConfig.neck],
       fretboard: bassBuilder.FRETBOARD_OPTIONS[resolvedConfig.fretboard],
+      frontNeckMask: (
+        bassBuilder.resolveSharedAsset('necks/bass', {
+          strings: resolvedConfig.strings,
+          requiredTokens: ['front', 'masks', 'mask'],
+          rejectTokens: ['neck-thru'],
+          preferTokens: [preferredFrontFretToken, preferredFrontProfileToken, 'standard', 'mask'],
+        })
+        // Fallback keeps existing behavior for any model/string combo that lacks a dedicated front mask.
+        || bassBuilder.resolveSharedAsset('necks/bass', {
+          strings: resolvedConfig.strings,
+          requiredTokens: ['front', 'neck-thru-mask'],
+          preferTokens: ['neck-thru-mask'],
+        })
+        || BASS_NECK_MASK
+      ),
+      frontFretboardMask: bassBuilder.resolveSharedAsset('necks/bass', {
+        strings: resolvedConfig.strings,
+        requiredTokens: ['front', 'masks', 'mask'],
+        rejectTokens: ['neck-thru'],
+        preferTokens: [preferredFrontFretToken, preferredFrontProfileToken, 'standard', 'mask'],
+      }) || BASS_NECK_MASK,
+      frontHeadstockMask: resolvedHeadstockMask || bassBuilder.resolveSharedAsset('headstocks/bass', {
+        strings: resolvedConfig.strings,
+        requiredTokens: ['masks', 'mask', exactStyleFolderToken],
+        preferTokens: [effectiveHeadstockStyle, 'mask', exactStyleFolderToken],
+      }),
+      frontFrets: {
+        stainless: bassBuilder.resolveSharedAsset('necks/bass', {
+          strings: resolvedConfig.strings,
+          requiredTokens: ['front', 'frets'],
+          preferTokens: [preferredFrontFretToken, 'stainless'],
+        }) || BASS_NECK_FRETS.stainless,
+        gold: bassBuilder.resolveSharedAsset('necks/bass', {
+          strings: resolvedConfig.strings,
+          requiredTokens: ['front', 'frets'],
+          preferTokens: [preferredFrontFretToken, 'gold'],
+        }) || BASS_NECK_FRETS.gold,
+      },
+      frontNut: {
+        white: bassBuilder.resolveSharedAsset('necks/bass', {
+          strings: resolvedConfig.strings,
+          requiredTokens: ['front', 'nut'],
+          preferTokens: [preferredFrontFretToken, 'white'],
+        }) || BASS_NECK_NUT.white,
+        black: bassBuilder.resolveSharedAsset('necks/bass', {
+          strings: resolvedConfig.strings,
+          requiredTokens: ['front', 'nut'],
+          preferTokens: [preferredFrontFretToken, 'black'],
+        }) || BASS_NECK_NUT.black,
+      },
       headstockWood: bassBuilder.HEADSTOCK_WOOD_OPTIONS[resolvedConfig.headstockWood],
+      headstockTuners: resolvedHeadstockTuners || (isHeadless ? null : bassBuilder.resolveSharedAsset('headstocks/bass', {
+        strings: resolvedConfig.strings,
+        requiredTokens: ['tuners', exactStyleFolderToken],
+        preferTokens: [effectiveHeadstockStyle, resolvedConfig.hardware, 'tuners', exactStyleFolderToken],
+      })),
+      headstockLogo: resolvedHeadstockLogo || (isHeadless ? null : bassBuilder.resolveSharedAsset('headstocks/bass', {
+        strings: resolvedConfig.strings,
+        requiredTokens: ['logos', 'bl', exactStyleFolderToken],
+        rejectTokens: ['left-handed'],
+        preferTokens: [effectiveHeadstockStyle, 'logos', exactStyleFolderToken],
+      })),
+      headstockStringOverlay: resolvedHeadstockStrings || (isHeadless ? null : bassBuilder.resolveSharedAsset('headstocks/bass', {
+        strings: resolvedConfig.strings,
+        requiredTokens: ['string-overlays', exactStyleFileToken],
+        preferTokens: [effectiveHeadstockStyle, 'string-overlays', exactStyleFileToken],
+      })),
+      headstockTrussCover: isHeadless ? null : bassBuilder.resolveSharedAsset('headstocks/bass', {
+        strings: resolvedConfig.strings,
+        requiredTokens: ['truss-cover'],
+        preferTokens: ['black', 'truss-cover'],
+      }),
       hardware: bassBuilder.HARDWARE_OPTIONS[resolvedConfig.hardware],
       bridge: getBridgeByStrings(
         bassBuilder.BRIDGE_OPTIONS[resolvedConfig.bassType],
         resolvedConfig.bridge,
         resolvedConfig.strings,
       ),
-      inlay: bassBuilder.INLAY_OPTIONS[resolvedConfig.inlays],
+      inlay: (() => {
+        const baseInlay = bassBuilder.INLAY_OPTIONS[resolvedConfig.inlays]
+        if (!isHeadless || !headlessInlayPreset) return baseInlay
+
+        const resolvedHeadlessInlay = bassBuilder.resolveSharedAsset('necks/bass', {
+          strings: resolvedConfig.strings,
+          requiredTokens: ['front', 'inlays'],
+          preferTokens: [
+            preferredFrontFretToken,
+            preferredFrontProfileToken,
+            'standard',
+            headlessInlayPreset.family,
+            headlessInlayPreset.material,
+          ],
+        })
+
+        if (!resolvedHeadlessInlay) return baseInlay
+        return { ...(baseInlay || {}), src: resolvedHeadlessInlay }
+      })(),
       backplate: getBackplateByStrings(
         bassBuilder.BACKPLATE_OPTIONS[resolvedConfig.bassType],
         resolvedConfig.backplate,
@@ -172,13 +337,24 @@ function BassPreview({ config, view, onViewChange, modelImageSrc }) {
         'masks',
         { strings: resolvedConfig.strings, preferTokens: ['bodymask'] },
       ),
-      rearNeckMask: bassBuilder.resolveCatalogAsset(
-        resolvedConfig.bassType,
-        'back',
-        'masks',
-        { strings: resolvedConfig.strings, preferTokens: ['bodyneckmask', 'neck'] },
+      rearNeckMask: (
+        bassBuilder.resolveSharedAsset('necks/bass', {
+          strings: resolvedConfig.strings,
+          requiredTokens: ['back', 'masks', 'neck-mask'],
+          preferTokens: [preferredRearNeckMaskToken, effectiveHeadstockStyle, 'neck-mask', 'back', 'masks'],
+        })
+        || bassBuilder.resolveSharedAsset('necks/bass', {
+          strings: resolvedConfig.strings,
+          requiredTokens: ['back', 'masks'],
+          preferTokens: ['neck-thru-mask', 'neckthrumask'],
+        })
+        || BASS_NECK_MASK
       ),
-      rearNeckFinish: bassBuilder.resolveCatalogAsset(
+      rearNeckFinish: bassBuilder.resolveSharedAsset('necks/bass', {
+        strings: resolvedConfig.strings,
+        requiredTokens: ['back'],
+        preferTokens: ['neck finish', 'multiply', effectiveHeadstockStyle],
+      }) || bassBuilder.resolveCatalogAsset(
         resolvedConfig.bassType,
         'back',
         'shadows_highlights',
@@ -223,6 +399,7 @@ function BassPreview({ config, view, onViewChange, modelImageSrc }) {
         'bridges',
         { strings: resolvedConfig.strings, preferTokens: ['standard'] },
       ),
+      isHeadless,
     }
 
     // Validate model-specific options
@@ -297,10 +474,10 @@ function BassPreview({ config, view, onViewChange, modelImageSrc }) {
     }
 
     // Neck + Fretboard
-    if (assets.neck?.src && BASS_NECK_MASK) {
+    if (assets.neck?.src && assets.frontNeckMask) {
       layers.push({
         name: 'neck',
-        maskSrc: BASS_NECK_MASK,
+        maskSrc: assets.frontNeckMask,
         style: {
           backgroundImage: `url(${assets.neck.src})`,
           filter: assets.neck.filter,
@@ -310,10 +487,10 @@ function BassPreview({ config, view, onViewChange, modelImageSrc }) {
       })
     }
 
-    if (assets.fretboard?.src && BASS_NECK_MASK) {
+    if (assets.fretboard?.src && (assets.frontFretboardMask || assets.frontNeckMask)) {
       layers.push({
         name: 'fretboard',
-        maskSrc: BASS_NECK_MASK,
+        maskSrc: assets.frontFretboardMask || assets.frontNeckMask,
         style: {
           backgroundImage: `url(${assets.fretboard.src})`,
           opacity: 0.94,
@@ -324,10 +501,10 @@ function BassPreview({ config, view, onViewChange, modelImageSrc }) {
     }
 
     // Frets
-    if (BASS_NECK_FRETS.stainless) {
+    if (assets.frontFrets?.stainless) {
       layers.push({
         name: 'frets',
-        src: BASS_NECK_FRETS.stainless,
+        src: assets.frontFrets.stainless,
         style: { zIndex: 5, opacity: 0.85 },
       })
     }
@@ -345,37 +522,64 @@ function BassPreview({ config, view, onViewChange, modelImageSrc }) {
 
     // Nut
     const nutColor = colorKey === 'black' ? 'black' : 'white'
-    if (BASS_NECK_NUT[nutColor]) {
+    if (!assets.isHeadless && assets.frontNut?.[nutColor]) {
       layers.push({
         name: 'nut',
-        src: BASS_NECK_NUT[nutColor],
+        src: assets.frontNut[nutColor],
         style: { zIndex: 7, opacity: 0.9 },
       })
     }
 
     // Headstock wood
-    if (assets.headstockWood?.texture && BASS_NECK_MASK) {
+    if (!assets.isHeadless && assets.headstockWood?.texture && (assets.frontHeadstockMask || assets.frontNeckMask)) {
       layers.push({
         name: 'headstock-wood',
-        maskSrc: BASS_NECK_MASK,
+        maskSrc: assets.frontHeadstockMask || assets.frontNeckMask,
         style: {
           backgroundImage: `url(${assets.headstockWood.texture})`,
           opacity: 0.95,
           zIndex: 8,
         },
       })
-    } else if (DEBUG) {
+    } else if (!assets.isHeadless && DEBUG) {
       console.warn('[HEADSTOCK] Missing headstock asset')
     }
 
-    // Logo - Removed as per instructions
-    // if (assets.logo?.src) {
-    //   layers.push({
-    //     name: 'logo',
-    //     src: assets.logo.src,
-    //     style: { zIndex: 8.5, opacity: 0.95 },
-    //   })
-    // }
+    if (!assets.isHeadless && assets.headstockLogo) {
+      layers.push({
+        name: 'headstock-logo',
+        src: assets.headstockLogo,
+        style: { zIndex: 8.2, opacity: 0.96 },
+      })
+    }
+    if (!assets.isHeadless && assets.headstockStringOverlay) {
+      layers.push({
+        name: 'headstock-strings',
+        src: assets.headstockStringOverlay,
+        style: { zIndex: 8.3, opacity: 0.95 },
+      })
+    }
+    if (!assets.isHeadless && assets.headstockTuners) {
+      layers.push({
+        name: 'headstock-tuners',
+        src: assets.headstockTuners,
+        style: { zIndex: 8.4, opacity: 0.97 },
+      })
+    }
+    if (!assets.isHeadless && assets.headstockTrussCover) {
+      layers.push({
+        name: 'headstock-truss-cover',
+        src: assets.headstockTrussCover,
+        style: { zIndex: 8.5, opacity: 0.95 },
+      })
+    }
+    if (assets.isHeadless && assets.logo?.src) {
+      layers.push({
+        name: 'body-logo',
+        src: assets.logo.src,
+        style: { zIndex: 8.2, opacity: 0.95 },
+      })
+    }
 
     // Pickguard - directly on body
     if (resolvedConfig.pickguard !== 'none' && assets.pickguard?.src) {
@@ -442,15 +646,15 @@ function BassPreview({ config, view, onViewChange, modelImageSrc }) {
     }
 
     // Strap/Buttons
-    const strapSrc = assets.bodyAssets?.front?.strap?.[colorKey]
-      || assets.bodyAssets?.front?.strap?.chrome
-      || bassBuilder.resolveCatalogVariant(
+    const strapSrc = bassBuilder.resolveCatalogVariant(
         resolvedConfig.bassType,
         'front',
         'strap buttons/standard',
         resolvedConfig.strings,
         colorKey,
       )
+      || assets.bodyAssets?.front?.strap?.[colorKey]
+      || assets.bodyAssets?.front?.strap?.chrome
     if (strapSrc) {
       layers.push({
         name: 'strap',
@@ -460,12 +664,12 @@ function BassPreview({ config, view, onViewChange, modelImageSrc }) {
     }
 
     // Shadow effects - applied last for depth
-    const frontShadow = assets.bodyAssets?.front?.shadows || bassBuilder.resolveCatalogAsset(
+    const frontShadow = bassBuilder.resolveCatalogAsset(
       resolvedConfig.bassType,
       'front',
       'shadows_highlights',
       { strings: resolvedConfig.strings, preferTokens: ['edge', 'shadow'] },
-    )
+    ) || assets.bodyAssets?.front?.shadows
     if (frontShadow) {
       layers.push({
         name: 'shadows',
@@ -475,12 +679,12 @@ function BassPreview({ config, view, onViewChange, modelImageSrc }) {
     }
 
     // Gloss/Highlight effects
-    const frontGloss = assets.bodyAssets?.front?.gloss || bassBuilder.resolveCatalogAsset(
+    const frontGloss = bassBuilder.resolveCatalogAsset(
       resolvedConfig.bassType,
       'front',
       'shadows_highlights',
       { strings: resolvedConfig.strings, preferTokens: ['gloss'] },
-    )
+    ) || assets.bodyAssets?.front?.gloss
     if (frontGloss) {
       layers.push({
         name: 'gloss',
@@ -496,12 +700,13 @@ function BassPreview({ config, view, onViewChange, modelImageSrc }) {
   // Rear view layers with strict validation
   const rearLayers = useMemo(() => {
     const layers = []
+    const rearBodyMask = assets.rearBodyMask || assets.bodyModel?.bodySrc
 
     // Body base
-    if (assets.bodyModel?.bodySrc && assets.bodyWood?.texture) {
+    if (rearBodyMask && assets.bodyWood?.texture) {
       layers.push({
         name: 'rear-body-wood',
-        maskSrc: assets.bodyModel.bodySrc,
+        maskSrc: rearBodyMask,
         style: {
           backgroundImage: `url(${assets.bodyWood.texture})`,
           opacity: 1,
@@ -513,7 +718,7 @@ function BassPreview({ config, view, onViewChange, modelImageSrc }) {
     if (assets.bodyFinish?.texture) {
       layers.push({
         name: 'rear-body-finish-texture',
-        maskSrc: assets.bodyModel?.bodySrc,
+        maskSrc: rearBodyMask,
         style: {
           backgroundImage: `url(${assets.bodyFinish.texture})`,
           opacity: 1,
@@ -524,7 +729,7 @@ function BassPreview({ config, view, onViewChange, modelImageSrc }) {
     } else if (assets.bodyFinish?.color) {
       layers.push({
         name: 'rear-body-finish-color',
-        maskSrc: assets.bodyModel?.bodySrc,
+        maskSrc: rearBodyMask,
         style: {
           backgroundColor: assets.bodyFinish.color,
           opacity: 1,
@@ -584,8 +789,8 @@ function BassPreview({ config, view, onViewChange, modelImageSrc }) {
       })
     }
 
-    const isHeadless = resolvedConfig.bassType === 'vader'
-    if (isHeadless && assets.bodyAssets?.back?.neckCap) {
+    const isRearHeadless = assets.isHeadless || resolvedConfig.bassType === 'vader'
+    if (isRearHeadless && assets.bodyAssets?.back?.neckCap) {
       layers.push({
         name: 'rear-neck-cap',
         src: assets.bodyAssets.back.neckCap,
@@ -631,19 +836,19 @@ function BassPreview({ config, view, onViewChange, modelImageSrc }) {
     }
 
     // Shadow effects - rear view
-    if (assets.bodyAssets?.back?.shadows || assets.rearNeckFinish) {
+    if (assets.rearNeckFinish || assets.bodyAssets?.back?.shadows) {
       layers.push({
         name: 'rear-shadows',
-        src: assets.bodyAssets?.back?.shadows || assets.rearNeckFinish,
+        src: assets.rearNeckFinish || assets.bodyAssets?.back?.shadows,
         style: { zIndex: 20, opacity: 0.85, mixBlendMode: 'multiply' },
       })
     }
 
     // Gloss effects - rear view
-    if (assets.bodyAssets?.back?.gloss || assets.rearGloss) {
+    if (assets.rearGloss || assets.bodyAssets?.back?.gloss) {
       layers.push({
         name: 'rear-gloss',
-        src: assets.bodyAssets?.back?.gloss || assets.rearGloss,
+        src: assets.rearGloss || assets.bodyAssets?.back?.gloss,
         style: { zIndex: 21, opacity: 0.8, mixBlendMode: 'screen' },
       })
     }
