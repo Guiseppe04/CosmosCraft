@@ -340,6 +340,10 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
     if (!isAdmin && !subtask.is_customer_updatable) return;
 
     try {
+      if (subtask.status === 'completed') {
+        const shouldUncheck = window.confirm('Uncheck this completed task and mark it as pending?');
+        if (!shouldUncheck) return;
+      }
       const newStatus = subtask.status === 'completed' ? 'pending' : 'completed';
       await adminApi.updateSubtask(subtask.subtask_id, { status: newStatus });
       loadData(); // Re-fetch to get new progress %
