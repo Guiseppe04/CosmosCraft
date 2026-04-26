@@ -593,32 +593,79 @@ export function DashboardPage() {
           </div>
         ) : (
           <div className="space-y-6">
-            {filteredOrders.map(order => (
+            {filteredOrders.map(order => {
+              const subtotalAmount = Number(order.subtotal || 0)
+              const shippingAmount = Number(order.shipping_cost || 0)
+              const taxAmount = Number(order.tax_amount || 0)
+              const totalAmount = Number(order.total_amount || 0)
+              const displayTotalAmount = totalAmount > 0
+                ? Math.max(totalAmount - taxAmount, 0)
+                : subtotalAmount + shippingAmount
+              const orderItems = Array.isArray(order.items) ? order.items : []
+
+              return (
               <div key={order.order_id} className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl p-5 hover:border-[var(--gold-primary)]/40 transition-colors">
-                <div className="flex justify-between items-center mb-4 border-b border-[var(--border)] pb-4">
+                <div className="flex flex-col gap-4 mb-4 border-b border-[var(--border)] pb-4 sm:flex-row sm:items-start sm:justify-between">
                   <div>
                     <h3 className="font-bold text-white text-lg">{order.order_number}</h3>
                     <p className="text-xs text-[var(--text-muted)] mt-1">{new Date(order.created_at).toLocaleDateString()} {new Date(order.created_at).toLocaleTimeString()}</p>
                   </div>
-                  <div className="text-right">
-                    <span className="inline-block px-3 py-1 bg-[var(--surface-light)] border border-[var(--border)] rounded-full text-xs font-semibold text-white capitalize mr-2">
-                       {formatStatus(order.status)}
-                    </span>
-                    <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold capitalize ${
-                       order.payment_status === 'paid' ? 'bg-green-500/10 text-green-400 border border-green-500/30' : 'bg-yellow-500/10 text-yellow-500 border border-yellow-500/30'
-                    }`}>
-                       {formatStatus(order.payment_status)}
-                    </span>
+                  <div className="flex flex-col gap-2 sm:items-end">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] uppercase tracking-wider text-[var(--text-muted)]">Order Status</span>
+                      <span className="inline-block px-3 py-1 bg-[var(--surface-light)] border border-[var(--border)] rounded-full text-xs font-semibold text-white capitalize">
+                         {formatStatus(order.status)}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] uppercase tracking-wider text-[var(--text-muted)]">Payment Status</span>
+                      <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold capitalize border ${
+                         ['approved', 'paid', 'verified'].includes(String(order.payment_status || '').toLowerCase())
+                           ? 'bg-green-500/10 text-green-400 border-green-500/30'
+                           : 'bg-yellow-500/10 text-yellow-500 border-yellow-500/30'
+                      }`}>
+                         {formatStatus(order.payment_status)}
+                      </span>
+                    </div>
                   </div>
                 </div>
+
+                {orderItems.length > 0 && (
+                  <div className="mt-4">
+                    <p className="text-[11px] uppercase tracking-wider text-[var(--text-muted)] mb-3">Item Details</p>
+                    <div className="space-y-2">
+                      {orderItems.map((item, index) => {
+                        const customization = item.customization_id ? customizationLookup.get(item.customization_id) : null
+                        const itemName = item.product_name || customization?.name || item.product_sku || 'Custom Item'
+                        const quantity = Number(item.quantity || 1)
+                        const unitPrice = Number(item.unit_price || 0)
+
+                        return (
+                          <div key={item.order_item_id || `${order.order_id}-${index}`} className="flex items-start justify-between gap-4 rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] px-4 py-3">
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold text-white">{itemName}</p>
+                              <p className="text-xs text-[var(--text-muted)] mt-1">
+                                Qty: {quantity}{item.customization_id ? ' • Custom Build' : ''}
+                              </p>
+                            </div>
+                            <span className="text-sm font-semibold text-white whitespace-nowrap">PHP {unitPrice.toLocaleString('en-PH')}</span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
                 
                 <div className="flex justify-between items-end mt-4">
-                   <div className="text-sm text-[var(--text-muted)]">
+                   <div className="text-sm text-[var(--text-muted)] [&>span:last-child]:hidden">
+                      <span className="block">Items: {orderItems.length}</span>
                       <span className="block">Shipping: ₱{Number(order.shipping_cost || 0).toLocaleString('en-PH')}</span>
                       <span className="block mt-1">Tax: ₱{Number(order.tax_amount || 0).toLocaleString('en-PH')}</span>
                    </div>
-                   <div className="text-right items-end flex flex-col">
+                   <div className="text-right items-end flex flex-col [&>span:not(:first-child)]:hidden">
                      <span className="text-sm text-[var(--text-muted)] mb-1">Total Amount</span>
+                     <div className="text-xl font-bold text-[var(--gold-primary)] block">PHP {displayTotalAmount.toLocaleString('en-PH')}</div>
+                     <span className="text-xl font-bold text-[var(--gold-primary)] block">â‚±{displayTotalAmount.toLocaleString('en-PH')}</span>
                      <span className="text-xl font-bold text-[var(--gold-primary)] block">₱{Number(order.total_amount || 0).toLocaleString('en-PH')}</span>
                    </div>
                 </div>
@@ -651,7 +698,7 @@ export function DashboardPage() {
                   </div>
                 )}
               </div>
-            ))}
+            )})}
           </div>
         )}
         </div>
