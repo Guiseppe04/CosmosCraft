@@ -235,7 +235,6 @@ export function AppointmentPage() {
   // Selections
   const [guitarSelectionMode, setGuitarSelectionMode] = useState(savedBuilds.length > 0 ? 'saved' : 'manual')
   const [selectedSavedBuildId, setSelectedSavedBuildId] = useState('')
-  const [manualGuitars, setManualGuitars] = useState([])
   const [homeServiceOption, setHomeServiceOption] = useState('')
   const [homeServiceAddressId, setHomeServiceAddressId] = useState('')
   const [homeServiceContact, setHomeServiceContact] = useState(user?.phone || '')
@@ -243,7 +242,7 @@ export function AppointmentPage() {
   const [servicesError, setServicesError] = useState('')
   const [servicesLoading, setServicesLoading] = useState(true)
   const [selectedServicesByCategory, setSelectedServicesByCategory] = useState({})
-  const [guitarDetails, setGuitarDetails] = useState({ brand: '', model: '', type: 'electric', serial: '', notes: '' })
+  const [guitarDetails, setGuitarDetails] = useState({ brand: '', model: '', type: 'electric', notes: '' })
   const [serviceReferenceFile, setServiceReferenceFile] = useState(null)
   const [serviceReferencePreviewUrl, setServiceReferencePreviewUrl] = useState('')
   const [guitarReferenceFile, setGuitarReferenceFile] = useState(null)
@@ -293,8 +292,15 @@ export function AppointmentPage() {
       }))
     }
 
-    return manualGuitars
-  }, [guitarSelectionMode, manualGuitars, selectedSavedBuilds])
+    if (!hasManualGuitarDetails) return []
+    return [{
+      brand: guitarDetails.brand.trim(),
+      model: guitarDetails.model.trim(),
+      type: normalizeAppointmentGuitarType(guitarDetails.type),
+      serial: 'N/A',
+      notes: guitarDetails.notes.trim(),
+    }]
+  }, [guitarDetails, guitarSelectionMode, hasManualGuitarDetails, selectedSavedBuilds])
   const hasSelectedGuitar = selectedGuitarEntries.length > 0
   const selectedServices = useMemo(
     () => Object.values(selectedServicesByCategory).filter(Boolean),
@@ -548,25 +554,6 @@ export function AppointmentPage() {
       ...prev,
       [normalizedCategoryId]: prev[normalizedCategoryId] === normalizedServiceId ? null : normalizedServiceId,
     }))
-  }
-
-  const handleAddManualGuitar = () => {
-    if (!hasManualGuitarDetails) return
-
-    const nextGuitar = {
-      brand: guitarDetails.brand.trim(),
-      model: guitarDetails.model.trim(),
-      type: normalizeAppointmentGuitarType(guitarDetails.type),
-      serial: guitarDetails.serial.trim() || 'N/A',
-      notes: guitarDetails.notes.trim(),
-    }
-
-    setManualGuitars((prev) => [...prev, nextGuitar])
-    setGuitarDetails({ brand: '', model: '', type: 'electric', serial: '', notes: '' })
-  }
-
-  const handleRemoveManualGuitar = (indexToRemove) => {
-    setManualGuitars((prev) => prev.filter((_, index) => index !== indexToRemove))
   }
 
   const renderServiceOption = (categoryId, service) => {
@@ -975,16 +962,6 @@ export function AppointmentPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-white mb-1.5">Serial Number / Details</label>
-                    <input
-                      type="text"
-                      value={guitarDetails.serial}
-                      onChange={e => setGuitarDetails({ ...guitarDetails, serial: e.target.value })}
-                      className="w-full px-4 py-3 bg-[var(--surface-dark)] text-[var(--text-light)] border border-[var(--border)] rounded-xl text-sm focus:outline-none focus:border-[#d4af37]"
-                      placeholder="e.g. SN123456 or Serial: 123456"
-                    />
-                  </div>
-                  <div>
                     <label className="block text-sm font-medium text-white mb-1.5">Notes / Issue Description</label>
                     <textarea
                       value={guitarDetails.notes}
@@ -993,41 +970,7 @@ export function AppointmentPage() {
                         placeholder="Describe the issue or service request"
                       />
                     </div>
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="text-xs text-[var(--text-muted)]">Optional: add one or more guitars for the service team.</p>
-                      <button
-                        type="button"
-                        onClick={handleAddManualGuitar}
-                        disabled={!hasManualGuitarDetails}
-                        className={`rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
-                          hasManualGuitarDetails
-                            ? 'bg-[#d4af37] text-black hover:bg-[#e9c458]'
-                            : 'bg-[var(--surface-dark)] text-[var(--text-muted)] border border-[var(--border)] cursor-not-allowed'
-                        }`}
-                      >
-                        Add Guitar
-                      </button>
-                    </div>
-
-                    {manualGuitars.length > 0 && (
-                      <div className="space-y-2 rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] p-3">
-                        {manualGuitars.map((guitar, index) => (
-                          <div key={`${guitar.brand}-${guitar.model}-${index}`} className="flex items-center justify-between gap-3 rounded-lg border border-[var(--border)] px-3 py-2">
-                            <div>
-                              <p className="text-sm font-semibold text-[var(--text-light)]">{guitar.brand} {guitar.model}</p>
-                              <p className="text-xs text-[var(--text-muted)]">{formatAppointmentGuitarTypeLabel(guitar.type)}</p>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveManualGuitar(index)}
-                              className="rounded-md border border-[var(--border)] px-2 py-1 text-xs text-[var(--text-muted)] hover:border-red-400/60 hover:text-red-300 transition-colors"
-                            >
-                              Remove
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                    <p className="text-xs text-[var(--text-muted)]">Manual guitar details are saved directly from the fields above.</p>
                 </>
               )}
 
