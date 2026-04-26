@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useNavigate } from 'react-router'
 import { motion, AnimatePresence } from 'motion/react'
 import { API } from '../utils/apiConfig'
@@ -15,49 +15,6 @@ import {
   CheckCircle2,
   Check,
 } from 'lucide-react'
-
-// --- CONSTANTS & DATA ---
-
-const guitarServices = [
-  {
-    categoryId: 'setup',
-    name: 'Setup & Intonation',
-    icon: Settings,
-    options: [
-      { id: 'setup-standard', name: 'Standard Setup', leadTime: 3, price: 80, desc: 'Complete intonation, action, and neck adjustment. (1-3 days)' },
-      { id: 'setup-full', name: 'Full Setup', leadTime: 7, price: 120, desc: 'Includes fret polishing and deep cleaning. (up to 7 days)' },
-    ]
-  },
-  {
-    categoryId: 'refinishing',
-    name: 'Refinishing',
-    icon: Paintbrush,
-    options: [
-      { id: 'refinish-basic', name: 'Basic Refinish', leadTime: 21, price: 300, desc: 'Standard solid color. (2-3 weeks)' },
-      { id: 'refinish-custom', name: 'Custom Refinish', leadTime: 42, price: 500, desc: 'Burst, metallic, or custom art. (4-6+ weeks)' },
-    ]
-  },
-  {
-    categoryId: 'repair',
-    name: 'Repair & Restoration',
-    icon: Wrench,
-    options: [
-      { id: 'repair-minor', name: 'Minor Repairs', leadTime: 0, price: 40, desc: 'String replacement, minor wiring fix. (Same day)' },
-      { id: 'repair-moderate', name: 'Moderate Repairs', leadTime: 7, price: 150, desc: 'Fret leveling, nut replacement. (2-7 days)' },
-      { id: 'repair-major', name: 'Major Repairs', leadTime: 21, price: 350, desc: 'Structural fix, headstock repair. (1-3 weeks or more)' },
-    ]
-  },
-  {
-    categoryId: 'electronics',
-    name: 'Electronics Upgrade',
-    icon: Sparkles,
-    options: [
-      { id: 'elec-simple', name: 'Simple Upgrade', leadTime: 0, price: 60, desc: 'Pots, output jack, capacitors. (Same day)' },
-      { id: 'elec-moderate', name: 'Moderate Upgrade', leadTime: 3, price: 120, desc: 'Pickup installation, wiring cleanup. (1-3 days)' },
-      { id: 'elec-advanced', name: 'Advanced Mods', leadTime: 7, price: 200, desc: 'Coil-splitting, custom wiring, shielding. (3-7 days)' },
-    ]
-  }
-]
 
 const APPOINTMENT_BRANCH_STORAGE_KEY = 'cosmoscraft.appointment.branch'
 const DEFAULT_BRANCH = {
@@ -96,6 +53,29 @@ const STEPS = [
   { id: 5, label: 'Confirmation' },
 ]
 
+const SERVICE_CATEGORY_META = {
+  setup: {
+    name: 'Setup & Intonation',
+    icon: Settings,
+    order: 1,
+  },
+  refinishing: {
+    name: 'Refinishing',
+    icon: Paintbrush,
+    order: 2,
+  },
+  repair: {
+    name: 'Repair & Restoration',
+    icon: Wrench,
+    order: 3,
+  },
+  electronics: {
+    name: 'Electronics Upgrade',
+    icon: Sparkles,
+    order: 4,
+  },
+}
+
 // --- HOLIDAYS ---
 const HOLIDAYS = [
   // Format: 'MM-DD' (month-day)
@@ -119,6 +99,54 @@ function isHoliday(date) {
   const month = String(date.getMonth() + 1).padStart(2, '0')
   const day = String(date.getDate()).padStart(2, '0')
   return HOLIDAYS.includes(`${month}-${day}`)
+}
+
+function inferServiceIcon(service = {}) {
+  const haystack = `${service.name || ''} ${service.description || ''}`.toLowerCase()
+  if (haystack.includes('refinish') || haystack.includes('paint') || haystack.includes('burst') || haystack.includes('color')) return Paintbrush
+  if (haystack.includes('electronic') || haystack.includes('pickup') || haystack.includes('wiring') || haystack.includes('mod')) return Sparkles
+  if (haystack.includes('setup') || haystack.includes('intonation') || haystack.includes('action') || haystack.includes('neck')) return Settings
+  return Wrench
+}
+
+function inferLeadTimeDays(service = {}) {
+  if (Number.isFinite(Number(service.lead_time_days))) {
+    return Number(service.lead_time_days)
+  }
+
+  const description = String(service.description || '').toLowerCase()
+  if (!description) return 0
+  if (description.includes('same day')) return 0
+
+  const dayRangeMatch = description.match(/(\d+)\s*-\s*(\d+)\s*days?/)
+  if (dayRangeMatch) return Number(dayRangeMatch[2]) || 0
+
+  const upToDayMatch = description.match(/up to\s*(\d+)\s*days?/)
+  if (upToDayMatch) return Number(upToDayMatch[1]) || 0
+
+  const singleDayMatch = description.match(/(\d+)\s*days?/)
+  if (singleDayMatch) return Number(singleDayMatch[1]) || 0
+
+  const weekRangeMatch = description.match(/(\d+)\s*-\s*(\d+)\s*\+?\s*weeks?/)
+  if (weekRangeMatch) return (Number(weekRangeMatch[2]) || 0) * 7
+
+  const singleWeekMatch = description.match(/(\d+)\s*\+?\s*weeks?/)
+  if (singleWeekMatch) return (Number(singleWeekMatch[1]) || 0) * 7
+
+  return 0
+}
+
+function formatLeadTimeLabel(service = {}) {
+  const leadTimeDays = inferLeadTimeDays(service)
+  if (leadTimeDays <= 0) return 'Same day turnaround'
+  return `Up to ${leadTimeDays} day${leadTimeDays > 1 ? 's' : ''} turnaround`
+}
+
+function formatLocalDateId(date) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
 function getMonthMatrix(year, month, maxLeadTimeDays) {
@@ -146,7 +174,7 @@ function getMonthMatrix(year, month, maxLeadTimeDays) {
       let isHolidayDate = false
 
       if (inCurrentMonth) {
-        id = date.toISOString().slice(0, 10)
+        id = formatLocalDateId(date)
         const isPast = date < today
         const isTooSoon = date < minAvailableDate
         const isSunday = date.getDay() === 0
@@ -194,6 +222,9 @@ export function AppointmentPage() {
   const [homeServiceOption, setHomeServiceOption] = useState('')
   const [homeServiceAddressId, setHomeServiceAddressId] = useState('')
   const [homeServiceContact, setHomeServiceContact] = useState(user?.phone || '')
+  const [availableServices, setAvailableServices] = useState([])
+  const [servicesError, setServicesError] = useState('')
+  const [servicesLoading, setServicesLoading] = useState(true)
   const [selectedServicesByCategory, setSelectedServicesByCategory] = useState({})
   const [guitarDetails, setGuitarDetails] = useState({ brand: '', model: '', type: '', notes: '' })
   const [selectedBranchId] = useState(branches[0].id)
@@ -210,14 +241,46 @@ export function AppointmentPage() {
   const currentBranch = branches.find(b => b.id === selectedBranchId)
   const selectedDate = selectedDateId ? new Date(`${selectedDateId}T00:00:00`) : null
 
-  const selectedServices = useMemo(
-    () => Object.values(selectedServicesByCategory).filter(Boolean),
-    [selectedServicesByCategory]
-  )
   const selectedBuild = savedBuilds.find((build) => String(build.id) === String(selectedBuildId)) || null
   const selectedAppointmentType = homeServiceOption === 'yes' ? 'service_home' : homeServiceOption === 'no' ? 'service_in_shop' : ''
   const hasManualGuitarDetails = Boolean(guitarDetails.brand.trim() && guitarDetails.model.trim() && guitarDetails.type.trim())
   const hasSelectedGuitar = guitarSelectionMode === 'saved' ? Boolean(selectedBuild) : hasManualGuitarDetails
+  const selectedServices = useMemo(
+    () => Object.values(selectedServicesByCategory).filter(Boolean),
+    [selectedServicesByCategory]
+  )
+
+  useEffect(() => {
+    let isMounted = true
+
+    const loadServices = async () => {
+      setServicesLoading(true)
+      setServicesError('')
+
+      try {
+        const response = await fetch(`${API}/api/services?is_active=true&limit=100&sort=name&order=asc`)
+        const payload = await response.json().catch(() => ({}))
+
+        if (!response.ok) {
+          throw new Error(payload.message || 'Failed to load services')
+        }
+
+        if (!isMounted) return
+        setAvailableServices(Array.isArray(payload.data) ? payload.data : [])
+      } catch (error) {
+        if (!isMounted) return
+        setServicesError(error.message || 'Failed to load services')
+        setAvailableServices([])
+      } finally {
+        if (isMounted) {
+          setServicesLoading(false)
+        }
+      }
+    }
+
+    loadServices()
+    return () => { isMounted = false }
+  }, [])
 
   // Derived calculations
   const { maxLeadTime, totalPrice, selectedDetailedServices } = useMemo(() => {
@@ -226,17 +289,56 @@ export function AppointmentPage() {
     let details = []
 
     selectedServices.forEach(selectedId => {
-      for (const cat of guitarServices) {
-        const opt = cat.options.find(o => o.id === selectedId)
-        if (opt) {
-          lead = Math.max(lead, opt.leadTime)
-          price += opt.price
-          details.push(opt)
-        }
+      const service = availableServices.find((item) => String(item.service_id) === String(selectedId))
+      if (service) {
+        lead = Math.max(lead, inferLeadTimeDays(service))
+        price += Number(service.price || 0)
+        details.push({
+          id: String(service.service_id),
+          name: service.name,
+          price: Number(service.price || 0),
+          desc: service.description || '',
+          duration_minutes: Number(service.duration_minutes || 0),
+          icon: inferServiceIcon(service),
+        })
       }
     })
     return { maxLeadTime: lead, totalPrice: price, selectedDetailedServices: details }
-  }, [selectedServices])
+  }, [availableServices, selectedServices])
+
+  const groupedServices = useMemo(() => {
+    const groups = new Map()
+
+    availableServices.forEach((service) => {
+      const categoryId = String(service.category_id || 'other').trim().toLowerCase() || 'other'
+      const meta = SERVICE_CATEGORY_META[categoryId] || {
+        name: categoryId
+          .split(/[_-]+/)
+          .filter(Boolean)
+          .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+          .join(' ') || 'Other Services',
+        icon: inferServiceIcon(service),
+        order: 99,
+      }
+
+      if (!groups.has(categoryId)) {
+        groups.set(categoryId, {
+          categoryId,
+          name: meta.name,
+          icon: meta.icon,
+          order: meta.order,
+          services: [],
+        })
+      }
+
+      groups.get(categoryId).services.push(service)
+    })
+
+    return Array.from(groups.values()).sort((left, right) => {
+      if (left.order !== right.order) return left.order - right.order
+      return left.name.localeCompare(right.name)
+    })
+  }, [availableServices])
 
   const monthMatrix = useMemo(() => getMonthMatrix(currentYear, currentMonth, maxLeadTime), [currentYear, currentMonth, maxLeadTime])
 
@@ -295,11 +397,107 @@ export function AppointmentPage() {
   }
 
   // Handlers
-  const handleToggleService = (categoryId, optId) => {
-    setSelectedServicesByCategory(prev => ({
+  const handleToggleService = (categoryId, serviceId) => {
+    const normalizedCategoryId = String(categoryId)
+    const normalizedServiceId = String(serviceId)
+
+    setSelectedServicesByCategory((prev) => ({
       ...prev,
-      [categoryId]: prev[categoryId] === optId ? null : optId
+      [normalizedCategoryId]: prev[normalizedCategoryId] === normalizedServiceId ? null : normalizedServiceId,
     }))
+  }
+
+  const renderServiceOption = (categoryId, service) => {
+    const serviceId = String(service.service_id)
+    const isSelected = selectedServicesByCategory[categoryId] === serviceId
+    const Icon = inferServiceIcon(service)
+
+    return (
+      <button
+        key={serviceId}
+        type="button"
+        onClick={() => handleToggleService(categoryId, serviceId)}
+        className={`text-left rounded-xl border-2 p-4 transition-all ${
+          isSelected
+            ? 'border-[#d4af37] bg-[#d4af37]/10'
+            : 'border-[var(--border)] bg-theme-surface-deep hover:border-[#d4af37]/30 hover:bg-[var(--surface-elevated)]'
+        }`}
+      >
+        <div className="mb-2 flex items-start justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <div className={`rounded-xl p-2 ${isSelected ? 'bg-[#d4af37]/20 text-[#d4af37]' : 'bg-[var(--surface-dark)] text-[var(--text-muted)]'}`}>
+              <Icon className="h-4 w-4" />
+            </div>
+            <div>
+              <span className={`block text-sm font-semibold ${isSelected ? 'text-[#d4af37]' : 'text-[var(--text-light)]'}`}>
+                {service.name}
+              </span>
+              <span className="mt-1 block text-xs text-[var(--text-muted)]">
+                {formatLeadTimeLabel(service)}
+              </span>
+            </div>
+          </div>
+          <span className="text-sm font-bold text-[var(--text-muted)]">PHP {Number(service.price || 0).toLocaleString('en-PH')}</span>
+        </div>
+        <p className="text-xs leading-relaxed text-[var(--text-muted)]">
+          {service.description || 'No description available.'}
+        </p>
+      </button>
+    )
+  }
+
+  const renderServiceSelection = () => {
+    if (servicesLoading) {
+      return (
+        <div className="rounded-2xl border border-[var(--border)] bg-theme-surface-deep p-6 text-sm text-[var(--text-muted)]">
+          Loading services...
+        </div>
+      )
+    }
+
+    if (servicesError) {
+      return (
+        <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-6 text-sm text-red-200">
+          {servicesError}
+        </div>
+      )
+    }
+
+    if (availableServices.length === 0) {
+      return (
+        <div className="rounded-2xl border border-[var(--border)] bg-theme-surface-deep p-6 text-sm text-[var(--text-muted)]">
+          No active services are available right now.
+        </div>
+      )
+    }
+
+    return (
+      <div className="space-y-6">
+        {groupedServices.map((category) => {
+          const CategoryIcon = category.icon
+
+          return (
+            <section key={category.categoryId} className="space-y-3">
+              <div className="flex items-center gap-3">
+                <div className="rounded-xl bg-[#d4af37]/15 p-2 text-[#d4af37]">
+                  <CategoryIcon className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold text-[var(--text-light)]">{category.name}</h3>
+                  <p className="text-xs text-[var(--text-muted)]">
+                    {category.services.length} service{category.services.length > 1 ? 's' : ''} available
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                {category.services.map((service) => renderServiceOption(category.categoryId, service))}
+              </div>
+            </section>
+          )
+        })}
+      </div>
+    )
   }
 
   const handleNextStep = () => {
@@ -344,7 +542,6 @@ export function AppointmentPage() {
             brand: selectedGuitarDetails.brand,
             model: selectedGuitarDetails.model,
             serial: 'N/A',
-            type: selectedGuitarDetails.type,
             notes: selectedGuitarDetails.notes || ''
           },
           scheduled_at: scheduledAt.toISOString(),
@@ -426,7 +623,8 @@ export function AppointmentPage() {
             </div>
             
             <div className="space-y-6">
-              {guitarServices.map(category => (
+              {renderServiceSelection()}
+              {false && availableServices.map((service) => (
                 <div key={category.categoryId} className="space-y-3">
                   <div className="flex items-center gap-2">
                     <category.icon className="w-5 h-5 text-[#d4af37]" />
