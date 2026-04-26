@@ -1696,7 +1696,7 @@ export function DashboardPage() {
         <div className="space-y-4 max-w-xl">
           <div className="flex items-center gap-2 mb-4">
             <button onClick={() => { setIsAddingAddress(false); setEditingAddressId(null); setAddressData({ category: 'Home', country: 'PH', streetLine1: '', streetLine2: '', province: '', city: '', barangay: '', postalZipCode: '', isDefault: true }); setLocationData(prev => ({ ...prev, cities: [], barangays: [] })) }} className="text-[var(--gold-primary)] hover:underline text-sm font-semibold flex items-center gap-1">
-              â† Back
+              Back
             </button>
             <span className="text-white font-semibold">{editingAddressId ? 'Edit Address' : 'Add New Address'}</span>
           </div>
