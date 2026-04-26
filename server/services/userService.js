@@ -1,6 +1,20 @@
 const bcrypt = require('bcryptjs');
 const { pool } = require('../config/database');
 
+const normalizeAddressValue = (value) => String(value || '')
+  .trim()
+  .replace(/\s+/g, ' ')
+  .toLowerCase();
+
+const getAddressSignature = (address = {}) => ([
+  address.line1 ?? address.streetLine1 ?? address.street,
+  address.line2 ?? address.streetLine2 ?? address.street2,
+  address.city,
+  address.province ?? address.stateProvince,
+  address.postal_code ?? address.postalZipCode ?? address.postalCode,
+  address.country,
+].map(normalizeAddressValue).join('|'));
+
 exports.createOAuthUser = async (userData) => {
   const client = await pool.connect();
   try {
@@ -179,12 +193,32 @@ exports.addAddress = async (userId, addressData) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const existing = await client.query('SELECT count(*) FROM addresses WHERE user_id = $1', [userId]);
-    if (parseInt(existing.rows[0].count) >= 2) {
+    const existing = await client.query(
+      'SELECT address_id, line1, line2, city, province, postal_code, country, is_default FROM addresses WHERE user_id = $1',
+      [userId]
+    );
+    const duplicateAddress = existing.rows.find(
+      (address) => getAddressSignature(address) === getAddressSignature(addressData)
+    );
+
+    if (duplicateAddress) {
+      if (addressData.isDefault && !duplicateAddress.is_default) {
+        await client.query('UPDATE addresses SET is_default = false WHERE user_id = $1', [userId]);
+        await client.query(
+          'UPDATE addresses SET is_default = true WHERE address_id = $1 AND user_id = $2',
+          [duplicateAddress.address_id, userId]
+        );
+      }
+
+      await client.query('COMMIT');
+      return exports.getUserById(userId);
+    }
+
+    if (existing.rows.length >= 2) {
       throw new Error('Maximum 2 addresses allowed.');
     }
 
-    const isFirst = existing.rows[0].count === '0';
+    const isFirst = existing.rows.length === 0;
     const isDefault = isFirst || addressData.isDefault;
 
     if (isDefault) {

@@ -30,6 +30,20 @@ const normalizePositiveQuantity = (value, fallback = 1) => {
   return Math.max(1, Math.trunc(quantity))
 }
 
+const normalizeAddressValue = (value) => String(value || '')
+  .trim()
+  .replace(/\s+/g, ' ')
+  .toLowerCase()
+
+const getAddressSignature = (address = {}) => ([
+  address.line1 ?? address.streetLine1 ?? address.street,
+  address.line2 ?? address.streetLine2 ?? address.street2,
+  address.city,
+  address.province ?? address.stateProvince,
+  address.postal_code ?? address.postalZipCode ?? address.postalCode,
+  address.country,
+].map(normalizeAddressValue).join('|'))
+
 const addInventoryReservation = (reservations, productId, quantity) => {
   if (!productId || quantity <= 0) return
 
@@ -351,15 +365,19 @@ exports.createOrder = async (orderData) => {
     // Insert billing address into addresses table (check for existing first)
     let shippingAddressId = null
     if (billingAddress.street && billingAddress.city) {
-      // Check if similar address already exists
+      // Reuse an existing saved address when the full normalized address matches.
       const existingAddr = await client.query(
-        `SELECT address_id FROM addresses 
-         WHERE user_id = $1 AND line1 = $2 AND city = $3 AND province = $4`,
-        [userId, billingAddress.street, billingAddress.city, billingAddress.province || null]
+        `SELECT address_id, line1, line2, city, province, postal_code, country
+         FROM addresses
+         WHERE user_id = $1`,
+        [userId]
+      )
+      const matchedAddress = existingAddr.rows.find(
+        (address) => getAddressSignature(address) === getAddressSignature(billingAddress)
       )
       
-      if (existingAddr.rows.length > 0) {
-        shippingAddressId = existingAddr.rows[0].address_id
+      if (matchedAddress) {
+        shippingAddressId = matchedAddress.address_id
       } else {
         const addressRes = await client.query(
           `INSERT INTO addresses (user_id, label, line1, line2, city, province, postal_code, country)
@@ -373,7 +391,7 @@ exports.createOrder = async (orderData) => {
             billingAddress.city,
             billingAddress.province || null,
             billingAddress.postalCode || null,
-            'PH'
+            billingAddress.country || 'PH'
           ]
         )
         shippingAddressId = addressRes.rows[0].address_id
