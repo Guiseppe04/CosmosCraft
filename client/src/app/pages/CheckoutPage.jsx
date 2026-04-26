@@ -520,6 +520,7 @@ function CheckoutSummaryCard({
   const safeFullTotal = Number.isFinite(Number(fullTotal)) ? Number(fullTotal) : safeTotal
   const safeRemainingBalance = Number.isFinite(Number(remainingBalance)) ? Number(remainingBalance) : 0
   const safeItemCount = Number.isFinite(Number(itemCount)) ? Number(itemCount) : 0
+  const isCheckoutDisabled = Boolean(disabled) || !termsAccepted
 
   return (
     <div className="bg-[var(--surface-dark)] border border-white/10 rounded-2xl p-6 space-y-5 shadow-lg shadow-black/20">
@@ -597,7 +598,7 @@ function CheckoutSummaryCard({
 
       <button
         onClick={onPlaceOrder}
-        disabled={isProcessing || disabled}
+        disabled={isProcessing || isCheckoutDisabled}
         className="w-full py-4 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-bold rounded-lg hover:shadow-[0_0_25px_rgba(212,175,55,0.5)] transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
       >
         {isProcessing ? (
