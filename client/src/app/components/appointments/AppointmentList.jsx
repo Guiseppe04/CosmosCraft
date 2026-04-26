@@ -15,6 +15,7 @@ const STATUS_CONFIG = {
   approved: { label: 'Approved', color: 'bg-blue-500/20 text-blue-400 border-blue-500/30', icon: CheckCircle },
   confirmed: { label: 'Confirmed', color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30', icon: CheckCircle },
   in_progress: { label: 'In Progress', color: 'bg-purple-500/20 text-purple-400 border-purple-500/30', icon: Clock },
+  ready_for_pickup: { label: 'Ready for Pickup', color: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30', icon: CheckCircle },
   completed: { label: 'Completed', color: 'bg-green-500/20 text-green-400 border-green-500/30', icon: CheckCircle },
   cancelled: { label: 'Cancelled', color: 'bg-red-500/20 text-red-400 border-red-500/30', icon: XCircle },
 }
@@ -29,9 +30,9 @@ const DATE_FILTERS = [
 const STATUS_FILTERS = [
   { value: 'all', label: 'All Status' },
   { value: 'pending', label: 'Pending' },
-  { value: 'approved', label: 'Approved' },
   { value: 'confirmed', label: 'Confirmed' },
   { value: 'in_progress', label: 'In Progress' },
+  { value: 'ready_for_pickup', label: 'Ready for Pickup' },
   { value: 'completed', label: 'Completed' },
   { value: 'cancelled', label: 'Cancelled' },
 ]

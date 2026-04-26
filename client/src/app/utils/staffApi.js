@@ -1,5 +1,10 @@
 import { API } from './apiConfig'
 
+const normalizeAppointmentStatus = (status) => {
+  if (status === 'approved') return 'confirmed'
+  return status
+}
+
 /**
  * staffApi.js
  * Mirrors the admin API surface for staff-safe actions.
@@ -51,9 +56,10 @@ export const staffApi = {
   createAppointment: (data) => request('/api/appointments', { method: 'POST', body: data }),
   updateAppointment: (id, data) => request(`/api/appointments/${id}`, { method: 'PATCH', body: data }),
   updateAppointmentStatus: (id, status, reason) =>
-    request(`/api/appointments/${id}/status`, { method: 'PATCH', body: { status, reason } }),
-  updateAppointmentPaymentStatus: (id, payment_status, options = {}) =>
-    request(`/api/appointments/${id}/payment-status`, { method: 'PATCH', body: { payment_status, ...options } }),
+    request(`/api/appointments/${id}/status`, {
+      method: 'PATCH',
+      body: { status: normalizeAppointmentStatus(status), reason },
+    }),
   rescheduleAppointment: (id, newScheduledAt, reason) =>
     request(`/api/appointments/${id}/reschedule`, { method: 'PATCH', body: { new_scheduled_at: newScheduledAt, reason } }),
   cancelAppointment: (id, reason) =>

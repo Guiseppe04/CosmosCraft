@@ -5,6 +5,11 @@
 
 const API_URL = import.meta.env.VITE_API_URL
 
+const normalizeAppointmentStatus = (status) => {
+  if (status === 'approved') return 'confirmed'
+  return status
+}
+
 async function request(path, options = {}) {
   const res = await fetch(`${API_URL}${path}`, {
     headers: { 'Content-Type': 'application/json', ...options.headers },
@@ -130,7 +135,10 @@ export const adminApi = {
   getAppointment: (id) => request(`/api/appointments/${id}`),
   createAppointment: (body) => request('/api/appointments', { method: 'POST', body }),
   updateAppointment: (id, body) => request(`/api/appointments/${id}`, { method: 'PATCH', body }),
-  updateAppointmentStatus: (id, status, reason) => request(`/api/appointments/${id}/status`, { method: 'PATCH', body: { status, reason } }),
+  updateAppointmentStatus: (id, status, reason) => request(`/api/appointments/${id}/status`, {
+    method: 'PATCH',
+    body: { status: normalizeAppointmentStatus(status), reason },
+  }),
   rescheduleAppointment: (id, newScheduledAt, reason) => request(`/api/appointments/${id}/reschedule`, { method: 'PATCH', body: { new_scheduled_at: newScheduledAt, reason } }),
   cancelAppointment: (id, reason) => request(`/api/appointments/${id}`, { method: 'DELETE', body: reason ? { reason } : {} }),
   getAppointmentStats: (params = {}) => {

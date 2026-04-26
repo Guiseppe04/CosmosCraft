@@ -274,7 +274,9 @@ exports.getUserUpcomingAppointments = async (userId) => {
        u.first_name || ' ' || u.last_name AS user_name
      FROM appointments a
      LEFT JOIN users u ON a.user_id = u.user_id
-     WHERE a.user_id = $1 AND a.status IN ('pending', 'approved') AND a.scheduled_at > now()
+     WHERE a.user_id = $1
+       AND a.status::text IN ('pending', 'approved', 'confirmed', 'ready_for_pickup')
+       AND a.scheduled_at > now()
      ORDER BY a.scheduled_at ASC`,
     [userId]
   );
@@ -363,7 +365,10 @@ exports.getAppointmentStats = async (filters = {}) => {
     `SELECT
        COUNT(*) as total_appointments,
        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending_count,
-       SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) as approved_count,
+       SUM(CASE WHEN status::text IN ('approved', 'confirmed') THEN 1 ELSE 0 END) as approved_count,
+       SUM(CASE WHEN status::text = 'confirmed' THEN 1 ELSE 0 END) as confirmed_count,
+       SUM(CASE WHEN status::text = 'in_progress' THEN 1 ELSE 0 END) as in_progress_count,
+       SUM(CASE WHEN status::text = 'ready_for_pickup' THEN 1 ELSE 0 END) as ready_for_pickup_count,
        SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed_count,
        SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled_count
      FROM appointments ${whereClause}`, params

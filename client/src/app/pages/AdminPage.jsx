@@ -2408,14 +2408,6 @@ export function AdminPage() {
     } catch (e) { showToast(e.message, 'error') }
   }, [showToast, fetchAppointments])
 
-  const handleAppointmentPaymentStatusChange = useCallback(async (id, paymentStatus) => {
-    try {
-      await adminApi.updateAppointment(id, { payment_status: paymentStatus })
-      showToast('Payment status updated', 'success')
-      fetchAppointments()
-    } catch (e) { showToast(e.message, 'error') }
-  }, [showToast, fetchAppointments])
-
   const handleAppointmentReschedule = useCallback(async (id, newScheduledAt, reason) => {
     try {
       await adminApi.rescheduleAppointment(id, newScheduledAt, reason)
@@ -3949,7 +3941,7 @@ export function AdminPage() {
                       { label: 'Revenue this month', value: formatCurrency(salesReport?.monthlySales || 0), badge: salesReport?.monthlySales > 0 ? '+live' : 'Live', badgeCls: 'bg-green-500/10 text-green-400' },
                       { label: 'Total orders', value: visibleOrders.length, badge: 'Order volume', badgeCls: 'bg-blue-500/10 text-blue-400' },
                       { label: 'Active projects', value: visibleProjects.filter(p => p.status === 'in_progress').length, badge: 'In progress', badgeCls: 'bg-purple-500/10 text-purple-400' },
-                      { label: 'Open appointments', value: visibleAppointments.filter(a => a.status === 'pending' || a.status === 'approved').length, badge: 'Action required', badgeCls: 'bg-[var(--gold-primary)]/10 text-[var(--gold-primary)]' },
+                      { label: 'Open appointments', value: visibleAppointments.filter(a => ['pending', 'approved', 'confirmed', 'ready_for_pickup'].includes(a.status)).length, badge: 'Action required', badgeCls: 'bg-[var(--gold-primary)]/10 text-[var(--gold-primary)]' },
                     ].map((stat) => (
                       <div key={stat.label} className="rounded-3xl border border-[var(--border)] bg-[var(--bg-primary)] p-5">
                         <p className="text-[var(--text-muted)] text-sm">{stat.label}</p>
@@ -5214,9 +5206,11 @@ export function AdminPage() {
                 const statusColors = {
                   pending: 'bg-yellow-500/10 text-yellow-500 border-yellow-500/30',
                   approved: 'bg-green-500/10 text-green-400 border-green-500/30',
+                  confirmed: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
+                  in_progress: 'bg-purple-500/10 text-purple-400 border-purple-500/30',
+                  ready_for_pickup: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30',
                   completed: 'bg-blue-500/10 text-blue-400 border-blue-500/30',
                   cancelled: 'bg-red-500/10 text-red-500 border-red-500/30',
-                  'no_show': 'bg-orange-500/10 text-orange-400 border-orange-500/30',
                 };
                 const statusCls = statusColors[apt.status] || 'bg-gray-500/10 text-gray-400 border-gray-500/30';
                 return (
@@ -5324,13 +5318,15 @@ export function AdminPage() {
               {/* Appointment Status Modal */}
               {modal.type === 'appointment' && modal.data && (() => {
                 const APPOINTMENT_STATUSES = [
-                  { value: 'approved', label: 'Approved (Confirmed)' },
-                  { value: 'completed', label: 'Completed (Showed Up)' },
-                  { value: 'no_show', label: 'No-Show (Missed)' },
+                  { value: 'pending', label: 'Pending' },
+                  { value: 'confirmed', label: 'Confirmed' },
+                  { value: 'in_progress', label: 'In Progress' },
+                  { value: 'ready_for_pickup', label: 'Ready for Pickup' },
+                  { value: 'completed', label: 'Completed' },
                   { value: 'cancelled', label: 'Cancelled' }
                 ];
                 // Use form.status if it was set, else fallback to modal.data.status
-                const currentStatus = form.status || modal.data.status || 'approved';
+                const currentStatus = form.status || modal.data.status || 'pending';
                 return (
                   <>
                     <ModalHeader title="Update Appointment Status" onClose={closeModal} />
@@ -5352,6 +5348,7 @@ export function AdminPage() {
                             const isSelected = currentStatus === stat.value;
                             return (
                               <button
+                                type="button"
                                 key={stat.value}
                                 onClick={() => setForm({ ...form, status: stat.value })}
                                 className={`p-4 text-left rounded-xl border flex flex-col gap-1 transition-all ${
@@ -5371,12 +5368,6 @@ export function AdminPage() {
                             );
                           })}
                         </div>
-                        {currentStatus === 'no_show' && (
-                          <p className="mt-4 text-xs flex items-center gap-2 text-orange-400 bg-orange-500/10 p-3 rounded-lg border border-orange-500/20">
-                            <AlertCircle className="w-4 h-4 shrink-0" />
-                            Warning: Marking as No-Show will lock the appointment.
-                          </p>
-                        )}
                         {currentStatus === 'cancelled' && (
                           <p className="mt-4 text-xs flex items-center gap-2 text-red-400 bg-red-500/10 p-3 rounded-lg border border-red-500/20">
                             <AlertCircle className="w-4 h-4 shrink-0" />
@@ -6378,7 +6369,9 @@ export function AdminPage() {
                       <label className={labelCls}>Status</label>
                       <select value={form.status || 'pending'} onChange={e => setForm(f => ({ ...f, status: e.target.value }))} className={inputCls}>
                         <option value="pending">Pending</option>
-                        <option value="approved">Approved</option>
+                        <option value="confirmed">Confirmed</option>
+                        <option value="in_progress">In Progress</option>
+                        <option value="ready_for_pickup">Ready for Pickup</option>
                         <option value="completed">Completed</option>
                         <option value="cancelled">Cancelled</option>
                       </select>
@@ -7130,7 +7123,6 @@ export function AdminPage() {
         }}
         appointment={selectedAppointment}
         onStatusChange={handleAppointmentStatusChange}
-        onPaymentStatusChange={handleAppointmentPaymentStatusChange}
         onReschedule={handleAppointmentReschedule}
         onCancel={handleAppointmentCancel}
         loading={appointmentLoading}

@@ -45,6 +45,23 @@ async function runStartupMigrations(client) {
   await client.query(`
     DO $$
     BEGIN
+      ALTER TYPE appointment_status_enum ADD VALUE IF NOT EXISTS 'confirmed';
+      ALTER TYPE appointment_status_enum ADD VALUE IF NOT EXISTS 'in_progress';
+      ALTER TYPE appointment_status_enum ADD VALUE IF NOT EXISTS 'ready_for_pickup';
+    EXCEPTION
+      WHEN duplicate_object THEN NULL;
+    END $$;
+  `);
+
+  await client.query(`
+    UPDATE appointments
+    SET status = 'confirmed'
+    WHERE status::text = 'approved';
+  `);
+
+  await client.query(`
+    DO $$
+    BEGIN
       ALTER TYPE project_status_enum ADD VALUE IF NOT EXISTS 'cancelled';
     EXCEPTION
       WHEN duplicate_object THEN NULL;
