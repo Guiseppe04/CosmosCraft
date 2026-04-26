@@ -35,13 +35,69 @@ const normalizeAddressValue = (value) => String(value || '')
   .replace(/\s+/g, ' ')
   .toLowerCase()
 
+const countryNameToCode = (() => {
+  const map = new Map([
+    ['philippines', 'PH'],
+    ['the philippines', 'PH'],
+    ['usa', 'US'],
+    ['united states', 'US'],
+    ['united states of america', 'US'],
+    ['uk', 'GB'],
+    ['united kingdom', 'GB'],
+  ])
+
+  if (typeof Intl?.DisplayNames !== 'function' || typeof Intl?.supportedValuesOf !== 'function') {
+    return map
+  }
+
+  try {
+    const displayNames = new Intl.DisplayNames(['en'], { type: 'region' })
+
+    for (const code of Intl.supportedValuesOf('region')) {
+      if (!/^[A-Z]{2}$/.test(code)) continue
+
+      const name = displayNames.of(code)
+      const normalizedName = normalizeAddressValue(name)
+
+      if (normalizedName) {
+        map.set(normalizedName, code)
+      }
+    }
+  } catch (error) {
+    // Keep the alias map if the runtime does not support full region metadata.
+  }
+
+  return map
+})()
+
+const normalizeCountryCode = (value, fallback = 'PH') => {
+  const rawValue = String(value || '').trim()
+
+  if (!rawValue) {
+    return fallback
+  }
+
+  const upperValue = rawValue.toUpperCase()
+  if (/^[A-Z]{2}$/.test(upperValue)) {
+    return upperValue
+  }
+
+  return countryNameToCode.get(normalizeAddressValue(rawValue)) || null
+}
+
+const createValidationError = (message, statusCode = 400) => {
+  const error = new Error(message)
+  error.statusCode = statusCode
+  return error
+}
+
 const getAddressSignature = (address = {}) => ([
   address.line1 ?? address.streetLine1 ?? address.street,
   address.line2 ?? address.streetLine2 ?? address.street2,
   address.city,
   address.province ?? address.stateProvince,
   address.postal_code ?? address.postalZipCode ?? address.postalCode,
-  address.country,
+  normalizeCountryCode(address.country, ''),
 ].map(normalizeAddressValue).join('|'))
 
 const addInventoryReservation = (reservations, productId, quantity) => {
@@ -343,14 +399,19 @@ exports.createOrder = async (orderData) => {
 
     // Validate required fields
     if (!billingAddress) {
-      throw new Error('Billing address is required')
+      throw createValidationError('Billing address is required')
     }
     if (!billingAddress.street || !billingAddress.city) {
-      throw new Error('Address must include street and city')
+      throw createValidationError('Address must include street and city')
+    }
+
+    const normalizedCountryCode = normalizeCountryCode(billingAddress.country)
+    if (!normalizedCountryCode) {
+      throw createValidationError('Address must include a valid 2-letter country code')
     }
 
     if (paymentMethod === 'cash' && hasCustomBuildItems(items)) {
-      throw new Error('COD is only available for regular product orders. Customized guitars require down payment.')
+      throw createValidationError('COD is only available for regular product orders. Customized guitars require down payment.')
     }
 
     // Calculate totals
@@ -391,7 +452,7 @@ exports.createOrder = async (orderData) => {
             billingAddress.city,
             billingAddress.province || null,
             billingAddress.postalCode || null,
-            billingAddress.country || 'PH'
+            normalizedCountryCode
           ]
         )
         shippingAddressId = addressRes.rows[0].address_id
@@ -472,7 +533,7 @@ exports.createOrder = async (orderData) => {
   } catch (error) {
     await client.query('ROLLBACK')
     console.error('Create order error:', error)
-    throw new Error(error.message || 'Failed to create order')
+    throw error
   } finally {
     client.release()
   }
