@@ -321,6 +321,25 @@ html[data-theme="light"] .min-h-screen {
   }
 }
 
+.theme-input {
+  background-color: var(--surface-dark);
+  color: var(--text-light);
+  border-color: var(--border);
+}
+
+.theme-input::placeholder {
+  color: var(--text-muted);
+}
+
+.theme-input:-webkit-autofill,
+.theme-input:-webkit-autofill:hover,
+.theme-input:-webkit-autofill:focus,
+.theme-input:-webkit-autofill:active {
+  -webkit-text-fill-color: var(--text-light);
+  -webkit-box-shadow: 0 0 0 1000px var(--surface-dark) inset;
+  transition: background-color 9999s ease-in-out 0s;
+}
+
 /* Responsive baseline */
 @media (max-width: 1024px) {
   html {

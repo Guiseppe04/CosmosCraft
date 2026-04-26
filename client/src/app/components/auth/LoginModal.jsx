@@ -116,7 +116,7 @@ export function LoginModal() {
                   value={email}
                   onChange={e => setEmail(e.target.value)}
                   placeholder="name@example.com"
-                  className="w-full px-4 py-2.5 rounded-lg border theme-input focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
+                  className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] text-[var(--text-light)] placeholder:text-[var(--text-muted)] theme-input focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
                 />
               </div>
               <div>
@@ -128,7 +128,7 @@ export function LoginModal() {
                     value={password}
                     onChange={e => setPassword(e.target.value)}
                     placeholder="••••••••"
-                    className="w-full px-4 py-2.5 rounded-lg border theme-input pr-10 focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
+                    className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] text-[var(--text-light)] placeholder:text-[var(--text-muted)] theme-input pr-10 focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
                   />
                   <button
                     type="button"
