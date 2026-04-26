@@ -102,7 +102,7 @@ export const adminApi = {
   updateOrder: (id, body) => request(`/api/orders/${id}`, { method: 'PUT', body }),
   updatePaymentStatus: (id, status, options = {}) => request(`/api/orders/${id}/payment-status`, { method: 'PUT', body: { status, ...options } }),
   cancelOrder: (id) => request(`/api/orders/${id}/cancel`, { method: 'POST' }),
-  cancelMyOrder: (id) => request(`/api/orders/${id}/cancel-my-order`, { method: 'POST' }),
+  cancelMyOrder: (id, reason) => request(`/api/orders/${id}/cancel-my-order`, { method: 'POST', body: reason ? { reason } : {} }),
 
   // Projects
   getProjects: (params = {}) => {

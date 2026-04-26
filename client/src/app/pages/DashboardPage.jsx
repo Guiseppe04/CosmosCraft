@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 import { motion, AnimatePresence } from 'motion/react'
-import { User, CreditCard, MapPin, Lock, Package, Calendar, ChevronRight, Upload, Save, Wallet, ShoppingBag, ShoppingCart, Trash2, Minus, Plus, MessageSquare, Send, Guitar, Clock, Truck, CheckCircle, XCircle, Briefcase, Activity, Star, Loader2, Edit, AlertCircle } from 'lucide-react'
+import { User, CreditCard, MapPin, Lock, Package, Calendar, ChevronRight, Upload, Save, Wallet, ShoppingBag, ShoppingCart, Trash2, Minus, Plus, MessageSquare, Send, Guitar, Clock, Truck, CheckCircle, XCircle, Briefcase, Activity, Star, Loader2, Edit, AlertCircle, X } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useCart } from '../context/CartContext.jsx'
 import { BASE_PRICE, BODY_OPTIONS, BODY_WOOD_OPTIONS, BODY_FINISH_OPTIONS, NECK_OPTIONS, FRETBOARD_OPTIONS, HEADSTOCK_OPTIONS, HEADSTOCK_WOOD_OPTIONS, INLAY_OPTIONS, BRIDGE_OPTIONS, PICKGUARD_OPTIONS_BY_BODY, KNOB_OPTIONS_BY_BODY, HARDWARE_OPTIONS, PICKUP_OPTIONS } from '../lib/guitarBuilderData.js'
@@ -17,6 +17,14 @@ const OTHER_COUNTRIES = ALL_COUNTRIES.filter(c => c.isoCode !== 'PH')
 const COUNTRIES = PHILIPPINES ? [PHILIPPINES, ...OTHER_COUNTRIES] : ALL_COUNTRIES
 const MAX_USER_ADDRESSES = 2
 const MAX_SAVED_GUITAR_BUILDS = 10
+const ORDER_CANCEL_REASONS = [
+  'Changed my mind',
+  'Ordered by mistake',
+  'Need to change shipping details',
+  'Found a better price elsewhere',
+  'Payment issue',
+  'Others',
+]
 
 const getOldConfigData = (key, val, bodyType) => {
     let price;
@@ -92,6 +100,11 @@ export function DashboardPage() {
   
   const [myOrders, setMyOrders] = useState([])
   const [activePurchaseTab, setActivePurchaseTab] = useState('All')
+  const [isCancelOrderModalOpen, setIsCancelOrderModalOpen] = useState(false)
+  const [cancelOrderTarget, setCancelOrderTarget] = useState(null)
+  const [cancelOrderReason, setCancelOrderReason] = useState('')
+  const [cancelOrderCustomReason, setCancelOrderCustomReason] = useState('')
+  const [isCancellingOrder, setIsCancellingOrder] = useState(false)
 
   const [myAppointments, setMyAppointments] = useState([])
   const [reschedulingAptId, setReschedulingAptId] = useState(null)
@@ -229,14 +242,41 @@ export function DashboardPage() {
     }
   };
 
-  const handleCancelOrder = async (orderId) => {
-    if (!window.confirm("Are you sure you want to cancel this order?")) return;
+  const openCancelOrderModal = (order) => {
+    setCancelOrderTarget(order)
+    setCancelOrderReason('')
+    setCancelOrderCustomReason('')
+    setIsCancelOrderModalOpen(true)
+  }
+
+  const closeCancelOrderModal = (force = false) => {
+    if (isCancellingOrder && !force) return
+    setIsCancelOrderModalOpen(false)
+    setCancelOrderTarget(null)
+    setCancelOrderReason('')
+    setCancelOrderCustomReason('')
+  }
+
+  const getResolvedCancelReason = () => {
+    if (cancelOrderReason === 'Others') return cancelOrderCustomReason.trim()
+    return cancelOrderReason
+  }
+
+  const handleCancelOrder = async () => {
+    const resolvedReason = getResolvedCancelReason()
+    if (!cancelOrderTarget?.order_id || !resolvedReason) {
+      return
+    }
     try {
-      await adminApi.cancelMyOrder(orderId);
+      setIsCancellingOrder(true)
+      await adminApi.cancelMyOrder(cancelOrderTarget.order_id, resolvedReason);
       setToastMessage('Order has been cancelled.');
       fetchMyOrders();
+      closeCancelOrderModal(true)
     } catch (err) {
       alert("Failed to cancel order: " + err.message);
+    } finally {
+      setIsCancellingOrder(false)
     }
   };
 
@@ -620,7 +660,7 @@ export function DashboardPage() {
                 {order.status === 'pending' && (
                   <div className="mt-4 pt-4 border-t border-[var(--border)] flex justify-end">
                     <button
-                      onClick={() => handleCancelOrder(order.order_id)}
+                      onClick={() => openCancelOrderModal(order)}
                       className="px-4 py-2 border border-red-500/30 text-red-500 hover:bg-red-500/10 transition-colors rounded-lg text-sm font-semibold"
                     >
                       Cancel Order
@@ -1727,6 +1767,104 @@ export function DashboardPage() {
         onConfirm={handleConfirmPasswordChange}
         onCancel={() => setIsPasswordConfirmOpen(false)}
       />
+      <AnimatePresence>
+        {isCancelOrderModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[300] bg-black/70 backdrop-blur-sm p-4 flex items-center justify-center"
+            onClick={(event) => {
+              if (event.target === event.currentTarget) closeCancelOrderModal()
+            }}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 16, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 16, scale: 0.96 }}
+              className="relative w-full max-w-lg rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-6 sm:p-7 shadow-2xl"
+            >
+              <button
+                type="button"
+                onClick={closeCancelOrderModal}
+                disabled={isCancellingOrder}
+                className="absolute right-4 top-4 rounded-lg p-2 text-[var(--text-muted)] hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
+                aria-label="Close cancel order modal"
+              >
+                <X className="h-4 w-4" />
+              </button>
+
+              <h3 className="text-xl font-bold text-white pr-8">Cancel Order</h3>
+              <p className="mt-2 text-sm text-[var(--text-muted)]">
+                {cancelOrderTarget?.order_number ? `Order ${cancelOrderTarget.order_number}` : 'This order'} will be cancelled. Please tell us why.
+              </p>
+
+              <div className="mt-5 space-y-3">
+                {ORDER_CANCEL_REASONS.map((reason) => {
+                  const isSelected = cancelOrderReason === reason
+                  return (
+                    <label
+                      key={reason}
+                      className={`flex cursor-pointer items-center gap-3 rounded-xl border px-4 py-3 transition-colors ${
+                        isSelected
+                          ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)]/10'
+                          : 'border-[var(--border)] hover:border-[var(--gold-primary)]/40'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="cancel-order-reason"
+                        value={reason}
+                        checked={isSelected}
+                        onChange={(event) => setCancelOrderReason(event.target.value)}
+                        className="h-4 w-4 accent-[var(--gold-primary)]"
+                      />
+                      <span className="text-sm text-white">{reason}</span>
+                    </label>
+                  )
+                })}
+              </div>
+
+              {cancelOrderReason === 'Others' && (
+                <div className="mt-4">
+                  <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                    Please specify your reason
+                  </label>
+                  <textarea
+                    value={cancelOrderCustomReason}
+                    onChange={(event) => setCancelOrderCustomReason(event.target.value)}
+                    maxLength={200}
+                    rows={4}
+                    placeholder="Type your reason here..."
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-3 text-sm text-white placeholder:text-[var(--text-muted)] focus:border-[var(--gold-primary)] focus:outline-none"
+                  />
+                  <p className="mt-1 text-right text-xs text-[var(--text-muted)]">{cancelOrderCustomReason.length}/200</p>
+                </div>
+              )}
+
+              <div className="mt-6 flex gap-3">
+                <button
+                  type="button"
+                  onClick={closeCancelOrderModal}
+                  disabled={isCancellingOrder}
+                  className="flex-1 rounded-xl border border-[var(--border)] bg-white/5 py-3 text-sm font-semibold text-white hover:bg-white/10 transition-colors disabled:opacity-50"
+                >
+                  Keep Order
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCancelOrder}
+                  disabled={!getResolvedCancelReason() || isCancellingOrder}
+                  className="flex-1 rounded-xl bg-red-500 py-3 text-sm font-bold text-white hover:bg-red-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {isCancellingOrder && <Loader2 className="h-4 w-4 animate-spin" />}
+                  {isCancellingOrder ? 'Cancelling...' : 'Confirm Cancel'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10">
         <div className="grid xl:grid-cols-[1fr_1.4fr] gap-4 sm:gap-6 items-start">

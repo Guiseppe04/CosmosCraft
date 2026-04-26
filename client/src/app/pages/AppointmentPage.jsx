@@ -1,7 +1,8 @@
-import { useState, useMemo } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useNavigate } from 'react-router'
 import { motion, AnimatePresence } from 'motion/react'
 import { API } from '../utils/apiConfig'
+import { uploadToCloudinary } from '../utils/cloudinary.js'
 import { useAuth } from '../context/AuthContext.jsx'
 import {
   Wrench,
@@ -14,6 +15,8 @@ import {
   ChevronRight,
   CheckCircle2,
   Check,
+  ImagePlus,
+  X,
 } from 'lucide-react'
 
 // --- CONSTANTS & DATA ---
@@ -112,6 +115,7 @@ const HOLIDAYS = [
 ]
 
 const OPENING_YEAR = 2026
+const MAX_REFERENCE_IMAGE_BYTES = 10 * 1024 * 1024
 
 // --- UTILS ---
 
@@ -196,6 +200,10 @@ export function AppointmentPage() {
   const [homeServiceContact, setHomeServiceContact] = useState(user?.phone || '')
   const [selectedServicesByCategory, setSelectedServicesByCategory] = useState({})
   const [guitarDetails, setGuitarDetails] = useState({ brand: '', model: '', type: '', notes: '' })
+  const [serviceReferenceFile, setServiceReferenceFile] = useState(null)
+  const [serviceReferencePreviewUrl, setServiceReferencePreviewUrl] = useState('')
+  const [guitarReferenceFile, setGuitarReferenceFile] = useState(null)
+  const [guitarReferencePreviewUrl, setGuitarReferencePreviewUrl] = useState('')
   const [selectedBranchId] = useState(branches[0].id)
   const [selectedDateId, setSelectedDateId] = useState('')
   const [selectedTime, setSelectedTime] = useState('')
@@ -218,6 +226,13 @@ export function AppointmentPage() {
   const selectedAppointmentType = homeServiceOption === 'yes' ? 'service_home' : homeServiceOption === 'no' ? 'service_in_shop' : ''
   const hasManualGuitarDetails = Boolean(guitarDetails.brand.trim() && guitarDetails.model.trim() && guitarDetails.type.trim())
   const hasSelectedGuitar = guitarSelectionMode === 'saved' ? Boolean(selectedBuild) : hasManualGuitarDetails
+
+  useEffect(() => {
+    return () => {
+      if (serviceReferencePreviewUrl) URL.revokeObjectURL(serviceReferencePreviewUrl)
+      if (guitarReferencePreviewUrl) URL.revokeObjectURL(guitarReferencePreviewUrl)
+    }
+  }, [serviceReferencePreviewUrl, guitarReferencePreviewUrl])
 
   // Derived calculations
   const { maxLeadTime, totalPrice, selectedDetailedServices } = useMemo(() => {
@@ -314,6 +329,46 @@ export function AppointmentPage() {
     }
   }
 
+  const handleReferenceImageChange = (target, event) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      alert('Please upload an image file.')
+      return
+    }
+    if (file.size > MAX_REFERENCE_IMAGE_BYTES) {
+      alert('Image size must be 10MB or less.')
+      return
+    }
+
+    const objectUrl = URL.createObjectURL(file)
+
+    if (target === 'service') {
+      if (serviceReferencePreviewUrl) URL.revokeObjectURL(serviceReferencePreviewUrl)
+      setServiceReferenceFile(file)
+      setServiceReferencePreviewUrl(objectUrl)
+      return
+    }
+
+    if (guitarReferencePreviewUrl) URL.revokeObjectURL(guitarReferencePreviewUrl)
+    setGuitarReferenceFile(file)
+    setGuitarReferencePreviewUrl(objectUrl)
+  }
+
+  const clearReferenceImage = (target) => {
+    if (target === 'service') {
+      if (serviceReferencePreviewUrl) URL.revokeObjectURL(serviceReferencePreviewUrl)
+      setServiceReferenceFile(null)
+      setServiceReferencePreviewUrl('')
+      return
+    }
+
+    if (guitarReferencePreviewUrl) URL.revokeObjectURL(guitarReferencePreviewUrl)
+    setGuitarReferenceFile(null)
+    setGuitarReferencePreviewUrl('')
+  }
+
   const handleSubmit = async () => {
     if (!isAuthenticated) {
       openLogin(() => navigate('/appointments', { replace: true }))
@@ -323,6 +378,19 @@ export function AppointmentPage() {
     setBookingComplete(true)
     
     try {
+      let serviceReferenceImageUrl = ''
+      let guitarReferenceImageUrl = ''
+      if (serviceReferenceFile) {
+        serviceReferenceImageUrl = await uploadToCloudinary(serviceReferenceFile, {
+          folder: 'cosmoscraft/appointments/service-reference',
+        })
+      }
+      if (guitarReferenceFile) {
+        guitarReferenceImageUrl = await uploadToCloudinary(guitarReferenceFile, {
+          folder: 'cosmoscraft/appointments/guitar-reference',
+        })
+      }
+
       const [timeStr, modifier] = selectedTime.split(' ');
       let [hours, minutes] = timeStr.split(':');
       if (hours === '12') hours = '00';
@@ -345,12 +413,17 @@ export function AppointmentPage() {
             model: selectedGuitarDetails.model,
             serial: 'N/A',
             type: selectedGuitarDetails.type,
-            notes: selectedGuitarDetails.notes || ''
+            notes: [
+              selectedGuitarDetails.notes || '',
+              guitarReferenceImageUrl ? `Guitar reference image: ${guitarReferenceImageUrl}` : '',
+            ].filter(Boolean).join('\n')
           },
           scheduled_at: scheduledAt.toISOString(),
           notes: [
             selectedGuitarDetails.notes || '',
             selectedAppointmentType === 'service_home' ? `Home service contact: ${homeServiceContact}` : '',
+            serviceReferenceImageUrl ? `Service reference image: ${serviceReferenceImageUrl}` : '',
+            guitarReferenceImageUrl ? `Guitar reference image: ${guitarReferenceImageUrl}` : '',
           ].filter(Boolean).join('\n')
         })
       });
@@ -458,6 +531,37 @@ export function AppointmentPage() {
                   </div>
                 </div>
               ))}
+            </div>
+
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-4 space-y-3">
+              <p className="text-sm font-semibold text-[var(--text-light)]">Service Reference Image (Optional)</p>
+              <p className="text-xs text-[var(--text-muted)]">Upload a photo reference for the service outcome you want.</p>
+              <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-[var(--border)] px-4 py-2.5 text-sm font-semibold text-[var(--text-light)] hover:border-[#d4af37]/50 hover:text-[#d4af37] transition-colors">
+                <ImagePlus className="h-4 w-4" />
+                Upload Image
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(event) => handleReferenceImageChange('service', event)}
+                />
+              </label>
+              {serviceReferencePreviewUrl && (
+                <div className="rounded-xl border border-[var(--border)] bg-theme-surface-deep p-3">
+                  <img src={serviceReferencePreviewUrl} alt="Service reference" className="h-40 w-full rounded-lg object-cover" />
+                  <div className="mt-3 flex items-center justify-between text-xs text-[var(--text-muted)]">
+                    <span>{serviceReferenceFile?.name || 'reference-image'}</span>
+                    <button
+                      type="button"
+                      onClick={() => clearReferenceImage('service')}
+                      className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] px-2 py-1 hover:border-red-400/60 hover:text-red-300 transition-colors"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </motion.div>
         )
@@ -573,6 +677,37 @@ export function AppointmentPage() {
                     No, In-store Service
                   </button>
                 </div>
+              </div>
+
+              <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-4 space-y-3">
+                <p className="text-sm font-semibold text-[var(--text-light)]">Guitar Reference Image (Optional)</p>
+                <p className="text-xs text-[var(--text-muted)]">Upload a guitar image reference for styling, finish, or details you want copied.</p>
+                <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-[var(--border)] px-4 py-2.5 text-sm font-semibold text-[var(--text-light)] hover:border-[#d4af37]/50 hover:text-[#d4af37] transition-colors">
+                  <ImagePlus className="h-4 w-4" />
+                  Upload Image
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(event) => handleReferenceImageChange('guitar', event)}
+                  />
+                </label>
+                {guitarReferencePreviewUrl && (
+                  <div className="rounded-xl border border-[var(--border)] bg-theme-surface-deep p-3">
+                    <img src={guitarReferencePreviewUrl} alt="Guitar reference" className="h-40 w-full rounded-lg object-cover" />
+                    <div className="mt-3 flex items-center justify-between text-xs text-[var(--text-muted)]">
+                      <span>{guitarReferenceFile?.name || 'reference-image'}</span>
+                      <button
+                        type="button"
+                        onClick={() => clearReferenceImage('guitar')}
+                        className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] px-2 py-1 hover:border-red-400/60 hover:text-red-300 transition-colors"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </motion.div>
@@ -844,6 +979,26 @@ export function AppointmentPage() {
                     </div>
                  </div>
                </div>
+
+               {(serviceReferencePreviewUrl || guitarReferencePreviewUrl) && (
+                 <div className="border-t border-[var(--border)] pt-4">
+                   <p className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-3">Reference Images</p>
+                   <div className="grid sm:grid-cols-2 gap-4">
+                     {serviceReferencePreviewUrl && (
+                       <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] p-3">
+                         <p className="mb-2 text-xs font-semibold text-[var(--text-muted)]">Service Reference</p>
+                         <img src={serviceReferencePreviewUrl} alt="Service reference preview" className="h-36 w-full rounded-lg object-cover" />
+                       </div>
+                     )}
+                     {guitarReferencePreviewUrl && (
+                       <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] p-3">
+                         <p className="mb-2 text-xs font-semibold text-[var(--text-muted)]">Guitar Reference</p>
+                         <img src={guitarReferencePreviewUrl} alt="Guitar reference preview" className="h-36 w-full rounded-lg object-cover" />
+                       </div>
+                     )}
+                   </div>
+                 </div>
+               )}
 
                <div className="border-t border-[var(--border)] pt-4 flex justify-between items-center">
                   <span className="text-sm font-bold text-[var(--text-muted)] uppercase">Estimated Total</span>

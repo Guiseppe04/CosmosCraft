@@ -113,8 +113,15 @@ exports.cancelMyOrder = asyncHandler(async (req, res, next) => {
   if (!userId) {
     throw new AppError('You must be logged in', 401);
   }
+  const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : ''
+  if (!reason) {
+    throw new AppError('Cancellation reason is required', 400)
+  }
+  if (reason.length > 200) {
+    throw new AppError('Cancellation reason must be 200 characters or less', 400)
+  }
   try {
-    const order = await orderService.cancelMyOrder(req.params.id, userId);
+    const order = await orderService.cancelMyOrder(req.params.id, userId, reason);
     res.status(200).json({ status: 'success', data: order });
   } catch (error) {
     throw new AppError(error.message, 400);

@@ -917,22 +917,31 @@ exports.cancelOrder = async (orderId) => {
   return res.rows[0];
 }
 
-exports.cancelMyOrder = async (orderId, userId) => {
+exports.cancelMyOrder = async (orderId, userId, reason) => {
   const checkRes = await pool.query(
-    `SELECT status FROM orders WHERE order_id = $1 AND user_id = $2`,
+    `SELECT status, notes FROM orders WHERE order_id = $1 AND user_id = $2`,
     [orderId, userId]
   );
   if (checkRes.rows.length === 0) {
     throw new Error('Order not found');
   }
-  const status = checkRes.rows[0].status;
+  const { status, notes } = checkRes.rows[0];
   if (status !== 'pending') {
     throw new Error('Only pending orders can be cancelled');
   }
 
+  const cancellationStamp = new Date().toISOString()
+  const cancellationNote = `Customer cancellation reason (${cancellationStamp}): ${reason}`
+  const nextNotes = [notes, cancellationNote].filter(Boolean).join('\n')
+
   const res = await pool.query(
-    `UPDATE orders SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP WHERE order_id = $1 AND user_id = $2 RETURNING *`,
-    [orderId, userId]
+    `UPDATE orders
+     SET status = 'cancelled',
+         notes = $3,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE order_id = $1 AND user_id = $2
+     RETURNING *`,
+    [orderId, userId, nextNotes]
   );
   return res.rows[0];
 }
