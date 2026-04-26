@@ -545,19 +545,36 @@ exports.getUserOrders = async (userId) => {
     [userId]
   )
 
-  for (const order of res.rows) {
-    const itemsRes = await pool.query(
-      `SELECT customization_id
-       FROM order_items
-       WHERE order_id = $1
-         AND customization_id IS NOT NULL`,
-      [order.order_id]
-    )
-
-    order.customization_ids = itemsRes.rows.map(item => item.customization_id)
+  if (res.rows.length === 0) {
+    return res.rows
   }
 
-  return res.rows
+  const orderIds = res.rows.map((order) => order.order_id)
+  const itemsRes = await pool.query(
+    `SELECT oi.*, pi.image_url
+     FROM order_items oi
+     LEFT JOIN product_images pi ON oi.product_id = pi.product_id AND pi.is_primary = true
+     WHERE oi.order_id = ANY($1)`,
+    [orderIds]
+  )
+
+  const itemsByOrder = itemsRes.rows.reduce((acc, item) => {
+    if (!acc[item.order_id]) acc[item.order_id] = []
+    acc[item.order_id].push(item)
+    return acc
+  }, {})
+
+  return res.rows.map((order) => {
+    const items = itemsByOrder[order.order_id] || []
+
+    return {
+      ...order,
+      items,
+      customization_ids: items
+        .map((item) => item.customization_id)
+        .filter(Boolean),
+    }
+  })
 }
 
 exports.getOrderById = async (orderId, userId) => {
