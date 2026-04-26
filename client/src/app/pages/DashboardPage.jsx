@@ -137,7 +137,7 @@ export function DashboardPage() {
     if (activeSection === 'appointments') {
       fetchMyAppointments()
     }
-  }, [activeSection])
+  }, [activeSection, user?.id])
 
   useEffect(() => {
     if (activeSection === 'my-guitar') {
@@ -157,7 +157,12 @@ export function DashboardPage() {
   }, [activeSection])
 
   const fetchMyAppointments = () => {
-    adminApi.getAppointments()
+    if (!user?.id) {
+      setMyAppointments([])
+      return
+    }
+
+    adminApi.getUserAppointments(user.id)
       .then(res => setMyAppointments(res.data?.appointments || []))
       .catch(console.error)
   }
