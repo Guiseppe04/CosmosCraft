@@ -360,7 +360,7 @@ exports.PAYMENT_STATUS = {
 // Valid payment status transitions (including self-transition for idempotent updates)
 const PAYMENT_STATUS_TRANSITIONS = {
   'pending': ['proof_submitted', 'pending'],
-  'proof_submitted': ['under_review', 'pending', 'proof_submitted'],
+  'proof_submitted': ['under_review', 'approved', 'rejected', 'pending', 'proof_submitted'],
   'under_review': ['approved', 'rejected', 'under_review'],
   'approved': ['approved', 'rejected', 'failed'],
   'rejected': ['pending', 'proof_submitted', 'rejected'],
@@ -753,7 +753,7 @@ exports.updatePaymentStatus = async (orderId, status, options = {}) => {
   
   // Validate status transition
   if (!isValidPaymentStatusTransition(currentStatus, status)) {
-    throw new Error(`Invalid payment status transition from '${currentStatus}' to '${status}'`)
+    throw createValidationError(`Invalid payment status transition from '${currentStatus}' to '${status}'`)
   }
 
   // Build update query dynamically
@@ -766,10 +766,13 @@ exports.updatePaymentStatus = async (orderId, status, options = {}) => {
     updateValues.push(reference_number)
   }
 
-  if (status === 'approved') {
+  if (status === 'approved' || status === 'rejected') {
     updateFields.push(`reviewed_by = $${paramIndex++}`)
     updateValues.push(admin_user_id || null)
     updateFields.push(`reviewed_at = CURRENT_TIMESTAMP`)
+  }
+
+  if (status !== 'rejected') {
     updateFields.push(`rejection_reason = NULL`)
   }
 
@@ -832,7 +835,7 @@ exports.approvePayment = async (orderId, options = {}) => {
   
   // Validate transition to approved
   if (!isValidPaymentStatusTransition(currentStatus, 'approved')) {
-    throw new Error(`Cannot approve payment with current status: ${currentStatus}`)
+    throw createValidationError(`Cannot approve payment with current status: ${currentStatus}`)
   }
   
   const res = await pool.query(

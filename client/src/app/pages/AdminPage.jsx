@@ -31,6 +31,11 @@ import { ProjectProgress, ProgressBadge } from '../components/admin/ProjectProgr
 import { OrderManagement } from '../components/admin/OrderManagement'
 import { formatCurrency } from '../utils/formatCurrency'
 import { adminApi } from '../utils/adminApi'
+import {
+  getAllowedPaymentStatuses,
+  getPaymentStatusConfig as getOrderPaymentStatusConfig,
+  normalizePaymentStatus,
+} from '../utils/orderPaymentStatus'
 import { uploadToCloudinary } from '../utils/cloudinary'
 import { ConfirmModal } from '../components/ui/ConfirmModal'
 import { useDebounce } from '../hooks/useDebounce'
@@ -892,16 +897,7 @@ const ORDER_STATUS_MAP = Object.fromEntries(ORDER_STATUS_LIFECYCLE.map(s => [s.v
 
 const getOrderStatusConfig = (status) => ORDER_STATUS_MAP[status] || ORDER_STATUS_LIFECYCLE[0]
 
-const PAYMENT_STATUS_LIFECYCLE = [
-  { value: 'paid', label: 'Paid', color: '#22c55e', bgColor: 'bg-green-500/20', textColor: 'text-green-400', borderColor: 'border-green-500/30' },
-  { value: 'pending', label: 'Pending', color: '#f59e0b', bgColor: 'bg-amber-500/20', textColor: 'text-amber-400', borderColor: 'border-amber-500/30' },
-  { value: 'awaiting_approval', label: 'Pending Approval', color: '#60a5fa', bgColor: 'bg-blue-500/20', textColor: 'text-blue-400', borderColor: 'border-blue-500/30' },
-  { value: 'failed', label: 'Failed', color: '#f87171', bgColor: 'bg-red-500/20', textColor: 'text-red-400', borderColor: 'border-red-500/30' },
-]
-
-const PAYMENT_STATUS_MAP = Object.fromEntries(PAYMENT_STATUS_LIFECYCLE.map(s => [s.value, s]))
-
-const getPaymentStatusConfig = (status) => PAYMENT_STATUS_MAP[status] || PAYMENT_STATUS_LIFECYCLE[1]
+const getPaymentStatusConfig = (status) => getOrderPaymentStatusConfig(status)
 
 const ORDER_STATUS_TABS = [
   { id: 'all', label: 'All', color: '#d4af37', bgColor: 'bg-[var(--gold-primary)]/20', textColor: 'text-[var(--gold-primary)]', borderColor: 'border-[var(--gold-primary)]/30' },
@@ -2549,11 +2545,11 @@ export function AdminPage() {
        initialForm.image_url = data.primary_image
      }
 
-     // Initialize status fields for order-details modal
-     if (type === 'order-details' && data) {
-       initialForm.order_status = data.status || 'pending'
-       initialForm.payment_status = data.payment_status || data.payment?.status || 'pending'
-     }
+    // Initialize status fields for order-details modal
+    if (type === 'order-details' && data) {
+      initialForm.order_status = data.status || 'pending'
+      initialForm.payment_status = normalizePaymentStatus(data.payment_status || data.payment?.status)
+    }
 
      // Convert duration_minutes (from API) to duration (hours for form)
      if (type === 'service' && data?.duration_minutes) {
@@ -2870,7 +2866,7 @@ export function AdminPage() {
     const order = orders.find(o => o.order_id === orderId)
     
     if (status === 'processing') {
-      const paymentVerified = order?.payment?.status === 'verified' || order?.payment_status === 'paid'
+      const paymentVerified = normalizePaymentStatus(order?.payment_status || order?.payment?.status) === 'approved'
       if (!paymentVerified) {
         showToast('Cannot start processing - payment not verified. Please approve payment first.', 'error')
         return
@@ -2892,7 +2888,7 @@ export function AdminPage() {
         order_number: order.order_number || order.order_id?.slice(0, 8),
         payment_method: order.payment?.method || order.payment_method || 'N/A',
         amount: order.total || order.total_amount || order.payment?.amount || 0,
-        payment_status: order.payment_status || order.payment?.status || 'pending',
+        payment_status: normalizePaymentStatus(order.payment_status || order.payment?.status),
         proof_url: order.payment?.proof_url || null,
       })
       setFormErrors({})
@@ -2905,7 +2901,7 @@ export function AdminPage() {
   const updatePaymentStatus = async () => {
     if (!form.order_id) return
     
-    const originalStatus = modal.data?.payment_status || modal.data?.payment?.status || 'pending'
+    const originalStatus = normalizePaymentStatus(modal.data?.payment_status || modal.data?.payment?.status)
     if (form.payment_status === originalStatus) {
       showToast('No changes detected', 'error')
       return
@@ -2934,10 +2930,12 @@ export function AdminPage() {
     
     const currentOrder = orders.find(o => o.order_id === modal.data.order_id)
     const currentOrderStatus = currentOrder?.status || modal.data.status || 'pending'
-    const currentPaymentStatus = currentOrder?.payment_status || modal.data.payment_status || modal.data?.payment?.status || 'pending'
+    const currentPaymentStatus = normalizePaymentStatus(
+      currentOrder?.payment_status || modal.data.payment_status || modal.data?.payment?.status
+    )
     
     const newOrderStatus = form.order_status || currentOrderStatus
-    const newPaymentStatus = form.payment_status || currentPaymentStatus
+    const newPaymentStatus = normalizePaymentStatus(form.payment_status || currentPaymentStatus)
     
     const orderStatusChanged = newOrderStatus !== currentOrderStatus
     const paymentStatusChanged = newPaymentStatus !== currentPaymentStatus
@@ -2947,8 +2945,8 @@ export function AdminPage() {
       return
     }
 
-    if (newOrderStatus === 'processing' && newPaymentStatus !== 'paid' && newPaymentStatus !== 'verified') {
-      showToast('Cannot start processing - payment not verified. Please set payment to Paid first.', 'error')
+    if (newOrderStatus === 'processing' && newPaymentStatus !== 'approved') {
+      showToast('Cannot start processing until the payment is approved.', 'error')
       return
     }
 
@@ -6323,14 +6321,10 @@ export function AdminPage() {
                   <p className="text-[var(--text-muted)] text-sm mb-3">Status</p>
                   <div className="relative">
                     {(() => {
-                      const statuses = [
-                        { value: 'pending', label: 'Pending', color: '#f59e0b' },
-                        { value: 'paid', label: 'Paid', color: '#22c55e' },
-                        { value: 'failed', label: 'Cancel', color: '#f87171' },
-                        { value: 'refunded', label: 'Refunded', color: '#38bdf8' },
-                      ]
-                      const currentValue = form.payment_status || 'pending'
-                      const currentStatus = statuses.find((status) => status.value === currentValue)
+                      const originalStatus = normalizePaymentStatus(modal.data?.payment_status || modal.data?.payment?.status)
+                      const statuses = getAllowedPaymentStatuses(originalStatus)
+                      const currentValue = normalizePaymentStatus(form.payment_status || originalStatus)
+                      const selectedStatus = statuses.find((status) => status.value === currentValue)
 
                       return (
                         <>
@@ -6339,8 +6333,8 @@ export function AdminPage() {
                             onClick={() => setPaymentStatusDropdownOpen((open) => !open)}
                             className="w-full rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] px-4 py-3 text-left flex items-center justify-between gap-3 transition-all hover:border-[var(--gold-primary)]/30"
                           >
-                            <span className="text-sm font-semibold" style={{ color: currentStatus?.color || '#ffffff' }}>
-                              {currentStatus?.label || 'Pending'}
+                            <span className="text-sm font-semibold" style={{ color: selectedStatus?.color || '#ffffff' }}>
+                              {selectedStatus?.label || 'Pending'}
                             </span>
                             <ChevronDown className="w-4 h-4 text-white" />
                           </button>
@@ -6369,7 +6363,7 @@ export function AdminPage() {
                     })()}
                   </div>
                   <p className="mt-3 text-[var(--text-muted)] text-sm leading-relaxed">
-                    Choose the current payment status for this order. Save your selection with Update Status.
+                    Choose the next valid payment status for this order. Save your selection with Update Status.
                   </p>
                 </div>
 
@@ -6394,9 +6388,9 @@ export function AdminPage() {
                   </button>
                   <button
                     onClick={updatePaymentStatus}
-                    disabled={paymentStatusUpdate.loading || form.payment_status === (modal.data?.payment_status || modal.data?.payment?.status)}
+                    disabled={paymentStatusUpdate.loading || normalizePaymentStatus(form.payment_status || modal.data?.payment_status || modal.data?.payment?.status) === normalizePaymentStatus(modal.data?.payment_status || modal.data?.payment?.status)}
                     className={`flex-1 px-4 py-3 bg-gradient-to-r from-green-500 to-green-600 rounded-lg text-white font-semibold hover:shadow-[0_0_20px_rgba(34,197,94,0.4)] transition-all flex items-center justify-center gap-2 ${
-                      paymentStatusUpdate.loading || form.payment_status === (modal.data?.payment_status || modal.data?.payment?.status)
+                      paymentStatusUpdate.loading || normalizePaymentStatus(form.payment_status || modal.data?.payment_status || modal.data?.payment?.status) === normalizePaymentStatus(modal.data?.payment_status || modal.data?.payment?.status)
                         ? 'opacity-50 cursor-not-allowed'
                         : ''
                     }`}
@@ -6647,8 +6641,8 @@ export function AdminPage() {
                   <div className="mb-4">
                     <p className="text-[var(--text-muted)] text-xs uppercase tracking-wider mb-2">Payment Status</p>
                     <div className="grid grid-cols-2 gap-2">
-                      {PAYMENT_STATUS_LIFECYCLE.map((status) => {
-                        const isActive = (form.payment_status || modal.data.payment_status || modal.data?.payment?.status || 'pending') === status.value
+                      {getAllowedPaymentStatuses(modal.data.payment_status || modal.data?.payment?.status).map((status) => {
+                        const isActive = normalizePaymentStatus(form.payment_status || modal.data.payment_status || modal.data?.payment?.status) === status.value
                         return (
                           <button
                             key={status.value}

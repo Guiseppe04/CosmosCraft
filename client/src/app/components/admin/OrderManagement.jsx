@@ -9,6 +9,12 @@ import {
 } from 'lucide-react'
 import { formatCurrency } from '../../utils/formatCurrency'
 import { adminApi } from '../../utils/adminApi'
+import {
+  PAYMENT_STATUS_MAP,
+  getAllowedPaymentStatuses,
+  getPaymentStatusConfig as getOrderPaymentStatusConfig,
+  normalizePaymentStatus,
+} from '../../utils/orderPaymentStatus'
 
 const ORDER_STATUS_LIFECYCLE = [
   { value: 'pending', label: 'Pending', color: '#f59e0b', bgColor: 'bg-amber-500/20', textColor: 'text-amber-400', borderColor: 'border-amber-500/30' },
@@ -20,17 +26,6 @@ const ORDER_STATUS_LIFECYCLE = [
 ]
 
 const ORDER_STATUS_MAP = Object.fromEntries(ORDER_STATUS_LIFECYCLE.map(s => [s.value, s]))
-
-const PAYMENT_STATUS_LIFECYCLE = [
-  { value: 'pending', label: 'Pending', color: '#f59e0b', bgColor: 'bg-amber-500/20', textColor: 'text-amber-400', borderColor: 'border-amber-500/30' },
-  { value: 'proof_submitted', label: 'Proof Submitted', color: '#60a5fa', bgColor: 'bg-blue-500/20', textColor: 'text-blue-400', borderColor: 'border-blue-500/30' },
-  { value: 'under_review', label: 'Under Review', color: '#8b5cf6', bgColor: 'bg-violet-500/20', textColor: 'text-violet-400', borderColor: 'border-violet-500/30' },
-  { value: 'approved', label: 'Approved', color: '#22c55e', bgColor: 'bg-green-500/20', textColor: 'text-green-400', borderColor: 'border-green-500/30' },
-  { value: 'rejected', label: 'Rejected', color: '#f87171', bgColor: 'bg-red-500/20', textColor: 'text-red-400', borderColor: 'border-red-500/30' },
-  { value: 'failed', label: 'Failed', color: '#ef4444', bgColor: 'bg-red-600/20', textColor: 'text-red-500', borderColor: 'border-red-600/30' },
-]
-
-const PAYMENT_STATUS_MAP = Object.fromEntries(PAYMENT_STATUS_LIFECYCLE.map(s => [s.value, s]))
 
 const ORDER_STATUS_TABS = [
   { id: 'all', label: 'All', color: '#d4af37', bgColor: 'bg-[var(--gold-primary)]/20', textColor: 'text-[var(--gold-primary)]', borderColor: 'border-[var(--gold-primary)]/30' },
@@ -57,7 +52,7 @@ function getOrderStatusConfig(status) {
 }
 
 function getPaymentStatusConfig(status) {
-  return PAYMENT_STATUS_MAP[status] || PAYMENT_STATUS_LIFECYCLE[1]
+  return getOrderPaymentStatusConfig(status)
 }
 
 function getOrderCustomerName(order) {
@@ -775,13 +770,29 @@ function OrderDetailsModal({ order, onClose, onUpdatePaymentStatus, onUpdateOrde
 }
 
 function PaymentVerificationPanel({ order, onVerify, user }) {
-  const [selectedStatus, setSelectedStatus] = useState(order.payment_status || 'pending')
+  const currentPaymentStatus = normalizePaymentStatus(order.payment_status)
+  const availableStatuses = useMemo(
+    () => getAllowedPaymentStatuses(currentPaymentStatus),
+    [currentPaymentStatus]
+  )
+  const [selectedStatus, setSelectedStatus] = useState(currentPaymentStatus)
   const [referenceNumber, setReferenceNumber] = useState(order.payment?.reference_number || '')
   const [notes, setNotes] = useState('')
   const [showImageModal, setShowImageModal] = useState(false)
   const [imageToView, setImageToView] = useState(null)
   const [isVerifying, setIsVerifying] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
+
+  useEffect(() => {
+    const fallbackStatus = availableStatuses[0]?.value || currentPaymentStatus
+    setSelectedStatus((prevStatus) => (
+      availableStatuses.some((status) => status.value === prevStatus)
+        ? prevStatus
+        : fallbackStatus
+    ))
+    setReferenceNumber(order.payment?.reference_number || '')
+    setNotes('')
+  }, [availableStatuses, currentPaymentStatus, order.order_id, order.payment?.reference_number])
 
   const handleVerify = async () => {
     setIsVerifying(true)
@@ -840,7 +851,7 @@ function PaymentVerificationPanel({ order, onVerify, user }) {
         <div className="mb-4">
           <p className="text-[var(--text-muted)] text-xs uppercase tracking-wider mb-2">Select Payment Status</p>
           <div className="grid grid-cols-2 gap-2">
-            {PAYMENT_STATUS_LIFECYCLE.map((status) => {
+            {availableStatuses.map((status) => {
               const isActive = selectedStatus === status.value
               return (
                 <button
@@ -913,6 +924,7 @@ function PaymentVerificationPanel({ order, onVerify, user }) {
         ) : (
           <button
             onClick={() => setShowConfirm(true)}
+            disabled={!availableStatuses.some((status) => status.value === selectedStatus)}
             className="w-full px-4 py-3 bg-gradient-to-r from-green-500 to-green-600 rounded-lg text-white font-semibold hover:shadow-[0_0_20px_rgba(34,197,94,0.4)] transition-all flex items-center justify-center gap-2"
           >
             <CheckCircle className="w-4 h-4" />
