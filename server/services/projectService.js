@@ -37,6 +37,7 @@ const ensureProjectArchiveColumns = async () => {
 const normalizeProjectStatus = (status) => {
   const normalized = String(status || '').trim().toLowerCase().replace(/\s+/g, '_')
 
+  if (normalized === 'cancelled') return 'cancelled'
   if (normalized === 'completed') return 'completed'
   if (normalized === 'in_progress') return 'in_progress'
   if (normalized === 'not_started' || normalized === 'pending') return 'not_started'
@@ -165,6 +166,18 @@ const getProjectTaskStats = async (db, projectId) => {
 const buildProjectTaskTracking = ({ total, completed }, currentStatus) => {
   const progress = total === 0 ? 0 : Math.round((completed / total) * 100);
   const normalizedCurrentStatus = normalizeProjectStatus(currentStatus);
+
+  if (normalizedCurrentStatus === 'cancelled') {
+    return {
+      progress,
+      status: 'cancelled',
+      task_summary: {
+        total,
+        completed,
+        pending: Math.max(total - completed, 0),
+      },
+    };
+  }
 
   let status = normalizedCurrentStatus || 'not_started';
   if (total > 0) {
@@ -301,6 +314,83 @@ exports.updateProject = async (projectId, projectData) => {
   );
   if (result.rows.length === 0) return null;
   return { ...result.rows[0], name: result.rows[0].title, description: result.rows[0].notes };
+};
+
+exports.cancelProject = async (projectId, userId, userRole) => {
+  await ensureProjectArchiveColumns();
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    const projectResult = await client.query(
+      `${PROJECT_BASE_SELECT}
+       WHERE p.project_id = $1
+         AND COALESCE(p.is_deleted, false) = false`,
+      [projectId]
+    );
+
+    if (projectResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return null;
+    }
+
+    const project = projectResult.rows[0];
+    const isPrivileged = ['staff', 'admin', 'super_admin'].includes(userRole);
+
+    if (!isPrivileged && project.customer_id !== userId) {
+      throw new AppError('You do not have access to this project', 403);
+    }
+
+    const stats = await getProjectTaskStats(client, projectId);
+    const tracking = buildProjectTaskTracking(stats, project.status);
+
+    if (tracking.status === 'cancelled') {
+      throw new AppError('Project is already cancelled', 400);
+    }
+
+    if (tracking.status === 'completed' || tracking.progress >= 80) {
+      throw new AppError('Only projects below 80% progress can be cancelled', 400);
+    }
+
+    await client.query(
+      `UPDATE projects
+       SET status = 'cancelled',
+           updated_at = CURRENT_TIMESTAMP
+       WHERE project_id = $1`,
+      [projectId]
+    );
+
+    await client.query(
+      `UPDATE orders
+       SET status = 'cancelled',
+           updated_at = CURRENT_TIMESTAMP
+       WHERE order_id = $1
+         AND status <> 'cancelled'`,
+      [project.order_id]
+    );
+
+    await logActivity(client, projectId, userId, 'project_cancelled', {
+      previous_status: tracking.status,
+      previous_progress: tracking.progress,
+      order_id: project.order_id,
+    });
+
+    await client.query('COMMIT');
+
+    return attachFulfillmentDetails({
+      ...project,
+      progress: tracking.progress,
+      status: 'cancelled',
+      task_summary: tracking.task_summary,
+      updated_at: new Date(),
+    });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 };
 
 exports.deleteProject = async (projectId, deletedBy = null) => {

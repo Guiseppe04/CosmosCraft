@@ -32,7 +32,7 @@ CREATE TYPE order_payment_status_enum AS ENUM (
     'failed'              -- payment attempt failed (optional fallback)
 );
 CREATE TYPE appointment_status_enum AS ENUM ('pending', 'approved', 'completed', 'cancelled');
-CREATE TYPE project_status_enum AS ENUM ('not_started', 'in_progress', 'completed');
+CREATE TYPE project_status_enum AS ENUM ('not_started', 'in_progress', 'completed', 'cancelled');
 CREATE TYPE notification_type_enum AS ENUM ('order_update', 'appointment_reminder', 'system', 'promotional');
 
 
