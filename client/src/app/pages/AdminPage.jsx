@@ -765,6 +765,19 @@ const PART_RULES = {
   type_mapping: [required('Type Mapping')],
   inventory_category: [required('Category')],
 }
+const normalizeServiceCategoryId = (value) => {
+  const normalized = String(value || '').trim().toLowerCase()
+  if (!normalized) return ''
+
+  const legacyMap = {
+    'setup-intonation': 'setup',
+    refinishing: 'refinishing',
+    'repair-restoration': 'repair',
+    'electronics-upgrade': 'electronics',
+  }
+
+  return legacyMap[normalized] || normalized
+}
 const BUILDER_CATEGORY_MAP = {
   pricing: ['basePrice'],
   body: ['body', 'bodyWood', 'bodyFinish', 'pickguard'],
@@ -860,6 +873,7 @@ const APPOINTMENT_RULES = {
 const SERVICE_RULES = {
   name: [required('Service Name')],
   price: [required('Base Price')],
+  category_id: [required('Category')],
 }
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50]
@@ -2546,6 +2560,10 @@ export function AdminPage() {
        initialForm.duration = Number(data.duration_minutes) / 60
      }
 
+     if (type === 'service') {
+       initialForm.category_id = normalizeServiceCategoryId(data?.category_id || data?.category)
+     }
+
      if (type === 'part') {
        const normalizedPart = normalizeBuilderPart(initialForm)
        initialForm = {
@@ -3013,6 +3031,7 @@ export function AdminPage() {
          description: form.description || '',
          price: Number(form.price),
          duration_minutes: Math.round(Number(form.duration) * 60),
+         category_id: normalizeServiceCategoryId(form.category_id || form.category),
        }
 
        // is_active only sent on update (create defaults to true in DB)
@@ -6186,15 +6205,22 @@ export function AdminPage() {
                     <FormField label="Base Price *" type="number" value={form.price || ''} onChange={v => setForm(f => ({ ...f, price: v }))} placeholder="1500.00" error={formErrors.price} />
                     <FormField label="Duration (hours)" type="number" value={form.duration || ''} onChange={v => setForm(f => ({ ...f, duration: v }))} placeholder="e.g. 2" />
                     <div>
-                      <label className={labelCls}>Category</label>
-                      <select value={form.category || ''} onChange={e => setForm(f => ({ ...f, category: e.target.value }))} className={inputCls}>
+                      <label className={`${labelCls} ${formErrors.category_id ? 'text-red-400' : ''}`}>Category *</label>
+                      <select
+                        value={form.category_id || ''}
+                        onChange={e => {
+                          setForm(f => ({ ...f, category_id: e.target.value }))
+                          setFormErrors(prev => ({ ...prev, category_id: null }))
+                        }}
+                        className={formErrors.category_id ? inputErrCls : inputCls}
+                      >
                         <option value="">Select Category</option>
-                        <option value="setup-intonation">Setup & Intonation</option>
+                        <option value="setup">Setup & Intonation</option>
                         <option value="refinishing">Refinishing</option>
-                        <option value="repair-restoration">Repair & Restoration</option>
-                        <option value="electronics-upgrade">Electronics Upgrade</option>
-                        <option value="custom-guitar-build">Custom Guitar Build</option>
+                        <option value="repair">Repair & Restoration</option>
+                        <option value="electronics">Electronics Upgrade</option>
                       </select>
+                      {formErrors.category_id && <p className="mt-1 text-xs text-red-400">{formErrors.category_id}</p>}
                     </div>
                      <div>
                        <label className={labelCls}>Status</label>
