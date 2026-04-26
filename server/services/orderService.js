@@ -35,13 +35,69 @@ const normalizeAddressValue = (value) => String(value || '')
   .replace(/\s+/g, ' ')
   .toLowerCase()
 
+const countryNameToCode = (() => {
+  const map = new Map([
+    ['philippines', 'PH'],
+    ['the philippines', 'PH'],
+    ['usa', 'US'],
+    ['united states', 'US'],
+    ['united states of america', 'US'],
+    ['uk', 'GB'],
+    ['united kingdom', 'GB'],
+  ])
+
+  if (typeof Intl?.DisplayNames !== 'function' || typeof Intl?.supportedValuesOf !== 'function') {
+    return map
+  }
+
+  try {
+    const displayNames = new Intl.DisplayNames(['en'], { type: 'region' })
+
+    for (const code of Intl.supportedValuesOf('region')) {
+      if (!/^[A-Z]{2}$/.test(code)) continue
+
+      const name = displayNames.of(code)
+      const normalizedName = normalizeAddressValue(name)
+
+      if (normalizedName) {
+        map.set(normalizedName, code)
+      }
+    }
+  } catch (error) {
+    // Keep the alias map if the runtime does not support full region metadata.
+  }
+
+  return map
+})()
+
+const normalizeCountryCode = (value, fallback = 'PH') => {
+  const rawValue = String(value || '').trim()
+
+  if (!rawValue) {
+    return fallback
+  }
+
+  const upperValue = rawValue.toUpperCase()
+  if (/^[A-Z]{2}$/.test(upperValue)) {
+    return upperValue
+  }
+
+  return countryNameToCode.get(normalizeAddressValue(rawValue)) || null
+}
+
+const createValidationError = (message, statusCode = 400) => {
+  const error = new Error(message)
+  error.statusCode = statusCode
+  return error
+}
+
 const getAddressSignature = (address = {}) => ([
   address.line1 ?? address.streetLine1 ?? address.street,
   address.line2 ?? address.streetLine2 ?? address.street2,
   address.city,
   address.province ?? address.stateProvince,
   address.postal_code ?? address.postalZipCode ?? address.postalCode,
-  address.country,
+  normalizeCountryCode(address.country, ''),
 ].map(normalizeAddressValue).join('|'))
 
 const addInventoryReservation = (reservations, productId, quantity) => {
@@ -304,7 +360,7 @@ exports.PAYMENT_STATUS = {
 // Valid payment status transitions (including self-transition for idempotent updates)
 const PAYMENT_STATUS_TRANSITIONS = {
   'pending': ['proof_submitted', 'pending'],
-  'proof_submitted': ['under_review', 'pending', 'proof_submitted'],
+  'proof_submitted': ['under_review', 'approved', 'rejected', 'pending', 'proof_submitted'],
   'under_review': ['approved', 'rejected', 'under_review'],
   'approved': ['approved', 'rejected', 'failed'],
   'rejected': ['pending', 'proof_submitted', 'rejected'],
@@ -343,14 +399,19 @@ exports.createOrder = async (orderData) => {
 
     // Validate required fields
     if (!billingAddress) {
-      throw new Error('Billing address is required')
+      throw createValidationError('Billing address is required')
     }
     if (!billingAddress.street || !billingAddress.city) {
-      throw new Error('Address must include street and city')
+      throw createValidationError('Address must include street and city')
+    }
+
+    const normalizedCountryCode = normalizeCountryCode(billingAddress.country)
+    if (!normalizedCountryCode) {
+      throw createValidationError('Address must include a valid 2-letter country code')
     }
 
     if (paymentMethod === 'cash' && hasCustomBuildItems(items)) {
-      throw new Error('COD is only available for regular product orders. Customized guitars require down payment.')
+      throw createValidationError('COD is only available for regular product orders. Customized guitars require down payment.')
     }
 
     // Calculate totals
@@ -391,7 +452,7 @@ exports.createOrder = async (orderData) => {
             billingAddress.city,
             billingAddress.province || null,
             billingAddress.postalCode || null,
-            billingAddress.country || 'PH'
+            normalizedCountryCode
           ]
         )
         shippingAddressId = addressRes.rows[0].address_id
@@ -472,7 +533,7 @@ exports.createOrder = async (orderData) => {
   } catch (error) {
     await client.query('ROLLBACK')
     console.error('Create order error:', error)
-    throw new Error(error.message || 'Failed to create order')
+    throw error
   } finally {
     client.release()
   }
@@ -484,19 +545,36 @@ exports.getUserOrders = async (userId) => {
     [userId]
   )
 
-  for (const order of res.rows) {
-    const itemsRes = await pool.query(
-      `SELECT customization_id
-       FROM order_items
-       WHERE order_id = $1
-         AND customization_id IS NOT NULL`,
-      [order.order_id]
-    )
-
-    order.customization_ids = itemsRes.rows.map(item => item.customization_id)
+  if (res.rows.length === 0) {
+    return res.rows
   }
 
-  return res.rows
+  const orderIds = res.rows.map((order) => order.order_id)
+  const itemsRes = await pool.query(
+    `SELECT oi.*, pi.image_url
+     FROM order_items oi
+     LEFT JOIN product_images pi ON oi.product_id = pi.product_id AND pi.is_primary = true
+     WHERE oi.order_id = ANY($1)`,
+    [orderIds]
+  )
+
+  const itemsByOrder = itemsRes.rows.reduce((acc, item) => {
+    if (!acc[item.order_id]) acc[item.order_id] = []
+    acc[item.order_id].push(item)
+    return acc
+  }, {})
+
+  return res.rows.map((order) => {
+    const items = itemsByOrder[order.order_id] || []
+
+    return {
+      ...order,
+      items,
+      customization_ids: items
+        .map((item) => item.customization_id)
+        .filter(Boolean),
+    }
+  })
 }
 
 exports.getOrderById = async (orderId, userId) => {
@@ -692,7 +770,7 @@ exports.updatePaymentStatus = async (orderId, status, options = {}) => {
   
   // Validate status transition
   if (!isValidPaymentStatusTransition(currentStatus, status)) {
-    throw new Error(`Invalid payment status transition from '${currentStatus}' to '${status}'`)
+    throw createValidationError(`Invalid payment status transition from '${currentStatus}' to '${status}'`)
   }
 
   // Build update query dynamically
@@ -705,10 +783,13 @@ exports.updatePaymentStatus = async (orderId, status, options = {}) => {
     updateValues.push(reference_number)
   }
 
-  if (status === 'approved') {
+  if (status === 'approved' || status === 'rejected') {
     updateFields.push(`reviewed_by = $${paramIndex++}`)
     updateValues.push(admin_user_id || null)
     updateFields.push(`reviewed_at = CURRENT_TIMESTAMP`)
+  }
+
+  if (status !== 'rejected') {
     updateFields.push(`rejection_reason = NULL`)
   }
 
@@ -771,7 +852,7 @@ exports.approvePayment = async (orderId, options = {}) => {
   
   // Validate transition to approved
   if (!isValidPaymentStatusTransition(currentStatus, 'approved')) {
-    throw new Error(`Cannot approve payment with current status: ${currentStatus}`)
+    throw createValidationError(`Cannot approve payment with current status: ${currentStatus}`)
   }
   
   const res = await pool.query(

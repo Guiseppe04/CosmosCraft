@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from 'react'
 import { CircleDot } from 'lucide-react'
 import {
   bassBuilder,
+  bassAsset,
   BASS_NECK_FRETS,
   BASS_NECK_MASK,
   BASS_NECK_NUT,
@@ -196,6 +197,8 @@ function BassPreview({ config, view, onViewChange, modelImageSrc }) {
     const preferredFrontProfileToken = isHeadless ? 'flat-bottom' : 'round-bottom'
     const stringCountToken = `${resolvedConfig.strings}-string`
     const headstockBasePath = `all-models/headstocks/bass/${stringCountToken}`
+    const rearNeckBasePath = `all-models/necks/bass/${stringCountToken}/back`
+    const rearMaskBasePath = `${rearNeckBasePath}/masks`
     const validHeadstockStyles = new Set(['ch', 'chr', 'gt4', 'gt4r', 'gt5', 'gt5r'])
     const canUseDirectHeadstockPaths = validHeadstockStyles.has(effectiveHeadstockStyle)
     const exactStyleFileToken = `/${effectiveHeadstockStyle}.png`
@@ -279,6 +282,33 @@ function BassPreview({ config, view, onViewChange, modelImageSrc }) {
         })
       )
       : null
+    const headstockStaticMask = !isHeadless && canUseDirectHeadstockPaths
+      ? bassAsset(`${headstockBasePath}/${effectiveHeadstockStyle}/masks/mask.png`)
+      : null
+    const headstockStaticTuners = !isHeadless && canUseDirectHeadstockPaths
+      ? bassAsset(`${headstockBasePath}/${effectiveHeadstockStyle}/tuners/${resolvedConfig.hardware}.png`)
+      : null
+    const headstockStaticLogo = !isHeadless && canUseDirectHeadstockPaths
+      ? bassAsset(`${headstockBasePath}/${effectiveHeadstockStyle}/logos/bl.png`)
+      : null
+    const headstockStaticStrings = !isHeadless && canUseDirectHeadstockPaths
+      ? bassAsset(`${headstockBasePath}/string-overlays/${effectiveHeadstockStyle}.png`)
+      : null
+    const headstockStaticTrussCover = !isHeadless
+      ? bassAsset(`${headstockBasePath}/truss-cover/black.png`)
+      : null
+    const rearNeckStaticMask = bassAsset(`${rearMaskBasePath}/${isFiveString ? 'neck-mask-22f.png' : 'neck-mask-20f.png'}`)
+    const rearNeckStaticMaskGeneric = bassAsset(`${rearMaskBasePath}/neck-mask.png`)
+    const rearHeadstockStaticMask = !isHeadless && canUseDirectHeadstockPaths
+      ? bassAsset(`${rearMaskBasePath}/${effectiveHeadstockStyle}.png`)
+      : null
+    const rearHeadstockStaticTuners = !isHeadless && canUseDirectHeadstockPaths
+      ? bassAsset(`${rearNeckBasePath}/${effectiveHeadstockStyle}/tuners/standard/${resolvedConfig.hardware}.png`)
+      : null
+    const rearHeadstockStaticFinish = !isHeadless && canUseDirectHeadstockPaths
+      ? bassAsset(`${rearNeckBasePath}/${effectiveHeadstockStyle}/finish/multiply.png`)
+      : null
+    const rearNeckStaticFinish = bassAsset(`${rearNeckBasePath}/neck finish/new-multiply-${isFiveString ? '22f' : '20f'}.png`)
 
     const headlessInlayPreset = {
       whiteDots: { family: 'id', material: 'white-pearl' },
@@ -322,7 +352,7 @@ function BassPreview({ config, view, onViewChange, modelImageSrc }) {
       }) || resolveHeadstockAssetWithFallback({
         requiredTokens: ['masks', 'mask'],
         preferTokens: [effectiveHeadstockStyle, 'mask'],
-      }),
+      }) || headstockStaticMask,
       frontFrets: {
         stainless: bassBuilder.resolveSharedAsset('necks/bass', {
           strings: resolvedConfig.strings,
@@ -355,7 +385,7 @@ function BassPreview({ config, view, onViewChange, modelImageSrc }) {
         }) || resolveHeadstockAssetWithFallback({
           requiredTokens: ['tuners'],
           preferTokens: [effectiveHeadstockStyle, resolvedConfig.hardware],
-        })
+        }) || headstockStaticTuners
       )),
       headstockLogo: resolvedHeadstockLogo || (isHeadless ? null : (
         resolveHeadstockAssetWithFallback({
@@ -366,7 +396,7 @@ function BassPreview({ config, view, onViewChange, modelImageSrc }) {
           requiredTokens: ['logos', 'bl'],
           rejectTokens: ['left-handed'],
           preferTokens: [effectiveHeadstockStyle, 'logos'],
-        })
+        }) || headstockStaticLogo
       )),
       headstockStringOverlay: resolvedHeadstockStrings || (isHeadless ? null : (
         resolveHeadstockAssetWithFallback({
@@ -375,7 +405,7 @@ function BassPreview({ config, view, onViewChange, modelImageSrc }) {
         }) || resolveHeadstockAssetWithFallback({
           requiredTokens: ['string-overlays'],
           preferTokens: [effectiveHeadstockStyle, exactStyleFileToken],
-        })
+        }) || headstockStaticStrings
       )),
       headstockTrussCover: isHeadless ? null : (
         resolveHeadstockAssetWithFallback({
@@ -384,7 +414,7 @@ function BassPreview({ config, view, onViewChange, modelImageSrc }) {
         }) || resolveHeadstockAssetWithFallback({
           requiredTokens: ['truss-cover'],
           preferTokens: ['truss-cover'],
-        })
+        }) || headstockStaticTrussCover
       ),
       hardware: bassBuilder.HARDWARE_OPTIONS[resolvedConfig.hardware],
       bridge: getBridgeByStrings(
@@ -420,9 +450,12 @@ function BassPreview({ config, view, onViewChange, modelImageSrc }) {
         resolvedConfig.bassType, 'front', 'masks',
         { strings: resolvedConfig.strings, preferTokens: ['bodymask'] },
       ) || bodyModel.bodySrc,
-      rearBodyMask: bassBuilder.resolveCatalogAsset(
-        resolvedConfig.bassType, 'back', 'masks',
-        { strings: resolvedConfig.strings, preferTokens: ['bodymask'] },
+      rearBodyMask: (
+        bassBuilder.resolveCatalogAsset(
+          resolvedConfig.bassType, 'back', 'masks',
+          { strings: resolvedConfig.strings, preferTokens: ['bodymask'] },
+        )
+        || bassBuilder.BODY_LAYER_ASSETS[resolvedConfig.bassType]?.back?.mask
       ),
       rearNeckMask: (
         bassBuilder.resolveSharedAsset('necks/bass', {
@@ -435,7 +468,39 @@ function BassPreview({ config, view, onViewChange, modelImageSrc }) {
           requiredTokens: ['back', 'masks'],
           preferTokens: ['neck-thru-mask', 'neckthrumask'],
         })
+        || rearNeckStaticMask
+        || rearNeckStaticMaskGeneric
         || BASS_NECK_MASK
+      ),
+      rearHeadstockMask: (
+        !isHeadless && (
+          bassBuilder.resolveSharedAsset('necks/bass', {
+            strings: resolvedConfig.strings,
+            requiredTokens: ['back', 'masks'],
+            preferTokens: [effectiveHeadstockStyle],
+          })
+          || rearHeadstockStaticMask
+        )
+      ),
+      rearHeadstockTuners: (
+        !isHeadless && (
+          bassBuilder.resolveSharedAsset('necks/bass', {
+            strings: resolvedConfig.strings,
+            requiredTokens: ['back', 'tuners', 'standard'],
+            preferTokens: [effectiveHeadstockStyle, resolvedConfig.hardware],
+          })
+          || rearHeadstockStaticTuners
+        )
+      ),
+      rearHeadstockFinish: (
+        !isHeadless && (
+          bassBuilder.resolveSharedAsset('necks/bass', {
+            strings: resolvedConfig.strings,
+            requiredTokens: ['back', 'finish'],
+            preferTokens: [effectiveHeadstockStyle, 'multiply'],
+          })
+          || rearHeadstockStaticFinish
+        )
       ),
       rearNeckFinish: bassBuilder.resolveSharedAsset('necks/bass', {
         strings: resolvedConfig.strings,
@@ -444,7 +509,7 @@ function BassPreview({ config, view, onViewChange, modelImageSrc }) {
       }) || bassBuilder.resolveCatalogAsset(
         resolvedConfig.bassType, 'back', 'shadows_highlights',
         { strings: resolvedConfig.strings, preferTokens: ['multiply'] },
-      ),
+      ) || rearNeckStaticFinish,
       rearGloss: bassBuilder.resolveCatalogAsset(
         resolvedConfig.bassType, 'back', 'shadows_highlights',
         { strings: resolvedConfig.strings, preferTokens: ['gloss'] },
@@ -587,6 +652,8 @@ function BassPreview({ config, view, onViewChange, modelImageSrc }) {
   const rearLayers = useMemo(() => {
     const layers = []
     const rearBodyMask = assets.rearBodyMask || assets.bodyModel?.bodySrc
+    const rearNeckMask = assets.rearNeckMask || BASS_NECK_MASK
+    const rearHeadstockMask = assets.rearHeadstockMask || rearNeckMask
 
     if (rearBodyMask && assets.bodyWood?.texture) {
       layers.push({ name: 'rear-body-wood', maskSrc: rearBodyMask, style: { backgroundImage: `url(${assets.bodyWood.texture})`, opacity: 1, zIndex: 1 } })
@@ -596,11 +663,11 @@ function BassPreview({ config, view, onViewChange, modelImageSrc }) {
     } else if (assets.bodyFinish?.color) {
       layers.push({ name: 'rear-body-finish-color', maskSrc: rearBodyMask, style: { backgroundColor: assets.bodyFinish.color, opacity: 1, zIndex: 2 } })
     }
-    if (assets.rearNeckMask && assets.neck?.src) {
-      layers.push({ name: 'rear-neck-wood', maskSrc: assets.rearNeckMask, style: { backgroundImage: `url(${assets.neck.src})`, filter: assets.neck.filter, opacity: 0.98, zIndex: 3 } })
+    if (rearNeckMask && assets.neck?.src) {
+      layers.push({ name: 'rear-neck-wood', maskSrc: rearNeckMask, style: { backgroundImage: `url(${assets.neck.src})`, filter: assets.neck.filter, opacity: 0.98, zIndex: 3 } })
     }
-    if (assets.rearNeckMask && assets.rearNeckFinish) {
-      layers.push({ name: 'rear-neck-finish', maskSrc: assets.rearNeckMask, style: { backgroundImage: `url(${assets.rearNeckFinish})`, opacity: 0.92, mixBlendMode: 'multiply', zIndex: 4 } })
+    if (rearNeckMask && assets.rearNeckFinish) {
+      layers.push({ name: 'rear-neck-finish', maskSrc: rearNeckMask, style: { backgroundImage: `url(${assets.rearNeckFinish})`, opacity: 0.92, mixBlendMode: 'multiply', zIndex: 4 } })
     }
     if (assets.rearNeckBolts) {
       layers.push({ name: 'rear-neck-bolts', src: assets.rearNeckBolts, style: { zIndex: 5, opacity: 0.95 } })
@@ -614,8 +681,14 @@ function BassPreview({ config, view, onViewChange, modelImageSrc }) {
     const isRearHeadless = assets.isHeadless || resolvedConfig.bassType === 'vader'
     if (isRearHeadless && assets.bodyAssets?.back?.neckCap) {
       layers.push({ name: 'rear-neck-cap', src: assets.bodyAssets.back.neckCap, style: { zIndex: 8, opacity: 0.95 } })
-    } else if (assets.headstockWood?.texture && assets.rearNeckMask) {
-      layers.push({ name: 'rear-headstock-wood', maskSrc: assets.rearNeckMask, style: { backgroundImage: `url(${assets.headstockWood.texture})`, opacity: 0.95, zIndex: 8 } })
+    } else if (assets.headstockWood?.texture && rearHeadstockMask) {
+      layers.push({ name: 'rear-headstock-wood', maskSrc: rearHeadstockMask, style: { backgroundImage: `url(${assets.headstockWood.texture})`, opacity: 0.95, zIndex: 8 } })
+    }
+    if (!isRearHeadless && rearHeadstockMask && assets.rearHeadstockFinish) {
+      layers.push({ name: 'rear-headstock-finish', maskSrc: rearHeadstockMask, style: { backgroundImage: `url(${assets.rearHeadstockFinish})`, opacity: 0.85, mixBlendMode: 'multiply', zIndex: 8.2 } })
+    }
+    if (!isRearHeadless && assets.rearHeadstockTuners) {
+      layers.push({ name: 'rear-headstock-tuners', src: assets.rearHeadstockTuners, style: { zIndex: 8.4, opacity: 0.97 } })
     }
     if (assets.backplate?.src) {
       layers.push({ name: 'backplate', src: assets.backplate.src, style: { zIndex: 9, opacity: 0.95 } })

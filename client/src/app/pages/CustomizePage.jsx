@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react'
 import { useSearchParams, useNavigate, useBlocker } from 'react-router'
 import { 
   RotateCcw, Save, ChevronDown, ChevronRight, Info, 
-  ShoppingCart, Clock, Truck, Shield, Check, CheckCircle,
+  ShoppingCart, Check, CheckCircle,
   Sparkles, Layers, Palette, Cog, Zap, Image, ZoomIn, ZoomOut, Upload, Trash2
 } from 'lucide-react'
 import { exportMaskedPreview } from '../utils/exportMaskedPreview.js'
@@ -1186,39 +1186,6 @@ export function CustomizePage() {
               )}
             </div>
             
-            {/* Quick actions */}
-            <div className="border-t border-white/10 p-4 space-y-2 flex-shrink-0">
-              <button
-                type="button"
-                onClick={resetConfig}
-                className="flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] px-4 py-2.5 text-sm font-medium transition-all duration-200 hover:bg-[var(--surface-dark)]"
-                style={{ color: 'var(--text-muted)' }}
-              >
-                <RotateCcw className="h-4 w-4" />
-                Reset Configuration
-              </button>
-              {isAuthenticated ? (
-                <button
-                  type="button"
-                  onClick={handleSave}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] px-4 py-2.5 text-sm font-medium transition-all duration-200 hover:bg-[var(--surface-dark)]"
-                  style={{ color: 'var(--text-muted)' }}
-                >
-                  <Save className="h-4 w-4" />
-                  Save Build
-                </button>
-              ) : (
-                <div className="h-[42px]" aria-hidden="true" />
-              )}
-              <div className={`inline-flex items-center gap-2 rounded-lg px-3 py-1 text-[11px] font-semibold ${
-                hasUnsavedChanges
-                  ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
-                  : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
-              }`}>
-                <span className={`h-1.5 w-1.5 rounded-full ${hasUnsavedChanges ? 'bg-amber-300' : 'bg-emerald-300'}`} />
-                {hasUnsavedChanges ? 'Unsaved changes' : 'Saved'}
-              </div>
-            </div>
           </aside>
 
           {/* CENTER - Guitar Preview */}
@@ -1245,21 +1212,6 @@ export function CustomizePage() {
                 </div>
               </div>
               
-              {/* Build info badges */}
-              <div className="mt-4 flex flex-wrap gap-3">
-                <div className="flex items-center gap-2 rounded-full bg-white/5 px-3 py-1.5 text-xs text-white/60">
-                  <Clock className="h-3.5 w-3.5" />
-                  <span>Build time: 4-6 weeks</span>
-                </div>
-                <div className="flex items-center gap-2 rounded-full bg-white/5 px-3 py-1.5 text-xs text-white/60">
-                  <Truck className="h-3.5 w-3.5" />
-                  <span>Free worldwide shipping</span>
-                </div>
-                <div className="flex items-center gap-2 rounded-full bg-white/5 px-3 py-1.5 text-xs text-white/60">
-                  <Shield className="h-3.5 w-3.5" />
-                  <span>2-year warranty</span>
-                </div>
-              </div>
             </div>
             
             {/* Guitar Preview */}
@@ -1664,40 +1616,52 @@ export function CustomizePage() {
                   </div>
                 </div>
               </div>
-              
-              {/* Shipping info */}
-              <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 space-y-3">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/5">
-                    <Truck className="h-5 w-5 text-white/60" />
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium">Free Worldwide Shipping</p>
-                    <p className="text-[10px] text-white/40">On all custom builds</p>
-                  </div>
+
+              <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 space-y-2">
+                <button
+                  type="button"
+                  onClick={resetConfig}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] px-4 py-2.5 text-sm font-medium transition-all duration-200 hover:bg-[var(--surface-dark)]"
+                  style={{ color: 'var(--text-muted)' }}
+                >
+                  <RotateCcw className="h-4 w-4" />
+                  Reset
+                </button>
+                {isAuthenticated ? (
+                  <button
+                    type="button"
+                    onClick={handleSave}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] px-4 py-2.5 text-sm font-medium transition-all duration-200 hover:bg-[var(--surface-dark)]"
+                    style={{ color: 'var(--text-muted)' }}
+                  >
+                    <Save className="h-4 w-4" />
+                    Save Build
+                  </button>
+                ) : (
+                  <div className="h-[42px]" aria-hidden="true" />
+                )}
+                <div className={`inline-flex items-center gap-2 rounded-lg px-3 py-1 text-[11px] font-semibold ${
+                  hasUnsavedChanges
+                    ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
+                    : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+                }`}>
+                  <span className={`h-1.5 w-1.5 rounded-full ${hasUnsavedChanges ? 'bg-amber-300' : 'bg-emerald-300'}`} />
+                  {hasUnsavedChanges ? 'Unsaved changes' : 'Saved'}
                 </div>
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/5">
-                    <Clock className="h-5 w-5 text-white/60" />
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium">4-6 Week Build Time</p>
-                    <p className="text-[10px] text-white/40">Handcrafted to order</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/5">
-                    <Shield className="h-5 w-5 text-white/60" />
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium">2-Year Warranty</p>
-                    <p className="text-[10px] text-white/40">Parts and labor</p>
-                  </div>
-                </div>
+                <button
+                  type="button"
+                  onClick={handleLoad}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] px-4 py-2.5 text-sm font-medium transition-all duration-200 hover:bg-[var(--surface-dark)]"
+                  style={{ color: 'var(--text-muted)' }}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                  Load Build
+                </button>
               </div>
+              
             </div>
             
-            {/* Save Image / Load Config */}
+            {/* Save Image */}
             <div className="border-t border-white/10 p-4 flex-shrink-0">
               <div className="flex gap-2">
                 {isAuthenticated ? (
@@ -1713,14 +1677,6 @@ export function CustomizePage() {
                 ) : (
                   <div className="flex-1" aria-hidden="true" />
                 )}
-                <button
-                  type="button"
-                  onClick={handleLoad}
-                  className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 py-2 text-xs font-medium transition-all duration-200 hover:bg-[var(--surface-dark)]"
-                  style={{ color: 'var(--text-muted)' }}
-                >
-                  Load Config
-                </button>
               </div>
             </div>
           </aside>
