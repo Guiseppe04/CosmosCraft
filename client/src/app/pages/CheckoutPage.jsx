@@ -24,16 +24,19 @@ const CUSTOM_BUILD_DOWN_PAYMENT_RATE = 0.5
 const MAX_USER_ADDRESSES = 2
 const ORDER_TAX_RATE = 0
 
+const normalizeAddressValue = (value) => String(value || '')
+  .trim()
+  .replace(/\s+/g, ' ')
+  .toLowerCase()
+
 const getAddressSignature = (address = {}) => ([
-  address.address_id,
-  address.street_line1,
-  address.street_line2,
+  address.street_line1 ?? address.streetLine1 ?? address.street ?? address.line1,
+  address.street_line2 ?? address.streetLine2 ?? address.street2 ?? address.line2,
   address.city,
-  address.province,
-  address.postal_code,
+  address.province ?? address.stateProvince,
+  address.postal_code ?? address.postalZipCode ?? address.postalCode,
   address.country,
-  address.label,
-].map(value => String(value || '').trim().toLowerCase()).join('|'))
+].map(normalizeAddressValue).join('|'))
 
 const isCustomBuildItem = (item = {}) => {
   const itemType = String(item.type || '').toLowerCase()
@@ -1196,6 +1199,17 @@ export function CheckoutPage() {
         country: countryCode,
         isDefault: addressData.isDefault
       }
+
+      const duplicateAddress = uniqueAddresses.find(
+        (address) => getAddressSignature(address) === getAddressSignature(payload)
+      )
+
+      if (duplicateAddress) {
+        setSelectedAddressId(duplicateAddress.address_id)
+        setShowAddAddressModal(false)
+        setAddressError(false)
+        return
+      }
       
       const response = await fetch(`${API}/api/users/me/addresses`, {
         method: 'POST',
@@ -1329,7 +1343,8 @@ export function CheckoutPage() {
       street2: selectedAddress?.street_line2 || '',
       city: selectedAddress?.city || '',
       province: selectedAddress?.province || '',
-      postalCode: selectedAddress?.postal_code || ''
+      postalCode: selectedAddress?.postal_code || '',
+      country: selectedAddress?.country || 'PH'
     }
 
     let additionalNotes = orderNotes?.trim() || ''

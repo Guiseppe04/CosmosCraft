@@ -3078,9 +3078,12 @@ export function AdminPage() {
       if (!product_id || !change_type || !quantity) {
         showToast('Please fill all required fields', 'error'); return
       }
+      const existingProduct = visibleProducts.find((product) => product.product_id === product_id)
+      const currentStock = Number(existingProduct?.stock ?? form.current_stock ?? 0) || 0
+      const qty = Number(quantity)
       const payload = { 
         productId: product_id, 
-        quantity: Number(quantity), 
+        quantity: change_type === 'adjustment' ? qty - currentStock : qty,
         reason: reason || notes,
         notes: notes 
       }
