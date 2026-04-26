@@ -43,6 +43,15 @@ async function runStartupMigrations(client) {
   `);
 
   await client.query(`
+    DO $$
+    BEGIN
+      ALTER TYPE project_status_enum ADD VALUE IF NOT EXISTS 'cancelled';
+    EXCEPTION
+      WHEN duplicate_object THEN NULL;
+    END $$;
+  `);
+
+  await client.query(`
     ALTER TABLE projects
     ADD COLUMN IF NOT EXISTS fulfillment_method VARCHAR(50),
     ADD COLUMN IF NOT EXISTS fulfillment_status VARCHAR(50),
