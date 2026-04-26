@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react'
-import { Package, Search, X, Printer, Download, ArrowUpDown, Grid3X3, List } from 'lucide-react'
+import { Package, Search, X, Printer, Download, ArrowUpDown, Grid3X3, List, ShoppingCart } from 'lucide-react'
 import { posApi } from '../../utils/posApi'
 import { formatCurrency } from '../../utils/formatCurrency'
 import { useSmartPolling } from '../../hooks/useSmartPolling'
@@ -472,6 +472,16 @@ export function PosWorkspace({
       return
     }
 
+    if (paymentMethod === 'cash' && String(cashReceived || '').trim() === '') {
+      showToast?.('Cash received is required for cash payments', 'error')
+      return
+    }
+
+    if (paymentMethod === 'gcash' && !referenceNumber.trim()) {
+      showToast?.('GCash reference number is required', 'error')
+      return
+    }
+
     if (paymentMethod === 'cash' && Number(cashReceived || 0) < total) {
       showToast?.('Cash received is below the total', 'error')
       return
@@ -487,6 +497,7 @@ export function PosWorkspace({
         taxAmount: tax,
         totalAmount: total,
         paymentMethod,
+        cashReceived: paymentMethod === 'cash' ? Number(cashReceived) : null,
         referenceNumber: paymentMethod === 'cash' ? null : (referenceNumber.trim() || null),
         items: cart.map(item => ({
           product_id: item.product_id,
@@ -676,9 +687,11 @@ export function PosWorkspace({
                       <button
                         type="button"
                         onClick={() => addToCart(item)}
-                        className="rounded-lg bg-[var(--gold-primary)] px-3 py-1.5 text-xs font-semibold text-[var(--text-dark)] hover:bg-[var(--gold-secondary)]"
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--gold-primary)] text-[var(--text-dark)] hover:bg-[var(--gold-secondary)]"
+                        title={`Add ${item.name} to cart`}
+                        aria-label={`Add ${item.name} to cart`}
                       >
-                        Add to cart
+                        <ShoppingCart className="h-4 w-4" />
                       </button>
                     </div>
                   ))}
@@ -748,7 +761,6 @@ export function PosWorkspace({
                 {[
                   ['cash', 'Cash'],
                   ['gcash', 'QRIS'],
-                  ['bank_transfer', 'Debit Card'],
                 ].map(([method, label]) => (
                   <button
                     key={method}

@@ -928,6 +928,14 @@ export function DashboardPage() {
                   <div>
                     <h3 className="text-lg font-bold text-white">{project.name}</h3>
                     <p className="text-[var(--text-muted)] text-sm mt-1">{project.description || 'Custom Build Project'}</p>
+                    <p className="text-[var(--text-muted)] text-sm mt-2">
+                      Estimated completion:{' '}
+                      <span className="text-white font-medium">
+                        {project.estimated_completion_date
+                          ? new Date(project.estimated_completion_date).toLocaleDateString()
+                          : 'Not set'}
+                      </span>
+                    </p>
                     <div className="mt-4 flex items-center gap-4">
                       <span className="px-2 py-0.5 border border-[var(--border)] rounded-full text-xs font-semibold text-white">{project.status}</span>
                       <span className="text-[var(--gold-primary)] font-bold text-sm">{project.progress}% Complete</span>

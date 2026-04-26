@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 
-const GCASH_QR_CODE = '/images/payment/gcash-qr.png'
+const GCASH_QR_CODE = '/gcashqrcode.png'
 
 const BANK_DETAILS = {
   bankName: 'BDO Unibank',
@@ -81,6 +81,7 @@ export function PaymentModal({
   onSubmit,
   total,
   fullTotal = total,
+  items = [],
   isProcessing,
   requiresCustomTerms = false,
   downPaymentRate = 0.5,
@@ -90,6 +91,7 @@ export function PaymentModal({
   const [paymentPlan, setPaymentPlan] = useState('down_payment')
   const [receipt, setReceipt] = useState(null)
   const [error, setError] = useState('')
+  const [showGcashQr, setShowGcashQr] = useState(true)
 
   useEffect(() => {
     if (!isOpen) return
@@ -98,6 +100,7 @@ export function PaymentModal({
     setPaymentPlan(requiresCustomTerms ? 'down_payment' : 'full')
     setReceipt(null)
     setError('')
+    setShowGcashQr(true)
   }, [isOpen, requiresCustomTerms, allowCashOnDelivery])
 
   const downPaymentAmount = Number.isFinite(Number(total)) ? Number(total) : 0
@@ -331,8 +334,20 @@ export function PaymentModal({
                     <p className="mt-1 text-xs text-slate-500">Mobile Payment Solution</p>
                   </div>
                   <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-md">
-                    <img src={GCASH_QR_CODE} alt="GCash QR code" className="mx-auto h-auto w-full max-w-xs object-contain" />
+                    {showGcashQr && (
+                      <img
+                        src={GCASH_QR_CODE}
+                        alt="GCash QR code"
+                        className="mx-auto h-auto w-full max-w-xs object-contain"
+                        onError={() => setShowGcashQr(false)}
+                      />
+                    )}
                   </div>
+                  {!showGcashQr && (
+                    <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                      GCash payment image is unavailable. Please ask admin for updated QR details.
+                    </div>
+                  )}
                   <p className="text-sm leading-relaxed text-slate-600">
                     Scan the QR code in your GCash app, pay the exact amount of PHP {amountDue.toLocaleString('en-PH', { maximumFractionDigits: 2 })}, and upload the receipt below.
                   </p>
@@ -390,6 +405,32 @@ export function PaymentModal({
                   </p>
                 </motion.div>
               )}
+            </div>
+
+            <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Payment Checkout</p>
+              <div className="mt-3 space-y-2">
+                {(Array.isArray(items) ? items : []).length === 0 ? (
+                  <p className="text-sm text-slate-500">No items selected.</p>
+                ) : (
+                  (Array.isArray(items) ? items : []).map((item, index) => {
+                    const imageSrc = item?.image || item?.image_url || '/assets/placeholder.jpg'
+                    const quantity = Number(item?.quantity ?? item?.qty ?? 1) || 1
+
+                    return (
+                      <div key={`${item?.id || item?.productId || index}`} className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5">
+                        <div className="h-12 w-12 overflow-hidden rounded-lg border border-slate-200 bg-white">
+                          <img src={imageSrc} alt={item?.name || 'Checkout item'} className="h-full w-full object-cover" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-semibold text-slate-900">{item?.name || 'Item'}</p>
+                          <p className="text-xs text-slate-500">Qty: {quantity}</p>
+                        </div>
+                      </div>
+                    )
+                  })
+                )}
+              </div>
             </div>
           </div>
 

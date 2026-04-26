@@ -531,11 +531,18 @@ exports.getAvailableSlots = async (req, res, next) => {
       throw new AppError('date parameter is required (YYYY-MM-DD)', 400);
     }
 
+    const dailyLoad = await appointmentService.getDailyAppointmentLoad(new Date(date));
     const slots = await appointmentService.getAvailableSlots(
       parseInt(serviceId, 10),
       new Date(date),
       parseInt(slot_duration, 10)
     );
+
+    const availabilityStatus = dailyLoad.is_unavailable
+      ? 'unavailable'
+      : dailyLoad.is_fully_booked
+        ? 'fully_booked'
+        : 'open';
 
     res.json({
       status: 'success',
@@ -545,6 +552,9 @@ exports.getAvailableSlots = async (req, res, next) => {
         slot_duration: parseInt(slot_duration, 10),
         available_slots: slots,
         total_available: slots.length,
+        availability_status: availabilityStatus,
+        daily_appointments: dailyLoad.active_appointments,
+        max_daily_appointments: dailyLoad.max_appointments,
       },
     });
   } catch (err) {

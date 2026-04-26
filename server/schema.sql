@@ -562,16 +562,21 @@ CREATE TABLE projects (
     fulfillment_notes TEXT,
     fulfillment_selected_at TIMESTAMPTZ,
     pickup_appointment_id UUID,
+    is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
+    deleted_at TIMESTAMPTZ,
+    deleted_by UUID,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     
     FOREIGN KEY (order_id) REFERENCES orders(order_id) ON DELETE CASCADE,
-    FOREIGN KEY (pickup_appointment_id) REFERENCES appointments(appointment_id) ON DELETE SET NULL
+    FOREIGN KEY (pickup_appointment_id) REFERENCES appointments(appointment_id) ON DELETE SET NULL,
+    FOREIGN KEY (deleted_by) REFERENCES users(user_id) ON DELETE SET NULL
 );
 
 CREATE INDEX idx_projects_order_id ON projects(order_id);
 CREATE INDEX idx_projects_status ON projects(status);
 CREATE INDEX idx_projects_fulfillment_method ON projects(fulfillment_method);
+CREATE INDEX idx_projects_is_deleted ON projects(is_deleted);
 
 
 -- =============================================

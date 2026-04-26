@@ -1,5 +1,38 @@
 const { pool } = require('../config/database');
 const { AppError } = require('../middleware/errorHandler');
+let projectArchiveColumnsReadyPromise = null;
+
+const ensureProjectArchiveColumns = async () => {
+  if (projectArchiveColumnsReadyPromise) return projectArchiveColumnsReadyPromise;
+
+  projectArchiveColumnsReadyPromise = (async () => {
+    const checkRes = await pool.query(
+      `SELECT column_name
+       FROM information_schema.columns
+       WHERE table_name = 'projects'
+         AND table_schema = current_schema()
+         AND column_name IN ('is_deleted', 'deleted_at', 'deleted_by')`
+    );
+
+    const existing = new Set(checkRes.rows.map((row) => row.column_name));
+
+    if (!existing.has('is_deleted')) {
+      await pool.query(`ALTER TABLE projects ADD COLUMN is_deleted BOOLEAN NOT NULL DEFAULT false`);
+    }
+    if (!existing.has('deleted_at')) {
+      await pool.query(`ALTER TABLE projects ADD COLUMN deleted_at TIMESTAMPTZ`);
+    }
+    if (!existing.has('deleted_by')) {
+      await pool.query(`ALTER TABLE projects ADD COLUMN deleted_by UUID REFERENCES users(user_id) ON DELETE SET NULL`);
+    }
+  })()
+    .catch((error) => {
+      projectArchiveColumnsReadyPromise = null;
+      throw error;
+    });
+
+  return projectArchiveColumnsReadyPromise;
+};
 
 const normalizeProjectStatus = (status) => {
   const normalized = String(status || '').trim().toLowerCase().replace(/\s+/g, '_')
@@ -176,7 +209,12 @@ const applyProjectTaskTracking = async (db, project, { stats = null, persist = f
 };
 
 exports.getProjects = async () => {
-  const result = await pool.query(`${PROJECT_BASE_SELECT} ORDER BY p.created_at DESC`);
+  await ensureProjectArchiveColumns();
+  const result = await pool.query(
+    `${PROJECT_BASE_SELECT}
+     WHERE COALESCE(p.is_deleted, false) = false
+     ORDER BY p.created_at DESC`
+  );
 
   return Promise.all(
     result.rows.map(async (project) => {
@@ -187,8 +225,11 @@ exports.getProjects = async () => {
 };
 
 exports.getProjectById = async (projectId) => {
+  await ensureProjectArchiveColumns();
   const result = await pool.query(
-    `${PROJECT_BASE_SELECT} WHERE p.project_id = $1`,
+    `${PROJECT_BASE_SELECT}
+     WHERE p.project_id = $1
+       AND COALESCE(p.is_deleted, false) = false`,
     [projectId]
   );
   if (result.rows.length === 0) return null;
@@ -197,9 +238,11 @@ exports.getProjectById = async (projectId) => {
 };
 
 exports.getMyProjects = async (userId) => {
+  await ensureProjectArchiveColumns();
   const result = await pool.query(
     `${PROJECT_BASE_SELECT}
      WHERE o.user_id = $1
+       AND COALESCE(p.is_deleted, false) = false
      ORDER BY p.created_at DESC`,
     [userId]
   );
@@ -224,6 +267,7 @@ exports.getMyProjects = async (userId) => {
 };
 
 exports.createProject = async (projectData) => {
+  await ensureProjectArchiveColumns();
   const { order_id, orderId, title, name, status, description, notes, estimated_completion_date } = projectData;
   const projectOrderId = order_id || orderId
   const projectTitle = title || name
@@ -239,6 +283,7 @@ exports.createProject = async (projectData) => {
 };
 
 exports.updateProject = async (projectId, projectData) => {
+  await ensureProjectArchiveColumns();
   const { title, name, status, description, notes, estimated_completion_date } = projectData;
   const normalizedStatus = normalizeProjectStatus(status)
 
@@ -249,15 +294,45 @@ exports.updateProject = async (projectId, projectData) => {
          notes = COALESCE($3, notes),
          estimated_completion_date = COALESCE($4, estimated_completion_date),
          updated_at = CURRENT_TIMESTAMP
-     WHERE project_id = $5 RETURNING *`,
+     WHERE project_id = $5
+       AND COALESCE(is_deleted, false) = false
+     RETURNING *`,
     [title || name, normalizedStatus, notes ?? description, estimated_completion_date || null, projectId]
   );
   if (result.rows.length === 0) return null;
   return { ...result.rows[0], name: result.rows[0].title, description: result.rows[0].notes };
 };
 
-exports.deleteProject = async (projectId) => {
-  const result = await pool.query('DELETE FROM projects WHERE project_id = $1 RETURNING *', [projectId]);
+exports.deleteProject = async (projectId, deletedBy = null) => {
+  await ensureProjectArchiveColumns();
+  const result = await pool.query(
+    `UPDATE projects
+     SET is_deleted = true,
+         deleted_at = CURRENT_TIMESTAMP,
+         deleted_by = $2,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE project_id = $1
+       AND COALESCE(is_deleted, false) = false
+     RETURNING *`,
+    [projectId, deletedBy]
+  );
+  if (result.rows.length === 0) return null;
+  return result.rows[0];
+};
+
+exports.restoreProject = async (projectId) => {
+  await ensureProjectArchiveColumns();
+  const result = await pool.query(
+    `UPDATE projects
+     SET is_deleted = false,
+         deleted_at = NULL,
+         deleted_by = NULL,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE project_id = $1
+       AND COALESCE(is_deleted, false) = true
+     RETURNING *`,
+    [projectId]
+  );
   if (result.rows.length === 0) return null;
   return result.rows[0];
 };
@@ -297,10 +372,13 @@ const logActivity = async (client, projectId, userId, actionType, details) => {
 };
 
 exports.getProjectHierarchy = async (projectId) => {
+  await ensureProjectArchiveColumns();
   const client = await pool.connect();
   try {
     const pResult = await client.query(
-      `${PROJECT_BASE_SELECT} WHERE p.project_id = $1`,
+      `${PROJECT_BASE_SELECT}
+       WHERE p.project_id = $1
+         AND COALESCE(p.is_deleted, false) = false`,
       [projectId]
     );
     if (pResult.rows.length === 0) return null;
@@ -458,12 +536,15 @@ exports.getProjectHierarchy = async (projectId) => {
 };
 
 exports.submitFulfillmentChoice = async (projectId, userId, userRole, data = {}) => {
+  await ensureProjectArchiveColumns();
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
     const projectResult = await client.query(
-      `${PROJECT_BASE_SELECT} WHERE p.project_id = $1`,
+      `${PROJECT_BASE_SELECT}
+       WHERE p.project_id = $1
+         AND COALESCE(p.is_deleted, false) = false`,
       [projectId]
     );
 

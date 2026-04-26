@@ -38,6 +38,7 @@ exports.createSale = async (
     taxAmount = 0,
     totalAmount = 0,
     paymentMethod = 'cash',
+    cashReceived = null,
     referenceNumber = null,
     status = 'completed',
     items = []
@@ -52,12 +53,33 @@ exports.createSale = async (
     throw new AppError('Staff member not found or inactive', 404);
   }
 
-  const normalizedPaymentMethod = ['cash', 'gcash', 'bank_transfer'].includes(paymentMethod) ? paymentMethod : 'cash';
+  const normalizedPaymentMethod = String(paymentMethod || '').toLowerCase();
+  if (!['cash', 'gcash'].includes(normalizedPaymentMethod)) {
+    throw new AppError('Only cash and GCash are allowed for POS payments', 400);
+  }
   const normalizedStatus = ['pending', 'completed', 'cancelled'].includes(status) ? status : 'completed';
   const normalizedSubtotal = Math.max(0, Number(subtotal || 0));
   const normalizedTaxAmount = 0;
   const normalizedTotalAmount = normalizedSubtotal;
   const paymentStatus = normalizedPaymentMethod === 'cash' ? 'verified' : 'pending';
+  const normalizedReferenceNumber = referenceNumber == null ? null : String(referenceNumber).trim();
+  const normalizedCashReceived = cashReceived == null || String(cashReceived).trim() === ''
+    ? null
+    : Number(cashReceived);
+
+  if (normalizedPaymentMethod === 'gcash' && !normalizedReferenceNumber) {
+    throw new AppError('GCash reference number is required', 400);
+  }
+
+  if (normalizedPaymentMethod === 'cash') {
+    if (normalizedCashReceived == null || !Number.isFinite(normalizedCashReceived)) {
+      throw new AppError('Cash received is required for cash payments', 400);
+    }
+    if (normalizedCashReceived < normalizedTotalAmount) {
+      throw new AppError('Cash received is below total amount', 400);
+    }
+  }
+
   const completedAt = normalizedStatus === 'completed' ? new Date() : null;
   const saleNumber = await generateSaleNumber();
 
@@ -86,7 +108,7 @@ exports.createSale = async (
         normalizedPaymentMethod,
         paymentStatus,
         normalizedStatus,
-        referenceNumber,
+        normalizedReferenceNumber,
         notes,
         completedAt
       ]
@@ -479,8 +501,12 @@ exports.updateSaleInfo = async (saleId, { paymentMethod, customerName, customerP
   let idx = 1;
 
   if (paymentMethod) {
+    const normalizedPaymentMethod = String(paymentMethod).toLowerCase();
+    if (!['cash', 'gcash'].includes(normalizedPaymentMethod)) {
+      throw new AppError('Only cash and GCash are allowed for POS payments', 400);
+    }
     updates.push(`payment_method = $${idx}`);
-    values.push(paymentMethod);
+    values.push(normalizedPaymentMethod);
     idx++;
   }
   if (customerName !== undefined) {
@@ -527,6 +553,16 @@ exports.checkoutSale = async (
   paymentMethod,
   { referenceNumber = null, notes = null }
 ) => {
+  const normalizedPaymentMethod = String(paymentMethod || '').toLowerCase();
+  if (!['cash', 'gcash'].includes(normalizedPaymentMethod)) {
+    throw new AppError('Only cash and GCash are allowed for POS checkout', 400);
+  }
+
+  const normalizedReferenceNumber = referenceNumber == null ? null : String(referenceNumber).trim();
+  if (normalizedPaymentMethod === 'gcash' && !normalizedReferenceNumber) {
+    throw new AppError('GCash reference number is required', 400);
+  }
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -602,7 +638,7 @@ exports.checkoutSale = async (
         reference_number = $4, completed_at = now(), updated_at = now()
        WHERE sale_id = $5
        RETURNING sale_id, sale_number, total_amount, status, payment_status`,
-      ['completed', paymentMethod === 'cash' ? 'verified' : 'pending', paymentMethod, referenceNumber, saleId]
+      ['completed', normalizedPaymentMethod === 'cash' ? 'verified' : 'pending', normalizedPaymentMethod, normalizedReferenceNumber, saleId]
     );
 
     // Create pos_payment record
@@ -613,9 +649,9 @@ exports.checkoutSale = async (
       [
         saleId,
         sale.total_amount,
-        paymentMethod,
-        paymentMethod === 'cash' ? 'verified' : 'pending',
-        referenceNumber,
+        normalizedPaymentMethod,
+        normalizedPaymentMethod === 'cash' ? 'verified' : 'pending',
+        normalizedReferenceNumber,
         notes
       ]
     );

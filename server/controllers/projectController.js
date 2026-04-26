@@ -30,9 +30,15 @@ exports.updateProject = asyncHandler(async (req, res, next) => {
 });
 
 exports.deleteProject = asyncHandler(async (req, res, next) => {
-  const project = await projectService.deleteProject(req.params.id);
+  const project = await projectService.deleteProject(req.params.id, req.user?.id || null);
   if (!project) throw new AppError('Project not found', 404);
-  res.json({ status: 'success', data: null });
+  res.json({ status: 'success', data: project });
+});
+
+exports.restoreProject = asyncHandler(async (req, res, next) => {
+  const project = await projectService.restoreProject(req.params.id);
+  if (!project) throw new AppError('Project not found', 404);
+  res.json({ status: 'success', data: project });
 });
 
 exports.assignTeam = asyncHandler(async (req, res, next) => {

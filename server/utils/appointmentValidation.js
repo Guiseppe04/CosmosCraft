@@ -6,6 +6,16 @@
 
 const Joi = require('joi');
 
+const GUITAR_TYPE_VALUES = ['electric', 'bass', 'acoustic', 'ukulele'];
+
+const guitarEntrySchema = Joi.object({
+  brand: Joi.string().required(),
+  model: Joi.string().required(),
+  type: Joi.string().valid(...GUITAR_TYPE_VALUES).required(),
+  serial: Joi.string().allow('').optional().default('N/A'),
+  notes: Joi.string().allow('').optional(),
+});
+
 const appointmentValidation = {
   // ─── CREATE APPOINTMENT (Type-Aware) ──────────────────────────────────────
 
@@ -35,11 +45,29 @@ const appointmentValidation = {
     location_id: Joi.string().optional(),
 
     guitar_details: Joi.object({
-      brand: Joi.string().required(),
-      model: Joi.string().required(),
-      serial: Joi.string().required(),
-      notes: Joi.string().allow('').optional()
-    }).optional(),
+      brand: Joi.string().optional(),
+      model: Joi.string().optional(),
+      type: Joi.string().valid(...GUITAR_TYPE_VALUES).optional(),
+      serial: Joi.string().allow('').optional(),
+      notes: Joi.string().allow('').optional(),
+      guitars: Joi.array().items(guitarEntrySchema).min(1).optional(),
+    })
+      .custom((value, helpers) => {
+        const hasLegacySingle = Boolean(value?.brand && value?.model);
+        const hasMulti = Array.isArray(value?.guitars) && value.guitars.length > 0;
+
+        if (!hasLegacySingle && !hasMulti) {
+          return helpers.error('any.custom', {
+            message: 'guitar_details must include either guitars[] or brand/model fields',
+          });
+        }
+
+        return value;
+      })
+      .optional()
+      .messages({
+        'any.custom': '{{#message}}',
+      }),
 
     // Order ID - Required for pickup, forbidden for service
     order_id: Joi.string()

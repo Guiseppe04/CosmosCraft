@@ -7,6 +7,105 @@
 const { pool } = require('../config/database');
 const { AppError } = require('../middleware/errorHandler');
 
+const NON_BLOCKING_APPOINTMENT_STATUSES = ['cancelled', 'rejected'];
+const MAX_APPOINTMENTS_PER_DAY = 5;
+
+function normalizeGuitarDetails(guitarDetails = {}) {
+  const source = (guitarDetails && typeof guitarDetails === 'object') ? guitarDetails : {};
+  const guitars = Array.isArray(source.guitars) ? source.guitars : [];
+
+  if (guitars.length > 0) {
+    const normalizedGuitars = guitars.map((entry) => ({
+      brand: entry?.brand || '',
+      model: entry?.model || '',
+      type: String(entry?.type || '').toLowerCase(),
+      serial: entry?.serial || 'N/A',
+      notes: entry?.notes || '',
+    }));
+
+    const firstGuitar = normalizedGuitars[0] || {};
+
+    return {
+      ...source,
+      brand: source.brand || firstGuitar.brand || '',
+      model: source.model || firstGuitar.model || '',
+      type: String(source.type || firstGuitar.type || '').toLowerCase(),
+      serial: source.serial || firstGuitar.serial || 'N/A',
+      notes: source.notes || firstGuitar.notes || '',
+      guitars: normalizedGuitars,
+    };
+  }
+
+  return {
+    ...source,
+    type: String(source.type || '').toLowerCase(),
+    serial: source.serial || 'N/A',
+  };
+}
+
+async function assertNoScheduleConflict(client, scheduledAt, excludeAppointmentId = null) {
+  const unavailableRes = await client.query(
+    `SELECT id FROM unavailable_dates WHERE date = ($1::timestamptz)::date LIMIT 1`,
+    [scheduledAt]
+  );
+
+  if (unavailableRes.rows.length > 0) {
+    throw new AppError('Selected appointment date is unavailable', 409);
+  }
+
+  const dayCount = await getActiveAppointmentCountForDate(client, scheduledAt, excludeAppointmentId);
+  if (dayCount >= MAX_APPOINTMENTS_PER_DAY) {
+    throw new AppError('Selected date is fully booked', 409);
+  }
+
+  const params = [scheduledAt];
+  let query = `
+    SELECT appointment_id
+    FROM appointments
+    WHERE date_trunc('minute', scheduled_at) = date_trunc('minute', $1::timestamptz)
+      AND lower(status::text) NOT IN (${NON_BLOCKING_APPOINTMENT_STATUSES.map((_, index) => `$${index + 2}`).join(', ')})
+  `;
+
+  params.push(...NON_BLOCKING_APPOINTMENT_STATUSES);
+
+  if (excludeAppointmentId) {
+    params.push(excludeAppointmentId);
+    query += ` AND appointment_id <> $${params.length}`;
+  }
+
+  query += ' LIMIT 1';
+
+  const conflictRes = await client.query(query, params);
+  if (conflictRes.rows.length > 0) {
+    throw new AppError('Selected appointment schedule is no longer available', 409);
+  }
+}
+
+async function getActiveAppointmentCountForDate(db, date, excludeAppointmentId = null) {
+  const startOfDay = new Date(date);
+  startOfDay.setHours(0, 0, 0, 0);
+
+  const endOfDay = new Date(date);
+  endOfDay.setHours(23, 59, 59, 999);
+
+  const params = [startOfDay, endOfDay, ...NON_BLOCKING_APPOINTMENT_STATUSES];
+  let query = `
+    SELECT COUNT(*)::int AS active_count
+    FROM appointments
+    WHERE scheduled_at >= $1
+      AND scheduled_at <= $2
+      AND lower(status::text) NOT IN (${NON_BLOCKING_APPOINTMENT_STATUSES.map((_, index) => `$${index + 3}`).join(', ')})
+  `;
+
+  if (excludeAppointmentId) {
+    params.push(excludeAppointmentId);
+    query += ` AND appointment_id <> $${params.length}`;
+  }
+
+  const result = await db.query(query, params);
+  return Number(result.rows?.[0]?.active_count || 0);
+}
+
 function formatAppointmentResponse(appointment) {
   // Defensive parsing for postgres JSON strings
   let parsedServices = appointment.services;
@@ -57,6 +156,10 @@ exports.createAppointment = async ({ appointment_type = 'service_in_shop', servi
       if (userResult.rows.length === 0) throw new AppError('User not found', 400);
     }
 
+    await assertNoScheduleConflict(client, scheduled_at);
+
+    const normalizedGuitarDetails = normalizeGuitarDetails(guitar_details || {});
+
     const appointmentResult = await client.query(
       `INSERT INTO appointments (user_id, appointment_type, order_id, services, location_id, guitar_details, scheduled_at, status, notes, confirmation_notes, created_at, updated_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', $8, $9, now(), now())
@@ -67,7 +170,7 @@ exports.createAppointment = async ({ appointment_type = 'service_in_shop', servi
         order_id,
         JSON.stringify(Array.isArray(services) ? services : []),
         location_id || null,
-        JSON.stringify(guitar_details || {}),
+        JSON.stringify(normalizedGuitarDetails),
         scheduled_at,
         notes || null,
         confirmation_notes || null,
@@ -182,25 +285,64 @@ exports.getAppointmentsByDateRange = async (startDate, endDate, filters = {}) =>
 
 exports.updateAppointment = async (appointmentId, updates) => {
   const { scheduled_at, status, notes, confirmation_notes } = updates;
-  const currentAppt = await this.getAppointmentById(appointmentId);
-  if (!currentAppt) throw new AppError('Appointment not found', 404);
-  
-  const setClauses = [];
-  const params = [];
-  let idx = 1;
+  const client = await pool.connect();
 
-  if (scheduled_at) { setClauses.push(`scheduled_at = $${idx++}`); params.push(scheduled_at); }
-  if (status !== undefined) { setClauses.push(`status = $${idx++}`); params.push(status); }
-  if (notes !== undefined) { setClauses.push(`notes = $${idx++}`); params.push(notes || null); }
-  if (confirmation_notes !== undefined) { setClauses.push(`confirmation_notes = $${idx++}`); params.push(confirmation_notes || null); }
+  try {
+    await client.query('BEGIN');
 
-  if (setClauses.length === 0) return currentAppt;
-  setClauses.push(`updated_at = now()`);
-  
-  params.push(appointmentId);
-  await pool.query(`UPDATE appointments SET ${setClauses.join(', ')} WHERE appointment_id = $${idx} RETURNING *`, params);
-  
-  return this.getAppointmentById(appointmentId);
+    const currentRes = await client.query(
+      'SELECT * FROM appointments WHERE appointment_id = $1 FOR UPDATE',
+      [appointmentId]
+    );
+
+    if (currentRes.rows.length === 0) {
+      throw new AppError('Appointment not found', 404);
+    }
+
+    const currentAppt = formatAppointmentResponse(currentRes.rows[0]);
+    const setClauses = [];
+    const params = [];
+    let idx = 1;
+
+    if (scheduled_at) {
+      await assertNoScheduleConflict(client, scheduled_at, appointmentId);
+      setClauses.push(`scheduled_at = $${idx++}`);
+      params.push(scheduled_at);
+    }
+    if (status !== undefined) {
+      setClauses.push(`status = $${idx++}`);
+      params.push(status);
+    }
+    if (notes !== undefined) {
+      setClauses.push(`notes = $${idx++}`);
+      params.push(notes || null);
+    }
+    if (confirmation_notes !== undefined) {
+      setClauses.push(`confirmation_notes = $${idx++}`);
+      params.push(confirmation_notes || null);
+    }
+
+    if (setClauses.length === 0) {
+      await client.query('COMMIT');
+      return currentAppt;
+    }
+
+    setClauses.push(`updated_at = now()`);
+    params.push(appointmentId);
+
+    await client.query(
+      `UPDATE appointments SET ${setClauses.join(', ')} WHERE appointment_id = $${idx} RETURNING *`,
+      params
+    );
+
+    await client.query('COMMIT');
+    return this.getAppointmentById(appointmentId);
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 };
 
 exports.rescheduleAppointment = async (appointmentId, newScheduledAt, reason) => this.updateAppointment(appointmentId, { scheduled_at: newScheduledAt, notes: reason ? `Rescheduled: ${reason}` : 'Rescheduled' });
@@ -300,7 +442,7 @@ exports.removeUnavailableDate = async (dateId) => {
 
 exports.isDateUnavailable = async (date) => {
   const result = await pool.query(
-    `SELECT id FROM unavailable_dates WHERE date = $1`,
+    `SELECT id FROM unavailable_dates WHERE date = ($1::timestamptz)::date`,
     [date]
   );
   return result.rows.length > 0;
@@ -341,6 +483,9 @@ exports.getAvailableSlots = async (serviceId, date, slotDuration = 30) => {
   const isUnavailable = await this.isDateUnavailable(date);
   if (isUnavailable) return [];
 
+  const activeAppointmentsForDay = await getActiveAppointmentCountForDate(pool, date);
+  if (activeAppointmentsForDay >= MAX_APPOINTMENTS_PER_DAY) return [];
+
   // Get existing appointments for the date
   const startOfDay = new Date(date);
   startOfDay.setHours(0, 0, 0, 0);
@@ -349,13 +494,16 @@ exports.getAvailableSlots = async (serviceId, date, slotDuration = 30) => {
 
   const appointmentsResult = await pool.query(
     `SELECT scheduled_at, estimated_end_at FROM appointments 
-     WHERE scheduled_at >= $1 AND scheduled_at <= $2 AND status NOT IN ('cancelled')`,
+     WHERE scheduled_at >= $1 AND scheduled_at <= $2 AND lower(status::text) NOT IN ('cancelled', 'rejected')`,
     [startOfDay, endOfDay]
   );
 
   const bookedSlots = appointmentsResult.rows.map(apt => ({
     start: new Date(apt.scheduled_at),
-    end: new Date(apt.estimated_end_at || apt.scheduled_at)
+    end: new Date(
+      apt.estimated_end_at
+      || new Date(new Date(apt.scheduled_at).getTime() + slotDuration * 60 * 1000)
+    )
   }));
 
   // Generate available slots (9 AM to 6 PM)
@@ -400,6 +548,9 @@ exports.checkAvailability = async (serviceId, scheduledAt, durationMinutes) => {
   const isUnavailable = await this.isDateUnavailable(dateStr);
   if (isUnavailable) return false;
 
+  const activeAppointmentsForDay = await getActiveAppointmentCountForDate(pool, scheduledAt);
+  if (activeAppointmentsForDay >= MAX_APPOINTMENTS_PER_DAY) return false;
+
   const startOfDay = new Date(date);
   startOfDay.setHours(0, 0, 0, 0);
   const endOfDay = new Date(date);
@@ -407,7 +558,7 @@ exports.checkAvailability = async (serviceId, scheduledAt, durationMinutes) => {
 
   const appointmentsResult = await pool.query(
     `SELECT scheduled_at, estimated_end_at FROM appointments 
-     WHERE scheduled_at >= $1 AND scheduled_at <= $2 AND status NOT IN ('cancelled')`,
+     WHERE scheduled_at >= $1 AND scheduled_at <= $2 AND lower(status::text) NOT IN ('cancelled', 'rejected')`,
     [startOfDay, endOfDay]
   );
 
@@ -417,7 +568,9 @@ exports.checkAvailability = async (serviceId, scheduledAt, durationMinutes) => {
 
   for (const apt of appointmentsResult.rows) {
     const bookedStart = new Date(apt.scheduled_at);
-    const bookedEnd = new Date(apt.estimated_end_at || bookedStart);
+    const bookedEnd = new Date(
+      apt.estimated_end_at || new Date(bookedStart.getTime() + (durationMinutes || 60) * 60 * 1000)
+    );
 
     if ((slotStart >= bookedStart && slotStart < bookedEnd) ||
         (slotEnd > bookedStart && slotEnd <= bookedEnd) ||
@@ -427,4 +580,18 @@ exports.checkAvailability = async (serviceId, scheduledAt, durationMinutes) => {
   }
 
   return true;
+};
+
+exports.getDailyAppointmentLoad = async (date, excludeAppointmentId = null) => {
+  const day = new Date(date);
+  const isUnavailable = await this.isDateUnavailable(day);
+  const count = await getActiveAppointmentCountForDate(pool, day, excludeAppointmentId);
+
+  return {
+    date: day.toISOString().slice(0, 10),
+    active_appointments: count,
+    max_appointments: MAX_APPOINTMENTS_PER_DAY,
+    is_unavailable: Boolean(isUnavailable),
+    is_fully_booked: count >= MAX_APPOINTMENTS_PER_DAY,
+  };
 };

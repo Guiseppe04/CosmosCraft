@@ -1702,6 +1702,7 @@ export function CheckoutPage() {
         onSubmit={handlePaymentSubmit}
         total={total}
         fullTotal={fullPaymentTotal}
+        items={checkoutItems}
         isProcessing={isProcessing}
         requiresCustomTerms={hasSelectedCustomBuild}
         downPaymentRate={CUSTOM_BUILD_DOWN_PAYMENT_RATE}

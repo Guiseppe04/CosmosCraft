@@ -45,13 +45,72 @@ const TIMELINE_STEPS = [
   { status: 'delivered', label: 'Delivered', desc: 'Successfully delivered to customer' },
 ]
 
+const ORDER_STATUS_TRANSITIONS = {
+  pending: ['processing'],
+  processing: ['shipped'],
+  shipped: ['out_for_delivery'],
+  out_for_delivery: ['delivered'],
+  delivered: [],
+  cancelled: [],
+}
+
 const PAGE_SIZE = 10
 
 function getOrderStatusConfig(status) {
   return ORDER_STATUS_MAP[status] || ORDER_STATUS_LIFECYCLE[0]
 }
 
-function getPaymentStatusConfig(status) {
+function extractPaymentMethodFromNotes(notes) {
+  const match = String(notes || '').match(/Payment Method:\s*([a-z_]+)/i)
+  return match?.[1] ? String(match[1]).toLowerCase() : ''
+}
+
+function getOrderPaymentMethodCode(order) {
+  const rawMethod = (
+    order.payment_method
+    || order.payment?.method
+    || order.payment?.payment_method
+    || extractPaymentMethodFromNotes(order.notes)
+    || ''
+  )
+  const methodLower = String(rawMethod).toLowerCase()
+
+  if (methodLower.includes('gcash') || methodLower.includes('g-cash')) return 'gcash'
+  if (
+    methodLower.includes('bank')
+    || methodLower.includes('transfer')
+    || methodLower.includes('bdo')
+    || methodLower.includes('bpi')
+    || methodLower.includes('unionbank')
+  ) return 'bank_transfer'
+  if (methodLower.includes('cod') || methodLower.includes('cash')) return 'cash'
+
+  return methodLower || 'unknown'
+}
+
+function isCashOnDeliveryOrder(order) {
+  return getOrderPaymentMethodCode(order) === 'cash'
+}
+
+function getOrderPaymentStatusLabel(order) {
+  if (isCashOnDeliveryOrder(order)) {
+    const normalized = normalizePaymentStatus(order.payment_status || 'pending')
+    if (normalized === 'approved') return 'Paid'
+    return 'To be paid on delivery'
+  }
+
+  const normalized = normalizePaymentStatus(order.payment_status || 'pending')
+  return PAYMENT_STATUS_MAP[normalized]?.label || 'Pending'
+}
+
+function getPaymentStatusConfig(status, order = null) {
+  if (order && isCashOnDeliveryOrder(order)) {
+    return {
+      ...getOrderPaymentStatusConfig('pending'),
+      label: getOrderPaymentStatusLabel(order),
+    }
+  }
+
   return getOrderPaymentStatusConfig(status)
 }
 
@@ -72,12 +131,12 @@ function getOrderAddress(order) {
 }
 
 function getOrderPaymentMethodLabel(order) {
-  const method = order.payment_method || order.payment?.method || order.payment?.payment_method || 'Unknown'
-  const methodLower = String(method).toLowerCase()
-  if (methodLower.includes('gcash') || methodLower.includes('g-cash')) return 'GCash'
-  if (methodLower.includes('bank') || methodLower.includes('transfer') || methodLower.includes('bdo') || methodLower.includes('bpi') || methodLower.includes('unionbank')) return 'Bank Transfer'
-  if (methodLower.includes('cod') || methodLower.includes('cash')) return 'Cash on Delivery'
-  return String(method).replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase())
+  const methodCode = getOrderPaymentMethodCode(order)
+  if (methodCode === 'gcash') return 'GCash'
+  if (methodCode === 'bank_transfer') return 'Bank Transfer'
+  if (methodCode === 'cash') return 'COD'
+  if (methodCode === 'unknown') return 'Unknown'
+  return String(methodCode).replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase())
 }
 
 function getOrderSubtotal(order) {
@@ -124,16 +183,25 @@ function buildReceiptHtml(order) {
   const createdAt = order.created_at ? new Date(order.created_at) : null
   const receiptDate = createdAt ? createdAt.toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' }) : 'N/A'
   const receiptTime = createdAt ? createdAt.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }) : 'N/A'
+  const paymentStatusLabel = getOrderPaymentStatusLabel(order)
   const riderDetails = getOrderRiderDetails(order)
   const itemsMarkup = (order.items || []).map((item) => {
     const quantity = Number(item.quantity ?? item.qty ?? 1) || 1
     const unitPrice = Number(item.unit_price ?? item.price ?? 0) || 0
     const lineTotal = unitPrice * quantity
     const itemName = item.product_name || item.name || item.product_sku || 'Product'
+    const itemImage = item.image_url || item.image || '/assets/placeholder.jpg'
 
     return `
       <tr>
-        <td>${escapeReceiptHtml(itemName)}</td>
+        <td>
+          <div style="display:flex; align-items:center; gap:10px;">
+            <img src="${escapeReceiptHtml(itemImage)}" alt="${escapeReceiptHtml(itemName)}" style="width:46px; height:46px; object-fit:cover; border-radius:8px; border:1px solid #e7dcc2;" />
+            <div>
+              <div style="font-weight:600;">${escapeReceiptHtml(itemName)}</div>
+            </div>
+          </div>
+        </td>
         <td style="text-align:center;">${quantity}</td>
         <td style="text-align:right;">${formatCurrency(unitPrice)}</td>
         <td style="text-align:right;">${formatCurrency(lineTotal)}</td>
@@ -197,7 +265,7 @@ function buildReceiptHtml(order) {
               <h3>Order</h3>
               <p><strong>Status:</strong> <span class="status">${escapeReceiptHtml(String(order.status || 'pending').replace(/_/g, ' '))}</span></p>
               <p><strong>Payment:</strong> ${escapeReceiptHtml(paymentMethod)}</p>
-              <p><strong>Payment Status:</strong> ${escapeReceiptHtml(String(order.payment_status || 'pending').replace(/_/g, ' '))}</p>
+              <p><strong>Payment Status:</strong> ${escapeReceiptHtml(paymentStatusLabel)}</p>
               ${order.tracking_number ? `<p><strong>Tracking #:</strong> ${escapeReceiptHtml(order.tracking_number)}</p>` : ''}
               ${riderDetails ? `<p><strong>Rider Details:</strong> ${escapeReceiptHtml(riderDetails)}</p>` : ''}
             </div>
@@ -436,7 +504,7 @@ function ReceiptPanel({ order }) {
               </div>
               <div className="flex items-center justify-between gap-4">
                 <span className="text-[var(--text-muted)]">Payment Status</span>
-                <span className="text-right text-white">{String(order.payment_status || 'pending').replace(/_/g, ' ')}</span>
+                <span className="text-right text-white">{getOrderPaymentStatusLabel(order)}</span>
               </div>
               {order.tracking_number && (
                 <div className="flex items-center justify-between gap-4">
@@ -469,13 +537,19 @@ function ReceiptPanel({ order }) {
                 const quantity = Number(item.quantity ?? item.qty ?? 1) || 1
                 const unitPrice = Number(item.unit_price ?? item.price ?? 0) || 0
                 const amount = unitPrice * quantity
+                const itemImage = item.image_url || item.image || '/assets/placeholder.jpg'
                 return (
                   <div key={`${item.product_id || item.customization_id || idx}`} className="grid grid-cols-[1.6fr_0.5fr_0.8fr_0.8fr] gap-3 border-b border-[var(--border)]/50 px-4 py-3 text-sm last:border-b-0">
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex items-center gap-3">
+                      <div className="h-12 w-12 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--bg-primary)]">
+                        <img src={itemImage} alt={item.product_name || item.name || 'Item image'} className="h-full w-full object-cover" />
+                      </div>
+                      <div className="min-w-0">
                       <p className="truncate font-medium text-white">{item.product_name || item.name || item.product_sku || 'Product'}</p>
                       {(item.notes || item.customization_id) && (
                         <p className="mt-1 truncate text-xs text-[var(--text-muted)]">{item.notes || `Customization ${item.customization_id}`}</p>
                       )}
+                      </div>
                     </div>
                     <span className="text-center text-white">{quantity}</span>
                     <span className="text-right text-white">{formatCurrency(unitPrice)}</span>
@@ -522,13 +596,18 @@ function ReceiptPanel({ order }) {
 
 function OrderDetailsModal({ order, onClose, onUpdatePaymentStatus, onUpdateOrderStatus, onVerifyPayment, user, initialSection = 'details' }) {
   const [activeSection, setActiveSection] = useState(initialSection)
+  const isCODOrder = isCashOnDeliveryOrder(order)
 
   useEffect(() => {
+    if (isCODOrder && initialSection === 'payment') {
+      setActiveSection('details')
+      return
+    }
     setActiveSection(initialSection)
-  }, [initialSection, order.order_id])
+  }, [initialSection, isCODOrder, order.order_id])
 
   const orderStatusConfig = getOrderStatusConfig(order.status || 'pending')
-  const paymentConfig = getPaymentStatusConfig(order.payment_status || 'pending')
+  const paymentConfig = getPaymentStatusConfig(order.payment_status || 'pending', order)
 
   return (
     <motion.div
@@ -584,17 +663,19 @@ function OrderDetailsModal({ order, onClose, onUpdatePaymentStatus, onUpdateOrde
             <FileText className="w-4 h-4 inline mr-2" />
             Receipt
           </button>
-          <button
-            onClick={() => setActiveSection('payment')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-              activeSection === 'payment'
-                ? 'bg-[var(--gold-primary)] text-black'
-                : 'text-[var(--text-muted)] hover:text-white'
-            }`}
-          >
-            <CreditCard className="w-4 h-4 inline mr-2" />
-            Update Payment Status
-          </button>
+          {!isCODOrder && (
+            <button
+              onClick={() => setActiveSection('payment')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                activeSection === 'payment'
+                  ? 'bg-[var(--gold-primary)] text-black'
+                  : 'text-[var(--text-muted)] hover:text-white'
+              }`}
+            >
+              <CreditCard className="w-4 h-4 inline mr-2" />
+              Update Payment Status
+            </button>
+          )}
           <button
             onClick={() => setActiveSection('order')}
             className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
@@ -749,7 +830,7 @@ function OrderDetailsModal({ order, onClose, onUpdatePaymentStatus, onUpdateOrde
             <ReceiptPanel order={order} />
           )}
 
-          {activeSection === 'payment' && (
+          {activeSection === 'payment' && !isCODOrder && (
             <PaymentVerificationPanel
               order={order}
               onVerify={onVerifyPayment}
@@ -975,6 +1056,9 @@ function OrderStatusPanel({ order, onUpdate }) {
   const [trackingInfo, setTrackingInfo] = useState('')
   const [isUpdating, setIsUpdating] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
+  const currentStatus = order.status || 'pending'
+  const allowedStatuses = ORDER_STATUS_TRANSITIONS[currentStatus] || []
+  const canSubmit = allowedStatuses.includes(selectedStatus)
 
   const handleUpdate = async () => {
     setIsUpdating(true)
@@ -1001,15 +1085,22 @@ function OrderStatusPanel({ order, onUpdate }) {
           <div className="grid grid-cols-3 gap-2">
             {ORDER_STATUS_LIFECYCLE.map((status) => {
               const isActive = selectedStatus === status.value
+              const isAllowed = allowedStatuses.includes(status.value)
               return (
                 <button
                   key={status.value}
                   type="button"
-                  onClick={() => setSelectedStatus(status.value)}
+                  onClick={() => {
+                    if (!isAllowed) return
+                    setSelectedStatus(status.value)
+                  }}
+                  disabled={!isAllowed}
                   className={`p-3 rounded-xl border text-sm font-medium transition-all ${
                     isActive
                       ? `${status.bgColor} ${status.textColor} ${status.borderColor}`
-                      : 'bg-[var(--bg-primary)] border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--gold-primary)]/50'
+                      : isAllowed
+                        ? 'bg-[var(--bg-primary)] border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--gold-primary)]/50'
+                        : 'bg-[var(--bg-primary)] border-[var(--border)] text-[var(--text-muted)]/70 font-semibold opacity-60 cursor-not-allowed'
                   }`}
                 >
                   {status.label}
@@ -1046,9 +1137,9 @@ function OrderStatusPanel({ order, onUpdate }) {
               </button>
               <button
                 onClick={handleUpdate}
-                disabled={isUpdating}
+                disabled={isUpdating || !canSubmit}
                 className={`flex-1 px-4 py-2 bg-[var(--gold-primary)] rounded-lg text-black text-sm font-medium hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all flex items-center justify-center gap-2 ${
-                  isUpdating ? 'opacity-50 cursor-not-allowed' : ''
+                  (isUpdating || !canSubmit) ? 'opacity-50 cursor-not-allowed' : ''
                 }`}
               >
                 {isUpdating ? (
@@ -1068,11 +1159,21 @@ function OrderStatusPanel({ order, onUpdate }) {
         ) : (
           <button
             onClick={() => setShowConfirm(true)}
-            className="w-full px-4 py-3 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] rounded-lg text-black font-semibold hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all flex items-center justify-center gap-2"
+            disabled={!canSubmit}
+            className={`w-full px-4 py-3 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 ${
+              canSubmit
+                ? 'bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black hover:shadow-[0_0_20px_rgba(212,175,55,0.4)]'
+                : 'bg-[var(--surface-dark)] border border-[var(--border)] text-[var(--text-muted)] cursor-not-allowed'
+            }`}
           >
             <Save className="w-4 h-4" />
             Update Order Status
           </button>
+        )}
+        {!allowedStatuses.length && (
+          <p className="text-xs text-[var(--text-muted)] mt-3">
+            This order status is final and cannot be moved backward.
+          </p>
         )}
       </div>
     </div>
@@ -1147,6 +1248,13 @@ export function OrderManagement({ orders, onRefresh, user }) {
   const handleUpdateOrderStatus = async (orderId, newStatus, trackingInfo) => {
     setIsUpdatingOrder(true)
     try {
+      const order = orders.find(o => o.order_id === orderId)
+      const currentStatus = order?.status || 'pending'
+      const allowedStatuses = ORDER_STATUS_TRANSITIONS[currentStatus] || []
+      if (!allowedStatuses.includes(newStatus)) {
+        throw new Error(`Invalid status transition from '${currentStatus}' to '${newStatus}'`)
+      }
+
       const updateData = { status: newStatus }
       if (newStatus === 'shipped' && trackingInfo) {
         updateData.tracking_number = trackingInfo
@@ -1265,7 +1373,7 @@ export function OrderManagement({ orders, onRefresh, user }) {
                   {paginatedOrders.map((order) => {
                     const orderStatus = order.status || 'pending'
                     const statusConfig = getOrderStatusConfig(orderStatus)
-                    const paymentConfig = getPaymentStatusConfig(order.payment_status || 'pending')
+                    const paymentConfig = getPaymentStatusConfig(order.payment_status || 'pending', order)
                     const itemCount = order.items?.length || 0
 
                     const rowHighlight = {

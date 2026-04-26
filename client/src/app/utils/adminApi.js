@@ -114,6 +114,7 @@ export const adminApi = {
   createProject: (body) => request('/api/projects', { method: 'POST', body }),
   updateProject: (id, body) => request(`/api/projects/${id}`, { method: 'PUT', body }),
   deleteProject: (id) => request(`/api/projects/${id}`, { method: 'DELETE' }),
+  restoreProject: (id) => request(`/api/projects/${id}/restore`, { method: 'PATCH' }),
   assignTeam: (id, userIds) => request(`/api/projects/${id}/team`, { method: 'PUT', body: { user_ids: userIds } }),
 
   // Appointments

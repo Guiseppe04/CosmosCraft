@@ -21,6 +21,7 @@ router.get('/:id', ctrl.getProject);
 router.post('/', ctrl.createProject);
 router.put('/:id', ctrl.updateProject);
 router.delete('/:id', ctrl.deleteProject);
+router.patch('/:id/restore', ctrl.restoreProject);
 router.put('/:id/team', ctrl.assignTeam);
 
 // Milestone routes

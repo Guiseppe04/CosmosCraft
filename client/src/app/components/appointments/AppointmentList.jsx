@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react'
 import {
   Search, Filter, Calendar, Clock, User, ChevronLeft, ChevronRight,
   RefreshCw, X, CheckCircle, XCircle, AlertCircle, Loader2,
-  MoreHorizontal, Eye, Edit, Trash2, Plus, Download, ChevronDown
+  MoreHorizontal, Eye, Trash2, Plus, Download, ChevronDown
 } from 'lucide-react'
 import { format, parseISO, isToday, isTomorrow, isPast, isFuture } from 'date-fns'
 import React from 'react';
@@ -307,13 +307,6 @@ export default function AppointmentList({
                       title="View Details"
                     >
                       <Eye className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={e => { e.stopPropagation(); onEdit?.(apt); }}
-                      className="p-2 rounded-lg hover:bg-[var(--gold-primary)]/20 text-[var(--text-muted)] hover:text-[var(--gold-primary)] transition-colors"
-                      title="Edit"
-                    >
-                      <Edit className="w-4 h-4" />
                     </button>
                   </td>
                 </tr>

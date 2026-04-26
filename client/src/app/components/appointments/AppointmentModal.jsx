@@ -185,6 +185,23 @@ export default function AppointmentModal({
     return appointment.services
   }
 
+  const getAppointmentGuitars = () => {
+    const details = appointment.guitar_details
+    if (!details) return []
+
+    if (Array.isArray(details?.guitars) && details.guitars.length > 0) {
+      return details.guitars
+    }
+
+    if (details.brand || details.model || details.type || details.serial) {
+      return [details]
+    }
+
+    return []
+  }
+
+  const appointmentGuitars = getAppointmentGuitars()
+
   return (
     <>
       <motion.div
@@ -388,6 +405,41 @@ export default function AppointmentModal({
                 <p className="text-white font-semibold mt-1 capitalize">{getServicesDisplay()}</p>
               </div>
             </div>
+          </div>
+
+          {/* Guitar Section */}
+          <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-5">
+            <h3 className="text-lg font-semibold text-white mb-4">Guitar Information</h3>
+            {appointmentGuitars.length === 0 ? (
+              <p className="text-[var(--text-muted)]">No guitar details provided.</p>
+            ) : (
+              <div className="space-y-3">
+                {appointmentGuitars.map((guitar, index) => (
+                  <div
+                    key={`${guitar?.brand || 'guitar'}-${guitar?.model || index}-${index}`}
+                    className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] p-4"
+                  >
+                    <p className="text-xs uppercase tracking-wider text-[var(--text-muted)]">Guitar {index + 1}</p>
+                    <p className="mt-1 text-white font-semibold">
+                      {(guitar?.brand || 'Unknown Brand')} {(guitar?.model || 'Unknown Model')}
+                    </p>
+                    <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                      <p className="text-[var(--text-muted)]">
+                        Type: <span className="text-white capitalize">{guitar?.type || 'N/A'}</span>
+                      </p>
+                      <p className="text-[var(--text-muted)]">
+                        Serial: <span className="text-white">{guitar?.serial || guitar?.serialNumber || 'N/A'}</span>
+                      </p>
+                    </div>
+                    {guitar?.notes && (
+                      <p className="mt-2 text-sm text-[var(--text-muted)]">
+                        Notes: <span className="text-white">{guitar.notes}</span>
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Notes Section */}
