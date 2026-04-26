@@ -515,7 +515,17 @@ export function ShopPage() {
   const hasActiveFilters = selectedCategory !== 'all' || selectedBrands.length > 0 || priceRange[0] > 0 || priceRange[1] > 0 || inStockOnly
 
   const handleAddToCart = product => {
-    if (isOutOfStock(product.id) || isAtMaxLimit(product.id)) return
+    const stock = getProductStock(product.id)
+    if (isOutOfStock(product.id)) {
+      setNotification('Out of stock.')
+      setTimeout(() => setNotification(null), 3000)
+      return
+    }
+    if (isAtMaxLimit(product.id)) {
+      setNotification(`Only ${stock} item${stock === 1 ? '' : 's'} available in stock.`)
+      setTimeout(() => setNotification(null), 3000)
+      return
+    }
     
     const added = addToCart({
       id: product.id,
@@ -767,14 +777,14 @@ export function ShopPage() {
                             )}
                             <button
                               onClick={(e) => { e.stopPropagation(); handleAddToCart(product); }}
-                              disabled={buttonState !== 'add'}
+                              disabled={buttonState === 'out_of_stock'}
                               className={`flex-1 px-4 py-2.5 rounded-full text-xs tracking-wide font-bold transition-all border ${
                                 buttonState === 'out_of_stock'
                                   ? 'border-[var(--border)] bg-[var(--surface-dark)] text-[var(--text-muted)] cursor-not-allowed'
                                   : 'bg-[var(--surface-dark)] border-[var(--border)] text-[var(--text-light)] hover:text-[var(--gold-primary)] hover:border-[var(--gold-primary)] shadow-sm'
                               }`}
                             >
-                              {buttonState === 'add' ? 'Add to cart' : buttonState === 'out_of_stock' ? 'Unavailable' : 'Added to cart'}
+                              {buttonState === 'add' ? 'Add to cart' : buttonState === 'out_of_stock' ? 'Out of Stock' : 'Added to cart'}
                             </button>
                           </div>
                         </div>

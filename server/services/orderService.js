@@ -315,11 +315,11 @@ const validateAndDeductInventory = async (client, reservations, orderId) => {
     const product = productRes.rows[0]
 
     if (!product) {
-      throw new Error(`Product ${productId} not found`)
+      throw createValidationError(`Product ${productId} not found`, 404)
     }
 
     if (!product.is_active) {
-      throw new Error(`Product "${product.name}" is no longer available`)
+      throw createValidationError(`Product "${product.name}" is no longer available`, 400)
     }
 
     const inventoryRes = await client.query(
@@ -331,14 +331,14 @@ const validateAndDeductInventory = async (client, reservations, orderId) => {
     )
 
     if (inventoryRes.rows.length === 0) {
-      throw new Error(`Inventory record not found for "${product.name}"`)
+      throw createValidationError(`Inventory record not found for "${product.name}"`, 404)
     }
 
     const currentStock = Number(inventoryRes.rows[0].stock) || 0
     const lowStockThreshold = Number(inventoryRes.rows[0].low_stock_threshold) || 10
 
     if (currentStock < quantity) {
-      throw new Error(`Insufficient stock for "${product.name}". Available: ${currentStock}`)
+      throw createValidationError(`Not enough stock for ${product.name}. Available stock: ${currentStock}.`, 400)
     }
 
     const updateRes = await client.query(

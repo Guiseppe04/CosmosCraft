@@ -65,6 +65,10 @@ function CartItemCard({
   onToggleSelect,
 }) {
   const customBuildSummaryTree = isCustomBuild ? getCustomBuildSummaryTree(item) : []
+  const parsedStock = Number(item.stock)
+  const hasStockValue = Number.isFinite(parsedStock) && parsedStock >= 0
+  const itemStock = hasStockValue ? parsedStock : null
+  const atStockLimit = hasStockValue && item.quantity >= itemStock
 
   return (
     <motion.div
@@ -113,7 +117,7 @@ function CartItemCard({
         </div>
 
         <div className="flex items-center gap-4 flex-shrink-0">
-            {!isCustomBuild && !isBuyNow && item.stock > 1 ? (
+            {!isCustomBuild && !isBuyNow && itemStock > 1 ? (
               <div className="flex flex-col items-end gap-1">
                 <div className="flex items-center gap-2 bg-[var(--bg-primary)] border border-white/10 rounded-full px-3 py-1.5">
                   <button
@@ -126,16 +130,19 @@ function CartItemCard({
                   <span className="text-sm font-semibold w-5 text-center text-white">{item.quantity}</span>
                   <button
                     onClick={() => onUpdateQuantity(item.id, item.quantity + 1)}
-                    disabled={item.quantity >= item.stock}
+                    disabled={atStockLimit}
                     className="text-[var(--text-muted)] hover:text-[var(--gold-primary)] p-0.5 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                   >
                     <Plus className="w-3 h-3" />
                   </button>
                 </div>
-                {item.stock > 0 && (
+                {itemStock > 0 && (
                   <span className="text-[10px] text-[var(--text-muted)]">
-                    {item.stock - item.quantity >= 0 ? `${item.stock - item.quantity} left` : 'Max reached'}
+                    {itemStock - item.quantity >= 0 ? `${itemStock - item.quantity} left` : 'Max reached'}
                   </span>
+                )}
+                {hasStockValue && (
+                  <span className="text-[10px] text-[var(--text-muted)]">Stock: {itemStock}</span>
                 )}
               </div>
             ) : !isCustomBuild && !isBuyNow ? (
@@ -143,8 +150,11 @@ function CartItemCard({
                 <div className="px-3 py-1.5 bg-[var(--bg-primary)]/50 rounded-full">
                   <span className="text-sm text-[var(--text-muted)]">Qty: {item.quantity}</span>
                 </div>
-                {item.stock <= 1 && (
+                {itemStock !== null && itemStock <= 1 && (
                   <span className="text-[10px] text-amber-400">Last item</span>
+                )}
+                {hasStockValue && (
+                  <span className="text-[10px] text-[var(--text-muted)]">Stock: {itemStock}</span>
                 )}
               </div>
             ) : (
@@ -1295,6 +1305,17 @@ export function CheckoutPage() {
     }
     if (!acceptedTerms) {
       setTermsError('You must agree to the Terms and Conditions before placing your order.')
+      return
+    }
+    const outOfStockItem = checkoutItems.find((item) => {
+      if (isCustomBuildItem(item)) return false
+      if (item.stock === null || item.stock === undefined || item.stock === '') return false
+      const stock = Number(item.stock)
+      return Number.isFinite(stock) && stock >= 0 && Number(item.quantity || 0) > stock
+    })
+    if (outOfStockItem) {
+      const availableStock = Number(outOfStockItem.stock ?? 0)
+      setOrderError(`Not enough stock for ${outOfStockItem.name}. Available stock: ${availableStock}.`)
       return
     }
     setTermsError('')
