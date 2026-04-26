@@ -1186,39 +1186,6 @@ export function CustomizePage() {
               )}
             </div>
             
-            {/* Quick actions */}
-            <div className="border-t border-white/10 p-4 space-y-2 flex-shrink-0">
-              <button
-                type="button"
-                onClick={resetConfig}
-                className="flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] px-4 py-2.5 text-sm font-medium transition-all duration-200 hover:bg-[var(--surface-dark)]"
-                style={{ color: 'var(--text-muted)' }}
-              >
-                <RotateCcw className="h-4 w-4" />
-                Reset Configuration
-              </button>
-              {isAuthenticated ? (
-                <button
-                  type="button"
-                  onClick={handleSave}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] px-4 py-2.5 text-sm font-medium transition-all duration-200 hover:bg-[var(--surface-dark)]"
-                  style={{ color: 'var(--text-muted)' }}
-                >
-                  <Save className="h-4 w-4" />
-                  Save Build
-                </button>
-              ) : (
-                <div className="h-[42px]" aria-hidden="true" />
-              )}
-              <div className={`inline-flex items-center gap-2 rounded-lg px-3 py-1 text-[11px] font-semibold ${
-                hasUnsavedChanges
-                  ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
-                  : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
-              }`}>
-                <span className={`h-1.5 w-1.5 rounded-full ${hasUnsavedChanges ? 'bg-amber-300' : 'bg-emerald-300'}`} />
-                {hasUnsavedChanges ? 'Unsaved changes' : 'Saved'}
-              </div>
-            </div>
           </aside>
 
           {/* CENTER - Guitar Preview */}
@@ -1649,10 +1616,52 @@ export function CustomizePage() {
                   </div>
                 </div>
               </div>
+
+              <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 space-y-2">
+                <button
+                  type="button"
+                  onClick={resetConfig}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] px-4 py-2.5 text-sm font-medium transition-all duration-200 hover:bg-[var(--surface-dark)]"
+                  style={{ color: 'var(--text-muted)' }}
+                >
+                  <RotateCcw className="h-4 w-4" />
+                  Reset
+                </button>
+                {isAuthenticated ? (
+                  <button
+                    type="button"
+                    onClick={handleSave}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] px-4 py-2.5 text-sm font-medium transition-all duration-200 hover:bg-[var(--surface-dark)]"
+                    style={{ color: 'var(--text-muted)' }}
+                  >
+                    <Save className="h-4 w-4" />
+                    Save Build
+                  </button>
+                ) : (
+                  <div className="h-[42px]" aria-hidden="true" />
+                )}
+                <div className={`inline-flex items-center gap-2 rounded-lg px-3 py-1 text-[11px] font-semibold ${
+                  hasUnsavedChanges
+                    ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
+                    : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+                }`}>
+                  <span className={`h-1.5 w-1.5 rounded-full ${hasUnsavedChanges ? 'bg-amber-300' : 'bg-emerald-300'}`} />
+                  {hasUnsavedChanges ? 'Unsaved changes' : 'Saved'}
+                </div>
+                <button
+                  type="button"
+                  onClick={handleLoad}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] px-4 py-2.5 text-sm font-medium transition-all duration-200 hover:bg-[var(--surface-dark)]"
+                  style={{ color: 'var(--text-muted)' }}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                  Load Build
+                </button>
+              </div>
               
             </div>
             
-            {/* Save Image / Load Config */}
+            {/* Save Image */}
             <div className="border-t border-white/10 p-4 flex-shrink-0">
               <div className="flex gap-2">
                 {isAuthenticated ? (
@@ -1668,14 +1677,6 @@ export function CustomizePage() {
                 ) : (
                   <div className="flex-1" aria-hidden="true" />
                 )}
-                <button
-                  type="button"
-                  onClick={handleLoad}
-                  className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 py-2 text-xs font-medium transition-all duration-200 hover:bg-[var(--surface-dark)]"
-                  style={{ color: 'var(--text-muted)' }}
-                >
-                  Load Config
-                </button>
               </div>
             </div>
           </aside>

@@ -36,6 +36,247 @@ function normalizeSales(payload) {
   return []
 }
 
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+function formatDateTime(value) {
+  if (!value) return 'N/A'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return 'N/A'
+  return date.toLocaleString('en-PH', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+function buildPosReceiptHtml(sale) {
+  const createdAt = formatDateTime(sale?.created_at)
+  const saleNumber = escapeHtml(sale?.sale_number || 'N/A')
+  const customerName = escapeHtml(sale?.customer_name || 'Walk-in customer')
+  const customerPhone = escapeHtml(sale?.customer_phone || 'N/A')
+  const paymentMethod = escapeHtml(String(sale?.payment_method || 'cash').replace(/_/g, ' '))
+  const referenceNumber = escapeHtml(sale?.reference_number || 'N/A')
+  const notes = escapeHtml(sale?.notes || '')
+  const subtotal = Number(sale?.subtotal || 0)
+  const taxAmount = Number(sale?.tax_amount || sale?.taxAmount || 0)
+  const totalAmount = Number(sale?.total_amount || sale?.totalAmount || subtotal + taxAmount)
+  const items = Array.isArray(sale?.items) ? sale.items : []
+
+  const rows = items.map((item) => {
+    const name = escapeHtml(item?.item_name || item?.name || 'Item')
+    const qty = Number(item?.quantity || 0)
+    const unitPrice = Number(item?.unit_price || item?.price || 0)
+    const lineTotal = Number(item?.subtotal || (qty * unitPrice))
+    return `
+      <tr>
+        <td>${name}</td>
+        <td class="num">${qty}</td>
+        <td class="num">${escapeHtml(formatCurrency(unitPrice))}</td>
+        <td class="num">${escapeHtml(formatCurrency(lineTotal))}</td>
+      </tr>
+    `
+  }).join('')
+
+  return `
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>POS Receipt ${saleNumber}</title>
+        <style>
+          :root { color-scheme: light; }
+          * { box-sizing: border-box; }
+          body {
+            margin: 0;
+            padding: 24px;
+            background: #f3f4f6;
+            color: #111827;
+            font-family: Arial, Helvetica, sans-serif;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          .sheet {
+            max-width: 820px;
+            margin: 0 auto;
+            background: #ffffff;
+            border: 1px solid #e5e7eb;
+            border-radius: 14px;
+            padding: 26px;
+          }
+          .header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 24px;
+            margin-bottom: 18px;
+          }
+          .brand {
+            border: 2px solid #111827;
+            padding: 10px 14px;
+            font-weight: 700;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            font-size: 12px;
+            line-height: 1.3;
+          }
+          .invoice h1 {
+            margin: 0;
+            font-size: 28px;
+            line-height: 1.1;
+          }
+          .meta-grid {
+            margin-top: 10px;
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 8px 24px;
+            font-size: 12px;
+          }
+          .meta-label {
+            color: #6b7280;
+            display: block;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-bottom: 2px;
+          }
+          .parties {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 14px;
+            margin: 18px 0 14px;
+            font-size: 12px;
+          }
+          .party {
+            border: 1px solid #e5e7eb;
+            border-radius: 10px;
+            padding: 10px 12px;
+          }
+          .party h4 {
+            margin: 0 0 8px;
+            font-size: 11px;
+            color: #6b7280;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+          }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 6px;
+          }
+          thead th {
+            text-align: left;
+            font-size: 11px;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #6b7280;
+            background: #f3f4f6;
+            padding: 8px 10px;
+          }
+          tbody td {
+            border-bottom: 1px solid #e5e7eb;
+            padding: 10px;
+            font-size: 13px;
+          }
+          .num { text-align: right; }
+          .summary {
+            margin-top: 14px;
+            margin-left: auto;
+            width: 280px;
+            font-size: 13px;
+          }
+          .summary-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 4px 0;
+          }
+          .summary-total {
+            font-weight: 700;
+            font-size: 15px;
+            border-top: 1px solid #d1d5db;
+            margin-top: 6px;
+            padding-top: 8px;
+          }
+          .notes {
+            margin-top: 18px;
+            border-top: 1px solid #e5e7eb;
+            padding-top: 12px;
+            font-size: 12px;
+            color: #4b5563;
+          }
+          @media print {
+            body { background: #fff; padding: 0; }
+            .sheet { max-width: none; border: 0; border-radius: 0; padding: 18px 22px; }
+          }
+        </style>
+      </head>
+      <body>
+        <main class="sheet">
+          <section class="header">
+            <div class="brand">Cosmos<br/>Craft</div>
+            <div class="invoice">
+              <h1>Invoice ${saleNumber}</h1>
+              <div class="meta-grid">
+                <div><span class="meta-label">Issue Date</span>${escapeHtml(createdAt)}</div>
+                <div><span class="meta-label">Payment</span>${paymentMethod}</div>
+                <div><span class="meta-label">Reference</span>${referenceNumber}</div>
+                <div><span class="meta-label">Phone</span>${customerPhone}</div>
+              </div>
+            </div>
+          </section>
+
+          <section class="parties">
+            <div class="party">
+              <h4>From</h4>
+              <div><strong>Cosmos Craft</strong></div>
+              <div>POS Counter</div>
+              <div>Capstone Workshop</div>
+            </div>
+            <div class="party">
+              <h4>To</h4>
+              <div><strong>${customerName}</strong></div>
+              <div>${customerPhone}</div>
+            </div>
+          </section>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th class="num">Qty</th>
+                <th class="num">Unit Price</th>
+                <th class="num">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows || '<tr><td colspan="4">No items</td></tr>'}
+            </tbody>
+          </table>
+
+          <section class="summary">
+            <div class="summary-row"><span>Subtotal</span><span>${escapeHtml(formatCurrency(subtotal))}</span></div>
+            <div class="summary-row"><span>Tax</span><span>${escapeHtml(formatCurrency(taxAmount))}</span></div>
+            <div class="summary-row summary-total"><span>Total</span><span>${escapeHtml(formatCurrency(totalAmount))}</span></div>
+          </section>
+
+          <section class="notes">
+            <strong>Notes:</strong> ${notes || 'N/A'}
+          </section>
+        </main>
+      </body>
+    </html>
+  `
+}
+
 export function PosWorkspace({
   inventoryItems = [],
   showToast,
@@ -257,6 +498,51 @@ export function PosWorkspace({
       setSubmitting(false)
     }
   }, [cart, cashReceived, customerName, customerPhone, loadRecentSales, paymentMethod, referenceNumber, resetSaleForm, saleNotes, showToast, subtotal, tax, total])
+
+  const handlePrintSaleReceipt = useCallback((sale) => {
+    if (!sale) {
+      showToast?.('No sale selected for receipt printing.', 'error')
+      return
+    }
+    const printWindow = window.open('', '_blank', 'width=980,height=780')
+    if (!printWindow) {
+      showToast?.('Please allow popups to print the receipt.', 'error')
+      return
+    }
+    printWindow.document.open()
+    printWindow.document.write(buildPosReceiptHtml(sale))
+    printWindow.document.close()
+    printWindow.focus()
+    setTimeout(() => {
+      printWindow.print()
+    }, 150)
+  }, [showToast])
+
+  const handlePrintDraftReceipt = useCallback(() => {
+    if (cart.length === 0) {
+      showToast?.('Add items to the cart before printing.', 'error')
+      return
+    }
+    const draftSale = {
+      sale_number: `DRAFT-${Date.now().toString().slice(-6)}`,
+      created_at: new Date().toISOString(),
+      customer_name: customerName.trim() || 'Walk-in customer',
+      customer_phone: customerPhone.trim() || null,
+      payment_method: paymentMethod,
+      reference_number: paymentMethod === 'cash' ? null : (referenceNumber.trim() || null),
+      notes: saleNotes.trim() || null,
+      subtotal,
+      tax_amount: tax,
+      total_amount: total,
+      items: cart.map((item) => ({
+        item_name: item.name,
+        quantity: Number(item.quantity || 0),
+        price: Number(item.price || 0),
+        subtotal: Number(item.price || 0) * Number(item.quantity || 0),
+      })),
+    }
+    handlePrintSaleReceipt(draftSale)
+  }, [cart, customerName, customerPhone, handlePrintSaleReceipt, paymentMethod, referenceNumber, saleNotes, showToast, subtotal, tax, total])
 
   return (
     <div className="space-y-6">
@@ -545,7 +831,7 @@ export function PosWorkspace({
                 <button
                   type="button"
                   className="flex items-center justify-center gap-2 rounded-xl border border-[var(--border)] px-3 py-2 text-sm font-semibold text-[var(--text-muted)] hover:text-white"
-                  onClick={() => window.print()}
+                  onClick={handlePrintDraftReceipt}
                 >
                   <Printer className="h-4 w-4" />
                   Print
@@ -700,7 +986,7 @@ export function PosWorkspace({
                   <button
                     type="button"
                     className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-[var(--border)] px-4 py-2 text-sm font-semibold text-[var(--text-muted)] hover:text-white"
-                    onClick={() => window.print()}
+                    onClick={() => handlePrintSaleReceipt(selectedSale)}
                   >
                     <Printer className="h-4 w-4" />
                     Print
@@ -708,18 +994,10 @@ export function PosWorkspace({
                   <button
                     type="button"
                     className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-[var(--border)] px-4 py-2 text-sm font-semibold text-[var(--text-muted)] hover:text-white"
-                    onClick={() => {
-                      const content = document.getElementById('receipt-content')
-                      if (content) {
-                        const printWindow = window.open('', '_blank')
-                        printWindow.document.write(content.innerHTML)
-                        printWindow.document.close()
-                        printWindow.print()
-                      }
-                    }}
+                    onClick={() => handlePrintSaleReceipt(selectedSale)}
                   >
                     <Download className="h-4 w-4" />
-                    Download
+                    Download / PDF
                   </button>
                 </div>
               </>
