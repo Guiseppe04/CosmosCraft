@@ -234,7 +234,7 @@ export function AppointmentPage() {
   
   // Selections
   const [guitarSelectionMode, setGuitarSelectionMode] = useState(savedBuilds.length > 0 ? 'saved' : 'manual')
-  const [selectedBuildIds, setSelectedBuildIds] = useState([])
+  const [selectedSavedBuildId, setSelectedSavedBuildId] = useState('')
   const [manualGuitars, setManualGuitars] = useState([])
   const [homeServiceOption, setHomeServiceOption] = useState('')
   const [homeServiceAddressId, setHomeServiceAddressId] = useState('')
@@ -243,7 +243,7 @@ export function AppointmentPage() {
   const [servicesError, setServicesError] = useState('')
   const [servicesLoading, setServicesLoading] = useState(true)
   const [selectedServicesByCategory, setSelectedServicesByCategory] = useState({})
-  const [guitarDetails, setGuitarDetails] = useState({ brand: '', model: '', type: 'electric', notes: '' })
+  const [guitarDetails, setGuitarDetails] = useState({ brand: '', model: '', type: 'electric', serial: '', notes: '' })
   const [serviceReferenceFile, setServiceReferenceFile] = useState(null)
   const [serviceReferencePreviewUrl, setServiceReferencePreviewUrl] = useState('')
   const [guitarReferenceFile, setGuitarReferenceFile] = useState(null)
@@ -277,8 +277,8 @@ export function AppointmentPage() {
     && normalizeAppointmentGuitarType(guitarDetails.type)
   )
   const selectedSavedBuilds = useMemo(
-    () => savedBuilds.filter((build) => selectedBuildIds.includes(String(build.id))),
-    [selectedBuildIds, savedBuilds]
+    () => savedBuilds.filter((build) => String(build.id) === String(selectedSavedBuildId)),
+    [selectedSavedBuildId, savedBuilds]
   )
   const selectedGuitarEntries = useMemo(() => {
     if (guitarSelectionMode === 'saved') {
@@ -512,7 +512,7 @@ export function AppointmentPage() {
   const canProceed = () => {
     if (currentStep === 1) return selectedDateId && selectedTime
     if (currentStep === 2) return selectedServices.length > 0
-    if (currentStep === 3) return hasSelectedGuitar && Boolean(selectedAppointmentType)
+    if (currentStep === 3) return Boolean(selectedAppointmentType)
     if (currentStep === 4) {
       if (selectedAppointmentType === 'service_home') {
         return Boolean(homeServiceAddressId && homeServiceContact.trim())
@@ -530,7 +530,6 @@ export function AppointmentPage() {
       return 'Select at least one service to continue.'
     }
     if (currentStep === 3) {
-      if (!hasSelectedGuitar) return 'Select a saved guitar or enter manual guitar details before continuing.'
       if (!selectedAppointmentType) return 'Please choose Home Service: Yes or No.'
     }
     if (currentStep === 4 && selectedAppointmentType === 'service_home') {
@@ -551,15 +550,6 @@ export function AppointmentPage() {
     }))
   }
 
-  const handleToggleSavedBuild = (buildId) => {
-    const normalized = String(buildId)
-    setSelectedBuildIds((prev) => (
-      prev.includes(normalized)
-        ? prev.filter((value) => value !== normalized)
-        : [...prev, normalized]
-    ))
-  }
-
   const handleAddManualGuitar = () => {
     if (!hasManualGuitarDetails) return
 
@@ -567,12 +557,12 @@ export function AppointmentPage() {
       brand: guitarDetails.brand.trim(),
       model: guitarDetails.model.trim(),
       type: normalizeAppointmentGuitarType(guitarDetails.type),
-      serial: 'N/A',
+      serial: guitarDetails.serial.trim() || 'N/A',
       notes: guitarDetails.notes.trim(),
     }
 
     setManualGuitars((prev) => [...prev, nextGuitar])
-    setGuitarDetails({ brand: '', model: '', type: 'electric', notes: '' })
+    setGuitarDetails({ brand: '', model: '', type: 'electric', serial: '', notes: '' })
   }
 
   const handleRemoveManualGuitar = (indexToRemove) => {
@@ -763,19 +753,23 @@ export function AppointmentPage() {
           services: selectedServices,
           location_id: selectedBranchId,
           address_id: selectedAppointmentType === 'service_home' ? homeServiceAddressId : undefined,
-          guitar_details: {
-            brand: selectedPrimaryGuitar?.brand || '',
-            model: selectedPrimaryGuitar?.model || '',
-            type: selectedPrimaryGuitar?.type || 'electric',
-            serial: selectedPrimaryGuitar?.serial || 'N/A',
-            notes: selectedPrimaryGuitar?.notes || '',
-            guitars: selectedGuitarEntries,
-          },
+          guitar_details: hasSelectedGuitar
+            ? {
+                brand: selectedPrimaryGuitar?.brand || '',
+                model: selectedPrimaryGuitar?.model || '',
+                type: selectedPrimaryGuitar?.type || 'electric',
+                serial: selectedPrimaryGuitar?.serial || 'N/A',
+                notes: selectedPrimaryGuitar?.notes || '',
+                guitars: selectedGuitarEntries,
+              }
+            : undefined,
           scheduled_at: scheduledAt.toISOString(),
           notes: [
-            selectedGuitarEntries
-              .map((guitar, index) => `Guitar ${index + 1}: ${guitar.brand} ${guitar.model} (${formatAppointmentGuitarTypeLabel(guitar.type)})`)
-              .join('\n'),
+            hasSelectedGuitar
+              ? selectedGuitarEntries
+                .map((guitar, index) => `Guitar ${index + 1}: ${guitar.brand} ${guitar.model} (${formatAppointmentGuitarTypeLabel(guitar.type)})`)
+                .join('\n')
+              : '',
             selectedAppointmentType === 'service_home' ? `Home service contact: ${homeServiceContact}` : '',
             serviceReferenceImageUrl ? `Service reference image: ${serviceReferenceImageUrl}` : '',
             guitarReferenceImageUrl ? `Guitar reference image: ${guitarReferenceImageUrl}` : '',
@@ -928,39 +922,25 @@ export function AppointmentPage() {
 
               {guitarSelectionMode === 'saved' && savedBuilds.length > 0 ? (
                 <div>
-                  <label className="block text-sm font-medium text-white mb-1.5">Select Saved Guitars <span className="text-red-400">*</span></label>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    {savedBuilds.map((build) => {
-                      const buildId = String(build.id)
-                      const isSelected = selectedBuildIds.includes(buildId)
-
-                      return (
-                        <button
-                          key={buildId}
-                          type="button"
-                          onClick={() => handleToggleSavedBuild(buildId)}
-                          className={`rounded-xl border p-3 text-left transition-colors ${
-                            isSelected
-                              ? 'border-[#d4af37] bg-[#d4af37]/10'
-                              : 'border-[var(--border)] bg-[var(--surface-dark)]'
-                          }`}
-                        >
-                          <p className={`text-sm font-semibold ${isSelected ? 'text-[#d4af37]' : 'text-[var(--text-light)]'}`}>
-                            {build.name || 'Custom Build'}
-                          </p>
-                          <p className="mt-1 text-xs text-[var(--text-muted)]">
-                            {build.isBass ? 'Bass Build' : 'Guitar Build'}
-                          </p>
-                        </button>
-                      )
-                    })}
-                  </div>
+                  <label className="block text-sm font-medium text-white mb-1.5">Select Saved Guitar</label>
+                  <select
+                    value={selectedSavedBuildId}
+                    onChange={(e) => setSelectedSavedBuildId(e.target.value)}
+                    className="w-full px-4 py-3 bg-[var(--surface-dark)] text-[var(--text-light)] border border-[var(--border)] rounded-xl text-sm focus:outline-none focus:border-[#d4af37]"
+                  >
+                    <option value="">No saved guitar selected</option>
+                    {savedBuilds.map((build) => (
+                      <option key={String(build.id)} value={String(build.id)}>
+                        {build.name || 'Custom Build'} - {build.isBass ? 'Bass Build' : 'Guitar Build'}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               ) : (
                 <>
                   <div className="grid sm:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-white mb-1.5">Brand <span className="text-red-400">*</span></label>
+                      <label className="block text-sm font-medium text-white mb-1.5">Brand</label>
                       <input
                         type="text"
                         value={guitarDetails.brand}
@@ -970,7 +950,7 @@ export function AppointmentPage() {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-white mb-1.5">Model <span className="text-red-400">*</span></label>
+                      <label className="block text-sm font-medium text-white mb-1.5">Model</label>
                       <input
                         type="text"
                         value={guitarDetails.model}
@@ -981,7 +961,7 @@ export function AppointmentPage() {
                     </div>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-white mb-1.5">Type <span className="text-red-400">*</span></label>
+                    <label className="block text-sm font-medium text-white mb-1.5">Type</label>
                     <select
                       value={guitarDetails.type}
                       onChange={e => setGuitarDetails({ ...guitarDetails, type: e.target.value })}
@@ -995,6 +975,16 @@ export function AppointmentPage() {
                     </select>
                   </div>
                   <div>
+                    <label className="block text-sm font-medium text-white mb-1.5">Serial Number / Details</label>
+                    <input
+                      type="text"
+                      value={guitarDetails.serial}
+                      onChange={e => setGuitarDetails({ ...guitarDetails, serial: e.target.value })}
+                      className="w-full px-4 py-3 bg-[var(--surface-dark)] text-[var(--text-light)] border border-[var(--border)] rounded-xl text-sm focus:outline-none focus:border-[#d4af37]"
+                      placeholder="e.g. SN123456 or Serial: 123456"
+                    />
+                  </div>
+                  <div>
                     <label className="block text-sm font-medium text-white mb-1.5">Notes / Issue Description</label>
                     <textarea
                       value={guitarDetails.notes}
@@ -1004,7 +994,7 @@ export function AppointmentPage() {
                       />
                     </div>
                     <div className="flex items-center justify-between gap-3">
-                      <p className="text-xs text-[var(--text-muted)]">Add each guitar before continuing.</p>
+                      <p className="text-xs text-[var(--text-muted)]">Optional: add one or more guitars for the service team.</p>
                       <button
                         type="button"
                         onClick={handleAddManualGuitar}
@@ -1366,15 +1356,19 @@ export function AppointmentPage() {
                  <div>
                     <p className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-3">Guitar Details</p>
                     <div className="space-y-1 text-sm bg-[var(--surface-dark)] p-3 rounded-lg border border-[var(--border)]">
-                      {selectedGuitarEntries.map((guitar, index) => (
-                        <div key={`${guitar.brand}-${guitar.model}-${index}`} className={index > 0 ? 'pt-2 mt-2 border-t border-[var(--border)]' : ''}>
-                          <p><span className="text-[var(--text-muted)]">Guitar {index + 1}:</span> <span className="text-[var(--text-light)]">{guitar.brand} {guitar.model}</span></p>
-                          <p><span className="text-[var(--text-muted)]">Type:</span> <span className="text-[var(--text-light)]">{formatAppointmentGuitarTypeLabel(guitar.type)}</span></p>
-                          {guitar.notes && (
-                            <p><span className="text-[var(--text-muted)]">Notes:</span> <span className="text-[var(--text-light)]">{guitar.notes}</span></p>
-                          )}
-                        </div>
-                      ))}
+                      {selectedGuitarEntries.length > 0 ? (
+                        selectedGuitarEntries.map((guitar, index) => (
+                          <div key={`${guitar.brand}-${guitar.model}-${index}`} className={index > 0 ? 'pt-2 mt-2 border-t border-[var(--border)]' : ''}>
+                            <p><span className="text-[var(--text-muted)]">Guitar {index + 1}:</span> <span className="text-[var(--text-light)]">{guitar.brand} {guitar.model}</span></p>
+                            <p><span className="text-[var(--text-muted)]">Type:</span> <span className="text-[var(--text-light)]">{formatAppointmentGuitarTypeLabel(guitar.type)}</span></p>
+                            {guitar.notes && (
+                              <p><span className="text-[var(--text-muted)]">Notes:</span> <span className="text-[var(--text-light)]">{guitar.notes}</span></p>
+                            )}
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-[var(--text-muted)]">No guitar selected</p>
+                      )}
                       {selectedAppointmentType === 'service_home' && (
                         <>
                           <p><span className="text-[var(--text-muted)]">Address:</span> <span className="text-[var(--text-light)]">{userAddresses.find(a => a.address_id === homeServiceAddressId)?.street_line1 || 'Not selected'}</span></p>

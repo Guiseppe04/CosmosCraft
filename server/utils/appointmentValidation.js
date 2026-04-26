@@ -53,8 +53,20 @@ const appointmentValidation = {
       guitars: Joi.array().items(guitarEntrySchema).min(1).optional(),
     })
       .custom((value, helpers) => {
+        if (!value || typeof value !== 'object') {
+          return value;
+        }
+
         const hasLegacySingle = Boolean(value?.brand && value?.model);
         const hasMulti = Array.isArray(value?.guitars) && value.guitars.length > 0;
+        const hasAnySingleField = Boolean(
+          value?.brand || value?.model || value?.type || value?.serial || value?.notes
+        );
+
+        // Guitar details are optional for service appointments.
+        if (!hasAnySingleField && !hasMulti) {
+          return value;
+        }
 
         if (!hasLegacySingle && !hasMulti) {
           return helpers.error('any.custom', {

@@ -78,6 +78,55 @@ const formatStatus = (status) => {
   return status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
 }
 
+const parseProjectDescription = (description) => {
+  const normalized = String(description || '').replace(/\s+/g, ' ').trim()
+  if (!normalized) return null
+
+  const checkoutPrefixMatch = normalized.match(/^Checkout Terms:\s*(.*)$/i)
+  if (!checkoutPrefixMatch) {
+    return { title: null, bulletItems: [], metaLines: [], plainText: normalized }
+  }
+
+  const remainder = checkoutPrefixMatch[1] || ''
+  const rawSegments = remainder
+    .split(/\s+-\s+/)
+    .flatMap((segment) =>
+      segment.split(/(?=Terms and Conditions accepted:)|(?=Payment Method:)|(?=Auto-created from custom build payment)/i)
+    )
+    .map((segment) => segment.trim())
+    .filter(Boolean)
+
+  const bulletItems = []
+  const metaLines = []
+
+  rawSegments.forEach((segment) => {
+    if (
+      /^Terms and Conditions accepted:/i.test(segment) ||
+      /^Payment Method:/i.test(segment) ||
+      /^Auto-created from custom build payment/i.test(segment)
+    ) {
+      metaLines.push(segment)
+      return
+    }
+    bulletItems.push(segment)
+  })
+
+  return {
+    title: 'Checkout Terms',
+    bulletItems,
+    metaLines,
+    plainText: '',
+  }
+}
+
+const formatEstimatedCompletionDate = (project) => {
+  const rawValue = project?.estimated_completion_date || project?.end_date || null
+  if (!rawValue) return null
+  const parsed = new Date(rawValue)
+  if (Number.isNaN(parsed.getTime())) return null
+  return parsed.toLocaleDateString()
+}
+
 export function DashboardPage() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -922,18 +971,43 @@ export function DashboardPage() {
           </div>       
         ) : (
           <div className="grid gap-6">
-            {myProjects.map((project) => (
+            {myProjects.map((project) => {
+              const projectDescription = parseProjectDescription(project.description || 'Custom Build Project')
+              return (
               <div key={project.project_id} className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl p-5 hover:border-[var(--gold-primary)]/40 transition-colors">
                 <div className="flex justify-between items-center">
                   <div>
                     <h3 className="text-lg font-bold text-white">{project.name}</h3>
-                    <p className="text-[var(--text-muted)] text-sm mt-1">{project.description || 'Custom Build Project'}</p>
+                    {projectDescription?.title ? (
+                      <div className="mt-2 rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] px-3 py-2.5 text-sm text-[var(--text-muted)]">
+                        <p className="font-semibold text-white">{projectDescription.title}</p>
+                        {projectDescription.bulletItems.length > 0 && (
+                          <ul className="mt-1.5 space-y-1">
+                            {projectDescription.bulletItems.map((item, index) => (
+                              <li key={`${project.project_id}-bullet-${index}`} className="flex items-start gap-2">
+                                <span className="mt-[6px] h-1.5 w-1.5 rounded-full bg-[var(--gold-primary)] shrink-0" />
+                                <span>{item}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                        {projectDescription.metaLines.length > 0 && (
+                          <div className="mt-2 space-y-1 border-t border-[var(--border)] pt-2">
+                            {projectDescription.metaLines.map((line, index) => (
+                              <p key={`${project.project_id}-meta-${index}`} className="break-words">
+                                {line}
+                              </p>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-[var(--text-muted)] text-sm mt-1 break-words">{projectDescription?.plainText || 'Custom Build Project'}</p>
+                    )}
                     <p className="text-[var(--text-muted)] text-sm mt-2">
                       Estimated completion:{' '}
                       <span className="text-white font-medium">
-                        {project.estimated_completion_date
-                          ? new Date(project.estimated_completion_date).toLocaleDateString()
-                          : 'Not set'}
+                        {formatEstimatedCompletionDate(project) || 'Not set'}
                       </span>
                     </p>
                     <div className="mt-4 flex items-center gap-4">
@@ -970,7 +1044,7 @@ export function DashboardPage() {
                 </div>
                 
               </div>
-            ))}
+            )})}
           </div>
         )}
       </div>

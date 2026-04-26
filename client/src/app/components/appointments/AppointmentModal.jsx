@@ -186,18 +186,55 @@ export default function AppointmentModal({
   }
 
   const getAppointmentGuitars = () => {
-    const details = appointment.guitar_details
-    if (!details) return []
-
-    if (Array.isArray(details?.guitars) && details.guitars.length > 0) {
-      return details.guitars
+    let details = appointment.guitar_details
+    if (typeof details === 'string') {
+      try {
+        details = JSON.parse(details)
+      } catch {
+        details = null
+      }
     }
 
-    if (details.brand || details.model || details.type || details.serial) {
-      return [details]
+    const fromDetails = []
+    if (details && typeof details === 'object') {
+      if (Array.isArray(details.guitars) && details.guitars.length > 0) {
+        fromDetails.push(...details.guitars)
+      } else if (details.brand || details.model || details.type || details.serial || details.notes) {
+        fromDetails.push(details)
+      }
     }
 
-    return []
+    // Fallback: parse note lines like "Guitar 1: Fender Stratocaster (Electric)"
+    const fromNotes = []
+    if (fromDetails.length === 0 && typeof appointment.notes === 'string') {
+      const lines = appointment.notes.split('\n')
+      lines.forEach((line) => {
+        const match = line.match(/^Guitar\s+\d+:\s*(.+?)\s+\(([^)]+)\)\s*$/i)
+        if (!match) return
+        const descriptor = match[1]?.trim() || ''
+        const type = String(match[2] || '').trim().toLowerCase()
+        const [brand, ...modelParts] = descriptor.split(' ')
+        fromNotes.push({
+          brand: brand || '',
+          model: modelParts.join(' ') || '',
+          type,
+          serial: 'N/A',
+          notes: '',
+        })
+      })
+    }
+
+    const normalized = (fromDetails.length > 0 ? fromDetails : fromNotes)
+      .map((guitar) => ({
+        brand: guitar?.brand || guitar?.name || '',
+        model: guitar?.model || guitar?.variant || '',
+        type: guitar?.type || guitar?.guitar_type || '',
+        serial: guitar?.serial || guitar?.serialNumber || 'N/A',
+        notes: guitar?.notes || '',
+      }))
+      .filter((guitar) => guitar.brand || guitar.model || guitar.type || guitar.serial || guitar.notes)
+
+    return normalized
   }
 
   const appointmentGuitars = getAppointmentGuitars()
@@ -213,16 +250,21 @@ export default function AppointmentModal({
       />
 
       <motion.div
-        initial={{ opacity: 0, x: 100 }}
-        animate={{ opacity: 1, x: 0 }}
-        exit={{ opacity: 0, x: 100 }}
-        className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-2xl bg-[var(--bg-primary)] border-l border-[var(--border)] shadow-2xl overflow-y-auto"
+        initial={{ opacity: 0, scale: 0.96, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.96, y: 20 }}
+        className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6"
+        onClick={onClose}
       >
+        <div
+          className="w-full max-w-3xl max-h-[92vh] rounded-3xl border border-[var(--border)] bg-[var(--bg-primary)] shadow-2xl overflow-hidden"
+          onClick={(e) => e.stopPropagation()}
+        >
         {/* Header */}
-        <div className="sticky top-0 z-10 bg-[var(--bg-primary)] border-b border-[var(--border)] p-6">
+        <div className="sticky top-0 z-10 bg-[var(--bg-primary)] border-b border-[var(--border)] p-5 sm:p-6">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-2xl font-semibold text-white">Appointment Details</h2>
+              <h2 className="text-xl sm:text-2xl font-semibold text-white">Appointment Details</h2>
               <p className="text-[var(--text-muted)] text-sm mt-1">
                 ID: {appointment.appointment_id?.slice(0, 8)}...
               </p>
@@ -237,7 +279,7 @@ export default function AppointmentModal({
         </div>
 
         {/* Content */}
-        <div className="p-6 space-y-6">
+        <div className="p-5 sm:p-6 space-y-6 overflow-y-auto max-h-[calc(92vh-92px)]">
           {/* Status Section */}
           <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-5">
             <h3 className="text-lg font-semibold text-white mb-4">Status</h3>
@@ -497,6 +539,7 @@ export default function AppointmentModal({
               )}
             </div>
           </div>
+        </div>
         </div>
       </motion.div>
 

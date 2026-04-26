@@ -5172,9 +5172,44 @@ export function AdminPage() {
               {modal.type === 'view_appointment' && modal.data && (() => {
                 const apt = modal.data;
                 const apptDate = apt.scheduled_at || apt.date;
-                const appointmentGuitars = Array.isArray(apt?.guitar_details?.guitars) && apt.guitar_details.guitars.length > 0
-                  ? apt.guitar_details.guitars
-                  : (apt?.guitar_details ? [apt.guitar_details] : []);
+                let guitarDetails = apt?.guitar_details
+                if (typeof guitarDetails === 'string') {
+                  try {
+                    guitarDetails = JSON.parse(guitarDetails)
+                  } catch {
+                    guitarDetails = null
+                  }
+                }
+
+                const mappedFromDetails = Array.isArray(guitarDetails?.guitars) && guitarDetails.guitars.length > 0
+                  ? guitarDetails.guitars
+                  : (guitarDetails ? [guitarDetails] : [])
+
+                const mappedFromNotes = (typeof apt?.notes === 'string' ? apt.notes.split('\n') : [])
+                  .map((line) => {
+                    const match = line.match(/^Guitar\s+\d+:\s*(.+?)\s+\(([^)]+)\)\s*$/i)
+                    if (!match) return null
+                    const descriptor = match[1]?.trim() || ''
+                    const [brand, ...modelParts] = descriptor.split(' ')
+                    return {
+                      brand: brand || '',
+                      model: modelParts.join(' ') || '',
+                      type: String(match[2] || '').trim().toLowerCase(),
+                      serial: 'N/A',
+                      notes: '',
+                    }
+                  })
+                  .filter(Boolean)
+
+                const appointmentGuitars = (mappedFromDetails.length > 0 ? mappedFromDetails : mappedFromNotes)
+                  .map((guitar) => ({
+                    ...guitar,
+                    brand: guitar?.brand || guitar?.name || '',
+                    model: guitar?.model || guitar?.variant || '',
+                    type: guitar?.type || guitar?.guitar_type || '',
+                    serial: guitar?.serial || guitar?.serialNumber || 'N/A',
+                  }))
+                  .filter((guitar) => guitar.brand || guitar.model || guitar.type || guitar.notes)
                 const primaryGuitar = appointmentGuitars[0] || null;
                 const statusColors = {
                   pending: 'bg-yellow-500/10 text-yellow-500 border-yellow-500/30',

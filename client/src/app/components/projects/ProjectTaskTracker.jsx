@@ -68,6 +68,13 @@ const formatFulfillmentLabel = (method) => {
   }
 };
 
+const formatDisplayDate = (value) => {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleDateString();
+};
+
 export default function ProjectTaskTracker({ projectId, projectName, isAdmin = false, parts = [], projectData = null, showTracker = true }) {
   const { user } = useAuth();
   const [hierarchy, setHierarchy] = useState(null);
@@ -282,7 +289,12 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
   const taskCompletionRate = taskSummary.total > 0
     ? Math.round((taskSummary.completed / taskSummary.total) * 100)
     : 0;
-  const trackingScore = Math.round((clampedProgress + milestoneCompletionRate + taskCompletionRate) / 3);
+  const estimatedCompletionDisplay = formatDisplayDate(
+    hierarchy?.estimated_completion_date ||
+    hierarchy?.end_date ||
+    projectData?.estimated_completion_date ||
+    projectData?.end_date
+  );
 
   // Group parts by category
   const groupedParts = resolvedParts.reduce((groups, part) => {
@@ -441,6 +453,12 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
               <p className="mt-2 text-sm text-[var(--text-muted)]">
                 {hierarchy.customer_name ? `For: ${hierarchy.customer_name}` : '-'}
               </p>
+              <p className="mt-2 text-sm text-[var(--text-muted)]">
+                Estimated completion:{' '}
+                <span className="text-white font-medium">
+                  {estimatedCompletionDisplay || 'Not set'}
+                </span>
+              </p>
             </div>
 
             <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-3 text-left lg:text-right whitespace-nowrap">
@@ -506,7 +524,7 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
               </div>
               <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] p-4">
                 <p className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">Percentage</p>
-                <p className="mt-2 text-2xl font-bold text-white">{trackingScore}<span className="text-base text-[var(--text-muted)]">%</span></p>
+                <p className="mt-2 text-2xl font-bold text-white">{clampedProgress}<span className="text-base text-[var(--text-muted)]">%</span></p>
               </div>
             </div>
           </div>
