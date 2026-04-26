@@ -19,6 +19,23 @@ function safeParseJson(value, fallback) {
   }
 }
 
+function normalizeQuantity(value, fallback = 1) {
+  const numericValue = Number(value)
+  if (!Number.isFinite(numericValue) || numericValue <= 0) return fallback
+  return Math.max(1, Math.trunc(numericValue))
+}
+
+function resolveStockValue(item = {}) {
+  const rawStock = item?.available_stock ?? item?.stock
+  const stock = Number(rawStock)
+  if (!Number.isFinite(stock)) return null
+  return Math.max(0, Math.trunc(stock))
+}
+
+function formatStockLimitMessage(stock) {
+  return `Only ${stock} item${stock === 1 ? '' : 's'} available in stock.`
+}
+
 export function CartProvider({ children }) {
   const { isAuthenticated, isLoadingUser } = useAuth()
   const [globalToast, setGlobalToast] = useState(null)
@@ -26,6 +43,11 @@ export function CartProvider({ children }) {
   const [cart, setCart] = useState([])
   const [isOpen, setIsOpen] = useState(false)
   const [itemAddedStates, setItemAddedStates] = useState({})
+
+  const showToastMessage = useCallback((message) => {
+    setGlobalToast(message)
+    setTimeout(() => setGlobalToast(null), 3000)
+  }, [])
 
   const fetchDbCart = useCallback(async () => {
     try {
@@ -37,7 +59,7 @@ export function CartProvider({ children }) {
           name: item.product?.name,
           price: item.unit_price,
           image: item.product?.image || item.product?.primary_image || '/assets/placeholder.jpg',
-          stock: item.product?.stock,
+          stock: Number(item.product?.stock ?? 0),
           quantity: item.quantity,
           type: 'product'
         }))
@@ -86,6 +108,13 @@ export function CartProvider({ children }) {
   }, [cart, isAuthenticated, isLoadingUser])
 
   const addToCart = useCallback((product, quantity = 1) => {
+    const requestedQuantity = normalizeQuantity(quantity)
+    const productStock = resolveStockValue(product)
+    if (productStock !== null && productStock <= 0) {
+      showToastMessage('Out of stock.')
+      return false
+    }
+
     const targetBuildId = localStorage.getItem('cosmoscraft_target_build_id')
     let added = false
     let shouldSync = false
@@ -99,9 +128,19 @@ export function CartProvider({ children }) {
 
           const existingPartIndex = builds[buildIndex].additionalParts.findIndex(p => p.id === product.id)
           if (existingPartIndex !== -1) {
-            builds[buildIndex].additionalParts[existingPartIndex].quantity += quantity
+            const existingPartQuantity = normalizeQuantity(builds[buildIndex].additionalParts[existingPartIndex].quantity)
+            const nextQuantity = existingPartQuantity + requestedQuantity
+            if (productStock !== null && nextQuantity > productStock) {
+              showToastMessage(formatStockLimitMessage(productStock))
+              return false
+            }
+            builds[buildIndex].additionalParts[existingPartIndex].quantity = nextQuantity
           } else {
-            builds[buildIndex].additionalParts.push({ ...product, quantity })
+            if (productStock !== null && requestedQuantity > productStock) {
+              showToastMessage(formatStockLimitMessage(productStock))
+              return false
+            }
+            builds[buildIndex].additionalParts.push({ ...product, quantity: requestedQuantity })
           }
           localStorage.setItem(storageKey, JSON.stringify(builds))
           localStorage.removeItem('cosmoscraft_target_build_id')
@@ -110,42 +149,61 @@ export function CartProvider({ children }) {
         }
       }
     } else {
+      let stockLimitMessage = ''
       setCart(prevCart => {
         const existing = prevCart.find(item => item.id === product.id)
+        const currentStock = resolveStockValue(product) ?? resolveStockValue(existing)
+
         if (existing) {
-          const newQuantity = existing.quantity + quantity
-          if (newQuantity > 10) return prevCart
+          const newQuantity = existing.quantity + requestedQuantity
+          if (currentStock !== null && newQuantity > currentStock) {
+            stockLimitMessage = formatStockLimitMessage(currentStock)
+            return prevCart
+          }
           added = true
           shouldSync = true
           return prevCart.map(item => item.id === product.id ? { ...item, quantity: newQuantity } : item)
         }
+        if (currentStock !== null && requestedQuantity > currentStock) {
+          stockLimitMessage = formatStockLimitMessage(currentStock)
+          return prevCart
+        }
         added = true
         shouldSync = true
-        return [...prevCart, { ...product, quantity }]
+        return [...prevCart, { ...product, quantity: requestedQuantity }]
       })
 
+      if (!added && stockLimitMessage) {
+        showToastMessage(stockLimitMessage)
+      }
+
       if (isAuthenticated && shouldSync) {
-        api.cart.addItem({ product_id: product.id, quantity })
+        api.cart.addItem({ product_id: product.id, quantity: requestedQuantity })
           .then(() => fetchDbCart())
-          .catch(console.error)
+          .catch((error) => {
+            fetchDbCart()
+            showToastMessage(error?.message || 'Unable to add item to cart.')
+          })
       }
     }
 
     if (added) {
       setItemAddedStates(prev => ({ ...prev, [product.id]: true }))
-      setGlobalToast(`Added ${quantity > 1 ? quantity + ' ' : ''}${product.name || 'item'} to cart!`)
+      showToastMessage(`Added ${requestedQuantity > 1 ? requestedQuantity + ' ' : ''}${product.name || 'item'} to cart!`)
       setTimeout(() => {
         setItemAddedStates(prev => ({ ...prev, [product.id]: false }))
       }, 1500)
-      setTimeout(() => setGlobalToast(null), 3000)
     }
 
     return added
-  }, [isAuthenticated, fetchDbCart])
+  }, [isAuthenticated, fetchDbCart, showToastMessage])
 
   const isItemAtMaxQuantity = useCallback((productId) => {
     const item = cart.find(i => i.id === productId)
-    return item ? item.quantity >= 10 : false
+    if (!item) return false
+    const stock = resolveStockValue(item)
+    if (stock === null) return false
+    return item.quantity >= stock
   }, [cart])
 
   const getItemAddedState = useCallback((productId) => {
@@ -167,22 +225,38 @@ export function CartProvider({ children }) {
   }, [cart, isAuthenticated])
 
   const updateQuantity = useCallback((productId, quantity) => {
-    if (quantity <= 0) {
+    const item = cart.find(i => i.id === productId)
+    if (!item) return
+
+    const desiredQuantity = Number(quantity)
+    if (!Number.isFinite(desiredQuantity) || desiredQuantity <= 0) {
       removeFromCart(productId)
       return
     }
-    const item = cart.find(i => i.id === productId)
+    const stock = resolveStockValue(item)
+    const clampedQuantity = stock === null
+      ? Math.max(1, Math.trunc(desiredQuantity))
+      : Math.max(1, Math.min(Math.trunc(desiredQuantity), stock))
+
+    if (stock !== null && desiredQuantity > stock) {
+      showToastMessage(formatStockLimitMessage(stock))
+    }
+    if (clampedQuantity === item.quantity) return
     
     setCart(prevCart =>
       prevCart.map(i =>
-        i.id === productId ? { ...i, quantity } : i
+        i.id === productId ? { ...i, quantity: clampedQuantity } : i
       )
     )
 
     if (isAuthenticated && item && item.cart_item_id) {
-      api.cart.updateItem(item.cart_item_id, { quantity }).catch(console.error)
+      api.cart.updateItem(item.cart_item_id, { quantity: clampedQuantity })
+        .catch((error) => {
+          fetchDbCart()
+          showToastMessage(error?.message || 'Unable to update cart quantity.')
+        })
     }
-  }, [cart, removeFromCart, isAuthenticated])
+  }, [cart, removeFromCart, isAuthenticated, fetchDbCart, showToastMessage])
 
   const clearCart = useCallback(() => {
     setCart([])
