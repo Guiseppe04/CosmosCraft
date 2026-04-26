@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from 'react'
 import { CircleDot } from 'lucide-react'
 import {
   bassBuilder,
+  bassAsset,
   BASS_NECK_FRETS,
   BASS_NECK_MASK,
   BASS_NECK_NUT,
@@ -279,6 +280,21 @@ function BassPreview({ config, view, onViewChange, modelImageSrc }) {
         })
       )
       : null
+    const headstockStaticMask = !isHeadless && canUseDirectHeadstockPaths
+      ? bassAsset(`${headstockBasePath}/${effectiveHeadstockStyle}/masks/mask.png`)
+      : null
+    const headstockStaticTuners = !isHeadless && canUseDirectHeadstockPaths
+      ? bassAsset(`${headstockBasePath}/${effectiveHeadstockStyle}/tuners/${resolvedConfig.hardware}.png`)
+      : null
+    const headstockStaticLogo = !isHeadless && canUseDirectHeadstockPaths
+      ? bassAsset(`${headstockBasePath}/${effectiveHeadstockStyle}/logos/bl.png`)
+      : null
+    const headstockStaticStrings = !isHeadless && canUseDirectHeadstockPaths
+      ? bassAsset(`${headstockBasePath}/string-overlays/${effectiveHeadstockStyle}.png`)
+      : null
+    const headstockStaticTrussCover = !isHeadless
+      ? bassAsset(`${headstockBasePath}/truss-cover/black.png`)
+      : null
 
     const headlessInlayPreset = {
       whiteDots: { family: 'id', material: 'white-pearl' },
@@ -322,7 +338,7 @@ function BassPreview({ config, view, onViewChange, modelImageSrc }) {
       }) || resolveHeadstockAssetWithFallback({
         requiredTokens: ['masks', 'mask'],
         preferTokens: [effectiveHeadstockStyle, 'mask'],
-      }),
+      }) || headstockStaticMask,
       frontFrets: {
         stainless: bassBuilder.resolveSharedAsset('necks/bass', {
           strings: resolvedConfig.strings,
@@ -355,7 +371,7 @@ function BassPreview({ config, view, onViewChange, modelImageSrc }) {
         }) || resolveHeadstockAssetWithFallback({
           requiredTokens: ['tuners'],
           preferTokens: [effectiveHeadstockStyle, resolvedConfig.hardware],
-        })
+        }) || headstockStaticTuners
       )),
       headstockLogo: resolvedHeadstockLogo || (isHeadless ? null : (
         resolveHeadstockAssetWithFallback({
@@ -366,7 +382,7 @@ function BassPreview({ config, view, onViewChange, modelImageSrc }) {
           requiredTokens: ['logos', 'bl'],
           rejectTokens: ['left-handed'],
           preferTokens: [effectiveHeadstockStyle, 'logos'],
-        })
+        }) || headstockStaticLogo
       )),
       headstockStringOverlay: resolvedHeadstockStrings || (isHeadless ? null : (
         resolveHeadstockAssetWithFallback({
@@ -375,7 +391,7 @@ function BassPreview({ config, view, onViewChange, modelImageSrc }) {
         }) || resolveHeadstockAssetWithFallback({
           requiredTokens: ['string-overlays'],
           preferTokens: [effectiveHeadstockStyle, exactStyleFileToken],
-        })
+        }) || headstockStaticStrings
       )),
       headstockTrussCover: isHeadless ? null : (
         resolveHeadstockAssetWithFallback({
@@ -384,7 +400,7 @@ function BassPreview({ config, view, onViewChange, modelImageSrc }) {
         }) || resolveHeadstockAssetWithFallback({
           requiredTokens: ['truss-cover'],
           preferTokens: ['truss-cover'],
-        })
+        }) || headstockStaticTrussCover
       ),
       hardware: bassBuilder.HARDWARE_OPTIONS[resolvedConfig.hardware],
       bridge: getBridgeByStrings(

@@ -3,8 +3,8 @@ import { motion, AnimatePresence } from 'motion/react'
 import { useSearchParams, useNavigate, useBlocker } from 'react-router'
 import { 
   RotateCcw, Save, ChevronDown, ChevronRight, Info, 
-  ShoppingCart, Clock, Truck, Shield, Check, CheckCircle,
-  Sparkles, Layers, Palette, Cog, Zap, Image, Upload, Trash2
+  ShoppingCart, Check, CheckCircle,
+  Sparkles, Layers, Palette, Cog, Zap, Image, ZoomIn, ZoomOut, Upload, Trash2
 } from 'lucide-react'
 import { formatCurrency } from '../utils/formatCurrency'
 import { useAuth } from '../context/AuthContext.jsx'
@@ -214,6 +214,9 @@ export function BassCustomizePage() {
     refreshPrices,
   } = useBassConfig()
   const [view, setView] = useState('front')
+  const [zoomLevel, setZoomLevel] = useState(1)
+  const [panOffset, setPanOffset] = useState({ x: 0, y: 0 })
+  const [isDraggingPreview, setIsDraggingPreview] = useState(false)
   const [activeCategory, setActiveCategory] = useState('body')
   const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false)
   const [bassTypeDropdownOpen, setBassTypeDropdownOpen] = useState(false)
@@ -229,6 +232,8 @@ export function BassCustomizePage() {
   const [isDraggingSticker, setIsDraggingSticker] = useState(false)
   const stickerFileInputRef = useRef(null)
   const stickersRef = useRef([])
+  const panStartRef = useRef({ pointerX: 0, pointerY: 0, originX: 0, originY: 0 })
+  const previewViewportRef = useRef(null)
   const previewStageRef = useRef(null)
   const stickersInitializedRef = useRef(false)
 
@@ -251,6 +256,13 @@ export function BassCustomizePage() {
       setHasUnsavedChanges(true)
     }
     baseLoadConfig(raw)
+  }
+
+  const handleZoomIn = () => setZoomLevel((prev) => Math.min(2, Number((prev + 0.1).toFixed(2))))
+  const handleZoomOut = () => setZoomLevel((prev) => Math.max(0.7, Number((prev - 0.1).toFixed(2))))
+  const handleZoomReset = () => {
+    setZoomLevel(1)
+    setPanOffset({ x: 0, y: 0 })
   }
 
   useEffect(() => {
@@ -408,6 +420,38 @@ export function BassCustomizePage() {
 
   const endStickerDrag = () => setIsDraggingSticker(false)
 
+  const clampPan = (x, y, scale = zoomLevel) => {
+    const viewport = previewViewportRef.current
+    if (!viewport || scale <= 1) return { x: 0, y: 0 }
+    const maxX = ((viewport.clientWidth * scale) - viewport.clientWidth) / 2
+    const maxY = ((viewport.clientHeight * scale) - viewport.clientHeight) / 2
+    return {
+      x: Math.max(-maxX, Math.min(maxX, x)),
+      y: Math.max(-maxY, Math.min(maxY, y)),
+    }
+  }
+
+  const beginDrag = (clientX, clientY) => {
+    if (zoomLevel <= 1 || isDraggingSticker) return
+    setIsDraggingPreview(true)
+    panStartRef.current = {
+      pointerX: clientX,
+      pointerY: clientY,
+      originX: panOffset.x,
+      originY: panOffset.y,
+    }
+  }
+
+  const updateDrag = (clientX, clientY) => {
+    if (!isDraggingPreview || isDraggingSticker) return
+    const dx = clientX - panStartRef.current.pointerX
+    const dy = clientY - panStartRef.current.pointerY
+    const next = clampPan(panStartRef.current.originX + dx, panStartRef.current.originY + dy)
+    setPanOffset(next)
+  }
+
+  const endDrag = () => setIsDraggingPreview(false)
+
   useEffect(() => {
     const handleVisibility = () => {
       if (!document.hidden && refreshPrices) {
@@ -421,6 +465,10 @@ export function BassCustomizePage() {
   useEffect(() => {
     stickersRef.current = stickers
   }, [stickers])
+
+  useEffect(() => {
+    setPanOffset((prev) => clampPan(prev.x, prev.y, zoomLevel))
+  }, [zoomLevel])
 
   useEffect(() => {
     if (!stickersInitializedRef.current) {
@@ -1220,42 +1268,61 @@ export function BassCustomizePage() {
                 </div>
               </div>
               
-              <div className="mt-4 flex flex-wrap gap-3">
-                <div className="flex items-center gap-2 rounded-full bg-white/5 px-3 py-1.5 text-xs text-white/60">
-                  <Clock className="h-3.5 w-3.5" />
-                  <span>Build time: 4-6 weeks</span>
-                </div>
-                <div className="flex items-center gap-2 rounded-full bg-white/5 px-3 py-1.5 text-xs text-white/60">
-                  <Truck className="h-3.5 w-3.5" />
-                  <span>Free worldwide shipping</span>
-                </div>
-                <div className="flex items-center gap-2 rounded-full bg-white/5 px-3 py-1.5 text-xs text-white/60">
-                  <Shield className="h-3.5 w-3.5" />
-                  <span>2-year warranty</span>
-                </div>
-              </div>
             </div>
             
-            <div ref={previewRef} className="relative flex-1 rounded-2xl border border-white/10 bg-gradient-to-b from-[#141414] via-[#0d0d0d] to-[#080808] overflow-visible">
+            <div ref={previewRef} className="relative flex-1 rounded-2xl border border-white/10 bg-gradient-to-b from-[#141414] via-[#0d0d0d] to-[#080808] overflow-hidden">
               <div className="absolute inset-0 overflow-hidden pointer-events-none">
                 <div className="absolute -top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-gradient-radial from-[#d4af37]/10 via-transparent to-transparent opacity-60" />
                 <div className="absolute top-1/4 left-1/4 w-[400px] h-[400px] bg-gradient-radial from-white/5 via-transparent to-transparent rounded-full" />
                 <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[800px] h-[200px] bg-gradient-to-t from-[#d4af37]/5 via-transparent to-transparent" />
               </div>
               
-              <div className="relative h-full flex items-center justify-center p-6">
+              <div
+                ref={previewViewportRef}
+                className={`relative h-full flex items-center justify-center p-6 ${zoomLevel > 1 ? 'cursor-grab' : 'cursor-default'} ${isDraggingPreview ? 'cursor-grabbing' : ''}`}
+                onMouseDown={(e) => beginDrag(e.clientX, e.clientY)}
+                onMouseMove={(e) => {
+                  if (isDraggingSticker) {
+                    updateStickerDrag(e.clientX, e.clientY)
+                    return
+                  }
+                  updateDrag(e.clientX, e.clientY)
+                }}
+                onMouseUp={() => {
+                  endDrag()
+                  endStickerDrag()
+                }}
+                onMouseLeave={() => {
+                  endDrag()
+                  endStickerDrag()
+                }}
+                onTouchStart={(e) => {
+                  const touch = e.touches[0]
+                  if (!touch) return
+                  beginDrag(touch.clientX, touch.clientY)
+                }}
+                onTouchMove={(e) => {
+                  const touch = e.touches[0]
+                  if (!touch) return
+                  if (isDraggingSticker) {
+                    updateStickerDrag(touch.clientX, touch.clientY)
+                    return
+                  }
+                  updateDrag(touch.clientX, touch.clientY)
+                }}
+                onTouchEnd={() => {
+                  endDrag()
+                  endStickerDrag()
+                }}
+              >
                 <div
                   ref={previewStageRef}
-                  className="relative w-full max-w-[1100px]"
-                  onMouseMove={(e) => updateStickerDrag(e.clientX, e.clientY)}
-                  onMouseUp={endStickerDrag}
-                  onMouseLeave={endStickerDrag}
-                  onTouchMove={(e) => {
-                    const touch = e.touches[0]
-                    if (!touch) return
-                    updateStickerDrag(touch.clientX, touch.clientY)
+                  className="relative w-full max-w-[1100px] transition-transform duration-200 ease-out"
+                  style={{
+                    transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${zoomLevel})`,
+                    transformOrigin: 'center center',
+                    willChange: 'transform',
                   }}
-                  onTouchEnd={endStickerDrag}
                 >
                   <BassPreview
                     config={config}
@@ -1332,6 +1399,38 @@ export function BassCustomizePage() {
                   }`}
                 >
                   Rear View
+                </button>
+              </div>
+
+              <div className="absolute bottom-4 right-4 flex items-center gap-2 rounded-lg border border-white/10 bg-black/35 p-1.5 backdrop-blur-sm">
+                <button
+                  type="button"
+                  onClick={handleZoomOut}
+                  disabled={zoomLevel <= 0.7}
+                  className="rounded-md bg-[var(--border)] px-2.5 py-2 text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-elevated)] disabled:opacity-40 disabled:cursor-not-allowed"
+                  aria-label="Zoom out"
+                  title="Zoom out"
+                >
+                  <ZoomOut className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={handleZoomReset}
+                  className="rounded-md px-2.5 py-1.5 text-xs font-semibold text-white/80 transition-colors hover:bg-white/10"
+                  aria-label="Reset zoom"
+                  title="Reset zoom"
+                >
+                  {Math.round(zoomLevel * 100)}%
+                </button>
+                <button
+                  type="button"
+                  onClick={handleZoomIn}
+                  disabled={zoomLevel >= 2}
+                  className="rounded-md bg-[var(--border)] px-2.5 py-2 text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-elevated)] disabled:opacity-40 disabled:cursor-not-allowed"
+                  aria-label="Zoom in"
+                  title="Zoom in"
+                >
+                  <ZoomIn className="h-4 w-4" />
                 </button>
               </div>
 
@@ -1560,35 +1659,6 @@ export function BassCustomizePage() {
                 </div>
               </div>
               
-              <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 space-y-3">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/5">
-                    <Truck className="h-5 w-5 text-white/60" />
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium">Free Worldwide Shipping</p>
-                    <p className="text-[10px] text-white/40">On all custom builds</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/5">
-                    <Clock className="h-5 w-5 text-white/60" />
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium">4-6 Week Build Time</p>
-                    <p className="text-[10px] text-white/40">Handcrafted to order</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/5">
-                    <Shield className="h-5 w-5 text-white/60" />
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium">2-Year Warranty</p>
-                    <p className="text-[10px] text-white/40">Parts and labor</p>
-                  </div>
-                </div>
-              </div>
             </div>
             
             <div className="border-t border-white/10 p-4 flex-shrink-0 space-y-2">

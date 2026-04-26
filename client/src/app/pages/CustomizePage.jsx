@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react'
 import { useSearchParams, useNavigate, useBlocker } from 'react-router'
 import { 
   RotateCcw, Save, ChevronDown, ChevronRight, Info, 
-  ShoppingCart, Clock, Truck, Shield, Check, CheckCircle,
+  ShoppingCart, Check, CheckCircle,
   Sparkles, Layers, Palette, Cog, Zap, Image, ZoomIn, ZoomOut, Upload, Trash2
 } from 'lucide-react'
 import { exportMaskedPreview } from '../utils/exportMaskedPreview.js'
@@ -1245,21 +1245,6 @@ export function CustomizePage() {
                 </div>
               </div>
               
-              {/* Build info badges */}
-              <div className="mt-4 flex flex-wrap gap-3">
-                <div className="flex items-center gap-2 rounded-full bg-white/5 px-3 py-1.5 text-xs text-white/60">
-                  <Clock className="h-3.5 w-3.5" />
-                  <span>Build time: 4-6 weeks</span>
-                </div>
-                <div className="flex items-center gap-2 rounded-full bg-white/5 px-3 py-1.5 text-xs text-white/60">
-                  <Truck className="h-3.5 w-3.5" />
-                  <span>Free worldwide shipping</span>
-                </div>
-                <div className="flex items-center gap-2 rounded-full bg-white/5 px-3 py-1.5 text-xs text-white/60">
-                  <Shield className="h-3.5 w-3.5" />
-                  <span>2-year warranty</span>
-                </div>
-              </div>
             </div>
             
             {/* Guitar Preview */}
@@ -1665,36 +1650,6 @@ export function CustomizePage() {
                 </div>
               </div>
               
-              {/* Shipping info */}
-              <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 space-y-3">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/5">
-                    <Truck className="h-5 w-5 text-white/60" />
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium">Free Worldwide Shipping</p>
-                    <p className="text-[10px] text-white/40">On all custom builds</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/5">
-                    <Clock className="h-5 w-5 text-white/60" />
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium">4-6 Week Build Time</p>
-                    <p className="text-[10px] text-white/40">Handcrafted to order</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/5">
-                    <Shield className="h-5 w-5 text-white/60" />
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium">2-Year Warranty</p>
-                    <p className="text-[10px] text-white/40">Parts and labor</p>
-                  </div>
-                </div>
-              </div>
             </div>
             
             {/* Save Image / Load Config */}
