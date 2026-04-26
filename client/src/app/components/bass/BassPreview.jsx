@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useMemo, useRef } from 'react'
 import { CircleDot } from 'lucide-react'
 import {
   bassBuilder,
@@ -60,6 +60,43 @@ function BassLayer({ src, maskSrc, style, className = '', layerName = '' }) {
   )
 }
 
+const getBridgeByStrings = (bridgesByModel, bridgeKey, strings = '4') => {
+  if (!bridgesByModel) return null
+  if (bridgesByModel[bridgeKey]) return bridgesByModel[bridgeKey]
+  const wantsFive = String(strings) === '5'
+  const fiveCandidates = ['extended5', 'standard5']
+  const fourCandidates = ['standard', 'standard4', 'cosmos']
+  const candidateKeys = wantsFive ? fiveCandidates : fourCandidates
+  return candidateKeys.map(key => bridgesByModel[key]).find(Boolean) ?? Object.values(bridgesByModel)[0] ?? null
+}
+
+const getBackplateByStrings = (platesByModel, plateKey, strings = '4') => {
+  if (!platesByModel) return null
+  if (platesByModel[plateKey]) return platesByModel[plateKey]
+  const wantsFive = String(strings) === '5'
+  if (wantsFive && platesByModel.extended) return platesByModel.extended
+  return platesByModel.standard ?? Object.values(platesByModel)[0] ?? null
+}
+
+const resolvePickupLayers = (resolvedConfig) => {
+  const strings = resolvedConfig.strings ?? '4'
+  const preferStyle = resolvedConfig.pickupTypeStyle ?? 'j'
+  const preferBridgeTone = resolvedConfig.pickups === 'active' ? 'creme' : 'black'
+  const baseOptions = { strings, preferTokens: [preferStyle, preferBridgeTone] }
+  const bridgePickup = bassBuilder.resolveCatalogAsset(resolvedConfig.bassType, 'front', 'pickups', {
+    ...baseOptions,
+    preferTokens: [preferStyle, 'bridge', preferBridgeTone],
+  })
+  const neckPickup = bassBuilder.resolveCatalogAsset(resolvedConfig.bassType, 'front', 'pickups', {
+    ...baseOptions,
+    preferTokens: [preferStyle, 'neck', preferBridgeTone],
+  })
+  return {
+    bridgePickup,
+    neckPickup: neckPickup && neckPickup !== bridgePickup ? neckPickup : null,
+  }
+}
+
 function BassPreview({ config, view, onViewChange, modelImageSrc }) {
   const previewRef = useRef(null)
 
@@ -73,11 +110,16 @@ function BassPreview({ config, view, onViewChange, modelImageSrc }) {
       fretboard: config.fretboard ?? 'rosewood',
       headstockWood: config.headstockWood ?? 'maple',
       hardware: config.hardware ?? 'chrome',
+      strings: config.strings ?? '4',
       pickguard: config.pickguard ?? 'none',
       knobs: config.knobs ?? 'black',
       pickups: config.pickups ?? 'standard',
+      pickupTypeStyle: config.pickupTypeStyle ?? 'j',
+      pickupConfig: config.pickupConfig ?? 'j',
       bridge: config.bridge ?? 'standard',
       inlays: config.inlays ?? 'pearl',
+      headstockStyle: config.headstockStyle ?? 'ch',
+      logo: config.logo ?? 'standard',
       backplate: config.backplate ?? 'standard',
       pickupScrews: config.pickupScrews ?? 'black',
       controlPlate: config.controlPlate ?? 'black',
@@ -105,11 +147,82 @@ function BassPreview({ config, view, onViewChange, modelImageSrc }) {
       fretboard: bassBuilder.FRETBOARD_OPTIONS[resolvedConfig.fretboard],
       headstockWood: bassBuilder.HEADSTOCK_WOOD_OPTIONS[resolvedConfig.headstockWood],
       hardware: bassBuilder.HARDWARE_OPTIONS[resolvedConfig.hardware],
-      bridge: bassBuilder.BRIDGE_OPTIONS[resolvedConfig.bassType]?.[resolvedConfig.bridge],
+      bridge: getBridgeByStrings(
+        bassBuilder.BRIDGE_OPTIONS[resolvedConfig.bassType],
+        resolvedConfig.bridge,
+        resolvedConfig.strings,
+      ),
       inlay: bassBuilder.INLAY_OPTIONS[resolvedConfig.inlays],
-      backplate: bassBuilder.BACKPLATE_OPTIONS[resolvedConfig.bassType]?.[resolvedConfig.backplate] || bassBuilder.BACKPLATE_OPTIONS.pb?.[resolvedConfig.backplate] || bassBuilder.BACKPLATE_OPTIONS.standard,
+      backplate: getBackplateByStrings(
+        bassBuilder.BACKPLATE_OPTIONS[resolvedConfig.bassType],
+        resolvedConfig.backplate,
+        resolvedConfig.strings,
+      ),
       controlPlate: bassBuilder.CONTROL_PLATE_OPTIONS[resolvedConfig.controlPlate],
       bodyAssets: bassBuilder.BODY_LAYER_ASSETS[resolvedConfig.bassType],
+      frontBodyMask: bassBuilder.resolveCatalogAsset(
+        resolvedConfig.bassType,
+        'front',
+        'masks',
+        { strings: resolvedConfig.strings, preferTokens: ['bodymask'] },
+      ) || bodyModel.bodySrc,
+      rearBodyMask: bassBuilder.resolveCatalogAsset(
+        resolvedConfig.bassType,
+        'back',
+        'masks',
+        { strings: resolvedConfig.strings, preferTokens: ['bodymask'] },
+      ),
+      rearNeckMask: bassBuilder.resolveCatalogAsset(
+        resolvedConfig.bassType,
+        'back',
+        'masks',
+        { strings: resolvedConfig.strings, preferTokens: ['bodyneckmask', 'neck'] },
+      ),
+      rearNeckFinish: bassBuilder.resolveCatalogAsset(
+        resolvedConfig.bassType,
+        'back',
+        'shadows_highlights',
+        { strings: resolvedConfig.strings, preferTokens: ['multiply'] },
+      ),
+      rearGloss: bassBuilder.resolveCatalogAsset(
+        resolvedConfig.bassType,
+        'back',
+        'shadows_highlights',
+        { strings: resolvedConfig.strings, preferTokens: ['gloss'] },
+      ),
+      rearStrap: bassBuilder.resolveCatalogVariant(
+        resolvedConfig.bassType,
+        'back',
+        'strap buttons/standard',
+        resolvedConfig.strings,
+        resolvedConfig.hardware,
+      ),
+      rearStrapLocks: bassBuilder.resolveCatalogVariant(
+        resolvedConfig.bassType,
+        'back',
+        'strap buttons/straplocks',
+        resolvedConfig.strings,
+        resolvedConfig.hardware,
+      ),
+      rearNeckBolts: bassBuilder.resolveCatalogAsset(
+        resolvedConfig.bassType,
+        'back',
+        'neck bolts',
+        { strings: resolvedConfig.strings, preferTokens: ['neck', 'bolts'] },
+      ),
+      rearFerrules: bassBuilder.resolveCatalogVariant(
+        resolvedConfig.bassType,
+        'back',
+        'string ferrules/standard',
+        resolvedConfig.strings,
+        resolvedConfig.hardware,
+      ),
+      rearBridge: bassBuilder.resolveCatalogAsset(
+        resolvedConfig.bassType,
+        'back',
+        'bridges',
+        { strings: resolvedConfig.strings, preferTokens: ['standard'] },
+      ),
     }
 
     // Validate model-specific options
@@ -132,6 +245,7 @@ function BassPreview({ config, view, onViewChange, modelImageSrc }) {
     if (pickupScrewsByModel) {
       resolvedAssets.pickupScrews = pickupScrewsByModel[resolvedConfig.pickupScrews]
     }
+    resolvedAssets.pickupLayers = resolvePickupLayers(resolvedConfig)
 
     if (DEBUG) console.log('[ASSET RESOLUTION]', resolvedAssets)
     return resolvedAssets
@@ -146,10 +260,10 @@ function BassPreview({ config, view, onViewChange, modelImageSrc }) {
     const layers = []
 
     // Body + Finish
-    if (bodyModelSrc) {
+    if (assets.bodyModel?.bodySrc) {
       layers.push({
         name: 'body-wood',
-        maskSrc: bodyModelSrc,
+        maskSrc: assets.bodyModel.bodySrc,
         style: {
           backgroundImage: assets.bodyWood?.texture ? `url(${assets.bodyWood.texture})` : undefined,
           opacity: 1,
@@ -162,7 +276,7 @@ function BassPreview({ config, view, onViewChange, modelImageSrc }) {
     if (assets.bodyFinish?.texture) {
       layers.push({
         name: 'body-finish-texture',
-        maskSrc: bodyModelSrc,
+        maskSrc: assets.bodyModel?.bodySrc,
         style: {
           backgroundImage: `url(${assets.bodyFinish.texture})`,
           opacity: 1,
@@ -173,7 +287,7 @@ function BassPreview({ config, view, onViewChange, modelImageSrc }) {
     } else if (assets.bodyFinish?.color) {
       layers.push({
         name: 'body-finish-color',
-        maskSrc: bodyModelSrc,
+        maskSrc: assets.bodyModel?.bodySrc,
         style: {
           backgroundColor: assets.bodyFinish.color,
           opacity: 1,
@@ -284,10 +398,17 @@ function BassPreview({ config, view, onViewChange, modelImageSrc }) {
     }
 
     // Pickups
-    if (assets.bodyAssets?.pickups) {
+    if (assets.pickupLayers?.bridgePickup) {
       layers.push({
-        name: 'pickups',
-        src: assets.bodyAssets.pickups,
+        name: 'pickup-bridge',
+        src: assets.pickupLayers.bridgePickup,
+        style: { zIndex: 11, opacity: 0.9 },
+      })
+    }
+    if (assets.pickupLayers?.neckPickup) {
+      layers.push({
+        name: 'pickup-neck',
+        src: assets.pickupLayers.neckPickup,
         style: { zIndex: 11, opacity: 0.9 },
       })
     }
@@ -321,7 +442,15 @@ function BassPreview({ config, view, onViewChange, modelImageSrc }) {
     }
 
     // Strap/Buttons
-    const strapSrc = resolveBassVariant(assets.bodyAssets?.strap, colorKey)
+    const strapSrc = assets.bodyAssets?.front?.strap?.[colorKey]
+      || assets.bodyAssets?.front?.strap?.chrome
+      || bassBuilder.resolveCatalogVariant(
+        resolvedConfig.bassType,
+        'front',
+        'strap buttons/standard',
+        resolvedConfig.strings,
+        colorKey,
+      )
     if (strapSrc) {
       layers.push({
         name: 'strap',
@@ -331,36 +460,48 @@ function BassPreview({ config, view, onViewChange, modelImageSrc }) {
     }
 
     // Shadow effects - applied last for depth
-    if (assets.bodyAssets?.shadows) {
+    const frontShadow = assets.bodyAssets?.front?.shadows || bassBuilder.resolveCatalogAsset(
+      resolvedConfig.bassType,
+      'front',
+      'shadows_highlights',
+      { strings: resolvedConfig.strings, preferTokens: ['edge', 'shadow'] },
+    )
+    if (frontShadow) {
       layers.push({
         name: 'shadows',
-        src: assets.bodyAssets.shadows,
+        src: frontShadow,
         style: { zIndex: 20, opacity: 1, mixBlendMode: 'multiply' },
       })
     }
 
     // Gloss/Highlight effects
-    if (assets.bodyAssets?.gloss) {
+    const frontGloss = assets.bodyAssets?.front?.gloss || bassBuilder.resolveCatalogAsset(
+      resolvedConfig.bassType,
+      'front',
+      'shadows_highlights',
+      { strings: resolvedConfig.strings, preferTokens: ['gloss'] },
+    )
+    if (frontGloss) {
       layers.push({
         name: 'gloss',
-        src: assets.bodyAssets.gloss,
+        src: frontGloss,
         style: { zIndex: 21, opacity: 0.9, mixBlendMode: 'screen' },
       })
     }
 
     if (DEBUG) console.log('[FRONT LAYERS]', layers.map(l => l.name))
     return layers
-  }, [assets, bodyModelSrc, colorKey, resolvedConfig.pickguard])
+  }, [assets, colorKey, resolvedConfig.pickguard])
 
   // Rear view layers with strict validation
   const rearLayers = useMemo(() => {
     const layers = []
 
     // Body base
-    if (bodyModelSrc && assets.bodyWood?.texture) {
+    if (assets.bodyModel?.bodySrc && assets.bodyWood?.texture) {
       layers.push({
         name: 'rear-body-wood',
-        maskSrc: bodyModelSrc,
+        maskSrc: assets.bodyModel.bodySrc,
         style: {
           backgroundImage: `url(${assets.bodyWood.texture})`,
           opacity: 1,
@@ -372,7 +513,7 @@ function BassPreview({ config, view, onViewChange, modelImageSrc }) {
     if (assets.bodyFinish?.texture) {
       layers.push({
         name: 'rear-body-finish-texture',
-        maskSrc: bodyModelSrc,
+        maskSrc: assets.bodyModel?.bodySrc,
         style: {
           backgroundImage: `url(${assets.bodyFinish.texture})`,
           opacity: 1,
@@ -383,7 +524,7 @@ function BassPreview({ config, view, onViewChange, modelImageSrc }) {
     } else if (assets.bodyFinish?.color) {
       layers.push({
         name: 'rear-body-finish-color',
-        maskSrc: bodyModelSrc,
+        maskSrc: assets.bodyModel?.bodySrc,
         style: {
           backgroundColor: assets.bodyFinish.color,
           opacity: 1,
@@ -392,52 +533,73 @@ function BassPreview({ config, view, onViewChange, modelImageSrc }) {
       })
     }
 
-    // Neck - rear view
-    if (assets.neck?.src && BASS_NECK_MASK) {
+    // Rear neck region from /back mask assets
+    if (assets.rearNeckMask && assets.neck?.src) {
       layers.push({
-        name: 'rear-neck',
-        maskSrc: BASS_NECK_MASK,
+        name: 'rear-neck-wood',
+        maskSrc: assets.rearNeckMask,
         style: {
           backgroundImage: `url(${assets.neck.src})`,
           filter: assets.neck.filter,
           opacity: 0.98,
-          zIndex: 2,
-        },
-      })
-    }
-
-    // Fretboard - rear view
-    if (assets.fretboard?.src && BASS_NECK_MASK) {
-      layers.push({
-        name: 'rear-fretboard',
-        maskSrc: BASS_NECK_MASK,
-        style: {
-          backgroundImage: `url(${assets.fretboard.src})`,
-          opacity: 0.94,
-          mixBlendMode: 'multiply',
           zIndex: 3,
         },
       })
     }
 
-    const isHeadless = resolvedConfig.bassType === 'vader';
-
-    // Headstock wood - rear view
-    if (!isHeadless && assets.headstockWood?.texture && BASS_NECK_MASK) {
+    if (assets.rearNeckMask && assets.rearNeckFinish) {
       layers.push({
-        name: 'rear-headstock-wood',
-        maskSrc: BASS_NECK_MASK,
+        name: 'rear-neck-finish',
+        maskSrc: assets.rearNeckMask,
         style: {
-          backgroundImage: `url(${assets.headstockWood.texture})`,
-          opacity: 0.95,
+          backgroundImage: `url(${assets.rearNeckFinish})`,
+          opacity: 0.92,
+          mixBlendMode: 'multiply',
           zIndex: 4,
         },
       })
-    } else if (isHeadless && assets.bodyAssets?.rearNeckCap) {
+    }
+
+    if (assets.rearNeckBolts) {
+      layers.push({
+        name: 'rear-neck-bolts',
+        src: assets.rearNeckBolts,
+        style: { zIndex: 5, opacity: 0.95 },
+      })
+    }
+
+    if (assets.rearFerrules) {
+      layers.push({
+        name: 'rear-ferrules',
+        src: assets.rearFerrules,
+        style: { zIndex: 6, opacity: 0.95 },
+      })
+    }
+
+    if (assets.rearBridge) {
+      layers.push({
+        name: 'rear-bridge',
+        src: assets.rearBridge,
+        style: { zIndex: 7, opacity: 0.95 },
+      })
+    }
+
+    const isHeadless = resolvedConfig.bassType === 'vader'
+    if (isHeadless && assets.bodyAssets?.back?.neckCap) {
       layers.push({
         name: 'rear-neck-cap',
-        src: assets.bodyAssets.rearNeckCap,
-        style: { zIndex: 4, opacity: 0.95, transform: 'scaleX(-1)' },
+        src: assets.bodyAssets.back.neckCap,
+        style: { zIndex: 8, opacity: 0.95 },
+      })
+    } else if (assets.headstockWood?.texture && assets.rearNeckMask) {
+      layers.push({
+        name: 'rear-headstock-wood',
+        maskSrc: assets.rearNeckMask,
+        style: {
+          backgroundImage: `url(${assets.headstockWood.texture})`,
+          opacity: 0.95,
+          zIndex: 8,
+        },
       })
     }
 
@@ -446,38 +608,54 @@ function BassPreview({ config, view, onViewChange, modelImageSrc }) {
       layers.push({
         name: 'backplate',
         src: assets.backplate.src,
-        style: { zIndex: 5, opacity: 0.95, transform: 'scaleX(-1)' },
+        style: { zIndex: 9, opacity: 0.95 },
       })
     } else if (DEBUG) {
       console.warn('[REAR] Backplate asset missing')
     }
 
+    if (assets.rearStrap) {
+      layers.push({
+        name: 'rear-strap',
+        src: assets.rearStrap,
+        style: { zIndex: 10, opacity: 0.95 },
+      })
+    }
+
+    if (assets.rearStrapLocks) {
+      layers.push({
+        name: 'rear-straplocks',
+        src: assets.rearStrapLocks,
+        style: { zIndex: 11, opacity: 0.95 },
+      })
+    }
+
     // Shadow effects - rear view
-    if (assets.bodyAssets?.shadows) {
+    if (assets.bodyAssets?.back?.shadows || assets.rearNeckFinish) {
       layers.push({
         name: 'rear-shadows',
-        src: assets.bodyAssets.shadows,
-        style: { zIndex: 20, opacity: 0.6, mixBlendMode: 'multiply' },
+        src: assets.bodyAssets?.back?.shadows || assets.rearNeckFinish,
+        style: { zIndex: 20, opacity: 0.85, mixBlendMode: 'multiply' },
       })
     }
 
     // Gloss effects - rear view
-    if (assets.bodyAssets?.gloss) {
+    if (assets.bodyAssets?.back?.gloss || assets.rearGloss) {
       layers.push({
         name: 'rear-gloss',
-        src: assets.bodyAssets.gloss,
-        style: { zIndex: 21, opacity: 0.7, mixBlendMode: 'screen' },
+        src: assets.bodyAssets?.back?.gloss || assets.rearGloss,
+        style: { zIndex: 21, opacity: 0.8, mixBlendMode: 'screen' },
       })
     }
 
     if (DEBUG) console.log('[REAR LAYERS]', layers.map(l => l.name))
     return layers
-  }, [assets, bodyModelSrc])
+  }, [assets])
 
   // Transform calculations
   const previewLayout = bassBuilder.PREVIEW_LAYOUTS[resolvedConfig.bassType] ?? { scale: 0.93, x: 0, y: 26 }
   const previewScale = view === 'rear' ? previewLayout.scale * 0.98 : previewLayout.scale
-  const previewFlip = view === 'rear' ? 'scaleX(-1)' : 'scaleX(1)'
+  const previewFlip = 'scaleX(1)'
 
   if (DEBUG && view) {
     console.log(`[VIEW CHANGE] ${view} - scale: ${previewScale}, flip: ${previewFlip}`)

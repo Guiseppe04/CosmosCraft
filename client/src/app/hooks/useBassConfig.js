@@ -275,11 +275,15 @@ export default function useBassConfig() {
   }, [priceOverrides])
 
   const mergedBackplateOptions = useMemo(() => {
-    const merged = { ...BASS_BACKPLATE_OPTIONS }
-    Object.keys(merged).forEach(key => {
-      if (priceOverrides[key] !== undefined) {
-        merged[key] = { ...merged[key], price: priceOverrides[key].price }
-      }
+    const merged = {}
+    Object.keys(BASS_BACKPLATE_OPTIONS).forEach(bodyKey => {
+      merged[bodyKey] = { ...BASS_BACKPLATE_OPTIONS[bodyKey] }
+      Object.keys(merged[bodyKey]).forEach(key => {
+        const specific = getOptionOverride('hardware', key)
+        if (specific !== undefined) {
+          merged[bodyKey][key] = { ...merged[bodyKey][key], price: specific }
+        }
+      })
     })
     return merged
   }, [priceOverrides])
@@ -407,10 +411,19 @@ export default function useBassConfig() {
     return merged
   }, [priceOverrides])
 
+  const getBridgeKeysForStrings = useCallback((bassType, strings) => {
+    const allKeys = Object.keys(BASS_BRIDGE_OPTIONS[bassType] ?? BASS_BRIDGE_OPTIONS.vader)
+    const wantsFive = String(strings) === '5'
+    const fiveKeys = allKeys.filter((key) => /(^|[^0-9])5([^0-9]|$)/i.test(key))
+    const fourKeys = allKeys.filter((key) => !/(^|[^0-9])5([^0-9]|$)/i.test(key))
+    const preferred = wantsFive ? fiveKeys : fourKeys
+    return preferred.length > 0 ? preferred : allKeys
+  }, [])
+
   useEffect(() => {
     const pickguardKeys = Object.keys(BASS_PICKGUARD_OPTIONS[config.bassType] ?? BASS_PICKGUARD_OPTIONS.vader)
     const knobKeys = Object.keys(BASS_KNOB_OPTIONS[config.bassType] ?? BASS_KNOB_OPTIONS.vader)
-    const bridgeKeys = Object.keys(BASS_BRIDGE_OPTIONS[config.bassType] ?? BASS_BRIDGE_OPTIONS.vader)
+    const bridgeKeys = getBridgeKeysForStrings(config.bassType, config.strings)
     const logoKeys = Object.keys(BASS_LOGO_OPTIONS[config.bassType] ?? BASS_LOGO_OPTIONS.vader)
     
     const nextPickguard = pickguardKeys.includes(config.pickguard) ? config.pickguard : pickguardKeys[0]
@@ -427,7 +440,7 @@ export default function useBassConfig() {
         logo: nextLogo,
       }))
     }
-  }, [config.bassType, config.knobs, config.pickguard, config.bridge, config.logo])
+  }, [config.bassType, config.strings, config.knobs, config.pickguard, config.bridge, config.logo, getBridgeKeysForStrings])
 
   const updateConfig = useCallback((patch) => {
     setConfig(prev => ({ ...prev, ...patch }))
@@ -527,13 +540,16 @@ export default function useBassConfig() {
     [mergedInlayOptions],
   )
   const bridgeOptions = useMemo(
-    () =>
-      Object.entries(mergedBridgeOptions[config.bassType] ?? mergedBridgeOptions.vader).map(([value, option]) => ({
+    () => {
+      const bridgeMap = mergedBridgeOptions[config.bassType] ?? mergedBridgeOptions.vader
+      const allowedKeys = new Set(getBridgeKeysForStrings(config.bassType, config.strings))
+      return Object.entries(bridgeMap).filter(([value]) => allowedKeys.has(value)).map(([value, option]) => ({
         value,
         ...option,
         preview: option.assets?.[config.hardware] ?? option.assets?.chrome ?? option.assets?.black ?? option.assets?.gold,
-      })),
-    [config.hardware, config.bassType, mergedBridgeOptions],
+      }))
+    },
+    [config.hardware, config.bassType, config.strings, getBridgeKeysForStrings, mergedBridgeOptions],
   )
   const pickguardOptions = useMemo(
     () =>
@@ -586,8 +602,8 @@ export default function useBassConfig() {
     [config.bassType, mergedLogoOptions],
   )
   const backplateOptions = useMemo(
-    () => Object.entries(mergedBackplateOptions).map(([value, option]) => ({ value, ...option })),
-    [mergedBackplateOptions],
+    () => Object.entries(mergedBackplateOptions[config.bassType] ?? mergedBackplateOptions.vader).map(([value, option]) => ({ value, ...option })),
+    [config.bassType, mergedBackplateOptions],
   )
   const pickupScrewOptions = useMemo(
     () => Object.entries(mergedPickupScrewOptions[config.bassType] ?? mergedPickupScrewOptions.vader).map(([value, option]) => ({ value, ...option })),
