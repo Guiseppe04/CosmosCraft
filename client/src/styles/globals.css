@@ -301,23 +301,23 @@ html[data-theme="light"] .min-h-screen {
 
 @media (prefers-color-scheme: dark) {
   body {
-    background-color: var(--color-dark); /* Dark bg for system dark mode */
-    color: var(--color-dark);
+    background-color: var(--bg-primary);
+    color: var(--text-light);
   }
 
   p {
-    color: var(--color-light); /* Light text on dark bg */
+    color: inherit;
   }
 
   h1, h2, h3, h4, h5, h6 {
-    color: var(--color-dark);
+    color: inherit;
   }
 
   input,
   textarea,
   select {
-    color: var(--color-dark);              /* Dark text in form fields */
-    border-color: var(--color-gray-700);   /* Darker border for dark mode inputs */
+    color: var(--text-light);
+    border-color: var(--border);
   }
 }
 

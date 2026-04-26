@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { CircleDot } from 'lucide-react'
 import {
   bassBuilder,
@@ -9,7 +9,7 @@ import {
   resolveBassVariant,
 } from '../../lib/bassBuilderData.js'
 
-const DEBUG = true // Toggle for debug logging
+const DEBUG = Boolean(import.meta.env.DEV)
 
 const layerStyle = (src, extra = {}) => {
   if (!src) return null
@@ -26,8 +26,14 @@ const maskedLayerStyle = (maskSrc, extra = {}) => {
   if (!maskSrc) return null
   return {
     backgroundColor: 'transparent',
+    backgroundRepeat: 'no-repeat',
+    backgroundPosition: 'center',
+    backgroundSize: 'contain',
     WebkitMaskImage: `url(${maskSrc})`,
     maskImage: `url(${maskSrc})`,
+    // Force alpha-based masking so preview matches export's destination-in alpha behavior.
+    WebkitMaskMode: 'alpha',
+    maskMode: 'alpha',
     WebkitMaskRepeat: 'no-repeat',
     maskRepeat: 'no-repeat',
     WebkitMaskSize: 'contain',
@@ -56,6 +62,8 @@ function BassLayer({ src, maskSrc, style, className = '', layerName = '' }) {
       className={`absolute inset-0 pointer-events-none select-none ${className}`}
       style={computedStyle}
       data-layer={layerName}
+      data-layer-src={src || ''}
+      data-layer-mask={maskSrc || ''}
       data-export-layer="true"
     />
   )
@@ -545,13 +553,6 @@ function BassPreview({ config, view, onViewChange, modelImageSrc }) {
       console.warn('[HEADSTOCK] Missing headstock asset')
     }
 
-    if (!assets.isHeadless && assets.headstockLogo) {
-      layers.push({
-        name: 'headstock-logo',
-        src: assets.headstockLogo,
-        style: { zIndex: 8.2, opacity: 0.96 },
-      })
-    }
     if (!assets.isHeadless && assets.headstockStringOverlay) {
       layers.push({
         name: 'headstock-strings',
@@ -570,13 +571,6 @@ function BassPreview({ config, view, onViewChange, modelImageSrc }) {
       layers.push({
         name: 'headstock-truss-cover',
         src: assets.headstockTrussCover,
-        style: { zIndex: 8.5, opacity: 0.95 },
-      })
-    }
-    if (assets.isHeadless && assets.logo?.src) {
-      layers.push({
-        name: 'body-logo',
-        src: assets.logo.src,
         style: { zIndex: 8.2, opacity: 0.95 },
       })
     }
@@ -866,10 +860,47 @@ function BassPreview({ config, view, onViewChange, modelImageSrc }) {
     console.log(`[VIEW CHANGE] ${view} - scale: ${previewScale}, flip: ${previewFlip}`)
   }
 
+  useEffect(() => {
+    if (!DEBUG || !previewRef.current) return
+    const stage = previewRef.current.querySelector('[data-export-stage="true"]')
+    if (!stage) {
+      console.warn('[BASS PREVIEW DEBUG] Missing export stage in preview DOM')
+      return
+    }
+
+    const layerNodes = Array.from(stage.querySelectorAll('[data-layer]'))
+    const rows = layerNodes.map((node) => {
+      const style = window.getComputedStyle(node)
+      const rect = node.getBoundingClientRect()
+      return {
+        name: node.getAttribute('data-layer') || '',
+        src: node.getAttribute('data-layer-src') || style.backgroundImage || '',
+        mask: node.getAttribute('data-layer-mask') || style.maskImage || style.webkitMaskImage || '',
+        zIndex: style.zIndex,
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+        opacity: style.opacity,
+        display: style.display,
+        visibility: style.visibility,
+        transform: style.transform,
+      }
+    })
+
+    const payload = {
+      view,
+      stage: {
+        width: Math.round(stage.getBoundingClientRect().width),
+        height: Math.round(stage.getBoundingClientRect().height),
+      },
+      layers: rows,
+    }
+    console.log('[BASS PREVIEW DEBUG] Rendered layer diagnostics', payload)
+  }, [view, frontLayers, rearLayers])
+
   return (
     <div className="w-full" ref={previewRef}>
       <div className="relative mx-auto w-full">
-        <div className="relative overflow-hidden rounded-xl">
+        <div className="relative overflow-visible rounded-xl">
           <div className="absolute inset-0 bg-gradient-to-b from-[#1a1a1a] via-[#0f0f0f] to-[#0a0a0a]" />
 
           <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -885,6 +916,7 @@ function BassPreview({ config, view, onViewChange, modelImageSrc }) {
               style={{
                 transform: `translate(${previewLayout.x}px, ${previewLayout.y}px) scale(${previewScale}) ${previewFlip}`,
                 transformOrigin: '50% 50%',
+                isolation: 'isolate',
               }}
             >
               {/* FRONT VIEW */}
