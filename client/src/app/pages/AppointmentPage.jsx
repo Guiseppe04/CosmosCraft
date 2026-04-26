@@ -242,7 +242,8 @@ export function AppointmentPage() {
   // Calendar state
   const [currentMonth, setCurrentMonth] = useState(today.getMonth())
   const [currentYear, setCurrentYear] = useState(today.getFullYear())
-  const [bookingComplete, setBookingComplete] = useState(false)
+  const [isSubmittingBooking, setIsSubmittingBooking] = useState(false)
+  const [showBookingSuccess, setShowBookingSuccess] = useState(false)
 
   const timeSlots = ['9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM']
 
@@ -566,7 +567,7 @@ export function AppointmentPage() {
       return
     }
     if (!canProceed()) return
-    setBookingComplete(true)
+    setIsSubmittingBooking(true)
     
     try {
       let serviceReferenceImageUrl = ''
@@ -620,14 +621,17 @@ export function AppointmentPage() {
         throw new Error(errData.message || 'Failed to create appointment');
       }
 
+      setShowBookingSuccess(true)
       setTimeout(() => {
-        setBookingComplete(false)
+        setShowBookingSuccess(false)
+        setIsSubmittingBooking(false)
         navigate('/dashboard')
       }, 2000)
 
     } catch (error) {
       console.error('Submission Error:', error);
-      setBookingComplete(false);
+      setShowBookingSuccess(false)
+      setIsSubmittingBooking(false)
       alert(`Failed to book appointment: ${error.message}`);
     }
   }
@@ -1275,7 +1279,7 @@ export function AppointmentPage() {
               <div className="flex items-center justify-between">
                <button
                  onClick={handlePrevStep}
-                 disabled={currentStep === 1 || bookingComplete}
+                 disabled={currentStep === 1 || isSubmittingBooking}
                  className="px-6 py-2.5 rounded-xl text-sm font-bold text-[var(--text-light)] bg-[var(--surface-dark)] border border-[var(--border)] hover:bg-[var(--surface-elevated)] hover:text-[var(--text-light)] transition-colors disabled:opacity-0"
                >
                  Back
@@ -1292,10 +1296,10 @@ export function AppointmentPage() {
                ) : (
                  <button
                    onClick={handleSubmit}
-                   disabled={bookingComplete}
+                   disabled={isSubmittingBooking}
                    className="px-8 py-2.5 rounded-xl text-sm font-bold bg-[#d4af37] text-black hover:bg-[#ffe270] transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(212,175,55,0.3)] shadow-[#d4af37]/20 flex items-center gap-2"
                  >
-                   {bookingComplete ? (
+                   {isSubmittingBooking ? (
                      <>Processing... <Settings className="w-4 h-4 animate-spin" /></>
                    ) : (
                      "Complete Booking"
@@ -1310,14 +1314,14 @@ export function AppointmentPage() {
 
         {/* Global Success Overlay */}
         <AnimatePresence>
-          {bookingComplete && (
+          {showBookingSuccess && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 flex items-center justify-center z-[100] bg-black/80 backdrop-blur-sm"
+              className="fixed inset-0 flex items-center justify-center z-[100] bg-[var(--overlay-dark)]"
             >
-              <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} className="bg-[#181818] border border-[#d4af37]/50 rounded-3xl p-10 text-center max-w-sm mx-4 shadow-2xl">
+              <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} className="bg-[var(--surface-dark)] border border-[#d4af37]/50 rounded-3xl p-10 text-center max-w-sm mx-4 shadow-2xl">
                 <div className="w-20 h-20 bg-[#d4af37]/20 rounded-full flex items-center justify-center mx-auto mb-6">
                   <CheckCircle2 className="w-10 h-10 text-[#d4af37]" />
                 </div>
@@ -1326,7 +1330,7 @@ export function AppointmentPage() {
                   Your appointment has been scheduled successfully. You will be redirected to the dashboard.
                 </p>
                 {referenceNumber && (
-                   <p className="text-xs font-mono text-[#d4af37] bg-[#d4af37]/10 py-2 rounded-lg">
+                   <p className="text-xs font-mono text-[#f4d76b] bg-[#d4af37]/15 py-2 rounded-lg border border-[#d4af37]/30">
                      {referenceNumber}
                    </p>
                 )}

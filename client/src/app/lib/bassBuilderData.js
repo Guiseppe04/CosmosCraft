@@ -1,14 +1,10 @@
-export const bassAsset = path => new URL(`../../../../builder/bass_models/${path}`, import.meta.url).href
-export const bassWoodAsset = path => new URL(`../../../../woodtype/${path}`, import.meta.url).href
+export const bassAsset = (path) => `/builder/bass_models/${String(path || '').replace(/^\/+/, '')}`
+export const bassWoodAsset = (path) => `/woodtype/${String(path || '').replace(/^\/+/, '')}`
 
-const RAW_BASS_ASSET_MODULES = import.meta.glob(
-  '../../../../builder/bass_models/bass/**/*.{png,jpg,jpeg,webp,avif,svg}',
-  { eager: true, import: 'default' },
-)
-const RAW_SHARED_BASS_ASSET_MODULES = import.meta.glob(
-  '../../../../builder/bass_models/all-models/**/*.{png,jpg,jpeg,webp,avif,svg}',
-  { eager: true, import: 'default' },
-)
+// Keep catalog logic optional: core rendering uses static `bassAsset(...)` paths
+// so bass previews work even if no external builder folder exists.
+const RAW_BASS_ASSET_MODULES = {}
+const RAW_SHARED_BASS_ASSET_MODULES = {}
 
 const createEmptyCatalog = () => ({ all: [], front: {}, back: {} })
 const DEFAULT_BASS_MODELS = ['vader', 'pb', 'jb']
