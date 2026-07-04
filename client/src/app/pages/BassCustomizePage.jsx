@@ -57,6 +57,20 @@ function Tooltip({ content, children }) {
   )
 }
 
+function ConfigRow({ label, value, price }) {
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-xs text-white/50">{label}</span>
+      <span className="text-xs font-medium">
+        {value}
+        {price > 0 && (
+          <span className="ml-2 text-[var(--gold-primary)]">+{formatCurrency(price)}</span>
+        )}
+      </span>
+    </div>
+  )
+}
+
 function AnimatedPrice({ price }) {
   const displayPrice = useMemo(() => {
     const phpPrice = toPHP(price, false)
@@ -175,8 +189,24 @@ export function BassCustomizePage() {
   const editBuildId = searchParams.get('edit')
   const navigate = useNavigate()
 
+<<<<<<< Updated upstream
   const { config, updateConfig, resetConfig, price, summary, exportConfig, loadConfig, builder, options } =
     useBassConfig()
+=======
+  const {
+    config,
+    updateConfig: baseUpdateConfig,
+    resetConfig: baseResetConfig,
+    price,
+    summary,
+    pricingBreakdown,
+    exportConfig,
+    loadConfig: baseLoadConfig,
+    builder,
+    options,
+    refreshPrices,
+  } = useBassConfig()
+>>>>>>> Stashed changes
   const [view, setView] = useState('front')
   const [activeCategory, setActiveCategory] = useState('body')
   const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false)
@@ -184,6 +214,51 @@ export function BassCustomizePage() {
   const categoryDropdownRef = useRef(null)
   const { isAuthenticated, openLogin } = useAuth()
   const { addToCart, setIsOpen: setCartOpen } = useCart()
+<<<<<<< Updated upstream
+=======
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(Boolean(editBuildId))
+  const bypassNavigationBlockRef = useRef(false)
+  const [showUnsavedModal, setShowUnsavedModal] = useState(false)
+  const suppressDirtyTrackingRef = useRef(false)
+  const [stickers, setStickers] = useState([])
+  const [selectedStickerId, setSelectedStickerId] = useState(null)
+  const [isDraggingSticker, setIsDraggingSticker] = useState(false)
+  const [isStickerPanelOpen, setIsStickerPanelOpen] = useState(true)
+  const stickerFileInputRef = useRef(null)
+  const stickersRef = useRef([])
+  const panStartRef = useRef({ pointerX: 0, pointerY: 0, originX: 0, originY: 0 })
+  const previewViewportRef = useRef(null)
+  const previewStageRef = useRef(null)
+  const stickersInitializedRef = useRef(false)
+
+  const updateConfig = (patch) => {
+    if (editBuildId && !suppressDirtyTrackingRef.current) {
+      setHasUnsavedChanges(true)
+    }
+    baseUpdateConfig(patch)
+  }
+
+  const resetConfig = () => {
+    if (editBuildId && !suppressDirtyTrackingRef.current) {
+      setHasUnsavedChanges(true)
+    }
+    baseResetConfig()
+  }
+
+  const loadConfig = (raw) => {
+    if (editBuildId && !suppressDirtyTrackingRef.current) {
+      setHasUnsavedChanges(true)
+    }
+    baseLoadConfig(raw)
+  }
+
+  const handleZoomIn = () => setZoomLevel((prev) => Math.min(2, Number((prev + 0.1).toFixed(2))))
+  const handleZoomOut = () => setZoomLevel((prev) => Math.max(0.7, Number((prev - 0.1).toFixed(2))))
+  const handleZoomReset = () => {
+    setZoomLevel(1)
+    setPanOffset({ x: 0, y: 0 })
+  }
+>>>>>>> Stashed changes
 
   useEffect(() => {
     function handleClickOutside(event) {
@@ -820,6 +895,7 @@ export function BassCustomizePage() {
 
           {/* CENTER - Bass Preview */}
           <main className="min-h-0 flex flex-col">
+<<<<<<< Updated upstream
             <div className="mb-4 rounded-2xl border border-white/10 bg-theme-surface-deep p-5">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
@@ -858,6 +934,9 @@ export function BassCustomizePage() {
             </div>
             
             <div className="relative flex-1 rounded-2xl border border-white/10 bg-gradient-to-b from-[#141414] via-[#0d0d0d] to-[#080808] overflow-hidden">
+=======
+            <div ref={previewRef} className="relative flex-1 rounded-2xl border border-white/10 bg-gradient-to-b from-[#141414] via-[#0d0d0d] to-[#080808] overflow-hidden">
+>>>>>>> Stashed changes
               <div className="absolute inset-0 overflow-hidden pointer-events-none">
                 <div className="absolute -top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-gradient-radial from-[#d4af37]/10 via-transparent to-transparent opacity-60" />
                 <div className="absolute top-1/4 left-1/4 w-[400px] h-[400px] bg-gradient-radial from-white/5 via-transparent to-transparent rounded-full" />
@@ -896,29 +975,218 @@ export function BassCustomizePage() {
                   Rear View
                 </button>
               </div>
+<<<<<<< Updated upstream
+=======
+
+              <div className="absolute bottom-4 right-4 flex items-center gap-2 rounded-lg border border-white/10 bg-black/35 p-1.5 backdrop-blur-sm">
+                <button
+                  type="button"
+                  onClick={handleZoomOut}
+                  disabled={zoomLevel <= 0.7}
+                  className="rounded-md bg-[var(--border)] px-2.5 py-2 text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-elevated)] disabled:opacity-40 disabled:cursor-not-allowed"
+                  aria-label="Zoom out"
+                  title="Zoom out"
+                >
+                  <ZoomOut className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={handleZoomReset}
+                  className="rounded-md px-2.5 py-1.5 text-xs font-semibold text-white/80 transition-colors hover:bg-white/10"
+                  aria-label="Reset zoom"
+                  title="Reset zoom"
+                >
+                  {Math.round(zoomLevel * 100)}%
+                </button>
+                <button
+                  type="button"
+                  onClick={handleZoomIn}
+                  disabled={zoomLevel >= 2}
+                  className="rounded-md bg-[var(--border)] px-2.5 py-2 text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-elevated)] disabled:opacity-40 disabled:cursor-not-allowed"
+                  aria-label="Zoom in"
+                  title="Zoom in"
+                >
+                  <ZoomIn className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="absolute top-4 right-2 sm:right-4 w-[calc(100%-1rem)] sm:w-[360px] sm:max-w-[calc(100%-2rem)] space-y-2 rounded-lg border border-white/10 bg-black/35 p-2 backdrop-blur-sm">
+                <input
+                  ref={stickerFileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleStickerUpload}
+                  className="hidden"
+                />
+                <div className="flex items-center justify-between gap-2">
+                  <button
+                    type="button"
+                    onClick={() => stickerFileInputRef.current?.click()}
+                    disabled={currentViewStickers.length >= MAX_STICKERS}
+                    className="inline-flex items-center gap-1.5 rounded-md bg-[var(--border)] px-2.5 py-2 text-xs font-semibold text-[var(--text-muted)] hover:bg-[var(--surface-elevated)] disabled:opacity-40 disabled:cursor-not-allowed"
+                    title="Upload sticker image"
+                  >
+                    <Upload className="h-3.5 w-3.5" />
+                    Add Sticker
+                  </button>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-white/70">{currentViewStickers.length}/{MAX_STICKERS} ({view})</span>
+                    <button
+                      type="button"
+                      onClick={() => setIsStickerPanelOpen((open) => !open)}
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-[var(--border)] text-[var(--text-muted)] transition hover:bg-[var(--surface-elevated)]"
+                      title={isStickerPanelOpen ? 'Hide sticker panel' : 'Show sticker panel'}
+                    >
+                      <span className={`inline-flex transform ${isStickerPanelOpen ? '' : 'rotate-180'}`}>
+                        <ChevronDown className="h-4 w-4" />
+                      </span>
+                    </button>
+                  </div>
+                </div>
+
+                {isStickerPanelOpen && selectedSticker && (selectedSticker.side || 'front') === view && (
+                  <div className="space-y-2 rounded-md border border-white/10 bg-black/25 p-2">
+                    <div className="grid grid-cols-4 gap-1.5">
+                      <button type="button" onClick={() => moveLayer('back')} className="rounded bg-[var(--border)] px-1.5 py-1 text-[10px] text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]">Back</button>
+                      <button type="button" onClick={() => moveLayer('down')} className="rounded bg-[var(--border)] px-1.5 py-1 text-[10px] text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]">Down</button>
+                      <button type="button" onClick={() => moveLayer('up')} className="rounded bg-[var(--border)] px-1.5 py-1 text-[10px] text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]">Up</button>
+                      <button type="button" onClick={() => moveLayer('front')} className="rounded bg-[var(--border)] px-1.5 py-1 text-[10px] text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]">Front</button>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => updateSelectedSticker((prev) => ({ ...prev, size: Math.max(6, prev.size - 2) }))}
+                        className="rounded-md bg-[var(--border)] px-2 py-1.5 text-xs font-bold text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]"
+                        title="Shrink sticker"
+                      >
+                        -
+                      </button>
+                      <span className="text-[10px] text-white/70 min-w-10 text-center">{Math.round(selectedSticker.size)}%</span>
+                      <button
+                        type="button"
+                        onClick={() => updateSelectedSticker((prev) => ({ ...prev, size: Math.min(50, prev.size + 2) }))}
+                        className="rounded-md bg-[var(--border)] px-2 py-1.5 text-xs font-bold text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]"
+                        title="Enlarge sticker"
+                      >
+                        +
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => updateSelectedSticker((prev) => ({ ...prev, rotation: (prev.rotation - 15 + 360) % 360 }))}
+                        className="rounded-md bg-[var(--border)] px-2 py-1.5 text-xs font-bold text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]"
+                        title="Rotate left"
+                      >
+                        -15°
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => updateSelectedSticker((prev) => ({ ...prev, rotation: (prev.rotation + 15) % 360 }))}
+                        className="rounded-md bg-[var(--border)] px-2 py-1.5 text-xs font-bold text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]"
+                        title="Rotate right"
+                      >
+                        +15°
+                      </button>
+                    </div>
+
+                    <input
+                      type="range"
+                      min="0"
+                      max="359"
+                      value={selectedSticker.rotation || 0}
+                      onChange={(e) => updateSelectedSticker({ rotation: Number(e.target.value) })}
+                      className="w-full accent-[#d4af37]"
+                    />
+
+                    <div className="flex items-center justify-between gap-1.5">
+                      <button
+                        type="button"
+                        onClick={duplicateSelectedSticker}
+                        disabled={currentViewStickers.length >= MAX_STICKERS}
+                        className="rounded-md bg-[var(--border)] px-2 py-1.5 text-[10px] font-semibold text-[var(--text-muted)] hover:bg-[var(--surface-elevated)] disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        Duplicate
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removeStickerById(selectedSticker.id)}
+                        className="rounded-md bg-red-500/20 px-2 py-1.5 text-red-300 hover:bg-red-500/30"
+                        title="Remove sticker"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {isStickerPanelOpen && currentViewStickers.length > 0 && (
+                  <div className="max-h-24 overflow-y-auto space-y-1 rounded-md border border-white/10 bg-black/20 p-1.5">
+                    {currentViewStickers.map((stickerItem, index) => (
+                      <button
+                        key={stickerItem.id}
+                        type="button"
+                        onClick={() => setSelectedStickerId(stickerItem.id)}
+                        className={`w-full flex items-center gap-2 rounded px-1.5 py-1 text-left text-[10px] ${
+                          selectedStickerId === stickerItem.id
+                            ? 'bg-[#d4af37]/20 text-[#d4af37]'
+                            : 'bg-white/5 text-white/70 hover:bg-white/10'
+                        }`}
+                      >
+                        <img src={stickerItem.src} alt={`Sticker ${index + 1}`} className="h-5 w-5 rounded object-cover" />
+                        <span>{view === 'front' ? 'Front' : 'Rear'} Sticker {index + 1}</span>
+                        <span className="ml-auto">z:{index + 1}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+>>>>>>> Stashed changes
             </div>
-            
-            <div className="mt-4 rounded-xl border border-white/10 bg-theme-surface-deep p-4">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                <div>
-                  <p className="text-[10px] uppercase tracking-[0.15em] text-white/40">Body</p>
-                  <p className="mt-0.5 text-sm font-medium">{summary.body}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] uppercase tracking-[0.15em] text-white/40">Pickups</p>
-                  <p className="mt-0.5 text-sm font-medium">{summary.pickups}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] uppercase tracking-[0.15em] text-white/40">Neck</p>
-                  <p className="mt-0.5 text-sm font-medium">{summary.neck}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] uppercase tracking-[0.15em] text-white/40">Strings</p>
-                  <p className="mt-0.5 text-sm font-medium">{summary.strings}</p>
+
+            <div className="mt-4 px-4 sm:px-6">
+              <div className="rounded-3xl border border-white/10 bg-white/[0.02] p-4 shadow-[0_15px_60px_-40px_rgba(0,0,0,0.8)]">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex flex-col gap-2">
+                    <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/30 px-3 py-2 text-[11px] font-semibold text-white/70">
+                      <span className={`h-2.5 w-2.5 rounded-full ${hasUnsavedChanges ? 'bg-amber-300' : 'bg-emerald-300'}`} />
+                      {hasUnsavedChanges ? 'Unsaved changes' : 'Saved'}
+                    </div>
+                  </div>
+
+                  <div className="grid w-full gap-3 sm:grid-cols-3 sm:w-auto">
+                    <button
+                      type="button"
+                      onClick={resetConfig}
+                      className="flex items-center justify-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] px-4 py-3 text-sm font-medium text-[var(--text-muted)] transition-all duration-200 hover:bg-[var(--surface-dark)]"
+                    >
+                      <RotateCcw className="h-4 w-4" />
+                      Reset
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSave}
+                      className="flex items-center justify-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] px-4 py-3 text-sm font-medium text-[var(--text-muted)] transition-all duration-200 hover:bg-[var(--surface-dark)]"
+                    >
+                      <Save className="h-4 w-4" />
+                      Save Build
+                    </button>
+                    {savedBuilds.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setShowLoadModal(true)}
+                        className="flex items-center justify-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] px-4 py-3 text-sm font-medium text-[var(--text-muted)] transition-all duration-200 hover:bg-[var(--surface-dark)]"
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                        Load Build ({savedBuilds.length})
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
-          </main>
+
+</main>
 
           {/* RIGHT PANEL - Summary & Actions */}
           <aside className="min-h-0 rounded-2xl border border-white/10 bg-[var(--bg-primary)] overflow-hidden flex flex-col">
@@ -939,53 +1207,44 @@ export function BassCustomizePage() {
               <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
                 <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-3">Your Configuration</h3>
                 <div className="space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-white/50">Body</span>
-                    <span className="text-xs font-medium">{summary.body}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-white/50">Body Wood</span>
-                    <span className="text-xs font-medium">{summary.bodyWood}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-white/50">Finish</span>
-                    <span className="text-xs font-medium">{summary.bodyFinish}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-white/50">Neck</span>
-                    <span className="text-xs font-medium">{summary.neck}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-white/50">Fretboard</span>
-                    <span className="text-xs font-medium">{summary.fretboard}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-white/50">Headstock</span>
-                    <span className="text-xs font-medium">{summary.headstockWood}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-white/50">Bridge</span>
-                    <span className="text-xs font-medium">{summary.bridge}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-white/50">Pickups</span>
-                    <span className="text-xs font-medium">{summary.pickups}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-white/50">Config</span>
-                    <span className="text-xs font-medium">{summary.pickupConfig}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-white/50">Hardware</span>
-                    <span className="text-xs font-medium">{summary.hardware}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-white/50">Strings</span>
-                    <span className="text-xs font-medium">{summary.strings}</span>
-                  </div>
+                  <ConfigRow label="Body" value={summary.body} price={pricingBreakdown.body} />
+                  <ConfigRow label="Body Wood" value={summary.bodyWood} price={pricingBreakdown.bodyWood} />
+                  <ConfigRow label="Finish" value={summary.bodyFinish} price={pricingBreakdown.bodyFinish} />
+                  <ConfigRow label="Neck" value={summary.neck} price={pricingBreakdown.neck} />
+                  <ConfigRow label="Fretboard" value={summary.fretboard} price={pricingBreakdown.fretboard} />
+                  <ConfigRow label="Headstock Wood" value={summary.headstockWood} price={pricingBreakdown.headstockWood} />
+                  <ConfigRow label="Headstock Style" value={summary.headstockStyle} price={pricingBreakdown.headstockStyle} />
+                  <ConfigRow label="Neck Style" value={summary.neckStyle} price={pricingBreakdown.neckStyle} />
+                  <ConfigRow label="Inlays" value={summary.inlays} price={pricingBreakdown.inlays} />
+                  <ConfigRow label="Logo" value={summary.logo} price={pricingBreakdown.logo} />
+                  <ConfigRow label="Backplate" value={summary.backplate} price={pricingBreakdown.backplate} />
+                  <ConfigRow label="Pickup Screws" value={summary.pickupScrews} price={pricingBreakdown.pickupScrews} />
+                  <ConfigRow label="Control Plate" value={summary.controlPlate} price={pricingBreakdown.controlPlate} />
+                  <ConfigRow label="Bridge" value={summary.bridge} price={pricingBreakdown.bridge} />
+                  <ConfigRow label="Pickguard" value={summary.pickguard} price={pricingBreakdown.pickguard} />
+                  <ConfigRow label="Knobs" value={summary.knobs} price={pricingBreakdown.knobs} />
+                  <ConfigRow label="Hardware" value={summary.hardware} price={pricingBreakdown.hardware} />
+                  <ConfigRow label="Pickups" value={summary.pickups} price={pricingBreakdown.pickups} />
+                  <ConfigRow label="Pickup Style" value={summary.pickupTypeStyle} price={pricingBreakdown.pickupTypeStyle} />
+                  <ConfigRow label="Pickup Config" value={summary.pickupConfig} price={pricingBreakdown.pickupConfig} />
+                  <ConfigRow label="Strings" value={summary.strings} price={pricingBreakdown.strings} />
                 </div>
               </div>
-              
+
+              <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-white/40">Your Build Total</p>
+                <AnimatedPrice price={price} />
+                <p className="mt-1 text-xs text-white/30">Base price: ₱{(options.basePrice ?? 0).toLocaleString('en-PH')}</p>
+                <button
+                  type="button"
+                  onClick={handleAddToCart}
+                  className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#d4af37] via-[#f4d03f] to-[#d4af37] px-4 py-3 text-sm font-bold text-black shadow-lg shadow-[#d4af37]/30 transition-all duration-300 hover:shadow-xl hover:shadow-[#d4af37]/40"
+                >
+                  <ShoppingCart className="h-4 w-4" />
+                  Add to Cart
+                </button>
+              </div>
+
               <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
                 <div className="flex items-start gap-3">
                   <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#d4af37]/10">
@@ -1001,6 +1260,7 @@ export function BassCustomizePage() {
                   </div>
                 </div>
               </div>
+<<<<<<< Updated upstream
               
               <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 space-y-3">
                 <div className="flex items-center gap-3">
@@ -1053,6 +1313,11 @@ export function BassCustomizePage() {
                 </button>
               </div>
             </div>
+=======
+
+            </div>
+            
+>>>>>>> Stashed changes
           </aside>
         </div>
       </div>

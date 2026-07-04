@@ -59,6 +59,20 @@ function Tooltip({ content, children }) {
   )
 }
 
+function ConfigRow({ label, value, price }) {
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-xs text-white/50">{label}</span>
+      <span className="text-xs font-medium">
+        {value}
+        {price > 0 && (
+          <span className="ml-2 text-[var(--gold-primary)]">+₱{price.toLocaleString('en-PH')}</span>
+        )}
+      </span>
+    </div>
+  )
+}
+
 // Animated price display
 function AnimatedPrice({ price }) {
   const displayPrice = useMemo(() => {
@@ -194,6 +208,253 @@ export function CustomizePage() {
   const [guitarTypeDropdownOpen, setGuitarTypeDropdownOpen] = useState(false)
   const categoryDropdownRef = useRef(null)
   const { isAuthenticated, openLogin } = useAuth()
+<<<<<<< Updated upstream
+=======
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(Boolean(editBuildId))
+  const [dbCustomizationId, setDbCustomizationId] = useState(null)
+  const [isLockedCustomization, setIsLockedCustomization] = useState(false)
+  const bypassNavigationBlockRef = useRef(false)
+  const [showUnsavedModal, setShowUnsavedModal] = useState(false)
+  const suppressDirtyTrackingRef = useRef(false)
+  const stickersInitializedRef = useRef(false)
+
+  const updateConfig = (patch) => {
+    if (editBuildId && !suppressDirtyTrackingRef.current) {
+      setHasUnsavedChanges(true)
+    }
+    baseUpdateConfig(patch)
+  }
+
+  const resetConfig = () => {
+    if (editBuildId && !suppressDirtyTrackingRef.current) {
+      setHasUnsavedChanges(true)
+    }
+    baseResetConfig()
+  }
+
+  const handleZoomIn = () => setZoomLevel(prev => Math.min(2, Number((prev + 0.1).toFixed(2))))
+  const handleZoomOut = () => setZoomLevel(prev => Math.max(0.7, Number((prev - 0.1).toFixed(2))))
+  const handleZoomReset = () => {
+    setZoomLevel(1)
+    setPanOffset({ x: 0, y: 0 })
+  }
+
+  const currentViewStickers = useMemo(
+    () => stickers.filter(s => (s.side || 'front') === view),
+    [stickers, view]
+  )
+  const selectedBodyModel = useMemo(
+    () => options.bodyOptions?.find((option) => option.value === config.body) || null,
+    [options.bodyOptions, config.body]
+  )
+
+  const [isStickerPanelOpen, setIsStickerPanelOpen] = useState(true)
+
+  const handleStickerUpload = (event) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    if (!file.type.startsWith('image/')) return
+    if (currentViewStickers.length >= MAX_STICKERS) {
+      alert(`You can upload up to ${MAX_STICKERS} stickers.`)
+      event.target.value = ''
+      return
+    }
+
+    const reader = new FileReader()
+    reader.onload = () => {
+      const dataUrl = typeof reader.result === 'string' ? reader.result : null
+      if (!dataUrl) return
+      const newSticker = {
+        id: `sticker-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        src: dataUrl,
+        x: 50,
+        y: 50,
+        size: 18,
+        rotation: 0,
+        side: view,
+      }
+      setStickers(prev => [...prev, newSticker])
+      setSelectedStickerId(newSticker.id)
+    }
+    reader.readAsDataURL(file)
+    event.target.value = ''
+  }
+
+  const selectedSticker = useMemo(
+    () => stickers.find(s => s.id === selectedStickerId) || null,
+    [stickers, selectedStickerId]
+  )
+
+  const updateSelectedSticker = (patchOrUpdater) => {
+    if (!selectedStickerId) return
+    setStickers(prev =>
+      prev.map(stickerItem => {
+        if (stickerItem.id !== selectedStickerId) return stickerItem
+        return typeof patchOrUpdater === 'function'
+          ? patchOrUpdater(stickerItem)
+          : { ...stickerItem, ...patchOrUpdater }
+      })
+    )
+  }
+
+  const updateStickerById = (id, patchOrUpdater) => {
+    if (!id) return
+    setStickers(prev =>
+      prev.map(stickerItem => {
+        if (stickerItem.id !== id) return stickerItem
+        return typeof patchOrUpdater === 'function'
+          ? patchOrUpdater(stickerItem)
+          : { ...stickerItem, ...patchOrUpdater }
+      })
+    )
+  }
+
+  const removeStickerById = (id) => {
+    setStickers(prev => {
+      const target = prev.find(s => s.id === id)
+      if (target?.src?.startsWith('blob:')) {
+        URL.revokeObjectURL(target.src)
+      }
+      return prev.filter(s => s.id !== id)
+    })
+    setSelectedStickerId(prev => (prev === id ? null : prev))
+  }
+
+  const duplicateSelectedSticker = () => {
+    if (!selectedSticker || (selectedSticker.side || 'front') !== view || currentViewStickers.length >= MAX_STICKERS) return
+    const duplicate = {
+      ...selectedSticker,
+      id: `sticker-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      x: Math.min(95, selectedSticker.x + 4),
+      y: Math.min(95, selectedSticker.y + 4),
+    }
+    setStickers(prev => [...prev, duplicate])
+    setSelectedStickerId(duplicate.id)
+  }
+
+  const moveLayer = (direction) => {
+    if (!selectedStickerId) return
+    setStickers(prev => {
+      const current = prev.filter(s => (s.side || 'front') === view)
+      const other = prev.filter(s => (s.side || 'front') !== view)
+      const idx = current.findIndex(s => s.id === selectedStickerId)
+      if (idx < 0) return prev
+      if (direction === 'front' && idx < current.length - 1) {
+        const [item] = current.splice(idx, 1)
+        current.push(item)
+      } else if (direction === 'back' && idx > 0) {
+        const [item] = current.splice(idx, 1)
+        current.unshift(item)
+      } else if (direction === 'up' && idx < current.length - 1) {
+        ;[current[idx], current[idx + 1]] = [current[idx + 1], current[idx]]
+      } else if (direction === 'down' && idx > 0) {
+        ;[current[idx], current[idx - 1]] = [current[idx - 1], current[idx]]
+      }
+      return [...other, ...current]
+    })
+  }
+
+  const clampSticker = (x, y) => ({
+    x: Math.max(5, Math.min(95, x)),
+    y: Math.max(5, Math.min(95, y)),
+  })
+
+  const moveStickerToClientPoint = (clientX, clientY, stickerId = selectedStickerId) => {
+    const stage = previewStageRef.current
+    if (!stage || !stickerId) return
+    const rect = stage.getBoundingClientRect()
+    if (rect.width <= 0 || rect.height <= 0) return
+    const px = ((clientX - rect.left) / rect.width) * 100
+    const py = ((clientY - rect.top) / rect.height) * 100
+    const clamped = clampSticker(px, py)
+    updateStickerById(stickerId, clamped)
+  }
+
+  const beginStickerDrag = (clientX, clientY, stickerId) => {
+    if (!stickerId) return
+    setSelectedStickerId(stickerId)
+    setIsDraggingSticker(true)
+    moveStickerToClientPoint(clientX, clientY, stickerId)
+  }
+
+  const updateStickerDrag = (clientX, clientY) => {
+    if (!isDraggingSticker) return
+    moveStickerToClientPoint(clientX, clientY)
+  }
+
+  const endStickerDrag = () => setIsDraggingSticker(false)
+
+  const clampPan = (x, y, scale = zoomLevel) => {
+    const viewport = previewViewportRef.current
+    if (!viewport || scale <= 1) return { x: 0, y: 0 }
+    const maxX = ((viewport.clientWidth * scale) - viewport.clientWidth) / 2
+    const maxY = ((viewport.clientHeight * scale) - viewport.clientHeight) / 2
+    return {
+      x: Math.max(-maxX, Math.min(maxX, x)),
+      y: Math.max(-maxY, Math.min(maxY, y)),
+    }
+  }
+
+  const beginDrag = (clientX, clientY) => {
+    if (zoomLevel <= 1 || isDraggingSticker) return
+    setIsDraggingPreview(true)
+    panStartRef.current = {
+      pointerX: clientX,
+      pointerY: clientY,
+      originX: panOffset.x,
+      originY: panOffset.y,
+    }
+  }
+
+  const updateDrag = (clientX, clientY) => {
+    if (!isDraggingPreview || isDraggingSticker) return
+    const dx = clientX - panStartRef.current.pointerX
+    const dy = clientY - panStartRef.current.pointerY
+    const next = clampPan(panStartRef.current.originX + dx, panStartRef.current.originY + dy)
+    setPanOffset(next)
+  }
+
+  const endDrag = () => setIsDraggingPreview(false)
+
+  useEffect(() => {
+    setPanOffset(prev => clampPan(prev.x, prev.y, zoomLevel))
+  }, [zoomLevel])
+
+  useEffect(() => {
+    stickersRef.current = stickers
+  }, [stickers])
+
+  useEffect(() => {
+    if (!stickersInitializedRef.current) {
+      stickersInitializedRef.current = true
+      return
+    }
+    if (editBuildId && !suppressDirtyTrackingRef.current) {
+      setHasUnsavedChanges(true)
+    }
+  }, [stickers, editBuildId])
+
+  useEffect(() => {
+    if (!selectedStickerId) {
+      if (currentViewStickers[0]) setSelectedStickerId(currentViewStickers[0].id)
+      return
+    }
+    const selectedInView = stickers.find(s => s.id === selectedStickerId && (s.side || 'front') === view)
+    if (!selectedInView) {
+      setSelectedStickerId(currentViewStickers[0]?.id || null)
+    }
+  }, [view, stickers, selectedStickerId, currentViewStickers])
+
+  useEffect(() => {
+    return () => {
+      stickersRef.current.forEach(stickerItem => {
+        if (stickerItem?.src?.startsWith('blob:')) {
+          URL.revokeObjectURL(stickerItem.src)
+        }
+      })
+    }
+  }, [])
+>>>>>>> Stashed changes
 
   // Get guitar type from URL and sync with config
   const urlGuitarType = searchParams.get('type') || 'electric'
@@ -710,6 +971,7 @@ export function CustomizePage() {
 
           {/* CENTER - Guitar Preview */}
           <main className="min-h-0 flex flex-col">
+<<<<<<< Updated upstream
             {/* Price & CTA Header */}
             <div className="mb-4 rounded-2xl border border-white/10 bg-theme-surface-deep p-5">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -751,6 +1013,10 @@ export function CustomizePage() {
             
             {/* Guitar Preview */}
             <div className="relative flex-1 rounded-2xl border border-white/10 bg-gradient-to-b from-[#141414] via-[#0d0d0d] to-[#080808] overflow-hidden">
+=======
+              {/* Guitar Preview */}
+            <div ref={previewRef} className="relative flex-1 rounded-2xl border border-white/10 bg-gradient-to-b from-[#141414] via-[#0d0d0d] to-[#080808] overflow-hidden">
+>>>>>>> Stashed changes
               {/* Spotlight effects */}
               <div className="absolute inset-0 overflow-hidden pointer-events-none">
                 <div className="absolute -top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-gradient-radial from-[#d4af37]/10 via-transparent to-transparent opacity-60" />
@@ -768,55 +1034,235 @@ export function CustomizePage() {
               {/* Subtle reflection/shadow beneath guitar */}
               <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-3/4 h-8 bg-gradient-to-b from-transparent to-black/40 blur-xl" />
               
-              {/* View toggle */}
-              <div className="absolute bottom-4 left-4 flex gap-2">
+              <div className="absolute top-4 left-4 z-20 rounded-3xl border border-white/10 bg-black/40 p-2 shadow-black/20 backdrop-blur-sm">
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setView('front')}
+                    className={`rounded-full px-3 py-2 text-[11px] font-semibold transition-all duration-200 ${
+                      view === 'front'
+                        ? 'bg-[#d4af37] text-black'
+                        : 'bg-[var(--border)] text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]'
+                    }`}
+                  >
+                    Front
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setView('rear')}
+                    className={`rounded-full px-3 py-2 text-[11px] font-semibold transition-all duration-200 ${
+                      view === 'rear'
+                        ? 'bg-[#d4af37] text-black'
+                        : 'bg-[var(--border)] text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]'
+                    }`}
+                  >
+                    Rear
+                  </button>
+                </div>
+              </div>
+<<<<<<< Updated upstream
+=======
+
+              {/* Zoom controls */}
+              <div className="absolute bottom-4 right-4 flex items-center gap-2 rounded-lg border border-white/10 bg-black/35 p-1.5 backdrop-blur-sm">
                 <button
                   type="button"
-                  onClick={() => setView('front')}
-                  className={`rounded-lg px-4 py-2 text-xs font-semibold transition-all duration-200 ${
-                    view === 'front'
-                      ? 'bg-[#d4af37] text-black'
-                      : 'bg-[var(--border)] text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]'
-                  }`}
+                  onClick={handleZoomOut}
+                  disabled={zoomLevel <= 0.7}
+                  className="rounded-md bg-[var(--border)] px-2.5 py-2 text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-elevated)] disabled:opacity-40 disabled:cursor-not-allowed"
+                  aria-label="Zoom out"
+                  title="Zoom out"
                 >
-                  Front View
+                  <ZoomOut className="h-4 w-4" />
                 </button>
                 <button
                   type="button"
-                  onClick={() => setView('rear')}
-                  className={`rounded-lg px-4 py-2 text-xs font-semibold transition-all duration-200 ${
-                    view === 'rear'
-                      ? 'bg-[#d4af37] text-black'
-                      : 'bg-[var(--border)] text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]'
-                  }`}
+                  onClick={handleZoomReset}
+                  className="rounded-md px-2.5 py-1.5 text-xs font-semibold text-white/80 transition-colors hover:bg-white/10"
+                  aria-label="Reset zoom"
+                  title="Reset zoom"
                 >
-                  Rear View
+                  {Math.round(zoomLevel * 100)}%
+                </button>
+                <button
+                  type="button"
+                  onClick={handleZoomIn}
+                  disabled={zoomLevel >= 2}
+                  className="rounded-md bg-[var(--border)] px-2.5 py-2 text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-elevated)] disabled:opacity-40 disabled:cursor-not-allowed"
+                  aria-label="Zoom in"
+                  title="Zoom in"
+                >
+                  <ZoomIn className="h-4 w-4" />
                 </button>
               </div>
+
+              {/* Sticker controls */}
+              <div className="absolute top-4 right-2 sm:right-4 w-[calc(100%-1rem)] sm:w-[360px] sm:max-w-[calc(100%-2rem)] space-y-2 rounded-lg border border-white/10 bg-black/35 p-2 backdrop-blur-sm">
+                <input
+                  ref={stickerFileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleStickerUpload}
+                  className="hidden"
+                />
+                <div className="flex items-center justify-between gap-2">
+                  <button
+                    type="button"
+                    onClick={() => stickerFileInputRef.current?.click()}
+                    disabled={currentViewStickers.length >= MAX_STICKERS}
+                    className="inline-flex items-center gap-1.5 rounded-md bg-[var(--border)] px-2.5 py-2 text-xs font-semibold text-[var(--text-muted)] hover:bg-[var(--surface-elevated)] disabled:opacity-40 disabled:cursor-not-allowed"
+                    title="Upload sticker image"
+                  >
+                    <Upload className="h-3.5 w-3.5" />
+                    Add Sticker
+                  </button>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-white/70">{currentViewStickers.length}/{MAX_STICKERS} ({view})</span>
+                    <button
+                      type="button"
+                      onClick={() => setIsStickerPanelOpen(open => !open)}
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-md bg-[var(--border)] text-[var(--text-muted)] transition hover:bg-[var(--surface-elevated)]"
+                      title={isStickerPanelOpen ? 'Hide sticker panel' : 'Show sticker panel'}
+                    >
+                      <span className={`inline-flex transform ${isStickerPanelOpen ? '' : 'rotate-180'}`}>
+                        <ChevronDown className="h-4 w-4" />
+                      </span>
+                    </button>
+                  </div>
+                </div>
+
+                {isStickerPanelOpen && selectedSticker && (selectedSticker.side || 'front') === view && (
+                  <div className="space-y-2 rounded-md border border-white/10 bg-black/25 p-2">
+                    <div className="grid grid-cols-4 gap-1.5">
+                      <button type="button" onClick={() => moveLayer('back')} className="rounded bg-[var(--border)] px-1.5 py-1 text-[10px] text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]">Back</button>
+                      <button type="button" onClick={() => moveLayer('down')} className="rounded bg-[var(--border)] px-1.5 py-1 text-[10px] text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]">Down</button>
+                      <button type="button" onClick={() => moveLayer('up')} className="rounded bg-[var(--border)] px-1.5 py-1 text-[10px] text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]">Up</button>
+                      <button type="button" onClick={() => moveLayer('front')} className="rounded bg-[var(--border)] px-1.5 py-1 text-[10px] text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]">Front</button>
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => updateSelectedSticker(prev => ({ ...prev, size: Math.max(6, prev.size - 2) }))}
+                        className="rounded-md bg-[var(--border)] px-2 py-1.5 text-xs font-bold text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]"
+                        title="Shrink sticker"
+                      >
+                        -
+                      </button>
+                      <span className="text-[10px] text-white/70 min-w-10 text-center">{Math.round(selectedSticker.size)}%</span>
+                      <button
+                        type="button"
+                        onClick={() => updateSelectedSticker(prev => ({ ...prev, size: Math.min(50, prev.size + 2) }))}
+                        className="rounded-md bg-[var(--border)] px-2 py-1.5 text-xs font-bold text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]"
+                        title="Enlarge sticker"
+                      >
+                        +
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => updateSelectedSticker(prev => ({ ...prev, rotation: (prev.rotation - 15 + 360) % 360 }))}
+                        className="rounded-md bg-[var(--border)] px-2 py-1.5 text-xs font-bold text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]"
+                        title="Rotate left"
+                      >
+                        -15°
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => updateSelectedSticker(prev => ({ ...prev, rotation: (prev.rotation + 15) % 360 }))}
+                        className="rounded-md bg-[var(--border)] px-2 py-1.5 text-xs font-bold text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]"
+                        title="Rotate right"
+                      >
+                        +15°
+                      </button>
+                    </div>
+
+                    <input
+                      type="range"
+                      min="0"
+                      max="359"
+                      value={selectedSticker.rotation || 0}
+                      onChange={(e) => updateSelectedSticker({ rotation: Number(e.target.value) })}
+                      className="w-full accent-[#d4af37]"
+                    />
+
+                    <div className="flex items-center justify-between gap-1.5">
+                      <button
+                        type="button"
+                        onClick={duplicateSelectedSticker}
+                        disabled={currentViewStickers.length >= MAX_STICKERS}
+                        className="rounded-md bg-[var(--border)] px-2 py-1.5 text-[10px] font-semibold text-[var(--text-muted)] hover:bg-[var(--surface-elevated)] disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        Duplicate
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removeStickerById(selectedSticker.id)}
+                        className="rounded-md bg-red-500/20 px-2 py-1.5 text-red-300 hover:bg-red-500/30"
+                        title="Remove sticker"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {isStickerPanelOpen && currentViewStickers.length > 0 && (
+                  <div className="max-h-24 overflow-y-auto space-y-1 rounded-md border border-white/10 bg-black/20 p-1.5">
+                    {currentViewStickers.map((stickerItem, index) => (
+                      <button
+                        key={stickerItem.id}
+                        type="button"
+                        onClick={() => setSelectedStickerId(stickerItem.id)}
+                        className={`w-full flex items-center gap-2 rounded px-1.5 py-1 text-left text-[10px] ${
+                          selectedStickerId === stickerItem.id
+                            ? 'bg-[#d4af37]/20 text-[#d4af37]'
+                            : 'bg-white/5 text-white/70 hover:bg-white/10'
+                        }`}
+                      >
+                        <img src={stickerItem.src} alt={`Sticker ${index + 1}`} className="h-5 w-5 rounded object-cover" />
+                          <span>{view === 'front' ? 'Front' : 'Rear'} Sticker {index + 1}</span>
+                          <span className="ml-auto">z:{index + 1}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+>>>>>>> Stashed changes
             </div>
             
-            {/* Guitar specs footer */}
-            <div className="mt-4 rounded-xl border border-white/10 bg-theme-surface-deep p-4">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                <div>
-                  <p className="text-[10px] uppercase tracking-[0.15em] text-white/40">Body</p>
-                  <p className="mt-0.5 text-sm font-medium">{summary.body}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] uppercase tracking-[0.15em] text-white/40">Pickups</p>
-                  <p className="mt-0.5 text-sm font-medium">{summary.pickups}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] uppercase tracking-[0.15em] text-white/40">Neck</p>
-                  <p className="mt-0.5 text-sm font-medium">{summary.neck}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] uppercase tracking-[0.15em] text-white/40">Hardware</p>
-                  <p className="mt-0.5 text-sm font-medium">{summary.hardware}</p>
+            <div className="mt-4 px-4 sm:px-6">
+              <div className="rounded-3xl border border-white/10 bg-white/[0.02] p-4 shadow-[0_15px_60px_-40px_rgba(0,0,0,0.8)]">
+                <div className="grid w-full gap-3 sm:grid-cols-3">
+                  <button
+                    type="button"
+                    onClick={resetConfig}
+                    className="flex items-center justify-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] px-5 py-3 text-sm font-medium text-[var(--text-muted)] transition-all duration-200 hover:bg-[var(--surface-dark)]"
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                    Reset
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSave}
+                    className="flex items-center justify-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] px-5 py-3 text-sm font-medium text-[var(--text-muted)] transition-all duration-200 hover:bg-[var(--surface-dark)]"
+                  >
+                    <Save className="h-4 w-4" />
+                    Save Build
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleLoad}
+                    className="flex items-center justify-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] px-5 py-3 text-sm font-medium text-[var(--text-muted)] transition-all duration-200 hover:bg-[var(--surface-dark)]"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                    Load Build
+                  </button>
                 </div>
               </div>
             </div>
-          </main>
+
+</main>
 
           {/* RIGHT PANEL - Summary & Actions */}
           <aside className="min-h-0 rounded-2xl border border-white/10 bg-[var(--bg-primary)] overflow-hidden flex flex-col">
@@ -836,51 +1282,39 @@ export function CustomizePage() {
             
             {/* Current selection summary */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              
-              {/* Quick Summary */}
               <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
                 <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-3">Your Configuration</h3>
                 <div className="space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-white/50">Body</span>
-                    <span className="text-xs font-medium">{summary.body}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-white/50">Body Wood</span>
-                    <span className="text-xs font-medium">{summary.bodyWood}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-white/50">Finish</span>
-                    <span className="text-xs font-medium">{summary.bodyFinish}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-white/50">Neck</span>
-                    <span className="text-xs font-medium">{summary.neck}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-white/50">Fretboard</span>
-                    <span className="text-xs font-medium">{summary.fretboard}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-white/50">Headstock</span>
-                    <span className="text-xs font-medium">{builder.HEADSTOCK_OPTIONS[config.headstock]?.label || config.headstock}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-white/50">Bridge</span>
-                    <span className="text-xs font-medium">{builder.BRIDGE_OPTIONS[config.bridge]?.label || config.bridge}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-white/50">Pickups</span>
-                    <span className="text-xs font-medium">{summary.pickups}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-white/50">Hardware</span>
-                    <span className="text-xs font-medium">{summary.hardware}</span>
-                  </div>
+                  <ConfigRow label="Body" value={summary.body} price={pricingBreakdown.body} />
+                  <ConfigRow label="Body Wood" value={summary.bodyWood} price={pricingBreakdown.bodyWood} />
+                  <ConfigRow label="Finish" value={summary.bodyFinish} price={pricingBreakdown.bodyFinish} />
+                  <ConfigRow label="Neck" value={summary.neck} price={pricingBreakdown.neck} />
+                  <ConfigRow label="Fretboard" value={summary.fretboard} price={pricingBreakdown.fretboard} />
+                  <ConfigRow label="Headstock" value={summary.headstock} price={pricingBreakdown.headstock} />
+                  <ConfigRow label="Headstock Wood" value={summary.headstockWood} price={pricingBreakdown.headstockWood} />
+                  <ConfigRow label="Inlays" value={summary.inlays} price={pricingBreakdown.inlays} />
+                  <ConfigRow label="Bridge" value={summary.bridge} price={pricingBreakdown.bridge} />
+                  <ConfigRow label="Pickguard" value={summary.pickguard} price={pricingBreakdown.pickguard} />
+                  <ConfigRow label="Knobs" value={summary.knobs} price={pricingBreakdown.knobs} />
+                  <ConfigRow label="Pickups" value={summary.pickups} price={pricingBreakdown.pickups} />
+                  <ConfigRow label="Hardware" value={summary.hardware} price={pricingBreakdown.hardware} />
                 </div>
               </div>
-              
-              {/* Help section */}
+
+              <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-white/40">Your Build Total</p>
+                <AnimatedPrice price={price} />
+                <p className="mt-1 text-xs text-white/30">Base price: ₱{(options.basePrice ?? 0).toLocaleString('en-PH')}</p>
+                <button
+                  type="button"
+                  onClick={handleAddToCart}
+                  className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#d4af37] via-[#f4d03f] to-[#d4af37] px-4 py-3 text-sm font-bold text-black shadow-lg shadow-[#d4af37]/30 transition-all duration-300 hover:shadow-xl hover:shadow-[#d4af37]/40"
+                >
+                  <ShoppingCart className="h-4 w-4" />
+                  Add to Cart
+                </button>
+              </div>
+
               <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
                 <div className="flex items-start gap-3">
                   <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#d4af37]/10">
@@ -896,6 +1330,7 @@ export function CustomizePage() {
                   </div>
                 </div>
               </div>
+<<<<<<< Updated upstream
               
               {/* Shipping info */}
               <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 space-y-3">
@@ -948,6 +1383,27 @@ export function CustomizePage() {
                 >
                   Load Config
                 </button>
+=======
+
+            </div>
+
+            {/* Save Image */}
+            <div className="border-t border-white/10 p-4 flex-shrink-0">
+              <div className="flex gap-2">
+                {isAuthenticated ? (
+                  <button
+                    type="button"
+                    onClick={handleSaveImage}
+                    className="flex-1 flex items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 py-2 text-xs font-medium transition-all duration-200 hover:bg-[var(--surface-dark)]"
+                    style={{ color: 'var(--text-muted)' }}
+                  >
+                    <Image className="h-3.5 w-3.5" />
+                    Save Image
+                  </button>
+                ) : (
+                  <div className="flex-1" aria-hidden="true" />
+                )}
+>>>>>>> Stashed changes
               </div>
             </div>
           </aside>
