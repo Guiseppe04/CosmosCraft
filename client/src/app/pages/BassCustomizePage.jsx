@@ -2,9 +2,9 @@ import { useMemo, useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { useSearchParams, useNavigate, useBlocker } from 'react-router'
 import { 
-  RotateCcw, Save, ChevronDown, ChevronRight, Info, 
-  ShoppingCart, Check, CheckCircle,
-  Sparkles, Layers, Palette, Cog, Zap, Image, ZoomIn, ZoomOut, Upload, Trash2
+  ChevronDown, Info, 
+  Check, CheckCircle,
+  Sparkles, Layers, Palette, Cog, Zap, Image, ZoomIn, ZoomOut, Trash2
 } from 'lucide-react'
 import { formatCurrency } from '../utils/formatCurrency'
 import { useAuth } from '../context/AuthContext.jsx'
@@ -14,6 +14,15 @@ import BassPreview from '../components/bass/BassPreview.jsx'
 import { exportMaskedPreview } from '../utils/exportMaskedPreview.js'
 import { RGBColorPicker } from '../components/options/RGBColorPicker.jsx'
 import { optimizeCloudinaryImage } from '../utils/cloudinary.js'
+import { BuilderActionBar } from '../components/customize/BuilderActionBar.jsx'
+import { BuilderCheckoutSection } from '../components/customize/BuilderCheckoutSection.jsx'
+import { BuilderSavedBadge } from '../components/customize/BuilderSavedBadge.jsx'
+import { StickerPanel } from '../components/customize/StickerPanel.jsx'
+import { BuilderConfigurationPanel } from '../components/customize/BuilderConfigurationPanel.jsx'
+import {
+  buildConfigurationLineItems,
+  BASS_CONFIGURATION_ITEMS,
+} from '../utils/buildConfigurationLineItems.js'
 
 const CATEGORIES = [
   { 
@@ -62,24 +71,6 @@ function Tooltip({ content, children }) {
   )
 }
 
-function AnimatedPrice({ price }) {
-  const displayPrice = useMemo(() => {
-    return price.toLocaleString('en-PH')
-  }, [price])
-  
-  return (
-    <div className="relative">
-      <span 
-        className={`text-5xl font-bold tracking-tight transition-all duration-300 ${
-          price > 0 ? 'text-transparent bg-clip-text bg-gradient-to-r from-[#d4af37] via-[#f4d03f] to-[#d4af37]' : 'text-white/30'
-        }`}
-      >
-        ₱{displayPrice}
-      </span>
-    </div>
-  )
-}
-
 function OptionButton({ option, isSelected, onClick }) {
   return (
     <button
@@ -120,7 +111,7 @@ function OptionButton({ option, isSelected, onClick }) {
   )
 }
 
-function VisualCard({ option, isSelected, onClick, previewImage, fallbackImage }) {
+function VisualCard({ option, isSelected, onClick, previewImage, fallbackImage, imageHeight = 'h-16' }) {
   const [displayImage, setDisplayImage] = useState(previewImage || fallbackImage || '')
 
   useEffect(() => {
@@ -139,7 +130,7 @@ function VisualCard({ option, isSelected, onClick, previewImage, fallbackImage }
           : 'border-[var(--border)] hover:border-[var(--gold-primary)]/40'
       }`}
     >
-      <div className="relative h-16 w-full overflow-hidden">
+      <div className={`relative ${imageHeight} w-full overflow-hidden`}>
         {displayImage ? (
           <img
             src={optimizedImage}
@@ -207,11 +198,13 @@ export function BassCustomizePage() {
     resetConfig: baseResetConfig,
     price,
     summary,
+    pricingBreakdown,
     exportConfig,
     loadConfig: baseLoadConfig,
     builder,
     options,
     refreshPrices,
+    loadingPrices,
   } = useBassConfig()
   const [view, setView] = useState('front')
   const [zoomLevel, setZoomLevel] = useState(1)
@@ -774,8 +767,13 @@ export function BassCustomizePage() {
     return category
   }
 
+  const configurationLineItems = useMemo(
+    () => buildConfigurationLineItems(summary, pricingBreakdown, BASS_CONFIGURATION_ITEMS),
+    [summary, pricingBreakdown],
+  )
+
   return (
-    <div className="h-screen overflow-hidden bg-[var(--bg-primary)] pt-16 text-[var(--text-light)] relative">
+    <div className="min-h-screen bg-[var(--bg-primary)] pt-16 text-[var(--text-light)] relative xl:h-screen xl:overflow-hidden">
       <AnimatePresence>
         {toastMessage && (
           <motion.div
@@ -791,7 +789,7 @@ export function BassCustomizePage() {
       </AnimatePresence>
       <div className="mx-auto flex h-full max-w-[2000px] flex-col px-3 pb-3 sm:px-4 lg:px-6 lg:pb-6">
         
-        <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[340px_minmax(0,1fr)_400px]">
+        <div className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[340px_minmax(0,1fr)_400px]">
           
 {/* LEFT PANEL - Configuration Categories */}
 <aside className="min-h-0 rounded-2xl border border-white/10 bg-[var(--bg-primary)] overflow-hidden flex flex-col">
@@ -882,6 +880,7 @@ export function BassCustomizePage() {
                           onClick={() => updateConfig({ bassType: opt.value })}
                           previewImage={opt.previewImageUrl}
                           fallbackImage={opt.bodySrc}
+                          imageHeight="h-24"
                         />
                       ))}
                     </div>
@@ -1208,30 +1207,7 @@ export function BassCustomizePage() {
 
           {/* CENTER - Bass Preview */}
           <main className="min-h-0 flex flex-col">
-            <div className="mb-4 rounded-2xl border border-white/10 bg-theme-surface-deep p-5">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.2em] text-white/40">Your Build Total</p>
-                  <AnimatedPrice price={price} />
-                  <p className="mt-1 text-xs text-white/30">Base price: ₱{(options.basePrice ?? 0).toLocaleString('en-PH')}</p>
-                </div>
-                
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <button
-                    type="button"
-                    onClick={handleAddToCart}
-                    className="group relative inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#d4af37] via-[#f4d03f] to-[#d4af37] px-8 py-3.5 text-sm font-bold text-black shadow-lg shadow-[#d4af37]/30 transition-all duration-300 hover:shadow-xl hover:shadow-[#d4af37]/40 hover:scale-[1.02] active:scale-[0.98]"
-                  >
-                    <ShoppingCart className="h-4 w-4" />
-                    Add to Cart
-                    <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-[#d4af37] via-[#f4d03f] to-[#d4af37] opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
-                  </button>
-                </div>
-              </div>
-              
-            </div>
-            
-            <div ref={previewRef} className="relative flex-1 rounded-2xl border border-white/10 bg-gradient-to-b from-[#141414] via-[#0d0d0d] to-[#080808] overflow-hidden">
+            <div ref={previewRef} className="relative flex-1 min-h-[320px] rounded-2xl border border-white/10 bg-gradient-to-b from-[#141414] via-[#0d0d0d] to-[#080808] overflow-hidden">
               <div className="absolute inset-0 overflow-hidden pointer-events-none">
                 <div className="absolute -top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-gradient-radial from-[#d4af37]/10 via-transparent to-transparent opacity-60" />
                 <div className="absolute top-1/4 left-1/4 w-[400px] h-[400px] bg-gradient-radial from-white/5 via-transparent to-transparent rounded-full" />
@@ -1338,7 +1314,7 @@ export function BassCustomizePage() {
               
               <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-3/4 h-8 bg-gradient-to-b from-transparent to-black/40 blur-xl" />
               
-              <div className="absolute bottom-4 left-4 flex gap-2">
+              <div className="absolute top-4 left-4 z-10 flex gap-2">
                 <button
                   type="button"
                   onClick={() => setView('front')}
@@ -1395,28 +1371,25 @@ export function BassCustomizePage() {
                 </button>
               </div>
 
-              <div className="absolute top-4 right-2 sm:right-4 w-[calc(100%-1rem)] sm:w-[360px] sm:max-w-[calc(100%-2rem)] space-y-2 rounded-lg border border-white/10 bg-black/35 p-2 backdrop-blur-sm">
-                <input
-                  ref={stickerFileInputRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={handleStickerUpload}
-                  className="hidden"
-                />
-                <div className="flex items-center justify-between gap-2">
-                  <button
-                    type="button"
-                    onClick={() => stickerFileInputRef.current?.click()}
-                    disabled={currentViewStickers.length >= MAX_STICKERS}
-                    className="inline-flex items-center gap-1.5 rounded-md bg-[var(--border)] px-2.5 py-2 text-xs font-semibold text-[var(--text-muted)] hover:bg-[var(--surface-elevated)] disabled:opacity-40 disabled:cursor-not-allowed"
-                    title="Upload sticker image"
-                  >
-                    <Upload className="h-3.5 w-3.5" />
-                    Add Sticker
-                  </button>
-                  <span className="text-[10px] text-white/70">{currentViewStickers.length}/{MAX_STICKERS} ({view})</span>
-                </div>
+              {/* Saved status */}
+              <div className="absolute bottom-4 left-4 z-10">
+                <BuilderSavedBadge hasUnsavedChanges={hasUnsavedChanges} />
+              </div>
 
+              <input
+                ref={stickerFileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleStickerUpload}
+                className="hidden"
+              />
+
+              <StickerPanel
+                stickerCount={stickers.length}
+                maxStickers={MAX_STICKERS}
+                onAddClick={() => stickerFileInputRef.current?.click()}
+                addDisabled={stickers.length >= MAX_STICKERS}
+              >
                 {selectedSticker && (selectedSticker.side || 'front') === view && (
                   <div className="space-y-2 rounded-md border border-white/10 bg-black/25 p-2">
                     <div className="grid grid-cols-4 gap-1.5">
@@ -1513,29 +1486,23 @@ export function BassCustomizePage() {
                     ))}
                   </div>
                 )}
-              </div>
+              </StickerPanel>
             </div>
-            
-            <div className="mt-4 rounded-xl border border-white/10 bg-theme-surface-deep p-4">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                <div>
-                  <p className="text-[10px] uppercase tracking-[0.15em] text-white/40">Body</p>
-                  <p className="mt-0.5 text-sm font-medium">{summary.body}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] uppercase tracking-[0.15em] text-white/40">Pickups</p>
-                  <p className="mt-0.5 text-sm font-medium">{summary.pickups}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] uppercase tracking-[0.15em] text-white/40">Neck</p>
-                  <p className="mt-0.5 text-sm font-medium">{summary.neck}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] uppercase tracking-[0.15em] text-white/40">Strings</p>
-                  <p className="mt-0.5 text-sm font-medium">{summary.strings}</p>
-                </div>
-              </div>
-            </div>
+
+            <BuilderActionBar
+              onReset={resetConfig}
+              onSave={handleSave}
+              onLoad={() => setShowLoadModal(true)}
+              loadLabel={savedBuilds.length > 0 ? `Load Build (${savedBuilds.length})` : 'Load Build'}
+            />
+            <button
+              type="button"
+              onClick={handleSaveImage}
+              className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-transparent px-3 py-1.5 text-xs font-medium text-white/40 transition-colors hover:border-[var(--border)] hover:text-[var(--text-muted)]"
+            >
+              <Image className="h-3.5 w-3.5" />
+              Save preview image
+            </button>
           </main>
 
           {/* RIGHT PANEL - Summary & Actions */}
@@ -1554,56 +1521,20 @@ export function BassCustomizePage() {
             </div>
             
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
-                <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-3">Your Configuration</h3>
-                <div className="space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-white/50">Body</span>
-                    <span className="text-xs font-medium">{summary.body}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-white/50">Body Wood</span>
-                    <span className="text-xs font-medium">{summary.bodyWood}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-white/50">Finish</span>
-                    <span className="text-xs font-medium">{summary.bodyFinish}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-white/50">Neck</span>
-                    <span className="text-xs font-medium">{summary.neck}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-white/50">Fretboard</span>
-                    <span className="text-xs font-medium">{summary.fretboard}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-white/50">Headstock</span>
-                    <span className="text-xs font-medium">{summary.headstockWood}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-white/50">Bridge</span>
-                    <span className="text-xs font-medium">{summary.bridge}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-white/50">Pickups</span>
-                    <span className="text-xs font-medium">{summary.pickups}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-white/50">Config</span>
-                    <span className="text-xs font-medium">{summary.pickupConfig}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-white/50">Hardware</span>
-                    <span className="text-xs font-medium">{summary.hardware}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-white/50">Strings</span>
-                    <span className="text-xs font-medium">{summary.strings}</span>
-                  </div>
-                </div>
-              </div>
-              
+              <BuilderConfigurationPanel
+                lineItems={configurationLineItems}
+                configurationTotal={price}
+                loadingPrices={loadingPrices}
+              />
+            </div>
+
+            <BuilderCheckoutSection
+              price={price}
+              basePrice={options.basePrice}
+              onAddToCart={handleAddToCart}
+            />
+
+            <div className="border-t border-white/10 p-4 flex-shrink-0">
               <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
                 <div className="flex items-start gap-3">
                   <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#d4af37]/10">
@@ -1627,61 +1558,6 @@ export function BassCustomizePage() {
                     </p>
                   </div>
                 </div>
-              </div>
-
-              <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 space-y-2">
-                <button
-                  type="button"
-                  onClick={resetConfig}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] px-4 py-2.5 text-sm font-medium transition-all duration-200 hover:bg-[var(--surface-dark)]"
-                  style={{ color: 'var(--text-muted)' }}
-                >
-                  <RotateCcw className="h-4 w-4" />
-                  Reset
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSave}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] px-4 py-2.5 text-sm font-medium transition-all duration-200 hover:bg-[var(--surface-dark)]"
-                  style={{ color: 'var(--text-muted)' }}
-                >
-                  <Save className="h-4 w-4" />
-                  Save Build
-                </button>
-                <div className={`inline-flex items-center gap-2 rounded-lg px-3 py-1 text-[11px] font-semibold ${
-                  hasUnsavedChanges
-                    ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
-                    : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
-                }`}>
-                  <span className={`h-1.5 w-1.5 rounded-full ${hasUnsavedChanges ? 'bg-amber-300' : 'bg-emerald-300'}`} />
-                  {hasUnsavedChanges ? 'Unsaved changes' : 'Saved'}
-                </div>
-                {savedBuilds.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setShowLoadModal(true)}
-                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] px-4 py-2.5 text-sm font-medium transition-all duration-200 hover:bg-[var(--surface-dark)]"
-                    style={{ color: 'var(--text-muted)' }}
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                    Load Build ({savedBuilds.length})
-                  </button>
-                )}
-              </div>
-              
-            </div>
-            
-            <div className="border-t border-white/10 p-4 flex-shrink-0 space-y-2">
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={handleSaveImage}
-                  className="flex-1 flex items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 py-2 text-xs font-medium transition-all duration-200 hover:bg-[var(--surface-dark)]"
-                  style={{ color: 'var(--text-muted)' }}
-                >
-                  <Image className="h-3.5 w-3.5" />
-                  Save Image
-                </button>
               </div>
             </div>
           </aside>
