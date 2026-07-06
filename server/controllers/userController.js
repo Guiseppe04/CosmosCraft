@@ -1,5 +1,6 @@
 const { asyncHandler, AppError } = require('../middleware/errorHandler');
 const userService = require('../services/userService');
+const rbacService = require('../services/rbacService');
 const { addAddressSchema, updateAddressSchema, updateProfileSchema } = require('../utils/validation');
 const { hasRole } = require('../utils/roles');
 
@@ -182,10 +183,15 @@ exports.updateUserRole = asyncHandler(async (req, res, next) => {
     throw new AppError('Only admins can update user roles', 403);
   }
 
+  const roleRecord = await rbacService.getRoleByName(role);
+  if (!roleRecord) throw new AppError('Role not found', 404);
+
+  await rbacService.setUserRoles(userId, [roleRecord.role_id], req.user.user_id);
+
   const { pool } = require('../config/database');
   const res2 = await pool.query(
     `UPDATE users SET role = $1, updated_at = now() WHERE user_id = $2 RETURNING user_id, email, role, is_active`,
-    [role, userId]
+    [roleRecord.name, userId]
   );
   if (!res2.rows[0]) throw new AppError('User not found', 404);
 

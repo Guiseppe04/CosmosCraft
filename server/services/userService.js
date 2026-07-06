@@ -1,5 +1,6 @@
 const bcrypt = require('bcryptjs');
 const { pool } = require('../config/database');
+const rbacService = require('./rbacService');
 
 const normalizeAddressValue = (value) => String(value || '')
   .trim()
@@ -45,6 +46,11 @@ exports.createOAuthUser = async (userData) => {
         userData.email
       ]
     );
+
+    const defaultRole = await rbacService.getRoleByName('customer');
+    if (defaultRole) {
+      await rbacService.assignRoleToUser(user.user_id, defaultRole.role_id, user.user_id, null, client);
+    }
 
     await client.query('COMMIT');
     return user;
@@ -101,6 +107,11 @@ exports.createEmailUser = async (userData) => {
       );
     }
 
+    const defaultRole = await rbacService.getRoleByName('customer');
+    if (defaultRole) {
+      await rbacService.assignRoleToUser(user.user_id, defaultRole.role_id, user.user_id, null, client);
+    }
+
     await client.query('COMMIT');
     delete user.password_hash;
     return user;
@@ -117,7 +128,8 @@ exports.getUserById = async (userId) => {
   if (res.rows.length === 0) throw new Error('User not found');
   const user = res.rows[0];
   delete user.password_hash;
-  return user;
+  const roleSummary = await rbacService.getUserRoleSummary(user.user_id, false);
+  return { ...user, role: roleSummary.role || user.role };
 };
 
 exports.getUserAuthInfo = async (userId) => {
@@ -430,8 +442,13 @@ exports.listUsers = async (filters = {}, limit = 10, skip = 0) => {
     pool.query(paginatedQuery, [...values, limit, skip]),
     pool.query(`SELECT count(*) FROM (${queryStr}) as t`, values)
   ]);
+
+  const users = await Promise.all(usersRes.rows.map(async (user) => {
+    const roleSummary = await rbacService.getUserRoleSummary(user.user_id, false);
+    return { ...user, role: roleSummary.role || user.role };
+  }));
   
-  return { users: usersRes.rows, total: parseInt(countRes.rows[0].count), limit, skip };
+  return { users, total: parseInt(countRes.rows[0].count), limit, skip };
 };
 
 exports.saveOTP = async (userId, otpCode, expiresAt, purpose = 'signup') => {

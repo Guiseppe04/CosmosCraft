@@ -2,6 +2,7 @@ const { asyncHandler, AppError } = require('../middleware/errorHandler');
 const { generateTokens, verifyRefreshToken, revokeRefreshToken } = require('../utils/generateTokens');
 const { generateOTPWithExpiry, verifyOTP } = require('../utils/otp');
 const userService = require('../services/userService');
+const rbacService = require('../services/rbacService');
 const mailService = require('../services/mailService');
 const { validate, emailSignupSchema, emailLoginSchema, oauthSignupSchema } = require('../utils/validation');
 
@@ -20,7 +21,8 @@ exports.googleCallback = asyncHandler(async (req, res, next) => {
     return res.redirect(`${getFrontendUrl()}/auth/oauth-signup?provider=google&userData=${encodeURIComponent(JSON.stringify(req.authInfo?.oauthData || {}))}`);
   }
 
-  const { accessToken, refreshToken } = await generateTokens(req.user.user_id, req.user.role);
+  const roleSummary = await rbacService.getUserRoleSummary(req.user.user_id, false);
+  const { accessToken, refreshToken } = await generateTokens(req.user.user_id, roleSummary.role);
 
   const cookieOptions = {
     httpOnly: true,
@@ -45,7 +47,8 @@ exports.facebookCallback = asyncHandler(async (req, res, next) => {
     return res.redirect(`${getFrontendUrl()}/auth/oauth-signup?provider=facebook&userData=${encodeURIComponent(JSON.stringify(req.authInfo?.oauthData || {}))}`);
   }
 
-  const { accessToken, refreshToken } = await generateTokens(req.user.user_id, req.user.role);
+  const roleSummary = await rbacService.getUserRoleSummary(req.user.user_id, false);
+  const { accessToken, refreshToken } = await generateTokens(req.user.user_id, roleSummary.role);
 
   const cookieOptions = {
     httpOnly: true,
@@ -88,7 +91,8 @@ exports.oauthSignup = asyncHandler(async (req, res, next) => {
     lastName,
   });
 
-  const { accessToken, refreshToken } = await generateTokens(newUser.user_id, newUser.role);
+  const roleSummary = await rbacService.getUserRoleSummary(newUser.user_id, false);
+  const { accessToken, refreshToken } = await generateTokens(newUser.user_id, roleSummary.role);
 
   const cookieOptions = {
     httpOnly: true,
@@ -130,7 +134,8 @@ exports.emailSignup = asyncHandler(async (req, res, next) => {
       console.error('Failed to send verification email:', mailError);
     }
 
-    const { accessToken, refreshToken } = await generateTokens(newUser.user_id, newUser.role);
+    const roleSummary = await rbacService.getUserRoleSummary(newUser.user_id, false);
+    const { accessToken, refreshToken } = await generateTokens(newUser.user_id, roleSummary.role);
 
     const cookieOptions = {
       httpOnly: true,
@@ -188,7 +193,8 @@ exports.emailLogin = asyncHandler(async (req, res, next) => {
     });
   }
 
-  const { accessToken, refreshToken } = await generateTokens(user.user_id, user.role);
+  const roleSummary = await rbacService.getUserRoleSummary(user.user_id, false);
+  const { accessToken, refreshToken } = await generateTokens(user.user_id, roleSummary.role);
 
   const cookieOptions = {
     httpOnly: true,
@@ -213,7 +219,7 @@ exports.emailLogin = asyncHandler(async (req, res, next) => {
         email: user.email, 
         name: { firstName: user.first_name, lastName: user.last_name },
         avatar: user.avatar_url,
-        role: user.role
+        role: roleSummary.role
       } 
     }
   });
@@ -226,7 +232,8 @@ exports.refreshAccessToken = asyncHandler(async (req, res, next) => {
   const decoded = await verifyRefreshToken(refreshToken);
   const user = await userService.getUserById(decoded.id);
 
-  const tokens = await generateTokens(user.user_id, user.role);
+  const roleSummary = await rbacService.getUserRoleSummary(user.user_id, false);
+  const tokens = await generateTokens(user.user_id, roleSummary.role);
 
   const cookieOptions = {
     httpOnly: true,
@@ -267,6 +274,7 @@ exports.checkAuth = asyncHandler(async (req, res, next) => {
 
   const user = await userService.getUserById(req.user.id);
   const authInfo = await userService.getUserAuthInfo(req.user.id);
+  const roleSummary = await rbacService.getUserRoleSummary(user.user_id, false);
   res.status(200).json({ 
     status: 'success', 
     data: { 
@@ -276,7 +284,7 @@ exports.checkAuth = asyncHandler(async (req, res, next) => {
         email: user.email, 
         name: { firstName: user.first_name, lastName: user.last_name },
         avatar: user.avatar_url,
-        role: user.role,
+        role: roleSummary.role || user.role,
         provider: authInfo.provider,
         identityProviders: authInfo.identity_providers || [],
         hasLocalPassword: authInfo.has_local_password,

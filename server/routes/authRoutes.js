@@ -3,6 +3,7 @@ const passport = require('passport');
 const authController = require('../controllers/authController.js');
 const { authenticateToken, optionalAuthenticateToken } = require('../middleware/auth.js');
 const { asyncHandler } = require('../middleware/errorHandler');
+const rbacService = require('../services/rbacService');
 
 const router = express.Router();
 
@@ -36,7 +37,8 @@ router.get(
         }
 
         // User exists or was just created - generate tokens
-        const { accessToken, refreshToken } = await generateTokens(user.user_id, user.role);
+        const roleSummary = await rbacService.getUserRoleSummary(user.user_id, false);
+        const { accessToken, refreshToken } = await generateTokens(user.user_id, roleSummary.role);
         console.log('[Google Callback] Tokens generated for user:', user.user_id);
 
         res.cookie('accessToken', accessToken, {
@@ -86,7 +88,8 @@ router.get(
         }
 
         // User exists or was just created - generate tokens
-        const { accessToken, refreshToken } = await generateTokens(user.user_id, user.role);
+        const roleSummary = await rbacService.getUserRoleSummary(user.user_id, false);
+        const { accessToken, refreshToken } = await generateTokens(user.user_id, roleSummary.role);
 
         res.cookie('accessToken', accessToken, {
           httpOnly: true,

@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const { generateTokens, verifyRefreshToken } = require('../utils/generateTokens');
+const rbacService = require('../services/rbacService');
 
 const handleAuth = async (req, res, next, { required }) => {
   try {
@@ -44,14 +45,21 @@ const handleAuth = async (req, res, next, { required }) => {
             res.cookie('refreshToken', newRefreshToken, { ...cookieOptions, maxAge: 7 * 24 * 60 * 60 * 1000 });
 
             // Decode the new token and attach user to request
-            jwt.verify(newAccessToken, process.env.JWT_SECRET, (err, decoded) => {
+            jwt.verify(newAccessToken, process.env.JWT_SECRET, async (err, decoded) => {
               if (err) {
                 return res.status(403).json({
                   status: 'error',
                   message: 'Invalid token',
                 });
               }
-              req.user = { ...decoded, user_id: decoded.id };
+              const roleSummary = await rbacService.getUserRoleSummary(decoded.id, false);
+              req.user = {
+                ...decoded,
+                user_id: decoded.id,
+                role: roleSummary.role,
+                roles: roleSummary.roles || [],
+                permissions: roleSummary.permissions || [],
+              };
               next();
             });
           } catch (refreshErr) {
@@ -79,7 +87,14 @@ const handleAuth = async (req, res, next, { required }) => {
           });
         }
       } else {
-        req.user = { ...user, user_id: user.id };
+        const roleSummary = await rbacService.getUserRoleSummary(user.id, false);
+        req.user = {
+          ...user,
+          user_id: user.id,
+          role: roleSummary.role,
+          roles: roleSummary.roles || [],
+          permissions: roleSummary.permissions || [],
+        };
         next();
       }
     });
