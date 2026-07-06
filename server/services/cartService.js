@@ -1,5 +1,6 @@
 const { pool } = require('../config/database');
 const { AppError } = require('../middleware/errorHandler');
+const { generateUniqueOrderNumber } = require('../utils/orderNumber');
 
 const TAX_RATE = 0;
 
@@ -329,7 +330,7 @@ async function convertCartToOrder(userId, { shipping_address_id, notes, payment_
   try {
     await client.query('BEGIN');
 
-    const orderNumber = `ORD-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+    const orderNumber = await generateUniqueOrderNumber();
 
     const orderResult = await client.query(
       `INSERT INTO orders (order_number, user_id, shipping_address_id, subtotal, tax_amount, shipping_cost, discount_amount, total_amount, status, payment_status, notes)

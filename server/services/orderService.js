@@ -1,4 +1,5 @@
 const { pool } = require('../config/database')
+const { generateUniqueOrderNumber } = require('../utils/orderNumber')
 
 const isValidUUID = (uuid) => {
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -441,7 +442,7 @@ exports.createOrder = async (orderData) => {
     const total = subtotal + shippingCost + tax
 
     // Generate order number
-    const orderNumber = `ORD-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`
+    const orderNumber = await generateUniqueOrderNumber()
 
     // Insert billing address into addresses table (check for existing first)
     let shippingAddressId = null
