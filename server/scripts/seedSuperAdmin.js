@@ -1,52 +1,87 @@
 /**
- * Super Admin Seeder
+ * Admin and Super Admin Seeder
  * Run once: node server/scripts/seedSuperAdmin.js
  *
- * Creates a super_admin user with a hashed password.
- * Customize SUPER_ADMIN_EMAIL / SUPER_ADMIN_PASSWORD below before running.
+ * Creates a super_admin and an admin account with RBAC-based permissions.
  */
 require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') });
 const bcrypt = require('bcryptjs');
 const { Pool } = require('pg');
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const isHostedDatabase = (url = '') => /render\.com|neon\.tech|supabase|railway\.app|amazonaws\.com/i.test(url);
 
-const SUPER_ADMIN_EMAIL    = 'superadmin@cosmoscraft.com';
-const SUPER_ADMIN_PASSWORD = 'CosmosAdmin@2025!';
-const SUPER_ADMIN_FIRST    = 'Cosmos';
-const SUPER_ADMIN_LAST     = 'Admin';
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: isHostedDatabase(process.env.DATABASE_URL || '') ? { rejectUnauthorized: false } : false,
+});
+
+const ACCOUNTS = [
+  {
+    email: process.env.SUPER_ADMIN_EMAIL || 'superadmin@cosmoscraft.com',
+    password: process.env.SUPER_ADMIN_PASSWORD || 'CosmosAdmin@2025!',
+    firstName: process.env.SUPER_ADMIN_FIRST || 'Cosmos',
+    lastName: process.env.SUPER_ADMIN_LAST || 'Admin',
+    roleName: 'super_admin',
+  },
+  {
+    email: process.env.ADMIN_EMAIL || 'admin@cosmoscraft.com',
+    password: process.env.ADMIN_PASSWORD || 'CosmosAdmin@2025!',
+    firstName: process.env.ADMIN_FIRST || 'Cosmos',
+    lastName: process.env.ADMIN_LAST || 'Manager',
+    roleName: 'admin',
+  },
+];
+
+async function ensureAccount(client, account) {
+  const hash = await bcrypt.hash(account.password, 12);
+  const userRes = await client.query(
+    `INSERT INTO users
+       (email, password_hash, first_name, last_name, role, is_verified, is_active)
+     VALUES ($1, $2, $3, $4, $5, true, true)
+     ON CONFLICT (email) DO UPDATE SET
+       password_hash = EXCLUDED.password_hash,
+       first_name = EXCLUDED.first_name,
+       last_name = EXCLUDED.last_name,
+       role = EXCLUDED.role,
+       is_verified = true,
+       is_active = true
+     RETURNING user_id, email, role`,
+    [account.email, hash, account.firstName, account.lastName, account.roleName]
+  );
+
+  const user = userRes.rows[0];
+  const roleRes = await client.query('SELECT role_id FROM roles WHERE LOWER(name) = LOWER($1)', [account.roleName]);
+  if (roleRes.rows.length === 0) {
+    throw new Error(`RBAC role not found: ${account.roleName}`);
+  }
+
+  await client.query(
+    `INSERT INTO user_roles (user_id, role_id, assigned_by, is_active)
+     VALUES ($1, $2, $1, true)
+     ON CONFLICT (user_id, role_id) DO NOTHING`,
+    [user.user_id, roleRes.rows[0].role_id]
+  );
+
+  return user;
+}
 
 async function seed() {
   const client = await pool.connect();
   try {
-    // Check if already exists
-    const exists = await client.query(
-      'SELECT user_id FROM users WHERE email = $1',
-      [SUPER_ADMIN_EMAIL]
-    );
-    if (exists.rows.length > 0) {
-      console.log('✅  Super admin already exists:', SUPER_ADMIN_EMAIL);
-      return;
+    await client.query('BEGIN');
+
+    for (const account of ACCOUNTS) {
+      const user = await ensureAccount(client, account);
+      console.log('✅ Account ready');
+      console.log('   Email:', user.email);
+      console.log('   Role :', account.roleName);
+      console.log('   Pass :', account.password);
     }
 
-    const hash = await bcrypt.hash(SUPER_ADMIN_PASSWORD, 12);
-
-    const res = await client.query(
-      `INSERT INTO users
-         (email, password_hash, first_name, last_name, role, is_verified, is_active)
-       VALUES ($1, $2, $3, $4, 'super_admin', true, true)
-       RETURNING user_id, email, role`,
-      [SUPER_ADMIN_EMAIL, hash, SUPER_ADMIN_FIRST, SUPER_ADMIN_LAST]
-    );
-
-    const admin = res.rows[0];
-    console.log('🚀  Super admin created!');
-    console.log('    ID   :', admin.user_id);
-    console.log('    Email:', admin.email);
-    console.log('    Role :', admin.role);
-    console.log('    Pass :', SUPER_ADMIN_PASSWORD);
+    await client.query('COMMIT');
   } catch (err) {
-    console.error('❌  Seed failed:', err.message);
+    await client.query('ROLLBACK');
+    console.error('❌ Seed failed:', err.message);
     process.exit(1);
   } finally {
     client.release();

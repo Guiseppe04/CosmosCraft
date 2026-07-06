@@ -1,16 +1,25 @@
 const jwt = require('jsonwebtoken');
 const { pool } = require('../config/database');
+const rbacService = require('../services/rbacService');
 
-const generateTokens = async (userId, userRole = 'user') => {
+const generateTokens = async (userId, userRole = null) => {
   try {
+    const roleSummary = userRole
+      ? { role: userRole, roles: [userRole], permissions: [] }
+      : await rbacService.getUserRoleSummary(userId, false);
+    const permissions = roleSummary.permissions?.length
+      ? roleSummary.permissions
+      : await rbacService.getUserPermissions(userId, false);
+    const resolvedRole = roleSummary.role || 'customer';
+
     const accessToken = jwt.sign(
-      { id: userId, role: userRole },
+      { id: userId, role: resolvedRole, roles: roleSummary.roles || [resolvedRole], permissions },
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRE || '30d' }
     );
 
     const refreshToken = jwt.sign(
-      { id: userId },
+      { id: userId, role: resolvedRole },
       process.env.JWT_REFRESH_SECRET,
       { expiresIn: process.env.JWT_REFRESH_EXPIRY || '7d' }
     );

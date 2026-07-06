@@ -1,5 +1,6 @@
 const { pool } = require('../config/database');
 const { AppError } = require('../middleware/errorHandler');
+const { normalizeRole } = require('../utils/roles');
 
 const permissionCache = new Map();
 const CACHE_TTL = 5 * 60 * 1000;
@@ -7,6 +8,28 @@ const CACHE_TTL = 5 * 60 * 1000;
 async function clearCache(userId) {
   permissionCache.delete(`user_${userId}`);
   permissionCache.delete(`roles_${userId}`);
+}
+
+async function getUserRoleSummary(userId, includeInactive = false) {
+  const legacyRoleResult = await pool.query('SELECT role FROM users WHERE user_id = $1', [userId]);
+  const legacyRole = legacyRoleResult.rows[0]?.role || 'customer';
+  const roleRows = await getUserRoles(userId, includeInactive);
+  const normalizedRoles = roleRows.map((row) => normalizeRole(row.name));
+  const primaryRole = normalizedRoles[0] || normalizeRole(legacyRole);
+  const permissions = await getUserPermissions(userId, false);
+
+  return {
+    role: primaryRole || 'customer',
+    roles: normalizedRoles,
+    roleDetails: roleRows,
+    legacyRole: normalizeRole(legacyRole),
+    permissions,
+  };
+}
+
+async function getEffectiveRoleName(userId, includeInactive = false) {
+  const summary = await getUserRoleSummary(userId, includeInactive);
+  return summary.role;
 }
 
 async function getAllRoles() {
@@ -360,8 +383,10 @@ async function checkUserPermission(userId, permission) {
   return permissions.includes(permission);
 }
 
-async function assignRoleToUser(userId, roleId, assignedBy, expiresAt = null) {
-  const userResult = await pool.query('SELECT user_id FROM users WHERE user_id = $1', [userId]);
+async function assignRoleToUser(userId, roleId, assignedBy, expiresAt = null, transactionClient = null) {
+  const dbQuery = transactionClient ? transactionClient.query.bind(transactionClient) : pool.query.bind(pool);
+
+  const userResult = await dbQuery('SELECT user_id FROM users WHERE user_id = $1', [userId]);
   if (userResult.rows.length === 0) {
     throw new AppError('User not found', 404);
   }
@@ -371,7 +396,7 @@ async function assignRoleToUser(userId, roleId, assignedBy, expiresAt = null) {
     throw new AppError('Role not found', 404);
   }
 
-  const existing = await pool.query(
+  const existing = await dbQuery(
     'SELECT * FROM user_roles WHERE user_id = $1 AND role_id = $2',
     [userId, roleId]
   );
@@ -380,7 +405,7 @@ async function assignRoleToUser(userId, roleId, assignedBy, expiresAt = null) {
     throw new AppError('User already has this role', 400);
   }
 
-  const result = await pool.query(
+  const result = await dbQuery(
     `INSERT INTO user_roles (user_id, role_id, assigned_by, expires_at)
      VALUES ($1, $2, $3, $4)
      RETURNING *`,
@@ -538,6 +563,8 @@ async function cleanupExpiredRoles() {
 }
 
 module.exports = {
+  getUserRoleSummary,
+  getEffectiveRoleName,
   getAllRoles,
   getRoleById,
   getRoleByName,
