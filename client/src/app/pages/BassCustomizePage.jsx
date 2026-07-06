@@ -14,6 +14,13 @@ import BassPreview from '../components/bass/BassPreview.jsx'
 import { exportMaskedPreview } from '../utils/exportMaskedPreview.js'
 import { RGBColorPicker } from '../components/options/RGBColorPicker.jsx'
 import { optimizeCloudinaryImage } from '../utils/cloudinary.js'
+import {
+  BASE_STICKER_Z_INDEX,
+  buildStickerPlacementContext,
+  getStickerAspectRatioFromMeta,
+  getStickerImageMeta,
+  normalizeStickerPlacement,
+} from '../utils/stickerPlacement.js'
 import { BuilderActionBar } from '../components/customize/BuilderActionBar.jsx'
 import { BuilderCheckoutSection } from '../components/customize/BuilderCheckoutSection.jsx'
 import { BuilderSavedBadge } from '../components/customize/BuilderSavedBadge.jsx'
@@ -225,6 +232,7 @@ export function BassCustomizePage() {
   const [isDraggingSticker, setIsDraggingSticker] = useState(false)
   const stickerFileInputRef = useRef(null)
   const stickersRef = useRef([])
+  const stickerPlacementContextRef = useRef(null)
   const panStartRef = useRef({ pointerX: 0, pointerY: 0, originX: 0, originY: 0 })
   const previewViewportRef = useRef(null)
   const previewStageRef = useRef(null)
@@ -273,6 +281,7 @@ export function BassCustomizePage() {
     () => options.bodyOptions?.find((option) => option.value === config.bassType) || null,
     [options.bodyOptions, config.bassType]
   )
+  const currentBodyMaskSrc = selectedBassModel?.bodySrc || null
 
   const currentViewStickers = useMemo(
     () => stickers.filter((s) => (s.side || 'front') === view),
@@ -298,17 +307,23 @@ export function BassCustomizePage() {
     reader.onload = () => {
       const dataUrl = typeof reader.result === 'string' ? reader.result : null
       if (!dataUrl) return
-      const newSticker = {
-        id: `sticker-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        src: dataUrl,
-        x: 50,
-        y: 50,
-        size: 18,
-        rotation: 0,
-        side: view,
-      }
-      setStickers((prev) => [...prev, newSticker])
-      setSelectedStickerId(newSticker.id)
+      void (async () => {
+        const meta = await getStickerImageMeta(dataUrl)
+        const newSticker = normalizeStickerPlacement({
+          id: `sticker-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          src: dataUrl,
+          x: 50,
+          y: 50,
+          size: 18,
+          rotation: 0,
+          side: view,
+          aspectRatio: getStickerAspectRatioFromMeta(meta),
+        }, previewStageRef.current, stickerPlacementContextRef.current)
+        setStickers((prev) => [...prev, newSticker])
+        setSelectedStickerId(newSticker.id)
+      })().catch((error) => {
+        console.error('Failed to measure sticker image:', error)
+      })
     }
     reader.readAsDataURL(file)
     event.target.value = ''
@@ -319,9 +334,10 @@ export function BassCustomizePage() {
     setStickers((prev) =>
       prev.map((stickerItem) => {
         if (stickerItem.id !== selectedStickerId) return stickerItem
-        return typeof patchOrUpdater === 'function'
+        const nextSticker = typeof patchOrUpdater === 'function'
           ? patchOrUpdater(stickerItem)
           : { ...stickerItem, ...patchOrUpdater }
+        return normalizeStickerPlacement(nextSticker, previewStageRef.current, stickerPlacementContextRef.current)
       })
     )
   }
@@ -331,9 +347,10 @@ export function BassCustomizePage() {
     setStickers((prev) =>
       prev.map((stickerItem) => {
         if (stickerItem.id !== id) return stickerItem
-        return typeof patchOrUpdater === 'function'
+        const nextSticker = typeof patchOrUpdater === 'function'
           ? patchOrUpdater(stickerItem)
           : { ...stickerItem, ...patchOrUpdater }
+        return normalizeStickerPlacement(nextSticker, previewStageRef.current, stickerPlacementContextRef.current)
       })
     )
   }
@@ -351,12 +368,12 @@ export function BassCustomizePage() {
 
   const duplicateSelectedSticker = () => {
     if (!selectedSticker || (selectedSticker.side || 'front') !== view || currentViewStickers.length >= MAX_STICKERS) return
-    const duplicate = {
+    const duplicate = normalizeStickerPlacement({
       ...selectedSticker,
       id: `sticker-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       x: Math.min(95, selectedSticker.x + 4),
       y: Math.min(95, selectedSticker.y + 4),
-    }
+    }, previewStageRef.current, stickerPlacementContextRef.current)
     setStickers((prev) => [...prev, duplicate])
     setSelectedStickerId(duplicate.id)
   }
@@ -460,6 +477,73 @@ export function BassCustomizePage() {
   }, [stickers])
 
   useEffect(() => {
+    const missingAspectRatio = stickers.filter((stickerItem) => !Number.isFinite(stickerItem.aspectRatio) || stickerItem.aspectRatio <= 0)
+    if (!missingAspectRatio.length) return undefined
+
+    let cancelled = false
+    void Promise.all(
+      missingAspectRatio.map(async (stickerItem) => {
+        const meta = await getStickerImageMeta(stickerItem.src)
+        return {
+          id: stickerItem.id,
+          aspectRatio: getStickerAspectRatioFromMeta(meta),
+        }
+      }),
+    ).then((updates) => {
+      if (cancelled) return
+      if (!updates.length) return
+      setStickers((prev) =>
+        prev.map((stickerItem) => {
+          const update = updates.find((entry) => entry.id === stickerItem.id)
+          return update ? { ...stickerItem, ...update } : stickerItem
+        }),
+      )
+    }).catch((error) => {
+      if (!cancelled) {
+        console.warn('Failed to hydrate sticker aspect ratios:', error)
+      }
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [stickers])
+
+  useEffect(() => {
+    let cancelled = false
+    const stage = previewStageRef.current
+    if (!stage || !currentBodyMaskSrc) {
+      stickerPlacementContextRef.current = null
+      return undefined
+    }
+
+    stickerPlacementContextRef.current = null
+    void buildStickerPlacementContext(stage, currentBodyMaskSrc)
+      .then((context) => {
+        if (!cancelled) {
+          stickerPlacementContextRef.current = context
+          setStickers((prev) =>
+            prev.map((stickerItem) => (
+              (stickerItem.side || 'front') === view
+                ? normalizeStickerPlacement(stickerItem, previewStageRef.current, context)
+                : stickerItem
+            )),
+          )
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          console.warn('Failed to build sticker placement context:', error)
+          stickerPlacementContextRef.current = null
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [config, currentBodyMaskSrc, view])
+
+  useEffect(() => {
     setPanOffset((prev) => clampPan(prev.x, prev.y, zoomLevel))
   }, [zoomLevel])
 
@@ -472,6 +556,17 @@ export function BassCustomizePage() {
       setHasUnsavedChanges(true)
     }
   }, [stickers, editBuildId])
+
+  useEffect(() => {
+    if (!stickerPlacementContextRef.current) return
+    setStickers((prev) =>
+      prev.map((stickerItem) => (
+        (stickerItem.side || 'front') === view
+          ? normalizeStickerPlacement(stickerItem, previewStageRef.current, stickerPlacementContextRef.current)
+          : stickerItem
+      )),
+    )
+  }, [currentBodyMaskSrc, view])
 
   useEffect(() => {
     if (!selectedStickerId) {
@@ -1281,7 +1376,7 @@ export function BassCustomizePage() {
                         alt={`Custom sticker ${index + 1}`}
                         className={`absolute select-none ${isDraggingSticker && isSelectedSticker ? 'cursor-grabbing' : 'cursor-grab'} ${isSelectedSticker ? 'ring-2 ring-[#d4af37]/80 ring-offset-1 ring-offset-black/40' : ''}`}
                         style={{
-                          zIndex: 30 + index,
+                          zIndex: BASE_STICKER_Z_INDEX + index,
                           left: `${stickerItem.x}%`,
                           top: `${stickerItem.y}%`,
                           width: `${stickerItem.size}%`,

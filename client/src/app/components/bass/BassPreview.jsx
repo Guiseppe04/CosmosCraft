@@ -43,7 +43,7 @@ const maskedLayerStyle = (maskSrc, extra = {}) => {
   }
 }
 
-function BassLayer({ src, maskSrc, style, className = '', layerName = '' }) {
+function BassLayer({ src, maskSrc, style, className = '', layerName = '', protectedLayer = false }) {
   if (!src && !maskSrc) {
     if (DEBUG) console.warn(`[BassLayer] Missing source for ${layerName}`)
     return null
@@ -61,6 +61,7 @@ function BassLayer({ src, maskSrc, style, className = '', layerName = '' }) {
       data-layer={layerName}
       data-layer-src={src || ''}
       data-layer-mask={maskSrc || ''}
+      data-sticker-protected={protectedLayer ? 'true' : 'false'}
       data-export-layer="true"
     />
   )
@@ -569,79 +570,80 @@ function BassPreview({ config, view, onViewChange, modelImageSrc }) {
       layers.push({ name: 'body-finish-color', maskSrc: assets.bodyModel?.bodySrc, style: { backgroundColor: assets.bodyFinish.color, opacity: 1, zIndex: 2 } })
     }
     if (assets.neck?.src && assets.frontNeckMask) {
-      layers.push({ name: 'neck', maskSrc: assets.frontNeckMask, style: { backgroundImage: `url(${assets.neck.src})`, filter: assets.neck.filter, opacity: 0.98, zIndex: 3 } })
+      layers.push({ name: 'neck', maskSrc: assets.frontNeckMask, style: { backgroundImage: `url(${assets.neck.src})`, filter: assets.neck.filter, opacity: 0.98, zIndex: 100 }, protectedLayer: true })
     }
     if (assets.fretboard?.src && (assets.frontFretboardMask || assets.frontNeckMask)) {
-      layers.push({ name: 'fretboard', maskSrc: assets.frontFretboardMask || assets.frontNeckMask, style: { backgroundImage: `url(${assets.fretboard.src})`, opacity: 0.94, mixBlendMode: 'multiply', zIndex: 4 } })
+      layers.push({ name: 'fretboard', maskSrc: assets.frontFretboardMask || assets.frontNeckMask, style: { backgroundImage: `url(${assets.fretboard.src})`, opacity: 0.94, mixBlendMode: 'multiply', zIndex: 101 }, protectedLayer: true })
     }
     if (assets.frontFrets?.stainless) {
-      layers.push({ name: 'frets', src: assets.frontFrets.stainless, style: { zIndex: 5, opacity: 0.85 } })
+      layers.push({ name: 'frets', src: assets.frontFrets.stainless, style: { zIndex: 102, opacity: 0.85 }, protectedLayer: true })
     }
     if (assets.inlay?.src) {
-      layers.push({ name: 'inlays', src: assets.inlay.src, style: { zIndex: 6, opacity: 1, filter: 'brightness(1.15) contrast(1.1)' } })
+      layers.push({ name: 'inlays', src: assets.inlay.src, style: { zIndex: 103, opacity: 1, filter: 'brightness(1.15) contrast(1.1)' }, protectedLayer: true })
     }
     const nutColor = colorKey === 'black' ? 'black' : 'white'
     if (!assets.isHeadless && assets.frontNut?.[nutColor]) {
-      layers.push({ name: 'nut', src: assets.frontNut[nutColor], style: { zIndex: 7, opacity: 0.9 } })
+      layers.push({ name: 'nut', src: assets.frontNut[nutColor], style: { zIndex: 104, opacity: 0.9 }, protectedLayer: true })
     }
     if (!assets.isHeadless && assets.headstockWood?.texture && (assets.frontHeadstockMask || assets.frontNeckMask)) {
-      layers.push({ name: 'headstock-wood', maskSrc: assets.frontHeadstockMask || assets.frontNeckMask, style: { backgroundImage: `url(${assets.headstockWood.texture})`, opacity: 0.95, zIndex: 8 } })
+      layers.push({ name: 'headstock-wood', maskSrc: assets.frontHeadstockMask || assets.frontNeckMask, style: { backgroundImage: `url(${assets.headstockWood.texture})`, opacity: 0.95, zIndex: 105 }, protectedLayer: true })
     }
     if (!assets.isHeadless && assets.headstockStringOverlay) {
       layers.push({
         name: 'headstock-strings',
         src: assets.headstockStringOverlay,
         style: {
-          zIndex: 8.3,
+          zIndex: 106,
           opacity: 1,
           filter: 'brightness(1.22) contrast(1.32) drop-shadow(0 0 0.45px rgba(0,0,0,0.85))',
         },
+        protectedLayer: true,
       })
     }
     if (!assets.isHeadless && assets.headstockLogo) {
-      layers.push({ name: 'headstock-logo', src: assets.headstockLogo, style: { zIndex: 8.35, opacity: 1, filter: 'brightness(1.12) contrast(1.18)' } })
+      layers.push({ name: 'headstock-logo', src: assets.headstockLogo, style: { zIndex: 107, opacity: 1, filter: 'brightness(1.12) contrast(1.18)' }, protectedLayer: true })
     }
     if (!assets.isHeadless && assets.headstockTuners) {
-      layers.push({ name: 'headstock-tuners', src: assets.headstockTuners, style: { zIndex: 8.4, opacity: 0.97 } })
+      layers.push({ name: 'headstock-tuners', src: assets.headstockTuners, style: { zIndex: 108, opacity: 0.97 }, protectedLayer: true })
     }
     if (!assets.isHeadless && assets.headstockTrussCover) {
-      layers.push({ name: 'headstock-truss-cover', src: assets.headstockTrussCover, style: { zIndex: 8.2, opacity: 1, filter: 'brightness(1.1) contrast(1.2)' } })
+      layers.push({ name: 'headstock-truss-cover', src: assets.headstockTrussCover, style: { zIndex: 109, opacity: 1, filter: 'brightness(1.1) contrast(1.2)' }, protectedLayer: true })
     }
     if (resolvedConfig.pickguard !== 'none' && assets.pickguard?.src) {
       layers.push({ name: 'pickguard', src: assets.pickguard.src, style: { zIndex: 9, opacity: 0.95 } })
     }
     if (resolvedConfig.pickguard !== 'none' && assets.pickupScrews?.src) {
-      layers.push({ name: 'pickup-screws', src: assets.pickupScrews.src, style: { zIndex: 10, opacity: 0.9 } })
+      layers.push({ name: 'pickup-screws', src: assets.pickupScrews.src, style: { zIndex: 120, opacity: 0.9 }, protectedLayer: true })
     }
     if (assets.pickupLayers?.bridgePickup) {
-      layers.push({ name: 'pickup-bridge', src: assets.pickupLayers.bridgePickup, style: { zIndex: 11, opacity: 0.9 } })
+      layers.push({ name: 'pickup-bridge', src: assets.pickupLayers.bridgePickup, style: { zIndex: 121, opacity: 0.9 }, protectedLayer: true })
     }
     if (assets.pickupLayers?.neckPickup) {
-      layers.push({ name: 'pickup-neck', src: assets.pickupLayers.neckPickup, style: { zIndex: 11, opacity: 0.9 } })
+      layers.push({ name: 'pickup-neck', src: assets.pickupLayers.neckPickup, style: { zIndex: 122, opacity: 0.9 }, protectedLayer: true })
     }
     if (resolvedConfig.bassType === 'jb' && assets.controlPlate?.src) {
-      layers.push({ name: 'control-plate', src: assets.controlPlate.src, style: { zIndex: 12, opacity: 0.9 } })
+      layers.push({ name: 'control-plate', src: assets.controlPlate.src, style: { zIndex: 123, opacity: 0.9 }, protectedLayer: true })
     }
     if (assets.knobs?.src) {
-      layers.push({ name: 'knobs', src: assets.knobs.src, style: { zIndex: 13, opacity: 0.95 } })
+      layers.push({ name: 'knobs', src: assets.knobs.src, style: { zIndex: 124, opacity: 0.95 }, protectedLayer: true })
     }
     const bridgeSrc = resolveBassVariant(assets.bridge?.assets, colorKey)
     if (bridgeSrc) {
-      layers.push({ name: 'bridge', src: bridgeSrc, style: { zIndex: 14, opacity: 0.95 } })
+      layers.push({ name: 'bridge', src: bridgeSrc, style: { zIndex: 125, opacity: 0.95 }, protectedLayer: true })
     }
     const strapSrc = bassBuilder.resolveCatalogVariant(resolvedConfig.bassType, 'front', 'strap buttons/standard', resolvedConfig.strings, colorKey)
       || assets.bodyAssets?.front?.strap?.[colorKey]
       || assets.bodyAssets?.front?.strap?.chrome
     if (strapSrc) {
-      layers.push({ name: 'strap', src: strapSrc, style: { zIndex: 15, opacity: 0.95 } })
+      layers.push({ name: 'strap', src: strapSrc, style: { zIndex: 126, opacity: 0.95 }, protectedLayer: true })
     }
     const frontShadow = bassBuilder.resolveCatalogAsset(resolvedConfig.bassType, 'front', 'shadows_highlights', { strings: resolvedConfig.strings, preferTokens: ['edge', 'shadow'] }) || assets.bodyAssets?.front?.shadows
     if (frontShadow) {
-      layers.push({ name: 'shadows', src: frontShadow, style: { zIndex: 20, opacity: 1, mixBlendMode: 'multiply' } })
+      layers.push({ name: 'shadows', src: frontShadow, style: { zIndex: 200, opacity: 1, mixBlendMode: 'multiply' } })
     }
     const frontGloss = bassBuilder.resolveCatalogAsset(resolvedConfig.bassType, 'front', 'shadows_highlights', { strings: resolvedConfig.strings, preferTokens: ['gloss'] }) || assets.bodyAssets?.front?.gloss
     if (frontGloss) {
-      layers.push({ name: 'gloss', src: frontGloss, style: { zIndex: 21, opacity: 0.9, mixBlendMode: 'screen' } })
+      layers.push({ name: 'gloss', src: frontGloss, style: { zIndex: 201, opacity: 0.9, mixBlendMode: 'screen' } })
     }
 
     const orderedLayers = sortLayersByZIndex(layers)
@@ -664,46 +666,46 @@ function BassPreview({ config, view, onViewChange, modelImageSrc }) {
       layers.push({ name: 'rear-body-finish-color', maskSrc: rearBodyMask, style: { backgroundColor: assets.bodyFinish.color, opacity: 1, zIndex: 2 } })
     }
     if (rearNeckMask && assets.neck?.src) {
-      layers.push({ name: 'rear-neck-wood', maskSrc: rearNeckMask, style: { backgroundImage: `url(${assets.neck.src})`, filter: assets.neck.filter, opacity: 0.98, zIndex: 3 } })
+      layers.push({ name: 'rear-neck-wood', maskSrc: rearNeckMask, style: { backgroundImage: `url(${assets.neck.src})`, filter: assets.neck.filter, opacity: 0.98, zIndex: 100 }, protectedLayer: true })
     }
     if (rearNeckMask && assets.rearNeckFinish) {
-      layers.push({ name: 'rear-neck-finish', maskSrc: rearNeckMask, style: { backgroundImage: `url(${assets.rearNeckFinish})`, opacity: 0.92, mixBlendMode: 'multiply', zIndex: 4 } })
+      layers.push({ name: 'rear-neck-finish', maskSrc: rearNeckMask, style: { backgroundImage: `url(${assets.rearNeckFinish})`, opacity: 0.92, mixBlendMode: 'multiply', zIndex: 101 }, protectedLayer: true })
     }
     if (assets.rearNeckBolts) {
-      layers.push({ name: 'rear-neck-bolts', src: assets.rearNeckBolts, style: { zIndex: 5, opacity: 0.95 } })
+      layers.push({ name: 'rear-neck-bolts', src: assets.rearNeckBolts, style: { zIndex: 102, opacity: 0.95 }, protectedLayer: true })
     }
     if (assets.rearFerrules) {
-      layers.push({ name: 'rear-ferrules', src: assets.rearFerrules, style: { zIndex: 6, opacity: 0.95 } })
+      layers.push({ name: 'rear-ferrules', src: assets.rearFerrules, style: { zIndex: 103, opacity: 0.95 }, protectedLayer: true })
     }
     if (assets.rearBridge) {
-      layers.push({ name: 'rear-bridge', src: assets.rearBridge, style: { zIndex: 7, opacity: 0.95 } })
+      layers.push({ name: 'rear-bridge', src: assets.rearBridge, style: { zIndex: 104, opacity: 0.95 }, protectedLayer: true })
     }
     const isRearHeadless = assets.isHeadless || resolvedConfig.bassType === 'vader'
     if (isRearHeadless && assets.bodyAssets?.back?.neckCap) {
-      layers.push({ name: 'rear-neck-cap', src: assets.bodyAssets.back.neckCap, style: { zIndex: 8, opacity: 0.95 } })
+      layers.push({ name: 'rear-neck-cap', src: assets.bodyAssets.back.neckCap, style: { zIndex: 105, opacity: 0.95 }, protectedLayer: true })
     } else if (assets.headstockWood?.texture && rearHeadstockMask) {
-      layers.push({ name: 'rear-headstock-wood', maskSrc: rearHeadstockMask, style: { backgroundImage: `url(${assets.headstockWood.texture})`, opacity: 0.95, zIndex: 8 } })
+      layers.push({ name: 'rear-headstock-wood', maskSrc: rearHeadstockMask, style: { backgroundImage: `url(${assets.headstockWood.texture})`, opacity: 0.95, zIndex: 105 }, protectedLayer: true })
     }
     if (!isRearHeadless && rearHeadstockMask && assets.rearHeadstockFinish) {
-      layers.push({ name: 'rear-headstock-finish', maskSrc: rearHeadstockMask, style: { backgroundImage: `url(${assets.rearHeadstockFinish})`, opacity: 0.85, mixBlendMode: 'multiply', zIndex: 8.2 } })
+      layers.push({ name: 'rear-headstock-finish', maskSrc: rearHeadstockMask, style: { backgroundImage: `url(${assets.rearHeadstockFinish})`, opacity: 0.85, mixBlendMode: 'multiply', zIndex: 106 }, protectedLayer: true })
     }
     if (!isRearHeadless && assets.rearHeadstockTuners) {
-      layers.push({ name: 'rear-headstock-tuners', src: assets.rearHeadstockTuners, style: { zIndex: 8.4, opacity: 0.97 } })
+      layers.push({ name: 'rear-headstock-tuners', src: assets.rearHeadstockTuners, style: { zIndex: 107, opacity: 0.97 }, protectedLayer: true })
     }
     if (assets.backplate?.src) {
-      layers.push({ name: 'backplate', src: assets.backplate.src, style: { zIndex: 9, opacity: 0.95 } })
+      layers.push({ name: 'backplate', src: assets.backplate.src, style: { zIndex: 108, opacity: 0.95 }, protectedLayer: true })
     }
     if (assets.rearStrap) {
-      layers.push({ name: 'rear-strap', src: assets.rearStrap, style: { zIndex: 10, opacity: 0.95 } })
+      layers.push({ name: 'rear-strap', src: assets.rearStrap, style: { zIndex: 109, opacity: 0.95 }, protectedLayer: true })
     }
     if (assets.rearStrapLocks) {
-      layers.push({ name: 'rear-straplocks', src: assets.rearStrapLocks, style: { zIndex: 11, opacity: 0.95 } })
+      layers.push({ name: 'rear-straplocks', src: assets.rearStrapLocks, style: { zIndex: 110, opacity: 0.95 }, protectedLayer: true })
     }
     if (assets.rearNeckFinish || assets.bodyAssets?.back?.shadows) {
-      layers.push({ name: 'rear-shadows', src: assets.rearNeckFinish || assets.bodyAssets?.back?.shadows, style: { zIndex: 20, opacity: 0.85, mixBlendMode: 'multiply' } })
+      layers.push({ name: 'rear-shadows', src: assets.rearNeckFinish || assets.bodyAssets?.back?.shadows, style: { zIndex: 200, opacity: 0.85, mixBlendMode: 'multiply' } })
     }
     if (assets.rearGloss || assets.bodyAssets?.back?.gloss) {
-      layers.push({ name: 'rear-gloss', src: assets.rearGloss || assets.bodyAssets?.back?.gloss, style: { zIndex: 21, opacity: 0.8, mixBlendMode: 'screen' } })
+      layers.push({ name: 'rear-gloss', src: assets.rearGloss || assets.bodyAssets?.back?.gloss, style: { zIndex: 201, opacity: 0.8, mixBlendMode: 'screen' } })
     }
 
     const orderedLayers = sortLayersByZIndex(layers)
@@ -797,6 +799,7 @@ function BassPreview({ config, view, onViewChange, modelImageSrc }) {
                     maskSrc={layer.maskSrc ?? undefined}
                     style={layer.style}
                     layerName={layer.name}
+                    protectedLayer={layer.protectedLayer}
                   />
                 ))}
                 {view === 'rear' && rearLayers.map((layer) => (
@@ -806,6 +809,7 @@ function BassPreview({ config, view, onViewChange, modelImageSrc }) {
                     maskSrc={layer.maskSrc ?? undefined}
                     style={layer.style}
                     layerName={layer.name}
+                    protectedLayer={layer.protectedLayer}
                   />
                 ))}
               </div>

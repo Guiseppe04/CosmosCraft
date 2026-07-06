@@ -29,7 +29,7 @@ const maskedLayerStyle = (maskSrc, extra = {}) => ({
   ...extra,
 })
 
-function GuitarLayer({ src, maskSrc, style, className = '' }) {
+function GuitarLayer({ src, maskSrc, style, className = '', layerName = '', protectedLayer = false }) {
   if (!src && !maskSrc) return null
   return (
     <div
@@ -37,6 +37,10 @@ function GuitarLayer({ src, maskSrc, style, className = '' }) {
       className={`absolute inset-0 pointer-events-none select-none ${className}`}
       style={maskSrc ? maskedLayerStyle(maskSrc, style) : layerStyle(src, style)}
       data-export-layer="true"
+      data-layer={layerName}
+      data-layer-src={src || ''}
+      data-layer-mask={maskSrc || ''}
+      data-sticker-protected={protectedLayer ? 'true' : 'false'}
     />
   )
 }
@@ -85,9 +89,9 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc }) {
     const layout = config.pickups
     const route = guitarBuilder.PUPPY
     const add = (set, slot) => [
-      { src: set.route?.[colorKey]?.[slot], className: 'opacity-90' },
-      { src: set.body?.[colorKey]?.[slot], className: 'opacity-90' },
-      { src: set.poles?.[colorKey]?.[slot], className: 'opacity-95' },
+      { name: `${slot}-pickup-route`, src: set.route?.[colorKey]?.[slot], className: 'opacity-90', protectedLayer: true, style: { zIndex: 120 } },
+      { name: `${slot}-pickup-body`, src: set.body?.[colorKey]?.[slot], className: 'opacity-90', protectedLayer: true, style: { zIndex: 121 } },
+      { name: `${slot}-pickup-poles`, src: set.poles?.[colorKey]?.[slot], className: 'opacity-95', protectedLayer: true, style: { zIndex: 122 } },
     ]
 
     if (layout === 'sss') return [...add(route.single, 'bridge'), ...add(route.single, 'middle'), ...add(route.single, 'neck')]
@@ -102,17 +106,17 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc }) {
     const strapSrc = resolveVariant(bodyAssets.strap, colorKey)
     const switchSrc = resolveVariant(bodyAssets.switch, colorKey)
     return [
-      { src: switchSrc, className: 'opacity-90' },
-      { src: strapSrc, className: 'opacity-95' },
-      { src: knobAsset, className: 'opacity-95' },
-      { src: bridgeSrc, className: 'opacity-95' },
+      { name: 'switch', src: switchSrc, className: 'opacity-90', protectedLayer: true, style: { zIndex: 130 } },
+      { name: 'strap-button', src: strapSrc, className: 'opacity-95', protectedLayer: true, style: { zIndex: 131 } },
+      { name: 'knobs', src: knobAsset, className: 'opacity-95', protectedLayer: true, style: { zIndex: 132 } },
+      { name: 'bridge', src: bridgeSrc, className: 'opacity-95', protectedLayer: true, style: { zIndex: 133 } },
     ].filter(layer => Boolean(layer.src))
   }, [bodyAssets, bridge.assets, colorKey, knobAsset])
 
   const overlayLayers = useMemo(() => {
     return [
-      bodyAssets.shadows ? { src: bodyAssets.shadows, style: { opacity: 0.8, mixBlendMode: 'multiply' } } : null,
-      bodyAssets.gloss ? { src: bodyAssets.gloss, style: { opacity: 0.8, mixBlendMode: 'screen' } } : null,
+      bodyAssets.shadows ? { name: 'body-shadows', src: bodyAssets.shadows, style: { opacity: 0.8, mixBlendMode: 'multiply', zIndex: 200 } } : null,
+      bodyAssets.gloss ? { name: 'body-gloss', src: bodyAssets.gloss, style: { opacity: 0.8, mixBlendMode: 'screen', zIndex: 201 } } : null,
     ].filter(Boolean)
   }, [bodyAssets])
 
@@ -121,60 +125,75 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc }) {
 
     return [
       {
+        name: 'body-wood',
         maskSrc: modelBodySrc,
         style: {
           backgroundImage: `url(${bodyWood.texture})`,
           opacity: 1,
           mixBlendMode: 'normal',
+          zIndex: 1,
         },
       },
       bodyFinish.texture
         ? {
+            name: 'body-finish-texture',
             maskSrc: modelBodySrc,
             style: {
               backgroundImage: `url(${bodyFinish.texture})`,
               opacity: 1,
               mixBlendMode: 'normal',
+              zIndex: 2,
             },
           }
         : bodyFinish.color
         ? {
+            name: 'body-finish-color',
             maskSrc: modelBodySrc,
             style: {
               backgroundColor: bodyFinish.color,
               opacity: 1,
               mixBlendMode: 'normal',
+              zIndex: 2,
             },
           }
         : null,
       {
+        name: 'neck',
         maskSrc: NECK_MASK,
         style: {
           backgroundImage: `url(${neck.src})`,
           filter: neck.filter,
           opacity: 0.98,
+          zIndex: 100,
         },
+        protectedLayer: true,
       },
       {
+        name: 'fretboard',
         maskSrc: NECK_MASK,
         style: {
           backgroundImage: `url(${fretboard.src})`,
           opacity: 0.94,
           mixBlendMode: 'multiply',
+          zIndex: 101,
         },
+        protectedLayer: true,
       },
-      { src: NECK_FRETS[config.pickups === 'hh' ? 'gold' : 'stainless'], className: 'opacity-85' },
-      { src: inlay.src, className: 'opacity-95' },
-      { src: NECK_NUT[hardware.color === 'black' ? 'black' : 'white'], className: 'opacity-90' },
+      { name: 'frets', src: NECK_FRETS[config.pickups === 'hh' ? 'gold' : 'stainless'], className: 'opacity-85', protectedLayer: true, style: { zIndex: 102 } },
+      { name: 'inlays', src: inlay.src, className: 'opacity-95', protectedLayer: true, style: { zIndex: 103 } },
+      { name: 'nut', src: NECK_NUT[hardware.color === 'black' ? 'black' : 'white'], className: 'opacity-90', protectedLayer: true, style: { zIndex: 104 } },
       {
+        name: 'headstock-wood',
         maskSrc: headstock.mask,
         style: {
           backgroundImage: `url(${headstockWood.texture})`,
           opacity: 0.95,
+          zIndex: 105,
         },
+        protectedLayer: true,
       },
-      { src: headstock.trussCover, className: 'opacity-95' },
-      { src: headstockTuners, className: 'opacity-95' },
+      { name: 'headstock-truss-cover', src: headstock.trussCover, className: 'opacity-95', protectedLayer: true, style: { zIndex: 106 } },
+      { name: 'headstock-tuners', src: headstockTuners, className: 'opacity-95', protectedLayer: true, style: { zIndex: 107 } },
     ].filter(Boolean)
   }, [bodyFinish.texture, bodyFinish.color, bodyWood.texture, colorKey, config.body, config.pickups, fretboard.src, headstock, headstockWood.texture, inlay.src, neck.filter, neck.src, hardware.color])
   
@@ -183,61 +202,76 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc }) {
 
     return [
       {
+        name: 'body-wood',
         maskSrc: modelBodySrc,
         style: {
           backgroundImage: `url(${bodyWood.texture})`,
           opacity: 1,
           mixBlendMode: 'normal',
+          zIndex: 1,
         },
       },
       bodyFinish.texture
         ? {
+            name: 'body-finish-texture',
             maskSrc: modelBodySrc,
             style: {
               backgroundImage: `url(${bodyFinish.texture})`,
               opacity: 1,
               mixBlendMode: 'normal',
+              zIndex: 2,
             },
           }
         : bodyFinish.color
         ? {
+            name: 'body-finish-color',
             maskSrc: modelBodySrc,
             style: {
               backgroundColor: bodyFinish.color,
               opacity: 1,
               mixBlendMode: 'normal',
+              zIndex: 2,
             },
           }
         : null,
       {
+        name: 'neck',
         maskSrc: NECK_MASK,
         style: {
           backgroundImage: `url(${neck.src})`,
           filter: neck.filter,
           opacity: 0.98,
+          zIndex: 100,
         },
+        protectedLayer: true,
       },
       {
+        name: 'fretboard',
         maskSrc: NECK_MASK,
         style: {
           backgroundImage: `url(${fretboard.src})`,
           opacity: 0.94,
           mixBlendMode: 'multiply',
+          zIndex: 101,
         },
+        protectedLayer: true,
       },
       {
+        name: 'headstock-wood',
         maskSrc: headstock.mask,
         style: {
           backgroundImage: `url(${headstockWood.texture})`,
           opacity: 0.95,
+          zIndex: 102,
         },
+        protectedLayer: true,
       },
-      { src: headstockTuners, className: 'opacity-95' },
+      { name: 'headstock-tuners', src: headstockTuners, className: 'opacity-95', protectedLayer: true, style: { zIndex: 103 } },
     ].filter(Boolean)
   }, [bodyFinish.texture, bodyFinish.color, bodyWood.texture, colorKey, fretboard.src, headstock, headstockWood.texture, modelBodySrc, neck.filter, neck.src])
   
   const stringLayer = useMemo(() => {
-    return headstock.strings ? { src: headstock.strings, className: 'opacity-95' } : null
+    return headstock.strings ? { src: headstock.strings, className: 'opacity-95', style: { zIndex: 110 } } : null
   }, [headstock.strings])
 
   return (
@@ -275,18 +309,34 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc }) {
                       maskSrc={layer.maskSrc}
                       style={layer.style}
                       className={layer.className}
+                      layerName={layer.name}
+                      protectedLayer={layer.protectedLayer}
                     />
                   ))}
-                  {pickguardAsset && <GuitarLayer src={pickguardAsset} className="opacity-95" />}
+                  {pickguardAsset && <GuitarLayer src={pickguardAsset} className="opacity-95" layerName="pickguard" style={{ zIndex: 15 }} />}
                   {pickupLayers.map((layer, index) => (
-                    <GuitarLayer key={`${layer.src}-${index}`} src={layer.src} className={layer.className} />
+                    <GuitarLayer
+                      key={`${layer.src}-${index}`}
+                      src={layer.src}
+                      style={layer.style}
+                      className={layer.className}
+                      layerName={layer.name}
+                      protectedLayer={layer.protectedLayer}
+                    />
                   ))}
                   {hardwareLayers.map((layer, index) => (
-                    <GuitarLayer key={`${layer.src}-${index}`} src={layer.src} className={layer.className} />
+                    <GuitarLayer
+                      key={`${layer.src}-${index}`}
+                      src={layer.src}
+                      style={layer.style}
+                      className={layer.className}
+                      layerName={layer.name}
+                      protectedLayer={layer.protectedLayer}
+                    />
                   ))}
-                  {stringLayer && <GuitarLayer src={stringLayer.src} className={stringLayer.className} />}
+                  {stringLayer && <GuitarLayer src={stringLayer.src} className={stringLayer.className} style={stringLayer.style} layerName="strings" protectedLayer />}
                   {overlayLayers.map((layer, index) => (
-                    <GuitarLayer key={`overlay-${index}`} src={layer.src} style={layer.style} />
+                    <GuitarLayer key={`overlay-${index}`} src={layer.src} style={layer.style} layerName={`overlay-${index}`} />
                   ))}
                 </>
               ) : (
@@ -298,13 +348,15 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc }) {
                       maskSrc={layer.maskSrc}
                       style={layer.style}
                       className={layer.className}
+                      layerName={layer.name}
+                      protectedLayer={layer.protectedLayer}
                     />
                   ))}
                   {resolveVariant(bodyAssets.strap, colorKey) && (
-                    <GuitarLayer src={resolveVariant(bodyAssets.strap, colorKey)} className="opacity-95" />
+                    <GuitarLayer src={resolveVariant(bodyAssets.strap, colorKey)} className="opacity-95" style={{ zIndex: 110 }} layerName="strap" protectedLayer />
                   )}
                   {overlayLayers.map((layer, index) => (
-                    <GuitarLayer key={`overlay-${index}`} src={layer.src} style={layer.style} />
+                    <GuitarLayer key={`overlay-${index}`} src={layer.src} style={layer.style} layerName={`overlay-${index}`} />
                   ))}
                 </>
               )}
