@@ -1,6 +1,10 @@
 const imageMetaCache = new Map()
 const imageDataCache = new Map()
 
+export const BASE_STICKER_Z_INDEX = 30
+const MIN_STICKER_SIZE = 4
+const MAX_STICKER_SIZE = 50
+
 function parseUrl(value) {
   if (!value || value === 'none') return null
   const match = value.match(/url\((['"]?)(.*?)\1\)/)
@@ -102,6 +106,12 @@ function getStickerAspectRatio(sticker) {
   return Number.isFinite(ratio) && ratio > 0 ? ratio : 1
 }
 
+function getStickerSize(sticker) {
+  const size = Number(sticker?.size)
+  if (!Number.isFinite(size) || size <= 0) return MIN_STICKER_SIZE
+  return clamp(size, MIN_STICKER_SIZE, MAX_STICKER_SIZE)
+}
+
 function getStickerMetrics(sticker, stageRect, centerX, centerY) {
   const width = Math.max(1, (stageRect.width * (Number(sticker?.size) || 0)) / 100)
   const height = width / getStickerAspectRatio(sticker)
@@ -109,17 +119,18 @@ function getStickerMetrics(sticker, stageRect, centerX, centerY) {
   const halfWidth = width / 2
   const halfHeight = height / 2
 
-  const localPoints = [
-    { x: 0, y: 0 },
-    { x: -halfWidth, y: -halfHeight },
-    { x: halfWidth, y: -halfHeight },
-    { x: halfWidth, y: halfHeight },
-    { x: -halfWidth, y: halfHeight },
-    { x: 0, y: -halfHeight },
-    { x: halfWidth, y: 0 },
-    { x: 0, y: halfHeight },
-    { x: -halfWidth, y: 0 },
-  ]
+  const localPoints = []
+  const steps = 12
+  for (let xStep = 0; xStep <= steps; xStep += 1) {
+    const xFraction = (xStep / steps) - 0.5
+    for (let yStep = 0; yStep <= steps; yStep += 1) {
+      const yFraction = (yStep / steps) - 0.5
+      localPoints.push({
+        x: halfWidth * 2 * xFraction,
+        y: halfHeight * 2 * yFraction,
+      })
+    }
+  }
 
   return localPoints.map((point) => ({
     x: centerX + (point.x * Math.cos(angle)) - (point.y * Math.sin(angle)),
@@ -129,8 +140,8 @@ function getStickerMetrics(sticker, stageRect, centerX, centerY) {
 
 function isPlacementValid({ sticker, stageRect, centerX, centerY, bodyMask, protectedMasks = [] }) {
   const samplePoints = getStickerMetrics(sticker, stageRect, centerX, centerY)
-  const bodyThreshold = 12
-  const protectedThreshold = 12
+  const bodyThreshold = 24
+  const protectedThreshold = 8
 
   for (const point of samplePoints) {
     if (sampleAlphaAtPoint(bodyMask, stageRect, point) < bodyThreshold) {
@@ -146,7 +157,29 @@ function isPlacementValid({ sticker, stageRect, centerX, centerY, bodyMask, prot
   return true
 }
 
-function findNearestValidCenter({ sticker, stageRect, bodyMask, protectedMasks, startX, startY }) {
+function getPlacementBodyBox(stageRect, placementContext) {
+  if (placementContext?.bodyBox) return placementContext.bodyBox
+  if (!placementContext?.bodyMask) return null
+  return getContainBox(stageRect.width, stageRect.height, placementContext.bodyMask.width, placementContext.bodyMask.height)
+}
+
+function getStickerAnchorPoint(sticker, stageRect, bodyBox, preferBodyAnchor = true) {
+  if (preferBodyAnchor && bodyBox && Number.isFinite(sticker?.bodyX) && Number.isFinite(sticker?.bodyY)) {
+    return {
+      x: bodyBox.x + (clamp(Number(sticker.bodyX), 0, 100) / 100) * bodyBox.width,
+      y: bodyBox.y + (clamp(Number(sticker.bodyY), 0, 100) / 100) * bodyBox.height,
+    }
+  }
+
+  const x = clamp(Number(sticker?.x) || 0, 0, 100)
+  const y = clamp(Number(sticker?.y) || 0, 0, 100)
+  return {
+    x: (x / 100) * stageRect.width,
+    y: (y / 100) * stageRect.height,
+  }
+}
+
+function findNearestValidCenter({ sticker, stageRect, bodyMask, protectedMasks, startX, startY, bodyBox }) {
   if (isPlacementValid({ sticker, stageRect, bodyMask, protectedMasks, centerX: startX, centerY: startY })) {
     return { x: startX, y: startY }
   }
@@ -154,25 +187,130 @@ function findNearestValidCenter({ sticker, stageRect, bodyMask, protectedMasks, 
   const maxRadius = Math.max(stageRect.width, stageRect.height) * 0.3
   const step = Math.max(4, Math.round(Math.min(stageRect.width, stageRect.height) / 120))
   const directions = 16
+  let bestCandidate = null
+
+  const considerCandidate = (candidate) => {
+    if (!isPlacementValid({ sticker, stageRect, bodyMask, protectedMasks, centerX: candidate.x, centerY: candidate.y })) {
+      return
+    }
+    const distance = Math.hypot(candidate.x - startX, candidate.y - startY)
+    if (!bestCandidate || distance < bestCandidate.distance) {
+      bestCandidate = { ...candidate, distance }
+    }
+  }
 
   for (let radius = step; radius <= maxRadius; radius += step) {
     for (let index = 0; index < directions; index += 1) {
       const angle = (Math.PI * 2 * index) / directions
-      const candidate = {
+      considerCandidate({
         x: clamp(startX + Math.cos(angle) * radius, 0, stageRect.width),
         y: clamp(startY + Math.sin(angle) * radius, 0, stageRect.height),
-      }
-
-      if (isPlacementValid({ sticker, stageRect, bodyMask, protectedMasks, centerX: candidate.x, centerY: candidate.y })) {
-        return candidate
-      }
+      })
     }
   }
 
-  return {
-    x: clamp(startX, 0, stageRect.width),
-    y: clamp(startY, 0, stageRect.height),
+  const bounds = bodyBox || {
+    x: 0,
+    y: 0,
+    width: stageRect.width,
+    height: stageRect.height,
   }
+
+  const gridColumns = 10
+  const gridRows = 10
+  for (let row = 0; row <= gridRows; row += 1) {
+    const ratioY = row / gridRows
+    for (let column = 0; column <= gridColumns; column += 1) {
+      const ratioX = column / gridColumns
+      considerCandidate({
+        x: bounds.x + bounds.width * ratioX,
+        y: bounds.y + bounds.height * ratioY,
+      })
+    }
+  }
+
+  return bestCandidate ? { x: bestCandidate.x, y: bestCandidate.y } : null
+}
+
+function resolvePlacementForSize({
+  sticker,
+  stageRect,
+  bodyMask,
+  protectedMasks,
+  startX,
+  startY,
+  bodyBox,
+  size,
+}) {
+  const candidateSticker = { ...sticker, size }
+  const center = findNearestValidCenter({
+    sticker: candidateSticker,
+    stageRect,
+    bodyMask,
+    protectedMasks,
+    startX,
+    startY,
+    bodyBox,
+  })
+  if (!center) return null
+
+  return {
+    sticker: candidateSticker,
+    center,
+  }
+}
+
+function fitStickerPlacement({
+  sticker,
+  stageRect,
+  bodyMask,
+  protectedMasks,
+  desiredCenter,
+  desiredSize,
+  bodyBox,
+}) {
+  const minSize = MIN_STICKER_SIZE
+  const maxSize = clamp(desiredSize, minSize, MAX_STICKER_SIZE)
+
+  let low = minSize
+  let high = maxSize
+  let best = null
+  let safety = 0
+
+  while (low <= high && safety < 20) {
+    safety += 1
+    const mid = Number(((low + high) / 2).toFixed(2))
+    const candidate = resolvePlacementForSize({
+      sticker,
+      stageRect,
+      bodyMask,
+      protectedMasks,
+      startX: desiredCenter.x,
+      startY: desiredCenter.y,
+      bodyBox,
+      size: mid,
+    })
+    if (candidate) {
+      best = candidate
+      low = mid + 0.25
+    } else {
+      high = mid - 0.25
+    }
+  }
+
+  if (best) return best
+
+  const fallback = resolvePlacementForSize({
+    sticker,
+    stageRect,
+    bodyMask,
+    protectedMasks,
+    startX: desiredCenter.x,
+    startY: desiredCenter.y,
+    bodyBox,
+    size: minSize,
+  })
+  return fallback
 }
 
 export async function getStickerImageMeta(src) {
@@ -211,42 +349,98 @@ export async function buildStickerPlacementContext(stage, bodySrc) {
     ...protectedSources.map((src) => getImageData(src)),
   ])
 
+  const bodyBox = bodyMask ? getContainBox(stage.getBoundingClientRect().width, stage.getBoundingClientRect().height, bodyMask.width, bodyMask.height) : null
+
   return {
     bodySrc,
     bodyMask,
+    bodyBox,
     protectedMasks: protectedMasks.filter(Boolean),
   }
 }
 
-export function normalizeStickerPlacement(sticker, stage, placementContext) {
+function toStagePointFromBodyPoint(bodyPoint, stageRect, bodyBox) {
+  if (!bodyPoint || !bodyBox || !stageRect) return null
+  return {
+    x: bodyBox.x + (bodyPoint.x / 100) * bodyBox.width,
+    y: bodyBox.y + (bodyPoint.y / 100) * bodyBox.height,
+  }
+}
+
+function toBodyPointFromStagePoint(stagePoint, stageRect, bodyBox) {
+  if (!stagePoint || !bodyBox || !stageRect) return null
+  return {
+    x: ((stagePoint.x - bodyBox.x) / bodyBox.width) * 100,
+    y: ((stagePoint.y - bodyBox.y) / bodyBox.height) * 100,
+  }
+}
+
+export function normalizeStickerPlacement(sticker, stage, placementContext, options = {}) {
   if (!sticker) return sticker
   const stageRect = stage?.getBoundingClientRect?.()
   if (!stageRect || stageRect.width <= 0 || stageRect.height <= 0) {
     return sticker
   }
+  const bodyBox = placementContext?.bodyMask ? getPlacementBodyBox(stageRect, placementContext) : null
+  const size = getStickerSize(sticker)
+  const x = Number(sticker.x)
+  const y = Number(sticker.y)
+  const fallbackX = Number.isFinite(x) ? x : 50
+  const fallbackY = Number.isFinite(y) ? y : 50
 
-  const x = clamp(Number(sticker.x) || 0, 0, 100)
-  const y = clamp(Number(sticker.y) || 0, 0, 100)
-
-  if (!placementContext?.bodyMask) {
-    return { ...sticker, x: clamp(x, 5, 95), y: clamp(y, 5, 95) }
+  if (!bodyBox) {
+    return {
+      ...sticker,
+      x: fallbackX,
+      y: fallbackY,
+      size,
+    }
   }
 
-  const startX = (x / 100) * stageRect.width
-  const startY = (y / 100) * stageRect.height
-  const nextCenter = findNearestValidCenter({
-    sticker,
+  const bodyPoint = toBodyPointFromStagePoint(
+    {
+      x: ((fallbackX / 100) * stageRect.width),
+      y: ((fallbackY / 100) * stageRect.height),
+    },
     stageRect,
-    bodyMask: placementContext.bodyMask,
-    protectedMasks: placementContext.protectedMasks || [],
-    startX,
-    startY,
-  })
+    bodyBox,
+  )
 
   return {
     ...sticker,
-    x: (nextCenter.x / stageRect.width) * 100,
-    y: (nextCenter.y / stageRect.height) * 100,
+    x: fallbackX,
+    y: fallbackY,
+    size,
+    bodyX: bodyPoint?.x ?? fallbackX,
+    bodyY: bodyPoint?.y ?? fallbackY,
   }
 }
 
+export function getStickerRenderPosition(sticker, stage, placementContext) {
+  if (!sticker) return { x: 0, y: 0 }
+  const stageRect = stage?.getBoundingClientRect?.()
+  if (!stageRect || stageRect.width <= 0 || stageRect.height <= 0) {
+    return {
+      x: clamp(Number(sticker.x) || 0, 0, 100),
+      y: clamp(Number(sticker.y) || 0, 0, 100),
+    }
+  }
+
+  const bodyMask = placementContext?.bodyMask
+  const bodyBox = placementContext?.bodyBox || (bodyMask ? getContainBox(stageRect.width, stageRect.height, bodyMask.width, bodyMask.height) : null)
+
+  if (bodyBox && Number.isFinite(sticker.bodyX) && Number.isFinite(sticker.bodyY)) {
+    const point = toStagePointFromBodyPoint({ x: sticker.bodyX, y: sticker.bodyY }, stageRect, bodyBox)
+    if (point) {
+      return {
+        x: (point.x / stageRect.width) * 100,
+        y: (point.y / stageRect.height) * 100,
+      }
+    }
+  }
+
+  return {
+    x: clamp(Number(sticker.x) || 0, 0, 100),
+    y: clamp(Number(sticker.y) || 0, 0, 100),
+  }
+}

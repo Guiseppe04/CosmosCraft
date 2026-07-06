@@ -14,6 +14,7 @@ import {
   buildStickerPlacementContext,
   getStickerAspectRatioFromMeta,
   getStickerImageMeta,
+  getStickerRenderPosition,
   normalizeStickerPlacement,
 } from '../utils/stickerPlacement.js'
 import { useAuth } from '../context/AuthContext.jsx'
@@ -203,6 +204,7 @@ function VisualCard({ option, isSelected, onClick, previewImage, fallbackImage, 
 }
 
 const MAX_STICKERS = 10
+const DEFAULT_STICKER_PRICE = 100
 
 export function CustomizePage() {
   const [searchParams] = useSearchParams()
@@ -274,11 +276,27 @@ export function CustomizePage() {
     () => stickers.filter(s => (s.side || 'front') === view),
     [stickers, view]
   )
+  const stickerLineItems = useMemo(
+    () => stickers.map((stickerItem, index) => ({
+      id: stickerItem.id,
+      category: 'Stickers',
+      name: `Sticker #${index + 1}`,
+      unitPrice: Number.isFinite(Number(stickerItem.price)) ? Number(stickerItem.price) : DEFAULT_STICKER_PRICE,
+      quantity: 1,
+      subtotal: Number.isFinite(Number(stickerItem.price)) ? Number(stickerItem.price) : DEFAULT_STICKER_PRICE,
+    })),
+    [stickers],
+  )
   const selectedBodyModel = useMemo(
     () => options.bodyOptions?.find((option) => option.value === config.body) || null,
     [options.bodyOptions, config.body]
   )
   const currentBodyMaskSrc = selectedBodyModel?.bodySrc || null
+  const stickerTotal = useMemo(
+    () => stickerLineItems.reduce((total, item) => total + (Number(item.subtotal) || 0), 0),
+    [stickerLineItems],
+  )
+  const totalPrice = price + stickerTotal
 
   const handleStickerUpload = (event) => {
     const file = event.target.files?.[0]
@@ -305,6 +323,7 @@ export function CustomizePage() {
           rotation: 0,
           side: view,
           aspectRatio: getStickerAspectRatioFromMeta(meta),
+          price: DEFAULT_STICKER_PRICE,
         }, previewStageRef.current, stickerPlacementContextRef.current)
         setStickers(prev => [...prev, newSticker])
         setSelectedStickerId(newSticker.id)
@@ -320,8 +339,55 @@ export function CustomizePage() {
     () => stickers.find(s => s.id === selectedStickerId) || null,
     [stickers, selectedStickerId]
   )
+  const currentStickerOverlay = useMemo(
+    () => currentViewStickers.map((stickerItem, index) => {
+      const renderPosition = getStickerRenderPosition(stickerItem, previewStageRef.current, stickerPlacementContextRef.current)
+      const left = `${renderPosition.x}%`
+      const top = `${renderPosition.y}%`
+      return (
+        <img
+          key={stickerItem.id}
+          src={stickerItem.src}
+          data-export-sticker="true"
+          data-sticker-x={renderPosition.x}
+          data-sticker-y={renderPosition.y}
+          data-sticker-size={stickerItem.size}
+          data-sticker-rotation={stickerItem.rotation || 0}
+          alt={`Custom sticker ${index + 1}`}
+          className={`absolute select-none ${isDraggingSticker && selectedStickerId === stickerItem.id ? 'cursor-grabbing' : 'cursor-grab'} ${selectedStickerId === stickerItem.id ? 'ring-2 ring-inset ring-[#d4af37]/80' : ''}`}
+          style={{
+            zIndex: BASE_STICKER_Z_INDEX + index,
+            left,
+            top,
+            width: `${stickerItem.size}%`,
+            transform: `translate(-50%, -50%) rotate(${stickerItem.rotation || 0}deg)`,
+            transformOrigin: 'center center',
+            touchAction: 'none',
+            userSelect: 'none',
+            pointerEvents: 'auto',
+          }}
+          draggable={false}
+          onMouseDown={(e) => {
+            e.stopPropagation()
+            beginStickerDrag(e.clientX, e.clientY, stickerItem.id)
+          }}
+          onTouchStart={(e) => {
+            e.stopPropagation()
+            const touch = e.touches[0]
+            if (!touch) return
+            beginStickerDrag(touch.clientX, touch.clientY, stickerItem.id)
+          }}
+          onClick={(e) => {
+            e.stopPropagation()
+            setSelectedStickerId(stickerItem.id)
+          }}
+        />
+      )
+    }),
+    [currentViewStickers, isDraggingSticker, selectedStickerId, previewStageRef.current, stickerPlacementContextRef.current]
+  )
 
-  const updateSelectedSticker = (patchOrUpdater) => {
+  const updateSelectedSticker = (patchOrUpdater, options = {}) => {
     if (!selectedStickerId) return
     setStickers(prev =>
       prev.map(stickerItem => {
@@ -329,12 +395,12 @@ export function CustomizePage() {
         const nextSticker = typeof patchOrUpdater === 'function'
           ? patchOrUpdater(stickerItem)
           : { ...stickerItem, ...patchOrUpdater }
-        return normalizeStickerPlacement(nextSticker, previewStageRef.current, stickerPlacementContextRef.current)
+        return normalizeStickerPlacement(nextSticker, previewStageRef.current, stickerPlacementContextRef.current, options)
       })
     )
   }
 
-  const updateStickerById = (id, patchOrUpdater) => {
+  const updateStickerById = (id, patchOrUpdater, options = {}) => {
     if (!id) return
     setStickers(prev =>
       prev.map(stickerItem => {
@@ -342,7 +408,7 @@ export function CustomizePage() {
         const nextSticker = typeof patchOrUpdater === 'function'
           ? patchOrUpdater(stickerItem)
           : { ...stickerItem, ...patchOrUpdater }
-        return normalizeStickerPlacement(nextSticker, previewStageRef.current, stickerPlacementContextRef.current)
+        return normalizeStickerPlacement(nextSticker, previewStageRef.current, stickerPlacementContextRef.current, options)
       })
     )
   }
@@ -393,8 +459,8 @@ export function CustomizePage() {
   }
 
   const clampSticker = (x, y) => ({
-    x: Math.max(5, Math.min(95, x)),
-    y: Math.max(5, Math.min(95, y)),
+    x,
+    y,
   })
 
   const moveStickerToClientPoint = (clientX, clientY, stickerId = selectedStickerId) => {
@@ -717,7 +783,7 @@ export function CustomizePage() {
     const baseBuild = {
       id: buildId,
       name: `${summary.body} build`,
-      price,
+      price: totalPrice,
       config,
       stickers,
       pricingBreakdown,
@@ -779,7 +845,7 @@ export function CustomizePage() {
       const payload = {
         name: `${summary.body} build`,
         guitar_type: config.guitarType || 'electric',
-        total_price: price,
+        total_price: totalPrice,
         is_saved: true,
         body_wood: summary.bodyWood || null,
         neck_wood: summary.neck || null,
@@ -938,8 +1004,8 @@ export function CustomizePage() {
   }
 
   const configurationLineItems = useMemo(
-    () => buildConfigurationLineItems(summary, pricingBreakdown, GUITAR_CONFIGURATION_ITEMS),
-    [summary, pricingBreakdown],
+    () => buildConfigurationLineItems(summary, pricingBreakdown, GUITAR_CONFIGURATION_ITEMS, stickerLineItems),
+    [summary, pricingBreakdown, stickerLineItems],
   )
 
   return (
@@ -1330,8 +1396,7 @@ export function CustomizePage() {
                 }}
               >
                 <div
-                  ref={previewStageRef}
-                  className="w-full max-w-[1100px] transition-transform duration-200 ease-out"
+                  className="relative w-full max-w-[1100px] transition-transform duration-200 ease-out"
                   style={{
                     transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${zoomLevel})`,
                     transformOrigin: 'center center',
@@ -1343,49 +1408,10 @@ export function CustomizePage() {
                     view={view}
                     onViewChange={setView}
                     modelImageSrc={selectedBodyModel?.previewImageUrl || selectedBodyModel?.bodySrc || null}
+                    stickerOverlay={currentStickerOverlay}
+                    stickerMaskSrc={selectedBodyModel?.bodySrc || null}
+                    stageRef={previewStageRef}
                   />
-                  {currentViewStickers.map((stickerItem, index) => {
-                    const isSelectedSticker = selectedStickerId === stickerItem.id
-                    return (
-                      <img
-                        key={stickerItem.id}
-                        src={stickerItem.src}
-                        data-export-sticker="true"
-                        data-sticker-x={stickerItem.x}
-                        data-sticker-y={stickerItem.y}
-                        data-sticker-size={stickerItem.size}
-                        data-sticker-rotation={stickerItem.rotation || 0}
-                        alt={`Custom sticker ${index + 1}`}
-                        className={`absolute select-none ${isDraggingSticker && isSelectedSticker ? 'cursor-grabbing' : 'cursor-grab'} ${isSelectedSticker ? 'ring-2 ring-[#d4af37]/80 ring-offset-1 ring-offset-black/40' : ''}`}
-                        style={{
-                          zIndex: BASE_STICKER_Z_INDEX + index,
-                          left: `${stickerItem.x}%`,
-                          top: `${stickerItem.y}%`,
-                          width: `${stickerItem.size}%`,
-                          transform: `translate(-50%, -50%) rotate(${stickerItem.rotation || 0}deg)`,
-                          transformOrigin: 'center center',
-                          touchAction: 'none',
-                          userSelect: 'none',
-                          pointerEvents: 'auto',
-                        }}
-                        draggable={false}
-                        onMouseDown={(e) => {
-                          e.stopPropagation()
-                          beginStickerDrag(e.clientX, e.clientY, stickerItem.id)
-                        }}
-                        onTouchStart={(e) => {
-                          e.stopPropagation()
-                          const touch = e.touches[0]
-                          if (!touch) return
-                          beginStickerDrag(touch.clientX, touch.clientY, stickerItem.id)
-                        }}
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setSelectedStickerId(stickerItem.id)
-                        }}
-                      />
-                    )
-                  })}
                 </div>
               </div>
               
@@ -1606,13 +1632,13 @@ export function CustomizePage() {
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
               <BuilderConfigurationPanel
                 lineItems={configurationLineItems}
-                configurationTotal={price}
+                configurationTotal={totalPrice}
                 loadingPrices={loadingPrices}
               />
             </div>
 
             <BuilderCheckoutSection
-              price={price}
+              price={totalPrice}
               basePrice={options.basePrice}
               onAddToCart={handleAddToCart}
             />

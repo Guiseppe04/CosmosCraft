@@ -19,6 +19,7 @@ import {
   buildStickerPlacementContext,
   getStickerAspectRatioFromMeta,
   getStickerImageMeta,
+  getStickerRenderPosition,
   normalizeStickerPlacement,
 } from '../utils/stickerPlacement.js'
 import { BuilderActionBar } from '../components/customize/BuilderActionBar.jsx'
@@ -63,6 +64,7 @@ const CATEGORIES = [
 ]
 
 const MAX_STICKERS = 10
+const DEFAULT_STICKER_PRICE = 100
 
 function Tooltip({ content, children }) {
   return (
@@ -287,10 +289,71 @@ export function BassCustomizePage() {
     () => stickers.filter((s) => (s.side || 'front') === view),
     [stickers, view]
   )
+  const stickerLineItems = useMemo(
+    () => stickers.map((stickerItem, index) => ({
+      id: stickerItem.id,
+      category: 'Stickers',
+      name: `Sticker #${index + 1}`,
+      unitPrice: Number.isFinite(Number(stickerItem.price)) ? Number(stickerItem.price) : DEFAULT_STICKER_PRICE,
+      quantity: 1,
+      subtotal: Number.isFinite(Number(stickerItem.price)) ? Number(stickerItem.price) : DEFAULT_STICKER_PRICE,
+    })),
+    [stickers],
+  )
 
   const selectedSticker = useMemo(
     () => stickers.find((s) => s.id === selectedStickerId) || null,
     [stickers, selectedStickerId]
+  )
+  const stickerTotal = useMemo(
+    () => stickerLineItems.reduce((total, item) => total + (Number(item.subtotal) || 0), 0),
+    [stickerLineItems],
+  )
+  const totalPrice = price + stickerTotal
+  const currentStickerOverlay = useMemo(
+    () => currentViewStickers.map((stickerItem, index) => {
+      const renderPosition = getStickerRenderPosition(stickerItem, previewStageRef.current, stickerPlacementContextRef.current)
+      return (
+        <img
+          key={stickerItem.id}
+          src={stickerItem.src}
+          data-export-sticker="true"
+          data-sticker-x={renderPosition.x}
+          data-sticker-y={renderPosition.y}
+          data-sticker-size={stickerItem.size}
+          data-sticker-rotation={stickerItem.rotation || 0}
+          alt={`Custom sticker ${index + 1}`}
+          className={`absolute select-none ${isDraggingSticker && selectedStickerId === stickerItem.id ? 'cursor-grabbing' : 'cursor-grab'} ${selectedStickerId === stickerItem.id ? 'ring-2 ring-inset ring-[#d4af37]/80' : ''}`}
+          style={{
+            zIndex: BASE_STICKER_Z_INDEX + index,
+            left: `${renderPosition.x}%`,
+            top: `${renderPosition.y}%`,
+            width: `${stickerItem.size}%`,
+            transform: `translate(-50%, -50%) rotate(${stickerItem.rotation || 0}deg)`,
+            transformOrigin: 'center center',
+            touchAction: 'none',
+            userSelect: 'none',
+            pointerEvents: 'auto',
+          }}
+          draggable={false}
+          onMouseDown={(e) => {
+            e.stopPropagation()
+            beginStickerDrag(e.clientX, e.clientY, stickerItem.id)
+          }}
+          onTouchStart={(e) => {
+            e.stopPropagation()
+            const touch = e.touches[0]
+            if (!touch) return
+            beginStickerDrag(touch.clientX, touch.clientY, stickerItem.id)
+          }}
+          onClick={(e) => {
+            e.stopPropagation()
+            setSelectedStickerId(stickerItem.id)
+          }}
+        />
+      )
+    }),
+    [currentViewStickers, isDraggingSticker, selectedStickerId, previewStageRef.current, stickerPlacementContextRef.current]
   )
 
   const handleStickerUpload = (event) => {
@@ -318,6 +381,7 @@ export function BassCustomizePage() {
           rotation: 0,
           side: view,
           aspectRatio: getStickerAspectRatioFromMeta(meta),
+          price: DEFAULT_STICKER_PRICE,
         }, previewStageRef.current, stickerPlacementContextRef.current)
         setStickers((prev) => [...prev, newSticker])
         setSelectedStickerId(newSticker.id)
@@ -329,7 +393,7 @@ export function BassCustomizePage() {
     event.target.value = ''
   }
 
-  const updateSelectedSticker = (patchOrUpdater) => {
+  const updateSelectedSticker = (patchOrUpdater, options = {}) => {
     if (!selectedStickerId) return
     setStickers((prev) =>
       prev.map((stickerItem) => {
@@ -337,12 +401,12 @@ export function BassCustomizePage() {
         const nextSticker = typeof patchOrUpdater === 'function'
           ? patchOrUpdater(stickerItem)
           : { ...stickerItem, ...patchOrUpdater }
-        return normalizeStickerPlacement(nextSticker, previewStageRef.current, stickerPlacementContextRef.current)
+        return normalizeStickerPlacement(nextSticker, previewStageRef.current, stickerPlacementContextRef.current, options)
       })
     )
   }
 
-  const updateStickerById = (id, patchOrUpdater) => {
+  const updateStickerById = (id, patchOrUpdater, options = {}) => {
     if (!id) return
     setStickers((prev) =>
       prev.map((stickerItem) => {
@@ -350,7 +414,7 @@ export function BassCustomizePage() {
         const nextSticker = typeof patchOrUpdater === 'function'
           ? patchOrUpdater(stickerItem)
           : { ...stickerItem, ...patchOrUpdater }
-        return normalizeStickerPlacement(nextSticker, previewStageRef.current, stickerPlacementContextRef.current)
+        return normalizeStickerPlacement(nextSticker, previewStageRef.current, stickerPlacementContextRef.current, options)
       })
     )
   }
@@ -401,8 +465,8 @@ export function BassCustomizePage() {
   }
 
   const clampSticker = (x, y) => ({
-    x: Math.max(5, Math.min(95, x)),
-    y: Math.max(5, Math.min(95, y)),
+    x,
+    y,
   })
 
   const moveStickerToClientPoint = (clientX, clientY, stickerId = selectedStickerId) => {
@@ -525,7 +589,7 @@ export function BassCustomizePage() {
           setStickers((prev) =>
             prev.map((stickerItem) => (
               (stickerItem.side || 'front') === view
-                ? normalizeStickerPlacement(stickerItem, previewStageRef.current, context)
+                ? normalizeStickerPlacement(stickerItem, previewStageRef.current, context, { preferBodyAnchor: true })
                 : stickerItem
             )),
           )
@@ -562,7 +626,7 @@ export function BassCustomizePage() {
     setStickers((prev) =>
       prev.map((stickerItem) => (
         (stickerItem.side || 'front') === view
-          ? normalizeStickerPlacement(stickerItem, previewStageRef.current, stickerPlacementContextRef.current)
+          ? normalizeStickerPlacement(stickerItem, previewStageRef.current, stickerPlacementContextRef.current, { preferBodyAnchor: true })
           : stickerItem
       )),
     )
@@ -1348,7 +1412,6 @@ export function BassCustomizePage() {
                 }}
               >
                 <div
-                  ref={previewStageRef}
                   className="relative w-full max-w-[1100px] transition-transform duration-200 ease-out"
                   style={{
                     transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${zoomLevel})`,
@@ -1361,49 +1424,10 @@ export function BassCustomizePage() {
                     view={view}
                     onViewChange={setView}
                     modelImageSrc={selectedBassModel?.previewImageUrl || selectedBassModel?.bodySrc || null}
+                    stickerOverlay={currentStickerOverlay}
+                    stickerMaskSrc={selectedBassModel?.bodySrc || null}
+                    stageRef={previewStageRef}
                   />
-                  {currentViewStickers.map((stickerItem, index) => {
-                    const isSelectedSticker = selectedStickerId === stickerItem.id
-                    return (
-                      <img
-                        key={stickerItem.id}
-                        src={stickerItem.src}
-                        data-export-sticker="true"
-                        data-sticker-x={stickerItem.x}
-                        data-sticker-y={stickerItem.y}
-                        data-sticker-size={stickerItem.size}
-                        data-sticker-rotation={stickerItem.rotation || 0}
-                        alt={`Custom sticker ${index + 1}`}
-                        className={`absolute select-none ${isDraggingSticker && isSelectedSticker ? 'cursor-grabbing' : 'cursor-grab'} ${isSelectedSticker ? 'ring-2 ring-[#d4af37]/80 ring-offset-1 ring-offset-black/40' : ''}`}
-                        style={{
-                          zIndex: BASE_STICKER_Z_INDEX + index,
-                          left: `${stickerItem.x}%`,
-                          top: `${stickerItem.y}%`,
-                          width: `${stickerItem.size}%`,
-                          transform: `translate(-50%, -50%) rotate(${stickerItem.rotation || 0}deg)`,
-                          transformOrigin: 'center center',
-                          touchAction: 'none',
-                          userSelect: 'none',
-                          pointerEvents: 'auto',
-                        }}
-                        draggable={false}
-                        onMouseDown={(e) => {
-                          e.stopPropagation()
-                          beginStickerDrag(e.clientX, e.clientY, stickerItem.id)
-                        }}
-                        onTouchStart={(e) => {
-                          e.stopPropagation()
-                          const touch = e.touches[0]
-                          if (!touch) return
-                          beginStickerDrag(touch.clientX, touch.clientY, stickerItem.id)
-                        }}
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setSelectedStickerId(stickerItem.id)
-                        }}
-                      />
-                    )
-                  })}
                 </div>
               </div>
               

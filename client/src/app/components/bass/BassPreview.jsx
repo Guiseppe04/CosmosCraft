@@ -152,7 +152,7 @@ const resolveHeadstockStyleForStrings = (headstockStyle, strings = '4') => {
   return style
 }
 
-function BassPreview({ config, view, onViewChange, modelImageSrc }) {
+function BassPreview({ config, view, onViewChange, modelImageSrc, stickerOverlay = null, stickerMaskSrc = null, stageRef = null }) {
   const previewRef = useRef(null)
 
   const resolvedConfig = useMemo(() => {
@@ -610,7 +610,7 @@ function BassPreview({ config, view, onViewChange, modelImageSrc }) {
       layers.push({ name: 'headstock-truss-cover', src: assets.headstockTrussCover, style: { zIndex: 109, opacity: 1, filter: 'brightness(1.1) contrast(1.2)' }, protectedLayer: true })
     }
     if (resolvedConfig.pickguard !== 'none' && assets.pickguard?.src) {
-      layers.push({ name: 'pickguard', src: assets.pickguard.src, style: { zIndex: 9, opacity: 0.95 } })
+      layers.push({ name: 'pickguard', src: assets.pickguard.src, style: { zIndex: 9, opacity: 0.95 }, protectedLayer: true })
     }
     if (resolvedConfig.pickguard !== 'none' && assets.pickupScrews?.src) {
       layers.push({ name: 'pickup-screws', src: assets.pickupScrews.src, style: { zIndex: 120, opacity: 0.9 }, protectedLayer: true })
@@ -778,6 +778,7 @@ function BassPreview({ config, view, onViewChange, modelImageSrc }) {
             >
               <div
                 data-export-stage="true"
+                ref={stageRef}
                 style={{
                   position: 'relative',
                   /* Use the same 16:7 ratio the export canvas uses */
@@ -802,6 +803,27 @@ function BassPreview({ config, view, onViewChange, modelImageSrc }) {
                     protectedLayer={layer.protectedLayer}
                   />
                 ))}
+                {view === 'front' && stickerOverlay && (
+                  <div
+                    aria-hidden="true"
+                    className="absolute inset-0 z-[25] pointer-events-none select-none"
+                    style={stickerMaskSrc ? {
+                      WebkitMaskImage: `url(${stickerMaskSrc})`,
+                      maskImage: `url(${stickerMaskSrc})`,
+                      WebkitMaskRepeat: 'no-repeat',
+                      maskRepeat: 'no-repeat',
+                      WebkitMaskSize: 'contain',
+                      maskSize: 'contain',
+                      WebkitMaskPosition: 'center',
+                      maskPosition: 'center',
+                      WebkitMaskMode: 'alpha',
+                      maskMode: 'alpha',
+                    } : undefined}
+                    data-sticker-clip-mask-src={stickerMaskSrc || ''}
+                  >
+                    {stickerOverlay}
+                  </div>
+                )}
                 {view === 'rear' && rearLayers.map((layer) => (
                   <BassLayer
                     key={layer.name}
@@ -812,6 +834,27 @@ function BassPreview({ config, view, onViewChange, modelImageSrc }) {
                     protectedLayer={layer.protectedLayer}
                   />
                 ))}
+                {view === 'rear' && stickerOverlay && (
+                  <div
+                    aria-hidden="true"
+                    className="absolute inset-0 z-[25] pointer-events-none select-none"
+                    style={stickerMaskSrc ? {
+                      WebkitMaskImage: `url(${stickerMaskSrc})`,
+                      maskImage: `url(${stickerMaskSrc})`,
+                      WebkitMaskRepeat: 'no-repeat',
+                      maskRepeat: 'no-repeat',
+                      WebkitMaskSize: 'contain',
+                      maskSize: 'contain',
+                      WebkitMaskPosition: 'center',
+                      maskPosition: 'center',
+                      WebkitMaskMode: 'alpha',
+                      maskMode: 'alpha',
+                    } : undefined}
+                    data-sticker-clip-mask-src={stickerMaskSrc || ''}
+                  >
+                    {stickerOverlay}
+                  </div>
+                )}
               </div>
             </div>
           </div>

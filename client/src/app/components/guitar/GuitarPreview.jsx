@@ -54,7 +54,7 @@ function stringsOverlayStyle() {
   }
 }
 
-function GuitarPreview({ config, view, onViewChange, modelImageSrc }) {
+function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverlay = null, stickerMaskSrc = null, stageRef = null }) {
   const model = guitarBuilder.BODY_OPTIONS[config.body] ?? guitarBuilder.BODY_OPTIONS.strat
   const modelBodySrc = modelImageSrc || model.bodySrc
   const bodyWood = guitarBuilder.BODY_WOOD_OPTIONS[config.bodyWood] ?? guitarBuilder.BODY_WOOD_OPTIONS.rosewood
@@ -294,6 +294,7 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc }) {
           <div className="relative flex items-center justify-center py-8">
             <div
               data-export-stage="true"
+              ref={stageRef}
               className="relative aspect-[16/7] w-full max-w-[1000px] transition-transform duration-500 ease-out"
               style={{
                 transform: `translate(${previewX}px, ${previewY}px) scale(${previewScale}) ${previewFlip}`,
@@ -313,7 +314,28 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc }) {
                       protectedLayer={layer.protectedLayer}
                     />
                   ))}
-                  {pickguardAsset && <GuitarLayer src={pickguardAsset} className="opacity-95" layerName="pickguard" style={{ zIndex: 15 }} />}
+                  {stickerOverlay && (
+                    <div
+                      aria-hidden="true"
+                      className="absolute inset-0 z-[25] pointer-events-none select-none"
+                      style={stickerMaskSrc ? {
+                        WebkitMaskImage: `url(${stickerMaskSrc})`,
+                        maskImage: `url(${stickerMaskSrc})`,
+                        WebkitMaskRepeat: 'no-repeat',
+                        maskRepeat: 'no-repeat',
+                        WebkitMaskSize: 'contain',
+                        maskSize: 'contain',
+                        WebkitMaskPosition: 'center',
+                        maskPosition: 'center',
+                        WebkitMaskMode: 'alpha',
+                        maskMode: 'alpha',
+                      } : undefined}
+                      data-sticker-clip-mask-src={stickerMaskSrc || ''}
+                    >
+                      {stickerOverlay}
+                    </div>
+                  )}
+                  {pickguardAsset && <GuitarLayer src={pickguardAsset} className="opacity-95" layerName="pickguard" style={{ zIndex: 15 }} protectedLayer />}
                   {pickupLayers.map((layer, index) => (
                     <GuitarLayer
                       key={`${layer.src}-${index}`}
