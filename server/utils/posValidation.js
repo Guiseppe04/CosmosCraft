@@ -108,7 +108,7 @@ exports.validateCheckout = [
     .isUUID()
     .withMessage('Invalid sale ID'),
   body('paymentMethod')
-    .isIn(['cash', 'gcash', 'bank_transfer'])
+    .isIn(['cash', 'gcash'])
     .withMessage('Invalid payment method'),
   body('referenceNumber')
     .optional()
@@ -127,6 +127,13 @@ exports.validateCheckout = [
     if (!errors.isEmpty()) {
       return next(new AppError(errors.array()[0].msg, 400));
     }
+
+    const paymentMethod = String(req.body.paymentMethod || '').toLowerCase();
+    const referenceNumber = String(req.body.referenceNumber || '').trim();
+    if (paymentMethod === 'gcash' && !referenceNumber) {
+      return next(new AppError('GCash reference number is required', 400));
+    }
+
     next();
   }
 ];
@@ -162,7 +169,7 @@ exports.validateUpdateSaleInfo = [
     .withMessage('Invalid sale ID'),
   body('paymentMethod')
     .optional()
-    .isIn(['cash', 'gcash', 'bank_transfer'])
+    .isIn(['cash', 'gcash'])
     .withMessage('Invalid payment method'),
   body('customerName')
     .optional()
@@ -214,7 +221,7 @@ exports.validateRemoveItem = [
  * Check if payment method is valid
  */
 exports.isValidPaymentMethod = (method) => {
-  return ['cash', 'gcash', 'bank_transfer'].includes(method);
+  return ['cash', 'gcash'].includes(method);
 };
 
 /**

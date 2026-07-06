@@ -1,7 +1,8 @@
 const { pool } = require('../config/database');
 const { AppError } = require('../middleware/errorHandler');
+const { generateUniqueOrderNumber } = require('../utils/orderNumber');
 
-const TAX_RATE = 0.12;
+const TAX_RATE = 0;
 
 async function getOrCreateCart(userId) {
   let result = await pool.query(
@@ -121,7 +122,7 @@ async function addItemToCart(userId, { product_id, customization_id, quantity = 
 
   if (product_id) {
     const productResult = await pool.query(
-      `SELECT p.price, p.is_active, i.stock FROM products p
+      `SELECT p.name, p.price, p.is_active, i.stock FROM products p
        LEFT JOIN inventory i ON p.product_id = i.product_id
        WHERE p.product_id = $1`,
       [product_id]
@@ -138,7 +139,7 @@ async function addItemToCart(userId, { product_id, customization_id, quantity = 
     }
 
     if (product.stock < quantity) {
-      throw new AppError(`Insufficient stock. Available: ${product.stock}`, 400);
+      throw new AppError(`Not enough stock for ${product.name}. Available stock: ${product.stock}.`, 400);
     }
 
     unitPrice = parseFloat(product.price);
@@ -169,12 +170,15 @@ async function addItemToCart(userId, { product_id, customization_id, quantity = 
 
     if (product_id) {
       const productResult = await pool.query(
-        `SELECT i.stock FROM inventory i WHERE i.product_id = $1`,
+        `SELECT p.name, i.stock
+         FROM products p
+         LEFT JOIN inventory i ON p.product_id = i.product_id
+         WHERE p.product_id = $1`,
        
         [product_id]
       );
       if (productResult.rows[0].stock < newQuantity) {
-        throw new AppError(`Insufficient stock. Available: ${productResult.rows[0].stock}`, 400);
+        throw new AppError(`Not enough stock for ${productResult.rows[0].name}. Available stock: ${productResult.rows[0].stock}.`, 400);
       }
     }
 
@@ -199,7 +203,7 @@ async function updateCartItem(userId, cartItemId, { quantity }) {
   const cart = await getOrCreateCart(userId);
 
   const itemResult = await pool.query(
-    `SELECT ci.*, i.stock, p.is_active AS product_active
+    `SELECT ci.*, i.stock, p.name AS product_name, p.is_active AS product_active
      FROM cart_items ci
      LEFT JOIN products p ON ci.product_id = p.product_id
      LEFT JOIN inventory i ON p.product_id = i.product_id
@@ -219,7 +223,7 @@ async function updateCartItem(userId, cartItemId, { quantity }) {
     }
 
     if (item.product_id && item.stock < quantity) {
-      throw new AppError(`Insufficient stock. Available: ${item.stock}`, 400);
+      throw new AppError(`Not enough stock for ${item.product_name || item.product_id}. Available stock: ${item.stock}.`, 400);
     }
 
     await pool.query(
@@ -288,7 +292,7 @@ async function prepareCheckout(userId, { shipping_address_id, notes }) {
       throw new AppError(`Product "${item.product.name}" is no longer available`, 400);
     }
     if (item.product && item.product.stock < item.quantity) {
-      throw new AppError(`Insufficient stock for "${item.product.name}". Available: ${item.product.stock}`, 400);
+      throw new AppError(`Not enough stock for ${item.product.name}. Available stock: ${item.product.stock}.`, 400);
     }
   }
 
@@ -317,7 +321,7 @@ async function convertCartToOrder(userId, { shipping_address_id, notes, payment_
       throw new AppError(`Product "${item.product.name}" is no longer available`, 400);
     }
     if (item.product && item.product.stock < item.quantity) {
-      throw new AppError(`Insufficient stock for "${item.product.name}". Available: ${item.product.stock}`, 400);
+      throw new AppError(`Not enough stock for ${item.product.name}. Available stock: ${item.product.stock}.`, 400);
     }
   }
 
@@ -326,7 +330,7 @@ async function convertCartToOrder(userId, { shipping_address_id, notes, payment_
   try {
     await client.query('BEGIN');
 
-    const orderNumber = `ORD-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+    const orderNumber = await generateUniqueOrderNumber();
 
     const orderResult = await client.query(
       `INSERT INTO orders (order_number, user_id, shipping_address_id, subtotal, tax_amount, shipping_cost, discount_amount, total_amount, status, payment_status, notes)

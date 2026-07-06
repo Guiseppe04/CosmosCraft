@@ -1,5 +1,232 @@
-export const bassAsset = path => new URL(`../../../../builder/bass_models/${path}`, import.meta.url).href
-export const bassWoodAsset = path => new URL(`../../../../woodtype/${path}`, import.meta.url).href
+export const bassAsset = (path) => `/builder/bass_models/${String(path || '').replace(/^\/+/, '')}`
+export const bassWoodAsset = (path) => `/woodtype/${String(path || '').replace(/^\/+/, '')}`
+
+// Keep catalog logic optional: core rendering uses static `bassAsset(...)` paths
+// so bass previews work even if no external builder folder exists.
+const RAW_BASS_ASSET_MODULES = {}
+const RAW_SHARED_BASS_ASSET_MODULES = {}
+
+const createEmptyCatalog = () => ({ all: [], front: {}, back: {} })
+const DEFAULT_BASS_MODELS = ['vader', 'pb', 'jb']
+const ROOT_CATEGORY_KEY = '__root'
+
+const normalizeSegment = (segment = '') => String(segment).trim().toLowerCase().replace(/\\/g, '/')
+const getStem = (assetPath = '') => {
+  const fileName = String(assetPath).split('/').pop() || ''
+  return fileName.replace(/\.[^.]+$/, '').toLowerCase()
+}
+
+const toCatalogRelativePath = (globPath = '') => {
+  const normalized = normalizeSegment(globPath)
+  const marker = '/builder/bass_models/'
+  const markerIndex = normalized.indexOf(marker)
+  if (markerIndex === -1) return null
+  return normalized.slice(markerIndex + marker.length)
+}
+
+const ensureModelCatalog = (catalogs, model) => {
+  if (!catalogs[model]) {
+    catalogs[model] = createEmptyCatalog()
+  }
+  return catalogs[model]
+}
+
+const BASS_MODEL_ENTRY_INDEX = {}
+const SHARED_BASS_ENTRY_INDEX = []
+
+for (const [globPath, importedUrl] of Object.entries(RAW_BASS_ASSET_MODULES)) {
+  const relativePath = toCatalogRelativePath(globPath)
+  if (!relativePath) continue
+
+  const segments = relativePath.split('/').filter(Boolean)
+  if (segments.length < 4 || segments[0] !== 'bass') continue
+
+  const model = segments[1]
+  const view = segments[2]
+  if (view !== 'front' && view !== 'back') continue
+
+  const fileName = segments[segments.length - 1]
+  const categorySegments = segments.slice(3, -1)
+  const category = categorySegments.length ? categorySegments.join('/') : ROOT_CATEGORY_KEY
+
+  const modelCatalog = ensureModelCatalog(BASS_MODEL_ENTRY_INDEX, model)
+  if (!modelCatalog[view][category]) {
+    modelCatalog[view][category] = []
+  }
+
+  const assetUrl = typeof importedUrl === 'string' ? importedUrl : bassAsset(relativePath)
+  const entry = {
+    relativePath,
+    fileName,
+    stem: getStem(relativePath),
+    url: assetUrl,
+  }
+
+  modelCatalog[view][category].push(entry)
+  modelCatalog.all.push(entry)
+}
+
+for (const [globPath, importedUrl] of Object.entries(RAW_SHARED_BASS_ASSET_MODULES)) {
+  const relativePath = toCatalogRelativePath(globPath)
+  if (!relativePath) continue
+
+  const segments = relativePath.split('/').filter(Boolean)
+  if (segments.length < 2 || segments[0] !== 'all-models') continue
+
+  const fileName = segments[segments.length - 1]
+  const assetUrl = typeof importedUrl === 'string' ? importedUrl : bassAsset(relativePath)
+  SHARED_BASS_ENTRY_INDEX.push({
+    relativePath,
+    fileName,
+    stem: getStem(relativePath),
+    url: assetUrl,
+  })
+}
+
+for (const model of DEFAULT_BASS_MODELS) {
+  ensureModelCatalog(BASS_MODEL_ENTRY_INDEX, model)
+}
+
+const mapViewEntriesToUrls = (viewCatalog) =>
+  Object.fromEntries(
+    Object.entries(viewCatalog).map(([category, entries]) => [category, entries.map(entry => entry.url)]),
+  )
+
+export const BASS_MODEL_CATALOG = Object.fromEntries(
+  Object.entries(BASS_MODEL_ENTRY_INDEX).map(([model, catalog]) => [
+    model,
+    {
+      all: catalog.all.map(entry => entry.url),
+      front: mapViewEntriesToUrls(catalog.front),
+      back: mapViewEntriesToUrls(catalog.back),
+    },
+  ]),
+)
+
+export const BASS_SHARED_ASSET_CATALOG = {
+  all: SHARED_BASS_ENTRY_INDEX.map(entry => entry.url),
+}
+
+const getCatalogEntries = (model, view, category = '') => {
+  const normalizedModel = normalizeSegment(model)
+  const normalizedView = normalizeSegment(view)
+  const normalizedCategory = normalizeSegment(category)
+  const modelCatalog = BASS_MODEL_ENTRY_INDEX[normalizedModel]
+  if (!modelCatalog) return []
+
+  const viewCatalog = modelCatalog[normalizedView]
+  if (!viewCatalog) return []
+  if (!normalizedCategory) {
+    return Object.values(viewCatalog).flat()
+  }
+
+  const entries = viewCatalog[normalizedCategory]
+  return Array.isArray(entries) ? entries : []
+}
+
+function resolveBassCatalogAsset(model, view, category = '', options = {}) {
+  const { strings, preferTokens = [] } = options
+  const entries = getCatalogEntries(model, view, category)
+  if (!entries.length) return null
+
+  const normalizedTokens = preferTokens.map(t => normalizeSegment(t)).filter(Boolean)
+  const stringToken = strings ? String(strings) : null
+  const stringTokenMatcher = stringToken
+    ? new RegExp(`(?:^|[\\/_-])${stringToken}(?:$|[\\/_\\.-])`)
+    : null
+  const hasAnyStringToken = /(?:^|[\\/_-])(4|5|6)(?:$|[\\/_\\.-])/
+
+  const scored = entries
+    .filter(entry => {
+      if (!stringTokenMatcher) return true
+      const searchTarget = `${entry.relativePath} ${entry.stem}`
+      if (!hasAnyStringToken.test(searchTarget)) return true
+      return stringTokenMatcher.test(searchTarget)
+    })
+    .map(entry => {
+      const searchTarget = `${entry.relativePath} ${entry.stem}`
+      const tokenScore = normalizedTokens.reduce((score, token) => (searchTarget.includes(token) ? score + 1 : score), 0)
+      return { entry, tokenScore }
+    })
+    .sort((a, b) => b.tokenScore - a.tokenScore)
+
+  return scored[0]?.entry?.url ?? entries[0]?.url ?? null
+}
+
+function resolveBassCatalogVariant(model, view, category = '', strings, colorKey, preferTokens = []) {
+  const tokens = [...preferTokens]
+  if (colorKey) tokens.push(colorKey)
+  return resolveBassCatalogAsset(model, view, category, { strings, preferTokens: tokens })
+}
+
+const hasStringToken = (value) => /(?:^|[\\/_-])(4|5|6)(?:$|[\\/_\\.-])/.test(value)
+
+function resolveSharedBassAsset(scope = '', options = {}) {
+  const {
+    strings,
+    preferTokens = [],
+    requiredTokens = [],
+    rejectTokens = [],
+  } = options
+
+  const normalizedScope = normalizeSegment(scope)
+  const normalizedPrefer = preferTokens.map(t => normalizeSegment(t)).filter(Boolean)
+  const normalizedRequired = requiredTokens.map(t => normalizeSegment(t)).filter(Boolean)
+  const normalizedReject = rejectTokens.map(t => normalizeSegment(t)).filter(Boolean)
+  const stringToken = strings ? String(strings) : null
+  const stringTokenMatcher = stringToken
+    ? new RegExp(`(?:^|[\\/_-])${stringToken}(?:$|[\\/_\\.-])`)
+    : null
+
+  const scopedEntries = SHARED_BASS_ENTRY_INDEX.filter((entry) =>
+    !normalizedScope || entry.relativePath.includes(`/${normalizedScope}/`) || entry.relativePath.endsWith(`/${normalizedScope}`),
+  )
+  if (!scopedEntries.length) return null
+
+  const filtered = scopedEntries.filter((entry) => {
+    const searchTarget = `${entry.relativePath} ${entry.stem}`
+    if (normalizedRequired.some(token => !searchTarget.includes(token))) return false
+    if (normalizedReject.some(token => searchTarget.includes(token))) return false
+
+    if (stringTokenMatcher) {
+      if (!hasStringToken(searchTarget)) return true
+      return stringTokenMatcher.test(searchTarget)
+    }
+    return true
+  })
+  if (!filtered.length) return null
+
+  const scored = filtered
+    .map((entry) => {
+      const searchTarget = `${entry.relativePath} ${entry.stem}`
+      const tokenScore = normalizedPrefer.reduce(
+        (score, token) => (searchTarget.includes(token) ? score + 1 : score),
+        0,
+      )
+      return { entry, tokenScore }
+    })
+    .sort((a, b) => b.tokenScore - a.tokenScore)
+
+  return scored[0]?.entry?.url ?? filtered[0]?.url ?? null
+}
+
+function mapCatalogByStem(model, view, category = '') {
+  const entries = getCatalogEntries(model, view, category)
+  return entries.reduce((acc, entry) => {
+    acc[entry.stem] = entry.url
+    return acc
+  }, {})
+}
+
+function pickColorVariants(model, view, category = '', strings) {
+  const colorKeys = ['chrome', 'black', 'gold']
+  const variants = colorKeys.reduce((acc, color) => {
+    const variantPath = resolveBassCatalogVariant(model, view, category, strings, color)
+    if (variantPath) acc[color] = variantPath
+    return acc
+  }, {})
+  return Object.keys(variants).length ? variants : null
+}
 
 export const BASS_DEFAULT_CONFIG = {
   bassType: 'vader',
@@ -38,19 +265,19 @@ export const BASS_BODY_OPTIONS = {
   vader: {
     label: 'Vader',
     note: 'Modern aggressive bass shape',
-    bodySrc: bassAsset('bass/vader/front/masks/bodymask.png'),
+    bodySrc: resolveBassCatalogAsset('vader', 'front', 'masks', { strings: '4', preferTokens: ['bodymask'] }) ?? bassAsset('bass/vader/front/masks/bodymask.png'),
     price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
   pb: {
     label: 'Precision',
     note: 'Classic precision shape',
-    bodySrc: bassAsset('bass/pb/front/masks/bodymask.png'),
+    bodySrc: resolveBassCatalogAsset('pb', 'front', 'masks', { strings: '4', preferTokens: ['bodymask'] }) ?? bassAsset('bass/pb/front/masks/bodymask.png'),
     price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
   jb: {
     label: 'Jazz',
     note: 'Modern jazz shape',
-    bodySrc: bassAsset('bass/jb/front/masks/bodymask.png'),
+    bodySrc: resolveBassCatalogAsset('jb', 'front', 'masks', { strings: '4', preferTokens: ['bodymask'] }) ?? bassAsset('bass/jb/front/masks/bodymask.png'),
     price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
 }
@@ -456,6 +683,12 @@ export const BASS_HEADSTOCK_STYLE_OPTIONS = {
     src: bassAsset('all-models/headstocks/bass/4-string/gt4r/'),
     price: 50, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
+  headless: {
+    label: 'Headless',
+    note: 'No headstock',
+    src: null,
+    price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
 }
 
 // Neck Style Options from all-models
@@ -538,7 +771,31 @@ export const BASS_BACKPLATE_OPTIONS = {
     standard: {
       label: 'Standard',
       note: 'Standard back panel',
-      src: bassAsset('bass/vader/back/backplates/battery-compartment.png'),
+      src: resolveBassCatalogAsset('vader', 'back', 'backplates', { strings: '4', preferTokens: ['battery', 'compartment'] }) ?? bassAsset('bass/vader/back/backplates/battery-compartment.png'),
+      price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
+    },
+    acf: {
+      label: 'ACF Battery Plate',
+      note: 'ACF rear battery compartment',
+      src: mapCatalogByStem('vader', 'back', 'backplates')['battery-compartment-acf'],
+      price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
+    },
+    black: {
+      label: 'Black Plate',
+      note: 'Black rear plate',
+      src: mapCatalogByStem('vader', 'back', 'backplates').black,
+      price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
+    },
+    ebony: {
+      label: 'Ebony Plate',
+      note: 'Ebony rear plate',
+      src: mapCatalogByStem('vader', 'back', 'backplates').ebony,
+      price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
+    },
+    purpleheart: {
+      label: 'Purpleheart Plate',
+      note: 'Purpleheart rear plate',
+      src: mapCatalogByStem('vader', 'back', 'backplates').purpleheart,
       price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
   },
@@ -546,13 +803,13 @@ export const BASS_BACKPLATE_OPTIONS = {
     standard: {
       label: 'Standard',
       note: 'Standard back panel',
-      src: bassAsset('bass/pb/back/backplates/battery-compartment.png'),
+      src: resolveBassCatalogAsset('pb', 'back', 'backplates', { strings: '4', preferTokens: ['battery', 'compartment'] }) ?? bassAsset('bass/pb/back/backplates/battery-compartment.png'),
       price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     extended: {
       label: 'Extended 5-String',
       note: 'Extended 5-string back panel',
-      src: bassAsset('bass/pb/back/backplates/battery-compartment-5.png'),
+      src: resolveBassCatalogAsset('pb', 'back', 'backplates', { strings: '5', preferTokens: ['battery', 'compartment'] }) ?? bassAsset('bass/pb/back/backplates/battery-compartment-5.png'),
       price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
   },
@@ -560,13 +817,13 @@ export const BASS_BACKPLATE_OPTIONS = {
     standard: {
       label: 'Standard',
       note: 'Standard back panel',
-      src: bassAsset('bass/jb/back/backplates/battery-compartment.png'),
+      src: resolveBassCatalogAsset('jb', 'back', 'backplates', { strings: '4', preferTokens: ['battery', 'compartment'] }) ?? bassAsset('bass/jb/back/backplates/battery-compartment.png'),
       price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     extended: {
       label: 'Extended 5-String',
       note: 'Extended 5-string back panel',
-      src: bassAsset('bass/jb/back/backplates/battery-compartment-5.png'),
+      src: resolveBassCatalogAsset('jb', 'back', 'backplates', { strings: '5', preferTokens: ['battery', 'compartment'] }) ?? bassAsset('bass/jb/back/backplates/battery-compartment-5.png'),
       price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
   }
@@ -649,9 +906,9 @@ export const BASS_BRIDGE_OPTIONS = {
       label: 'Standard',
       note: 'Standard bridge',
       assets: {
-        chrome: bassAsset('bass/vader/front/bridges/bridge.png'),
-        black: bassAsset('bass/vader/front/bridges/bridge.png'),
-        gold: bassAsset('bass/vader/front/bridges/bridge.png'),
+        chrome: resolveBassCatalogVariant('vader', 'front', 'bridges', '4', 'chrome', ['bridge']) ?? bassAsset('bass/vader/front/bridges/bridge.png'),
+        black: resolveBassCatalogVariant('vader', 'front', 'bridges', '4', 'black', ['bridge']) ?? bassAsset('bass/vader/front/bridges/bridge.png'),
+        gold: resolveBassCatalogVariant('vader', 'front', 'bridges', '4', 'gold', ['bridge']) ?? bassAsset('bass/vader/front/bridges/bridge.png'),
       },
       price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
@@ -659,9 +916,9 @@ export const BASS_BRIDGE_OPTIONS = {
       label: 'Extended 5-String',
       note: '5-string bridge',
       assets: {
-        chrome: bassAsset('bass/vader/front/bridges/bridge-5.png'),
-        black: bassAsset('bass/vader/front/bridges/bridge-5.png'),
-        gold: bassAsset('bass/vader/front/bridges/bridge-5.png'),
+        chrome: resolveBassCatalogVariant('vader', 'front', 'bridges', '5', 'chrome', ['bridge']) ?? bassAsset('bass/vader/front/bridges/bridge-5.png'),
+        black: resolveBassCatalogVariant('vader', 'front', 'bridges', '5', 'black', ['bridge']) ?? bassAsset('bass/vader/front/bridges/bridge-5.png'),
+        gold: resolveBassCatalogVariant('vader', 'front', 'bridges', '5', 'gold', ['bridge']) ?? bassAsset('bass/vader/front/bridges/bridge-5.png'),
       },
       price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
@@ -669,33 +926,73 @@ export const BASS_BRIDGE_OPTIONS = {
       label: 'Extended 300',
       note: 'Extended 300 bridge variant',
       assets: {
-        chrome: bassAsset('bass/vader/front/bridges/bridge-300.png'),
-        black: bassAsset('bass/vader/front/bridges/bridge-300.png'),
-        gold: bassAsset('bass/vader/front/bridges/bridge-300.png'),
+        chrome: resolveBassCatalogAsset('vader', 'front', 'bridges', { strings: '4', preferTokens: ['300'] }) ?? bassAsset('bass/vader/front/bridges/bridge-300.png'),
+        black: resolveBassCatalogAsset('vader', 'front', 'bridges', { strings: '4', preferTokens: ['300'] }) ?? bassAsset('bass/vader/front/bridges/bridge-300.png'),
+        gold: resolveBassCatalogAsset('vader', 'front', 'bridges', { strings: '4', preferTokens: ['300'] }) ?? bassAsset('bass/vader/front/bridges/bridge-300.png'),
       },
       price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
   },
   jb: {
+    standard: {
+      label: 'Standard 4-String',
+      note: 'Kiesel 4-string bridge',
+      assets: {
+        chrome: resolveBassCatalogVariant('jb', 'front', 'bridges/kiesel/4', '4', 'chrome') ?? bassAsset('bass/jb/front/bridges/kiesel/4/chrome.png'),
+        black: resolveBassCatalogVariant('jb', 'front', 'bridges/kiesel/4', '4', 'black') ?? bassAsset('bass/jb/front/bridges/kiesel/4/black.png'),
+        gold: resolveBassCatalogVariant('jb', 'front', 'bridges/kiesel/4', '4', 'gold') ?? bassAsset('bass/jb/front/bridges/kiesel/4/gold.png'),
+      },
+      price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
+    },
+    extended5: {
+      label: 'Standard 5-String',
+      note: 'Kiesel 5-string bridge',
+      assets: {
+        chrome: resolveBassCatalogVariant('jb', 'front', 'bridges/kiesel/5', '5', 'chrome') ?? bassAsset('bass/jb/front/bridges/kiesel/5/chrome.png'),
+        black: resolveBassCatalogVariant('jb', 'front', 'bridges/kiesel/5', '5', 'black') ?? bassAsset('bass/jb/front/bridges/kiesel/5/black.png'),
+        gold: resolveBassCatalogVariant('jb', 'front', 'bridges/kiesel/5', '5', 'gold') ?? bassAsset('bass/jb/front/bridges/kiesel/5/gold.png'),
+      },
+      price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
+    },
     cosmos: {
       label: 'Cosmos',
       note: 'Custom Cosmos bridge',
       assets: {
-        chrome: bassAsset('bass/jb/front/bridges/kiesel/4/chrome.png'),
-        black: bassAsset('bass/jb/front/bridges/kiesel/4/black.png'),
-        gold: bassAsset('bass/jb/front/bridges/kiesel/4/gold.png'),
+        chrome: resolveBassCatalogVariant('jb', 'front', 'bridges/kiesel/4', '4', 'chrome') ?? bassAsset('bass/jb/front/bridges/kiesel/4/chrome.png'),
+        black: resolveBassCatalogVariant('jb', 'front', 'bridges/kiesel/4', '4', 'black') ?? bassAsset('bass/jb/front/bridges/kiesel/4/black.png'),
+        gold: resolveBassCatalogVariant('jb', 'front', 'bridges/kiesel/4', '4', 'gold') ?? bassAsset('bass/jb/front/bridges/kiesel/4/gold.png'),
       },
       price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
   },
   pb: {
+    standard: {
+      label: 'Standard 4-String',
+      note: 'Classic 4-string bridge',
+      assets: {
+        chrome: resolveBassCatalogVariant('pb', 'front', 'bridges/4', '4', 'chrome') ?? bassAsset('bass/pb/front/bridges/4/chrome.png'),
+        black: resolveBassCatalogVariant('pb', 'front', 'bridges/4', '4', 'black') ?? bassAsset('bass/pb/front/bridges/4/black.png'),
+        gold: resolveBassCatalogVariant('pb', 'front', 'bridges/4', '4', 'gold') ?? bassAsset('bass/pb/front/bridges/4/gold.png'),
+      },
+      price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
+    },
     standard4: {
       label: 'Standard 4-String',
       note: 'Classic 4-string bridge',
       assets: {
-        chrome: bassAsset('bass/pb/front/bridges/4/chrome.png'),
-        black: bassAsset('bass/pb/front/bridges/4/black.png'),
-        gold: bassAsset('bass/pb/front/bridges/4/gold.png'),
+        chrome: resolveBassCatalogVariant('pb', 'front', 'bridges/4', '4', 'chrome') ?? bassAsset('bass/pb/front/bridges/4/chrome.png'),
+        black: resolveBassCatalogVariant('pb', 'front', 'bridges/4', '4', 'black') ?? bassAsset('bass/pb/front/bridges/4/black.png'),
+        gold: resolveBassCatalogVariant('pb', 'front', 'bridges/4', '4', 'gold') ?? bassAsset('bass/pb/front/bridges/4/gold.png'),
+      },
+      price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
+    },
+    extended5: {
+      label: 'Standard 5-String',
+      note: 'Extended 5-string bridge',
+      assets: {
+        chrome: resolveBassCatalogVariant('pb', 'front', 'bridges/5', '5', 'chrome') ?? bassAsset('bass/pb/front/bridges/5/chrome.png'),
+        black: resolveBassCatalogVariant('pb', 'front', 'bridges/5', '5', 'black') ?? bassAsset('bass/pb/front/bridges/5/black.png'),
+        gold: resolveBassCatalogVariant('pb', 'front', 'bridges/5', '5', 'gold') ?? bassAsset('bass/pb/front/bridges/5/gold.png'),
       },
       price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
@@ -703,9 +1000,9 @@ export const BASS_BRIDGE_OPTIONS = {
       label: 'Standard 5-String',
       note: 'Extended 5-string bridge',
       assets: {
-        chrome: bassAsset('bass/pb/front/bridges/5/chrome.png'),
-        black: bassAsset('bass/pb/front/bridges/5/black.png'),
-        gold: bassAsset('bass/pb/front/bridges/5/gold.png'),
+        chrome: resolveBassCatalogVariant('pb', 'front', 'bridges/5', '5', 'chrome') ?? bassAsset('bass/pb/front/bridges/5/chrome.png'),
+        black: resolveBassCatalogVariant('pb', 'front', 'bridges/5', '5', 'black') ?? bassAsset('bass/pb/front/bridges/5/black.png'),
+        gold: resolveBassCatalogVariant('pb', 'front', 'bridges/5', '5', 'gold') ?? bassAsset('bass/pb/front/bridges/5/gold.png'),
       },
       price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
@@ -1034,11 +1331,6 @@ export const BASS_STRING_OPTIONS = {
     note: 'Extended range',
     price: 50, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
-  '6': {
-    label: '6 Strings',
-    note: 'Full extended range',
-    price: 100, specs: { size: '', dimensions: '', material: '', notes: '' }
-  },
 }
 
 export const BASS_PREVIEW_LAYOUTS = {
@@ -1049,60 +1341,73 @@ export const BASS_PREVIEW_LAYOUTS = {
 
 export const BASS_BODY_LAYER_ASSETS = {
   vader: {
-    bridge: BASS_BRIDGE_OPTIONS.vader.standard.assets,
-    knobs: {
-      chrome: bassAsset('bass/vader/front/knobs/chrome.png'),
-      black: bassAsset('bass/vader/front/knobs/black.png'),
-      gold: bassAsset('bass/vader/front/knobs/tamarind.png'),
+    allAssets: BASS_MODEL_CATALOG.vader.all,
+    front: {
+      mask: resolveBassCatalogAsset('vader', 'front', 'masks', { strings: '4', preferTokens: ['bodymask'] }) ?? bassAsset('bass/vader/front/masks/bodymask.png'),
+      bridge: BASS_BRIDGE_OPTIONS.vader.standard.assets,
+      strap: pickColorVariants('vader', 'front', 'strap buttons/standard', '4'),
+      straplocks: pickColorVariants('vader', 'front', 'strap buttons/straplocks', '4'),
+      pickups: resolveBassCatalogAsset('vader', 'front', 'pickups', { strings: '4', preferTokens: ['bridge', 'black'] }) ?? bassAsset('bass/vader/front/pickups/hb/standard/4/bridge-black.png'),
+      pickupCatalog: mapCatalogByStem('vader', 'front', 'pickups'),
+      shadows: resolveBassCatalogAsset('vader', 'front', 'shadows_highlights', { strings: '4', preferTokens: ['edge', 'shadow'] }) ?? bassAsset('bass/vader/front/shadows_highlights/edge-shadow.png'),
+      gloss: resolveBassCatalogAsset('vader', 'front', 'shadows_highlights', { strings: '4', preferTokens: ['gloss'] }) ?? bassAsset('bass/vader/front/shadows_highlights/gloss.png'),
     },
-    strap: {
-      chrome: bassAsset('bass/vader/front/strap buttons/standard/chrome.png'),
-      black: bassAsset('bass/vader/front/strap buttons/standard/black.png'),
-      gold: bassAsset('bass/vader/front/strap buttons/standard/gold.png'),
+    back: {
+      mask: resolveBassCatalogAsset('vader', 'back', 'masks', { strings: '4', preferTokens: ['bodymask'] }) ?? bassAsset('bass/vader/back/masks/bodymask.png'),
+      backplate: BASS_BACKPLATE_OPTIONS.vader.standard.src,
+      bridge: resolveBassCatalogAsset('vader', 'back', 'bridges', { strings: '4', preferTokens: ['standard'] }),
+      strap: pickColorVariants('vader', 'back', 'strap buttons/standard', '4'),
+      straplocks: pickColorVariants('vader', 'back', 'strap buttons/straplocks', '4'),
+      neckCap: resolveBassCatalogAsset('vader', 'back', '', { strings: '4', preferTokens: ['neck', 'cap'] }) ?? bassAsset('bass/vader/back/neck-cap.png'),
+      shadows: resolveBassCatalogAsset('vader', 'back', 'shadows_highlights', { strings: '4', preferTokens: ['multiply'] }) ?? bassAsset('bass/vader/back/shadows_highlights/multiply.png'),
+      gloss: resolveBassCatalogAsset('vader', 'back', 'shadows_highlights', { strings: '4', preferTokens: ['gloss'] }) ?? bassAsset('bass/vader/back/shadows_highlights/gloss.png'),
     },
-    pickups: bassAsset('bass/vader/front/pickups/hb/standard/4/bridge-black.png'),
-    shadows: bassAsset('bass/vader/front/shadows_highlights/edge-shadow.png'),
-    gloss: bassAsset('bass/vader/front/shadows_highlights/gloss.png'),
-    pickguard: null,
-    rearNeckCap: bassAsset('bass/vader/back/neck-cap.png'),
   },
   pb: {
-    bridge: BASS_BRIDGE_OPTIONS.pb.standard4.assets,
-    knobs: {
-      chrome: bassAsset('bass/pb/front/knobs/chrome.png'),
-      black: bassAsset('bass/pb/front/knobs/black.png'),
-      gold: bassAsset('bass/pb/front/knobs/gold.png'),
+    allAssets: BASS_MODEL_CATALOG.pb.all,
+    front: {
+      mask: resolveBassCatalogAsset('pb', 'front', 'masks', { strings: '4', preferTokens: ['bodymask'] }) ?? bassAsset('bass/pb/front/masks/bodymask.png'),
+      bridge: BASS_BRIDGE_OPTIONS.pb.standard.assets,
+      strap: pickColorVariants('pb', 'front', 'strap buttons/standard', '4'),
+      straplocks: pickColorVariants('pb', 'front', 'strap buttons/straplocks', '4'),
+      pickups: resolveBassCatalogAsset('pb', 'front', 'pickups', { strings: '4', preferTokens: ['bridge', 'black'] }) ?? bassAsset('bass/pb/front/pickups/4/bridge-black.png'),
+      pickupCatalog: mapCatalogByStem('pb', 'front', 'pickups'),
+      shadows: resolveBassCatalogAsset('pb', 'front', 'shadows_highlights', { strings: '4', preferTokens: ['edge', 'shadow'] }) ?? bassAsset('bass/pb/front/shadows_highlights/edge-shadow.png'),
+      gloss: resolveBassCatalogAsset('pb', 'front', 'shadows_highlights', { strings: '4', preferTokens: ['gloss'] }) ?? bassAsset('bass/pb/front/shadows_highlights/gloss.png'),
     },
-    strap: {
-      chrome: bassAsset('bass/pb/front/strap buttons/standard/chrome.png'),
-      black: bassAsset('bass/pb/front/strap buttons/standard/black.png'),
-      gold: bassAsset('bass/pb/front/strap buttons/standard/gold.png'),
-    },
-    pickups: bassAsset('all-models/pickups/bass/p/neck-black.png'),
-    shadows: bassAsset('bass/pb/front/shadows_highlights/edge-shadow.png'),
-    gloss: bassAsset('bass/pb/front/shadows_highlights/gloss.png'),
-    pickguard: {
-      chrome: bassAsset('bass/pb/front/pickguard/black.png'),
-      black: bassAsset('bass/pb/front/pickguard/black.png'),
-      gold: bassAsset('bass/pb/front/pickguard/tortoise.png'),
+    back: {
+      mask: resolveBassCatalogAsset('pb', 'back', 'masks', { strings: '4', preferTokens: ['bodymask'] }) ?? bassAsset('bass/pb/back/masks/bodymask.png'),
+      backplate: BASS_BACKPLATE_OPTIONS.pb.standard.src,
+      neckBolts: resolveBassCatalogAsset('pb', 'back', 'neck bolts', { strings: '4', preferTokens: ['neck', 'bolts'] }),
+      ferrules: pickColorVariants('pb', 'back', 'string ferrules/standard', '4'),
+      strap: pickColorVariants('pb', 'back', 'strap buttons/standard', '4'),
+      straplocks: pickColorVariants('pb', 'back', 'strap buttons/straplocks', '4'),
+      shadows: resolveBassCatalogAsset('pb', 'back', 'shadows_highlights', { strings: '4', preferTokens: ['multiply'] }) ?? bassAsset('bass/pb/back/shadows_highlights/multiply.png'),
+      gloss: resolveBassCatalogAsset('pb', 'back', 'shadows_highlights', { strings: '4', preferTokens: ['gloss'] }) ?? bassAsset('bass/pb/back/shadows_highlights/gloss.png'),
     },
   },
   jb: {
-    bridge: BASS_BRIDGE_OPTIONS.jb.cosmos.assets,
-    knobs: {
-      chrome: bassAsset('bass/jb/front/knobs/chrome.png'),
-      black: bassAsset('bass/jb/front/knobs/black.png'),
-      gold: bassAsset('bass/jb/front/knobs/gold.png'),
+    allAssets: BASS_MODEL_CATALOG.jb.all,
+    front: {
+      mask: resolveBassCatalogAsset('jb', 'front', 'masks', { strings: '4', preferTokens: ['bodymask'] }) ?? bassAsset('bass/jb/front/masks/bodymask.png'),
+      bridge: BASS_BRIDGE_OPTIONS.jb.standard.assets,
+      strap: pickColorVariants('jb', 'front', 'strap buttons/standard', '4'),
+      straplocks: pickColorVariants('jb', 'front', 'strap buttons/straplocks', '4'),
+      pickups: resolveBassCatalogAsset('jb', 'front', 'pickups', { strings: '4', preferTokens: ['bridge', 'black'] }) ?? bassAsset('bass/jb/front/pickups/4/j/bridge-black.png'),
+      pickupCatalog: mapCatalogByStem('jb', 'front', 'pickups'),
+      shadows: resolveBassCatalogAsset('jb', 'front', 'shadows_highlights', { strings: '4', preferTokens: ['edge', 'shadow'] }) ?? bassAsset('bass/jb/front/shadows_highlights/edge-shadow.png'),
+      gloss: resolveBassCatalogAsset('jb', 'front', 'shadows_highlights', { strings: '4', preferTokens: ['gloss'] }) ?? bassAsset('bass/jb/front/shadows_highlights/gloss.png'),
     },
-    strap: {
-      chrome: bassAsset('bass/jb/front/strap buttons/standard/chrome.png'),
-      black: bassAsset('bass/jb/front/strap buttons/standard/black.png'),
-      gold: bassAsset('bass/jb/front/strap buttons/standard/gold.png'),
+    back: {
+      mask: resolveBassCatalogAsset('jb', 'back', 'masks', { strings: '4', preferTokens: ['bodymask'] }) ?? bassAsset('bass/jb/back/masks/bodymask.png'),
+      backplate: BASS_BACKPLATE_OPTIONS.jb.standard.src,
+      neckBolts: resolveBassCatalogAsset('jb', 'back', 'neck bolts', { strings: '4', preferTokens: ['neck', 'bolts'] }),
+      ferrules: pickColorVariants('jb', 'back', 'string ferrules/standard', '4'),
+      strap: pickColorVariants('jb', 'back', 'strap buttons/standard', '4'),
+      straplocks: pickColorVariants('jb', 'back', 'strap buttons/straplocks', '4'),
+      shadows: resolveBassCatalogAsset('jb', 'back', 'shadows_highlights', { strings: '4', preferTokens: ['multiply'] }) ?? bassAsset('bass/jb/back/shadows_highlights/multiply.png'),
+      gloss: resolveBassCatalogAsset('jb', 'back', 'shadows_highlights', { strings: '4', preferTokens: ['gloss'] }) ?? bassAsset('bass/jb/back/shadows_highlights/gloss.png'),
     },
-    pickups: bassAsset('all-models/pickups/bass/j/4/bridge-black.png'),
-    shadows: bassAsset('bass/jb/front/shadows_highlights/edge-shadow.png'),
-    gloss: bassAsset('bass/jb/front/shadows_highlights/gloss.png'),
-    pickguard: null,
   },
 }
 
@@ -1141,5 +1446,10 @@ export const bassBuilder = {
   STRING_OPTIONS: BASS_STRING_OPTIONS,
   PREVIEW_LAYOUTS: BASS_PREVIEW_LAYOUTS,
   BODY_LAYER_ASSETS: BASS_BODY_LAYER_ASSETS,
+  MODEL_ASSET_CATALOG: BASS_MODEL_CATALOG,
+  SHARED_ASSET_CATALOG: BASS_SHARED_ASSET_CATALOG,
   resolveVariant: resolveBassVariant,
+  resolveCatalogAsset: resolveBassCatalogAsset,
+  resolveCatalogVariant: resolveBassCatalogVariant,
+  resolveSharedAsset: resolveSharedBassAsset,
 }

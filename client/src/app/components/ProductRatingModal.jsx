@@ -142,8 +142,8 @@ export function ProductRatingModal({ product, isOpen, onClose, onBuyNow, onAddTo
                  </button>
               )}
               <button
-                onClick={() => { if(buttonState === 'add') onAddToCart(product); }}
-                disabled={buttonState !== 'add'}
+                onClick={() => { if(buttonState !== 'out_of_stock') onAddToCart(product); }}
+                disabled={buttonState === 'out_of_stock'}
                 className={`w-full py-3.5 rounded-full tracking-wide font-bold transition-all border ${
                   buttonState === 'out_of_stock'
                     ? 'border-white/10 text-white/30 cursor-not-allowed'
@@ -152,7 +152,7 @@ export function ProductRatingModal({ product, isOpen, onClose, onBuyNow, onAddTo
                     : 'border-white/10 text-white hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)]'
                 }`}
               >
-                {buttonState === 'add' ? 'Add to Cart' : buttonState === 'out_of_stock' ? 'Unavailable' : 'Added to Cart'}
+                {buttonState === 'add' ? 'Add to Cart' : buttonState === 'out_of_stock' ? 'Out of Stock' : 'Added to Cart'}
               </button>
             </div>
             

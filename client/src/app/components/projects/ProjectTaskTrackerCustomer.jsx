@@ -125,6 +125,7 @@ export default function ProjectTaskTracker({ projectId, projectName, showTracker
   const [showConfirmationModal, setShowConfirmationModal] = useState(false);
   const [confirmedSelection, setConfirmedSelection] = useState(null);
   const [unavailableDates, setUnavailableDates] = useState([]);
+  const [pendingUncheckSubtask, setPendingUncheckSubtask] = useState(null);
 
   // Validation state
   const [validationErrors, setValidationErrors] = useState({});
@@ -312,8 +313,24 @@ export default function ProjectTaskTracker({ projectId, projectName, showTracker
     if (!subtask.is_customer_updatable) return;
 
     try {
+      if (subtask.status === 'completed') {
+        setPendingUncheckSubtask(subtask);
+        return;
+      }
       const newStatus = subtask.status === 'completed' ? 'pending' : 'completed';
       await adminApi.updateSubtask(subtask.subtask_id, { status: newStatus });
+      loadData();
+    } catch (err) {
+      alert("Failed to update task: " + err.message);
+    }
+  };
+
+  const handleConfirmUncheckSubtask = async () => {
+    if (!pendingUncheckSubtask) return;
+
+    try {
+      await adminApi.updateSubtask(pendingUncheckSubtask.subtask_id, { status: 'pending' });
+      setPendingUncheckSubtask(null);
       loadData();
     } catch (err) {
       alert("Failed to update task: " + err.message);
@@ -819,6 +836,48 @@ export default function ProjectTaskTracker({ projectId, projectName, showTracker
                     className="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black font-bold disabled:opacity-60"
                   >
                     {fulfillmentSaving ? 'Confirming...' : 'Confirm Selection'}
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {pendingUncheckSubtask && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+            >
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                className="w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-5"
+              >
+                <h3 className="text-lg font-semibold text-white">Uncheck Completed Task?</h3>
+                <p className="mt-2 text-sm text-[var(--text-muted)]">
+                  This will move the task back to pending.
+                </p>
+                <p className="mt-2 rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-3 py-2 text-sm text-white">
+                  {pendingUncheckSubtask.title}
+                </p>
+                <div className="mt-5 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPendingUncheckSubtask(null)}
+                    className="flex-1 rounded-lg border border-[var(--border)] px-3 py-2 text-sm font-semibold text-[var(--text-light)] hover:bg-[var(--bg-primary)]"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleConfirmUncheckSubtask}
+                    className="flex-1 rounded-lg bg-[var(--gold-primary)] px-3 py-2 text-sm font-semibold text-black hover:bg-[var(--gold-secondary)]"
+                  >
+                    Yes, Uncheck
                   </button>
                 </div>
               </motion.div>

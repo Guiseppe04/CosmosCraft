@@ -50,6 +50,7 @@ function normalizeBlendMode(mode) {
 }
 
 export async function exportMaskedPreview(previewRoot, { fileName, background = '#111111', scale = 2 } = {}) {
+  const DEBUG = Boolean(import.meta.env?.DEV)
   const stage = previewRoot?.querySelector('[data-export-stage="true"]')
   if (!stage) {
     throw new Error('Preview stage not found')
@@ -57,11 +58,6 @@ export async function exportMaskedPreview(previewRoot, { fileName, background = 
 
   const rootRect = previewRoot.getBoundingClientRect()
   const stageRect = stage.getBoundingClientRect()
-  const stageStyle = window.getComputedStyle(stage)
-  const stageTransform = stageStyle.transform && stageStyle.transform !== 'none'
-    ? new DOMMatrixReadOnly(stageStyle.transform)
-    : null
-
   const canvas = document.createElement('canvas')
   canvas.width = Math.max(1, Math.round(rootRect.width * scale))
   canvas.height = Math.max(1, Math.round(rootRect.height * scale))
@@ -73,25 +69,12 @@ export async function exportMaskedPreview(previewRoot, { fileName, background = 
 
   const stageX = stageRect.left - rootRect.left
   const stageY = stageRect.top - rootRect.top
-
-  if (stageTransform) {
-    const centerX = stageX + stageRect.width / 2
-    const centerY = stageY + stageRect.height / 2
-    ctx.translate(centerX, centerY)
-    ctx.transform(
-      stageTransform.a,
-      stageTransform.b,
-      stageTransform.c,
-      stageTransform.d,
-      stageTransform.e,
-      stageTransform.f,
-    )
-    ctx.translate(-stageRect.width / 2, -stageRect.height / 2)
-  } else {
-    ctx.translate(stageX, stageY)
-  }
+  // Stage rect already reflects CSS transforms on screen; draw directly in this final box
+  // to avoid double-transform drift between preview and exported image.
+  ctx.translate(stageX, stageY)
 
   const layerNodes = Array.from(stage.querySelectorAll('[data-export-layer="true"]'))
+  const exportLayerRows = []
 
   for (const layerNode of layerNodes) {
     const style = window.getComputedStyle(layerNode)
@@ -101,11 +84,27 @@ export async function exportMaskedPreview(previewRoot, { fileName, background = 
     const maskSrc = isValidImageSrc(rawMaskSrc) ? rawMaskSrc : null
 
     if (!imageSrc && !maskSrc) continue
+    if (DEBUG) {
+      const rect = layerNode.getBoundingClientRect()
+      exportLayerRows.push({
+        name: layerNode.getAttribute('data-layer') || '',
+        src: imageSrc || '',
+        mask: maskSrc || '',
+        zIndex: style.zIndex,
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+        opacity: style.opacity,
+        display: style.display,
+        visibility: style.visibility,
+        transform: style.transform,
+      })
+    }
 
     try {
       ctx.save()
       ctx.globalAlpha = Number.parseFloat(style.opacity || '1') || 1
       ctx.globalCompositeOperation = normalizeBlendMode(style.mixBlendMode)
+      ctx.filter = style.filter && style.filter !== 'none' ? style.filter : 'none'
 
       if (maskSrc) {
         const [maskImage, fillImage] = await Promise.all([
@@ -134,10 +133,19 @@ export async function exportMaskedPreview(previewRoot, { fileName, background = 
         drawImageContain(ctx, image, 0, 0, stageRect.width, stageRect.height)
       }
     } catch (error) {
-      console.warn('Skipping layer during export:', error)
+      console.warn('Skipping layer during export:', layerNode.getAttribute('data-layer') || 'unknown-layer', error)
     } finally {
       ctx.restore()
     }
+  }
+  if (DEBUG) {
+    console.log('[BASS EXPORT DEBUG] Rendered layer diagnostics', {
+      stage: {
+        width: Math.round(stageRect.width),
+        height: Math.round(stageRect.height),
+      },
+      layers: exportLayerRows,
+    })
   }
 
   const stickerNodes = Array.from(previewRoot.querySelectorAll('img[data-export-sticker="true"]'))
@@ -150,6 +158,7 @@ export async function exportMaskedPreview(previewRoot, { fileName, background = 
     try {
       const image = await loadImage(src)
       ctx.save()
+      ctx.filter = 'none'
       const rect = stickerNode.getBoundingClientRect()
       const drawWidth = rect.width
       const drawHeight = rect.height

@@ -1,4 +1,5 @@
 const rbacService = require('../services/rbacService');
+const { normalizeRole } = require('../utils/roles');
 
 const checkPermission = (...requiredPermissions) => {
   return async (req, res, next) => {
@@ -43,13 +44,13 @@ const checkRole = (...allowedRoles) => {
       }
 
       const userRoles = await rbacService.getUserRoles(req.user.user_id, true);
-      const roleNames = userRoles.map(r => r.name.toLowerCase());
+      const roleNames = userRoles.map(r => normalizeRole(r.name.toLowerCase()));
       
-      const hasRole = allowedRoles.some(role => 
-        roleNames.includes(role.toLowerCase())
+      const userHasRole = allowedRoles.some(role => 
+        roleNames.includes(normalizeRole(role.toLowerCase()))
       );
 
-      if (!hasRole) {
+      if (!userHasRole) {
         return res.status(403).json({
           status: 'error',
           message: 'Insufficient role privileges',

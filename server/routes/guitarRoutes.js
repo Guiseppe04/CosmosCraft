@@ -7,7 +7,7 @@ const ctrl = require('../controllers/guitarController');
 router.get('/customizations',          authenticateToken, authorize('admin', 'super_admin'), ctrl.getCustomizations);
 router.get('/customizations/:id',      authenticateToken, authorize('admin', 'super_admin'), ctrl.getCustomization);
 router.put('/customizations/:id',      authenticateToken, authorize('admin', 'super_admin'), ctrl.updateCustomization);
-router.delete('/customizations/:id',   authenticateToken, authorize('super_admin'), ctrl.deleteCustomization);
+router.delete('/customizations/:id',   authenticateToken, authorize('admin'), ctrl.deleteCustomization);
 router.get('/my-customizations',       authenticateToken, authorize('customer', 'staff', 'admin', 'super_admin'), ctrl.getMyCustomizations);
 router.post('/my-customizations',      authenticateToken, authorize('customer', 'staff', 'admin', 'super_admin'), ctrl.createMyCustomization);
 router.put('/my-customizations/:id',   authenticateToken, authorize('customer', 'staff', 'admin', 'super_admin'), ctrl.updateMyCustomization);

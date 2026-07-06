@@ -1,11 +1,13 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import { API } from '../utils/apiConfig'
+import { normalizeRole } from '../utils/roles'
 
 const AuthContext = createContext(null)
 
 // Role constants
 export const ROLES = {
   ADMIN: 'admin',
+  SUPER_ADMIN: 'super_admin',
   STAFF: 'staff',
   CUSTOMER: 'customer',
 }
@@ -133,6 +135,10 @@ export function AuthProvider({ children }) {
           )
           return userData
         }
+
+        setIsAuthenticated(false)
+        setUser(null)
+        window.localStorage.removeItem('cosmoscraft_auth')
       } else if (response.status === 401) {
         setIsAuthenticated(false)
         setUser(null)
@@ -223,7 +229,7 @@ export function AuthProvider({ children }) {
   // Role checking helpers
   const getUserRole = useCallback(() => {
     if (!user) return null
-    return user.role || ROLES.CUSTOMER
+    return normalizeRole(user.role || ROLES.CUSTOMER)
   }, [user])
 
   const isAdmin = useCallback(() => {

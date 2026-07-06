@@ -23,6 +23,7 @@ import AppointmentForm from '../components/appointments/AppointmentForm'
 import UnavailableDatesManager from '../components/appointments/UnavailableDatesManager'
 import { PosWorkspace } from '../components/pos/PosWorkspace'
 import { useAuth } from '../context/AuthContext'
+import { hasRole } from '../utils/roles.js'
 import { useNavigate } from 'react-router'
 import { Topbar } from '../components/admin/Topbar'
 import { MessagePanel } from '../components/admin/MessagePanel'
@@ -30,6 +31,11 @@ import { ProjectProgress, ProgressBadge } from '../components/admin/ProjectProgr
 import { OrderManagement } from '../components/admin/OrderManagement'
 import { formatCurrency } from '../utils/formatCurrency'
 import { adminApi } from '../utils/adminApi'
+import {
+  getAllowedPaymentStatuses,
+  getPaymentStatusConfig as getOrderPaymentStatusConfig,
+  normalizePaymentStatus,
+} from '../utils/orderPaymentStatus'
 import { uploadToCloudinary } from '../utils/cloudinary'
 import { ConfirmModal } from '../components/ui/ConfirmModal'
 import { useDebounce } from '../hooks/useDebounce'
@@ -762,6 +768,20 @@ const CATEGORY_RULES = {
 const PART_RULES = {
   name: [required('Name')],
   type_mapping: [required('Type Mapping')],
+  inventory_category: [required('Category')],
+}
+const normalizeServiceCategoryId = (value) => {
+  const normalized = String(value || '').trim().toLowerCase()
+  if (!normalized) return ''
+
+  const legacyMap = {
+    'setup-intonation': 'setup',
+    refinishing: 'refinishing',
+    'repair-restoration': 'repair',
+    'electronics-upgrade': 'electronics',
+  }
+
+  return legacyMap[normalized] || normalized
 }
 const BUILDER_CATEGORY_MAP = {
   pricing: ['basePrice'],
@@ -786,191 +806,67 @@ const SLOT_TO_PART_CATEGORY = {
   knobs: 'hardware',
   pickups: 'pickups',
 }
+const INVENTORY_PART_CATEGORY_OPTIONS = [
+  { value: 'body', label: 'Body' },
+  { value: 'neck', label: 'Neck' },
+  { value: 'pickups', label: 'Pickups' },
+  { value: 'hardware', label: 'Hardware' },
+  { value: 'electronics', label: 'Electronics' },
+  { value: 'accessories', label: 'Accessories' },
+]
+const INVENTORY_PART_CATEGORY_LABELS = Object.fromEntries(
+  INVENTORY_PART_CATEGORY_OPTIONS.map(({ value, label }) => [value, label])
+)
+const TECHNICAL_TO_INVENTORY_PART_CATEGORY = {
+  body: 'body',
+  neck: 'neck',
+  fretboard: 'neck',
+  headstock: 'neck',
+  pickups: 'pickups',
+  hardware: 'hardware',
+  bridge: 'hardware',
+  knobs: 'hardware',
+  tuners: 'hardware',
+  electronics: 'electronics',
+  wood_type: 'accessories',
+  finish: 'accessories',
+  strings: 'accessories',
+  pickguard: 'accessories',
+  inlays: 'accessories',
+  misc: 'accessories',
+}
 const normalizePartText = (value) => String(value || '').trim().toLowerCase()
 const makePartIdentityKey = (part) =>
   `${normalizePartText(part.guitar_type)}|${normalizePartText(part.type_mapping)}|${normalizePartText(part.name)}`
+const normalizeInventoryPartCategory = (value) => {
+  const normalized = normalizePartText(value)
+  return INVENTORY_PART_CATEGORY_LABELS[normalized] ? normalized : ''
+}
+const getBuilderCategoryForTypeMapping = (typeMapping) =>
+  Object.entries(BUILDER_CATEGORY_MAP).find(([, slots]) => slots.includes(typeMapping))?.[0] || ''
+const deriveInventoryPartCategory = (part = {}) => {
+  const savedCategory = normalizeInventoryPartCategory(
+    part.inventory_category || part.metadata?.inventory_category
+  )
+  if (savedCategory) return savedCategory
+
+  const technicalCategory = normalizePartText(
+    part.part_category || SLOT_TO_PART_CATEGORY[part.type_mapping]
+  )
+  return TECHNICAL_TO_INVENTORY_PART_CATEGORY[technicalCategory] || 'accessories'
+}
+const normalizeBuilderPart = (part = {}) => {
+  const normalizedStock = Number(part.stock ?? part.quantity ?? 0) || 0
+  return {
+    ...part,
+    stock: normalizedStock,
+    quantity: normalizedStock,
+    inventory_category: deriveInventoryPartCategory(part),
+  }
+}
 const ELECTRIC_BODY_KEYS = Object.entries(BODY_OPTIONS || {})
   .filter(([, option]) => Array.isArray(option?.types) ? option.types.includes('electric') : true)
   .map(([bodyKey]) => bodyKey)
-
-const pickOptionImage = (option) => {
-  if (!option || typeof option !== 'object') return null
-  if (option.src) return option.src
-  if (option.texture) return option.texture
-  if (option.bodySrc) return option.bodySrc
-  if (option.assets && typeof option.assets === 'object') {
-    const asset = option.assets.chrome || option.assets.black || option.assets.gold || Object.values(option.assets)[0]
-    return asset || null
-  }
-  return null
-}
-
-const buildElectricPartSeedPayloads = () => {
-  const payloads = []
-
-  const pushPayload = ({ name, description, typeMapping, partCategory, imageUrl, price, metadata }) => {
-    payloads.push({
-      name,
-      description,
-      guitar_type: 'electric',
-      part_category: partCategory,
-      folder_key: `electric/${partCategory}`,
-      type_mapping: typeMapping,
-      price: Number(price || 0),
-      stock: 30,
-      image_url: imageUrl || null,
-      metadata: { ...(metadata || {}), import_category: 'electric_guitar' },
-      is_active: true,
-    })
-  }
-
-  const addFlatOptions = (options, config) => {
-    Object.entries(options || {}).forEach(([optionKey, option]) => {
-      if (optionKey === 'none') return
-      if (Array.isArray(config.allowedOptionKeys) && config.allowedOptionKeys.length > 0 && !config.allowedOptionKeys.includes(optionKey)) return
-      const label = option?.label || optionKey
-      pushPayload({
-        name: `Electric ${config.label} - ${label}`,
-        description: option?.note || `${config.label} option for Electric guitar builder`,
-        typeMapping: config.typeMapping,
-        partCategory: config.partCategory,
-        imageUrl: pickOptionImage(option),
-        price: option?.price || 0,
-        metadata: { source: 'guitarBuilderData', group: config.group, option_key: optionKey },
-      })
-    })
-  }
-
-  const addNestedOptions = (options, config) => {
-    Object.entries(options || {}).forEach(([variantKey, variantOptions]) => {
-      if (Array.isArray(config.allowedVariants) && config.allowedVariants.length > 0 && !config.allowedVariants.includes(variantKey)) return
-      Object.entries(variantOptions || {}).forEach(([optionKey, option]) => {
-        if (optionKey === 'none') return
-        const label = option?.label || optionKey
-        pushPayload({
-          name: `Electric ${config.label} - ${variantKey.toUpperCase()} - ${label}`,
-          description: option?.note || `${config.label} option for ${variantKey.toUpperCase()} electric`,
-          typeMapping: config.typeMapping,
-          partCategory: config.partCategory,
-          imageUrl: pickOptionImage(option),
-          price: option?.price || 0,
-          metadata: { source: 'guitarBuilderData', group: config.group, variant: variantKey, option_key: optionKey },
-        })
-      })
-    })
-  }
-
-  addFlatOptions(BODY_OPTIONS, { label: 'Body', typeMapping: 'body', partCategory: 'body', group: 'BODY_OPTIONS', allowedOptionKeys: ELECTRIC_BODY_KEYS })
-  addFlatOptions(BODY_WOOD_OPTIONS, { label: 'Body Wood', typeMapping: 'bodyWood', partCategory: 'wood_type', group: 'BODY_WOOD_OPTIONS' })
-  addFlatOptions(BODY_FINISH_OPTIONS, { label: 'Body Finish', typeMapping: 'bodyFinish', partCategory: 'finish', group: 'BODY_FINISH_OPTIONS' })
-  addFlatOptions(NECK_OPTIONS, { label: 'Neck', typeMapping: 'neck', partCategory: 'neck', group: 'NECK_OPTIONS' })
-  addFlatOptions(FRETBOARD_OPTIONS, { label: 'Fretboard', typeMapping: 'fretboard', partCategory: 'fretboard', group: 'FRETBOARD_OPTIONS' })
-  addFlatOptions(HEADSTOCK_OPTIONS, { label: 'Headstock Style', typeMapping: 'headstock', partCategory: 'misc', group: 'HEADSTOCK_OPTIONS' })
-  addFlatOptions(HEADSTOCK_WOOD_OPTIONS, { label: 'Headstock Wood', typeMapping: 'headstockWood', partCategory: 'wood_type', group: 'HEADSTOCK_WOOD_OPTIONS' })
-  addFlatOptions(INLAY_OPTIONS, { label: 'Inlays', typeMapping: 'inlays', partCategory: 'misc', group: 'INLAY_OPTIONS' })
-  addFlatOptions(BRIDGE_OPTIONS, { label: 'Bridge', typeMapping: 'bridge', partCategory: 'bridge', group: 'BRIDGE_OPTIONS' })
-  addFlatOptions(HARDWARE_OPTIONS, { label: 'Hardware', typeMapping: 'hardware', partCategory: 'hardware', group: 'HARDWARE_OPTIONS' })
-  addFlatOptions(PICKUP_OPTIONS, { label: 'Pickup Set', typeMapping: 'pickups', partCategory: 'pickups', group: 'PICKUP_OPTIONS' })
-
-  addNestedOptions(PICKGUARD_OPTIONS_BY_BODY, {
-    label: 'Pickguard',
-    typeMapping: 'pickguard',
-    partCategory: 'pickguard',
-    group: 'PICKGUARD_OPTIONS_BY_BODY',
-    allowedVariants: ELECTRIC_BODY_KEYS,
-  })
-  addNestedOptions(KNOB_OPTIONS_BY_BODY, {
-    label: 'Knobs',
-    typeMapping: 'knobs',
-    partCategory: 'hardware',
-    group: 'KNOB_OPTIONS_BY_BODY',
-    allowedVariants: ELECTRIC_BODY_KEYS,
-  })
-
-  return payloads
-}
-
-const buildBassPartSeedPayloads = () => {
-  const payloads = []
-
-  const pushPayload = ({ name, description, typeMapping, partCategory, imageUrl, price, metadata }) => {
-    payloads.push({
-      name,
-      description,
-      guitar_type: 'bass',
-      part_category: partCategory,
-      folder_key: `bass/${partCategory}`,
-      type_mapping: typeMapping,
-      price: Number(price || 0),
-      stock: 30,
-      image_url: imageUrl || null,
-      metadata: { ...(metadata || {}), import_category: 'bass_guitar' },
-      is_active: true,
-    })
-  }
-
-  const addFlatOptions = (options, config) => {
-    Object.entries(options || {}).forEach(([optionKey, option]) => {
-      if (optionKey === 'none') return
-      const label = option?.label || optionKey
-      pushPayload({
-        name: `Bass ${config.label} - ${label}`,
-        description: option?.note || `${config.label} option for Bass builder`,
-        typeMapping: config.typeMapping,
-        partCategory: config.partCategory,
-        imageUrl: pickOptionImage(option),
-        price: option?.price || 0,
-        metadata: { source: 'bassBuilderData', group: config.group, option_key: optionKey },
-      })
-    })
-  }
-
-  const addNestedOptions = (options, config) => {
-    Object.entries(options || {}).forEach(([variantKey, variantOptions]) => {
-      Object.entries(variantOptions || {}).forEach(([optionKey, option]) => {
-        if (optionKey === 'none') return
-        const label = option?.label || optionKey
-        pushPayload({
-          name: `Bass ${config.label} - ${variantKey.toUpperCase()} - ${label}`,
-          description: option?.note || `${config.label} option for ${variantKey.toUpperCase()} bass`,
-          typeMapping: config.typeMapping,
-          partCategory: config.partCategory,
-          imageUrl: pickOptionImage(option),
-          price: option?.price || 0,
-          metadata: { source: 'bassBuilderData', group: config.group, variant: variantKey, option_key: optionKey },
-        })
-      })
-    })
-  }
-
-  addFlatOptions(BASS_BODY_OPTIONS, { label: 'Body', typeMapping: 'body', partCategory: 'body', group: 'BASS_BODY_OPTIONS' })
-  addFlatOptions(BASS_BODY_WOOD_OPTIONS, { label: 'Body Wood', typeMapping: 'bodyWood', partCategory: 'wood_type', group: 'BASS_BODY_WOOD_OPTIONS' })
-  addFlatOptions(BASS_BODY_FINISH_OPTIONS, { label: 'Body Finish', typeMapping: 'bodyFinish', partCategory: 'finish', group: 'BASS_BODY_FINISH_OPTIONS' })
-  addFlatOptions(BASS_NECK_OPTIONS, { label: 'Neck', typeMapping: 'neck', partCategory: 'neck', group: 'BASS_NECK_OPTIONS' })
-  addFlatOptions(BASS_FRETBOARD_OPTIONS, { label: 'Fretboard', typeMapping: 'fretboard', partCategory: 'fretboard', group: 'BASS_FRETBOARD_OPTIONS' })
-  addFlatOptions(BASS_HEADSTOCK_WOOD_OPTIONS, { label: 'Headstock Wood', typeMapping: 'headstockWood', partCategory: 'wood_type', group: 'BASS_HEADSTOCK_WOOD_OPTIONS' })
-  addFlatOptions(BASS_HEADSTOCK_STYLE_OPTIONS, { label: 'Headstock Style', typeMapping: 'headstock', partCategory: 'misc', group: 'BASS_HEADSTOCK_STYLE_OPTIONS' })
-  addFlatOptions(BASS_INLAY_OPTIONS, { label: 'Inlays', typeMapping: 'inlays', partCategory: 'misc', group: 'BASS_INLAY_OPTIONS' })
-  addFlatOptions(BASS_HARDWARE_OPTIONS, { label: 'Hardware', typeMapping: 'hardware', partCategory: 'hardware', group: 'BASS_HARDWARE_OPTIONS' })
-  addFlatOptions(BASS_PICKUP_OPTIONS, { label: 'Pickup Set', typeMapping: 'pickups', partCategory: 'pickups', group: 'BASS_PICKUP_OPTIONS' })
-  addFlatOptions(BASS_PICKUP_TYPE_STYLE_OPTIONS, { label: 'Pickup Type Style', typeMapping: 'pickupTypeStyle', partCategory: 'pickups', group: 'BASS_PICKUP_TYPE_STYLE_OPTIONS' })
-  addFlatOptions(BASS_PICKUP_CONFIG_OPTIONS, { label: 'Pickup Config', typeMapping: 'pickupConfig', partCategory: 'pickups', group: 'BASS_PICKUP_CONFIG_OPTIONS' })
-  addFlatOptions(BASS_STRING_OPTIONS, { label: 'String Setup', typeMapping: 'strings', partCategory: 'strings', group: 'BASS_STRING_OPTIONS' })
-  addFlatOptions(BASS_CONTROL_PLATE_OPTIONS, { label: 'Control Plate', typeMapping: 'controlPlate', partCategory: 'hardware', group: 'BASS_CONTROL_PLATE_OPTIONS' })
-
-  addNestedOptions(BASS_BRIDGE_OPTIONS, { label: 'Bridge', typeMapping: 'bridge', partCategory: 'bridge', group: 'BASS_BRIDGE_OPTIONS' })
-  addNestedOptions(BASS_PICKGUARD_OPTIONS, { label: 'Pickguard', typeMapping: 'pickguard', partCategory: 'pickguard', group: 'BASS_PICKGUARD_OPTIONS' })
-  addNestedOptions(BASS_KNOB_OPTIONS, { label: 'Knobs', typeMapping: 'knobs', partCategory: 'hardware', group: 'BASS_KNOB_OPTIONS' })
-  addNestedOptions(BASS_LOGO_OPTIONS, { label: 'Logo', typeMapping: 'logo', partCategory: 'misc', group: 'BASS_LOGO_OPTIONS' })
-  addNestedOptions(BASS_BACKPLATE_OPTIONS, { label: 'Backplate', typeMapping: 'backplate', partCategory: 'misc', group: 'BASS_BACKPLATE_OPTIONS' })
-  addNestedOptions(BASS_PICKUP_SCREW_OPTIONS, { label: 'Pickup Screws', typeMapping: 'pickupScrews', partCategory: 'hardware', group: 'BASS_PICKUP_SCREW_OPTIONS' })
-
-  return payloads
-}
-const IMPORT_SEED_PAYLOAD_BUILDERS = {
-  electric: buildElectricPartSeedPayloads,
-  bass: buildBassPartSeedPayloads,
-}
 
 const PROJECT_RULES = {
   name: [required('Project Name')],
@@ -982,6 +878,7 @@ const APPOINTMENT_RULES = {
 const SERVICE_RULES = {
   name: [required('Service Name')],
   price: [required('Base Price')],
+  category_id: [required('Category')],
 }
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50]
@@ -1000,16 +897,7 @@ const ORDER_STATUS_MAP = Object.fromEntries(ORDER_STATUS_LIFECYCLE.map(s => [s.v
 
 const getOrderStatusConfig = (status) => ORDER_STATUS_MAP[status] || ORDER_STATUS_LIFECYCLE[0]
 
-const PAYMENT_STATUS_LIFECYCLE = [
-  { value: 'paid', label: 'Paid', color: '#22c55e', bgColor: 'bg-green-500/20', textColor: 'text-green-400', borderColor: 'border-green-500/30' },
-  { value: 'pending', label: 'Pending', color: '#f59e0b', bgColor: 'bg-amber-500/20', textColor: 'text-amber-400', borderColor: 'border-amber-500/30' },
-  { value: 'awaiting_approval', label: 'Pending Approval', color: '#60a5fa', bgColor: 'bg-blue-500/20', textColor: 'text-blue-400', borderColor: 'border-blue-500/30' },
-  { value: 'failed', label: 'Failed', color: '#f87171', bgColor: 'bg-red-500/20', textColor: 'text-red-400', borderColor: 'border-red-500/30' },
-]
-
-const PAYMENT_STATUS_MAP = Object.fromEntries(PAYMENT_STATUS_LIFECYCLE.map(s => [s.value, s]))
-
-const getPaymentStatusConfig = (status) => PAYMENT_STATUS_MAP[status] || PAYMENT_STATUS_LIFECYCLE[1]
+const getPaymentStatusConfig = (status) => getOrderPaymentStatusConfig(status)
 
 const ORDER_STATUS_TABS = [
   { id: 'all', label: 'All', color: '#d4af37', bgColor: 'bg-[var(--gold-primary)]/20', textColor: 'text-[var(--gold-primary)]', borderColor: 'border-[var(--gold-primary)]/30' },
@@ -1028,6 +916,26 @@ const TIMELINE_STEPS = [
   { status: 'out_for_delivery', label: 'Out for Delivery', desc: 'Out for delivery with rider details' },
   { status: 'delivered', label: 'Delivered', desc: 'Successfully delivered to customer' },
 ]
+
+const ORDER_STATUS_TRANSITIONS = {
+  pending: ['processing'],
+  processing: ['shipped'],
+  shipped: ['out_for_delivery'],
+  out_for_delivery: ['delivered'],
+  delivered: [],
+  cancelled: [],
+}
+
+const extractOrderPaymentMethod = (order = {}) => {
+  const rawMethod = String(order.payment_method || order.payment?.method || '').toLowerCase()
+  if (!rawMethod) return 'unknown'
+  if (rawMethod.includes('cod') || rawMethod.includes('cash')) return 'cash'
+  if (rawMethod.includes('gcash') || rawMethod.includes('g-cash')) return 'gcash'
+  if (rawMethod.includes('bank') || rawMethod.includes('transfer') || rawMethod.includes('bdo') || rawMethod.includes('bpi') || rawMethod.includes('unionbank')) return 'bank_transfer'
+  return rawMethod
+}
+
+const isCashOnDeliveryOrder = (order = {}) => extractOrderPaymentMethod(order) === 'cash'
 
 // ── Stock Adjustment Components ───────────────────────────────────────────────
 const ADJUSTMENT_REASONS = [
@@ -1470,8 +1378,7 @@ function AdjustStockModal({ visibleProducts, modal, form, setForm, formErrors, s
       return
     }
     
-    setForm(f => ({ ...f, reason: form.reason, notes: localNotes }))
-    await saveStockAdjust()
+    await saveStockAdjust({ reason: form.reason, notes: localNotes })
   }
   
   return (
@@ -1594,6 +1501,176 @@ function AdjustStockModal({ visibleProducts, modal, form, setForm, formErrors, s
       </div>
       
       {/* Action Buttons */}
+      <div className="flex gap-3 mt-6 pt-4 border-t border-[var(--border)]">
+        <button
+          onClick={closeModal}
+          disabled={isSaving}
+          className="flex-1 py-3 rounded-xl bg-[var(--bg-primary)] text-white font-semibold hover:bg-white/10 transition-colors disabled:opacity-50"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={handleSubmit}
+          disabled={!canSubmit || isSaving}
+          className="flex-1 py-3 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black font-bold hover:shadow-[0_8px_25px_rgba(212,175,55,0.35)] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {isSaving ? 'Processing...' : 'Confirm Adjustment'}
+        </button>
+      </div>
+    </motion.div>
+  )
+}
+
+function AdjustPartStockModal({ modal, form, setForm, formErrors, setFormErrors, closeModal, isSaving, savePartStockAdjust, formatCurrency }) {
+  const [localNotes, setLocalNotes] = useState('')
+  const selectedPart = modal.data || null
+  const adjustmentType = form.change_type
+  const quantity = parseInt(form.quantity) || 0
+  const currentStock = Number(selectedPart?.stock ?? selectedPart?.quantity ?? form.current_stock ?? 0) || 0
+
+  const calculatedNewStock = useMemo(() => {
+    if (!adjustmentType || !quantity) return null
+    if (adjustmentType === 'stock_in') return currentStock + quantity
+    if (adjustmentType === 'stock_out') return currentStock - quantity
+    if (adjustmentType === 'adjustment') return quantity
+    return currentStock
+  }, [adjustmentType, currentStock, quantity])
+
+  const canSubmit = Boolean(selectedPart?.part_id && adjustmentType && quantity > 0)
+  const selectedReason = ADJUSTMENT_REASONS.find(r => r.value === form.reason)
+  const needsNotes = selectedReason?.requiresNotes
+
+  const handleSubmit = async () => {
+    const errors = {}
+
+    if (!selectedPart?.part_id) errors.part_id = 'No guitar part selected'
+    if (!adjustmentType) errors.change_type = 'Please select adjustment type'
+    if (!quantity || quantity < 1) errors.quantity = 'Quantity must be greater than 0'
+    if (adjustmentType === 'stock_out' && quantity > currentStock) {
+      errors.quantity = `Insufficient stock. Available: ${currentStock}`
+    }
+    if (adjustmentType === 'stock_out' && calculatedNewStock < 0) {
+      errors.quantity = 'Stock cannot be negative'
+    }
+    if (needsNotes && !localNotes.trim()) {
+      errors.notes = 'Notes are required for this reason'
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors)
+      return
+    }
+
+    await savePartStockAdjust({ reason: form.reason, notes: localNotes })
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.95 }}
+      className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-3xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto"
+    >
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-white text-xl font-bold">Adjust Guitar Part Stock</h2>
+        <button onClick={closeModal} className="p-2 hover:bg-white/10 rounded-lg transition-colors">
+          <X className="w-5 h-5 text-[var(--text-muted)]" />
+        </button>
+      </div>
+
+      <div className="space-y-5">
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]/50 p-4">
+          <p className="text-sm font-semibold text-[var(--text-muted)] mb-1">Guitar Part</p>
+          <p className="text-white font-semibold">{selectedPart?.name || 'Unknown part'}</p>
+          <p className="text-xs text-[var(--text-muted)] mt-1">
+            {selectedPart?.type_mapping || 'No SKU'} • {formatCurrency(Number(selectedPart?.price || 0))}
+          </p>
+          {formErrors.part_id && <p className="mt-2 text-xs text-red-400">{formErrors.part_id}</p>}
+        </div>
+
+        <div className="p-4 bg-[var(--bg-primary)]/50 rounded-xl border border-[var(--border)]">
+          <StockVisualizer
+            currentStock={currentStock}
+            newStock={calculatedNewStock}
+            threshold={10}
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-semibold text-[var(--text-muted)] mb-2">Adjustment Type *</label>
+          <div className="grid grid-cols-3 gap-2">
+            {Object.entries(ADJUSTMENT_TYPE_LABELS).map(([key, { label }]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => {
+                  setForm(f => ({ ...f, change_type: key }))
+                  setFormErrors(e => ({ ...e, change_type: null }))
+                }}
+                className={`py-3 px-3 rounded-xl text-sm font-medium transition-all border ${
+                  adjustmentType === key
+                    ? 'bg-[var(--gold-primary)] text-black border-[var(--gold-primary)]'
+                    : 'bg-[var(--bg-primary)] text-[var(--text-muted)] border-[var(--border)] hover:border-[var(--gold-primary)]/50'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {formErrors.change_type && (
+            <p className="mt-1 text-xs text-red-400">{formErrors.change_type}</p>
+          )}
+        </div>
+
+        <div>
+          <label className="block text-sm font-semibold text-[var(--text-muted)] mb-2">Quantity *</label>
+          <QuantityStepper
+            value={quantity}
+            onChange={(val) => {
+              setForm(f => ({ ...f, quantity: val }))
+              setFormErrors(e => ({ ...e, quantity: null }))
+            }}
+            maxValue={adjustmentType === 'stock_out' ? currentStock : undefined}
+            disabled={!selectedPart?.part_id || !adjustmentType}
+          />
+          {formErrors.quantity && (
+            <p className="mt-1 text-xs text-red-400">{formErrors.quantity}</p>
+          )}
+        </div>
+
+        <div>
+          <label className="block text-sm font-semibold text-[var(--text-muted)] mb-2">Reason *</label>
+          <ReasonSelector
+            value={form.reason || ''}
+            onChange={(val) => {
+              setForm(f => ({ ...f, reason: val }))
+              setFormErrors(e => ({ ...e, reason: null }))
+            }}
+          />
+          {formErrors.reason && (
+            <p className="mt-1 text-xs text-red-400">{formErrors.reason}</p>
+          )}
+        </div>
+
+        <div>
+          <label className="block text-sm font-semibold text-[var(--text-muted)] mb-2">
+            Notes {needsNotes && <span className="text-red-400">*</span>}
+          </label>
+          <textarea
+            value={localNotes}
+            onChange={(e) => {
+              setLocalNotes(e.target.value)
+              setFormErrors(e => ({ ...e, notes: null }))
+            }}
+            placeholder={needsNotes ? 'Please provide additional details...' : 'Add any additional details (optional)'}
+            className="w-full h-20 px-4 py-3 bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl text-white text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
+          />
+          {formErrors.notes && (
+            <p className="mt-1 text-xs text-red-400">{formErrors.notes}</p>
+          )}
+        </div>
+      </div>
+
       <div className="flex gap-3 mt-6 pt-4 border-t border-[var(--border)]">
         <button
           onClick={closeModal}
@@ -1746,7 +1823,7 @@ function ServiceGridView({ services, onEdit, onDelete }) {
 export function AdminPage() {
   const { user, isAuthenticated } = useAuth()
   const navigate = useNavigate()
-  const isSuperAdmin = user?.role === 'super_admin'
+  const isSuperAdmin = hasRole(user?.role, 'admin')
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -1769,7 +1846,23 @@ export function AdminPage() {
   const [paymentStatusUpdate, setPaymentStatusUpdate] = useState({ loading: false, orderId: null })
 
   // Confirm dialog state
-  const [confirm, setConfirm] = useState({ open: false, title: '', description: '', onConfirm: null, isBusy: false, variant: 'danger' })
+  const [confirm, setConfirm] = useState({
+    open: false,
+    title: '',
+    description: '',
+    confirmLabel: 'Confirm',
+    cancelLabel: 'Cancel',
+    onConfirm: null,
+    isBusy: false,
+    variant: 'danger',
+  })
+  const [projectArchiveFeedback, setProjectArchiveFeedback] = useState({
+    open: false,
+    projectId: null,
+    projectName: '',
+    snapshot: null,
+    busy: false,
+  })
 
   // Filters
   const [userRoleFilter, setUserRoleFilter] = useState('all')
@@ -1813,8 +1906,8 @@ export function AdminPage() {
   const [inventorySubTab, setInventorySubTab] = useState('products')
 
   // Inventory tab state - separate for products and parts
-  const [productsInventoryFilter, setProductsInventoryFilter] = useState({ status: 'all', sort: 'name', page: 1 })
-  const [partsInventoryFilter, setPartsInventoryFilter] = useState({ status: 'all', sort: 'name', page: 1 })
+  const [productsInventoryFilter, setProductsInventoryFilter] = useState({ search: '', status: 'all', sort: 'name', page: 1 })
+  const [partsInventoryFilter, setPartsInventoryFilter] = useState({ search: '', status: 'all', category: 'all', sort: 'name', page: 1 })
   const INVENTORY_SUB_TABS = [
     { id: 'products', label: 'Products', icon: Package },
     { id: 'guitar-parts', label: 'Guitar Parts', icon: Guitar },
@@ -1868,8 +1961,6 @@ export function AdminPage() {
   const [expandedPartCategories, setExpandedPartCategories] = useState(new Set())
   const [partDensity, setPartDensity] = useState('comfortable')
   const [partSearchQuery, setPartSearchQuery] = useState('')
-  const [isImportingElectricParts, setIsImportingElectricParts] = useState(false)
-  const [isImportingBassParts, setIsImportingBassParts] = useState(false)
 
   // Services section state
   const [serviceViewMode, setServiceViewMode] = useState('grid')
@@ -1890,7 +1981,7 @@ export function AdminPage() {
 
   // ── Derived / filtered views ─────────────────────────────────────────────
   const visibleProducts = products || []
-  const visibleParts = parts || []
+  const visibleParts = useMemo(() => (parts || []).map((part) => normalizeBuilderPart(part)), [parts])
   const productImageById = useMemo(
     () =>
       new Map(
@@ -1923,10 +2014,10 @@ export function AdminPage() {
     return true
   })
 
-  const partCategoryOptions = useMemo(
-    () => Array.from(new Set((parts || []).map((p) => p.part_category).filter(Boolean))).sort(),
-    [parts]
-  )
+  const inventoryPartCategoryOptions = useMemo(() => {
+    const presentCategories = new Set((visibleParts || []).map((part) => part.inventory_category).filter(Boolean))
+    return INVENTORY_PART_CATEGORY_OPTIONS.filter(({ value }) => presentCategories.has(value))
+  }, [visibleParts])
 
   // Filtered and sorted orders
   const filteredOrders = useMemo(() => {
@@ -1993,7 +2084,7 @@ export function AdminPage() {
   // Combined inventory items (products + parts)
   const inventoryItems = useMemo(() => {
     const prods = visibleInventory.map(p => ({ ...p, type: 'product', stock: p.stock, name: p.name, sku: p.sku, low_stock_threshold: p.low_stock_threshold, part_id: p.product_id }))
-    const pts = visibleParts.map(p => ({ ...p, type: 'part', stock: p.quantity, name: p.name, sku: p.type_mapping, low_stock_threshold: 10 }))
+    const pts = visibleParts.map(p => ({ ...p, type: 'part', stock: Number(p.stock ?? p.quantity ?? 0), name: p.name, sku: p.type_mapping, low_stock_threshold: 10 }))
     return [...prods, ...pts]
   }, [visibleInventory, visibleParts])
 
@@ -2060,14 +2151,26 @@ export function AdminPage() {
 
   // Separate filtered inventory for Guitar Parts sub-tab
   const filteredPartsInventory = useMemo(() => {
-    const pts = visibleParts.map(p => ({ ...p, type: 'part', stock: p.quantity, name: p.name, sku: p.type_mapping, low_stock_threshold: 10 }))
+    const pts = visibleParts.map((p) => ({
+      ...p,
+      type: 'part',
+      stock: Number(p.stock ?? p.quantity ?? 0),
+      name: p.name,
+      sku: p.type_mapping,
+      low_stock_threshold: 10,
+    }))
     let result = [...pts]
     const searchTerm = String(partsInventoryFilter.search || '').trim().toLowerCase()
     if (searchTerm) {
       result = result.filter((item) =>
         String(item.name || '').toLowerCase().includes(searchTerm) ||
-        String(item.sku || '').toLowerCase().includes(searchTerm)
+        String(item.sku || '').toLowerCase().includes(searchTerm) ||
+        String(INVENTORY_PART_CATEGORY_LABELS[item.inventory_category] || '').toLowerCase().includes(searchTerm)
       )
+    }
+    const categoryFilter = partsInventoryFilter.category || 'all'
+    if (categoryFilter !== 'all') {
+      result = result.filter((item) => item.inventory_category === categoryFilter)
     }
     const statusFilter = partsInventoryFilter.status
     if (statusFilter !== 'all') {
@@ -2082,6 +2185,10 @@ export function AdminPage() {
       })
     }
     result.sort((a, b) => {
+      const categoryCompare = (INVENTORY_PART_CATEGORY_LABELS[a.inventory_category] || '').localeCompare(
+        INVENTORY_PART_CATEGORY_LABELS[b.inventory_category] || ''
+      )
+      if (categoryCompare !== 0) return categoryCompare
       if (partsInventoryFilter.sort === 'name') return (a.name || '').localeCompare(b.name || '')
       if (partsInventoryFilter.sort === 'sku') return (a.sku || '').localeCompare(b.sku || '')
       if (partsInventoryFilter.sort === 'stock_low') return Number(a.stock || 0) - Number(b.stock || 0)
@@ -2108,7 +2215,7 @@ export function AdminPage() {
 
   const inventoryHealthData = (() => {
     const productItems = visibleProducts.map((p) => ({ stock: Number(p.stock ?? 0), threshold: Number(p.low_stock_threshold ?? 10) }))
-    const partItems = visibleParts.map((p) => ({ stock: Number(p.quantity ?? 0), threshold: 10 }))
+    const partItems = visibleParts.map((p) => ({ stock: Number(p.stock ?? p.quantity ?? 0), threshold: 10 }))
     const items = [...productItems, ...partItems]
     if (items.length === 0) return { value: '0%', status: 'Healthy', statusClass: 'text-emerald-400', iconBg: 'bg-emerald-500/15' }
     let critical = false, warning = false, healthyCount = 0
@@ -2166,8 +2273,8 @@ export function AdminPage() {
   }, [appointmentBranchAddress, showToast])
 
   // ── Confirm dialog helper ────────────────────────────────────────────────
-  const openConfirm = ({ title, description, onConfirm, variant = 'danger' }) => {
-    setConfirm({ open: true, title, description, onConfirm, isBusy: false, variant })
+  const openConfirm = ({ title, description, onConfirm, variant = 'danger', confirmLabel = 'Confirm', cancelLabel = 'Cancel' }) => {
+    setConfirm({ open: true, title, description, confirmLabel, cancelLabel, onConfirm, isBusy: false, variant })
   }
   const closeConfirm = () => setConfirm(c => ({ ...c, open: false }))
   const handleConfirmAction = async () => {
@@ -2297,14 +2404,6 @@ export function AdminPage() {
     try {
       await adminApi.updateAppointmentStatus(id, status, reason)
       showToast('Appointment status updated', 'success')
-      fetchAppointments()
-    } catch (e) { showToast(e.message, 'error') }
-  }, [showToast, fetchAppointments])
-
-  const handleAppointmentPaymentStatusChange = useCallback(async (id, paymentStatus) => {
-    try {
-      await adminApi.updateAppointment(id, { payment_status: paymentStatus })
-      showToast('Payment status updated', 'success')
       fetchAppointments()
     } catch (e) { showToast(e.message, 'error') }
   }, [showToast, fetchAppointments])
@@ -2474,15 +2573,41 @@ export function AdminPage() {
        initialForm.image_url = data.primary_image
      }
 
-     // Initialize status fields for order-details modal
-     if (type === 'order-details' && data) {
-       initialForm.order_status = data.status || 'pending'
-       initialForm.payment_status = data.payment_status || data.payment?.status || 'pending'
-     }
+    // Initialize status fields for order-details modal
+    if (type === 'order-details' && data) {
+      initialForm.order_status = data.status || 'pending'
+      initialForm.payment_status = normalizePaymentStatus(data.payment_status || data.payment?.status)
+    }
 
      // Convert duration_minutes (from API) to duration (hours for form)
      if (type === 'service' && data?.duration_minutes) {
        initialForm.duration = Number(data.duration_minutes) / 60
+     }
+
+     if (type === 'service') {
+       initialForm.category_id = normalizeServiceCategoryId(data?.category_id || data?.category)
+     }
+
+     if (type === 'part') {
+       const normalizedPart = normalizeBuilderPart(initialForm)
+       initialForm = {
+         guitar_type: 'electric',
+         part_category: '',
+         type_mapping: '',
+         builder_category: '',
+         inventory_category: '',
+         stock: 0,
+         price: 0,
+         is_active: true,
+         ...normalizedPart,
+       }
+       initialForm.builder_category =
+         initialForm.builder_category || getBuilderCategoryForTypeMapping(initialForm.type_mapping)
+       initialForm.part_category =
+         initialForm.part_category || SLOT_TO_PART_CATEGORY[initialForm.type_mapping] || ''
+       initialForm.inventory_category =
+         normalizeInventoryPartCategory(initialForm.inventory_category) ||
+         deriveInventoryPartCategory(initialForm)
      }
 
      setForm(initialForm)
@@ -2675,9 +2800,27 @@ export function AdminPage() {
       if (form.image_file) {
         finalImageUrl = await uploadToCloudinary(form.image_file)
       }
-      const payload = { ...form, image_url: finalImageUrl }
+      const technicalPartCategory =
+        form.part_category ||
+        SLOT_TO_PART_CATEGORY[form.type_mapping] ||
+        'misc'
+      const payload = {
+        ...form,
+        image_url: finalImageUrl,
+        part_category: technicalPartCategory,
+        stock: Number(form.stock ?? 0) || 0,
+        price: Number(form.price ?? 0) || 0,
+        metadata: {
+          ...(form.metadata && typeof form.metadata === 'object' ? form.metadata : {}),
+          inventory_category:
+            normalizeInventoryPartCategory(form.inventory_category) ||
+            deriveInventoryPartCategory(form),
+        },
+      }
       delete payload.image_file
       delete payload.preview_url
+      delete payload.inventory_category
+      delete payload.quantity
 
       if (modal.data?.part_id) {
         await adminApi.updateBuilderPart(modal.data.part_id, payload)
@@ -2701,45 +2844,6 @@ export function AdminPage() {
         showToast('Builder Part deactivated')
         fetchParts()
       },
-    })
-  }
-
-  const importBuilderPartsByType = async ({ guitarType, label, setImporting }) => {
-    setImporting(true)
-    try {
-      const response = await adminApi.importBuilderPartsFromModels(guitarType)
-      const stats = response?.data?.imported || {}
-      await fetchParts()
-      if ((stats.failed || 0) > 0) {
-        showToast(
-          `${label} import done: ${stats.created || 0} added, ${stats.updated || 0} updated, ${stats.failed || 0} failed.`,
-          'error'
-        )
-      } else {
-        showToast(`${label} import done: ${stats.created || 0} added, ${stats.updated || 0} updated.`)
-      }
-    } catch (error) {
-      showToast(error.message || `Failed to import ${label.toLowerCase()} parts`, 'error')
-    } finally {
-      setImporting(false)
-    }
-  }
-
-  const importElectricParts = async () => {
-    if (isImportingElectricParts) return
-    await importBuilderPartsByType({
-      guitarType: 'electric',
-      label: 'Electric Guitar',
-      setImporting: setIsImportingElectricParts,
-    })
-  }
-
-  const importBassParts = async () => {
-    if (isImportingBassParts) return
-    await importBuilderPartsByType({
-      guitarType: 'bass',
-      label: 'Bass Guitar',
-      setImporting: setIsImportingBassParts,
     })
   }
 
@@ -2788,9 +2892,16 @@ export function AdminPage() {
   // ── CRUD: Orders ─────────────────────────────────────────────────────────
   const updateOrderStatus = async (orderId, status) => {
     const order = orders.find(o => o.order_id === orderId)
+    const currentStatus = order?.status || 'pending'
+    const allowedTransitions = ORDER_STATUS_TRANSITIONS[currentStatus] || []
+
+    if (!allowedTransitions.includes(status)) {
+      showToast(`Invalid status transition from ${currentStatus} to ${status}.`, 'error')
+      return
+    }
     
     if (status === 'processing') {
-      const paymentVerified = order?.payment?.status === 'verified' || order?.payment_status === 'paid'
+      const paymentVerified = normalizePaymentStatus(order?.payment_status || order?.payment?.status) === 'approved'
       if (!paymentVerified) {
         showToast('Cannot start processing - payment not verified. Please approve payment first.', 'error')
         return
@@ -2806,13 +2917,17 @@ export function AdminPage() {
 
   const approvePayment = async (orderId) => {
     const order = orders.find(o => o.order_id === orderId)
+    if (order && isCashOnDeliveryOrder(order)) {
+      showToast('COD orders do not require payment verification.', 'error')
+      return
+    }
     if (order?.payment) {
       setForm({
         order_id: order.order_id,
         order_number: order.order_number || order.order_id?.slice(0, 8),
         payment_method: order.payment?.method || order.payment_method || 'N/A',
         amount: order.total || order.total_amount || order.payment?.amount || 0,
-        payment_status: order.payment_status || order.payment?.status || 'pending',
+        payment_status: normalizePaymentStatus(order.payment_status || order.payment?.status),
         proof_url: order.payment?.proof_url || null,
       })
       setFormErrors({})
@@ -2824,8 +2939,12 @@ export function AdminPage() {
 
   const updatePaymentStatus = async () => {
     if (!form.order_id) return
+    if (modal.data && isCashOnDeliveryOrder(modal.data)) {
+      showToast('COD orders do not support payment status updates.', 'error')
+      return
+    }
     
-    const originalStatus = modal.data?.payment_status || modal.data?.payment?.status || 'pending'
+    const originalStatus = normalizePaymentStatus(modal.data?.payment_status || modal.data?.payment?.status)
     if (form.payment_status === originalStatus) {
       showToast('No changes detected', 'error')
       return
@@ -2854,10 +2973,12 @@ export function AdminPage() {
     
     const currentOrder = orders.find(o => o.order_id === modal.data.order_id)
     const currentOrderStatus = currentOrder?.status || modal.data.status || 'pending'
-    const currentPaymentStatus = currentOrder?.payment_status || modal.data.payment_status || modal.data?.payment?.status || 'pending'
+    const currentPaymentStatus = normalizePaymentStatus(
+      currentOrder?.payment_status || modal.data.payment_status || modal.data?.payment?.status
+    )
     
     const newOrderStatus = form.order_status || currentOrderStatus
-    const newPaymentStatus = form.payment_status || currentPaymentStatus
+    const newPaymentStatus = normalizePaymentStatus(form.payment_status || currentPaymentStatus)
     
     const orderStatusChanged = newOrderStatus !== currentOrderStatus
     const paymentStatusChanged = newPaymentStatus !== currentPaymentStatus
@@ -2867,8 +2988,16 @@ export function AdminPage() {
       return
     }
 
-    if (newOrderStatus === 'processing' && newPaymentStatus !== 'paid' && newPaymentStatus !== 'verified') {
-      showToast('Cannot start processing - payment not verified. Please set payment to Paid first.', 'error')
+    if (orderStatusChanged) {
+      const allowedTransitions = ORDER_STATUS_TRANSITIONS[currentOrderStatus] || []
+      if (!allowedTransitions.includes(newOrderStatus)) {
+        showToast(`Invalid status transition from ${currentOrderStatus} to ${newOrderStatus}.`, 'error')
+        return
+      }
+    }
+
+    if (newOrderStatus === 'processing' && newPaymentStatus !== 'approved') {
+      showToast('Cannot start processing until the payment is approved.', 'error')
       return
     }
 
@@ -2922,15 +3051,62 @@ export function AdminPage() {
 
   const deleteProject = (id, name) => {
     openConfirm({
-      title: 'Archive Project?',
-      description: `"${name}" will be soft-deleted and hidden from the project list. Linked tasks will be preserved.`,
+      title: 'Archive Project',
+      description: 'Are you sure you want to delete this project?',
+      confirmLabel: 'Confirm Delete',
+      cancelLabel: 'Cancel',
       variant: 'danger',
       onConfirm: async () => {
-        await adminApi.deleteProject(id)
-        showToast('Project archived')
-        fetchProjects()
+        const existingProject = (projects || []).find((project) => project.project_id === id) || null
+        const response = await adminApi.deleteProject(id)
+        const deletedProject = response?.data || existingProject
+
+        setProjects((prev) => prev.filter((project) => project.project_id !== id))
+        setProjectArchiveFeedback({
+          open: true,
+          projectId: id,
+          projectName: name || deletedProject?.name || deletedProject?.title || 'Project',
+          snapshot: deletedProject,
+          busy: false,
+        })
       },
     })
+  }
+
+  const closeProjectArchiveFeedback = () => {
+    setProjectArchiveFeedback({
+      open: false,
+      projectId: null,
+      projectName: '',
+      snapshot: null,
+      busy: false,
+    })
+  }
+
+  const undoArchivedProject = async () => {
+    if (!projectArchiveFeedback.projectId) return
+    setProjectArchiveFeedback((prev) => ({ ...prev, busy: true }))
+
+    try {
+      const response = await adminApi.restoreProject(projectArchiveFeedback.projectId)
+      const restoredProject = response?.data || projectArchiveFeedback.snapshot
+
+      if (restoredProject) {
+        setProjects((prev) => {
+          const withoutRestored = prev.filter((project) => project.project_id !== restoredProject.project_id)
+          const next = [restoredProject, ...withoutRestored]
+          next.sort((left, right) => new Date(right.created_at || 0).getTime() - new Date(left.created_at || 0).getTime())
+          return next
+        })
+      } else {
+        await fetchProjects()
+      }
+
+      closeProjectArchiveFeedback()
+    } catch (error) {
+      showToast(error.message || 'Failed to restore archived project', 'error')
+      setProjectArchiveFeedback((prev) => ({ ...prev, busy: false }))
+    }
   }
 
   const assignProjectTeam = async (projectId, userIds) => {
@@ -2951,6 +3127,7 @@ export function AdminPage() {
          description: form.description || '',
          price: Number(form.price),
          duration_minutes: Math.round(Number(form.duration) * 60),
+         category_id: normalizeServiceCategoryId(form.category_id || form.category),
        }
 
        // is_active only sent on update (create defaults to true in DB)
@@ -3009,16 +3186,19 @@ export function AdminPage() {
   }
 
   // ── CRUD: Inventory ──────────────────────────────────────────────────────
-  const saveStockAdjust = async () => {
+  const saveStockAdjust = async (overrideForm = {}) => {
     setIsSaving(true)
     try {
-      const { product_id, change_type, quantity, reason, notes } = form
+      const { product_id, change_type, quantity, reason, notes } = { ...form, ...overrideForm }
       if (!product_id || !change_type || !quantity) {
         showToast('Please fill all required fields', 'error'); return
       }
+      const existingProduct = visibleProducts.find((product) => product.product_id === product_id)
+      const currentStock = Number(existingProduct?.stock ?? form.current_stock ?? 0) || 0
+      const qty = Number(quantity)
       const payload = { 
         productId: product_id, 
-        quantity: Number(quantity), 
+        quantity: change_type === 'adjustment' ? qty - currentStock : qty,
         reason: reason || notes,
         notes: notes 
       }
@@ -3027,6 +3207,49 @@ export function AdminPage() {
       else await adminApi.adjustStock(payload)
       showToast('Stock adjusted!')
       fetchInventory()
+      closeModal()
+    } catch (e) { showToast(e.message, 'error') }
+    finally { setIsSaving(false) }
+  }
+
+  const savePartStockAdjust = async (overrideForm = {}) => {
+    setIsSaving(true)
+    try {
+      const { part_id, change_type, quantity, reason, notes } = { ...form, ...overrideForm }
+      if (!part_id || !change_type || !quantity) {
+        showToast('Please fill all required fields', 'error'); return
+      }
+
+      const existingPart = visibleParts.find((part) => part.part_id === part_id)
+      const currentStock = Number(existingPart?.stock ?? existingPart?.quantity ?? form.current_stock ?? 0) || 0
+      const qty = Number(quantity)
+
+      let nextStock = currentStock
+      if (change_type === 'stock_in') nextStock = currentStock + qty
+      else if (change_type === 'stock_out') nextStock = currentStock - qty
+      else nextStock = qty
+
+      if (nextStock < 0) {
+        showToast('Stock cannot be negative', 'error')
+        return
+      }
+
+      await adminApi.updateBuilderPart(part_id, {
+        stock: nextStock,
+        metadata: {
+          ...(existingPart?.metadata && typeof existingPart.metadata === 'object' ? existingPart.metadata : {}),
+          last_stock_adjustment: {
+            change_type,
+            quantity: qty,
+            reason: reason || notes || null,
+            notes: notes || null,
+            adjusted_at: new Date().toISOString(),
+          },
+        },
+      })
+
+      showToast('Guitar part stock adjusted!')
+      fetchParts()
       closeModal()
     } catch (e) { showToast(e.message, 'error') }
     finally { setIsSaving(false) }
@@ -3122,6 +3345,21 @@ export function AdminPage() {
   const inventoryCurrentRows = inventoryIsProducts ? filteredProductsInventory : filteredPartsInventory
   const inventoryCurrentPageRows = inventoryIsProducts ? paginatedProductsInventory : paginatedPartsInventory
   const inventoryTotalPages = Math.max(1, Math.ceil(inventoryCurrentRows.length / INVENTORY_PAGE_SIZE))
+  const inventoryGroupedPartPageRows = useMemo(() => {
+    if (inventoryIsProducts) return []
+
+    let previousCategory = null
+    return inventoryCurrentPageRows.flatMap((item) => {
+      const category = item.inventory_category || 'accessories'
+      const rows = []
+      if (category !== previousCategory) {
+        rows.push({ type: 'group', category })
+        previousCategory = category
+      }
+      rows.push({ type: 'item', item })
+      return rows
+    })
+  }, [inventoryCurrentPageRows, inventoryIsProducts])
   const resolveInventoryImage = (item) => {
     if (!item) return null
     if (item.primary_image) return item.primary_image
@@ -3164,11 +3402,58 @@ export function AdminPage() {
         open={confirm.open}
         title={confirm.title}
         description={confirm.description}
+        confirmLabel={confirm.confirmLabel}
+        cancelLabel={confirm.cancelLabel}
         variant={confirm.variant}
         isBusy={confirm.isBusy}
         onConfirm={handleConfirmAction}
         onCancel={closeConfirm}
       />
+
+      <AnimatePresence>
+        {projectArchiveFeedback.open && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[210] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 12 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 12 }}
+              className="w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6 shadow-2xl"
+            >
+              <div className="mb-5">
+                <h3 className="text-xl font-bold text-white">Project Archived</h3>
+                <p className="mt-2 text-sm text-[var(--text-muted)]">You deleted this project.</p>
+                <p className="mt-1 text-xs text-[var(--text-muted)]/80">
+                  {projectArchiveFeedback.projectName}
+                </p>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={closeProjectArchiveFeedback}
+                  disabled={projectArchiveFeedback.busy}
+                  className="flex-1 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-2.5 text-sm font-semibold text-[var(--text-muted)] transition-colors hover:text-white disabled:opacity-60"
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  onClick={undoArchivedProject}
+                  disabled={projectArchiveFeedback.busy}
+                  className="flex-1 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] px-4 py-2.5 text-sm font-bold text-black transition-all hover:shadow-[0_0_20px_rgba(212,175,55,0.35)] disabled:opacity-60 flex items-center justify-center gap-2"
+                >
+                  {projectArchiveFeedback.busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
+                  Undo / Revert
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {false && (
         <>
@@ -3609,26 +3894,6 @@ export function AdminPage() {
                    </button>
                  </div>
                )}
-              {activeTab === 'guitar-parts' && isSuperAdmin && (
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={importElectricParts}
-                    disabled={isImportingElectricParts || isImportingBassParts}
-                    className="flex items-center gap-2 px-4 py-2.5 border border-[var(--border)] rounded-xl font-semibold text-sm text-[var(--text-light)] hover:border-[var(--gold-primary)] hover:bg-[var(--gold-primary)]/10 transition-all disabled:opacity-60"
-                  >
-                    {isImportingElectricParts ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowUpCircle className="w-4 h-4" />}
-                    {isImportingElectricParts ? 'Importing Electric Guitar Parts...' : 'Import Electric Guitar'}
-                  </button>
-                  <button
-                    onClick={importBassParts}
-                    disabled={isImportingElectricParts || isImportingBassParts}
-                    className="flex items-center gap-2 px-4 py-2.5 border border-[var(--border)] rounded-xl font-semibold text-sm text-[var(--text-light)] hover:border-[var(--gold-primary)] hover:bg-[var(--gold-primary)]/10 transition-all disabled:opacity-60"
-                  >
-                    {isImportingBassParts ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowDownCircle className="w-4 h-4" />}
-                    {isImportingBassParts ? 'Importing Bass Guitar Parts...' : 'Import Bass Guitar'}
-                  </button>
-                </div>
-              )}
               {activeTab === 'products' && isSuperAdmin && (
                 <button onClick={() => openModal('product')} className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black rounded-xl font-semibold text-sm hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all">
                   <Plus className="w-4 h-4" /> Add Product
@@ -3676,7 +3941,7 @@ export function AdminPage() {
                       { label: 'Revenue this month', value: formatCurrency(salesReport?.monthlySales || 0), badge: salesReport?.monthlySales > 0 ? '+live' : 'Live', badgeCls: 'bg-green-500/10 text-green-400' },
                       { label: 'Total orders', value: visibleOrders.length, badge: 'Order volume', badgeCls: 'bg-blue-500/10 text-blue-400' },
                       { label: 'Active projects', value: visibleProjects.filter(p => p.status === 'in_progress').length, badge: 'In progress', badgeCls: 'bg-purple-500/10 text-purple-400' },
-                      { label: 'Open appointments', value: visibleAppointments.filter(a => a.status === 'pending' || a.status === 'approved').length, badge: 'Action required', badgeCls: 'bg-[var(--gold-primary)]/10 text-[var(--gold-primary)]' },
+                      { label: 'Open appointments', value: visibleAppointments.filter(a => ['pending', 'approved', 'confirmed', 'ready_for_pickup'].includes(a.status)).length, badge: 'Action required', badgeCls: 'bg-[var(--gold-primary)]/10 text-[var(--gold-primary)]' },
                     ].map((stat) => (
                       <div key={stat.label} className="rounded-3xl border border-[var(--border)] bg-[var(--bg-primary)] p-5">
                         <p className="text-[var(--text-muted)] text-sm">{stat.label}</p>
@@ -4455,6 +4720,7 @@ export function AdminPage() {
                     <p className="mt-1 text-sm text-[var(--text-muted)]">Manage your product inventory and listings.</p>
                   </div>
                   {isSuperAdmin && (
+                    inventoryIsProducts && (
                     <button
                       onClick={() => openModal('product')}
                       className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] px-4 py-2 text-sm font-semibold text-black"
@@ -4462,6 +4728,7 @@ export function AdminPage() {
                       <Plus className="h-4 w-4" />
                       Add New Product
                     </button>
+                    )
                   )}
                 </div>
 
@@ -4489,7 +4756,7 @@ export function AdminPage() {
                   })}
                 </div>
 
-                <div className="mt-5 grid gap-3 lg:grid-cols-[1.2fr_auto_auto]">
+                <div className={`mt-5 grid gap-3 ${inventoryIsProducts ? 'lg:grid-cols-[1.2fr_auto_auto]' : 'xl:grid-cols-[1.2fr_auto_auto_auto]'}`}>
                   <div className="relative">
                     <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]" />
                     <input
@@ -4530,6 +4797,24 @@ export function AdminPage() {
                     </select>
                   </div>
 
+                  {!inventoryIsProducts && (
+                    <select
+                      value={partsInventoryFilter.category || 'all'}
+                      onChange={(e) => {
+                        setPartsInventoryFilter((prev) => ({ ...prev, category: e.target.value }))
+                        setInventoryPage(1)
+                      }}
+                      className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-white"
+                    >
+                      <option value="all">All Categories</option>
+                      {inventoryPartCategoryOptions.map((category) => (
+                        <option key={category.value} value={category.value}>
+                          {category.label}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+
                   <select
                     value={inventoryCurrentFilter.sort}
                     onChange={(e) => {
@@ -4569,7 +4854,23 @@ export function AdminPage() {
                           </td>
                         </tr>
                       ) : (
-                        inventoryCurrentPageRows.map((item) => {
+                        (inventoryIsProducts
+                          ? inventoryCurrentPageRows.map((item) => ({ type: 'item', item }))
+                          : inventoryGroupedPartPageRows
+                        ).map((row, index) => {
+                          if (row.type === 'group') {
+                            return (
+                              <tr key={`group-${row.category}-${index}`} className="border-b border-[var(--border)]/70 bg-[var(--gold-primary)]/8">
+                                <td colSpan={7} className="px-4 py-2.5">
+                                  <span className="inline-flex rounded-full border border-[var(--gold-primary)]/35 bg-[var(--gold-primary)]/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--gold-primary)]">
+                                    {INVENTORY_PART_CATEGORY_LABELS[row.category] || 'Accessories'}
+                                  </span>
+                                </td>
+                              </tr>
+                            )
+                          }
+
+                          const item = row.item
                           const stock = Number(item.stock ?? 0)
                           const threshold = Number(item.low_stock_threshold ?? 10)
                           const isOutOfStock = stock <= 0
@@ -4611,7 +4912,7 @@ export function AdminPage() {
                               <td className="px-4 py-3 text-[var(--text-muted)]">
                                 {inventoryIsProducts
                                   ? (item.category_name || 'Uncategorized')
-                                  : (PART_CATEGORY_LABELS[item.part_category] || item.part_category || 'General')}
+                                  : (INVENTORY_PART_CATEGORY_LABELS[item.inventory_category] || 'Accessories')}
                               </td>
                               <td className="px-4 py-3 font-mono text-xs text-[var(--text-muted)]">{item.sku || '�'}</td>
                               <td className="px-4 py-3 font-semibold text-white">{formatCurrency(Number(item.price || 0))}</td>
@@ -4627,7 +4928,10 @@ export function AdminPage() {
                                     if (inventoryIsProducts) {
                                       openModal('inventory', { product_id: item.product_id, name: item.name })
                                     } else {
-                                      openModal('part', item)
+                                      openModal('part_inventory', {
+                                        ...item,
+                                        current_stock: Number(item.stock ?? item.quantity ?? 0),
+                                      })
                                     }
                                   }}
                                   className="rounded-lg border border-[var(--border)] p-2 text-[var(--text-muted)] hover:text-white"
@@ -4860,12 +5164,53 @@ export function AdminPage() {
               {modal.type === 'view_appointment' && modal.data && (() => {
                 const apt = modal.data;
                 const apptDate = apt.scheduled_at || apt.date;
+                let guitarDetails = apt?.guitar_details
+                if (typeof guitarDetails === 'string') {
+                  try {
+                    guitarDetails = JSON.parse(guitarDetails)
+                  } catch {
+                    guitarDetails = null
+                  }
+                }
+
+                const mappedFromDetails = Array.isArray(guitarDetails?.guitars) && guitarDetails.guitars.length > 0
+                  ? guitarDetails.guitars
+                  : (guitarDetails ? [guitarDetails] : [])
+
+                const mappedFromNotes = (typeof apt?.notes === 'string' ? apt.notes.split('\n') : [])
+                  .map((line) => {
+                    const match = line.match(/^Guitar\s+\d+:\s*(.+?)\s+\(([^)]+)\)\s*$/i)
+                    if (!match) return null
+                    const descriptor = match[1]?.trim() || ''
+                    const [brand, ...modelParts] = descriptor.split(' ')
+                    return {
+                      brand: brand || '',
+                      model: modelParts.join(' ') || '',
+                      type: String(match[2] || '').trim().toLowerCase(),
+                      serial: 'N/A',
+                      notes: '',
+                    }
+                  })
+                  .filter(Boolean)
+
+                const appointmentGuitars = (mappedFromDetails.length > 0 ? mappedFromDetails : mappedFromNotes)
+                  .map((guitar) => ({
+                    ...guitar,
+                    brand: guitar?.brand || guitar?.name || '',
+                    model: guitar?.model || guitar?.variant || '',
+                    type: guitar?.type || guitar?.guitar_type || '',
+                    serial: guitar?.serial || guitar?.serialNumber || 'N/A',
+                  }))
+                  .filter((guitar) => guitar.brand || guitar.model || guitar.type || guitar.notes)
+                const primaryGuitar = appointmentGuitars[0] || null;
                 const statusColors = {
                   pending: 'bg-yellow-500/10 text-yellow-500 border-yellow-500/30',
                   approved: 'bg-green-500/10 text-green-400 border-green-500/30',
+                  confirmed: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
+                  in_progress: 'bg-purple-500/10 text-purple-400 border-purple-500/30',
+                  ready_for_pickup: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30',
                   completed: 'bg-blue-500/10 text-blue-400 border-blue-500/30',
                   cancelled: 'bg-red-500/10 text-red-500 border-red-500/30',
-                  'no_show': 'bg-orange-500/10 text-orange-400 border-orange-500/30',
                 };
                 const statusCls = statusColors[apt.status] || 'bg-gray-500/10 text-gray-400 border-gray-500/30';
                 return (
@@ -4876,7 +5221,7 @@ export function AdminPage() {
                         <div className="flex justify-between items-start mb-4">
                           <div>
                             <h3 className="text-xl font-bold text-white mb-1">
-                              {apt.guitar_details ? `${apt.guitar_details.brand} ${apt.guitar_details.model}` : (apt.title || apt.service_name || 'Appointment')}
+                              {primaryGuitar ? `${primaryGuitar.brand || ''} ${primaryGuitar.model || ''}`.trim() : (apt.title || apt.service_name || 'Appointment')}
                             </h3>
                             <p className="text-[var(--text-muted)] font-mono text-xs">ID: {apt.appointment_id || apt.id || 'N/A'}</p>
                           </div>
@@ -4919,22 +5264,22 @@ export function AdminPage() {
 
                         <div className="bg-[var(--bg-primary)] p-5 rounded-xl border border-[var(--border)]">
                            <p className="text-[11px] font-semibold uppercase tracking-widest text-[var(--text-muted)] mb-3">Guitar Details</p>
-                           {apt.guitar_details ? (
+                           {appointmentGuitars.length > 0 ? (
                              <div className="space-y-3">
-                               <div>
-                                 <p className="text-[var(--text-muted)] text-xs mb-0.5">Brand & Model</p>
-                                 <p className="text-white font-medium">{apt.guitar_details.brand} {apt.guitar_details.model}</p>
-                               </div>
-                               <div>
-                                 <p className="text-[var(--text-muted)] text-xs mb-0.5">Serial Number</p>
-                                 <p className="text-white">{apt.guitar_details.serialNumber || '—'}</p>
-                               </div>
-                               {apt.guitar_details.type && (
-                                 <div>
-                                   <p className="text-[var(--text-muted)] text-xs mb-0.5">Type</p>
-                                   <p className="text-white capitalize">{apt.guitar_details.type}</p>
+                               {appointmentGuitars.map((guitar, index) => (
+                                 <div key={`${guitar?.brand || 'guitar'}-${guitar?.model || index}-${index}`} className={index > 0 ? 'pt-3 mt-3 border-t border-[var(--border)]' : ''}>
+                                   <p className="text-[var(--text-muted)] text-xs mb-0.5">Brand & Model</p>
+                                   <p className="text-white font-medium">{guitar?.brand || '—'} {guitar?.model || ''}</p>
+                                   <p className="text-[var(--text-muted)] text-xs mb-0.5 mt-2">Serial Number</p>
+                                   <p className="text-white">{guitar?.serial || guitar?.serialNumber || '—'}</p>
+                                   {guitar?.type && (
+                                     <div className="mt-2">
+                                       <p className="text-[var(--text-muted)] text-xs mb-0.5">Type</p>
+                                       <p className="text-white capitalize">{guitar.type}</p>
+                                     </div>
+                                   )}
                                  </div>
-                               )}
+                               ))}
                              </div>
                            ) : (
                              <p className="text-[var(--text-muted)] text-sm italic">No detailed guitar specs provided.</p>
@@ -4973,19 +5318,25 @@ export function AdminPage() {
               {/* Appointment Status Modal */}
               {modal.type === 'appointment' && modal.data && (() => {
                 const APPOINTMENT_STATUSES = [
-                  { value: 'approved', label: 'Approved (Confirmed)' },
-                  { value: 'completed', label: 'Completed (Showed Up)' },
-                  { value: 'no_show', label: 'No-Show (Missed)' },
+                  { value: 'pending', label: 'Pending' },
+                  { value: 'confirmed', label: 'Confirmed' },
+                  { value: 'in_progress', label: 'In Progress' },
+                  { value: 'ready_for_pickup', label: 'Ready for Pickup' },
+                  { value: 'completed', label: 'Completed' },
                   { value: 'cancelled', label: 'Cancelled' }
                 ];
                 // Use form.status if it was set, else fallback to modal.data.status
-                const currentStatus = form.status || modal.data.status || 'approved';
+                const currentStatus = form.status || modal.data.status || 'pending';
                 return (
                   <>
                     <ModalHeader title="Update Appointment Status" onClose={closeModal} />
                     <div className="mt-6 space-y-6">
                       <div className="p-4 bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl">
-                        <p className="text-white text-lg font-bold mb-1">{modal.data.guitar_details ? `${modal.data.guitar_details.brand} ${modal.data.guitar_details.model}` : (modal.data.title || modal.data.service_name || 'Appointment')}</p>
+                        <p className="text-white text-lg font-bold mb-1">
+                          {Array.isArray(modal.data?.guitar_details?.guitars) && modal.data.guitar_details.guitars.length > 0
+                            ? `${modal.data.guitar_details.guitars[0]?.brand || ''} ${modal.data.guitar_details.guitars[0]?.model || ''}`.trim()
+                            : (modal.data.guitar_details ? `${modal.data.guitar_details.brand} ${modal.data.guitar_details.model}` : (modal.data.title || modal.data.service_name || 'Appointment'))}
+                        </p>
                         <p className="text-[var(--text-muted)] text-sm">Customer: <span className="font-medium text-white">{modal.data.customer_name || modal.data.user_name || '—'}</span></p>
                         <p className="text-[var(--text-muted)] text-sm">Date: <span className="font-medium text-white">{modal.data.scheduled_at ? new Date(modal.data.scheduled_at).toLocaleDateString() : '—'}</span></p>
                       </div>
@@ -4997,6 +5348,7 @@ export function AdminPage() {
                             const isSelected = currentStatus === stat.value;
                             return (
                               <button
+                                type="button"
                                 key={stat.value}
                                 onClick={() => setForm({ ...form, status: stat.value })}
                                 className={`p-4 text-left rounded-xl border flex flex-col gap-1 transition-all ${
@@ -5016,12 +5368,6 @@ export function AdminPage() {
                             );
                           })}
                         </div>
-                        {currentStatus === 'no_show' && (
-                          <p className="mt-4 text-xs flex items-center gap-2 text-orange-400 bg-orange-500/10 p-3 rounded-lg border border-orange-500/20">
-                            <AlertCircle className="w-4 h-4 shrink-0" />
-                            Warning: Marking as No-Show will lock the appointment.
-                          </p>
-                        )}
                         {currentStatus === 'cancelled' && (
                           <p className="mt-4 text-xs flex items-center gap-2 text-red-400 bg-red-500/10 p-3 rounded-lg border border-red-500/20">
                             <AlertCircle className="w-4 h-4 shrink-0" />
@@ -5516,9 +5862,9 @@ export function AdminPage() {
               {/* Builder Part Modal */}
               {modal.type === 'part' && (() => {
                 const partFieldBase =
-                  'w-full min-h-[2.875rem] px-4 py-3 bg-[var(--bg-primary)] rounded-2xl text-white placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 text-sm transition-colors box-border'
-                const partFieldOk = `${partFieldBase} border border-[var(--border)] focus:ring-[var(--gold-primary)]`
-                const partFieldErr = `${partFieldBase} border border-[var(--border)] border-l-4 border-l-red-500 focus:ring-red-500/40`
+                  'w-full min-h-[2.875rem] px-4 py-3 bg-[var(--bg-primary)] rounded-xl text-white placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 text-sm transition-colors box-border border border-[var(--border)]'
+                const partFieldOk = `${partFieldBase} focus:ring-[var(--gold-primary)]`
+                const partFieldErr = `${partFieldBase} border-red-500/60 focus:ring-red-500`
                 const partSelErr = `${inputCls} border-l-4 border-l-red-500`
                 const partHint = (text, tone = 'muted') => (
                   <p
@@ -5534,7 +5880,7 @@ export function AdminPage() {
                   </p>
                 )
                 const partTextareaOk =
-                  'w-full min-h-[5.5rem] resize-y px-4 py-3 box-border bg-[var(--bg-primary)] rounded-2xl border border-[var(--border)] text-white placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] text-sm transition-colors'
+                  'w-full min-h-[5.5rem] resize-y px-4 py-3 box-border bg-[var(--bg-primary)] rounded-xl border border-[var(--border)] text-white placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] text-sm transition-colors'
                 const slotHints = {
                   basePrice: 'Overrides the base starting price shown in customization pages.',
                   body: 'Controls the guitar body shape and wood.',
@@ -5554,11 +5900,23 @@ export function AdminPage() {
                 const slotHint = form.type_mapping ? slotHints[form.type_mapping] : null
                 const previewGuitarType = (form.guitar_type || 'electric').replace(/\b\w/g, (l) => l.toUpperCase())
                 const previewPartCat = (form.part_category || form.type_mapping || 'misc').replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase())
+                const previewInventoryCategory =
+                  INVENTORY_PART_CATEGORY_LABELS[
+                    normalizeInventoryPartCategory(form.inventory_category) || deriveInventoryPartCategory(form)
+                  ] || 'Accessories'
+                const canSubmit = Boolean(
+                  String(form.name || '').trim() &&
+                  String(form.type_mapping || '').trim() &&
+                  normalizeInventoryPartCategory(form.inventory_category)
+                )
                 const previewPrice = form.price !== '' && form.price != null && !Number.isNaN(Number(form.price)) ? formatCurrency(Number(form.price), false) : '—'
                 return (
                   <>
-                    <div className="sticky top-0 z-20 -mx-8 mb-4 border-b border-[var(--border)] bg-[var(--surface-dark)] px-8 pb-4 pt-0">
-                      <ModalHeader title={modal.data ? 'Edit Guitar Part' : 'New Guitar Part'} onClose={closeModal} />
+                    <div className="mb-6 flex items-center justify-between">
+                      <h2 className="text-white text-xl font-bold">{modal.data ? 'Edit Guitar Part' : 'Add Guitar Part'}</h2>
+                      <button onClick={closeModal} className="p-2 hover:bg-white/10 rounded-lg transition-colors">
+                        <X className="w-5 h-5 text-[var(--text-muted)]" />
+                      </button>
                     </div>
                     <div className="mt-0 grid grid-cols-1 gap-8 md:grid-cols-2 md:gap-0">
                       <div className="min-w-0 space-y-5 md:pr-8">
@@ -5644,6 +6002,31 @@ export function AdminPage() {
                           <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Catalog metadata</p>
                           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5">
                             <div>
+                              <label className={`${labelCls} ${formErrors.inventory_category ? 'text-red-400' : ''}`}>Category *</label>
+                              <select
+                                value={
+                                  normalizeInventoryPartCategory(form.inventory_category) ||
+                                  (form.part_category || form.type_mapping || modal.data?.part_id
+                                    ? deriveInventoryPartCategory(form)
+                                    : '')
+                                }
+                                onChange={(e) => {
+                                  setForm((f) => ({ ...f, inventory_category: e.target.value }))
+                                  setFormErrors((prev) => ({ ...prev, inventory_category: null }))
+                                }}
+                                className={formErrors.inventory_category ? partSelErr : inputCls}
+                              >
+                                <option value="">Select Category</option>
+                                {INVENTORY_PART_CATEGORY_OPTIONS.map((option) => (
+                                  <option key={option.value} value={option.value}>
+                                    {option.label}
+                                  </option>
+                                ))}
+                              </select>
+                              {formErrors.inventory_category && <p className="mt-1 text-xs text-red-400">{formErrors.inventory_category}</p>}
+                              {partHint('Used by the Inventory tab for category filters and grouped display.')}
+                            </div>
+                            <div>
                               <label className={labelCls}>Guitar Type</label>
                               <select value={form.guitar_type || 'electric'} onChange={(e) => setForm((f) => ({ ...f, guitar_type: e.target.value }))} className={inputCls}>
                                 {['electric', 'bass', 'ukulele'].map((t) => (
@@ -5655,7 +6038,7 @@ export function AdminPage() {
                               {partHint('Which instrument line this part belongs to.')}
                             </div>
                             <div>
-                              <label className={labelCls}>Part Category</label>
+                              <label className={labelCls}>Technical Part Category</label>
                               <select value={form.part_category || form.type_mapping || 'misc'} onChange={(e) => setForm((f) => ({ ...f, part_category: e.target.value }))} className={inputCls}>
                                 {['body', 'neck', 'fretboard', 'pickups', 'bridge', 'electronics', 'hardware', 'tuners', 'strings', 'finish', 'wood_type', 'pickguard', 'misc'].map((t) => (
                                   <option key={t} value={t}>
@@ -5663,7 +6046,7 @@ export function AdminPage() {
                                   </option>
                                 ))}
                               </select>
-                              {partHint('Used for filtering and inventory grouping.')}
+                              {partHint('Keeps the builder mapping intact for customization logic.')}
                             </div>
                           </div>
                         </div>
@@ -5767,6 +6150,9 @@ export function AdminPage() {
                                 <p className="truncate text-base font-semibold text-white">{form.name?.trim() || 'Part name'}</p>
                                 <div className="flex flex-wrap gap-2">
                                   <span className="rounded-md border border-[var(--gold-primary)]/35 bg-[var(--gold-primary)]/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--gold-primary)]">
+                                    {previewInventoryCategory}
+                                  </span>
+                                  <span className="rounded-md border border-[var(--gold-primary)]/35 bg-[var(--gold-primary)]/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--gold-primary)]">
                                     {previewGuitarType}
                                   </span>
                                   <span className="rounded-md border border-[var(--border)] bg-[var(--surface-dark)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">
@@ -5789,7 +6175,23 @@ export function AdminPage() {
                         </div>
                       </div>
                     </div>
-                    <ModalFooter onCancel={closeModal} onSave={validateAndSave(PART_RULES, savePart)} isSaving={isSaving} />
+                    <div className="mt-6 flex gap-3 border-t border-[var(--border)] pt-4">
+                      <button
+                        onClick={closeModal}
+                        disabled={isSaving}
+                        className="flex-1 py-3 rounded-xl bg-[var(--bg-primary)] text-white font-semibold hover:bg-white/10 transition-colors disabled:opacity-50"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={validateAndSave(PART_RULES, savePart)}
+                        disabled={!canSubmit || isSaving}
+                        className="flex-1 py-3 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black font-bold hover:shadow-[0_8px_25px_rgba(212,175,55,0.35)] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                      >
+                        {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                        {isSaving ? 'Saving...' : modal.data ? 'Update Guitar Part' : 'Save Guitar Part'}
+                      </button>
+                    </div>
                   </>
                 )
               })()}
@@ -5807,6 +6209,20 @@ export function AdminPage() {
                   isSaving={isSaving}
                   saveStockAdjust={saveStockAdjust}
                   showToast={showToast}
+                  formatCurrency={formatCurrency}
+                />
+              )}
+
+              {modal.type === 'part_inventory' && (
+                <AdjustPartStockModal
+                  modal={modal}
+                  form={form}
+                  setForm={setForm}
+                  formErrors={formErrors}
+                  setFormErrors={setFormErrors}
+                  closeModal={closeModal}
+                  isSaving={isSaving}
+                  savePartStockAdjust={savePartStockAdjust}
                   formatCurrency={formatCurrency}
                 />
               )}
@@ -5953,7 +6369,9 @@ export function AdminPage() {
                       <label className={labelCls}>Status</label>
                       <select value={form.status || 'pending'} onChange={e => setForm(f => ({ ...f, status: e.target.value }))} className={inputCls}>
                         <option value="pending">Pending</option>
-                        <option value="approved">Approved</option>
+                        <option value="confirmed">Confirmed</option>
+                        <option value="in_progress">In Progress</option>
+                        <option value="ready_for_pickup">Ready for Pickup</option>
                         <option value="completed">Completed</option>
                         <option value="cancelled">Cancelled</option>
                       </select>
@@ -5974,15 +6392,22 @@ export function AdminPage() {
                     <FormField label="Base Price *" type="number" value={form.price || ''} onChange={v => setForm(f => ({ ...f, price: v }))} placeholder="1500.00" error={formErrors.price} />
                     <FormField label="Duration (hours)" type="number" value={form.duration || ''} onChange={v => setForm(f => ({ ...f, duration: v }))} placeholder="e.g. 2" />
                     <div>
-                      <label className={labelCls}>Category</label>
-                      <select value={form.category || ''} onChange={e => setForm(f => ({ ...f, category: e.target.value }))} className={inputCls}>
+                      <label className={`${labelCls} ${formErrors.category_id ? 'text-red-400' : ''}`}>Category *</label>
+                      <select
+                        value={form.category_id || ''}
+                        onChange={e => {
+                          setForm(f => ({ ...f, category_id: e.target.value }))
+                          setFormErrors(prev => ({ ...prev, category_id: null }))
+                        }}
+                        className={formErrors.category_id ? inputErrCls : inputCls}
+                      >
                         <option value="">Select Category</option>
-                        <option value="setup-intonation">Setup & Intonation</option>
+                        <option value="setup">Setup & Intonation</option>
                         <option value="refinishing">Refinishing</option>
-                        <option value="repair-restoration">Repair & Restoration</option>
-                        <option value="electronics-upgrade">Electronics Upgrade</option>
-                        <option value="custom-guitar-build">Custom Guitar Build</option>
+                        <option value="repair">Repair & Restoration</option>
+                        <option value="electronics">Electronics Upgrade</option>
                       </select>
+                      {formErrors.category_id && <p className="mt-1 text-xs text-red-400">{formErrors.category_id}</p>}
                     </div>
                      <div>
                        <label className={labelCls}>Status</label>
@@ -6085,14 +6510,10 @@ export function AdminPage() {
                   <p className="text-[var(--text-muted)] text-sm mb-3">Status</p>
                   <div className="relative">
                     {(() => {
-                      const statuses = [
-                        { value: 'pending', label: 'Pending', color: '#f59e0b' },
-                        { value: 'paid', label: 'Paid', color: '#22c55e' },
-                        { value: 'failed', label: 'Cancel', color: '#f87171' },
-                        { value: 'refunded', label: 'Refunded', color: '#38bdf8' },
-                      ]
-                      const currentValue = form.payment_status || 'pending'
-                      const currentStatus = statuses.find((status) => status.value === currentValue)
+                      const originalStatus = normalizePaymentStatus(modal.data?.payment_status || modal.data?.payment?.status)
+                      const statuses = getAllowedPaymentStatuses(originalStatus)
+                      const currentValue = normalizePaymentStatus(form.payment_status || originalStatus)
+                      const selectedStatus = statuses.find((status) => status.value === currentValue)
 
                       return (
                         <>
@@ -6101,8 +6522,8 @@ export function AdminPage() {
                             onClick={() => setPaymentStatusDropdownOpen((open) => !open)}
                             className="w-full rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] px-4 py-3 text-left flex items-center justify-between gap-3 transition-all hover:border-[var(--gold-primary)]/30"
                           >
-                            <span className="text-sm font-semibold" style={{ color: currentStatus?.color || '#ffffff' }}>
-                              {currentStatus?.label || 'Pending'}
+                            <span className="text-sm font-semibold" style={{ color: selectedStatus?.color || '#ffffff' }}>
+                              {selectedStatus?.label || 'Pending'}
                             </span>
                             <ChevronDown className="w-4 h-4 text-white" />
                           </button>
@@ -6131,7 +6552,7 @@ export function AdminPage() {
                     })()}
                   </div>
                   <p className="mt-3 text-[var(--text-muted)] text-sm leading-relaxed">
-                    Choose the current payment status for this order. Save your selection with Update Status.
+                    Choose the next valid payment status for this order. Save your selection with Update Status.
                   </p>
                 </div>
 
@@ -6156,9 +6577,9 @@ export function AdminPage() {
                   </button>
                   <button
                     onClick={updatePaymentStatus}
-                    disabled={paymentStatusUpdate.loading || form.payment_status === (modal.data?.payment_status || modal.data?.payment?.status)}
+                    disabled={paymentStatusUpdate.loading || normalizePaymentStatus(form.payment_status || modal.data?.payment_status || modal.data?.payment?.status) === normalizePaymentStatus(modal.data?.payment_status || modal.data?.payment?.status)}
                     className={`flex-1 px-4 py-3 bg-gradient-to-r from-green-500 to-green-600 rounded-lg text-white font-semibold hover:shadow-[0_0_20px_rgba(34,197,94,0.4)] transition-all flex items-center justify-center gap-2 ${
-                      paymentStatusUpdate.loading || form.payment_status === (modal.data?.payment_status || modal.data?.payment?.status)
+                      paymentStatusUpdate.loading || normalizePaymentStatus(form.payment_status || modal.data?.payment_status || modal.data?.payment?.status) === normalizePaymentStatus(modal.data?.payment_status || modal.data?.payment?.status)
                         ? 'opacity-50 cursor-not-allowed'
                         : ''
                     }`}
@@ -6376,6 +6797,10 @@ export function AdminPage() {
 
                 {/* Unified Status Update Section */}
                 <div className="bg-[var(--bg-primary)]/50 rounded-xl p-4 border border-[var(--border)]">
+                  {(() => {
+                    const isCODOrder = isCashOnDeliveryOrder(modal.data)
+                    return (
+                      <>
                   <h3 className="text-white font-semibold mb-4 flex items-center gap-2">
                     <RefreshCw className="w-4 h-4 text-[var(--gold-primary)]" />
                     Update Status
@@ -6386,16 +6811,25 @@ export function AdminPage() {
                     <p className="text-[var(--text-muted)] text-xs uppercase tracking-wider mb-2">Order Status</p>
                     <div className="grid grid-cols-3 gap-2">
                       {ORDER_STATUS_LIFECYCLE.filter(s => s.value !== 'out_for_delivery').map((status) => {
+                        const currentOrderStatus = modal.data.status || 'pending'
+                        const allowedTransitions = ORDER_STATUS_TRANSITIONS[currentOrderStatus] || []
                         const isActive = (form.order_status || modal.data.status || 'pending') === status.value
+                        const isAllowed = allowedTransitions.includes(status.value)
                         return (
                           <button
                             key={status.value}
                             type="button"
-                            onClick={() => setForm((f) => ({ ...f, order_status: status.value }))}
+                            onClick={() => {
+                              if (!isAllowed) return
+                              setForm((f) => ({ ...f, order_status: status.value }))
+                            }}
+                            disabled={!isAllowed}
                             className={`p-2 rounded-lg border text-xs font-medium transition-all ${
                               isActive 
                                 ? `${status.bgColor} ${status.textColor} ${status.borderColor}` 
-                                : 'bg-[var(--surface-dark)] border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--gold-primary)]/50'
+                                : isAllowed
+                                  ? 'bg-[var(--surface-dark)] border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--gold-primary)]/50'
+                                  : 'bg-[var(--surface-dark)] border-[var(--border)] text-[var(--text-muted)]/70 font-semibold opacity-60 cursor-not-allowed'
                             }`}
                           >
                             {status.label}
@@ -6405,29 +6839,30 @@ export function AdminPage() {
                     </div>
                   </div>
                   
-                  {/* Payment Status Selector */}
-                  <div className="mb-4">
-                    <p className="text-[var(--text-muted)] text-xs uppercase tracking-wider mb-2">Payment Status</p>
-                    <div className="grid grid-cols-2 gap-2">
-                      {PAYMENT_STATUS_LIFECYCLE.map((status) => {
-                        const isActive = (form.payment_status || modal.data.payment_status || modal.data?.payment?.status || 'pending') === status.value
-                        return (
-                          <button
-                            key={status.value}
-                            type="button"
-                            onClick={() => setForm((f) => ({ ...f, payment_status: status.value }))}
-                            className={`p-2 rounded-lg border text-xs font-medium transition-all ${
-                              isActive 
-                                ? `${status.bgColor} ${status.textColor} ${status.borderColor}` 
-                                : 'bg-[var(--surface-dark)] border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--gold-primary)]/50'
-                            }`}
-                          >
-                            {status.label}
-                          </button>
-                        )
-                      })}
+                  {!isCODOrder && (
+                    <div className="mb-4">
+                      <p className="text-[var(--text-muted)] text-xs uppercase tracking-wider mb-2">Payment Status</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        {getAllowedPaymentStatuses(modal.data.payment_status || modal.data?.payment?.status).map((status) => {
+                          const isActive = normalizePaymentStatus(form.payment_status || modal.data.payment_status || modal.data?.payment?.status) === status.value
+                          return (
+                            <button
+                              key={status.value}
+                              type="button"
+                              onClick={() => setForm((f) => ({ ...f, payment_status: status.value }))}
+                              className={`p-2 rounded-lg border text-xs font-medium transition-all ${
+                                isActive 
+                                  ? `${status.bgColor} ${status.textColor} ${status.borderColor}` 
+                                  : 'bg-[var(--surface-dark)] border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--gold-primary)]/50'
+                              }`}
+                            >
+                              {status.label}
+                            </button>
+                          )
+                        })}
+                      </div>
                     </div>
-                  </div>
+                  )}
                   
                   {/* Save Button */}
                   <button
@@ -6449,6 +6884,9 @@ export function AdminPage() {
                       </>
                     )}
                   </button>
+                      </>
+                    )
+                  })()}
                 </div>
               </div>
             </motion.div>
@@ -6484,16 +6922,25 @@ export function AdminPage() {
                   <p className="text-[var(--text-muted)] text-sm mb-3">Select New Order Status</p>
                   <div className="grid grid-cols-2 gap-2">
                     {ORDER_STATUS_LIFECYCLE.map((status) => {
+                      const currentOrderStatus = modal.data.status || 'pending'
+                      const allowedTransitions = ORDER_STATUS_TRANSITIONS[currentOrderStatus] || []
                       const isActive = (form.order_status || modal.data.status || 'pending') === status.value
+                      const isAllowed = allowedTransitions.includes(status.value)
                       return (
                         <button
                           key={status.value}
                           type="button"
-                          onClick={() => setForm((f) => ({ ...f, order_status: status.value }))}
+                          onClick={() => {
+                            if (!isAllowed) return
+                            setForm((f) => ({ ...f, order_status: status.value }))
+                          }}
+                          disabled={!isAllowed}
                           className={`p-3 rounded-xl border text-left transition-all ${
                             isActive 
                               ? `${status.bgColor} ${status.textColor} ${status.borderColor}` 
-                              : 'bg-[var(--bg-primary)] border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--gold-primary)]/50'
+                              : isAllowed
+                                ? 'bg-[var(--bg-primary)] border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--gold-primary)]/50'
+                                : 'bg-[var(--bg-primary)] border-[var(--border)] text-[var(--text-muted)]/70 font-semibold opacity-60 cursor-not-allowed'
                           }`}
                         >
                           <span className="text-sm font-semibold">{status.label}</span>
@@ -6528,6 +6975,13 @@ export function AdminPage() {
                   <button
                     onClick={async () => {
                       if (!form.order_status) return
+                      const currentOrderStatus = modal.data.status || 'pending'
+                      const allowedTransitions = ORDER_STATUS_TRANSITIONS[currentOrderStatus] || []
+                      if (!allowedTransitions.includes(form.order_status)) {
+                        showToast(`Invalid status transition from ${currentOrderStatus} to ${form.order_status}.`, 'error')
+                        return
+                      }
+
                       setIsSaving(true)
                       try {
                         const updateData = { status: form.order_status }
@@ -6545,9 +6999,17 @@ export function AdminPage() {
                         setIsSaving(false)
                       }
                     }}
-                    disabled={isSaving || !form.order_status}
+                    disabled={
+                      isSaving
+                      || !form.order_status
+                      || !(ORDER_STATUS_TRANSITIONS[modal.data.status || 'pending'] || []).includes(form.order_status)
+                    }
                     className={`flex-1 px-4 py-3 bg-gradient-to-r from-purple-500 to-purple-600 rounded-lg text-white font-semibold hover:shadow-[0_0_20px_rgba(147,51,234,0.4)] transition-all flex items-center justify-center gap-2 ${
-                      isSaving || !form.order_status ? 'opacity-50 cursor-not-allowed' : ''
+                      (
+                        isSaving
+                        || !form.order_status
+                        || !(ORDER_STATUS_TRANSITIONS[modal.data.status || 'pending'] || []).includes(form.order_status)
+                      ) ? 'opacity-50 cursor-not-allowed' : ''
                     }`}
                   >
                     {isSaving ? (
@@ -6661,7 +7123,6 @@ export function AdminPage() {
         }}
         appointment={selectedAppointment}
         onStatusChange={handleAppointmentStatusChange}
-        onPaymentStatusChange={handleAppointmentPaymentStatusChange}
         onReschedule={handleAppointmentReschedule}
         onCancel={handleAppointmentCancel}
         loading={appointmentLoading}

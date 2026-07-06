@@ -17,6 +17,7 @@ import { useAuth } from '../context/AuthContext.jsx'
 import { ThemeToggle } from './ThemeToggle.jsx'
 import { ConfirmModal } from './ui/ConfirmModal.jsx'
 import { GUITAR_TYPE_OPTIONS } from '../lib/guitarBuilderData.js'
+import { hasRole } from '../utils/roles.js'
 
 export function Header() {
   const location = useLocation()
@@ -310,18 +311,12 @@ export function Header() {
                         </div>
                       </div>
 
-                      {(user?.role === 'admin' ||
-                        user?.role === 'super_admin' ||
-                        user?.role === 'staff') && (
+                      {(hasRole(user?.role, 'admin', 'staff')) && (
                         <button
                           type="button"
                           onClick={() => {
                             setProfileMenuOpen(false)
-                            navigate(
-                              user?.role === 'admin' || user?.role === 'super_admin'
-                                ? '/admin'
-                                : '/staff',
-                            )
+                            navigate(hasRole(user?.role, 'admin') ? '/admin' : '/staff')
                           }}
                           className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-[var(--text-light)] transition-colors hover:bg-[var(--surface-elevated)]"
                         >

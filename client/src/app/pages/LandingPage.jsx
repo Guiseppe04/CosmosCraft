@@ -177,7 +177,7 @@ export function LandingPage() {
       <section className="px-3 py-10 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-7xl rounded-2xl sm:rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-4 sm:p-8">
           <div className="mb-4 sm:mb-5 flex items-center justify-between gap-2 sm:gap-3">
-            <h2 className="text-xl sm:text-2xl font-semibold lg:text-3xl">What Our Customers Say</h2>
+            <h2 className="text-xl sm:text-2xl font-semibold text-[var(--text-light)] lg:text-3xl">What Our Customers Say</h2>
             <Sparkles className="h-5 w-5 text-[var(--gold-primary)]" />
           </div>
           <TestimonialCarousel />
@@ -189,7 +189,7 @@ export function LandingPage() {
           <div className="rounded-2xl sm:rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-4 sm:p-8 lg:p-10">
             <div className="grid gap-6 sm:gap-8 lg:grid-cols-[0.9fr_1.1fr]">
               <div>
-                <h2 className="text-2xl font-semibold leading-tight sm:text-4xl lg:text-5xl">Get in touch with us</h2>
+                <h2 className="text-2xl font-semibold leading-tight text-[var(--text-light)] sm:text-4xl lg:text-5xl">Get in touch with us</h2>
                 <p className="mt-3 sm:mt-4 max-w-md text-xs sm:text-sm leading-relaxed text-[var(--text-muted)] lg:text-base">
                   We're here to help. Whether you have a question about our services, need assistance with your account,
                   or want to provide feedback, our team is ready to assist you.
@@ -303,5 +303,4 @@ export function LandingPage() {
     </div>
   )
 }
-
 

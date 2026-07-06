@@ -31,8 +31,8 @@ CREATE TYPE order_payment_status_enum AS ENUM (
     'rejected',           -- proof invalid / denied
     'failed'              -- payment attempt failed (optional fallback)
 );
-CREATE TYPE appointment_status_enum AS ENUM ('pending', 'approved', 'completed', 'cancelled');
-CREATE TYPE project_status_enum AS ENUM ('not_started', 'in_progress', 'completed');
+CREATE TYPE appointment_status_enum AS ENUM ('pending', 'confirmed', 'in_progress', 'ready_for_pickup', 'completed', 'cancelled');
+CREATE TYPE project_status_enum AS ENUM ('not_started', 'in_progress', 'completed', 'cancelled');
 CREATE TYPE notification_type_enum AS ENUM ('order_update', 'appointment_reminder', 'system', 'promotional');
 
 
@@ -562,16 +562,21 @@ CREATE TABLE projects (
     fulfillment_notes TEXT,
     fulfillment_selected_at TIMESTAMPTZ,
     pickup_appointment_id UUID,
+    is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
+    deleted_at TIMESTAMPTZ,
+    deleted_by UUID,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     
     FOREIGN KEY (order_id) REFERENCES orders(order_id) ON DELETE CASCADE,
-    FOREIGN KEY (pickup_appointment_id) REFERENCES appointments(appointment_id) ON DELETE SET NULL
+    FOREIGN KEY (pickup_appointment_id) REFERENCES appointments(appointment_id) ON DELETE SET NULL,
+    FOREIGN KEY (deleted_by) REFERENCES users(user_id) ON DELETE SET NULL
 );
 
 CREATE INDEX idx_projects_order_id ON projects(order_id);
 CREATE INDEX idx_projects_status ON projects(status);
 CREATE INDEX idx_projects_fulfillment_method ON projects(fulfillment_method);
+CREATE INDEX idx_projects_is_deleted ON projects(is_deleted);
 
 
 -- =============================================
@@ -683,7 +688,35 @@ ON CONFLICT (guitar_type_code, part_category_code) DO NOTHING;
 
 
 -- =============================================
--- 23. GUITAR BUILDER PARTS
+-- 23. BUILDER MODEL IMAGES
+-- =============================================
+
+CREATE TABLE builder_model_images (
+    model_image_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    guitar_type_code VARCHAR(50) NOT NULL REFERENCES builder_guitar_types(guitar_type_code) ON DELETE CASCADE,
+    model_key VARCHAR(100) NOT NULL,
+    display_name VARCHAR(120) NOT NULL,
+    image_url TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (guitar_type_code, model_key)
+);
+
+CREATE INDEX idx_builder_model_images_guitar_type ON builder_model_images(guitar_type_code);
+
+INSERT INTO builder_model_images (guitar_type_code, model_key, display_name) VALUES
+('electric', 'strat', 'Strat'),
+('electric', 'solo', 'Solo'),
+('electric', 'dc', 'DC'),
+('electric', 'delos', 'Delos'),
+('bass', 'vader', 'Vader'),
+('bass', 'pb', 'Precision'),
+('bass', 'jb', 'Jazz')
+ON CONFLICT (guitar_type_code, model_key) DO NOTHING;
+
+
+-- =============================================
+-- 24. GUITAR BUILDER PARTS
 -- =============================================
 
 CREATE TABLE guitar_builder_parts (
@@ -1319,6 +1352,76 @@ CREATE TRIGGER trg_payments_set_updated_at
 BEFORE UPDATE ON payments
 FOR EACH ROW
 EXECUTE FUNCTION set_updated_at();
+
+CREATE OR REPLACE FUNCTION ensure_payment_for_verification_status()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.status = 'pending'::payment_status_enum AND (
+        NULLIF(BTRIM(COALESCE(NEW.reference_number, '')), '') IS NOT NULL OR
+        NULLIF(BTRIM(COALESCE(NEW.proof_url, '')), '') IS NOT NULL
+    ) THEN
+        NEW.status := 'for_verification'::payment_status_enum;
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION sync_order_payment_status_from_payment()
+RETURNS TRIGGER AS $$
+DECLARE
+    next_order_status order_payment_status_enum;
+    next_reference_number TEXT;
+BEGIN
+    next_reference_number := NULLIF(BTRIM(COALESCE(NEW.reference_number, '')), '');
+
+    next_order_status := CASE
+        WHEN NEW.status = 'verified'::payment_status_enum THEN 'approved'::order_payment_status_enum
+        WHEN NEW.status = 'for_verification'::payment_status_enum THEN 'proof_submitted'::order_payment_status_enum
+        WHEN NEW.status = 'rejected'::payment_status_enum THEN 'rejected'::order_payment_status_enum
+        WHEN NEW.status = 'cancelled'::payment_status_enum THEN 'pending'::order_payment_status_enum
+        WHEN NEW.status = 'refunded'::payment_status_enum THEN 'failed'::order_payment_status_enum
+        WHEN NEW.status = 'pending'::payment_status_enum THEN 'pending'::order_payment_status_enum
+        ELSE NULL
+    END;
+
+    IF next_order_status IS NOT NULL THEN
+        UPDATE orders
+        SET payment_status = next_order_status,
+            payment_reference_number = COALESCE(next_reference_number, payment_reference_number),
+            proof_submitted_at = CASE
+                WHEN next_order_status = 'proof_submitted'::order_payment_status_enum
+                    THEN COALESCE(proof_submitted_at, NEW.created_at, now())
+                ELSE proof_submitted_at
+            END,
+            reviewed_at = CASE
+                WHEN next_order_status = 'approved'::order_payment_status_enum
+                    THEN COALESCE(reviewed_at, now())
+                ELSE reviewed_at
+            END,
+            updated_at = now()
+        WHERE order_id = NEW.order_id
+          AND (
+              payment_status IS DISTINCT FROM next_order_status OR
+              payment_reference_number IS DISTINCT FROM COALESCE(next_reference_number, payment_reference_number)
+          );
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_payments_force_for_verification ON payments;
+CREATE TRIGGER trg_payments_force_for_verification
+BEFORE INSERT OR UPDATE OF status, reference_number, proof_url ON payments
+FOR EACH ROW
+EXECUTE FUNCTION ensure_payment_for_verification_status();
+
+DROP TRIGGER IF EXISTS trg_sync_orders_from_payments ON payments;
+CREATE TRIGGER trg_sync_orders_from_payments
+AFTER INSERT OR UPDATE OF status, reference_number, proof_url ON payments
+FOR EACH ROW
+EXECUTE FUNCTION sync_order_payment_status_from_payment();
 
 DROP TRIGGER IF EXISTS trg_payment_config_set_updated_at ON payment_config;
 CREATE TRIGGER trg_payment_config_set_updated_at

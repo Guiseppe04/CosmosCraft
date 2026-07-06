@@ -43,18 +43,26 @@ export function formatPricePHP(price) {
 export default function useBassConfig() {
   const [config, setConfig] = useState(BASS_DEFAULT_CONFIG)
   const [builderParts, setBuilderParts] = useState([])
+  const [modelImages, setModelImages] = useState([])
   const [loadingPrices, setLoadingPrices] = useState(true)
 
   const fetchBuilderParts = async () => {
     setLoadingPrices(true)
     try {
-      const response = await axios.get(`${API_URL}/api/builder-parts`, {
-        params: { is_active: true, pageSize: 500, _t: Date.now() },
-        headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache', 'Expires': '0' }
-      })
-      if (response.data?.data) {
-        setBuilderParts(response.data.data)
+      const [partsResponse, modelImagesResponse] = await Promise.all([
+        axios.get(`${API_URL}/api/builder-parts`, {
+          params: { is_active: true, guitar_type: 'bass', pageSize: 500, _t: Date.now() },
+          headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache', 'Expires': '0' }
+        }),
+        axios.get(`${API_URL}/api/builder-parts/model-images`, {
+          params: { guitar_type: 'bass', _t: Date.now() },
+          headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache', 'Expires': '0' }
+        }),
+      ])
+      if (partsResponse.data?.data) {
+        setBuilderParts(partsResponse.data.data)
       }
+      setModelImages(Array.isArray(modelImagesResponse.data?.data) ? modelImagesResponse.data.data : [])
     } catch (error) {
       console.error('Failed to fetch builder parts:', error)
     } finally {
@@ -84,34 +92,66 @@ export default function useBassConfig() {
 
   const priceOverrides = useMemo(() => {
     const overrides = {}
+    const registerOverride = (key, value) => {
+      if (!key) return
+      if (overrides[key] === undefined) {
+        overrides[key] = value
+      }
+    }
+
     builderParts.forEach(part => {
       const partType = typeof part.guitar_type === 'string' ? part.guitar_type.trim().toLowerCase() : ''
       const matchesType = !partType || partType === 'bass'
       if (matchesType && part.price !== undefined) {
+        const metadata = part?.metadata && typeof part.metadata === 'object' ? part.metadata : {}
         const normalizedCategory = typeof part.part_category === 'string' ? part.part_category.trim().toLowerCase() : ''
         const normalizedTypeMapping = typeof part.type_mapping === 'string' ? part.type_mapping.trim() : ''
         const normalizedNameKey = typeof part.name === 'string' ? part.name.trim().toLowerCase().replace(/\s+/g, '') : ''
+        const normalizedOptionKey = typeof metadata.option_key === 'string' ? metadata.option_key.trim().toLowerCase() : ''
+        const normalizedVariant = typeof metadata.variant === 'string' ? metadata.variant.trim().toLowerCase() : ''
+        const overrideValue = { price: Number(part.price), partCategory: normalizedCategory || part.part_category }
 
         if (normalizedTypeMapping) {
-          overrides[normalizedTypeMapping] = { price: Number(part.price), partCategory: normalizedCategory || part.part_category }
-          overrides[normalizedTypeMapping.toLowerCase()] = { price: Number(part.price), partCategory: normalizedCategory || part.part_category }
+          registerOverride(normalizedTypeMapping, overrideValue)
+          registerOverride(normalizedTypeMapping.toLowerCase(), overrideValue)
+        }
+        if (normalizedOptionKey) {
+          registerOverride(normalizedOptionKey, overrideValue)
+          if (normalizedCategory) {
+            registerOverride(`catname:${normalizedCategory}:${normalizedOptionKey}`, overrideValue)
+          }
+          if (normalizedCategory && normalizedVariant) {
+            registerOverride(`variant:${normalizedCategory}:${normalizedVariant}:${normalizedOptionKey}`, overrideValue)
+          }
         }
         if (normalizedCategory && normalizedNameKey) {
-          overrides[`catname:${normalizedCategory}:${normalizedNameKey}`] = { price: Number(part.price), partCategory: normalizedCategory }
+          registerOverride(`catname:${normalizedCategory}:${normalizedNameKey}`, overrideValue)
         }
         if (normalizedCategory) {
-          overrides[`cat:${normalizedCategory}`] = { price: Number(part.price), partCategory: normalizedCategory }
+          registerOverride(`cat:${normalizedCategory}`, overrideValue)
         }
       }
     })
     return overrides
   }, [builderParts])
 
+  const modelImageMap = useMemo(() => {
+    return modelImages.reduce((acc, item) => {
+      const key = String(item?.model_key || '').trim()
+      if (key && item?.image_url) {
+        acc[key] = item.image_url
+      }
+      return acc
+    }, {})
+  }, [modelImages])
+
   const getCategoryPrice = (cat) => priceOverrides[`cat:${cat}`]?.price
-  const getOptionOverride = (category, optionKey) => {
+  const getOptionOverride = (category, optionKey, variant = '') => {
     const key = String(optionKey || '').trim()
     const normalized = key.toLowerCase()
+    const normalizedVariant = String(variant || '').trim().toLowerCase()
     return (
+      priceOverrides[`variant:${category}:${normalizedVariant}:${normalized}`]?.price ??
       priceOverrides[`catname:${category}:${normalized}`]?.price ??
       priceOverrides[key]?.price ??
       priceOverrides[normalized]?.price
@@ -225,7 +265,7 @@ export default function useBassConfig() {
     Object.keys(BASS_LOGO_OPTIONS).forEach(bodyKey => {
       merged[bodyKey] = { ...BASS_LOGO_OPTIONS[bodyKey] }
       Object.keys(merged[bodyKey]).forEach(key => {
-        const specific = getOptionOverride('misc', key)
+        const specific = getOptionOverride('misc', key, bodyKey)
         if (specific !== undefined) {
           merged[bodyKey][key] = { ...merged[bodyKey][key], price: specific }
         }
@@ -235,11 +275,15 @@ export default function useBassConfig() {
   }, [priceOverrides])
 
   const mergedBackplateOptions = useMemo(() => {
-    const merged = { ...BASS_BACKPLATE_OPTIONS }
-    Object.keys(merged).forEach(key => {
-      if (priceOverrides[key] !== undefined) {
-        merged[key] = { ...merged[key], price: priceOverrides[key].price }
-      }
+    const merged = {}
+    Object.keys(BASS_BACKPLATE_OPTIONS).forEach(bodyKey => {
+      merged[bodyKey] = { ...BASS_BACKPLATE_OPTIONS[bodyKey] }
+      Object.keys(merged[bodyKey]).forEach(key => {
+        const specific = getOptionOverride('hardware', key)
+        if (specific !== undefined) {
+          merged[bodyKey][key] = { ...merged[bodyKey][key], price: specific }
+        }
+      })
     })
     return merged
   }, [priceOverrides])
@@ -274,7 +318,7 @@ export default function useBassConfig() {
     Object.keys(BASS_BRIDGE_OPTIONS).forEach(bodyKey => {
       merged[bodyKey] = { ...BASS_BRIDGE_OPTIONS[bodyKey] }
       Object.keys(merged[bodyKey]).forEach(key => {
-        const specific = getOptionOverride('bridge', key)
+        const specific = getOptionOverride('bridge', key, bodyKey)
         const finalPrice = specific !== undefined ? specific : bridgeCatPrice
         if (finalPrice !== undefined) {
           merged[bodyKey][key] = { ...merged[bodyKey][key], price: finalPrice }
@@ -290,7 +334,7 @@ export default function useBassConfig() {
     Object.keys(BASS_PICKGUARD_OPTIONS).forEach(bodyKey => {
       merged[bodyKey] = { ...BASS_PICKGUARD_OPTIONS[bodyKey] }
       Object.keys(merged[bodyKey]).forEach(key => {
-        const specific = getOptionOverride('pickguard', key)
+        const specific = getOptionOverride('pickguard', key, bodyKey)
         const finalPrice = specific !== undefined ? specific : pickguardCatPrice
         if (finalPrice !== undefined) {
           merged[bodyKey][key] = { ...merged[bodyKey][key], price: finalPrice }
@@ -307,7 +351,7 @@ export default function useBassConfig() {
     Object.keys(BASS_KNOB_OPTIONS).forEach(bodyKey => {
       merged[bodyKey] = { ...BASS_KNOB_OPTIONS[bodyKey] }
       Object.keys(merged[bodyKey]).forEach(key => {
-        const specific = getOptionOverride('knobs', key) ?? getOptionOverride('hardware', key)
+        const specific = getOptionOverride('knobs', key, bodyKey) ?? getOptionOverride('hardware', key, bodyKey)
         const finalPrice = specific !== undefined ? specific : (knobsCatPrice !== undefined ? knobsCatPrice : hardwareCatPrice)
         if (finalPrice !== undefined) {
           merged[bodyKey][key] = { ...merged[bodyKey][key], price: finalPrice }
@@ -367,10 +411,19 @@ export default function useBassConfig() {
     return merged
   }, [priceOverrides])
 
+  const getBridgeKeysForStrings = useCallback((bassType, strings) => {
+    const allKeys = Object.keys(BASS_BRIDGE_OPTIONS[bassType] ?? BASS_BRIDGE_OPTIONS.vader)
+    const wantsFive = String(strings) === '5'
+    const fiveKeys = allKeys.filter((key) => /(^|[^0-9])5([^0-9]|$)/i.test(key))
+    const fourKeys = allKeys.filter((key) => !/(^|[^0-9])5([^0-9]|$)/i.test(key))
+    const preferred = wantsFive ? fiveKeys : fourKeys
+    return preferred.length > 0 ? preferred : allKeys
+  }, [])
+
   useEffect(() => {
     const pickguardKeys = Object.keys(BASS_PICKGUARD_OPTIONS[config.bassType] ?? BASS_PICKGUARD_OPTIONS.vader)
     const knobKeys = Object.keys(BASS_KNOB_OPTIONS[config.bassType] ?? BASS_KNOB_OPTIONS.vader)
-    const bridgeKeys = Object.keys(BASS_BRIDGE_OPTIONS[config.bassType] ?? BASS_BRIDGE_OPTIONS.vader)
+    const bridgeKeys = getBridgeKeysForStrings(config.bassType, config.strings)
     const logoKeys = Object.keys(BASS_LOGO_OPTIONS[config.bassType] ?? BASS_LOGO_OPTIONS.vader)
     
     const nextPickguard = pickguardKeys.includes(config.pickguard) ? config.pickguard : pickguardKeys[0]
@@ -387,7 +440,7 @@ export default function useBassConfig() {
         logo: nextLogo,
       }))
     }
-  }, [config.bassType, config.knobs, config.pickguard, config.bridge, config.logo])
+  }, [config.bassType, config.strings, config.knobs, config.pickguard, config.bridge, config.logo, getBridgeKeysForStrings])
 
   const updateConfig = useCallback((patch) => {
     setConfig(prev => ({ ...prev, ...patch }))
@@ -463,8 +516,12 @@ export default function useBassConfig() {
     [mergedBodyFinishOptions],
   )
   const bodyOptions = useMemo(
-    () => Object.entries(mergedBodyOptions).map(([value, option]) => ({ value, ...option })),
-    [mergedBodyOptions],
+    () => Object.entries(mergedBodyOptions).map(([value, option]) => ({
+      value,
+      ...option,
+      previewImageUrl: modelImageMap[value] || null,
+    })),
+    [mergedBodyOptions, modelImageMap],
   )
   const neckOptions = useMemo(
     () => Object.entries(mergedNeckOptions).map(([value, option]) => ({ value, ...option })),
@@ -483,13 +540,16 @@ export default function useBassConfig() {
     [mergedInlayOptions],
   )
   const bridgeOptions = useMemo(
-    () =>
-      Object.entries(mergedBridgeOptions[config.bassType] ?? mergedBridgeOptions.vader).map(([value, option]) => ({
+    () => {
+      const bridgeMap = mergedBridgeOptions[config.bassType] ?? mergedBridgeOptions.vader
+      const allowedKeys = new Set(getBridgeKeysForStrings(config.bassType, config.strings))
+      return Object.entries(bridgeMap).filter(([value]) => allowedKeys.has(value)).map(([value, option]) => ({
         value,
         ...option,
         preview: option.assets?.[config.hardware] ?? option.assets?.chrome ?? option.assets?.black ?? option.assets?.gold,
-      })),
-    [config.hardware, config.bassType, mergedBridgeOptions],
+      }))
+    },
+    [config.hardware, config.bassType, config.strings, getBridgeKeysForStrings, mergedBridgeOptions],
   )
   const pickguardOptions = useMemo(
     () =>
@@ -542,8 +602,8 @@ export default function useBassConfig() {
     [config.bassType, mergedLogoOptions],
   )
   const backplateOptions = useMemo(
-    () => Object.entries(mergedBackplateOptions).map(([value, option]) => ({ value, ...option })),
-    [mergedBackplateOptions],
+    () => Object.entries(mergedBackplateOptions[config.bassType] ?? mergedBackplateOptions.vader).map(([value, option]) => ({ value, ...option })),
+    [config.bassType, mergedBackplateOptions],
   )
   const pickupScrewOptions = useMemo(
     () => Object.entries(mergedPickupScrewOptions[config.bassType] ?? mergedPickupScrewOptions.vader).map(([value, option]) => ({ value, ...option })),
@@ -569,6 +629,31 @@ export default function useBassConfig() {
     fetchBuilderParts()
   }, [])
 
+  const pricingBreakdown = useMemo(() => ({
+    base: dynamicBasePrice,
+    body: mergedBodyOptions[config.bassType]?.price ?? BASS_BODY_OPTIONS[config.bassType]?.price ?? 0,
+    bodyWood: mergedBodyWoodOptions[config.bodyWood]?.price ?? BASS_BODY_WOOD_OPTIONS[config.bodyWood]?.price ?? 0,
+    bodyFinish: mergedBodyFinishOptions[config.bodyFinish]?.price ?? BASS_BODY_FINISH_OPTIONS[config.bodyFinish]?.price ?? 0,
+    neck: mergedNeckOptions[config.neck]?.price ?? BASS_NECK_OPTIONS[config.neck]?.price ?? 0,
+    fretboard: mergedFretboardOptions[config.fretboard]?.price ?? BASS_FRETBOARD_OPTIONS[config.fretboard]?.price ?? 0,
+    headstockWood: mergedHeadstockWoodOptions[config.headstockWood]?.price ?? BASS_HEADSTOCK_WOOD_OPTIONS[config.headstockWood]?.price ?? 0,
+    headstockStyle: mergedHeadstockStyleOptions[config.headstockStyle]?.price ?? BASS_HEADSTOCK_STYLE_OPTIONS[config.headstockStyle]?.price ?? 0,
+    neckStyle: mergedNeckStyleOptions[config.neckStyle]?.price ?? BASS_NECK_STYLE_OPTIONS[config.neckStyle]?.price ?? 0,
+    inlays: mergedInlayOptions[config.inlays]?.price ?? BASS_INLAY_OPTIONS[config.inlays]?.price ?? 0,
+    logo: mergedLogoOptions[config.bassType]?.[config.logo]?.price ?? BASS_LOGO_OPTIONS[config.bassType]?.[config.logo]?.price ?? 0,
+    backplate: mergedBackplateOptions[config.bassType]?.[config.backplate]?.price ?? BASS_BACKPLATE_OPTIONS[config.bassType]?.[config.backplate]?.price ?? 0,
+    pickupScrews: mergedPickupScrewOptions[config.bassType]?.[config.pickupScrews]?.price ?? BASS_PICKUP_SCREW_OPTIONS[config.bassType]?.[config.pickupScrews]?.price ?? 0,
+    controlPlate: mergedControlPlateOptions[config.controlPlate]?.price ?? BASS_CONTROL_PLATE_OPTIONS[config.controlPlate]?.price ?? 0,
+    bridge: mergedBridgeOptions[config.bassType]?.[config.bridge]?.price ?? BASS_BRIDGE_OPTIONS[config.bassType]?.[config.bridge]?.price ?? 0,
+    pickguard: mergedPickguardOptions[config.bassType]?.[config.pickguard]?.price ?? BASS_PICKGUARD_OPTIONS[config.bassType]?.[config.pickguard]?.price ?? 0,
+    knobs: mergedKnobOptions[config.bassType]?.[config.knobs]?.price ?? BASS_KNOB_OPTIONS[config.bassType]?.[config.knobs]?.price ?? 0,
+    hardware: mergedHardwareOptions[config.hardware]?.price ?? BASS_HARDWARE_OPTIONS[config.hardware]?.price ?? 0,
+    pickups: mergedPickupOptions[config.pickups]?.price ?? BASS_PICKUP_OPTIONS[config.pickups]?.price ?? 0,
+    pickupTypeStyle: mergedPickupTypeStyleOptions[config.pickupTypeStyle]?.price ?? BASS_PICKUP_TYPE_STYLE_OPTIONS[config.pickupTypeStyle]?.price ?? 0,
+    pickupConfig: 0,
+    strings: mergedStringOptions[config.strings]?.price ?? BASS_STRING_OPTIONS[config.strings]?.price ?? 0,
+  }), [config, dynamicBasePrice, mergedBodyOptions, mergedBodyWoodOptions, mergedBodyFinishOptions, mergedNeckOptions, mergedFretboardOptions, mergedHeadstockWoodOptions, mergedHeadstockStyleOptions, mergedNeckStyleOptions, mergedInlayOptions, mergedLogoOptions, mergedBackplateOptions, mergedPickupScrewOptions, mergedControlPlateOptions, mergedBridgeOptions, mergedPickguardOptions, mergedKnobOptions, mergedHardwareOptions, mergedPickupOptions, mergedPickupTypeStyleOptions, mergedStringOptions])
+
   return {
     config,
     setConfig,
@@ -576,6 +661,7 @@ export default function useBassConfig() {
     resetConfig,
     price,
     summary,
+    pricingBreakdown,
     exportConfig,
     loadConfig,
     builder: bassBuilder,

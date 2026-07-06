@@ -38,6 +38,7 @@ exports.createSale = async (
     taxAmount = 0,
     totalAmount = 0,
     paymentMethod = 'cash',
+    cashReceived = null,
     referenceNumber = null,
     status = 'completed',
     items = []
@@ -52,12 +53,33 @@ exports.createSale = async (
     throw new AppError('Staff member not found or inactive', 404);
   }
 
-  const normalizedPaymentMethod = ['cash', 'gcash', 'bank_transfer'].includes(paymentMethod) ? paymentMethod : 'cash';
+  const normalizedPaymentMethod = String(paymentMethod || '').toLowerCase();
+  if (!['cash', 'gcash'].includes(normalizedPaymentMethod)) {
+    throw new AppError('Only cash and GCash are allowed for POS payments', 400);
+  }
   const normalizedStatus = ['pending', 'completed', 'cancelled'].includes(status) ? status : 'completed';
   const normalizedSubtotal = Math.max(0, Number(subtotal || 0));
-  const normalizedTaxAmount = Math.max(0, Number(taxAmount || 0));
-  const normalizedTotalAmount = Math.max(0, Number(totalAmount || 0));
+  const normalizedTaxAmount = 0;
+  const normalizedTotalAmount = normalizedSubtotal;
   const paymentStatus = normalizedPaymentMethod === 'cash' ? 'verified' : 'pending';
+  const normalizedReferenceNumber = referenceNumber == null ? null : String(referenceNumber).trim();
+  const normalizedCashReceived = cashReceived == null || String(cashReceived).trim() === ''
+    ? null
+    : Number(cashReceived);
+
+  if (normalizedPaymentMethod === 'gcash' && !normalizedReferenceNumber) {
+    throw new AppError('GCash reference number is required', 400);
+  }
+
+  if (normalizedPaymentMethod === 'cash') {
+    if (normalizedCashReceived == null || !Number.isFinite(normalizedCashReceived)) {
+      throw new AppError('Cash received is required for cash payments', 400);
+    }
+    if (normalizedCashReceived < normalizedTotalAmount) {
+      throw new AppError('Cash received is below total amount', 400);
+    }
+  }
+
   const completedAt = normalizedStatus === 'completed' ? new Date() : null;
   const saleNumber = await generateSaleNumber();
 
@@ -86,13 +108,13 @@ exports.createSale = async (
         normalizedPaymentMethod,
         paymentStatus,
         normalizedStatus,
-        referenceNumber,
+        normalizedReferenceNumber,
         notes,
         completedAt
       ]
     );
 
-    const sale = saleRes.rows[0];
+    let sale = saleRes.rows[0];
 
     if (items && items.length > 0) {
       for (const item of items) {
@@ -141,6 +163,20 @@ exports.createSale = async (
           );
         }
       }
+
+      await recalculateSaleTotals(client, sale.sale_id);
+
+      const updatedSaleRes = await client.query(
+        `SELECT
+          sale_id, sale_number, staff_id, customer_name, customer_phone,
+          subtotal, discount_amount, tax_amount, total_amount,
+          payment_method, payment_status, status, reference_number, created_at, completed_at
+         FROM pos_sales
+         WHERE sale_id = $1`,
+        [sale.sale_id]
+      );
+
+      sale = updatedSaleRes.rows[0] || sale;
     }
 
     await client.query('COMMIT');
@@ -465,8 +501,12 @@ exports.updateSaleInfo = async (saleId, { paymentMethod, customerName, customerP
   let idx = 1;
 
   if (paymentMethod) {
+    const normalizedPaymentMethod = String(paymentMethod).toLowerCase();
+    if (!['cash', 'gcash'].includes(normalizedPaymentMethod)) {
+      throw new AppError('Only cash and GCash are allowed for POS payments', 400);
+    }
     updates.push(`payment_method = $${idx}`);
-    values.push(paymentMethod);
+    values.push(normalizedPaymentMethod);
     idx++;
   }
   if (customerName !== undefined) {
@@ -513,6 +553,16 @@ exports.checkoutSale = async (
   paymentMethod,
   { referenceNumber = null, notes = null }
 ) => {
+  const normalizedPaymentMethod = String(paymentMethod || '').toLowerCase();
+  if (!['cash', 'gcash'].includes(normalizedPaymentMethod)) {
+    throw new AppError('Only cash and GCash are allowed for POS checkout', 400);
+  }
+
+  const normalizedReferenceNumber = referenceNumber == null ? null : String(referenceNumber).trim();
+  if (normalizedPaymentMethod === 'gcash' && !normalizedReferenceNumber) {
+    throw new AppError('GCash reference number is required', 400);
+  }
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -588,7 +638,7 @@ exports.checkoutSale = async (
         reference_number = $4, completed_at = now(), updated_at = now()
        WHERE sale_id = $5
        RETURNING sale_id, sale_number, total_amount, status, payment_status`,
-      ['completed', paymentMethod === 'cash' ? 'verified' : 'pending', paymentMethod, referenceNumber, saleId]
+      ['completed', normalizedPaymentMethod === 'cash' ? 'verified' : 'pending', normalizedPaymentMethod, normalizedReferenceNumber, saleId]
     );
 
     // Create pos_payment record
@@ -599,9 +649,9 @@ exports.checkoutSale = async (
       [
         saleId,
         sale.total_amount,
-        paymentMethod,
-        paymentMethod === 'cash' ? 'verified' : 'pending',
-        referenceNumber,
+        normalizedPaymentMethod,
+        normalizedPaymentMethod === 'cash' ? 'verified' : 'pending',
+        normalizedReferenceNumber,
         notes
       ]
     );
@@ -669,7 +719,7 @@ exports.cancelSale = async (saleId, cancelledBy, reason = null) => {
 // ─── HELPER FUNCTIONS ────────────────────────────────────────────────────────
 
 /**
- * Recalculate sale totals (subtotal, tax, total)
+ * Recalculate sale totals (subtotal and total)
  * Assumes transaction context
  */
 const recalculateSaleTotals = async (client, saleId) => {
@@ -683,10 +733,8 @@ const recalculateSaleTotals = async (client, saleId) => {
   const subtotal = parseFloat(itemsRes.rows[0]?.subtotal || 0);
   const discountAmount = parseFloat(itemsRes.rows[0]?.total_discount || 0);
   
-  // Tax calculation (12% default - adjust as needed)
-  const taxableAmount = subtotal;
-  const taxAmount = taxableAmount * 0.12;
-  const totalAmount = subtotal + taxAmount;
+  const taxAmount = 0;
+  const totalAmount = subtotal;
 
   await client.query(
     `UPDATE pos_sales SET 

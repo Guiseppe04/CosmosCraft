@@ -1,6 +1,7 @@
 const { asyncHandler, AppError } = require('../middleware/errorHandler');
 const userService = require('../services/userService');
 const { addAddressSchema, updateAddressSchema, updateProfileSchema } = require('../utils/validation');
+const { hasRole } = require('../utils/roles');
 
 /**
  * Get Current User Profile
@@ -166,7 +167,7 @@ exports.getAllUsers = asyncHandler(async (req, res, next) => {
 });
 
 /**
- * Update User Role (super_admin only — can assign any role)
+ * Update User Role (admin access)
  */
 exports.updateUserRole = asyncHandler(async (req, res, next) => {
   const { userId } = req.params;
@@ -177,9 +178,8 @@ exports.updateUserRole = asyncHandler(async (req, res, next) => {
     throw new AppError(`Invalid role. Must be one of: ${VALID_ROLES.join(', ')}`, 400);
   }
 
-  // Prevent non-super_admins from assigning super_admin role
-  if (role === 'super_admin' && req.user.role !== 'super_admin') {
-    throw new AppError('Only super admins can assign the super_admin role', 403);
+  if (!hasRole(req.user.role, 'admin')) {
+    throw new AppError('Only admins can update user roles', 403);
   }
 
   const { pool } = require('../config/database');

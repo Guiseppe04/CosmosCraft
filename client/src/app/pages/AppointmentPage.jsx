@@ -1,7 +1,8 @@
-import { useState, useMemo } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useNavigate } from 'react-router'
 import { motion, AnimatePresence } from 'motion/react'
 import { API } from '../utils/apiConfig'
+import { uploadToCloudinary } from '../utils/cloudinary.js'
 import { useAuth } from '../context/AuthContext.jsx'
 import {
   Wrench,
@@ -14,50 +15,9 @@ import {
   ChevronRight,
   CheckCircle2,
   Check,
+  ImagePlus,
+  X,
 } from 'lucide-react'
-
-// --- CONSTANTS & DATA ---
-
-const guitarServices = [
-  {
-    categoryId: 'setup',
-    name: 'Setup & Intonation',
-    icon: Settings,
-    options: [
-      { id: 'setup-standard', name: 'Standard Setup', leadTime: 3, price: 80, desc: 'Complete intonation, action, and neck adjustment. (1-3 days)' },
-      { id: 'setup-full', name: 'Full Setup', leadTime: 7, price: 120, desc: 'Includes fret polishing and deep cleaning. (up to 7 days)' },
-    ]
-  },
-  {
-    categoryId: 'refinishing',
-    name: 'Refinishing',
-    icon: Paintbrush,
-    options: [
-      { id: 'refinish-basic', name: 'Basic Refinish', leadTime: 21, price: 300, desc: 'Standard solid color. (2-3 weeks)' },
-      { id: 'refinish-custom', name: 'Custom Refinish', leadTime: 42, price: 500, desc: 'Burst, metallic, or custom art. (4-6+ weeks)' },
-    ]
-  },
-  {
-    categoryId: 'repair',
-    name: 'Repair & Restoration',
-    icon: Wrench,
-    options: [
-      { id: 'repair-minor', name: 'Minor Repairs', leadTime: 0, price: 40, desc: 'String replacement, minor wiring fix. (Same day)' },
-      { id: 'repair-moderate', name: 'Moderate Repairs', leadTime: 7, price: 150, desc: 'Fret leveling, nut replacement. (2-7 days)' },
-      { id: 'repair-major', name: 'Major Repairs', leadTime: 21, price: 350, desc: 'Structural fix, headstock repair. (1-3 weeks or more)' },
-    ]
-  },
-  {
-    categoryId: 'electronics',
-    name: 'Electronics Upgrade',
-    icon: Sparkles,
-    options: [
-      { id: 'elec-simple', name: 'Simple Upgrade', leadTime: 0, price: 60, desc: 'Pots, output jack, capacitors. (Same day)' },
-      { id: 'elec-moderate', name: 'Moderate Upgrade', leadTime: 3, price: 120, desc: 'Pickup installation, wiring cleanup. (1-3 days)' },
-      { id: 'elec-advanced', name: 'Advanced Mods', leadTime: 7, price: 200, desc: 'Coil-splitting, custom wiring, shielding. (3-7 days)' },
-    ]
-  }
-]
 
 const APPOINTMENT_BRANCH_STORAGE_KEY = 'cosmoscraft.appointment.branch'
 const DEFAULT_BRANCH = {
@@ -96,6 +56,29 @@ const STEPS = [
   { id: 5, label: 'Confirmation' },
 ]
 
+const SERVICE_CATEGORY_META = {
+  setup: {
+    name: 'Setup & Intonation',
+    icon: Settings,
+    order: 1,
+  },
+  refinishing: {
+    name: 'Refinishing',
+    icon: Paintbrush,
+    order: 2,
+  },
+  repair: {
+    name: 'Repair & Restoration',
+    icon: Wrench,
+    order: 3,
+  },
+  electronics: {
+    name: 'Electronics Upgrade',
+    icon: Sparkles,
+    order: 4,
+  },
+}
+
 // --- HOLIDAYS ---
 const HOLIDAYS = [
   // Format: 'MM-DD' (month-day)
@@ -112,6 +95,8 @@ const HOLIDAYS = [
 ]
 
 const OPENING_YEAR = 2026
+const MAX_REFERENCE_IMAGE_BYTES = 10 * 1024 * 1024
+const APPOINTMENT_GUITAR_TYPES = ['electric', 'bass', 'acoustic', 'ukulele']
 
 // --- UTILS ---
 
@@ -121,7 +106,65 @@ function isHoliday(date) {
   return HOLIDAYS.includes(`${month}-${day}`)
 }
 
-function getMonthMatrix(year, month, maxLeadTimeDays) {
+function inferServiceIcon(service = {}) {
+  const haystack = `${service.name || ''} ${service.description || ''}`.toLowerCase()
+  if (haystack.includes('refinish') || haystack.includes('paint') || haystack.includes('burst') || haystack.includes('color')) return Paintbrush
+  if (haystack.includes('electronic') || haystack.includes('pickup') || haystack.includes('wiring') || haystack.includes('mod')) return Sparkles
+  if (haystack.includes('setup') || haystack.includes('intonation') || haystack.includes('action') || haystack.includes('neck')) return Settings
+  return Wrench
+}
+
+function inferLeadTimeDays(service = {}) {
+  if (Number.isFinite(Number(service.lead_time_days))) {
+    return Number(service.lead_time_days)
+  }
+
+  const description = String(service.description || '').toLowerCase()
+  if (!description) return 0
+  if (description.includes('same day')) return 0
+
+  const dayRangeMatch = description.match(/(\d+)\s*-\s*(\d+)\s*days?/)
+  if (dayRangeMatch) return Number(dayRangeMatch[2]) || 0
+
+  const upToDayMatch = description.match(/up to\s*(\d+)\s*days?/)
+  if (upToDayMatch) return Number(upToDayMatch[1]) || 0
+
+  const singleDayMatch = description.match(/(\d+)\s*days?/)
+  if (singleDayMatch) return Number(singleDayMatch[1]) || 0
+
+  const weekRangeMatch = description.match(/(\d+)\s*-\s*(\d+)\s*\+?\s*weeks?/)
+  if (weekRangeMatch) return (Number(weekRangeMatch[2]) || 0) * 7
+
+  const singleWeekMatch = description.match(/(\d+)\s*\+?\s*weeks?/)
+  if (singleWeekMatch) return (Number(singleWeekMatch[1]) || 0) * 7
+
+  return 0
+}
+
+function formatLeadTimeLabel(service = {}) {
+  const leadTimeDays = inferLeadTimeDays(service)
+  if (leadTimeDays <= 0) return 'Same day turnaround'
+  return `Up to ${leadTimeDays} day${leadTimeDays > 1 ? 's' : ''} turnaround`
+}
+
+function formatLocalDateId(date) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function normalizeAppointmentGuitarType(value = '') {
+  return String(value || '').trim().toLowerCase()
+}
+
+function formatAppointmentGuitarTypeLabel(value = '') {
+  const normalized = normalizeAppointmentGuitarType(value)
+  if (!normalized) return '—'
+  return normalized.charAt(0).toUpperCase() + normalized.slice(1)
+}
+
+function getMonthMatrix(year, month, maxLeadTimeDays, disabledDateSet = new Set()) {
   const firstDay = new Date(year, month, 1)
   const firstWeekday = firstDay.getDay()
   const daysInMonth = new Date(year, month + 1, 0).getDate()
@@ -146,12 +189,13 @@ function getMonthMatrix(year, month, maxLeadTimeDays) {
       let isHolidayDate = false
 
       if (inCurrentMonth) {
-        id = date.toISOString().slice(0, 10)
+        id = formatLocalDateId(date)
         const isPast = date < today
         const isTooSoon = date < minAvailableDate
         const isSunday = date.getDay() === 0
         isHolidayDate = isHoliday(date)
-        isAvailable = !isPast && !isTooSoon && !isSunday && !isHolidayDate
+        const isAdminDisabled = disabledDateSet.has(id)
+        isAvailable = !isPast && !isTooSoon && !isSunday && !isHolidayDate && !isAdminDisabled
       }
 
       week.push({
@@ -190,34 +234,216 @@ export function AppointmentPage() {
   
   // Selections
   const [guitarSelectionMode, setGuitarSelectionMode] = useState(savedBuilds.length > 0 ? 'saved' : 'manual')
-  const [selectedBuildId, setSelectedBuildId] = useState('')
+  const [selectedSavedBuildId, setSelectedSavedBuildId] = useState('')
   const [homeServiceOption, setHomeServiceOption] = useState('')
   const [homeServiceAddressId, setHomeServiceAddressId] = useState('')
   const [homeServiceContact, setHomeServiceContact] = useState(user?.phone || '')
+  const [availableServices, setAvailableServices] = useState([])
+  const [servicesError, setServicesError] = useState('')
+  const [servicesLoading, setServicesLoading] = useState(true)
   const [selectedServicesByCategory, setSelectedServicesByCategory] = useState({})
-  const [guitarDetails, setGuitarDetails] = useState({ brand: '', model: '', type: '', notes: '' })
+  const [guitarDetails, setGuitarDetails] = useState({ brand: '', model: '', type: 'electric', notes: '' })
+  const [serviceReferenceFile, setServiceReferenceFile] = useState(null)
+  const [serviceReferencePreviewUrl, setServiceReferencePreviewUrl] = useState('')
+  const [guitarReferenceFile, setGuitarReferenceFile] = useState(null)
+  const [guitarReferencePreviewUrl, setGuitarReferencePreviewUrl] = useState('')
   const [selectedBranchId] = useState(branches[0].id)
   const [selectedDateId, setSelectedDateId] = useState('')
   const [selectedTime, setSelectedTime] = useState('')
+  const [unavailableDateSet, setUnavailableDateSet] = useState(new Set())
+  const [availableTimeSet, setAvailableTimeSet] = useState(new Set())
+  const [slotsLoading, setSlotsLoading] = useState(false)
+  const [slotAvailabilityStatus, setSlotAvailabilityStatus] = useState('')
   
   // Calendar state
   const [currentMonth, setCurrentMonth] = useState(today.getMonth())
   const [currentYear, setCurrentYear] = useState(today.getFullYear())
-  const [bookingComplete, setBookingComplete] = useState(false)
+  const [isSubmittingBooking, setIsSubmittingBooking] = useState(false)
+  const [showBookingSuccess, setShowBookingSuccess] = useState(false)
 
-  const timeSlots = ['9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM']
+  const timeSlots = useMemo(
+    () => ['9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM'],
+    []
+  )
 
   const currentBranch = branches.find(b => b.id === selectedBranchId)
   const selectedDate = selectedDateId ? new Date(`${selectedDateId}T00:00:00`) : null
 
+  const selectedAppointmentType = homeServiceOption === 'yes' ? 'service_home' : homeServiceOption === 'no' ? 'service_in_shop' : ''
+  const hasManualGuitarDetails = Boolean(
+    guitarDetails.brand.trim()
+    && guitarDetails.model.trim()
+    && normalizeAppointmentGuitarType(guitarDetails.type)
+  )
+  const selectedSavedBuilds = useMemo(
+    () => savedBuilds.filter((build) => String(build.id) === String(selectedSavedBuildId)),
+    [selectedSavedBuildId, savedBuilds]
+  )
+  const selectedGuitarEntries = useMemo(() => {
+    if (guitarSelectionMode === 'saved') {
+      return selectedSavedBuilds.map((build) => ({
+        brand: build.name || 'Saved Build',
+        model: build.summary?.body || build.config?.body || build.config?.bassType || 'Custom Build',
+        type: normalizeAppointmentGuitarType(build.isBass ? 'bass' : (build.config?.guitarType || 'electric')),
+        serial: 'N/A',
+        notes: build.summary
+          ? `Saved build details: ${Object.values(build.summary).filter(Boolean).join(', ')}`
+          : '',
+      }))
+    }
+
+    if (!hasManualGuitarDetails) return []
+    return [{
+      brand: guitarDetails.brand.trim(),
+      model: guitarDetails.model.trim(),
+      type: normalizeAppointmentGuitarType(guitarDetails.type),
+      serial: 'N/A',
+      notes: guitarDetails.notes.trim(),
+    }]
+  }, [guitarDetails, guitarSelectionMode, hasManualGuitarDetails, selectedSavedBuilds])
+  const hasSelectedGuitar = selectedGuitarEntries.length > 0
   const selectedServices = useMemo(
     () => Object.values(selectedServicesByCategory).filter(Boolean),
     [selectedServicesByCategory]
   )
-  const selectedBuild = savedBuilds.find((build) => String(build.id) === String(selectedBuildId)) || null
-  const selectedAppointmentType = homeServiceOption === 'yes' ? 'service_home' : homeServiceOption === 'no' ? 'service_in_shop' : ''
-  const hasManualGuitarDetails = Boolean(guitarDetails.brand.trim() && guitarDetails.model.trim() && guitarDetails.type.trim())
-  const hasSelectedGuitar = guitarSelectionMode === 'saved' ? Boolean(selectedBuild) : hasManualGuitarDetails
+
+  useEffect(() => {
+    let isMounted = true
+
+    const loadServices = async () => {
+      setServicesLoading(true)
+      setServicesError('')
+
+      try {
+        const response = await fetch(`${API}/api/services?is_active=true&limit=100&sort=name&order=asc`)
+        const payload = await response.json().catch(() => ({}))
+
+        if (!response.ok) {
+          throw new Error(payload.message || 'Failed to load services')
+        }
+
+        if (!isMounted) return
+        setAvailableServices(Array.isArray(payload.data) ? payload.data : [])
+      } catch (error) {
+        if (!isMounted) return
+        setServicesError(error.message || 'Failed to load services')
+        setAvailableServices([])
+      } finally {
+        if (isMounted) {
+          setServicesLoading(false)
+        }
+      }
+    }
+
+    loadServices()
+    return () => { isMounted = false }
+  }, [])
+
+  useEffect(() => {
+    let isMounted = true
+
+    const loadUnavailableDates = async () => {
+      try {
+        const response = await fetch(`${API}/api/appointments/unavailable-dates`, {
+          credentials: 'include',
+        })
+        const payload = await response.json().catch(() => ({}))
+
+        if (!response.ok) {
+          if (!isMounted) return
+          setUnavailableDateSet(new Set())
+          return
+        }
+
+        const dates = Array.isArray(payload?.data?.unavailable_dates) ? payload.data.unavailable_dates : []
+        const nextSet = new Set(
+          dates
+            .map((entry) => String(entry?.date || '').slice(0, 10))
+            .filter(Boolean)
+        )
+
+        if (isMounted) {
+          setUnavailableDateSet(nextSet)
+          if (selectedDateId && nextSet.has(selectedDateId)) {
+            setSelectedDateId('')
+            setSelectedTime('')
+          }
+        }
+      } catch {
+        if (isMounted) {
+          setUnavailableDateSet(new Set())
+        }
+      }
+    }
+
+    loadUnavailableDates()
+    return () => { isMounted = false }
+  }, [])
+
+  useEffect(() => {
+    let isMounted = true
+
+    const loadAvailableSlots = async () => {
+      if (!selectedDateId || unavailableDateSet.has(selectedDateId)) {
+        setAvailableTimeSet(new Set())
+        setSlotAvailabilityStatus('')
+        return
+      }
+
+      const fallbackServiceId = selectedServices[0] || availableServices[0]?.service_id
+      if (!fallbackServiceId) {
+        setAvailableTimeSet(new Set(timeSlots))
+        setSlotAvailabilityStatus('open')
+        return
+      }
+
+      setSlotsLoading(true)
+      try {
+        const response = await fetch(
+          `${API}/api/appointments/services/${fallbackServiceId}/availability/slots?date=${selectedDateId}&slot_duration=60`,
+          { credentials: 'include' }
+        )
+        const payload = await response.json().catch(() => ({}))
+        if (!response.ok) {
+          throw new Error(payload?.message || 'Failed to load available time slots')
+        }
+
+        const backendSlots = Array.isArray(payload?.data?.available_slots) ? payload.data.available_slots : []
+        const availabilityStatus = String(payload?.data?.availability_status || (backendSlots.length > 0 ? 'open' : '')).toLowerCase()
+        const nextSet = new Set(
+          backendSlots
+            .map((slot) => {
+              if (slot?.formatted_start) return String(slot.formatted_start).toUpperCase()
+              if (slot?.start) {
+                return new Date(slot.start).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }).toUpperCase()
+              }
+              return null
+            })
+            .filter(Boolean)
+        )
+
+        if (!isMounted) return
+        setAvailableTimeSet(nextSet)
+        setSlotAvailabilityStatus(availabilityStatus)
+        if (selectedTime && !nextSet.has(selectedTime.toUpperCase())) {
+          setSelectedTime('')
+        }
+      } catch {
+        if (isMounted) {
+          const fallbackSet = new Set(timeSlots.map((slot) => slot.toUpperCase()))
+          setAvailableTimeSet(fallbackSet)
+          setSlotAvailabilityStatus('')
+        }
+      } finally {
+        if (isMounted) {
+          setSlotsLoading(false)
+        }
+      }
+    }
+
+    loadAvailableSlots()
+    return () => { isMounted = false }
+  }, [availableServices, selectedDateId, selectedServices, selectedTime, timeSlots, unavailableDateSet])
 
   // Derived calculations
   const { maxLeadTime, totalPrice, selectedDetailedServices } = useMemo(() => {
@@ -226,47 +452,73 @@ export function AppointmentPage() {
     let details = []
 
     selectedServices.forEach(selectedId => {
-      for (const cat of guitarServices) {
-        const opt = cat.options.find(o => o.id === selectedId)
-        if (opt) {
-          lead = Math.max(lead, opt.leadTime)
-          price += opt.price
-          details.push(opt)
-        }
+      const service = availableServices.find((item) => String(item.service_id) === String(selectedId))
+      if (service) {
+        lead = Math.max(lead, inferLeadTimeDays(service))
+        price += Number(service.price || 0)
+        details.push({
+          id: String(service.service_id),
+          name: service.name,
+          price: Number(service.price || 0),
+          desc: service.description || '',
+          duration_minutes: Number(service.duration_minutes || 0),
+          icon: inferServiceIcon(service),
+        })
       }
     })
     return { maxLeadTime: lead, totalPrice: price, selectedDetailedServices: details }
-  }, [selectedServices])
+  }, [availableServices, selectedServices])
 
-  const monthMatrix = useMemo(() => getMonthMatrix(currentYear, currentMonth, maxLeadTime), [currentYear, currentMonth, maxLeadTime])
+  const groupedServices = useMemo(() => {
+    const groups = new Map()
+
+    availableServices.forEach((service) => {
+      const categoryId = String(service.category_id || 'other').trim().toLowerCase() || 'other'
+      const meta = SERVICE_CATEGORY_META[categoryId] || {
+        name: categoryId
+          .split(/[_-]+/)
+          .filter(Boolean)
+          .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+          .join(' ') || 'Other Services',
+        icon: inferServiceIcon(service),
+        order: 99,
+      }
+
+      if (!groups.has(categoryId)) {
+        groups.set(categoryId, {
+          categoryId,
+          name: meta.name,
+          icon: meta.icon,
+          order: meta.order,
+          services: [],
+        })
+      }
+
+      groups.get(categoryId).services.push(service)
+    })
+
+    return Array.from(groups.values()).sort((left, right) => {
+      if (left.order !== right.order) return left.order - right.order
+      return left.name.localeCompare(right.name)
+    })
+  }, [availableServices])
+
+  const monthMatrix = useMemo(
+    () => getMonthMatrix(currentYear, currentMonth, maxLeadTime, unavailableDateSet),
+    [currentYear, currentMonth, maxLeadTime, unavailableDateSet]
+  )
 
   const referenceNumber = selectedDate && selectedTime
     ? `CC-${selectedBranchId.toUpperCase()}-${selectedDateId.replace(/-/g, '')}-${selectedTime.replace(/[:\s]/g, '')}`
     : ''
 
-  const selectedGuitarDetails = useMemo(() => {
-    if (guitarSelectionMode === 'saved' && selectedBuild) {
-      return {
-        brand: selectedBuild.name || 'Saved Build',
-        model: selectedBuild.summary?.body || selectedBuild.config?.body || selectedBuild.config?.bassType || 'Custom Build',
-        type: selectedBuild.isBass ? 'bass' : (selectedBuild.config?.guitarType || 'guitar'),
-        notes: selectedBuild.summary ? `Saved build details: ${Object.values(selectedBuild.summary).filter(Boolean).join(', ')}` : '',
-      }
-    }
-
-    return {
-      brand: guitarDetails.brand.trim(),
-      model: guitarDetails.model.trim(),
-      type: guitarDetails.type.trim(),
-      notes: guitarDetails.notes.trim(),
-    }
-  }, [guitarSelectionMode, selectedBuild, guitarDetails])
+  const selectedPrimaryGuitar = selectedGuitarEntries[0] || null
 
   // Validation
   const canProceed = () => {
     if (currentStep === 1) return selectedDateId && selectedTime
     if (currentStep === 2) return selectedServices.length > 0
-    if (currentStep === 3) return hasSelectedGuitar && Boolean(selectedAppointmentType)
+    if (currentStep === 3) return Boolean(selectedAppointmentType)
     if (currentStep === 4) {
       if (selectedAppointmentType === 'service_home') {
         return Boolean(homeServiceAddressId && homeServiceContact.trim())
@@ -284,7 +536,6 @@ export function AppointmentPage() {
       return 'Select at least one service to continue.'
     }
     if (currentStep === 3) {
-      if (!hasSelectedGuitar) return 'Select a saved guitar or enter manual guitar details before continuing.'
       if (!selectedAppointmentType) return 'Please choose Home Service: Yes or No.'
     }
     if (currentStep === 4 && selectedAppointmentType === 'service_home') {
@@ -295,11 +546,107 @@ export function AppointmentPage() {
   }
 
   // Handlers
-  const handleToggleService = (categoryId, optId) => {
-    setSelectedServicesByCategory(prev => ({
+  const handleToggleService = (categoryId, serviceId) => {
+    const normalizedCategoryId = String(categoryId)
+    const normalizedServiceId = String(serviceId)
+
+    setSelectedServicesByCategory((prev) => ({
       ...prev,
-      [categoryId]: prev[categoryId] === optId ? null : optId
+      [normalizedCategoryId]: prev[normalizedCategoryId] === normalizedServiceId ? null : normalizedServiceId,
     }))
+  }
+
+  const renderServiceOption = (categoryId, service) => {
+    const serviceId = String(service.service_id)
+    const isSelected = selectedServicesByCategory[categoryId] === serviceId
+    const Icon = inferServiceIcon(service)
+
+    return (
+      <button
+        key={serviceId}
+        type="button"
+        onClick={() => handleToggleService(categoryId, serviceId)}
+        className={`text-left rounded-xl border-2 p-4 transition-all ${
+          isSelected
+            ? 'border-[#d4af37] bg-[#d4af37]/10'
+            : 'border-[var(--border)] bg-theme-surface-deep hover:border-[#d4af37]/30 hover:bg-[var(--surface-elevated)]'
+        }`}
+      >
+        <div className="mb-2 flex items-start justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <div className={`rounded-xl p-2 ${isSelected ? 'bg-[#d4af37]/20 text-[#d4af37]' : 'bg-[var(--surface-dark)] text-[var(--text-muted)]'}`}>
+              <Icon className="h-4 w-4" />
+            </div>
+            <div>
+              <span className={`block text-sm font-semibold ${isSelected ? 'text-[#d4af37]' : 'text-[var(--text-light)]'}`}>
+                {service.name}
+              </span>
+              <span className="mt-1 block text-xs text-[var(--text-muted)]">
+                {formatLeadTimeLabel(service)}
+              </span>
+            </div>
+          </div>
+          <span className="text-sm font-bold text-[var(--text-muted)]">PHP {Number(service.price || 0).toLocaleString('en-PH')}</span>
+        </div>
+        <p className="text-xs leading-relaxed text-[var(--text-muted)]">
+          {service.description || 'No description available.'}
+        </p>
+      </button>
+    )
+  }
+
+  const renderServiceSelection = () => {
+    if (servicesLoading) {
+      return (
+        <div className="rounded-2xl border border-[var(--border)] bg-theme-surface-deep p-6 text-sm text-[var(--text-muted)]">
+          Loading services...
+        </div>
+      )
+    }
+
+    if (servicesError) {
+      return (
+        <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-6 text-sm text-red-200">
+          {servicesError}
+        </div>
+      )
+    }
+
+    if (availableServices.length === 0) {
+      return (
+        <div className="rounded-2xl border border-[var(--border)] bg-theme-surface-deep p-6 text-sm text-[var(--text-muted)]">
+          No active services are available right now.
+        </div>
+      )
+    }
+
+    return (
+      <div className="space-y-6">
+        {groupedServices.map((category) => {
+          const CategoryIcon = category.icon
+
+          return (
+            <section key={category.categoryId} className="space-y-3">
+              <div className="flex items-center gap-3">
+                <div className="rounded-xl bg-[#d4af37]/15 p-2 text-[#d4af37]">
+                  <CategoryIcon className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold text-[var(--text-light)]">{category.name}</h3>
+                  <p className="text-xs text-[var(--text-muted)]">
+                    {category.services.length} service{category.services.length > 1 ? 's' : ''} available
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                {category.services.map((service) => renderServiceOption(category.categoryId, service))}
+              </div>
+            </section>
+          )
+        })}
+      </div>
+    )
   }
 
   const handleNextStep = () => {
@@ -314,15 +661,68 @@ export function AppointmentPage() {
     }
   }
 
+  const handleReferenceImageChange = (target, event) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      alert('Please upload an image file.')
+      return
+    }
+    if (file.size > MAX_REFERENCE_IMAGE_BYTES) {
+      alert('Image size must be 10MB or less.')
+      return
+    }
+
+    const objectUrl = URL.createObjectURL(file)
+
+    if (target === 'service') {
+      if (serviceReferencePreviewUrl) URL.revokeObjectURL(serviceReferencePreviewUrl)
+      setServiceReferenceFile(file)
+      setServiceReferencePreviewUrl(objectUrl)
+      return
+    }
+
+    if (guitarReferencePreviewUrl) URL.revokeObjectURL(guitarReferencePreviewUrl)
+    setGuitarReferenceFile(file)
+    setGuitarReferencePreviewUrl(objectUrl)
+  }
+
+  const clearReferenceImage = (target) => {
+    if (target === 'service') {
+      if (serviceReferencePreviewUrl) URL.revokeObjectURL(serviceReferencePreviewUrl)
+      setServiceReferenceFile(null)
+      setServiceReferencePreviewUrl('')
+      return
+    }
+
+    if (guitarReferencePreviewUrl) URL.revokeObjectURL(guitarReferencePreviewUrl)
+    setGuitarReferenceFile(null)
+    setGuitarReferencePreviewUrl('')
+  }
+
   const handleSubmit = async () => {
     if (!isAuthenticated) {
       openLogin(() => navigate('/appointments', { replace: true }))
       return
     }
     if (!canProceed()) return
-    setBookingComplete(true)
+    setIsSubmittingBooking(true)
     
     try {
+      let serviceReferenceImageUrl = ''
+      let guitarReferenceImageUrl = ''
+      if (serviceReferenceFile) {
+        serviceReferenceImageUrl = await uploadToCloudinary(serviceReferenceFile, {
+          folder: 'cosmoscraft/appointments/service-reference',
+        })
+      }
+      if (guitarReferenceFile) {
+        guitarReferenceImageUrl = await uploadToCloudinary(guitarReferenceFile, {
+          folder: 'cosmoscraft/appointments/guitar-reference',
+        })
+      }
+
       const [timeStr, modifier] = selectedTime.split(' ');
       let [hours, minutes] = timeStr.split(':');
       if (hours === '12') hours = '00';
@@ -340,17 +740,26 @@ export function AppointmentPage() {
           services: selectedServices,
           location_id: selectedBranchId,
           address_id: selectedAppointmentType === 'service_home' ? homeServiceAddressId : undefined,
-          guitar_details: {
-            brand: selectedGuitarDetails.brand,
-            model: selectedGuitarDetails.model,
-            serial: 'N/A',
-            type: selectedGuitarDetails.type,
-            notes: selectedGuitarDetails.notes || ''
-          },
+          guitar_details: hasSelectedGuitar
+            ? {
+                brand: selectedPrimaryGuitar?.brand || '',
+                model: selectedPrimaryGuitar?.model || '',
+                type: selectedPrimaryGuitar?.type || 'electric',
+                serial: selectedPrimaryGuitar?.serial || 'N/A',
+                notes: selectedPrimaryGuitar?.notes || '',
+                guitars: selectedGuitarEntries,
+              }
+            : undefined,
           scheduled_at: scheduledAt.toISOString(),
           notes: [
-            selectedGuitarDetails.notes || '',
+            hasSelectedGuitar
+              ? selectedGuitarEntries
+                .map((guitar, index) => `Guitar ${index + 1}: ${guitar.brand} ${guitar.model} (${formatAppointmentGuitarTypeLabel(guitar.type)})`)
+                .join('\n')
+              : '',
             selectedAppointmentType === 'service_home' ? `Home service contact: ${homeServiceContact}` : '',
+            serviceReferenceImageUrl ? `Service reference image: ${serviceReferenceImageUrl}` : '',
+            guitarReferenceImageUrl ? `Guitar reference image: ${guitarReferenceImageUrl}` : '',
           ].filter(Boolean).join('\n')
         })
       });
@@ -360,14 +769,17 @@ export function AppointmentPage() {
         throw new Error(errData.message || 'Failed to create appointment');
       }
 
+      setShowBookingSuccess(true)
       setTimeout(() => {
-        setBookingComplete(false)
+        setShowBookingSuccess(false)
+        setIsSubmittingBooking(false)
         navigate('/dashboard')
       }, 2000)
 
     } catch (error) {
       console.error('Submission Error:', error);
-      setBookingComplete(false);
+      setShowBookingSuccess(false)
+      setIsSubmittingBooking(false)
       alert(`Failed to book appointment: ${error.message}`);
     }
   }
@@ -426,7 +838,8 @@ export function AppointmentPage() {
             </div>
             
             <div className="space-y-6">
-              {guitarServices.map(category => (
+              {renderServiceSelection()}
+              {false && availableServices.map((service) => (
                 <div key={category.categoryId} className="space-y-3">
                   <div className="flex items-center gap-2">
                     <category.icon className="w-5 h-5 text-[#d4af37]" />
@@ -459,6 +872,7 @@ export function AppointmentPage() {
                 </div>
               ))}
             </div>
+
           </motion.div>
         )
 
@@ -495,16 +909,16 @@ export function AppointmentPage() {
 
               {guitarSelectionMode === 'saved' && savedBuilds.length > 0 ? (
                 <div>
-                  <label className="block text-sm font-medium text-white mb-1.5">Select Saved Guitar <span className="text-red-400">*</span></label>
+                  <label className="block text-sm font-medium text-white mb-1.5">Select Saved Guitar</label>
                   <select
-                    value={selectedBuildId}
-                    onChange={(e) => setSelectedBuildId(e.target.value)}
+                    value={selectedSavedBuildId}
+                    onChange={(e) => setSelectedSavedBuildId(e.target.value)}
                     className="w-full px-4 py-3 bg-[var(--surface-dark)] text-[var(--text-light)] border border-[var(--border)] rounded-xl text-sm focus:outline-none focus:border-[#d4af37]"
                   >
-                    <option value="">Choose a saved build</option>
+                    <option value="">No saved guitar selected</option>
                     {savedBuilds.map((build) => (
-                      <option key={build.id} value={build.id}>
-                        {build.name || 'Custom Build'} ({build.isBass ? 'Bass' : 'Guitar'})
+                      <option key={String(build.id)} value={String(build.id)}>
+                        {build.name || 'Custom Build'} - {build.isBass ? 'Bass Build' : 'Guitar Build'}
                       </option>
                     ))}
                   </select>
@@ -513,7 +927,7 @@ export function AppointmentPage() {
                 <>
                   <div className="grid sm:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-white mb-1.5">Brand <span className="text-red-400">*</span></label>
+                      <label className="block text-sm font-medium text-white mb-1.5">Brand</label>
                       <input
                         type="text"
                         value={guitarDetails.brand}
@@ -523,7 +937,7 @@ export function AppointmentPage() {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-white mb-1.5">Model <span className="text-red-400">*</span></label>
+                      <label className="block text-sm font-medium text-white mb-1.5">Model</label>
                       <input
                         type="text"
                         value={guitarDetails.model}
@@ -534,14 +948,18 @@ export function AppointmentPage() {
                     </div>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-white mb-1.5">Type <span className="text-red-400">*</span></label>
-                    <input
-                      type="text"
+                    <label className="block text-sm font-medium text-white mb-1.5">Type</label>
+                    <select
                       value={guitarDetails.type}
                       onChange={e => setGuitarDetails({ ...guitarDetails, type: e.target.value })}
                       className="w-full px-4 py-3 bg-[var(--surface-dark)] text-[var(--text-light)] border border-[var(--border)] rounded-xl text-sm focus:outline-none focus:border-[#d4af37]"
-                      placeholder="e.g. Electric, Acoustic, Bass"
-                    />
+                    >
+                      {APPOINTMENT_GUITAR_TYPES.map((type) => (
+                        <option key={type} value={type}>
+                          {formatAppointmentGuitarTypeLabel(type)}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-white mb-1.5">Notes / Issue Description</label>
@@ -549,9 +967,10 @@ export function AppointmentPage() {
                       value={guitarDetails.notes}
                       onChange={e => setGuitarDetails({ ...guitarDetails, notes: e.target.value })}
                       className="w-full h-28 px-4 py-3 bg-[var(--surface-dark)] text-[var(--text-light)] border border-[var(--border)] rounded-xl text-sm resize-none focus:outline-none focus:border-[#d4af37]"
-                      placeholder="Describe the issue or service request"
-                    />
-                  </div>
+                        placeholder="Describe the issue or service request"
+                      />
+                    </div>
+                    <p className="text-xs text-[var(--text-muted)]">Manual guitar details are saved directly from the fields above.</p>
                 </>
               )}
 
@@ -573,6 +992,37 @@ export function AppointmentPage() {
                     No, In-store Service
                   </button>
                 </div>
+              </div>
+
+              <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-4 space-y-3">
+                <p className="text-sm font-semibold text-[var(--text-light)]">Guitar Reference Image (Optional)</p>
+                <p className="text-xs text-[var(--text-muted)]">Upload a guitar image reference for styling, finish, or details you want copied.</p>
+                <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-[var(--border)] px-4 py-2.5 text-sm font-semibold text-[var(--text-light)] hover:border-[#d4af37]/50 hover:text-[#d4af37] transition-colors">
+                  <ImagePlus className="h-4 w-4" />
+                  Upload Image
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(event) => handleReferenceImageChange('guitar', event)}
+                  />
+                </label>
+                {guitarReferencePreviewUrl && (
+                  <div className="rounded-xl border border-[var(--border)] bg-theme-surface-deep p-3">
+                    <img src={guitarReferencePreviewUrl} alt="Guitar reference" className="h-40 w-full rounded-lg object-cover" />
+                    <div className="mt-3 flex items-center justify-between text-xs text-[var(--text-muted)]">
+                      <span>{guitarReferenceFile?.name || 'reference-image'}</span>
+                      <button
+                        type="button"
+                        onClick={() => clearReferenceImage('guitar')}
+                        className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] px-2 py-1 hover:border-red-400/60 hover:text-red-300 transition-colors"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </motion.div>
@@ -732,7 +1182,10 @@ export function AppointmentPage() {
                     return (
                       <button
                         key={day.id}
-                        onClick={() => setSelectedDateId(day.id)}
+                        onClick={() => {
+                          setSelectedDateId(day.id)
+                          setSelectedTime('')
+                        }}
                         className={`flex items-center justify-center h-9 sm:h-10 rounded-xl text-xs sm:text-sm font-medium transition-all ${
                           isSelected
                             ? 'bg-[#08CB00] text-black shadow-lg shadow-[#08CB00]/20 scale-105 border border-[#08CB00]/40'
@@ -750,17 +1203,34 @@ export function AppointmentPage() {
               {selectedDateId && (
                 <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="pt-6 border-t border-[var(--border)]">
                   <h3 className="text-sm font-bold text-[var(--text-muted)] mb-4 uppercase tracking-wider">Available Time Slots</h3>
+                  {slotsLoading && (
+                    <p className="mb-3 text-xs text-[var(--text-muted)]">Checking live availability...</p>
+                  )}
+                  {!slotsLoading && slotAvailabilityStatus === 'fully_booked' && (
+                    <p className="mb-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-300">
+                      Fully Booked: This date already has the maximum of 5 appointments.
+                    </p>
+                  )}
+                  {!slotsLoading && slotAvailabilityStatus === 'unavailable' && (
+                    <p className="mb-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-300">
+                      This date is unavailable for booking.
+                    </p>
+                  )}
                   <div className="flex flex-wrap gap-3">
                     {timeSlots.map(time => {
                       const isSelected = selectedTime === time
+                      const isUnavailableTime = !availableTimeSet.has(time.toUpperCase())
                       return (
                         <button
                           key={time}
                           onClick={() => setSelectedTime(time)}
+                          disabled={isUnavailableTime || slotsLoading}
                           className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
                             isSelected
                               ? 'bg-[#d4af37] text-black'
-                              : 'bg-[var(--surface-dark)] text-[var(--text-light)] border border-[var(--border)] hover:border-[#d4af37]/30'
+                              : isUnavailableTime
+                                ? 'bg-[var(--surface-elevated)] text-[var(--text-muted)]/70 border border-[var(--border)] cursor-not-allowed line-through'
+                                : 'bg-[var(--surface-dark)] text-[var(--text-light)] border border-[var(--border)] hover:border-[#d4af37]/30'
                           }`}
                         >
                           {time}
@@ -829,11 +1299,18 @@ export function AppointmentPage() {
                  <div>
                     <p className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-3">Guitar Details</p>
                     <div className="space-y-1 text-sm bg-[var(--surface-dark)] p-3 rounded-lg border border-[var(--border)]">
-                      <p><span className="text-[var(--text-muted)]">Brand:</span> <span className="text-[var(--text-light)]">{selectedGuitarDetails.brand}</span></p>
-                      <p><span className="text-[var(--text-muted)]">Model:</span> <span className="text-[var(--text-light)]">{selectedGuitarDetails.model}</span></p>
-                      <p><span className="text-[var(--text-muted)]">Type:</span> <span className="text-[var(--text-light)]">{selectedGuitarDetails.type}</span></p>
-                      {selectedGuitarDetails.notes && (
-                        <p><span className="text-[var(--text-muted)]">Notes:</span> <span className="text-[var(--text-light)]">{selectedGuitarDetails.notes}</span></p>
+                      {selectedGuitarEntries.length > 0 ? (
+                        selectedGuitarEntries.map((guitar, index) => (
+                          <div key={`${guitar.brand}-${guitar.model}-${index}`} className={index > 0 ? 'pt-2 mt-2 border-t border-[var(--border)]' : ''}>
+                            <p><span className="text-[var(--text-muted)]">Guitar {index + 1}:</span> <span className="text-[var(--text-light)]">{guitar.brand} {guitar.model}</span></p>
+                            <p><span className="text-[var(--text-muted)]">Type:</span> <span className="text-[var(--text-light)]">{formatAppointmentGuitarTypeLabel(guitar.type)}</span></p>
+                            {guitar.notes && (
+                              <p><span className="text-[var(--text-muted)]">Notes:</span> <span className="text-[var(--text-light)]">{guitar.notes}</span></p>
+                            )}
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-[var(--text-muted)]">No guitar selected</p>
                       )}
                       {selectedAppointmentType === 'service_home' && (
                         <>
@@ -844,6 +1321,26 @@ export function AppointmentPage() {
                     </div>
                  </div>
                </div>
+
+               {(serviceReferencePreviewUrl || guitarReferencePreviewUrl) && (
+                 <div className="border-t border-[var(--border)] pt-4">
+                   <p className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-3">Reference Images</p>
+                   <div className="grid sm:grid-cols-2 gap-4">
+                     {serviceReferencePreviewUrl && (
+                       <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] p-3">
+                         <p className="mb-2 text-xs font-semibold text-[var(--text-muted)]">Service Reference</p>
+                         <img src={serviceReferencePreviewUrl} alt="Service reference preview" className="h-36 w-full rounded-lg object-cover" />
+                       </div>
+                     )}
+                     {guitarReferencePreviewUrl && (
+                       <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] p-3">
+                         <p className="mb-2 text-xs font-semibold text-[var(--text-muted)]">Guitar Reference</p>
+                         <img src={guitarReferencePreviewUrl} alt="Guitar reference preview" className="h-36 w-full rounded-lg object-cover" />
+                       </div>
+                     )}
+                   </div>
+                 </div>
+               )}
 
                <div className="border-t border-[var(--border)] pt-4 flex justify-between items-center">
                   <span className="text-sm font-bold text-[var(--text-muted)] uppercase">Estimated Total</span>
@@ -962,7 +1459,7 @@ export function AppointmentPage() {
               <div className="flex items-center justify-between">
                <button
                  onClick={handlePrevStep}
-                 disabled={currentStep === 1 || bookingComplete}
+                 disabled={currentStep === 1 || isSubmittingBooking}
                  className="px-6 py-2.5 rounded-xl text-sm font-bold text-[var(--text-light)] bg-[var(--surface-dark)] border border-[var(--border)] hover:bg-[var(--surface-elevated)] hover:text-[var(--text-light)] transition-colors disabled:opacity-0"
                >
                  Back
@@ -979,10 +1476,10 @@ export function AppointmentPage() {
                ) : (
                  <button
                    onClick={handleSubmit}
-                   disabled={bookingComplete}
+                   disabled={isSubmittingBooking}
                    className="px-8 py-2.5 rounded-xl text-sm font-bold bg-[#d4af37] text-black hover:bg-[#ffe270] transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(212,175,55,0.3)] shadow-[#d4af37]/20 flex items-center gap-2"
                  >
-                   {bookingComplete ? (
+                   {isSubmittingBooking ? (
                      <>Processing... <Settings className="w-4 h-4 animate-spin" /></>
                    ) : (
                      "Complete Booking"
@@ -997,14 +1494,14 @@ export function AppointmentPage() {
 
         {/* Global Success Overlay */}
         <AnimatePresence>
-          {bookingComplete && (
+          {showBookingSuccess && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 flex items-center justify-center z-[100] bg-black/80 backdrop-blur-sm"
+              className="fixed inset-0 flex items-center justify-center z-[100] bg-[var(--overlay-dark)]"
             >
-              <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} className="bg-[#181818] border border-[#d4af37]/50 rounded-3xl p-10 text-center max-w-sm mx-4 shadow-2xl">
+              <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} className="bg-[var(--surface-dark)] border border-[#d4af37]/50 rounded-3xl p-10 text-center max-w-sm mx-4 shadow-2xl">
                 <div className="w-20 h-20 bg-[#d4af37]/20 rounded-full flex items-center justify-center mx-auto mb-6">
                   <CheckCircle2 className="w-10 h-10 text-[#d4af37]" />
                 </div>
@@ -1013,7 +1510,7 @@ export function AppointmentPage() {
                   Your appointment has been scheduled successfully. You will be redirected to the dashboard.
                 </p>
                 {referenceNumber && (
-                   <p className="text-xs font-mono text-[#d4af37] bg-[#d4af37]/10 py-2 rounded-lg">
+                   <p className="text-xs font-mono text-[#f4d76b] bg-[#d4af37]/15 py-2 rounded-lg border border-[#d4af37]/30">
                      {referenceNumber}
                    </p>
                 )}

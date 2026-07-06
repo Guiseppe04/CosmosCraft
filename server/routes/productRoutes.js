@@ -10,7 +10,7 @@ router.put('/categories/:id', authenticateToken, authorize('admin', 'super_admin
 router.delete('/categories/:id', authenticateToken, authorize('admin', 'super_admin'), ctrl.deleteCategory);
 
 // ─── PRODUCTS ────────────────────────────────────────────────────────────────
-router.get('/',     ctrl.getProducts);
+router.get('/', ctrl.getProducts);
 router.get('/:id', ctrl.getProduct);
 router.post('/',    authenticateToken, authorize('admin', 'super_admin'), ctrl.createProduct);
 router.put('/:id',  authenticateToken, authorize('admin', 'super_admin'), ctrl.updateProduct);

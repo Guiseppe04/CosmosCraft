@@ -34,7 +34,7 @@ router.put(
 router.delete(
   '/:id',
   authenticateToken,
-  authorize('super_admin'),
+  authorize('admin'),
   ctrl.deleteService
 );
 

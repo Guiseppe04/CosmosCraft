@@ -2,17 +2,27 @@ import { useMemo, useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { useSearchParams, useNavigate, useBlocker } from 'react-router'
 import { 
-  RotateCcw, Save, ChevronDown, ChevronRight, Info, 
-  ShoppingCart, Clock, Truck, Shield, Check, CheckCircle,
-  Sparkles, Layers, Palette, Cog, Zap, Image, ZoomIn, ZoomOut, Upload, Trash2
+  ChevronDown, Info, 
+  Check, CheckCircle,
+  Sparkles, Layers, Palette, Cog, Zap, Image, ZoomIn, ZoomOut, Trash2
 } from 'lucide-react'
 import { exportMaskedPreview } from '../utils/exportMaskedPreview.js'
 import { adminApi } from '../utils/adminApi.js'
+import { optimizeCloudinaryImage } from '../utils/cloudinary.js'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useCart } from '../context/CartContext.jsx'
 import useGuitarConfig from '../hooks/useGuitarConfig.js'
 import GuitarPreview from '../components/guitar/GuitarPreview.jsx'
 import { RGBColorPicker } from '../components/options/RGBColorPicker.jsx'
+import { BuilderActionBar } from '../components/customize/BuilderActionBar.jsx'
+import { BuilderCheckoutSection } from '../components/customize/BuilderCheckoutSection.jsx'
+import { BuilderSavedBadge } from '../components/customize/BuilderSavedBadge.jsx'
+import { StickerPanel } from '../components/customize/StickerPanel.jsx'
+import { BuilderConfigurationPanel } from '../components/customize/BuilderConfigurationPanel.jsx'
+import {
+  buildConfigurationLineItems,
+  GUITAR_CONFIGURATION_ITEMS,
+} from '../utils/buildConfigurationLineItems.js'
 
 // Configuration categories with icons and tooltips
 const CATEGORIES = [
@@ -61,25 +71,6 @@ function Tooltip({ content, children }) {
   )
 }
 
-// Animated price display
-function AnimatedPrice({ price }) {
-  const displayPrice = useMemo(() => {
-    return price.toLocaleString('en-PH')
-  }, [price])
-  
-  return (
-    <div className="relative">
-      <span 
-        className={`text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight transition-all duration-300 ${
-          price > 0 ? 'text-transparent bg-clip-text bg-gradient-to-r from-[#d4af37] via-[#f4d03f] to-[#d4af37]' : 'text-white/30'
-        }`}
-      >
-        ₱{displayPrice}
-      </span>
-    </div>
-  )
-}
-
 // Option button with premium styling
 function OptionButton({ option, isSelected, onClick }) {
   return (
@@ -123,7 +114,15 @@ function OptionButton({ option, isSelected, onClick }) {
 }
 
 // Visual card option for wood/material selection
-function VisualCard({ option, isSelected, onClick, previewImage }) {
+function VisualCard({ option, isSelected, onClick, previewImage, fallbackImage, imageHeight = 'h-16' }) {
+  const [displayImage, setDisplayImage] = useState(previewImage || fallbackImage || '')
+
+  useEffect(() => {
+    setDisplayImage(previewImage || fallbackImage || '')
+  }, [previewImage, fallbackImage])
+
+  const optimizedImage = optimizeCloudinaryImage(displayImage, { width: 640 })
+
   return (
     <button
       type="button"
@@ -135,11 +134,20 @@ function VisualCard({ option, isSelected, onClick, previewImage }) {
       }`}
     >
       {/* Preview image/gradient */}
-      <div className="relative h-16 w-full overflow-hidden">
-        {previewImage ? (
-          <div 
-            className="absolute inset-0 bg-cover bg-center transition-transform duration-500 group-hover:scale-105"
-            style={{ backgroundImage: `url(${previewImage})` }}
+      <div className={`relative ${imageHeight} w-full overflow-hidden`}>
+        {displayImage ? (
+          <img
+            src={optimizedImage}
+            alt={option.label}
+            loading="lazy"
+            onError={() => {
+              if (fallbackImage && displayImage !== fallbackImage) {
+                setDisplayImage(fallbackImage)
+                return
+              }
+              setDisplayImage('')
+            }}
+            className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
           />
         ) : (
           <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-white/5" />
@@ -205,6 +213,7 @@ export function CustomizePage() {
     builder,
     options,
     refreshPrices,
+    loadingPrices,
   } = useGuitarConfig()
   const navigate = useNavigate()
   const [view, setView] = useState('front')
@@ -256,6 +265,10 @@ export function CustomizePage() {
   const currentViewStickers = useMemo(
     () => stickers.filter(s => (s.side || 'front') === view),
     [stickers, view]
+  )
+  const selectedBodyModel = useMemo(
+    () => options.bodyOptions?.find((option) => option.value === config.body) || null,
+    [options.bodyOptions, config.body]
   )
 
   const handleStickerUpload = (event) => {
@@ -829,6 +842,11 @@ export function CustomizePage() {
     return category
   }
 
+  const configurationLineItems = useMemo(
+    () => buildConfigurationLineItems(summary, pricingBreakdown, GUITAR_CONFIGURATION_ITEMS),
+    [summary, pricingBreakdown],
+  )
+
   return (
     <div className="min-h-screen bg-[var(--bg-primary)] pt-16 text-[var(--text-light)] relative xl:h-screen xl:overflow-hidden">
       <AnimatePresence>
@@ -936,11 +954,14 @@ export function CustomizePage() {
                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Body Shape</h3>
                     <div className="grid grid-cols-2 gap-2">
                       {options.bodyOptions?.map((opt) => (
-                        <OptionButton
+                        <VisualCard
                           key={opt.value}
                           option={opt}
                           isSelected={config.body === opt.value}
                           onClick={() => updateConfig({ body: opt.value })}
+                          previewImage={opt.previewImageUrl}
+                          fallbackImage={opt.bodySrc}
+                          imageHeight="h-24"
                         />
                       ))}
                     </div>
@@ -1162,84 +1183,11 @@ export function CustomizePage() {
               )}
             </div>
             
-            {/* Quick actions */}
-            <div className="border-t border-white/10 p-4 space-y-2 flex-shrink-0">
-              <button
-                type="button"
-                onClick={resetConfig}
-                className="flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] px-4 py-2.5 text-sm font-medium transition-all duration-200 hover:bg-[var(--surface-dark)]"
-                style={{ color: 'var(--text-muted)' }}
-              >
-                <RotateCcw className="h-4 w-4" />
-                Reset Configuration
-              </button>
-              {isAuthenticated ? (
-                <button
-                  type="button"
-                  onClick={handleSave}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] px-4 py-2.5 text-sm font-medium transition-all duration-200 hover:bg-[var(--surface-dark)]"
-                  style={{ color: 'var(--text-muted)' }}
-                >
-                  <Save className="h-4 w-4" />
-                  Save Build
-                </button>
-              ) : (
-                <div className="h-[42px]" aria-hidden="true" />
-              )}
-              <div className={`inline-flex items-center gap-2 rounded-lg px-3 py-1 text-[11px] font-semibold ${
-                hasUnsavedChanges
-                  ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
-                  : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
-              }`}>
-                <span className={`h-1.5 w-1.5 rounded-full ${hasUnsavedChanges ? 'bg-amber-300' : 'bg-emerald-300'}`} />
-                {hasUnsavedChanges ? 'Unsaved changes' : 'Saved'}
-              </div>
-            </div>
           </aside>
 
           {/* CENTER - Guitar Preview */}
           <main className="min-h-0 flex flex-col">
-            {/* Price & CTA Header */}
-            <div className="mb-4 rounded-2xl border border-white/10 bg-theme-surface-deep p-5">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.2em] text-white/40">Your Build Total</p>
-                  <AnimatedPrice price={price} />
-                  <p className="mt-1 text-xs text-white/30">Base price: ₱{(options.basePrice ?? 0).toLocaleString('en-PH')}</p>
-                </div>
-                
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <button
-                    type="button"
-                    onClick={handleAddToCart}
-                    className="group relative inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#d4af37] via-[#f4d03f] to-[#d4af37] px-8 py-3.5 text-sm font-bold text-black shadow-lg shadow-[#d4af37]/30 transition-all duration-300 hover:shadow-xl hover:shadow-[#d4af37]/40 hover:scale-[1.02] active:scale-[0.98]"
-                  >
-                    <ShoppingCart className="h-4 w-4" />
-                    Add to Cart
-                    <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-[#d4af37] via-[#f4d03f] to-[#d4af37] opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
-                  </button>
-                </div>
-              </div>
-              
-              {/* Build info badges */}
-              <div className="mt-4 flex flex-wrap gap-3">
-                <div className="flex items-center gap-2 rounded-full bg-white/5 px-3 py-1.5 text-xs text-white/60">
-                  <Clock className="h-3.5 w-3.5" />
-                  <span>Build time: 4-6 weeks</span>
-                </div>
-                <div className="flex items-center gap-2 rounded-full bg-white/5 px-3 py-1.5 text-xs text-white/60">
-                  <Truck className="h-3.5 w-3.5" />
-                  <span>Free worldwide shipping</span>
-                </div>
-                <div className="flex items-center gap-2 rounded-full bg-white/5 px-3 py-1.5 text-xs text-white/60">
-                  <Shield className="h-3.5 w-3.5" />
-                  <span>2-year warranty</span>
-                </div>
-              </div>
-            </div>
-            
-            {/* Guitar Preview */}
-            <div ref={previewRef} className="relative flex-1 rounded-2xl border border-white/10 bg-gradient-to-b from-[#141414] via-[#0d0d0d] to-[#080808] overflow-hidden">
+            <div ref={previewRef} className="relative flex-1 min-h-[320px] rounded-2xl border border-white/10 bg-gradient-to-b from-[#141414] via-[#0d0d0d] to-[#080808] overflow-hidden">
               {/* Spotlight effects */}
               <div className="absolute inset-0 overflow-hidden pointer-events-none">
                 <div className="absolute -top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-gradient-radial from-[#d4af37]/10 via-transparent to-transparent opacity-60" />
@@ -1295,7 +1243,12 @@ export function CustomizePage() {
                     willChange: 'transform',
                   }}
                 >
-                  <GuitarPreview config={config} view={view} onViewChange={setView} />
+                  <GuitarPreview
+                    config={config}
+                    view={view}
+                    onViewChange={setView}
+                    modelImageSrc={selectedBodyModel?.previewImageUrl || selectedBodyModel?.bodySrc || null}
+                  />
                   {currentViewStickers.map((stickerItem, index) => {
                     const isSelectedSticker = selectedStickerId === stickerItem.id
                     return (
@@ -1345,7 +1298,7 @@ export function CustomizePage() {
               <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-3/4 h-8 bg-gradient-to-b from-transparent to-black/40 blur-xl" />
               
               {/* View toggle */}
-              <div className="absolute bottom-4 left-4 flex gap-2">
+              <div className="absolute top-4 left-4 z-10 flex gap-2">
                 <button
                   type="button"
                   onClick={() => setView('front')}
@@ -1403,29 +1356,25 @@ export function CustomizePage() {
                 </button>
               </div>
 
-              {/* Sticker controls */}
-              <div className="absolute top-4 right-2 sm:right-4 w-[calc(100%-1rem)] sm:w-[360px] sm:max-w-[calc(100%-2rem)] space-y-2 rounded-lg border border-white/10 bg-black/35 p-2 backdrop-blur-sm">
-                <input
-                  ref={stickerFileInputRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={handleStickerUpload}
-                  className="hidden"
-                />
-                <div className="flex items-center justify-between gap-2">
-                  <button
-                    type="button"
-                    onClick={() => stickerFileInputRef.current?.click()}
-                    disabled={currentViewStickers.length >= MAX_STICKERS}
-                    className="inline-flex items-center gap-1.5 rounded-md bg-[var(--border)] px-2.5 py-2 text-xs font-semibold text-[var(--text-muted)] hover:bg-[var(--surface-elevated)] disabled:opacity-40 disabled:cursor-not-allowed"
-                    title="Upload sticker image"
-                  >
-                    <Upload className="h-3.5 w-3.5" />
-                    Add Sticker
-                  </button>
-                  <span className="text-[10px] text-white/70">{currentViewStickers.length}/{MAX_STICKERS} ({view})</span>
-                </div>
+              {/* Saved status */}
+              <div className="absolute bottom-4 left-4 z-10">
+                <BuilderSavedBadge hasUnsavedChanges={hasUnsavedChanges} />
+              </div>
 
+              <input
+                ref={stickerFileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleStickerUpload}
+                className="hidden"
+              />
+
+              <StickerPanel
+                stickerCount={stickers.length}
+                maxStickers={MAX_STICKERS}
+                onAddClick={() => stickerFileInputRef.current?.click()}
+                addDisabled={stickers.length >= MAX_STICKERS}
+              >
                 {selectedSticker && (selectedSticker.side || 'front') === view && (
                   <div className="space-y-2 rounded-md border border-white/10 bg-black/25 p-2">
                     <div className="grid grid-cols-4 gap-1.5">
@@ -1522,30 +1471,24 @@ export function CustomizePage() {
                     ))}
                   </div>
                 )}
-              </div>
+              </StickerPanel>
             </div>
-            
-            {/* Guitar specs footer */}
-            <div className="mt-4 rounded-xl border border-white/10 bg-theme-surface-deep p-4">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                <div>
-                  <p className="text-[10px] uppercase tracking-[0.15em] text-white/40">Body</p>
-                  <p className="mt-0.5 text-sm font-medium">{summary.body}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] uppercase tracking-[0.15em] text-white/40">Pickups</p>
-                  <p className="mt-0.5 text-sm font-medium">{summary.pickups}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] uppercase tracking-[0.15em] text-white/40">Neck</p>
-                  <p className="mt-0.5 text-sm font-medium">{summary.neck}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] uppercase tracking-[0.15em] text-white/40">Hardware</p>
-                  <p className="mt-0.5 text-sm font-medium">{summary.hardware}</p>
-                </div>
-              </div>
-            </div>
+
+            <BuilderActionBar
+              onReset={resetConfig}
+              onSave={handleSave}
+              onLoad={handleLoad}
+            />
+            {isAuthenticated && (
+              <button
+                type="button"
+                onClick={handleSaveImage}
+                className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-transparent px-3 py-1.5 text-xs font-medium text-white/40 transition-colors hover:border-[var(--border)] hover:text-[var(--text-muted)]"
+              >
+                <Image className="h-3.5 w-3.5" />
+                Save preview image
+              </button>
+            )}
           </main>
 
           {/* RIGHT PANEL - Summary & Actions */}
@@ -1566,51 +1509,21 @@ export function CustomizePage() {
             
             {/* Current selection summary */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              
-              {/* Quick Summary */}
-              <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
-                <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-3">Your Configuration</h3>
-                <div className="space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-white/50">Body</span>
-                    <span className="text-xs font-medium">{summary.body}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-white/50">Body Wood</span>
-                    <span className="text-xs font-medium">{summary.bodyWood}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-white/50">Finish</span>
-                    <span className="text-xs font-medium">{summary.bodyFinish}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-white/50">Neck</span>
-                    <span className="text-xs font-medium">{summary.neck}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-white/50">Fretboard</span>
-                    <span className="text-xs font-medium">{summary.fretboard}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-white/50">Headstock</span>
-                    <span className="text-xs font-medium">{builder.HEADSTOCK_OPTIONS[config.headstock]?.label || config.headstock}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-white/50">Bridge</span>
-                    <span className="text-xs font-medium">{builder.BRIDGE_OPTIONS[config.bridge]?.label || config.bridge}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-white/50">Pickups</span>
-                    <span className="text-xs font-medium">{summary.pickups}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-white/50">Hardware</span>
-                    <span className="text-xs font-medium">{summary.hardware}</span>
-                  </div>
-                </div>
-              </div>
-              
-              {/* Help section */}
+              <BuilderConfigurationPanel
+                lineItems={configurationLineItems}
+                configurationTotal={price}
+                loadingPrices={loadingPrices}
+              />
+            </div>
+
+            <BuilderCheckoutSection
+              price={price}
+              basePrice={options.basePrice}
+              onAddToCart={handleAddToCart}
+            />
+
+            {/* Help section */}
+            <div className="border-t border-white/10 p-4 flex-shrink-0">
               <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
                 <div className="flex items-start gap-3">
                   <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#d4af37]/10">
@@ -1634,64 +1547,6 @@ export function CustomizePage() {
                     </p>
                   </div>
                 </div>
-              </div>
-              
-              {/* Shipping info */}
-              <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4 space-y-3">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/5">
-                    <Truck className="h-5 w-5 text-white/60" />
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium">Free Worldwide Shipping</p>
-                    <p className="text-[10px] text-white/40">On all custom builds</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/5">
-                    <Clock className="h-5 w-5 text-white/60" />
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium">4-6 Week Build Time</p>
-                    <p className="text-[10px] text-white/40">Handcrafted to order</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/5">
-                    <Shield className="h-5 w-5 text-white/60" />
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium">2-Year Warranty</p>
-                    <p className="text-[10px] text-white/40">Parts and labor</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-            
-            {/* Save Image / Load Config */}
-            <div className="border-t border-white/10 p-4 flex-shrink-0">
-              <div className="flex gap-2">
-                {isAuthenticated ? (
-                  <button
-                    type="button"
-                    onClick={handleSaveImage}
-                    className="flex-1 flex items-center justify-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 py-2 text-xs font-medium transition-all duration-200 hover:bg-[var(--surface-dark)]"
-                    style={{ color: 'var(--text-muted)' }}
-                  >
-                    <Image className="h-3.5 w-3.5" />
-                    Save Image
-                  </button>
-                ) : (
-                  <div className="flex-1" aria-hidden="true" />
-                )}
-                <button
-                  type="button"
-                  onClick={handleLoad}
-                  className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 py-2 text-xs font-medium transition-all duration-200 hover:bg-[var(--surface-dark)]"
-                  style={{ color: 'var(--text-muted)' }}
-                >
-                  Load Config
-                </button>
               </div>
             </div>
           </aside>

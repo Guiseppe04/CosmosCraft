@@ -13,31 +13,18 @@ const STATUS_CONFIG = {
   approved: { label: 'Approved', color: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
   confirmed: { label: 'Confirmed', color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' },
   in_progress: { label: 'In Progress', color: 'bg-purple-500/20 text-purple-400 border-purple-500/30' },
+  ready_for_pickup: { label: 'Ready for Pickup', color: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30' },
   completed: { label: 'Completed', color: 'bg-green-500/20 text-green-400 border-green-500/30' },
   cancelled: { label: 'Cancelled', color: 'bg-red-500/20 text-red-400 border-red-500/30' },
 }
 
-const PAYMENT_STATUS_CONFIG = {
-  pending: { label: 'Pending', color: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' },
-  awaiting_approval: { label: 'Awaiting Approval', color: 'bg-orange-500/20 text-orange-400 border-orange-500/30' },
-  paid: { label: 'Paid', color: 'bg-green-500/20 text-green-400 border-green-500/30' },
-  failed: { label: 'Failed', color: 'bg-red-500/20 text-red-400 border-red-500/30' },
-}
-
 const STATUS_OPTIONS = [
   { value: 'pending', label: 'Pending' },
-  { value: 'approved', label: 'Approved' },
   { value: 'confirmed', label: 'Confirmed' },
   { value: 'in_progress', label: 'In Progress' },
+  { value: 'ready_for_pickup', label: 'Ready for Pickup' },
   { value: 'completed', label: 'Completed' },
   { value: 'cancelled', label: 'Cancelled' },
-]
-
-const PAYMENT_STATUS_OPTIONS = [
-  { value: 'pending', label: 'Pending' },
-  { value: 'awaiting_approval', label: 'Awaiting Approval' },
-  { value: 'paid', label: 'Paid' },
-  { value: 'failed', label: 'Failed' },
 ]
 
 // Image modal for viewing payment proof
@@ -103,14 +90,12 @@ export default function AppointmentModal({
   isOpen,
   onClose,
   onStatusChange,
-  onPaymentStatusChange,
   onReschedule,
   onCancel,
   onDelete,
   loading = false,
 }) {
   const [showStatusDropdown, setShowStatusDropdown] = useState(false)
-  const [showPaymentDropdown, setShowPaymentDropdown] = useState(false)
   const [showImageModal, setShowImageModal] = useState(false)
   const [showRescheduleModal, setShowRescheduleModal] = useState(false)
   const [showCancelModal, setShowCancelModal] = useState(false)
@@ -135,16 +120,6 @@ export default function AppointmentModal({
     setActionLoading(true)
     try {
       await onStatusChange?.(appointment.appointment_id, newStatus)
-    } finally {
-      setActionLoading(false)
-    }
-  }
-
-  const handlePaymentStatusChange = async (newStatus) => {
-    setShowPaymentDropdown(false)
-    setActionLoading(true)
-    try {
-      await onPaymentStatusChange?.(appointment.appointment_id, newStatus)
     } finally {
       setActionLoading(false)
     }
@@ -185,6 +160,60 @@ export default function AppointmentModal({
     return appointment.services
   }
 
+  const getAppointmentGuitars = () => {
+    let details = appointment.guitar_details
+    if (typeof details === 'string') {
+      try {
+        details = JSON.parse(details)
+      } catch {
+        details = null
+      }
+    }
+
+    const fromDetails = []
+    if (details && typeof details === 'object') {
+      if (Array.isArray(details.guitars) && details.guitars.length > 0) {
+        fromDetails.push(...details.guitars)
+      } else if (details.brand || details.model || details.type || details.serial || details.notes) {
+        fromDetails.push(details)
+      }
+    }
+
+    // Fallback: parse note lines like "Guitar 1: Fender Stratocaster (Electric)"
+    const fromNotes = []
+    if (fromDetails.length === 0 && typeof appointment.notes === 'string') {
+      const lines = appointment.notes.split('\n')
+      lines.forEach((line) => {
+        const match = line.match(/^Guitar\s+\d+:\s*(.+?)\s+\(([^)]+)\)\s*$/i)
+        if (!match) return
+        const descriptor = match[1]?.trim() || ''
+        const type = String(match[2] || '').trim().toLowerCase()
+        const [brand, ...modelParts] = descriptor.split(' ')
+        fromNotes.push({
+          brand: brand || '',
+          model: modelParts.join(' ') || '',
+          type,
+          serial: 'N/A',
+          notes: '',
+        })
+      })
+    }
+
+    const normalized = (fromDetails.length > 0 ? fromDetails : fromNotes)
+      .map((guitar) => ({
+        brand: guitar?.brand || guitar?.name || '',
+        model: guitar?.model || guitar?.variant || '',
+        type: guitar?.type || guitar?.guitar_type || '',
+        serial: guitar?.serial || guitar?.serialNumber || 'N/A',
+        notes: guitar?.notes || '',
+      }))
+      .filter((guitar) => guitar.brand || guitar.model || guitar.type || guitar.serial || guitar.notes)
+
+    return normalized
+  }
+
+  const appointmentGuitars = getAppointmentGuitars()
+
   return (
     <>
       <motion.div
@@ -196,16 +225,21 @@ export default function AppointmentModal({
       />
 
       <motion.div
-        initial={{ opacity: 0, x: 100 }}
-        animate={{ opacity: 1, x: 0 }}
-        exit={{ opacity: 0, x: 100 }}
-        className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-2xl bg-[var(--bg-primary)] border-l border-[var(--border)] shadow-2xl overflow-y-auto"
+        initial={{ opacity: 0, scale: 0.96, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.96, y: 20 }}
+        className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6"
+        onClick={onClose}
       >
+        <div
+          className="w-full max-w-3xl max-h-[92vh] rounded-3xl border border-[var(--border)] bg-[var(--bg-primary)] shadow-2xl overflow-hidden"
+          onClick={(e) => e.stopPropagation()}
+        >
         {/* Header */}
-        <div className="sticky top-0 z-10 bg-[var(--bg-primary)] border-b border-[var(--border)] p-6">
+        <div className="sticky top-0 z-10 bg-[var(--bg-primary)] border-b border-[var(--border)] p-5 sm:p-6">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-2xl font-semibold text-white">Appointment Details</h2>
+              <h2 className="text-xl sm:text-2xl font-semibold text-white">Appointment Details</h2>
               <p className="text-[var(--text-muted)] text-sm mt-1">
                 ID: {appointment.appointment_id?.slice(0, 8)}...
               </p>
@@ -220,14 +254,14 @@ export default function AppointmentModal({
         </div>
 
         {/* Content */}
-        <div className="p-6 space-y-6">
+        <div className="p-5 sm:p-6 space-y-6 overflow-y-auto max-h-[calc(92vh-92px)]">
           {/* Status Section */}
           <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-5">
-            <h3 className="text-lg font-semibold text-white mb-4">Status</h3>
+            <h3 className="text-lg font-semibold text-white mb-4">Update Appointment Status</h3>
             <div className="flex flex-wrap gap-3">
-              {/* Appointment Status */}
               <div className="relative">
                 <button
+                  type="button"
                   onClick={() => setShowStatusDropdown(!showStatusDropdown)}
                   disabled={actionLoading}
                   className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] text-white hover:border-[var(--gold-primary)] transition-colors disabled:opacity-50"
@@ -245,6 +279,7 @@ export default function AppointmentModal({
                     >
                       {STATUS_OPTIONS.map(option => (
                         <button
+                          type="button"
                           key={option.value}
                           onClick={() => handleStatusChange(option.value)}
                           className={`w-full px-4 py-3 text-left text-sm hover:bg-[var(--surface-dark)] transition-colors ${
@@ -258,43 +293,6 @@ export default function AppointmentModal({
                   )}
                 </AnimatePresence>
               </div>
-
-              {/* Payment Status */}
-              {appointment.payment_status && (
-                <div className="relative">
-                  <button
-                    onClick={() => setShowPaymentDropdown(!showPaymentDropdown)}
-                    disabled={actionLoading}
-                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] text-white hover:border-[var(--gold-primary)] transition-colors disabled:opacity-50"
-                  >
-                    <CreditCard className="w-4 h-4 text-[var(--text-muted)]" />
-                    <StatusBadge status={appointment.payment_status} config={PAYMENT_STATUS_CONFIG} />
-                    <ChevronDown className="w-4 h-4 text-[var(--text-muted)]" />
-                  </button>
-                  <AnimatePresence>
-                    {showPaymentDropdown && (
-                      <motion.div
-                        initial={{ opacity: 0, y: -10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -10 }}
-                        className="absolute top-full mt-2 left-0 w-56 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] shadow-xl z-20 overflow-hidden"
-                      >
-                        {PAYMENT_STATUS_OPTIONS.map(option => (
-                          <button
-                            key={option.value}
-                            onClick={() => handlePaymentStatusChange(option.value)}
-                            className={`w-full px-4 py-3 text-left text-sm hover:bg-[var(--surface-dark)] transition-colors ${
-                              appointment.payment_status === option.value ? 'bg-[var(--gold-primary)]/10 text-[var(--gold-primary)]' : 'text-white'
-                            }`}
-                          >
-                            {option.label}
-                          </button>
-                        ))}
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
-              )}
             </div>
           </div>
 
@@ -329,6 +327,7 @@ export default function AppointmentModal({
             </div>
             <div className="mt-4 pt-4 border-t border-[var(--border)]">
               <button
+                type="button"
                 onClick={() => setShowRescheduleModal(true)}
                 className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] text-[var(--text-muted)] hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)] transition-colors"
               >
@@ -390,6 +389,41 @@ export default function AppointmentModal({
             </div>
           </div>
 
+          {/* Guitar Section */}
+          <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-5">
+            <h3 className="text-lg font-semibold text-white mb-4">Guitar Information</h3>
+            {appointmentGuitars.length === 0 ? (
+              <p className="text-[var(--text-muted)]">No guitar details provided.</p>
+            ) : (
+              <div className="space-y-3">
+                {appointmentGuitars.map((guitar, index) => (
+                  <div
+                    key={`${guitar?.brand || 'guitar'}-${guitar?.model || index}-${index}`}
+                    className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] p-4"
+                  >
+                    <p className="text-xs uppercase tracking-wider text-[var(--text-muted)]">Guitar {index + 1}</p>
+                    <p className="mt-1 text-white font-semibold">
+                      {(guitar?.brand || 'Unknown Brand')} {(guitar?.model || 'Unknown Model')}
+                    </p>
+                    <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                      <p className="text-[var(--text-muted)]">
+                        Type: <span className="text-white capitalize">{guitar?.type || 'N/A'}</span>
+                      </p>
+                      <p className="text-[var(--text-muted)]">
+                        Serial: <span className="text-white">{guitar?.serial || guitar?.serialNumber || 'N/A'}</span>
+                      </p>
+                    </div>
+                    {guitar?.notes && (
+                      <p className="mt-2 text-sm text-[var(--text-muted)]">
+                        Notes: <span className="text-white">{guitar.notes}</span>
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           {/* Notes Section */}
           {appointment.notes && (
             <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-5">
@@ -418,6 +452,7 @@ export default function AppointmentModal({
                   <div>
                     <p className="text-xs uppercase tracking-wider text-[var(--text-muted)] mb-2">Payment Proof</p>
                     <button
+                      type="button"
                       onClick={() => setShowImageModal(true)}
                       className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] text-[var(--text-muted)] hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)] transition-colors"
                     >
@@ -436,6 +471,7 @@ export default function AppointmentModal({
             <div className="flex flex-wrap gap-3">
               {appointment.status !== 'cancelled' && appointment.status !== 'completed' && (
                 <button
+                  type="button"
                   onClick={() => setShowCancelModal(true)}
                   className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors"
                 >
@@ -445,6 +481,7 @@ export default function AppointmentModal({
               )}
             </div>
           </div>
+        </div>
         </div>
       </motion.div>
 
@@ -488,12 +525,14 @@ export default function AppointmentModal({
               </div>
               <div className="flex justify-end gap-3 mt-6">
                 <button
+                  type="button"
                   onClick={() => setShowRescheduleModal(false)}
                   className="px-4 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] text-[var(--text-muted)] hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)] transition-colors"
                 >
                   Cancel
                 </button>
                 <button
+                  type="button"
                   onClick={handleReschedule}
                   disabled={actionLoading || !rescheduleDate || !rescheduleTime}
                   className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[var(--gold-primary)] text-black font-medium hover:bg-[var(--gold-primary)]/90 transition-colors disabled:opacity-50"
@@ -540,12 +579,14 @@ export default function AppointmentModal({
               </div>
               <div className="flex justify-end gap-3 mt-6">
                 <button
+                  type="button"
                   onClick={() => setShowCancelModal(false)}
                   className="px-4 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] text-[var(--text-muted)] hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)] transition-colors"
                 >
                   Keep Appointment
                 </button>
                 <button
+                  type="button"
                   onClick={handleCancel}
                   disabled={actionLoading}
                   className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-red-500 text-white font-medium hover:bg-red-600 transition-colors disabled:opacity-50"

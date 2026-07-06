@@ -301,24 +301,43 @@ html[data-theme="light"] .min-h-screen {
 
 @media (prefers-color-scheme: dark) {
   body {
-    background-color: var(--color-dark); /* Dark bg for system dark mode */
-    color: var(--color-dark);
+    background-color: var(--bg-primary);
+    color: var(--text-light);
   }
 
   p {
-    color: var(--color-light); /* Light text on dark bg */
+    color: inherit;
   }
 
   h1, h2, h3, h4, h5, h6 {
-    color: var(--color-dark);
+    color: inherit;
   }
 
   input,
   textarea,
   select {
-    color: var(--color-dark);              /* Dark text in form fields */
-    border-color: var(--color-gray-700);   /* Darker border for dark mode inputs */
+    color: var(--text-light);
+    border-color: var(--border);
   }
+}
+
+.theme-input {
+  background-color: var(--surface-dark);
+  color: var(--text-light);
+  border-color: var(--border);
+}
+
+.theme-input::placeholder {
+  color: var(--text-muted);
+}
+
+.theme-input:-webkit-autofill,
+.theme-input:-webkit-autofill:hover,
+.theme-input:-webkit-autofill:focus,
+.theme-input:-webkit-autofill:active {
+  -webkit-text-fill-color: var(--text-light);
+  -webkit-box-shadow: 0 0 0 1000px var(--surface-dark) inset;
+  transition: background-color 9999s ease-in-out 0s;
 }
 
 /* Responsive baseline */

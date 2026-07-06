@@ -103,12 +103,12 @@ exports.getServiceById = async (serviceId) => {
 /**
  * Create new service
  */
-exports.createService = async ({ name, description, price, duration_minutes }) => {
+exports.createService = async ({ name, description, category_id, price, duration_minutes }) => {
   const result = await pool.query(
-    `INSERT INTO services (name, description, price, duration_minutes, is_active, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, true, now(), now())
+    `INSERT INTO services (name, description, category_id, price, duration_minutes, is_active, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, true, now(), now())
      RETURNING *`,
-    [name, description || null, price, duration_minutes]
+    [name, description || null, category_id, price, duration_minutes]
   );
   return result.rows[0];
 };
@@ -117,7 +117,7 @@ exports.createService = async ({ name, description, price, duration_minutes }) =
  * Update service
  */
 exports.updateService = async (serviceId, updates) => {
-  const { name, description, price, duration_minutes, is_active } = updates;
+  const { name, description, category_id, price, duration_minutes, is_active } = updates;
 
   const setClauses = [];
   const params = [];
@@ -130,6 +130,10 @@ exports.updateService = async (serviceId, updates) => {
   if (description !== undefined) {
     setClauses.push(`description = $${idx++}`);
     params.push(description || null);
+  }
+  if (category_id !== undefined) {
+    setClauses.push(`category_id = $${idx++}`);
+    params.push(category_id || null);
   }
   if (price !== undefined) {
     setClauses.push(`price = $${idx++}`);

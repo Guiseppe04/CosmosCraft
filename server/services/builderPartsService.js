@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { pathToFileURL } = require('url');
 const cloudinary = require('cloudinary').v2;
 const { pool } = require('../config/database');
 const { AppError } = require('../middleware/errorHandler');
@@ -35,6 +36,33 @@ const VALID_PART_CATEGORIES = new Set([
 ]);
 
 let cloudinaryReady = false;
+let builderModelImagesReady = false;
+let builderModelImagesPromise = null;
+
+const BUILDER_MODEL_IMAGE_CONFIG = {
+  electric: [
+    { model_key: 'strat', display_name: 'Strat' },
+    { model_key: 'solo', display_name: 'Solo' },
+    { model_key: 'dc', display_name: 'DC' },
+    { model_key: 'delos', display_name: 'Delos' },
+  ],
+  bass: [
+    { model_key: 'vader', display_name: 'Vader' },
+    { model_key: 'pb', display_name: 'Precision' },
+    { model_key: 'jb', display_name: 'Jazz' },
+  ],
+};
+
+const CUSTOMIZE_CATALOG_MODULES = {
+  electric: {
+    source: 'guitarBuilderData',
+    filePath: path.resolve(__dirname, '../../client/src/app/lib/guitarBuilderData.js'),
+  },
+  bass: {
+    source: 'bassBuilderData',
+    filePath: path.resolve(__dirname, '../../client/src/app/lib/bassBuilderData.js'),
+  },
+};
 
 const normalizeKey = (value) => String(value || '').trim().toLowerCase();
 
@@ -44,6 +72,18 @@ const titleCase = (value) =>
     .replace(/\s+/g, ' ')
     .trim()
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
+
+const pickOptionImage = (option) => {
+  if (!option || typeof option !== 'object') return null;
+  if (option.src) return option.src;
+  if (option.texture) return option.texture;
+  if (option.bodySrc) return option.bodySrc;
+  if (option.logo) return option.logo;
+  if (option.assets && typeof option.assets === 'object') {
+    return option.assets.chrome || option.assets.black || option.assets.gold || Object.values(option.assets)[0] || null;
+  }
+  return null;
+};
 
 const inferPartCategory = (normalizedRelativePath) => {
   const checks = [
@@ -193,6 +233,433 @@ const uploadToCloudinary = async ({ localPath, guitarType, relativePath }) => {
   }
 };
 
+const ensureBuilderModelImagesTable = async () => {
+  if (builderModelImagesReady) return;
+  if (!builderModelImagesPromise) {
+    builderModelImagesPromise = (async () => {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS builder_model_images (
+          model_image_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          guitar_type_code VARCHAR(50) NOT NULL REFERENCES builder_guitar_types(guitar_type_code) ON DELETE CASCADE,
+          model_key VARCHAR(100) NOT NULL,
+          display_name VARCHAR(120) NOT NULL,
+          image_url TEXT,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+          UNIQUE (guitar_type_code, model_key)
+        )
+      `);
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_builder_model_images_guitar_type
+        ON builder_model_images(guitar_type_code)
+      `);
+
+      const seedRows = Object.entries(BUILDER_MODEL_IMAGE_CONFIG).flatMap(([guitarType, models]) =>
+        models.map((model) => [guitarType, model.model_key, model.display_name])
+      );
+
+      for (const [guitarType, modelKey, displayName] of seedRows) {
+        await pool.query(
+          `INSERT INTO builder_model_images (guitar_type_code, model_key, display_name)
+           VALUES ($1, $2, $3)
+           ON CONFLICT (guitar_type_code, model_key) DO NOTHING`,
+          [guitarType, modelKey, displayName]
+        );
+      }
+
+      builderModelImagesReady = true;
+    })().catch((error) => {
+      builderModelImagesPromise = null;
+      throw error;
+    });
+  }
+
+  await builderModelImagesPromise;
+};
+
+const resolveModelDefinition = (guitarType, modelKey) => {
+  const normalizedType = normalizeKey(guitarType);
+  const normalizedModelKey = normalizeKey(modelKey);
+  const modelConfig = BUILDER_MODEL_IMAGE_CONFIG[normalizedType] || [];
+  return modelConfig.find((entry) => normalizeKey(entry.model_key) === normalizedModelKey) || null;
+};
+
+const loadCustomizeCatalogModule = async (guitarType) => {
+  const normalizedType = normalizeKey(guitarType);
+  const config = CUSTOMIZE_CATALOG_MODULES[normalizedType];
+  if (!config) {
+    throw new AppError('Invalid customize catalog type. Use "electric" or "bass".', 400);
+  }
+
+  const importedModule = await import(pathToFileURL(config.filePath).href);
+  return { normalizedType, source: config.source, module: importedModule };
+};
+
+const buildElectricCustomizeSeedPayloads = (catalogSource, module) => {
+  const {
+    BODY_OPTIONS,
+    BODY_WOOD_OPTIONS,
+    BODY_FINISH_OPTIONS,
+    NECK_OPTIONS,
+    FRETBOARD_OPTIONS,
+    HEADSTOCK_OPTIONS,
+    HEADSTOCK_WOOD_OPTIONS,
+    INLAY_OPTIONS,
+    BRIDGE_OPTIONS,
+    PICKGUARD_OPTIONS_BY_BODY,
+    KNOB_OPTIONS_BY_BODY,
+    HARDWARE_OPTIONS,
+    PICKUP_OPTIONS,
+  } = module;
+
+  const electricBodyKeys = Object.entries(BODY_OPTIONS || {})
+    .filter(([, option]) => Array.isArray(option?.types) ? option.types.includes('electric') : true)
+    .map(([optionKey]) => optionKey);
+
+  const payloads = [];
+  const pushPayload = ({ name, description, typeMapping, partCategory, imageUrl, price, metadata }) => {
+    payloads.push({
+      name,
+      description,
+      guitar_type: 'electric',
+      part_category: partCategory,
+      folder_key: `electric/${partCategory}`,
+      type_mapping: typeMapping,
+      price: Number(price || 0),
+      stock: 30,
+      image_url: imageUrl || null,
+      metadata: {
+        ...(metadata || {}),
+        seed_source: 'customize_catalog',
+        source: catalogSource,
+        import_category: 'electric_guitar',
+      },
+      is_active: true,
+    });
+  };
+
+  const addFlatOptions = (options, config) => {
+    Object.entries(options || {}).forEach(([optionKey, option]) => {
+      if (optionKey === 'none') return;
+      if (Array.isArray(config.allowedOptionKeys) && config.allowedOptionKeys.length > 0 && !config.allowedOptionKeys.includes(optionKey)) return;
+      const label = option?.label || optionKey;
+      pushPayload({
+        name: `Electric ${config.label} - ${label}`,
+        description: option?.note || `${config.label} option for Electric guitar builder`,
+        typeMapping: config.typeMapping,
+        partCategory: config.partCategory,
+        imageUrl: pickOptionImage(option),
+        price: option?.price || 0,
+        metadata: {
+          group: config.group,
+          option_key: optionKey,
+          option_identity: `${config.group}:${optionKey}`,
+        },
+      });
+    });
+  };
+
+  const addNestedOptions = (options, config) => {
+    Object.entries(options || {}).forEach(([variantKey, variantOptions]) => {
+      if (Array.isArray(config.allowedVariants) && config.allowedVariants.length > 0 && !config.allowedVariants.includes(variantKey)) return;
+      Object.entries(variantOptions || {}).forEach(([optionKey, option]) => {
+        if (optionKey === 'none') return;
+        const label = option?.label || optionKey;
+        pushPayload({
+          name: `Electric ${config.label} - ${variantKey.toUpperCase()} - ${label}`,
+          description: option?.note || `${config.label} option for ${variantKey.toUpperCase()} electric`,
+          typeMapping: config.typeMapping,
+          partCategory: config.partCategory,
+          imageUrl: pickOptionImage(option),
+          price: option?.price || 0,
+          metadata: {
+            group: config.group,
+            variant: variantKey,
+            option_key: optionKey,
+            option_identity: `${config.group}:${variantKey}:${optionKey}`,
+          },
+        });
+      });
+    });
+  };
+
+  addFlatOptions(BODY_OPTIONS, { label: 'Body', typeMapping: 'body', partCategory: 'body', group: 'BODY_OPTIONS', allowedOptionKeys: electricBodyKeys });
+  addFlatOptions(BODY_WOOD_OPTIONS, { label: 'Body Wood', typeMapping: 'bodyWood', partCategory: 'wood_type', group: 'BODY_WOOD_OPTIONS' });
+  addFlatOptions(BODY_FINISH_OPTIONS, { label: 'Body Finish', typeMapping: 'bodyFinish', partCategory: 'finish', group: 'BODY_FINISH_OPTIONS' });
+  addFlatOptions(NECK_OPTIONS, { label: 'Neck', typeMapping: 'neck', partCategory: 'neck', group: 'NECK_OPTIONS' });
+  addFlatOptions(FRETBOARD_OPTIONS, { label: 'Fretboard', typeMapping: 'fretboard', partCategory: 'fretboard', group: 'FRETBOARD_OPTIONS' });
+  addFlatOptions(HEADSTOCK_OPTIONS, { label: 'Headstock Style', typeMapping: 'headstock', partCategory: 'misc', group: 'HEADSTOCK_OPTIONS' });
+  addFlatOptions(HEADSTOCK_WOOD_OPTIONS, { label: 'Headstock Wood', typeMapping: 'headstockWood', partCategory: 'wood_type', group: 'HEADSTOCK_WOOD_OPTIONS' });
+  addFlatOptions(INLAY_OPTIONS, { label: 'Inlays', typeMapping: 'inlays', partCategory: 'misc', group: 'INLAY_OPTIONS' });
+  addFlatOptions(BRIDGE_OPTIONS, { label: 'Bridge', typeMapping: 'bridge', partCategory: 'bridge', group: 'BRIDGE_OPTIONS' });
+  addFlatOptions(HARDWARE_OPTIONS, { label: 'Hardware', typeMapping: 'hardware', partCategory: 'hardware', group: 'HARDWARE_OPTIONS' });
+  addFlatOptions(PICKUP_OPTIONS, { label: 'Pickup Set', typeMapping: 'pickups', partCategory: 'pickups', group: 'PICKUP_OPTIONS' });
+
+  addNestedOptions(PICKGUARD_OPTIONS_BY_BODY, {
+    label: 'Pickguard',
+    typeMapping: 'pickguard',
+    partCategory: 'pickguard',
+    group: 'PICKGUARD_OPTIONS_BY_BODY',
+    allowedVariants: electricBodyKeys,
+  });
+  addNestedOptions(KNOB_OPTIONS_BY_BODY, {
+    label: 'Knobs',
+    typeMapping: 'knobs',
+    partCategory: 'hardware',
+    group: 'KNOB_OPTIONS_BY_BODY',
+    allowedVariants: electricBodyKeys,
+  });
+
+  return payloads;
+};
+
+const buildBassCustomizeSeedPayloads = (catalogSource, module) => {
+  const {
+    BASS_BODY_OPTIONS,
+    BASS_BODY_WOOD_OPTIONS,
+    BASS_BODY_FINISH_OPTIONS,
+    BASS_NECK_OPTIONS,
+    BASS_FRETBOARD_OPTIONS,
+    BASS_HEADSTOCK_WOOD_OPTIONS,
+    BASS_HEADSTOCK_STYLE_OPTIONS,
+    BASS_INLAY_OPTIONS,
+    BASS_HARDWARE_OPTIONS,
+    BASS_PICKUP_OPTIONS,
+    BASS_PICKUP_TYPE_STYLE_OPTIONS,
+    BASS_PICKUP_CONFIG_OPTIONS,
+    BASS_STRING_OPTIONS,
+    BASS_CONTROL_PLATE_OPTIONS,
+    BASS_BRIDGE_OPTIONS,
+    BASS_PICKGUARD_OPTIONS,
+    BASS_KNOB_OPTIONS,
+    BASS_LOGO_OPTIONS,
+    BASS_BACKPLATE_OPTIONS,
+    BASS_PICKUP_SCREW_OPTIONS,
+  } = module;
+
+  const payloads = [];
+  const pushPayload = ({ name, description, typeMapping, partCategory, imageUrl, price, metadata }) => {
+    payloads.push({
+      name,
+      description,
+      guitar_type: 'bass',
+      part_category: partCategory,
+      folder_key: `bass/${partCategory}`,
+      type_mapping: typeMapping,
+      price: Number(price || 0),
+      stock: 30,
+      image_url: imageUrl || null,
+      metadata: {
+        ...(metadata || {}),
+        seed_source: 'customize_catalog',
+        source: catalogSource,
+        import_category: 'bass_guitar',
+      },
+      is_active: true,
+    });
+  };
+
+  const addFlatOptions = (options, config) => {
+    Object.entries(options || {}).forEach(([optionKey, option]) => {
+      if (optionKey === 'none') return;
+      const label = option?.label || optionKey;
+      pushPayload({
+        name: `Bass ${config.label} - ${label}`,
+        description: option?.note || `${config.label} option for Bass builder`,
+        typeMapping: config.typeMapping,
+        partCategory: config.partCategory,
+        imageUrl: pickOptionImage(option),
+        price: option?.price || 0,
+        metadata: {
+          group: config.group,
+          option_key: optionKey,
+          option_identity: `${config.group}:${optionKey}`,
+        },
+      });
+    });
+  };
+
+  const addNestedOptions = (options, config) => {
+    Object.entries(options || {}).forEach(([variantKey, variantOptions]) => {
+      Object.entries(variantOptions || {}).forEach(([optionKey, option]) => {
+        if (optionKey === 'none') return;
+        const label = option?.label || optionKey;
+        pushPayload({
+          name: `Bass ${config.label} - ${variantKey.toUpperCase()} - ${label}`,
+          description: option?.note || `${config.label} option for ${variantKey.toUpperCase()} bass`,
+          typeMapping: config.typeMapping,
+          partCategory: config.partCategory,
+          imageUrl: pickOptionImage(option),
+          price: option?.price || 0,
+          metadata: {
+            group: config.group,
+            variant: variantKey,
+            option_key: optionKey,
+            option_identity: `${config.group}:${variantKey}:${optionKey}`,
+          },
+        });
+      });
+    });
+  };
+
+  addFlatOptions(BASS_BODY_OPTIONS, { label: 'Body', typeMapping: 'body', partCategory: 'body', group: 'BASS_BODY_OPTIONS' });
+  addFlatOptions(BASS_BODY_WOOD_OPTIONS, { label: 'Body Wood', typeMapping: 'bodyWood', partCategory: 'wood_type', group: 'BASS_BODY_WOOD_OPTIONS' });
+  addFlatOptions(BASS_BODY_FINISH_OPTIONS, { label: 'Body Finish', typeMapping: 'bodyFinish', partCategory: 'finish', group: 'BASS_BODY_FINISH_OPTIONS' });
+  addFlatOptions(BASS_NECK_OPTIONS, { label: 'Neck', typeMapping: 'neck', partCategory: 'neck', group: 'BASS_NECK_OPTIONS' });
+  addFlatOptions(BASS_FRETBOARD_OPTIONS, { label: 'Fretboard', typeMapping: 'fretboard', partCategory: 'fretboard', group: 'BASS_FRETBOARD_OPTIONS' });
+  addFlatOptions(BASS_HEADSTOCK_WOOD_OPTIONS, { label: 'Headstock Wood', typeMapping: 'headstockWood', partCategory: 'wood_type', group: 'BASS_HEADSTOCK_WOOD_OPTIONS' });
+  addFlatOptions(BASS_HEADSTOCK_STYLE_OPTIONS, { label: 'Headstock Style', typeMapping: 'headstock', partCategory: 'misc', group: 'BASS_HEADSTOCK_STYLE_OPTIONS' });
+  addFlatOptions(BASS_INLAY_OPTIONS, { label: 'Inlays', typeMapping: 'inlays', partCategory: 'misc', group: 'BASS_INLAY_OPTIONS' });
+  addFlatOptions(BASS_HARDWARE_OPTIONS, { label: 'Hardware', typeMapping: 'hardware', partCategory: 'hardware', group: 'BASS_HARDWARE_OPTIONS' });
+  addFlatOptions(BASS_PICKUP_OPTIONS, { label: 'Pickup Set', typeMapping: 'pickups', partCategory: 'pickups', group: 'BASS_PICKUP_OPTIONS' });
+  addFlatOptions(BASS_PICKUP_TYPE_STYLE_OPTIONS, { label: 'Pickup Type Style', typeMapping: 'pickupTypeStyle', partCategory: 'pickups', group: 'BASS_PICKUP_TYPE_STYLE_OPTIONS' });
+  addFlatOptions(BASS_PICKUP_CONFIG_OPTIONS, { label: 'Pickup Config', typeMapping: 'pickupConfig', partCategory: 'pickups', group: 'BASS_PICKUP_CONFIG_OPTIONS' });
+  addFlatOptions(BASS_STRING_OPTIONS, { label: 'String Setup', typeMapping: 'strings', partCategory: 'strings', group: 'BASS_STRING_OPTIONS' });
+  addFlatOptions(BASS_CONTROL_PLATE_OPTIONS, { label: 'Control Plate', typeMapping: 'controlPlate', partCategory: 'hardware', group: 'BASS_CONTROL_PLATE_OPTIONS' });
+
+  addNestedOptions(BASS_BRIDGE_OPTIONS, { label: 'Bridge', typeMapping: 'bridge', partCategory: 'bridge', group: 'BASS_BRIDGE_OPTIONS' });
+  addNestedOptions(BASS_PICKGUARD_OPTIONS, { label: 'Pickguard', typeMapping: 'pickguard', partCategory: 'pickguard', group: 'BASS_PICKGUARD_OPTIONS' });
+  addNestedOptions(BASS_KNOB_OPTIONS, { label: 'Knobs', typeMapping: 'knobs', partCategory: 'hardware', group: 'BASS_KNOB_OPTIONS' });
+  addNestedOptions(BASS_LOGO_OPTIONS, { label: 'Logo', typeMapping: 'logo', partCategory: 'misc', group: 'BASS_LOGO_OPTIONS' });
+  addNestedOptions(BASS_BACKPLATE_OPTIONS, { label: 'Backplate', typeMapping: 'backplate', partCategory: 'misc', group: 'BASS_BACKPLATE_OPTIONS' });
+  addNestedOptions(BASS_PICKUP_SCREW_OPTIONS, { label: 'Pickup Screws', typeMapping: 'pickupScrews', partCategory: 'hardware', group: 'BASS_PICKUP_SCREW_OPTIONS' });
+
+  return payloads;
+};
+
+exports.seedCustomizeParts = async ({ guitarType }) => {
+  const { normalizedType, source, module } = await loadCustomizeCatalogModule(guitarType);
+  const payloads = normalizedType === 'electric'
+    ? buildElectricCustomizeSeedPayloads(source, module)
+    : buildBassCustomizeSeedPayloads(source, module);
+
+  const existingRes = await pool.query(
+    `SELECT *
+     FROM guitar_builder_parts
+     WHERE guitar_type = $1`,
+    [normalizedType]
+  );
+
+  const existingBySeedIdentity = new Map();
+  const existingByNameIdentity = new Map();
+
+  for (const row of existingRes.rows) {
+    const metadata = row?.metadata || {};
+    const seedSource = normalizeKey(metadata.seed_source);
+    const optionIdentity = normalizeKey(metadata.option_identity);
+    if (seedSource === 'customize_catalog' && optionIdentity) {
+      existingBySeedIdentity.set(optionIdentity, row);
+    }
+
+    const identityKey = `${normalizeKey(row.guitar_type)}|${normalizeKey(row.type_mapping)}|${normalizeKey(row.name)}`;
+    if (!existingByNameIdentity.has(identityKey)) {
+      existingByNameIdentity.set(identityKey, row);
+    }
+  }
+
+  const stats = {
+    created: 0,
+    updated: 0,
+    skipped: 0,
+    total: payloads.length,
+  };
+
+  for (const payload of payloads) {
+    const optionIdentity = normalizeKey(payload?.metadata?.option_identity);
+    const nameIdentity = `${normalizeKey(payload.guitar_type)}|${normalizeKey(payload.type_mapping)}|${normalizeKey(payload.name)}`;
+    const existing = existingBySeedIdentity.get(optionIdentity) || existingByNameIdentity.get(nameIdentity);
+
+    if (existing?.part_id) {
+      const updated = await exports.updatePart(existing.part_id, payload);
+      if (updated) {
+        stats.updated += 1;
+        existingBySeedIdentity.set(optionIdentity, updated);
+        existingByNameIdentity.set(nameIdentity, updated);
+      } else {
+        stats.skipped += 1;
+      }
+      continue;
+    }
+
+    const created = await exports.createPart(payload);
+    stats.created += 1;
+    existingBySeedIdentity.set(optionIdentity, created);
+    existingByNameIdentity.set(nameIdentity, created);
+  }
+
+  return {
+    guitarType: normalizedType,
+    source,
+    seeded: stats,
+  };
+};
+
+exports.getModelImages = async ({ guitar_type } = {}) => {
+  await ensureBuilderModelImagesTable();
+
+  const params = [];
+  const where = [];
+
+  if (guitar_type) {
+    params.push(normalizeKey(guitar_type));
+    where.push(`guitar_type_code = $${params.length}`);
+  }
+
+  const condition = where.length ? `WHERE ${where.join(' AND ')}` : '';
+  const res = await pool.query(
+    `SELECT
+       model_image_id,
+       guitar_type_code AS guitar_type,
+       model_key,
+       display_name,
+       image_url,
+       created_at,
+       updated_at
+     FROM builder_model_images
+     ${condition}
+     ORDER BY guitar_type_code ASC, display_name ASC`,
+    params
+  );
+
+  return res.rows;
+};
+
+exports.upsertModelImage = async ({ guitar_type, model_key, display_name, image_url }) => {
+  await ensureBuilderModelImagesTable();
+
+  const normalizedType = normalizeKey(guitar_type);
+  const normalizedModelKey = normalizeKey(model_key);
+  const definition = resolveModelDefinition(normalizedType, normalizedModelKey);
+
+  if (!definition) {
+    throw new AppError('Unsupported customize model image target.', 400);
+  }
+
+  const finalDisplayName = String(display_name || definition.display_name || '').trim() || definition.display_name;
+  const finalImageUrl = image_url ? String(image_url).trim() : null;
+
+  const res = await pool.query(
+    `INSERT INTO builder_model_images (guitar_type_code, model_key, display_name, image_url)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (guitar_type_code, model_key)
+     DO UPDATE SET
+       display_name = EXCLUDED.display_name,
+       image_url = EXCLUDED.image_url,
+       updated_at = now()
+     RETURNING
+       model_image_id,
+       guitar_type_code AS guitar_type,
+       model_key,
+       display_name,
+       image_url,
+       created_at,
+       updated_at`,
+    [normalizedType, normalizedModelKey, finalDisplayName, finalImageUrl]
+  );
+
+  return res.rows[0] || null;
+};
+
 exports.getAllParts = async ({
   search,
   type_mapping,
@@ -257,7 +724,7 @@ exports.getAllParts = async ({
   };
   const orderColumn = sortableColumns[sortBy] || sortableColumns.created_at;
   const orderDirection = String(sortDir).toLowerCase() === 'asc' ? 'ASC' : 'DESC';
-  const normalizedPageSize = Math.min(Math.max(Number(pageSize) || 10, 1), 100);
+  const normalizedPageSize = Math.min(Math.max(Number(pageSize) || 10, 1), 500);
   const normalizedPage = Math.max(Number(page) || 1, 1);
   const offset = (normalizedPage - 1) * normalizedPageSize;
 

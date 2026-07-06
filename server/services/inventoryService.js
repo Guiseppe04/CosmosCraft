@@ -86,10 +86,12 @@ exports.addStock = async (productId, quantity, { notes = null, createdBy = null 
     );
     
     if (!inventoryRes.rows[0]) {
-      // Create inventory record if it doesn't exist
+      // Seed a missing inventory row at zero so the increment only happens once.
       await client.query(
-        'INSERT INTO inventory (product_id, stock) VALUES ($1, $2)',
-        [productId, quantity]
+        `INSERT INTO inventory (product_id, stock)
+         VALUES ($1, 0)
+         ON CONFLICT (product_id) DO NOTHING`,
+        [productId]
       );
     }
 
@@ -158,11 +160,7 @@ exports.deductStock = async (
       [productId]
     );
     
-    if (!inventoryRes.rows[0]) {
-      throw new AppError('Product inventory not found', 404);
-    }
-
-    const currentStock = inventoryRes.rows[0].stock;
+    const currentStock = Number(inventoryRes.rows[0]?.stock || 0);
     if (currentStock < quantity) {
       throw new AppError(
         `Insufficient stock. Available: ${currentStock}, Requested: ${quantity}`,
@@ -244,13 +242,26 @@ exports.adjustStock = async (productId, quantity, { notes = null, createdBy = nu
     );
     
     if (!inventoryRes.rows[0]) {
-      throw new AppError('Product inventory not found', 404);
+      if (quantity < 0) {
+        throw new AppError(
+          `Adjustment would result in negative stock. Current: 0, Adjustment: ${quantity}`,
+          400
+        );
+      }
+
+      await client.query(
+        `INSERT INTO inventory (product_id, stock)
+         VALUES ($1, 0)
+         ON CONFLICT (product_id) DO NOTHING`,
+        [productId]
+      );
     }
 
-    const newStock = inventoryRes.rows[0].stock + quantity;
+    const currentStock = Number(inventoryRes.rows[0]?.stock || 0);
+    const newStock = currentStock + quantity;
     if (newStock < 0) {
       throw new AppError(
-        `Adjustment would result in negative stock. Current: ${inventoryRes.rows[0].stock}, Adjustment: ${quantity}`,
+        `Adjustment would result in negative stock. Current: ${currentStock}, Adjustment: ${quantity}`,
         400
       );
     }

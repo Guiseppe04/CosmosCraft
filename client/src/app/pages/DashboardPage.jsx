@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 import { motion, AnimatePresence } from 'motion/react'
-import { User, CreditCard, MapPin, Lock, Package, Calendar, ChevronRight, Upload, Save, Wallet, ShoppingBag, ShoppingCart, Trash2, Minus, Plus, MessageSquare, Send, Guitar, Clock, Truck, CheckCircle, XCircle, Briefcase, Activity, Star, Loader2, Edit, AlertCircle } from 'lucide-react'
+import { User, CreditCard, MapPin, Lock, Package, Calendar, ChevronRight, Upload, Save, Wallet, ShoppingBag, ShoppingCart, Trash2, Minus, Plus, MessageSquare, Send, Guitar, Clock, Truck, CheckCircle, XCircle, Briefcase, Activity, Star, Loader2, Edit, AlertCircle, X } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useCart } from '../context/CartContext.jsx'
 import { BASE_PRICE, BODY_OPTIONS, BODY_WOOD_OPTIONS, BODY_FINISH_OPTIONS, NECK_OPTIONS, FRETBOARD_OPTIONS, HEADSTOCK_OPTIONS, HEADSTOCK_WOOD_OPTIONS, INLAY_OPTIONS, BRIDGE_OPTIONS, PICKGUARD_OPTIONS_BY_BODY, KNOB_OPTIONS_BY_BODY, HARDWARE_OPTIONS, PICKUP_OPTIONS } from '../lib/guitarBuilderData.js'
@@ -17,6 +17,14 @@ const OTHER_COUNTRIES = ALL_COUNTRIES.filter(c => c.isoCode !== 'PH')
 const COUNTRIES = PHILIPPINES ? [PHILIPPINES, ...OTHER_COUNTRIES] : ALL_COUNTRIES
 const MAX_USER_ADDRESSES = 2
 const MAX_SAVED_GUITAR_BUILDS = 10
+const ORDER_CANCEL_REASONS = [
+  'Changed my mind',
+  'Ordered by mistake',
+  'Need to change shipping details',
+  'Found a better price elsewhere',
+  'Payment issue',
+  'Others',
+]
 
 const getOldConfigData = (key, val, bodyType) => {
     let price;
@@ -70,6 +78,55 @@ const formatStatus = (status) => {
   return status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
 }
 
+const parseProjectDescription = (description) => {
+  const normalized = String(description || '').replace(/\s+/g, ' ').trim()
+  if (!normalized) return null
+
+  const checkoutPrefixMatch = normalized.match(/^Checkout Terms:\s*(.*)$/i)
+  if (!checkoutPrefixMatch) {
+    return { title: null, bulletItems: [], metaLines: [], plainText: normalized }
+  }
+
+  const remainder = checkoutPrefixMatch[1] || ''
+  const rawSegments = remainder
+    .split(/\s+-\s+/)
+    .flatMap((segment) =>
+      segment.split(/(?=Terms and Conditions accepted:)|(?=Payment Method:)|(?=Auto-created from custom build payment)/i)
+    )
+    .map((segment) => segment.trim())
+    .filter(Boolean)
+
+  const bulletItems = []
+  const metaLines = []
+
+  rawSegments.forEach((segment) => {
+    if (
+      /^Terms and Conditions accepted:/i.test(segment) ||
+      /^Payment Method:/i.test(segment) ||
+      /^Auto-created from custom build payment/i.test(segment)
+    ) {
+      metaLines.push(segment)
+      return
+    }
+    bulletItems.push(segment)
+  })
+
+  return {
+    title: 'Checkout Terms',
+    bulletItems,
+    metaLines,
+    plainText: '',
+  }
+}
+
+const formatEstimatedCompletionDate = (project) => {
+  const rawValue = project?.estimated_completion_date || project?.end_date || null
+  if (!rawValue) return null
+  const parsed = new Date(rawValue)
+  if (Number.isNaN(parsed.getTime())) return null
+  return parsed.toLocaleDateString()
+}
+
 export function DashboardPage() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -88,9 +145,18 @@ export function DashboardPage() {
   const [myProjects, setMyProjects] = useState([])
   const [myCustomizations, setMyCustomizations] = useState([])
   const [activeProjectView, setActiveProjectView] = useState(null)
+  const [activeBuildTab, setActiveBuildTab] = useState('build-projects')
   
   const [myOrders, setMyOrders] = useState([])
   const [activePurchaseTab, setActivePurchaseTab] = useState('All')
+  const [isCancelOrderModalOpen, setIsCancelOrderModalOpen] = useState(false)
+  const [cancelOrderTarget, setCancelOrderTarget] = useState(null)
+  const [cancelOrderReason, setCancelOrderReason] = useState('')
+  const [cancelOrderCustomReason, setCancelOrderCustomReason] = useState('')
+  const [isCancellingOrder, setIsCancellingOrder] = useState(false)
+  const [isCancelProjectModalOpen, setIsCancelProjectModalOpen] = useState(false)
+  const [cancelProjectTarget, setCancelProjectTarget] = useState(null)
+  const [isCancellingProject, setIsCancellingProject] = useState(false)
 
   const [myAppointments, setMyAppointments] = useState([])
   const [reschedulingAptId, setReschedulingAptId] = useState(null)
@@ -123,7 +189,7 @@ export function DashboardPage() {
     if (activeSection === 'appointments') {
       fetchMyAppointments()
     }
-  }, [activeSection])
+  }, [activeSection, user?.id])
 
   useEffect(() => {
     if (activeSection === 'my-guitar') {
@@ -143,7 +209,12 @@ export function DashboardPage() {
   }, [activeSection])
 
   const fetchMyAppointments = () => {
-    adminApi.getAppointments()
+    if (!user?.id) {
+      setMyAppointments([])
+      return
+    }
+
+    adminApi.getUserAppointments(user.id)
       .then(res => setMyAppointments(res.data?.appointments || []))
       .catch(console.error)
   }
@@ -185,7 +256,10 @@ export function DashboardPage() {
   const getBuildLockState = (build) => {
     const customizationId = getBuildCustomizationId(build)
     const customization = customizationId ? customizationLookup.get(customizationId) : null
-    const project = customizationId ? projectLookupByCustomization.get(customizationId) : null
+    const rawProject = customizationId ? projectLookupByCustomization.get(customizationId) : null
+    const project = rawProject && String(rawProject.status || '').toLowerCase() !== 'cancelled'
+      ? rawProject
+      : null
 
     return {
       customizationId,
@@ -228,25 +302,73 @@ export function DashboardPage() {
     }
   };
 
-  const handleCancelOrder = async (orderId) => {
-    if (!window.confirm("Are you sure you want to cancel this order?")) return;
+  const openCancelOrderModal = (order) => {
+    setCancelOrderTarget(order)
+    setCancelOrderReason('')
+    setCancelOrderCustomReason('')
+    setIsCancelOrderModalOpen(true)
+  }
+
+  const closeCancelOrderModal = (force = false) => {
+    if (isCancellingOrder && !force) return
+    setIsCancelOrderModalOpen(false)
+    setCancelOrderTarget(null)
+    setCancelOrderReason('')
+    setCancelOrderCustomReason('')
+  }
+
+  const getResolvedCancelReason = () => {
+    if (cancelOrderReason === 'Others') return cancelOrderCustomReason.trim()
+    return cancelOrderReason
+  }
+
+  const handleCancelOrder = async () => {
+    const resolvedReason = getResolvedCancelReason()
+    if (!cancelOrderTarget?.order_id || !resolvedReason) {
+      return
+    }
     try {
-      await adminApi.cancelMyOrder(orderId);
+      setIsCancellingOrder(true)
+      await adminApi.cancelMyOrder(cancelOrderTarget.order_id, resolvedReason);
       setToastMessage('Order has been cancelled.');
       fetchMyOrders();
+      closeCancelOrderModal(true)
     } catch (err) {
-      alert("Failed to cancel order: " + err.message);
+      setToastMessage(`Failed to cancel order: ${err.message}`);
+    } finally {
+      setIsCancellingOrder(false)
     }
   };
 
-  const handleCancelProject = async (projectId) => {
-    if (!window.confirm("Are you sure you want to cancel this project? This will stop the building progress.")) return;
+  const openCancelProjectModal = (project) => {
+    setCancelProjectTarget(project)
+    setIsCancelProjectModalOpen(true)
+  }
+
+  const closeCancelProjectModal = (force = false) => {
+    if (isCancellingProject && !force) return
+    setIsCancelProjectModalOpen(false)
+    setCancelProjectTarget(null)
+  }
+
+  const handleCancelProject = async () => {
+    if (!cancelProjectTarget?.project_id) return
+
     try {
-      await adminApi.updateProject(projectId, { status: 'Cancelled' });
+      setIsCancellingProject(true)
+      await adminApi.cancelMyProject(cancelProjectTarget.project_id)
       setToastMessage('Project has been cancelled.');
       fetchMyProjects();
+      fetchMyOrders();
+      fetchMyCustomizations();
+      if (activeProjectView?.project_id === cancelProjectTarget.project_id) {
+        setActiveProjectView(null)
+      }
+      closeCancelProjectModal(true)
     } catch (err) {
-      alert("Failed to cancel project: " + err.message);
+      setToastMessage(`Failed to cancel project: ${err.message}`);
+    } finally {
+      setIsCancellingProject(false)
     }
   };
 
@@ -587,39 +709,86 @@ export function DashboardPage() {
           </div>
         ) : (
           <div className="space-y-6">
-            {filteredOrders.map(order => (
+            {filteredOrders.map(order => {
+              const subtotalAmount = Number(order.subtotal || 0)
+              const shippingAmount = Number(order.shipping_cost || 0)
+              const taxAmount = Number(order.tax_amount || 0)
+              const totalAmount = Number(order.total_amount || 0)
+              const displayTotalAmount = totalAmount > 0
+                ? Math.max(totalAmount - taxAmount, 0)
+                : subtotalAmount + shippingAmount
+              const orderItems = Array.isArray(order.items) ? order.items : []
+
+              return (
               <div key={order.order_id} className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl p-5 hover:border-[var(--gold-primary)]/40 transition-colors">
-                <div className="flex justify-between items-center mb-4 border-b border-[var(--border)] pb-4">
+                <div className="flex flex-col gap-4 mb-4 border-b border-[var(--border)] pb-4 sm:flex-row sm:items-start sm:justify-between">
                   <div>
                     <h3 className="font-bold text-white text-lg">{order.order_number}</h3>
                     <p className="text-xs text-[var(--text-muted)] mt-1">{new Date(order.created_at).toLocaleDateString()} {new Date(order.created_at).toLocaleTimeString()}</p>
                   </div>
-                  <div className="text-right">
-                    <span className="inline-block px-3 py-1 bg-[var(--surface-light)] border border-[var(--border)] rounded-full text-xs font-semibold text-white capitalize mr-2">
-                       {formatStatus(order.status)}
-                    </span>
-                    <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold capitalize ${
-                       order.payment_status === 'paid' ? 'bg-green-500/10 text-green-400 border border-green-500/30' : 'bg-yellow-500/10 text-yellow-500 border border-yellow-500/30'
-                    }`}>
-                       {formatStatus(order.payment_status)}
-                    </span>
+                  <div className="flex flex-col gap-2 sm:items-end">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] uppercase tracking-wider text-[var(--text-muted)]">Order Status</span>
+                      <span className="inline-block px-3 py-1 bg-[var(--surface-light)] border border-[var(--border)] rounded-full text-xs font-semibold text-white capitalize">
+                         {formatStatus(order.status)}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] uppercase tracking-wider text-[var(--text-muted)]">Payment Status</span>
+                      <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold capitalize border ${
+                         ['approved', 'paid', 'verified'].includes(String(order.payment_status || '').toLowerCase())
+                           ? 'bg-green-500/10 text-green-400 border-green-500/30'
+                           : 'bg-yellow-500/10 text-yellow-500 border-yellow-500/30'
+                      }`}>
+                         {formatStatus(order.payment_status)}
+                      </span>
+                    </div>
                   </div>
                 </div>
+
+                {orderItems.length > 0 && (
+                  <div className="mt-4">
+                    <p className="text-[11px] uppercase tracking-wider text-[var(--text-muted)] mb-3">Item Details</p>
+                    <div className="space-y-2">
+                      {orderItems.map((item, index) => {
+                        const customization = item.customization_id ? customizationLookup.get(item.customization_id) : null
+                        const itemName = item.product_name || customization?.name || item.product_sku || 'Custom Item'
+                        const quantity = Number(item.quantity || 1)
+                        const unitPrice = Number(item.unit_price || 0)
+
+                        return (
+                          <div key={item.order_item_id || `${order.order_id}-${index}`} className="flex items-start justify-between gap-4 rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] px-4 py-3">
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold text-white">{itemName}</p>
+                              <p className="text-xs text-[var(--text-muted)] mt-1">
+                                Qty: {quantity}{item.customization_id ? ' • Custom Build' : ''}
+                              </p>
+                            </div>
+                            <span className="text-sm font-semibold text-white whitespace-nowrap">PHP {unitPrice.toLocaleString('en-PH')}</span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
                 
                 <div className="flex justify-between items-end mt-4">
-                   <div className="text-sm text-[var(--text-muted)]">
+                   <div className="text-sm text-[var(--text-muted)] [&>span:last-child]:hidden">
+                      <span className="block">Items: {orderItems.length}</span>
                       <span className="block">Shipping: ₱{Number(order.shipping_cost || 0).toLocaleString('en-PH')}</span>
                       <span className="block mt-1">Tax: ₱{Number(order.tax_amount || 0).toLocaleString('en-PH')}</span>
                    </div>
-                   <div className="text-right items-end flex flex-col">
+                   <div className="text-right items-end flex flex-col [&>span:not(:first-child)]:hidden">
                      <span className="text-sm text-[var(--text-muted)] mb-1">Total Amount</span>
+                     <div className="text-xl font-bold text-[var(--gold-primary)] block">PHP {displayTotalAmount.toLocaleString('en-PH')}</div>
+                     <span className="text-xl font-bold text-[var(--gold-primary)] block">â‚±{displayTotalAmount.toLocaleString('en-PH')}</span>
                      <span className="text-xl font-bold text-[var(--gold-primary)] block">₱{Number(order.total_amount || 0).toLocaleString('en-PH')}</span>
                    </div>
                 </div>
                 {order.status === 'pending' && (
                   <div className="mt-4 pt-4 border-t border-[var(--border)] flex justify-end">
                     <button
-                      onClick={() => handleCancelOrder(order.order_id)}
+                      onClick={() => openCancelOrderModal(order)}
                       className="px-4 py-2 border border-red-500/30 text-red-500 hover:bg-red-500/10 transition-colors rounded-lg text-sm font-semibold"
                     >
                       Cancel Order
@@ -645,7 +814,7 @@ export function DashboardPage() {
                   </div>
                 )}
               </div>
-            ))}
+            )})}
           </div>
         )}
         </div>
@@ -729,7 +898,7 @@ export function DashboardPage() {
                     <div>
                       <span className="block text-[var(--text-muted)] mb-1">Date & Time</span>
                       <span className="text-white">
-                        {apptDate ? new Date(apptDate).toLocaleDateString() : '—'} at {apt.time || (apptDate ? new Date(apptDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—')}
+                        {apptDate ? new Date(apptDate).toLocaleDateString() : 'â€”'} at {apt.time || (apptDate ? new Date(apptDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'â€”')}
                       </span>
                     </div>
                     {apt.location_id && (
@@ -778,9 +947,9 @@ export function DashboardPage() {
   const renderProjectsContent = () => {
     if (activeProjectView) {
       return (
-        <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-5 sm:p-8">
+        <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-4 sm:p-6 lg:p-7 xl:p-8">
           <button onClick={() => setActiveProjectView(null)} className="mb-6 text-[var(--gold-primary)] hover:underline flex items-center gap-2 text-sm font-semibold">
-            ← Back to Build Projects
+            &larr; Back to Build Projects
           </button>
           <ProjectTaskTracker projectId={activeProjectView.project_id} isAdmin={false} />
         </div>
@@ -789,6 +958,31 @@ export function DashboardPage() {
 
     return (
       <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-5 sm:p-8">
+        <div className="flex flex-wrap gap-6 sm:gap-8 border-b border-[var(--border)] mb-6">
+          {[
+            { id: 'build-projects', label: 'Build Projects' },
+            { id: 'saved-builds', label: 'Saved Builds' },
+          ].map((tab) => {
+            const isActive = activeBuildTab === tab.id
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveBuildTab(tab.id)}
+                className={`relative pb-3 text-sm sm:text-base font-semibold whitespace-nowrap transition-colors ${
+                  isActive ? 'text-white' : 'text-[var(--text-muted)] hover:text-white'
+                }`}
+              >
+                {tab.label}
+                <span
+                  className={`absolute left-0 -bottom-px h-0.5 w-full rounded-full transition-opacity ${
+                    isActive ? 'opacity-100 bg-[var(--gold-primary)]' : 'opacity-0'
+                  }`}
+                />
+              </button>
+            )
+          })}
+        </div>
         <h2 className="text-2xl font-bold text-white mb-1">Build Projects</h2>
         <p className="text-sm text-[var(--text-muted)] mb-8">Track progress on your custom builds and repairs</p>
 
@@ -804,23 +998,56 @@ export function DashboardPage() {
           </div>       
         ) : (
           <div className="grid gap-6">
-            {myProjects.map((project) => (
+            {myProjects.map((project) => {
+              const projectDescription = parseProjectDescription(project.description || 'Custom Build Project')
+              return (
               <div key={project.project_id} className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl p-5 hover:border-[var(--gold-primary)]/40 transition-colors">
                 <div className="flex justify-between items-center">
                   <div>
                     <h3 className="text-lg font-bold text-white">{project.name}</h3>
-                    <p className="text-[var(--text-muted)] text-sm mt-1">{project.description || 'Custom Build Project'}</p>
+                    {projectDescription?.title ? (
+                      <div className="mt-2 rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] px-3 py-2.5 text-sm text-[var(--text-muted)]">
+                        <p className="font-semibold text-white">{projectDescription.title}</p>
+                        {projectDescription.bulletItems.length > 0 && (
+                          <ul className="mt-1.5 space-y-1">
+                            {projectDescription.bulletItems.map((item, index) => (
+                              <li key={`${project.project_id}-bullet-${index}`} className="flex items-start gap-2">
+                                <span className="mt-[6px] h-1.5 w-1.5 rounded-full bg-[var(--gold-primary)] shrink-0" />
+                                <span>{item}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                        {projectDescription.metaLines.length > 0 && (
+                          <div className="mt-2 space-y-1 border-t border-[var(--border)] pt-2">
+                            {projectDescription.metaLines.map((line, index) => (
+                              <p key={`${project.project_id}-meta-${index}`} className="break-words">
+                                {line}
+                              </p>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-[var(--text-muted)] text-sm mt-1 break-words">{projectDescription?.plainText || 'Custom Build Project'}</p>
+                    )}
+                    <p className="text-[var(--text-muted)] text-sm mt-2">
+                      Estimated completion:{' '}
+                      <span className="text-white font-medium">
+                        {formatEstimatedCompletionDate(project) || 'Not set'}
+                      </span>
+                    </p>
                     <div className="mt-4 flex items-center gap-4">
-                      <span className="px-2 py-0.5 border border-[var(--border)] rounded-full text-xs font-semibold text-white">{project.status}</span>
+                      <span className="px-2 py-0.5 border border-[var(--border)] rounded-full text-xs font-semibold text-white">{formatStatus(project.status)}</span>
                       <span className="text-[var(--gold-primary)] font-bold text-sm">{project.progress}% Complete</span>
                     </div>
                   </div>
                   
                 </div>
                 <div className="flex gap-2 mt-4 pt-4 border-t border-[var(--border)]">
-                  {project.progress < 80 && project.status !== 'Cancelled' && (
+                  {project.progress < 80 && String(project.status || '').toLowerCase() !== 'cancelled' && (
                     <button
-                      onClick={() => handleCancelProject(project.project_id)}
+                      onClick={() => openCancelProjectModal(project)}
                       className="px-4 py-2 rounded-lg border border-red-500/30 text-red-500 hover:bg-red-500/10 transition-colors text-sm font-semibold"
                     >
                       Cancel Project
@@ -830,12 +1057,21 @@ export function DashboardPage() {
                     onClick={() => setActiveProjectView(project)}
                     className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-bold shadow-[0_0_10px_rgba(212,175,55,0.3)] hover:shadow-[0_0_15px_rgba(212,175,55,0.5)] transition-all flex items-center gap-2"
                   >
-                    <Activity className="w-4 h-4" /> Track Progress
+                    <span className="flex items-center gap-3">
+                      <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-black/10">
+                        <Activity className="w-4 h-4" />
+                      </span>
+                      <span className="flex flex-col items-start leading-tight">
+                        <span className="text-[10px] uppercase tracking-wide text-[var(--text-dark)]/70">Project</span>
+                        <span className="text-sm font-bold">Track Progress</span>
+                      </span>
+                      <ChevronRight className="w-4 h-4 ml-1" />
+                    </span>
                   </button>
                 </div>
                 
               </div>
-            ))}
+            )})}
           </div>
         )}
       </div>
@@ -858,9 +1094,35 @@ export function DashboardPage() {
 
     return (
       <div className="space-y-8">
-        {renderProjectsContent()}
+        {activeBuildTab === 'build-projects' && renderProjectsContent()}
 
+        {activeBuildTab === 'saved-builds' && (
         <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-5 sm:p-8">
+        <div className="flex flex-wrap gap-6 sm:gap-8 border-b border-[var(--border)] mb-6">
+          {[
+            { id: 'build-projects', label: 'Build Projects' },
+            { id: 'saved-builds', label: 'Saved Builds' },
+          ].map((tab) => {
+            const isActive = activeBuildTab === tab.id
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveBuildTab(tab.id)}
+                className={`relative pb-3 text-sm sm:text-base font-semibold whitespace-nowrap transition-colors ${
+                  isActive ? 'text-white' : 'text-[var(--text-muted)] hover:text-white'
+                }`}
+              >
+                {tab.label}
+                <span
+                  className={`absolute left-0 -bottom-px h-0.5 w-full rounded-full transition-opacity ${
+                    isActive ? 'opacity-100 bg-[var(--gold-primary)]' : 'opacity-0'
+                  }`}
+                />
+              </button>
+            )
+          })}
+        </div>
         <div className="flex items-center justify-between mb-6">
           <div>
             <h2 className="text-2xl font-bold text-white mb-1">My Saved Builds</h2>
@@ -1002,8 +1264,8 @@ export function DashboardPage() {
                         onClick={() => setActiveProjectView(buildLockState.project)}
                         className="w-full mt-2 py-2.5 px-3 rounded-lg bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-bold text-sm shadow-[0_0_10px_rgba(212,175,55,0.3)] hover:shadow-[0_0_15px_rgba(212,175,55,0.5)] transition-all flex items-center justify-center gap-2"
                       >
-                        <Activity className="w-4 h-4" />
-                        Track Progress
+                        <ShoppingCart className="w-4 h-4" />
+                        Buy Now
                       </button>
                     ) : (
                       <button
@@ -1020,10 +1282,10 @@ export function DashboardPage() {
                       onClick={() => {
                           navigate('/checkout', { state: { checkoutItem: build, isCustomBuild: true } });
                       }}
-                      className="w-full mt-2 py-2.5 px-3 rounded-lg bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-bold text-sm shadow-[0_0_10px_rgba(212,175,55,0.3)] hover:shadow-[0_0_15px_rgba(212,175,55,0.5)] transition-all flex items-center justify-center gap-2"
-                    >
-                      <ShoppingCart className="w-4 h-4" />
-                      Order This Build
+                    className="w-full mt-2 py-2.5 px-3 rounded-lg bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-bold text-sm shadow-[0_0_10px_rgba(212,175,55,0.3)] hover:shadow-[0_0_15px_rgba(212,175,55,0.5)] transition-all flex items-center justify-center gap-2"
+                  >
+                    <ShoppingCart className="w-4 h-4" />
+                      Buy Now
                     </button>
                   )}
                 </div>
@@ -1032,6 +1294,7 @@ export function DashboardPage() {
           </div>
         )}
         </div>
+        )}
       </div>
     )
   }
@@ -1433,7 +1696,7 @@ export function DashboardPage() {
         <div className="space-y-4 max-w-xl">
           <div className="flex items-center gap-2 mb-4">
             <button onClick={() => { setIsAddingAddress(false); setEditingAddressId(null); setAddressData({ category: 'Home', country: 'PH', streetLine1: '', streetLine2: '', province: '', city: '', barangay: '', postalZipCode: '', isDefault: true }); setLocationData(prev => ({ ...prev, cities: [], barangays: [] })) }} className="text-[var(--gold-primary)] hover:underline text-sm font-semibold flex items-center gap-1">
-              ← Back
+              Back
             </button>
             <span className="text-white font-semibold">{editingAddressId ? 'Edit Address' : 'Add New Address'}</span>
           </div>
@@ -1665,6 +1928,117 @@ export function DashboardPage() {
         onConfirm={handleConfirmPasswordChange}
         onCancel={() => setIsPasswordConfirmOpen(false)}
       />
+      <ConfirmModal
+        open={isCancelProjectModalOpen}
+        title="Cancel Project"
+        description={cancelProjectTarget?.name
+          ? `${cancelProjectTarget.name} will be cancelled and the build will stop where it is now.`
+          : 'Are you sure you want to cancel this project? This will stop the building progress.'}
+        confirmLabel="Cancel Project"
+        cancelLabel="Keep Project"
+        variant="danger"
+        isBusy={isCancellingProject}
+        onConfirm={handleCancelProject}
+        onCancel={() => closeCancelProjectModal()}
+      />
+      <AnimatePresence>
+        {isCancelOrderModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[300] bg-black/70 backdrop-blur-sm p-4 flex items-center justify-center"
+            onClick={(event) => {
+              if (event.target === event.currentTarget) closeCancelOrderModal()
+            }}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 16, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 16, scale: 0.96 }}
+              className="relative w-full max-w-lg rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-6 sm:p-7 shadow-2xl"
+            >
+              <button
+                type="button"
+                onClick={closeCancelOrderModal}
+                disabled={isCancellingOrder}
+                className="absolute right-4 top-4 rounded-lg p-2 text-[var(--text-muted)] hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
+                aria-label="Close cancel order modal"
+              >
+                <X className="h-4 w-4" />
+              </button>
+
+              <h3 className="text-xl font-bold text-white pr-8">Cancel Order</h3>
+              <p className="mt-2 text-sm text-[var(--text-muted)]">
+                {cancelOrderTarget?.order_number ? `Order ${cancelOrderTarget.order_number}` : 'This order'} will be cancelled. Please tell us why.
+              </p>
+
+              <div className="mt-5 space-y-3">
+                {ORDER_CANCEL_REASONS.map((reason) => {
+                  const isSelected = cancelOrderReason === reason
+                  return (
+                    <label
+                      key={reason}
+                      className={`flex cursor-pointer items-center gap-3 rounded-xl border px-4 py-3 transition-colors ${
+                        isSelected
+                          ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)]/10'
+                          : 'border-[var(--border)] hover:border-[var(--gold-primary)]/40'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="cancel-order-reason"
+                        value={reason}
+                        checked={isSelected}
+                        onChange={(event) => setCancelOrderReason(event.target.value)}
+                        className="h-4 w-4 accent-[var(--gold-primary)]"
+                      />
+                      <span className="text-sm text-white">{reason}</span>
+                    </label>
+                  )
+                })}
+              </div>
+
+              {cancelOrderReason === 'Others' && (
+                <div className="mt-4">
+                  <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                    Please specify your reason
+                  </label>
+                  <textarea
+                    value={cancelOrderCustomReason}
+                    onChange={(event) => setCancelOrderCustomReason(event.target.value)}
+                    maxLength={200}
+                    rows={4}
+                    placeholder="Type your reason here..."
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-3 text-sm text-white placeholder:text-[var(--text-muted)] focus:border-[var(--gold-primary)] focus:outline-none"
+                  />
+                  <p className="mt-1 text-right text-xs text-[var(--text-muted)]">{cancelOrderCustomReason.length}/200</p>
+                </div>
+              )}
+
+              <div className="mt-6 flex gap-3">
+                <button
+                  type="button"
+                  onClick={closeCancelOrderModal}
+                  disabled={isCancellingOrder}
+                  className="flex-1 rounded-xl border border-[var(--border)] bg-white/5 py-3 text-sm font-semibold text-white hover:bg-white/10 transition-colors disabled:opacity-50"
+                >
+                  Keep Order
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCancelOrder}
+                  disabled={!getResolvedCancelReason() || isCancellingOrder}
+                  className="flex-1 rounded-xl bg-red-500 py-3 text-sm font-bold text-white hover:bg-red-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {isCancellingOrder && <Loader2 className="h-4 w-4 animate-spin" />}
+                  {isCancellingOrder ? 'Cancelling...' : 'Confirm Cancel'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10">
         <div className="grid xl:grid-cols-[1fr_1.4fr] gap-4 sm:gap-6 items-start">
@@ -2123,8 +2497,8 @@ export function DashboardPage() {
                   }}
                   className="w-full mt-8 py-4 px-4 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-bold text-lg shadow-[0_0_10px_rgba(212,175,55,0.3)] hover:shadow-[0_0_20px_rgba(212,175,55,0.5)] transition-all flex items-center justify-center gap-3"
                 >
-                  <Activity className="w-6 h-6" />
-                  Track Progress
+                  <ShoppingCart className="w-6 h-6" />
+                  Buy Now
                 </button>
               ) : (
                 <button
@@ -2158,4 +2532,5 @@ export function DashboardPage() {
 }
 
 export default DashboardPage
+
 

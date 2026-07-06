@@ -14,6 +14,7 @@ const getFrontendUrl = () => {
   throw new Error('Frontend URL not configured.');
 };
 
+// Google Callback
 exports.googleCallback = asyncHandler(async (req, res, next) => {
   if (!req.user) {
     return res.redirect(`${getFrontendUrl()}/auth/oauth-signup?provider=google&userData=${encodeURIComponent(JSON.stringify(req.authInfo?.oauthData || {}))}`);
@@ -38,7 +39,7 @@ exports.googleCallback = asyncHandler(async (req, res, next) => {
 
   return res.redirect(`${getFrontendUrl()}/auth/success?userId=${req.user.user_id}&provider=google`);
 });
-
+// Facebook Callback
 exports.facebookCallback = asyncHandler(async (req, res, next) => {
   if (!req.user) {
     return res.redirect(`${getFrontendUrl()}/auth/oauth-signup?provider=facebook&userData=${encodeURIComponent(JSON.stringify(req.authInfo?.oauthData || {}))}`);
@@ -64,6 +65,7 @@ exports.facebookCallback = asyncHandler(async (req, res, next) => {
   return res.redirect(`${getFrontendUrl()}/auth/success?userId=${req.user.user_id}&provider=facebook`);
 });
 
+// OAuth Signup(for new users)
 exports.oauthSignup = asyncHandler(async (req, res, next) => {
   const { provider, googleId, facebookId, email, firstName, middleName, lastName } = req.body;
 
@@ -108,7 +110,7 @@ exports.oauthSignup = asyncHandler(async (req, res, next) => {
     data: { user: { id: newUser.user_id, email: newUser.email, name: `${newUser.first_name} ${newUser.last_name}` } }
   });
 });
-
+// Email Signup
 exports.emailSignup = asyncHandler(async (req, res, next) => {
   const { error, value } = emailSignupSchema.validate(req.body, { abortEarly: false });
   if (error) {
@@ -154,7 +156,7 @@ exports.emailSignup = asyncHandler(async (req, res, next) => {
     throw new AppError(error.message || 'Signup failed', 400);
   }
 });
-
+// Email Login
 exports.emailLogin = asyncHandler(async (req, res, next) => {
   const { error, value } = emailLoginSchema.validate(req.body, { abortEarly: false });
   if (error) {
@@ -253,6 +255,16 @@ exports.logout = asyncHandler(async (req, res, next) => {
 });
 
 exports.checkAuth = asyncHandler(async (req, res, next) => {
+  if (!req.user?.id) {
+    return res.status(200).json({
+      status: 'success',
+      data: {
+        isAuthenticated: false,
+        user: null,
+      }
+    });
+  }
+
   const user = await userService.getUserById(req.user.id);
   const authInfo = await userService.getUserAuthInfo(req.user.id);
   res.status(200).json({ 

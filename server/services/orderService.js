@@ -1,4 +1,5 @@
 const { pool } = require('../config/database')
+const { generateUniqueOrderNumber } = require('../utils/orderNumber')
 
 const isValidUUID = (uuid) => {
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -29,6 +30,96 @@ const normalizePositiveQuantity = (value, fallback = 1) => {
 
   return Math.max(1, Math.trunc(quantity))
 }
+
+const normalizeAddressValue = (value) => String(value || '')
+  .trim()
+  .replace(/\s+/g, ' ')
+  .toLowerCase()
+
+const countryNameToCode = (() => {
+  const map = new Map([
+    ['philippines', 'PH'],
+    ['the philippines', 'PH'],
+    ['usa', 'US'],
+    ['united states', 'US'],
+    ['united states of america', 'US'],
+    ['uk', 'GB'],
+    ['united kingdom', 'GB'],
+  ])
+
+  if (typeof Intl?.DisplayNames !== 'function' || typeof Intl?.supportedValuesOf !== 'function') {
+    return map
+  }
+
+  try {
+    const displayNames = new Intl.DisplayNames(['en'], { type: 'region' })
+
+    for (const code of Intl.supportedValuesOf('region')) {
+      if (!/^[A-Z]{2}$/.test(code)) continue
+
+      const name = displayNames.of(code)
+      const normalizedName = normalizeAddressValue(name)
+
+      if (normalizedName) {
+        map.set(normalizedName, code)
+      }
+    }
+  } catch (error) {
+    // Keep the alias map if the runtime does not support full region metadata.
+  }
+
+  return map
+})()
+
+const normalizeCountryCode = (value, fallback = 'PH') => {
+  const rawValue = String(value || '').trim()
+
+  if (!rawValue) {
+    return fallback
+  }
+
+  const upperValue = rawValue.toUpperCase()
+  if (/^[A-Z]{2}$/.test(upperValue)) {
+    return upperValue
+  }
+
+  return countryNameToCode.get(normalizeAddressValue(rawValue)) || null
+}
+
+const createValidationError = (message, statusCode = 400) => {
+  const error = new Error(message)
+  error.statusCode = statusCode
+  return error
+}
+
+const extractPaymentMethodFromNotes = (notes = '') => {
+  const match = String(notes || '').match(/Payment Method:\s*([a-z_]+)/i)
+  return match?.[1] ? String(match[1]).toLowerCase() : ''
+}
+
+const resolveOrderPaymentMethod = (order = {}, payment = null) => {
+  const paymentMethod = String(
+    payment?.method
+    || order?.payment_method
+    || extractPaymentMethodFromNotes(order?.notes)
+    || ''
+  ).toLowerCase()
+
+  if (!paymentMethod) return null
+  if (paymentMethod.includes('cash') || paymentMethod.includes('cod')) return 'cash'
+  if (paymentMethod.includes('gcash')) return 'gcash'
+  if (paymentMethod.includes('bank') || paymentMethod.includes('transfer')) return 'bank_transfer'
+  return paymentMethod
+}
+
+const getAddressSignature = (address = {}) => ([
+  address.line1 ?? address.streetLine1 ?? address.street,
+  address.line2 ?? address.streetLine2 ?? address.street2,
+  address.city,
+  address.province ?? address.stateProvince,
+  address.postal_code ?? address.postalZipCode ?? address.postalCode,
+  normalizeCountryCode(address.country, ''),
+].map(normalizeAddressValue).join('|'))
 
 const addInventoryReservation = (reservations, productId, quantity) => {
   if (!productId || quantity <= 0) return
@@ -225,11 +316,11 @@ const validateAndDeductInventory = async (client, reservations, orderId) => {
     const product = productRes.rows[0]
 
     if (!product) {
-      throw new Error(`Product ${productId} not found`)
+      throw createValidationError(`Product ${productId} not found`, 404)
     }
 
     if (!product.is_active) {
-      throw new Error(`Product "${product.name}" is no longer available`)
+      throw createValidationError(`Product "${product.name}" is no longer available`, 400)
     }
 
     const inventoryRes = await client.query(
@@ -241,14 +332,14 @@ const validateAndDeductInventory = async (client, reservations, orderId) => {
     )
 
     if (inventoryRes.rows.length === 0) {
-      throw new Error(`Inventory record not found for "${product.name}"`)
+      throw createValidationError(`Inventory record not found for "${product.name}"`, 404)
     }
 
     const currentStock = Number(inventoryRes.rows[0].stock) || 0
     const lowStockThreshold = Number(inventoryRes.rows[0].low_stock_threshold) || 10
 
     if (currentStock < quantity) {
-      throw new Error(`Insufficient stock for "${product.name}". Available: ${currentStock}`)
+      throw createValidationError(`Not enough stock for ${product.name}. Available stock: ${currentStock}.`, 400)
     }
 
     const updateRes = await client.query(
@@ -290,7 +381,7 @@ exports.PAYMENT_STATUS = {
 // Valid payment status transitions (including self-transition for idempotent updates)
 const PAYMENT_STATUS_TRANSITIONS = {
   'pending': ['proof_submitted', 'pending'],
-  'proof_submitted': ['under_review', 'pending', 'proof_submitted'],
+  'proof_submitted': ['under_review', 'approved', 'rejected', 'pending', 'proof_submitted'],
   'under_review': ['approved', 'rejected', 'under_review'],
   'approved': ['approved', 'rejected', 'failed'],
   'rejected': ['pending', 'proof_submitted', 'rejected'],
@@ -305,12 +396,12 @@ function isValidPaymentStatusTransition(currentStatus, newStatus) {
 }
 
 const VALID_STATUS_TRANSITIONS = {
-  'pending': ['processing', 'cancelled', 'pending'],
-  'processing': ['shipped', 'cancelled', 'processing'],
-  'shipped': ['out_for_delivery', 'cancelled', 'shipped'],
-  'out_for_delivery': ['delivered', 'cancelled', 'out_for_delivery'],
-  'delivered': ['delivered'],
-  'cancelled': ['pending', 'cancelled']
+  'pending': ['processing'],
+  'processing': ['shipped'],
+  'shipped': ['out_for_delivery'],
+  'out_for_delivery': ['delivered'],
+  'delivered': [],
+  'cancelled': []
 }
 
 const STATUS_FIELD_REQUIREMENTS = {
@@ -329,14 +420,19 @@ exports.createOrder = async (orderData) => {
 
     // Validate required fields
     if (!billingAddress) {
-      throw new Error('Billing address is required')
+      throw createValidationError('Billing address is required')
     }
     if (!billingAddress.street || !billingAddress.city) {
-      throw new Error('Address must include street and city')
+      throw createValidationError('Address must include street and city')
+    }
+
+    const normalizedCountryCode = normalizeCountryCode(billingAddress.country)
+    if (!normalizedCountryCode) {
+      throw createValidationError('Address must include a valid 2-letter country code')
     }
 
     if (paymentMethod === 'cash' && hasCustomBuildItems(items)) {
-      throw new Error('COD is only available for regular product orders. Customized guitars require down payment.')
+      throw createValidationError('COD is only available for regular product orders. Customized guitars require down payment.')
     }
 
     // Calculate totals
@@ -346,20 +442,24 @@ exports.createOrder = async (orderData) => {
     const total = subtotal + shippingCost + tax
 
     // Generate order number
-    const orderNumber = `ORD-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`
+    const orderNumber = await generateUniqueOrderNumber()
 
     // Insert billing address into addresses table (check for existing first)
     let shippingAddressId = null
     if (billingAddress.street && billingAddress.city) {
-      // Check if similar address already exists
+      // Reuse an existing saved address when the full normalized address matches.
       const existingAddr = await client.query(
-        `SELECT address_id FROM addresses 
-         WHERE user_id = $1 AND line1 = $2 AND city = $3 AND province = $4`,
-        [userId, billingAddress.street, billingAddress.city, billingAddress.province || null]
+        `SELECT address_id, line1, line2, city, province, postal_code, country
+         FROM addresses
+         WHERE user_id = $1`,
+        [userId]
+      )
+      const matchedAddress = existingAddr.rows.find(
+        (address) => getAddressSignature(address) === getAddressSignature(billingAddress)
       )
       
-      if (existingAddr.rows.length > 0) {
-        shippingAddressId = existingAddr.rows[0].address_id
+      if (matchedAddress) {
+        shippingAddressId = matchedAddress.address_id
       } else {
         const addressRes = await client.query(
           `INSERT INTO addresses (user_id, label, line1, line2, city, province, postal_code, country)
@@ -373,7 +473,7 @@ exports.createOrder = async (orderData) => {
             billingAddress.city,
             billingAddress.province || null,
             billingAddress.postalCode || null,
-            'PH'
+            normalizedCountryCode
           ]
         )
         shippingAddressId = addressRes.rows[0].address_id
@@ -454,7 +554,7 @@ exports.createOrder = async (orderData) => {
   } catch (error) {
     await client.query('ROLLBACK')
     console.error('Create order error:', error)
-    throw new Error(error.message || 'Failed to create order')
+    throw error
   } finally {
     client.release()
   }
@@ -466,19 +566,52 @@ exports.getUserOrders = async (userId) => {
     [userId]
   )
 
-  for (const order of res.rows) {
-    const itemsRes = await pool.query(
-      `SELECT customization_id
-       FROM order_items
-       WHERE order_id = $1
-         AND customization_id IS NOT NULL`,
-      [order.order_id]
-    )
-
-    order.customization_ids = itemsRes.rows.map(item => item.customization_id)
+  if (res.rows.length === 0) {
+    return res.rows
   }
 
-  return res.rows
+  const orderIds = res.rows.map((order) => order.order_id)
+  const itemsRes = await pool.query(
+    `SELECT oi.*, pi.image_url
+     FROM order_items oi
+     LEFT JOIN product_images pi ON oi.product_id = pi.product_id AND pi.is_primary = true
+     WHERE oi.order_id = ANY($1)`,
+    [orderIds]
+  )
+
+  const itemsByOrder = itemsRes.rows.reduce((acc, item) => {
+    if (!acc[item.order_id]) acc[item.order_id] = []
+    acc[item.order_id].push(item)
+    return acc
+  }, {})
+
+  const paymentsRes = await pool.query(
+    `SELECT DISTINCT ON (order_id) *
+     FROM payments
+     WHERE order_id = ANY($1)
+     ORDER BY order_id, created_at DESC`,
+    [orderIds]
+  )
+
+  const paymentsByOrder = paymentsRes.rows.reduce((acc, payment) => {
+    acc[payment.order_id] = payment
+    return acc
+  }, {})
+
+  return res.rows.map((order) => {
+    const items = itemsByOrder[order.order_id] || []
+    const payment = paymentsByOrder[order.order_id] || null
+
+    return {
+      ...order,
+      items,
+      payment,
+      payment_method: resolveOrderPaymentMethod(order, payment),
+      customization_ids: items
+        .map((item) => item.customization_id)
+        .filter(Boolean),
+    }
+  })
 }
 
 exports.getOrderById = async (orderId, userId) => {
@@ -515,6 +648,7 @@ exports.getOrderById = async (orderId, userId) => {
   const order = res.rows[0]
   order.items = itemsRes.rows
   order.payment = paymentRes.rows[0] || null
+  order.payment_method = resolveOrderPaymentMethod(order, order.payment)
 
   return order
 }
@@ -562,15 +696,22 @@ exports.getAllOrders = async (params = {}) => {
         acc[payment.order_id] = payment;
         return acc;
       }, {});
-      return res.rows.map(order => ({
-        ...order,
-        items: itemsByOrder[order.order_id] || [],
-        payment: paymentsByOrder[order.order_id] || null
-      }));
+      return res.rows.map(order => {
+        const payment = paymentsByOrder[order.order_id] || null
+        return {
+          ...order,
+          items: itemsByOrder[order.order_id] || [],
+          payment,
+          payment_method: resolveOrderPaymentMethod(order, payment),
+        }
+      });
     }
   }
   
-  return res.rows;
+  return res.rows.map((order) => ({
+    ...order,
+    payment_method: resolveOrderPaymentMethod(order, null),
+  }));
 }
 
 exports.updateOrder = async (orderId, updateData) => {
@@ -664,17 +805,37 @@ exports.updatePaymentStatus = async (orderId, status, options = {}) => {
 
   // Get current order to check status transition
   const orderRes = await pool.query(
-    'SELECT payment_status, status FROM orders WHERE order_id = $1',
+    `SELECT
+       o.payment_status,
+       o.status,
+       o.notes,
+       (
+         SELECT p.method::text
+         FROM payments p
+         WHERE p.order_id = o.order_id
+         ORDER BY p.created_at DESC
+         LIMIT 1
+       ) AS payment_method
+     FROM orders o
+     WHERE o.order_id = $1`,
     [orderId]
   )
   
   if (orderRes.rows.length === 0) return null
   
   const currentStatus = orderRes.rows[0].payment_status
+  const resolvedPaymentMethod = resolveOrderPaymentMethod(
+    { notes: orderRes.rows[0].notes, payment_method: orderRes.rows[0].payment_method },
+    null
+  )
+
+  if (resolvedPaymentMethod === 'cash') {
+    throw createValidationError('COD orders do not support manual payment verification updates')
+  }
   
   // Validate status transition
   if (!isValidPaymentStatusTransition(currentStatus, status)) {
-    throw new Error(`Invalid payment status transition from '${currentStatus}' to '${status}'`)
+    throw createValidationError(`Invalid payment status transition from '${currentStatus}' to '${status}'`)
   }
 
   // Build update query dynamically
@@ -687,10 +848,13 @@ exports.updatePaymentStatus = async (orderId, status, options = {}) => {
     updateValues.push(reference_number)
   }
 
-  if (status === 'approved') {
+  if (status === 'approved' || status === 'rejected') {
     updateFields.push(`reviewed_by = $${paramIndex++}`)
     updateValues.push(admin_user_id || null)
     updateFields.push(`reviewed_at = CURRENT_TIMESTAMP`)
+  }
+
+  if (status !== 'rejected') {
     updateFields.push(`rejection_reason = NULL`)
   }
 
@@ -753,7 +917,7 @@ exports.approvePayment = async (orderId, options = {}) => {
   
   // Validate transition to approved
   if (!isValidPaymentStatusTransition(currentStatus, 'approved')) {
-    throw new Error(`Cannot approve payment with current status: ${currentStatus}`)
+    throw createValidationError(`Cannot approve payment with current status: ${currentStatus}`)
   }
   
   const res = await pool.query(
@@ -797,7 +961,7 @@ exports.updateShipment = async (orderId, shipmentData) => {
   
   const order = orderRes.rows[0];
   
-  if (order.payment_status !== 'paid') {
+  if (order.payment_status !== exports.PAYMENT_STATUS.APPROVED) {
     throw new Error('Cannot ship order - payment not completed');
   }
   
@@ -899,22 +1063,31 @@ exports.cancelOrder = async (orderId) => {
   return res.rows[0];
 }
 
-exports.cancelMyOrder = async (orderId, userId) => {
+exports.cancelMyOrder = async (orderId, userId, reason) => {
   const checkRes = await pool.query(
-    `SELECT status FROM orders WHERE order_id = $1 AND user_id = $2`,
+    `SELECT status, notes FROM orders WHERE order_id = $1 AND user_id = $2`,
     [orderId, userId]
   );
   if (checkRes.rows.length === 0) {
     throw new Error('Order not found');
   }
-  const status = checkRes.rows[0].status;
+  const { status, notes } = checkRes.rows[0];
   if (status !== 'pending') {
     throw new Error('Only pending orders can be cancelled');
   }
 
+  const cancellationStamp = new Date().toISOString()
+  const cancellationNote = `Customer cancellation reason (${cancellationStamp}): ${reason}`
+  const nextNotes = [notes, cancellationNote].filter(Boolean).join('\n')
+
   const res = await pool.query(
-    `UPDATE orders SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP WHERE order_id = $1 AND user_id = $2 RETURNING *`,
-    [orderId, userId]
+    `UPDATE orders
+     SET status = 'cancelled',
+         notes = $3,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE order_id = $1 AND user_id = $2
+     RETURNING *`,
+    [orderId, userId, nextNotes]
   );
   return res.rows[0];
 }

@@ -22,18 +22,21 @@ const OTHER_COUNTRIES = ALL_COUNTRIES.filter(c => c.isoCode !== 'PH')
 const COUNTRIES = PHILIPPINES ? [PHILIPPINES, ...OTHER_COUNTRIES] : ALL_COUNTRIES
 const CUSTOM_BUILD_DOWN_PAYMENT_RATE = 0.5
 const MAX_USER_ADDRESSES = 2
-const ORDER_TAX_RATE = 0.1
+const ORDER_TAX_RATE = 0
+
+const normalizeAddressValue = (value) => String(value || '')
+  .trim()
+  .replace(/\s+/g, ' ')
+  .toLowerCase()
 
 const getAddressSignature = (address = {}) => ([
-  address.address_id,
-  address.street_line1,
-  address.street_line2,
+  address.street_line1 ?? address.streetLine1 ?? address.street ?? address.line1,
+  address.street_line2 ?? address.streetLine2 ?? address.street2 ?? address.line2,
   address.city,
-  address.province,
-  address.postal_code,
+  address.province ?? address.stateProvince,
+  address.postal_code ?? address.postalZipCode ?? address.postalCode,
   address.country,
-  address.label,
-].map(value => String(value || '').trim().toLowerCase()).join('|'))
+].map(normalizeAddressValue).join('|'))
 
 const isCustomBuildItem = (item = {}) => {
   const itemType = String(item.type || '').toLowerCase()
@@ -62,6 +65,10 @@ function CartItemCard({
   onToggleSelect,
 }) {
   const customBuildSummaryTree = isCustomBuild ? getCustomBuildSummaryTree(item) : []
+  const parsedStock = Number(item.stock)
+  const hasStockValue = Number.isFinite(parsedStock) && parsedStock >= 0
+  const itemStock = hasStockValue ? parsedStock : null
+  const atStockLimit = hasStockValue && item.quantity >= itemStock
 
   return (
     <motion.div
@@ -110,7 +117,7 @@ function CartItemCard({
         </div>
 
         <div className="flex items-center gap-4 flex-shrink-0">
-            {!isCustomBuild && !isBuyNow && item.stock > 1 ? (
+            {!isCustomBuild && !isBuyNow && itemStock > 1 ? (
               <div className="flex flex-col items-end gap-1">
                 <div className="flex items-center gap-2 bg-[var(--bg-primary)] border border-white/10 rounded-full px-3 py-1.5">
                   <button
@@ -123,16 +130,19 @@ function CartItemCard({
                   <span className="text-sm font-semibold w-5 text-center text-white">{item.quantity}</span>
                   <button
                     onClick={() => onUpdateQuantity(item.id, item.quantity + 1)}
-                    disabled={item.quantity >= item.stock}
+                    disabled={atStockLimit}
                     className="text-[var(--text-muted)] hover:text-[var(--gold-primary)] p-0.5 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                   >
                     <Plus className="w-3 h-3" />
                   </button>
                 </div>
-                {item.stock > 0 && (
+                {itemStock > 0 && (
                   <span className="text-[10px] text-[var(--text-muted)]">
-                    {item.stock - item.quantity >= 0 ? `${item.stock - item.quantity} left` : 'Max reached'}
+                    {itemStock - item.quantity >= 0 ? `${itemStock - item.quantity} left` : 'Max reached'}
                   </span>
+                )}
+                {hasStockValue && (
+                  <span className="text-[10px] text-[var(--text-muted)]">Stock: {itemStock}</span>
                 )}
               </div>
             ) : !isCustomBuild && !isBuyNow ? (
@@ -140,8 +150,11 @@ function CartItemCard({
                 <div className="px-3 py-1.5 bg-[var(--bg-primary)]/50 rounded-full">
                   <span className="text-sm text-[var(--text-muted)]">Qty: {item.quantity}</span>
                 </div>
-                {item.stock <= 1 && (
+                {itemStock !== null && itemStock <= 1 && (
                   <span className="text-[10px] text-amber-400">Last item</span>
+                )}
+                {hasStockValue && (
+                  <span className="text-[10px] text-[var(--text-muted)]">Stock: {itemStock}</span>
                 )}
               </div>
             ) : (
@@ -426,13 +439,6 @@ function OrderSummaryCard({
           {shippingCost === 0 ? 'Free' : `₱${shippingCost}`}
         </span>
       </div>
-      <div className="flex justify-between text-sm">
-        <span className="text-[var(--text-muted)]">Tax (10%)</span>
-        <span className="text-[var(--text-light)] font-medium">
-          PHP {taxAmount.toLocaleString('en-PH', { maximumFractionDigits: 2 })}
-        </span>
-      </div>
-
     </div>
 
     {/* Full total always shown */}
@@ -523,11 +529,11 @@ function CheckoutSummaryCard({
 }) {
   const safeSubtotal = Number.isFinite(Number(subtotal)) ? Number(subtotal) : 0
   const safeShippingCost = Number.isFinite(Number(shippingCost)) ? Number(shippingCost) : 0
-  const safeTaxAmount = Number.isFinite(Number(taxAmount)) ? Number(taxAmount) : 0
   const safeTotal = Number.isFinite(Number(total)) ? Number(total) : 0
   const safeFullTotal = Number.isFinite(Number(fullTotal)) ? Number(fullTotal) : safeTotal
   const safeRemainingBalance = Number.isFinite(Number(remainingBalance)) ? Number(remainingBalance) : 0
   const safeItemCount = Number.isFinite(Number(itemCount)) ? Number(itemCount) : 0
+  const isCheckoutDisabled = Boolean(disabled) || !termsAccepted
 
   return (
     <div className="bg-[var(--surface-dark)] border border-white/10 rounded-2xl p-6 space-y-5 shadow-lg shadow-black/20">
@@ -545,12 +551,6 @@ function CheckoutSummaryCard({
           <span className="text-[var(--text-muted)]">Shipping</span>
           <span className={`${safeShippingCost === 0 ? 'text-green-400' : 'text-[var(--text-light)]'}`}>
             {safeShippingCost === 0 ? 'Free' : `PHP ${safeShippingCost.toLocaleString('en-PH')}`}
-          </span>
-        </div>
-        <div className="flex justify-between text-sm">
-          <span className="text-[var(--text-muted)]">Tax (10%)</span>
-          <span className="text-[var(--text-light)] font-medium">
-            PHP {safeTaxAmount.toLocaleString('en-PH', { maximumFractionDigits: 2 })}
           </span>
         </div>
         <div className="flex justify-between text-sm">
@@ -611,7 +611,7 @@ function CheckoutSummaryCard({
 
       <button
         onClick={onPlaceOrder}
-        disabled={isProcessing || disabled}
+        disabled={isProcessing || isCheckoutDisabled}
         className="w-full py-4 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-bold rounded-lg hover:shadow-[0_0_25px_rgba(212,175,55,0.5)] transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
       >
         {isProcessing ? (
@@ -1210,6 +1210,17 @@ export function CheckoutPage() {
         country: countryCode,
         isDefault: addressData.isDefault
       }
+
+      const duplicateAddress = uniqueAddresses.find(
+        (address) => getAddressSignature(address) === getAddressSignature(payload)
+      )
+
+      if (duplicateAddress) {
+        setSelectedAddressId(duplicateAddress.address_id)
+        setShowAddAddressModal(false)
+        setAddressError(false)
+        return
+      }
       
       const response = await fetch(`${API}/api/users/me/addresses`, {
         method: 'POST',
@@ -1296,6 +1307,17 @@ export function CheckoutPage() {
       setTermsError('You must agree to the Terms and Conditions before placing your order.')
       return
     }
+    const outOfStockItem = checkoutItems.find((item) => {
+      if (isCustomBuildItem(item)) return false
+      if (item.stock === null || item.stock === undefined || item.stock === '') return false
+      const stock = Number(item.stock)
+      return Number.isFinite(stock) && stock >= 0 && Number(item.quantity || 0) > stock
+    })
+    if (outOfStockItem) {
+      const availableStock = Number(outOfStockItem.stock ?? 0)
+      setOrderError(`Not enough stock for ${outOfStockItem.name}. Available stock: ${availableStock}.`)
+      return
+    }
     setTermsError('')
     setShowPaymentModal(true)
   }
@@ -1343,7 +1365,8 @@ export function CheckoutPage() {
       street2: selectedAddress?.street_line2 || '',
       city: selectedAddress?.city || '',
       province: selectedAddress?.province || '',
-      postalCode: selectedAddress?.postal_code || ''
+      postalCode: selectedAddress?.postal_code || '',
+      country: selectedAddress?.country || 'PH'
     }
 
     let additionalNotes = orderNotes?.trim() || ''
@@ -1700,6 +1723,7 @@ export function CheckoutPage() {
         onSubmit={handlePaymentSubmit}
         total={total}
         fullTotal={fullPaymentTotal}
+        items={checkoutItems}
         isProcessing={isProcessing}
         requiresCustomTerms={hasSelectedCustomBuild}
         downPaymentRate={CUSTOM_BUILD_DOWN_PAYMENT_RATE}

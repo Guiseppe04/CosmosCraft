@@ -9,6 +9,13 @@ exports.getAllParts = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+exports.getModelImages = async (req, res, next) => {
+  try {
+    const items = await builderPartsService.getModelImages(req.query);
+    res.json({ status: 'success', data: items });
+  } catch (err) { next(err); }
+};
+
 exports.getPart = async (req, res, next) => {
   try {
     const part = await builderPartsService.getPartById(req.params.id);
@@ -80,5 +87,30 @@ exports.importPartsFromModels = async (req, res, next) => {
       message: `Imported ${result.imported.created + result.imported.updated} ${guitarType} parts`,
       data: result,
     });
+  } catch (err) { next(err); }
+};
+
+exports.seedCustomizeParts = async (req, res, next) => {
+  try {
+    const guitarType = String(req.body?.guitarType || '').trim().toLowerCase();
+    const result = await builderPartsService.seedCustomizeParts({ guitarType });
+    res.json({
+      status: 'success',
+      message: `Seeded ${result.seeded.created + result.seeded.updated} ${guitarType} customize parts`,
+      data: result,
+    });
+  } catch (err) { next(err); }
+};
+
+exports.upsertModelImage = async (req, res, next) => {
+  try {
+    const item = await builderPartsService.upsertModelImage({
+      guitar_type: req.params.guitarType,
+      model_key: req.params.modelKey,
+      display_name: req.body?.display_name,
+      image_url: req.body?.image_url ?? null,
+    });
+    if (!item) throw new AppError('Model image could not be saved', 500);
+    res.json({ status: 'success', data: item });
   } catch (err) { next(err); }
 };

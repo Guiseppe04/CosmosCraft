@@ -27,6 +27,7 @@ exports.createSale = async (req, res, next) => {
       taxAmount,
       totalAmount,
       paymentMethod,
+      cashReceived,
       referenceNumber,
       status,
       items
@@ -40,6 +41,7 @@ exports.createSale = async (req, res, next) => {
       taxAmount,
       totalAmount,
       paymentMethod,
+      cashReceived,
       referenceNumber,
       status,
       items
@@ -221,7 +223,7 @@ exports.checkoutSale = async (req, res, next) => {
       throw new AppError('Payment method is required', 400);
     }
 
-    if (!['cash', 'gcash', 'bank_transfer'].includes(paymentMethod)) {
+    if (!['cash', 'gcash'].includes(paymentMethod)) {
       throw new AppError('Invalid payment method', 400);
     }
 

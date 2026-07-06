@@ -30,6 +30,13 @@ const serviceValidation = {
       .messages({
         'string.max': 'Description cannot exceed 1000 characters',
       }),
+    category_id: Joi.string()
+      .valid('setup', 'refinishing', 'repair', 'electronics')
+      .required()
+      .messages({
+        'any.only': 'Category must be one of: setup, refinishing, repair, electronics',
+        'any.required': 'Category is required',
+      }),
     price: Joi.number()
       .min(0)
       .max(99999.99)
@@ -63,6 +70,9 @@ const serviceValidation = {
       .optional()
       .allow('')
       .trim(),
+    category_id: Joi.string()
+      .valid('setup', 'refinishing', 'repair', 'electronics')
+      .optional(),
     price: Joi.number()
       .min(0)
       .max(99999.99)
