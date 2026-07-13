@@ -26,6 +26,7 @@ const inventoryRoutes = require('./routes/inventoryRoutes');
 const posRoutes = require('./routes/posRoutes');
 const projectRoutes = require('./routes/projectRoutes');
 const builderPartsRoutes = require('./routes/builderPartsRoutes');
+const cloudinaryRoutes = require('./routes/cloudinaryRoutes');
 const { errorHandler, notFound } = require('./middleware/errorHandler.js');
 
 const app = express();
@@ -91,6 +92,7 @@ app.use('/api/inventory', inventoryRoutes);
 app.use('/api/pos', posRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/builder-parts', builderPartsRoutes);
+app.use('/api/cloudinary', cloudinaryRoutes);
 // Legacy route alias kept for backwards-compat
 app.use('/user', userRoutes);
 

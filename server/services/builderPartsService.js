@@ -10,12 +10,12 @@ const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.avif', '.g
 const IMPORT_CONFIG = {
   electric: {
     sourceDir: path.resolve(__dirname, '../../builder/electric_models'),
-    cloudinaryFolder: 'cosmoscraft/electric_guitars',
+    cloudinaryFolder: 'cosmoscraft_assets/electric_assets',
     importCategory: 'electric_guitar',
   },
   bass: {
     sourceDir: path.resolve(__dirname, '../../builder/bass_models'),
-    cloudinaryFolder: 'cosmoscraft/bass_guitars',
+    cloudinaryFolder: 'cosmoscraft_assets/bass_assets',
     importCategory: 'bass_guitar',
   },
 };

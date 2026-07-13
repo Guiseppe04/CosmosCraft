@@ -20,14 +20,14 @@ async function seedLocalAssetsToCloudinary() {
     {
       dir: path.join(clientPublicNode, 'woodtype'),
       type: 'wood_type',
-      cloudinaryFolder: 'cosmoscraft/builder/wood_types',
+      cloudinaryFolder: 'cosmoscraft_assets/builder_assets/wood_types',
       price: 2500, // example price for wood upgrade
       stock: 50
     },
     {
       dir: path.join(clientPublicNode, 'builder/bass_models'),
       type: 'body', // treating bass_models as bodies for this seed
-      cloudinaryFolder: 'cosmoscraft/builder/bodies',
+      cloudinaryFolder: 'cosmoscraft_assets/builder_assets/bodies',
       price: 5000,
       stock: 20
     }

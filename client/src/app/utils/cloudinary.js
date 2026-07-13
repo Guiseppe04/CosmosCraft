@@ -6,7 +6,7 @@
 export const uploadToCloudinary = async (file, options = {}) => {
   const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
   const uploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
-  const folder = options.folder || 'cosmoscraft/admin_uploads';
+  const folder = options.folder || 'cosmoscraft_assets/admin_assets';
 
   if (!cloudName || !uploadPreset) {
     throw new Error('Cloudinary environment variables are missing (VITE_CLOUDINARY_CLOUD_NAME, VITE_CLOUDINARY_UPLOAD_PRESET)');
