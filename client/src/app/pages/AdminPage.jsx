@@ -1836,7 +1836,8 @@ export function AdminPage() {
   const debouncedSearch = useDebounce(searchQuery, 300)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
-  const [toast, setToast] = useState(null)
+  const [toasts, setToasts] = useState([])
+  const toastTimersRef = useRef(new Map())
   const [productViewMode, setProductViewMode] = useState('grid') // grid | table
   const [productActiveTab, setProductActiveTab] = useState('active') // all | active | inactive
 
@@ -2232,8 +2233,29 @@ export function AdminPage() {
 
   // ── Toast ────────────────────────────────────────────────────────────────
   const showToast = useCallback((msg, type = 'success') => {
-    setToast({ msg, type })
-    setTimeout(() => setToast(null), 3500)
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    setToasts((prev) => [...prev, { id, msg, type }])
+
+    const timer = setTimeout(() => {
+      setToasts((prev) => prev.filter((toast) => toast.id !== id))
+      toastTimersRef.current.delete(id)
+    }, 3500)
+
+    toastTimersRef.current.set(id, timer)
+  }, [])
+
+  const dismissToast = useCallback((id) => {
+    const timer = toastTimersRef.current.get(id)
+    if (timer) {
+      clearTimeout(timer)
+      toastTimersRef.current.delete(id)
+    }
+    setToasts((prev) => prev.filter((toast) => toast.id !== id))
+  }, [])
+
+  useEffect(() => () => {
+    toastTimersRef.current.forEach((timer) => clearTimeout(timer))
+    toastTimersRef.current.clear()
   }, [])
 
   useEffect(() => {
@@ -3382,18 +3404,49 @@ export function AdminPage() {
 
       {/* Toast */}
       <AnimatePresence>
-        {toast && (
-          <motion.div
-            key="toast"
-            initial={{ opacity: 0, y: -30 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -30 }}
-            className={`fixed top-24 right-6 z-[200] px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-3 text-sm font-semibold border ${toast.type === 'error'
-              ? 'bg-red-500/10 border-red-500/30 text-red-400'
-              : 'bg-green-500/10 border-green-500/30 text-green-400'
-              }`}
-          >
-            {toast.type === 'error' ? <AlertCircle className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
-            {toast.msg}
-          </motion.div>
+        {toasts.length > 0 && (
+          <div className="fixed bottom-6 right-6 z-[9999] flex w-[calc(100vw-3rem)] max-w-sm flex-col items-end gap-3 pointer-events-none">
+            <AnimatePresence initial={false}>
+              {toasts.map((toast) => {
+                const toastStyles = {
+                  success: 'bg-green-500/10 border-green-500/30 text-green-400',
+                  error: 'bg-red-500/10 border-red-500/30 text-red-400',
+                  warning: 'bg-amber-500/10 border-amber-500/30 text-amber-300',
+                  info: 'bg-sky-500/10 border-sky-500/30 text-sky-300',
+                }
+                const toastIcons = {
+                  success: CheckCircle,
+                  error: AlertCircle,
+                  warning: AlertCircle,
+                  info: Info,
+                }
+                const ToastIcon = toastIcons[toast.type] || CheckCircle
+
+                return (
+                  <motion.div
+                    key={toast.id}
+                    layout
+                    initial={{ opacity: 0, y: 24, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 24, scale: 0.98 }}
+                    transition={{ duration: 0.2 }}
+                    className={`pointer-events-auto w-full rounded-2xl border px-5 py-3 shadow-2xl flex items-start gap-3 text-sm font-semibold ${toastStyles[toast.type] || toastStyles.success}`}
+                  >
+                    <ToastIcon className="w-4 h-4 mt-0.5 shrink-0" />
+                    <div className="min-w-0 flex-1">{toast.msg}</div>
+                    <button
+                      type="button"
+                      onClick={() => dismissToast(toast.id)}
+                      className="shrink-0 text-current/70 hover:text-current transition-colors"
+                      aria-label="Dismiss toast"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </motion.div>
+                )
+              })}
+            </AnimatePresence>
+          </div>
         )}
       </AnimatePresence>
 
@@ -3838,7 +3891,7 @@ export function AdminPage() {
           {/* Actions bar */}
           {activeTab !== 'pos' && activeTab !== 'inventory' && activeTab !== 'products' && (
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
-            {['users', 'product-categories', 'projects', 'services', 'appointments'].includes(activeTab) && (
+            {['product-categories', 'projects', 'services', 'appointments'].includes(activeTab) && (
               <div className="relative max-w-sm w-full">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
                 <input
@@ -3853,7 +3906,7 @@ export function AdminPage() {
 
             <div className="flex items-center gap-2 ml-auto">
               {/* Refresh button (hidden on dashboard/inventory) */}
-              {activeTab !== 'dashboard' && activeTab !== 'inventory' && activeTab !== 'products' && activeTab !== 'guitar-parts' && activeTab !== 'orders' && (
+              {activeTab !== 'dashboard' && activeTab !== 'inventory' && activeTab !== 'products' && activeTab !== 'guitar-parts' && activeTab !== 'orders' && activeTab !== 'users' && (
                 <button onClick={handleRefresh} className="p-2 border border-[var(--border)] rounded-lg hover:border-[var(--gold-primary)] hover:bg-[var(--gold-primary)]/10 transition-all" title="Refresh">
                   <RefreshCw className={`w-4 h-4 text-[var(--text-muted)] ${isLoading ? 'animate-spin' : ''}`} />
                 </button>
@@ -4514,21 +4567,44 @@ export function AdminPage() {
 
           {activeTab === 'users' && (
             <motion.div key="users" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-              <div className="flex flex-col sm:flex-row gap-4 p-4 bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl">
-                <div className="flex items-center gap-3">
-                  <Filter className="w-5 h-5 text-[var(--gold-primary)]" />
-                  <span className="text-white font-medium">Filters:</span>
-                </div>
-                <div className="flex flex-wrap gap-4">
-                  <select value={userRoleFilter} onChange={(e) => setUserRoleFilter(e.target.value)} className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-[var(--gold-primary)]">
-                    <option value="all">All Roles</option>
-                    {VALID_ROLES.map(r => <option key={r} value={r}>{r.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}</option>)}
-                  </select>
-                  <select value={userStatusFilter} onChange={(e) => setUserStatusFilter(e.target.value)} className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-[var(--gold-primary)]">
-                    <option value="all">All Statuses</option>
-                    <option value="active">Active</option>
-                    <option value="inactive">Inactive</option>
-                  </select>
+              <div className="p-4 bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl">
+                <div className="flex flex-col xl:flex-row xl:items-center gap-3">
+                  <div className="relative min-w-0 flex-[1.7]">
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
+                    <input
+                      type="text"
+                      placeholder="Search users..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full h-[50px] pl-11 pr-4 bg-[var(--bg-primary)] border border-[var(--border)] rounded-2xl text-[var(--text-light)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] text-sm"
+                    />
+                  </div>
+                  <div className="flex flex-col sm:flex-row xl:flex-nowrap gap-3 xl:items-center">
+                    <div className="flex items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 h-[50px] min-w-[150px] shrink-0">
+                      <Filter className="w-4 h-4 text-[var(--gold-primary)] shrink-0" />
+                      <span className="text-white text-sm font-medium whitespace-nowrap">Filters:</span>
+                    </div>
+                    <select
+                      value={userRoleFilter}
+                      onChange={(e) => setUserRoleFilter(e.target.value)}
+                      className="w-full sm:w-[220px] h-[50px] bg-[var(--bg-primary)] border border-[var(--border)] rounded-2xl px-4 text-sm text-white focus:outline-none focus:border-[var(--gold-primary)] shrink-0"
+                    >
+                      <option value="all">All Roles</option>
+                      {VALID_ROLES.map(r => <option key={r} value={r}>{r.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}</option>)}
+                    </select>
+                    <select
+                      value={userStatusFilter}
+                      onChange={(e) => setUserStatusFilter(e.target.value)}
+                      className="w-full sm:w-[220px] h-[50px] bg-[var(--bg-primary)] border border-[var(--border)] rounded-2xl px-4 text-sm text-white focus:outline-none focus:border-[var(--gold-primary)] shrink-0"
+                    >
+                      <option value="all">All Statuses</option>
+                      <option value="active">Active</option>
+                      <option value="inactive">Inactive</option>
+                    </select>
+                    <button onClick={handleRefresh} className="h-[50px] w-[50px] flex items-center justify-center border border-[var(--border)] rounded-2xl hover:border-[var(--gold-primary)] hover:bg-[var(--gold-primary)]/10 transition-all shrink-0" title="Refresh">
+                      <RefreshCw className={`w-4 h-4 text-[var(--text-muted)] ${isLoading ? 'animate-spin' : ''}`} />
+                    </button>
+                  </div>
                 </div>
               </div>
               <AdminTable
