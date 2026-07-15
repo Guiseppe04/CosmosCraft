@@ -14,6 +14,8 @@ import {
   ChevronRight,
   Clock,
   Edit,
+  Filter,
+  MoreHorizontal,
   Package,
   Plus,
   RefreshCw,
@@ -81,6 +83,28 @@ function getInventoryState(stock, threshold = 10) {
   if (stock <= threshold) return { label: 'Critical', variant: 'warning' }
   if (stock <= threshold * 2) return { label: 'Warning', variant: 'info' }
   return { label: 'Healthy', variant: 'success' }
+}
+
+function resolveInventoryImage(item) {
+  if (!item) return null
+  if (item.primary_image) return item.primary_image
+  if (item.image_url) return item.image_url
+  if (item.product_image) return item.product_image
+  if (item.preview_url) return item.preview_url
+  if (item.image) return item.image
+  if (Array.isArray(item.images) && item.images.length > 0) {
+    const first = item.images[0]
+    if (typeof first === 'string') return first
+    if (first?.url) return first.url
+  }
+  return null
+}
+
+function formatInventoryCategory(value) {
+  if (!value) return 'Accessories'
+  return String(value)
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase())
 }
 
 const ADJUSTMENT_REASONS = [

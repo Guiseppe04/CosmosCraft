@@ -1,5 +1,12 @@
-export const asset = path => `/builder/electric_models/${path}`
-export const woodAsset = path => `/woodtype/${path}`
+// Repointed to Cloudinary collection: cosmoscraft_assets/electric_assets
+// (local /builder/electric_models/* files no longer exist)
+const CLOUD_NAME = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_CLOUDINARY_CLOUD_NAME) ? import.meta.env.VITE_CLOUDINARY_CLOUD_NAME : ''
+
+export const cloudImage = (root, path) =>
+  `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/${root}/${path}`
+
+export const asset = path => cloudImage('cosmoscraft_assets/electric_assets', path)
+export const woodAsset = path => cloudImage('cosmoscraft_assets/electric_assets', path)
 
 export const DEFAULT_CONFIG = {
   guitarType: 'electric',
@@ -16,6 +23,40 @@ export const DEFAULT_CONFIG = {
   pickups: 'hss',
   hardware: 'chrome',
   headstock: 'gt6',
+  // --- New customization options ---
+  dexterity: 'right',
+  strings: '6',
+  multiscale: 'off',
+  scaleLength: '25.5',
+  case: 'none',
+  bevel: 'off',
+  topWood: 'none',
+  topCoat: 'clearGloss',
+  burstFinish: 'none',
+  neckConstruction: '1piece',
+  inlayShape: 'dots',
+  inlayMaterial: 'pearl',
+  frets: 'stainlessRegular',
+  neckRearFinish: 'none',
+  headstockShape: 'inlineGT',
+  trussRodCover: 'black',
+  electronicsType: 'passive',
+  pickupConfiguration: 'hss',
+  bridgePickupModel: 'beryllium',
+  middlePickupModel: 'none',
+  neckPickupModel: 'beryllium',
+  pickupBobbin: 'standard',
+  pickupPoleColor: 'black',
+  controls: 'standard',
+  saddle: 'chrome',
+  nut: 'blackGraphTech',
+  tuning: 'eStandard',
+  stringBrand: 'elixir1046',
+  outputJack: 'none',
+  strapButtons: 'off',
+  tunerButtons: 'off',
+  electronicsCavityCover: 'none',
+  tremoloCover: 'none',
 }
 
 export const GUITAR_TYPE_OPTIONS = [
@@ -805,6 +846,231 @@ PUPPY.fluence = {
   poles: PUPPY.humbucker.poles,
 }
 
+// ============================================================
+// NEW CUSTOMIZATION SCHEMA (General / Body / Neck / Electronics / Hardware)
+// Images are left null where no Cloudinary asset is mapped yet.
+// ============================================================
+
+const specs = () => ({ size: '', dimensions: '', material: '', notes: '' })
+
+export const DEXTERITY_OPTIONS = {
+  right: { label: 'Right Handed', note: 'Standard orientation', price: 0, specs: specs() },
+  left: { label: 'Left Handed', note: 'Reversed orientation', price: 0, specs: specs() },
+}
+
+export const STRING_COUNT_OPTIONS = {
+  '6': { label: '6 Strings', note: 'Standard six-string', price: 0, specs: specs() },
+  '7': { label: '7 Strings', note: 'Extended range', price: 0, specs: specs() },
+  '8': { label: '8 Strings', note: 'Extended range', price: 0, specs: specs() },
+}
+
+export const MULTISCALE_OPTIONS = {
+  off: { label: 'Off', note: 'Straight scale', price: 0, specs: specs() },
+  on: { label: 'On', note: 'Multiscale fan', price: 0, specs: specs() },
+}
+
+export const SCALE_LENGTH_OPTIONS = {
+  '25.5': { label: '25.5"', note: 'Standard scale', price: 0, specs: specs() },
+  '26.5': { label: '26.5"', note: 'Baritone scale', price: 0, specs: specs() },
+  '27': { label: '27"', note: 'Multiscale low', price: 0, specs: specs() },
+}
+
+export const CASE_OPTIONS = {
+  none: { label: 'No Case', note: 'No case included', price: 0, specs: specs() },
+  gigbag: { label: 'Gig Bag', note: 'Padded gig bag', price: 60, specs: specs() },
+  hardcase: { label: 'Hard Case', note: 'Molded hard case', price: 120, specs: specs() },
+}
+
+// --- Body ---
+export const BEVEL_OPTIONS = {
+  off: { label: 'Off', note: 'Square body edges', price: 0, specs: specs() },
+  on: { label: 'On', note: 'Beveled body edges', price: 40, specs: specs() },
+}
+
+export const TOP_WOOD_OPTIONS = {
+  none: { label: 'None', note: 'No top wood', price: 0, specs: specs() },
+  maple: { label: 'Maple Top', note: 'Bright top wood', texture: null, price: 0, specs: specs() },
+  walnut: { label: 'Walnut Top', note: 'Warm top wood', texture: null, price: 0, specs: specs() },
+  mahogany: { label: 'Mahogany Top', note: 'Classic top wood', texture: null, price: 0, specs: specs() },
+}
+
+export const FINISH_TYPE_OPTIONS = {
+  metallic: { label: 'Metallic', note: 'Metallic flake finish', texture: null, price: 35, specs: specs() },
+  translucent: { label: 'Translucent', note: 'Tinted translucent finish', texture: null, price: 35, specs: specs() },
+  sparkle: { label: 'Sparkle', note: 'Sparkle finish', texture: null, price: 40, specs: specs() },
+}
+
+export const TOP_COAT_OPTIONS = {
+  clearGloss: { label: 'Clear Gloss', note: 'High-gloss clear coat', price: 0, specs: specs() },
+  tungOil: { label: 'Tung Oil', note: 'Natural tung oil finish', price: 0, specs: specs() },
+  satinMatte: { label: 'Satin Matte', note: 'Low-sheen satin', price: 0, specs: specs() },
+}
+
+export const BURST_FINISH_OPTIONS = {
+  none: { label: 'None', note: 'No burst', price: 0, specs: specs() },
+  blackBurst: { label: 'Black Burst Edges', note: 'Black burst edges', texture: null, price: 45, specs: specs() },
+  whiteBurst: { label: 'White Burst Edges', note: 'White burst edges', texture: null, price: 45, specs: specs() },
+  translucentBlackBurst: { label: 'Translucent Black Burst Edges', note: 'Translucent black burst', texture: null, price: 50, specs: specs() },
+  reverseTranslucentBlackBurst: { label: 'Reverse Translucent Black Burst', note: 'Reverse translucent black burst', texture: null, price: 55, specs: specs() },
+}
+
+// --- Neck ---
+export const NECK_CONSTRUCTION_OPTIONS = {
+  '1piece': { label: '1-Piece', note: 'Single-piece neck', price: 0, specs: specs() },
+  '3piece': { label: '3-Piece', note: 'Three-piece neck', price: 0, specs: specs() },
+  '5piece': { label: '5-Piece', note: 'Five-piece neck', price: 0, specs: specs() },
+}
+
+export const INLAY_SHAPE_OPTIONS = {
+  dots: { label: 'Dots', note: 'Classic dot inlays', src: null, price: 0, specs: specs() },
+  diamonds: { label: 'Diamonds', note: 'Diamond inlays', src: null, price: 30, specs: specs() },
+  blocks: { label: 'Blocks', note: 'Block inlays', src: null, price: 30, specs: specs() },
+}
+
+export const INLAY_MATERIAL_OPTIONS = {
+  pearl: { label: 'White Pearl', note: 'Pearl inlay material', src: null, price: 0, specs: specs() },
+  abalone: { label: 'Abalone', note: 'Abalone inlay material', src: null, price: 35, specs: specs() },
+  black: { label: 'Black', note: 'Black inlay material', src: null, price: 0, specs: specs() },
+  luminlay: { label: 'Luminlay', note: 'Glow-in-the-dark material', src: null, price: 35, specs: specs() },
+}
+
+export const FRET_OPTIONS = {
+  stainlessMedJumbo: { label: 'Stainless Med-Jumbo (.048" H × .103" W)', note: 'Medium jumbo stainless frets', src: null, price: 60, specs: specs() },
+  stainlessRegular: { label: 'Stainless Regular (.043" H × .080" W)', note: 'Regular stainless frets', src: null, price: 50, specs: specs() },
+  regularNickel: { label: 'Regular Nickel', note: 'Standard nickel frets', src: null, price: 0, specs: specs() },
+  stainlessJumbo: { label: 'Stainless Jumbo (.055" H × .110" W)', note: 'Jumbo stainless frets', src: null, price: 70, specs: specs() },
+}
+
+export const NECK_REAR_FINISH_OPTIONS = {
+  none: { label: 'None', note: 'Natural neck rear', price: 0, specs: specs() },
+  tungOilNeck: { label: 'Tung Oil Neck', note: 'Tung oil neck finish', price: 0, specs: specs() },
+}
+
+export const HEADSTOCK_SHAPE_OPTIONS = {
+  inlineGT: { label: 'Inline GT', note: 'Straight 6 inline', src: null, price: 0, specs: specs() },
+  '2x4': { label: '2×4', note: '2×4 headstock', src: null, price: 20, specs: specs() },
+  aero: { label: 'Aero Headstock', note: 'Aero headstock', src: null, price: 30, specs: specs() },
+  pointedStraight6Inline: { label: 'Pointed Straight 6 Inline', note: 'Pointed straight 6 inline', src: null, price: 25, specs: specs() },
+  reversedInlineGT: { label: 'Reversed Inline GT', note: 'Reverse inline GT', src: null, price: 25, specs: specs() },
+  reversedPointedStraight6Inline: { label: 'Reversed Pointed Straight 6 Inline', note: 'Reversed pointed straight 6 inline', src: null, price: 25, specs: specs() },
+}
+
+export const TRUSS_ROD_COVER_OPTIONS = {
+  black: { label: 'Black', note: 'Black truss rod cover', src: null, price: 0, specs: specs() },
+  cream: { label: 'Cream', note: 'Cream truss rod cover', src: null, price: 10, specs: specs() },
+  white: { label: 'White', note: 'White truss rod cover', src: null, price: 10, specs: specs() },
+  redTortoiseshell: { label: 'Red Tortoiseshell', note: 'Red tortoiseshell cover', src: null, price: 15, specs: specs() },
+  whitePearloid: { label: 'White Pearloid', note: 'White pearloid cover', src: null, price: 15, specs: specs() },
+  ebony: { label: 'Ebony', note: 'Ebony truss rod cover', src: null, price: 20, specs: specs() },
+}
+
+// --- Electronics ---
+export const ELECTRONICS_TYPE_OPTIONS = {
+  passive: { label: 'Passive', note: 'Standard passive electronics', price: 0, specs: specs() },
+  active: { label: 'Active', note: 'Active preamp electronics', price: 80, specs: specs() },
+}
+
+export const PICKUP_CONFIGURATION_OPTIONS = {
+  hh: { label: 'Two Humbuckers (HH)', note: 'Dual humbuckers', price: 135, specs: specs() },
+  hss: { label: 'Humbucker - Single - Single (HSS)', note: 'Bridge humbucker, two singles', price: 110, specs: specs() },
+  sss: { label: 'Three Single Coils (SSS)', note: 'Three single coils', price: 0, specs: specs() },
+  p90p90: { label: 'Two P90s (P90-P90)', note: 'Dual P90 set', price: 125, specs: specs() },
+}
+
+export const PICKUP_MODEL_BRIDGE_OPTIONS = {
+  beryllium: { label: 'Beryllium Humbucker', note: 'Beryllium bridge pickup', src: null, price: 0, specs: specs() },
+  holdsworth: { label: 'Holdsworth Humbucker', note: 'Holdsworth bridge pickup', src: null, price: 0, specs: specs() },
+  lithium: { label: 'Lithium Humbucker', note: 'Lithium bridge pickup', src: null, price: 0, specs: specs() },
+  illusionist: { label: 'Illusionist Humbucker', note: 'Illusionist bridge pickup', src: null, price: 0, specs: specs() },
+  m12sd: { label: 'M12SD', note: 'M12SD bridge pickup', src: null, price: 0, specs: specs() },
+  thorium: { label: 'Thorium Humbucker', note: 'Thorium bridge pickup', src: null, price: 0, specs: specs() },
+  vantium: { label: 'Vantium Humbucker', note: 'Vantium bridge pickup', src: null, price: 0, specs: specs() },
+}
+
+export const PICKUP_MODEL_MIDDLE_OPTIONS = {
+  none: { label: 'None', note: 'No middle pickup', src: null, price: 0, specs: specs() },
+  singleCoil: { label: 'Single Coil Models', note: 'Single coil middle models', src: null, price: 0, specs: specs() },
+}
+
+export const PICKUP_MODEL_NECK_OPTIONS = {
+  beryllium: { label: 'Beryllium Humbucker', note: 'Beryllium neck pickup', src: null, price: 0, specs: specs() },
+  holdsworth: { label: 'Holdsworth Humbucker', note: 'Holdsworth neck pickup', src: null, price: 0, specs: specs() },
+  lithium: { label: 'Lithium Humbucker', note: 'Lithium neck pickup', src: null, price: 0, specs: specs() },
+  empyrean: { label: 'Empyrean Humbucker', note: 'Empyrean neck pickup', src: null, price: 0, specs: specs() },
+  vantium: { label: 'Vantium Humbucker', note: 'Vantium neck pickup', src: null, price: 0, specs: specs() },
+  delete: { label: 'Delete Neck Pickup', note: 'Remove neck pickup', src: null, price: 0, specs: specs() },
+}
+
+export const PICKUP_BOBBIN_OPTIONS = {
+  standard: { label: 'Standard Bobbins', note: 'Standard bobbin style', src: null, price: 0, specs: specs() },
+  painted: { label: 'Painted Bobbins', note: 'Painted bobbin style', src: null, price: 10, specs: specs() },
+  wooden: { label: 'Wooden Bobbins', note: 'Wooden bobbin style', src: null, price: 15, specs: specs() },
+  covered: { label: 'Covered Pickups', note: 'Covered pickup style', src: null, price: 10, specs: specs() },
+}
+
+export const PICKUP_POLE_COLOR_OPTIONS = {
+  black: { label: 'Black', note: 'Black pole pieces', src: null, price: 0, specs: specs() },
+  chrome: { label: 'Chrome', note: 'Chrome pole pieces', src: null, price: 10, specs: specs() },
+  gold: { label: 'Gold', note: 'Gold pole pieces', src: null, price: 10, specs: specs() },
+}
+
+export const CONTROLS_OPTIONS = {
+  standard: { label: 'Standard Controls', note: 'Standard volume/tone', price: 0, specs: specs() },
+  deleteTone: { label: 'Delete Tone Control', note: 'Remove tone control', price: 0, specs: specs() },
+  deleteToneMoveVolume: { label: 'Delete Tone Control and Move Volume to Tone Position', note: 'Move volume to tone position', price: 0, specs: specs() },
+}
+
+// --- Hardware ---
+export const SADDLE_OPTIONS = {
+  chrome: { label: 'Chrome', note: 'Chrome saddle', price: 0, specs: specs() },
+  black: { label: 'Black', note: 'Black saddle', price: 0, specs: specs() },
+  gold: { label: 'Gold', note: 'Gold saddle', price: 0, specs: specs() },
+}
+
+export const NUT_OPTIONS = {
+  blackGraphTech: { label: 'Black Graph Tech TUSQ', note: 'Black Graph Tech TUSQ nut', price: 25, specs: specs() },
+  ivoryGraphTech: { label: 'Ivory Graph Tech TUSQ', note: 'Ivory Graph Tech TUSQ nut', price: 25, specs: specs() },
+}
+
+export const TUNING_OPTIONS = {
+  eStandard: { label: 'E Standard (10-46)', note: 'E standard tuning', price: 0, specs: specs() },
+  dStandard: { label: 'D Standard (10-46)', note: 'D standard tuning', price: 0, specs: specs() },
+  cStandard: { label: 'C Standard (11-56)', note: 'C standard tuning', price: 0, specs: specs() },
+  dropC: { label: 'Drop C (10-52)', note: 'Drop C tuning', price: 0, specs: specs() },
+  dropB: { label: 'Drop B (11-56)', note: 'Drop B tuning', price: 0, specs: specs() },
+}
+
+export const STRING_BRAND_OPTIONS = {
+  elixir1046: { label: 'Elixir 10-46', note: 'Elixir 10-46 strings', price: 0, specs: specs() },
+  elixir942: { label: 'Elixir 9-42 Super Light', note: 'Elixir 9-42 super light', price: 0, specs: specs() },
+}
+
+export const OUTPUT_JACK_OPTIONS = {
+  none: { label: 'None', note: 'No output jack upgrade', price: 0, specs: specs() },
+  standard: { label: 'Standard Jack', note: 'Standard output jack', price: 0, specs: specs() },
+  gold: { label: 'Gold Jack', note: 'Gold output jack', price: 15, specs: specs() },
+}
+
+export const STRAP_BUTTON_OPTIONS = {
+  off: { label: 'Off', note: 'No strap buttons', price: 0, specs: specs() },
+  on: { label: 'On', note: 'Strap buttons installed', price: 10, specs: specs() },
+}
+
+export const TUNER_BUTTON_OPTIONS = {
+  off: { label: 'Off', note: 'No tuner buttons', price: 0, specs: specs() },
+  on: { label: 'On', note: 'Tuner buttons installed', price: 10, specs: specs() },
+}
+
+export const ELECTRONICS_CAVITY_COVER_OPTIONS = {
+  none: { label: 'None', note: 'No cavity cover', price: 0, specs: specs() },
+  standard: { label: 'Standard Cover', note: 'Standard electronics cavity cover', price: 10, specs: specs() },
+}
+
+export const TREMOLO_COVER_OPTIONS = {
+  none: { label: 'None', note: 'No tremolo cover', price: 0, specs: specs() },
+  standard: { label: 'Standard Cover', note: 'Standard tremolo cover', price: 10, specs: specs() },
+}
+
 export function resolveVariant(source, colorKey) {
   if (!source) return null
   if (typeof source === 'string') return source
@@ -814,6 +1080,8 @@ export function resolveVariant(source, colorKey) {
 export const guitarBuilder = {
   DEFAULT_CONFIG,
   BASE_PRICE,
+  // existing
+  GUITAR_TYPE_OPTIONS,
   BODY_OPTIONS,
   BODY_WOOD_OPTIONS,
   BODY_FINISH_OPTIONS,
@@ -834,4 +1102,39 @@ export const guitarBuilder = {
   BODY_LAYER_ASSETS,
   PUPPY,
   resolveVariant,
+  // new schema
+  DEXTERITY_OPTIONS,
+  STRING_COUNT_OPTIONS,
+  MULTISCALE_OPTIONS,
+  SCALE_LENGTH_OPTIONS,
+  CASE_OPTIONS,
+  BEVEL_OPTIONS,
+  TOP_WOOD_OPTIONS,
+  FINISH_TYPE_OPTIONS,
+  TOP_COAT_OPTIONS,
+  BURST_FINISH_OPTIONS,
+  NECK_CONSTRUCTION_OPTIONS,
+  INLAY_SHAPE_OPTIONS,
+  INLAY_MATERIAL_OPTIONS,
+  FRET_OPTIONS,
+  NECK_REAR_FINISH_OPTIONS,
+  HEADSTOCK_SHAPE_OPTIONS,
+  TRUSS_ROD_COVER_OPTIONS,
+  ELECTRONICS_TYPE_OPTIONS,
+  PICKUP_CONFIGURATION_OPTIONS,
+  PICKUP_MODEL_BRIDGE_OPTIONS,
+  PICKUP_MODEL_MIDDLE_OPTIONS,
+  PICKUP_MODEL_NECK_OPTIONS,
+  PICKUP_BOBBIN_OPTIONS,
+  PICKUP_POLE_COLOR_OPTIONS,
+  CONTROLS_OPTIONS,
+  SADDLE_OPTIONS,
+  NUT_OPTIONS,
+  TUNING_OPTIONS,
+  STRING_BRAND_OPTIONS,
+  OUTPUT_JACK_OPTIONS,
+  STRAP_BUTTON_OPTIONS,
+  TUNER_BUTTON_OPTIONS,
+  ELECTRONICS_CAVITY_COVER_OPTIONS,
+  TREMOLO_COVER_OPTIONS,
 }

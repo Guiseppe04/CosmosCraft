@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+﻿import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import {
   Users, Package, ShoppingBag, Calendar, Search,
@@ -3836,9 +3836,9 @@ export function AdminPage() {
         <main className={`p-6 ${activeTab === 'pos' ? 'pt-19' : 'pt-5'}`}>
 
           {/* Actions bar */}
-          {activeTab !== 'pos' && activeTab !== 'inventory' && (
+          {activeTab !== 'pos' && activeTab !== 'inventory' && activeTab !== 'products' && (
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
-            {['products', 'users', 'product-categories', 'projects', 'services', 'appointments'].includes(activeTab) && (
+            {['users', 'product-categories', 'projects', 'services', 'appointments'].includes(activeTab) && (
               <div className="relative max-w-sm w-full">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
                 <input
@@ -3853,33 +3853,15 @@ export function AdminPage() {
 
             <div className="flex items-center gap-2 ml-auto">
               {/* Refresh button (hidden on dashboard/inventory) */}
-              {activeTab !== 'dashboard' && activeTab !== 'inventory' && activeTab !== 'guitar-parts' && activeTab !== 'orders' && (
+              {activeTab !== 'dashboard' && activeTab !== 'inventory' && activeTab !== 'products' && activeTab !== 'guitar-parts' && activeTab !== 'orders' && (
                 <button onClick={handleRefresh} className="p-2 border border-[var(--border)] rounded-lg hover:border-[var(--gold-primary)] hover:bg-[var(--gold-primary)]/10 transition-all" title="Refresh">
                   <RefreshCw className={`w-4 h-4 text-[var(--text-muted)] ${isLoading ? 'animate-spin' : ''}`} />
                 </button>
               )}
-               {activeTab === 'products' && (
-                 <div className="flex rounded-lg border border-[var(--border)] overflow-hidden">
-                   <button
-                     onClick={() => setProductViewMode('grid')}
-                     className={`p-2 ${productViewMode === 'grid' ? 'bg-[var(--gold-primary)] text-black' : 'bg-[var(--surface-dark)] text-[var(--text-muted)] hover:text-white'} transition-colors`}
-                     title="Grid View"
-                   >
-                     <Grid3X3 className="w-4 h-4" />
-                   </button>
-                   <button
-                     onClick={() => setProductViewMode('table')}
-                     className={`p-2 ${productViewMode === 'table' ? 'bg-[var(--gold-primary)] text-black' : 'bg-[var(--surface-dark)] text-[var(--text-muted)] hover:text-white'} transition-colors`}
-                     title="Table View"
-                   >
-                     <List className="w-4 h-4" />
-                   </button>
-                 </div>
-               )}
-               {activeTab === 'services' && (
-                 <div className="flex rounded-lg border border-[var(--border)] overflow-hidden">
-                   <button
-                     onClick={() => setServiceViewMode('grid')}
+                {activeTab === 'services' && (
+                  <div className="flex rounded-lg border border-[var(--border)] overflow-hidden">
+                    <button
+                      onClick={() => setServiceViewMode('grid')}
                      className={`p-2 ${serviceViewMode === 'grid' ? 'bg-[var(--gold-primary)] text-black' : 'bg-[var(--surface-dark)] text-[var(--text-muted)] hover:text-white'} transition-colors`}
                      title="Grid View"
                    >
@@ -3894,15 +3876,10 @@ export function AdminPage() {
                    </button>
                  </div>
                )}
-              {activeTab === 'products' && isSuperAdmin && (
-                <button onClick={() => openModal('product')} className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black rounded-xl font-semibold text-sm hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all">
-                  <Plus className="w-4 h-4" /> Add Product
-                </button>
-              )}
-              {activeTab === 'product-categories' && isSuperAdmin && (
-                <button onClick={() => openModal('category')} className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black rounded-xl font-semibold text-sm hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all">
-                  <Plus className="w-4 h-4" /> Add Category
-                </button>
+                {activeTab === 'product-categories' && isSuperAdmin && (
+                  <button onClick={() => openModal('category')} className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black rounded-xl font-semibold text-sm hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all">
+                    <Plus className="w-4 h-4" /> Add Category
+                  </button>
               )}
               {activeTab === 'projects' && isSuperAdmin && (
                 <button onClick={() => setShowGuitarTypeSelector(true)} className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black rounded-xl font-semibold text-sm hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all">
@@ -4062,21 +4039,37 @@ export function AdminPage() {
           {/* ── PRODUCTS ───────────────────────────────────────────── */}
           {activeTab === 'products' && (
             <motion.div key="products" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-              <div className="mb-4 flex items-end justify-between gap-3">
-                <div>
+              <div className="mb-4 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div className="min-w-0">
                   <h2 className="text-white text-xl font-semibold">Products</h2>
                   <p className="text-[var(--text-muted)] text-sm">Manage catalog items, visibility, and pricing.</p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setProductActiveTab('active')
-                    setProductQuery({ page: 1, pageSize: productQuery.pageSize, sortBy: 'created_at', sortDir: 'desc', category_id: '', is_active: 'true', min_price: '', max_price: '' })
-                  }}
-                  className="px-3 py-2 rounded-lg border border-[var(--border)] text-sm text-[var(--text-muted)] hover:text-white hover:border-[var(--gold-primary)] transition-colors"
-                >
-                  Clear product filters
-                </button>
+                <div className="flex flex-wrap items-center justify-start lg:justify-end gap-2">
+                  <button onClick={handleRefresh} className="p-2 border border-[var(--border)] rounded-lg hover:border-[var(--gold-primary)] hover:bg-[var(--gold-primary)]/10 transition-all" title="Refresh">
+                    <RefreshCw className={`w-4 h-4 text-[var(--text-muted)] ${isLoading ? 'animate-spin' : ''}`} />
+                  </button>
+                  <div className="flex rounded-lg border border-[var(--border)] overflow-hidden">
+                    <button
+                      onClick={() => setProductViewMode('grid')}
+                      className={`p-2 ${productViewMode === 'grid' ? 'bg-[var(--gold-primary)] text-black' : 'bg-[var(--surface-dark)] text-[var(--text-muted)] hover:text-white'} transition-colors`}
+                      title="Grid View"
+                    >
+                      <Grid3X3 className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => setProductViewMode('table')}
+                      className={`p-2 ${productViewMode === 'table' ? 'bg-[var(--gold-primary)] text-black' : 'bg-[var(--surface-dark)] text-[var(--text-muted)] hover:text-white'} transition-colors`}
+                      title="Table View"
+                    >
+                      <List className="w-4 h-4" />
+                    </button>
+                  </div>
+                  {isSuperAdmin && (
+                    <button onClick={() => openModal('product')} className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black rounded-xl font-semibold text-sm hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all">
+                      <Plus className="w-4 h-4" /> Add Product
+                    </button>
+                  )}
+                </div>
               </div>
               {/* Product Activity Tabs */}
               <div className="flex border-b border-[var(--border)] mb-6 gap-4 pb-0">
@@ -4103,7 +4096,26 @@ export function AdminPage() {
 
               {/* Product Filter Bar */}
               <div className="mb-6 p-4 rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)]/70 backdrop-blur-sm">
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-[minmax(0,2.6fr)_minmax(0,1.1fr)_minmax(0,0.95fr)_minmax(0,0.9fr)_minmax(0,0.85fr)_auto] gap-3 items-center">
+                  <div className="relative min-w-0">
+                      <Search className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
+                      <input
+                        type="text"
+                        aria-label="Search products"
+                        placeholder="Search products..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className={`${inputCls} pl-11`}
+                      />
+                  </div>
+                  <input
+                    type="text"
+                    aria-label="Filter products by brand"
+                    placeholder="Filter by brand..."
+                    value={productQuery.brand}
+                    onChange={(e) => setProductQuery((prev) => ({ ...prev, page: 1, brand: e.target.value }))}
+                    className={inputCls}
+                  />
                   <select aria-label="Filter products by category" value={productQuery.category_id} onChange={(e) => setProductQuery((prev) => ({ ...prev, page: 1, category_id: e.target.value }))} className={inputCls}>
                     <option value="">All categories</option>
                     {categoryTree.map(parent => (
@@ -4115,14 +4127,6 @@ export function AdminPage() {
                       </optgroup>
                     ))}
                   </select>
-                  <input 
-                    type="text"
-                    aria-label="Filter products by brand" 
-                    placeholder="Filter by brand..."
-                    value={productQuery.brand} 
-                    onChange={(e) => setProductQuery((prev) => ({ ...prev, page: 1, brand: e.target.value }))} 
-                    className={inputCls}
-                  />
                   <select aria-label="Sort products" value={`${productQuery.sortBy}:${productQuery.sortDir}`} onChange={(e) => {
                     const [sortBy, sortDir] = e.target.value.split(':')
                     setProductQuery((prev) => ({ ...prev, page: 1, sortBy, sortDir }))
@@ -4137,7 +4141,17 @@ export function AdminPage() {
                   <select aria-label="Products page size" value={productQuery.pageSize} onChange={(e) => setProductQuery((prev) => ({ ...prev, page: 1, pageSize: Number(e.target.value) }))} className={inputCls}>
                     {PAGE_SIZE_OPTIONS.map((n) => <option key={n} value={n}>{n} per page</option>)}
                   </select>
-                </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setProductActiveTab('active')
+                      setProductQuery({ page: 1, pageSize: productQuery.pageSize, sortBy: 'created_at', sortDir: 'desc', category_id: '', is_active: 'true', min_price: '', max_price: '' })
+                    }}
+                    className="h-[50px] px-4 rounded-2xl border border-[var(--border)] text-sm text-[var(--text-muted)] hover:text-white hover:border-[var(--gold-primary)] transition-colors whitespace-nowrap justify-self-start xl:justify-self-end"
+                  >
+                    Clear product filters
+                  </button>
+                  </div>
               </div>
 
               {productsLoading ? (

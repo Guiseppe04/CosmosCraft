@@ -1,5 +1,50 @@
-export const bassAsset = (path) => `/builder/bass_models/${String(path || '').replace(/^\/+/, '')}`
-export const bassWoodAsset = (path) => `/woodtype/${String(path || '').replace(/^\/+/, '')}`
+// Repointed to Cloudinary collection: cosmoscraft_assets/bass_assets
+// (local /builder/bass_models/* files no longer exist)
+const CLOUD_NAME = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_CLOUDINARY_CLOUD_NAME) ? import.meta.env.VITE_CLOUDINARY_CLOUD_NAME : ''
+
+export const cloudImage = (root, path) =>
+  `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/${root}/${path}`
+
+export const bassAsset = (path) => cloudImage('cosmoscraft_assets/bass_assets', String(path || '').replace(/^\/+/, ''))
+export const bassWoodAsset = (path) => cloudImage('cosmoscraft_assets/bass_assets', String(path || '').replace(/^\/+/, ''))
+
+// Reuse the new customization schema from the electric builder.
+// Bass-conditional: STRING_COUNT_OPTIONS (6/7/8) is omitted (bass uses 4/5/6).
+import {
+  DEXTERITY_OPTIONS,
+  MULTISCALE_OPTIONS,
+  SCALE_LENGTH_OPTIONS,
+  CASE_OPTIONS,
+  BEVEL_OPTIONS,
+  TOP_WOOD_OPTIONS,
+  FINISH_TYPE_OPTIONS,
+  TOP_COAT_OPTIONS,
+  BURST_FINISH_OPTIONS,
+  NECK_CONSTRUCTION_OPTIONS,
+  INLAY_SHAPE_OPTIONS,
+  INLAY_MATERIAL_OPTIONS,
+  FRET_OPTIONS,
+  NECK_REAR_FINISH_OPTIONS,
+  HEADSTOCK_SHAPE_OPTIONS,
+  TRUSS_ROD_COVER_OPTIONS,
+  ELECTRONICS_TYPE_OPTIONS,
+  PICKUP_CONFIGURATION_OPTIONS,
+  PICKUP_MODEL_BRIDGE_OPTIONS,
+  PICKUP_MODEL_MIDDLE_OPTIONS,
+  PICKUP_MODEL_NECK_OPTIONS,
+  PICKUP_BOBBIN_OPTIONS,
+  PICKUP_POLE_COLOR_OPTIONS,
+  CONTROLS_OPTIONS,
+  SADDLE_OPTIONS,
+  NUT_OPTIONS,
+  TUNING_OPTIONS,
+  STRING_BRAND_OPTIONS,
+  OUTPUT_JACK_OPTIONS,
+  STRAP_BUTTON_OPTIONS,
+  TUNER_BUTTON_OPTIONS,
+  ELECTRONICS_CAVITY_COVER_OPTIONS,
+  TREMOLO_COVER_OPTIONS,
+} from './guitarBuilderData.js'
 
 // Keep catalog logic optional: core rendering uses static `bassAsset(...)` paths
 // so bass previews work even if no external builder folder exists.
@@ -250,6 +295,39 @@ export const BASS_DEFAULT_CONFIG = {
   backplate: 'standard',
   pickupScrews: 'black',
   controlPlate: 'black',
+  // --- New customization options ---
+  dexterity: 'right',
+  multiscale: 'off',
+  scaleLength: '34',
+  case: 'none',
+  bevel: 'off',
+  topWood: 'none',
+  topCoat: 'clearGloss',
+  burstFinish: 'none',
+  neckConstruction: '1piece',
+  inlayShape: 'dots',
+  inlayMaterial: 'pearl',
+  frets: 'stainlessRegular',
+  neckRearFinish: 'none',
+  headstockShape: 'inlineGT',
+  trussRodCover: 'black',
+  electronicsType: 'passive',
+  pickupConfiguration: 'hss',
+  bridgePickupModel: 'beryllium',
+  middlePickupModel: 'none',
+  neckPickupModel: 'beryllium',
+  pickupBobbin: 'standard',
+  pickupPoleColor: 'black',
+  controls: 'standard',
+  saddle: 'chrome',
+  nut: 'blackGraphTech',
+  tuning: 'eStandard',
+  stringBrand: 'elixir1046',
+  outputJack: 'none',
+  strapButtons: 'off',
+  tunerButtons: 'off',
+  cavityCover: 'none',
+  tremoloCover: 'none',
 }
 
 export const BASS_TYPE_OPTIONS = [
@@ -1449,6 +1527,40 @@ export const bassBuilder = {
   MODEL_ASSET_CATALOG: BASS_MODEL_CATALOG,
   SHARED_ASSET_CATALOG: BASS_SHARED_ASSET_CATALOG,
   resolveVariant: resolveBassVariant,
+  // new schema (bass-conditional: STRING_COUNT_OPTIONS omitted)
+  DEXTERITY_OPTIONS,
+  MULTISCALE_OPTIONS,
+  SCALE_LENGTH_OPTIONS,
+  CASE_OPTIONS,
+  BEVEL_OPTIONS,
+  TOP_WOOD_OPTIONS,
+  FINISH_TYPE_OPTIONS,
+  TOP_COAT_OPTIONS,
+  BURST_FINISH_OPTIONS,
+  NECK_CONSTRUCTION_OPTIONS,
+  INLAY_SHAPE_OPTIONS,
+  INLAY_MATERIAL_OPTIONS,
+  FRET_OPTIONS,
+  NECK_REAR_FINISH_OPTIONS,
+  HEADSTOCK_SHAPE_OPTIONS,
+  TRUSS_ROD_COVER_OPTIONS,
+  ELECTRONICS_TYPE_OPTIONS,
+  PICKUP_CONFIGURATION_OPTIONS,
+  PICKUP_MODEL_BRIDGE_OPTIONS,
+  PICKUP_MODEL_MIDDLE_OPTIONS,
+  PICKUP_MODEL_NECK_OPTIONS,
+  PICKUP_BOBBIN_OPTIONS,
+  PICKUP_POLE_COLOR_OPTIONS,
+  CONTROLS_OPTIONS,
+  SADDLE_OPTIONS,
+  NUT_OPTIONS,
+  TUNING_OPTIONS,
+  STRING_BRAND_OPTIONS,
+  OUTPUT_JACK_OPTIONS,
+  STRAP_BUTTON_OPTIONS,
+  TUNER_BUTTON_OPTIONS,
+  ELECTRONICS_CAVITY_COVER_OPTIONS,
+  TREMOLO_COVER_OPTIONS,
   resolveCatalogAsset: resolveBassCatalogAsset,
   resolveCatalogVariant: resolveBassCatalogVariant,
   resolveSharedAsset: resolveSharedBassAsset,
