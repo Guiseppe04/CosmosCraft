@@ -11,14 +11,11 @@ const ensureProjectArchiveColumns = async () => {
        FROM information_schema.columns
        WHERE table_name = 'projects'
          AND table_schema = current_schema()
-         AND column_name IN ('is_deleted', 'deleted_at', 'deleted_by')`
+         AND column_name IN ('deleted_at', 'deleted_by')`
     );
 
     const existing = new Set(checkRes.rows.map((row) => row.column_name));
 
-    if (!existing.has('is_deleted')) {
-      await pool.query(`ALTER TABLE projects ADD COLUMN is_deleted BOOLEAN NOT NULL DEFAULT false`);
-    }
     if (!existing.has('deleted_at')) {
       await pool.query(`ALTER TABLE projects ADD COLUMN deleted_at TIMESTAMPTZ`);
     }
@@ -225,7 +222,7 @@ exports.getProjects = async () => {
   await ensureProjectArchiveColumns();
   const result = await pool.query(
     `${PROJECT_BASE_SELECT}
-     WHERE COALESCE(p.is_deleted, false) = false
+     WHERE p.deleted_at IS NULL
      ORDER BY p.created_at DESC`
   );
 
@@ -242,7 +239,7 @@ exports.getProjectById = async (projectId) => {
   const result = await pool.query(
     `${PROJECT_BASE_SELECT}
      WHERE p.project_id = $1
-       AND COALESCE(p.is_deleted, false) = false`,
+       AND p.deleted_at IS NULL`,
     [projectId]
   );
   if (result.rows.length === 0) return null;
@@ -255,7 +252,7 @@ exports.getMyProjects = async (userId) => {
   const result = await pool.query(
     `${PROJECT_BASE_SELECT}
      WHERE o.user_id = $1
-       AND COALESCE(p.is_deleted, false) = false
+       AND p.deleted_at IS NULL
      ORDER BY p.created_at DESC`,
     [userId]
   );
@@ -308,7 +305,7 @@ exports.updateProject = async (projectId, projectData) => {
          estimated_completion_date = COALESCE($4, estimated_completion_date),
          updated_at = CURRENT_TIMESTAMP
      WHERE project_id = $5
-       AND COALESCE(is_deleted, false) = false
+       AND deleted_at IS NULL
      RETURNING *`,
     [title || name, normalizedStatus, notes ?? description, estimated_completion_date || null, projectId]
   );
@@ -326,7 +323,7 @@ exports.cancelProject = async (projectId, userId, userRole) => {
     const projectResult = await client.query(
       `${PROJECT_BASE_SELECT}
        WHERE p.project_id = $1
-         AND COALESCE(p.is_deleted, false) = false`,
+         AND p.deleted_at IS NULL`,
       [projectId]
     );
 
@@ -397,12 +394,11 @@ exports.deleteProject = async (projectId, deletedBy = null) => {
   await ensureProjectArchiveColumns();
   const result = await pool.query(
     `UPDATE projects
-     SET is_deleted = true,
-         deleted_at = CURRENT_TIMESTAMP,
+     SET deleted_at = CURRENT_TIMESTAMP,
          deleted_by = $2,
          updated_at = CURRENT_TIMESTAMP
      WHERE project_id = $1
-       AND COALESCE(is_deleted, false) = false
+       AND deleted_at IS NULL
      RETURNING *`,
     [projectId, deletedBy]
   );
@@ -414,12 +410,11 @@ exports.restoreProject = async (projectId) => {
   await ensureProjectArchiveColumns();
   const result = await pool.query(
     `UPDATE projects
-     SET is_deleted = false,
-         deleted_at = NULL,
+     SET deleted_at = NULL,
          deleted_by = NULL,
          updated_at = CURRENT_TIMESTAMP
      WHERE project_id = $1
-       AND COALESCE(is_deleted, false) = true
+       AND deleted_at IS NOT NULL
      RETURNING *`,
     [projectId]
   );
@@ -456,8 +451,9 @@ exports.assignTeam = async (projectId, userIds) => {
 
 const logActivity = async (client, projectId, userId, actionType, details) => {
   await client.query(
-    'INSERT INTO project_activity_logs (project_id, user_id, action_type, details) VALUES ($1, $2, $3, $4)',
-    [projectId, userId, actionType, JSON.stringify(details)]
+    `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, details)
+     VALUES ($1, $2, $3, $4, $5)`,
+    [userId, actionType, 'project', projectId, JSON.stringify(details)]
   );
 };
 
@@ -468,7 +464,7 @@ exports.getProjectHierarchy = async (projectId) => {
     const pResult = await client.query(
       `${PROJECT_BASE_SELECT}
        WHERE p.project_id = $1
-         AND COALESCE(p.is_deleted, false) = false`,
+         AND p.deleted_at IS NULL`,
       [projectId]
     );
     if (pResult.rows.length === 0) return null;
@@ -634,7 +630,7 @@ exports.submitFulfillmentChoice = async (projectId, userId, userRole, data = {})
     const projectResult = await client.query(
       `${PROJECT_BASE_SELECT}
        WHERE p.project_id = $1
-         AND COALESCE(p.is_deleted, false) = false`,
+         AND p.deleted_at IS NULL`,
       [projectId]
     );
 
@@ -971,9 +967,9 @@ exports.deleteSubtask = async (subtaskId, userId) => {
 exports.getActivityLogs = async (projectId) => {
   const res = await pool.query(`
     SELECT l.*, u.first_name, u.last_name, u.email, u.role
-    FROM project_activity_logs l
+    FROM audit_logs l
     LEFT JOIN users u ON l.user_id = u.user_id
-    WHERE l.project_id = $1
+    WHERE l.entity_type = 'project' AND l.entity_id = $1
     ORDER BY l.created_at DESC
   `, [projectId]);
   return res.rows;

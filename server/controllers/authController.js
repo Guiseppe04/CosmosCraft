@@ -154,7 +154,7 @@ exports.emailSignup = asyncHandler(async (req, res, next) => {
 
     res.status(201).json({
       status: 'success', message: 'Signup successful. Please check your email for the verification code.',
-      data: { user: { id: newUser.user_id, email: newUser.email, is_verified: newUser.is_verified }, accessToken, refreshToken }
+      data: { user: { id: newUser.user_id, email: newUser.email, is_verified: newUser.is_verified } }
     });
   } catch (error) {
     if (error.message.includes('already exists')) throw new AppError('Email address already used.', 409);

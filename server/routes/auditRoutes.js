@@ -11,7 +11,7 @@ router.get('/summary', ctrl.getActivitySummary);
 router.get('/:id', ctrl.getAuditLog);
 router.get('/module/:module', ctrl.getAuditLogsByModule);
 router.get('/user/:userId', ctrl.getAuditLogsByUser);
-router.get('/entity/:tableName/:recordId', ctrl.getAuditLogsByEntity);
+router.get('/entity/:entityType/:entityId', ctrl.getAuditLogsByEntity);
 router.delete('/cleanup', authorize('admin', 'super_admin'), ctrl.cleanupOldLogs);
 
 module.exports = router;

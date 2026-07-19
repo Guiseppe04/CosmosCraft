@@ -5,23 +5,48 @@ import {
 } from 'lucide-react'
 import { format } from 'date-fns'
 
-function buildTimeSlots(dateValue) {
-  if (!dateValue) return []
+function localDateFromYMD(dateValue, hour = 0, minute = 0) {
+  const [year, month, day] = dateValue.split('-').map(Number)
+  return new Date(year, month - 1, day, hour, minute, 0, 0)
+}
 
-  const date = new Date(dateValue)
+function isPastSlot(dateValue, timeValue) {
+  if (!dateValue || !timeValue) return false
+
+  const selectedDate = localDateFromYMD(dateValue)
   const today = new Date()
   today.setHours(0, 0, 0, 0)
 
+  if (selectedDate.toDateString() !== today.toDateString()) {
+    return false
+  }
+
+  const [hour, minute] = timeValue.split(':').map(Number)
+  const slotDate = localDateFromYMD(dateValue, hour, minute)
+  return slotDate < new Date()
+}
+
+function buildTimeSlots(dateValue) {
+  if (!dateValue) return []
+
+  const date = localDateFromYMD(dateValue)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const currentTime = new Date()
+
   const isToday = date.toDateString() === today.toDateString()
-  const startHour = isToday ? Math.max(9, new Date().getHours() + 1) : 9
   const slots = []
 
-  for (let hour = startHour; hour < 18; hour += 1) {
+  for (let hour = 9; hour < 18; hour += 1) {
     for (let minute = 0; minute < 60; minute += 30) {
       const value = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
+      const slotDate = localDateFromYMD(dateValue, hour, minute)
+      const disabled = isToday && slotDate < currentTime
+
       slots.push({
         value,
-        label: format(new Date(`2000-01-01T${value}`), 'h:mm a'),
+        label: format(new Date(2000, 0, 1, hour, minute, 0), 'h:mm a'),
+        disabled,
       })
     }
   }
@@ -109,6 +134,10 @@ export default function AppointmentForm({
     }
     if (!formData.scheduled_time) {
       nextErrors.scheduled_time = 'Time is required'
+    }
+
+    if (formData.scheduled_date && formData.scheduled_time && isPastSlot(formData.scheduled_date, formData.scheduled_time)) {
+      nextErrors.scheduled_time = 'Selected time is in the past for your local time'
     }
 
     setErrors(nextErrors)
@@ -317,8 +346,8 @@ export default function AppointmentForm({
                 >
                   <option value="">Select time...</option>
                   {availableSlots.map((slot) => (
-                    <option key={slot.value} value={slot.value}>
-                      {slot.label}
+                    <option key={slot.value} value={slot.value} disabled={slot.disabled}>
+                      {slot.label}{slot.disabled ? ' (past)' : ''}
                     </option>
                   ))}
                 </select>

@@ -154,6 +154,31 @@ function formatLocalDateId(date) {
   return `${year}-${month}-${day}`
 }
 
+function parseTimeLabelTo24(timeLabel = '') {
+  const match = String(timeLabel).trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i)
+  if (!match) return null
+
+  let hour = Number(match[1])
+  const minute = Number(match[2])
+  const period = match[3].toUpperCase()
+
+  if (hour === 12) {
+    hour = period === 'AM' ? 0 : 12
+  } else if (period === 'PM') {
+    hour += 12
+  }
+
+  return { hour, minute }
+}
+
+function isPastTimeSlot(dateId, timeLabel) {
+  const parsed = parseTimeLabelTo24(timeLabel)
+  if (!parsed || !dateId) return false
+
+  const slotDate = new Date(`${dateId}T${String(parsed.hour).padStart(2, '0')}:${String(parsed.minute).padStart(2, '0')}:00`)
+  return slotDate < new Date()
+}
+
 function normalizeAppointmentGuitarType(value = '') {
   return String(value || '').trim().toLowerCase()
 }
@@ -268,6 +293,16 @@ export function AppointmentPage() {
 
   const currentBranch = branches.find(b => b.id === selectedBranchId)
   const selectedDate = selectedDateId ? new Date(`${selectedDateId}T00:00:00`) : null
+  const allTimeSlotsDisabled = selectedDateId && timeSlots.every((time) => {
+    const isUnavailableTime = !availableTimeSet.has(time.toUpperCase())
+    const isPastTime = isPastTimeSlot(selectedDateId, time)
+    return isUnavailableTime || isPastTime
+  })
+  const hasAvailableTimeSlots = selectedDateId && timeSlots.some((time) => {
+    const isUnavailableTime = !availableTimeSet.has(time.toUpperCase())
+    const isPastTime = isPastTimeSlot(selectedDateId, time)
+    return !isUnavailableTime && !isPastTime
+  })
 
   const selectedAppointmentType = homeServiceOption === 'yes' ? 'service_home' : homeServiceOption === 'no' ? 'service_in_shop' : ''
   const hasManualGuitarDetails = Boolean(
@@ -425,7 +460,7 @@ export function AppointmentPage() {
         if (!isMounted) return
         setAvailableTimeSet(nextSet)
         setSlotAvailabilityStatus(availabilityStatus)
-        if (selectedTime && !nextSet.has(selectedTime.toUpperCase())) {
+        if (selectedTime && (!nextSet.has(selectedTime.toUpperCase()) || isPastTimeSlot(selectedDateId, selectedTime))) {
           setSelectedTime('')
         }
       } catch {
@@ -1216,44 +1251,52 @@ export function AppointmentPage() {
                       This date is unavailable for booking.
                     </p>
                   )}
-                  <div className="flex flex-wrap gap-3">
-                    {timeSlots.map(time => {
-                      const isSelected = selectedTime === time
-                      const isUnavailableTime = !availableTimeSet.has(time.toUpperCase())
-                      return (
-                        <button
-                          key={time}
-                          onClick={() => setSelectedTime(time)}
-                          disabled={isUnavailableTime || slotsLoading}
-                          className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
-                            isSelected
-                              ? 'bg-[#d4af37] text-black'
-                              : isUnavailableTime
-                                ? 'bg-[var(--surface-elevated)] text-[var(--text-muted)]/70 border border-[var(--border)] cursor-not-allowed line-through'
-                                : 'bg-[var(--surface-dark)] text-[var(--text-light)] border border-[var(--border)] hover:border-[#d4af37]/30'
-                          }`}
-                        >
-                          {time}
-                        </button>
-                      )
-                    })}
-                  </div>
+                  {!slotsLoading && !hasAvailableTimeSlots && (
+                    <p className="mb-3 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-3 py-2 text-xs font-semibold text-[var(--text-muted)]">
+                      No available time slots.
+                    </p>
+                  )}
+                  {hasAvailableTimeSlots && (
+                    <div className="flex flex-wrap gap-3">
+                      {timeSlots.map(time => {
+                        const isSelected = selectedTime === time
+                        const isUnavailableTime = !availableTimeSet.has(time.toUpperCase())
+                        const isPastTime = selectedDateId && isPastTimeSlot(selectedDateId, time)
+                        const isDisabled = isUnavailableTime || slotsLoading || isPastTime
+                        return (
+                          <button
+                            key={time}
+                            onClick={() => { if (!isDisabled) setSelectedTime(time) }}
+                            disabled={isDisabled}
+                            className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
+                              isSelected
+                                ? 'bg-[#d4af37] text-black'
+                                : isDisabled
+                                  ? 'bg-[var(--surface-elevated)] text-[var(--text-muted)]/70 border border-[var(--border)] cursor-not-allowed'
+                                  : 'bg-[var(--surface-dark)] text-[var(--text-light)] border border-[var(--border)] hover:border-[#d4af37]/30'
+                            }`}
+                          >
+                            {time}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
                 </motion.div>
               )}
             </div>
 
-            {/* Currently Selected Summary */}
-            <div className={`p-4 rounded-xl border transition-all flex items-center gap-3 ${selectedDateId && selectedTime ? 'bg-[#d4af37]/10 border-[#d4af37]/30' : 'bg-theme-surface-deep border-[var(--border)]'}`}>
-               <ClockIcon className={`w-5 h-5 ${selectedDateId && selectedTime ? 'text-[#d4af37]' : 'text-[var(--text-muted)]'}`} />
-               <div>
+            {selectedDateId && selectedTime && (
+              <div className="p-4 rounded-xl border transition-all flex items-center gap-3 bg-[#d4af37]/10 border-[#d4af37]/30">
+                <ClockIcon className="w-5 h-5 text-[#d4af37]" />
+                <div>
                   <p className="text-xs text-[var(--text-muted)] mb-0.5">Currently Selected</p>
-                  <p className={`text-sm font-medium ${selectedDateId && selectedTime ? 'text-[#d4af37]' : 'text-[var(--text-muted)]'}`}>
-                    {selectedDate && selectedTime 
-                        ? `${selectedDate.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })} at ${selectedTime}`
-                        : 'No date and time selected yet'}
+                  <p className="text-sm font-medium text-[#d4af37]">
+                    {selectedDate.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })} at {selectedTime}
                   </p>
-               </div>
-            </div>
+                </div>
+              </div>
+            )}
           </motion.div>
         )
 

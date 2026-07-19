@@ -1,7 +1,6 @@
 require('dotenv').config();
 
 const express = require('express');
-const rateLimit = require('express-rate-limit');
 const cookieParser = require('cookie-parser');
 const cors = require('cors');
 const passport = require('passport');
@@ -28,10 +27,11 @@ const projectRoutes = require('./routes/projectRoutes');
 const builderPartsRoutes = require('./routes/builderPartsRoutes');
 const cloudinaryRoutes = require('./routes/cloudinaryRoutes');
 const { errorHandler, notFound } = require('./middleware/errorHandler.js');
+const { createRateLimiter } = require('./middleware/rateLimitMiddleware.js');
 
 const app = express();
 
-const generalLimiter = rateLimit({
+const generalLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
   max: 300,
   standardHeaders: true,
@@ -42,7 +42,7 @@ const generalLimiter = rateLimit({
   },
 });
 
-const authLimiter = rateLimit({
+const authLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
   max: 10,
   standardHeaders: true,
@@ -93,9 +93,6 @@ app.use('/api/pos', posRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/builder-parts', builderPartsRoutes);
 app.use('/api/cloudinary', cloudinaryRoutes);
-// Legacy route alias kept for backwards-compat
-app.use('/user', userRoutes);
-
 app.use(notFound);
 app.use(errorHandler);
 

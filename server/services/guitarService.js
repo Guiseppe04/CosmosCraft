@@ -46,7 +46,7 @@ async function getCustomizationLockInfo(customizationId, userId) {
        JOIN order_items oi ON oi.order_id = o.order_id
        WHERE oi.customization_id = c.customization_id
          AND o.user_id = c.user_id
-         AND COALESCE(p.is_deleted, false) = false
+          AND p.deleted_at IS NULL
          AND p.status <> 'cancelled'
        ORDER BY p.created_at DESC
        LIMIT 1

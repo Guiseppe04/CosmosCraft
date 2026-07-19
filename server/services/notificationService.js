@@ -33,7 +33,7 @@ async function createNotification({ user_id, title, message, type, related_entit
     `INSERT INTO notifications (user_id, title, message, notification_type, related_entity_id, related_entity_type, expires_at)
      VALUES ($1, $2, $3, $4, $5, $6, $7)
      RETURNING *`,
-    [user_id, title, message || null, type || NOTIFICATION_TYPES.GENERAL, related_entity_id, related_entity_type, expires_at || null]
+     [user_id, title, message || '', type || NOTIFICATION_TYPES.GENERAL, related_entity_id, related_entity_type, expires_at || null]
   );
 
   return result.rows[0];
@@ -66,7 +66,7 @@ async function createBatchNotifications(userIds, { title, message, type, related
         `INSERT INTO notifications (user_id, title, message, notification_type, related_entity_id, related_entity_type)
          VALUES ($1, $2, $3, $4, $5, $6)
          RETURNING *`,
-        [userId, title, message || null, type || NOTIFICATION_TYPES.GENERAL, related_entity_id, related_entity_type]
+        [userId, title, message || '', type || NOTIFICATION_TYPES.GENERAL, related_entity_id, related_entity_type]
       );
       notifications.push(result.rows[0]);
     }

@@ -36,7 +36,7 @@ exports.getCurrentUser = asyncHandler(async (req, res, next) => {
         avatarUrl: user.avatar_url || null,
         avatar_url: user.avatar_url || null,
         phone: user.phone,
-        birthDate: user.birth_date,
+        birthDate: null,
         addresses,
         role: user.role,
         provider: authInfo.provider,
@@ -71,8 +71,6 @@ exports.updateProfile = asyncHandler(async (req, res, next) => {
   }
 
   if (value.phone) updateData.phone = value.phone;
-  if (value.bio !== undefined) updateData['profile.bio'] = value.bio;
-  if (value.birthDate !== undefined) updateData.birth_date = value.birthDate;
   if (value.avatarUrl !== undefined) updateData.avatar_url = value.avatarUrl;
 
   const user = await userService.updateProfile(req.user.id, updateData);

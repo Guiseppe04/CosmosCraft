@@ -177,7 +177,7 @@ exports.updateProfile = async (userId, updates) => {
   const fields = [];
   const values = [];
   let idx = 1;
-  const validUpdates = ['first_name', 'middle_name', 'last_name', 'phone', 'avatar_url', 'birth_date'];
+  const validUpdates = ['first_name', 'middle_name', 'last_name', 'phone', 'avatar_url'];
   
   for (const key in updates) {
     if (validUpdates.includes(key)) {

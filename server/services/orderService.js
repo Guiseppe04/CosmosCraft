@@ -877,26 +877,26 @@ exports.updatePaymentStatus = async (orderId, status, options = {}) => {
 
   const order = res.rows[0]
 
-  // Log to audit table if it exists
+  // Log to consolidated audit_logs table
   try {
-    await pool.query(
-      `INSERT INTO payment_audit_log (order_id, action, previous_status, new_status, admin_name, admin_email, reference_number, rejection_reason, admin_notes)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-      [
-        orderId,
-        status === 'approved' ? 'approved' : status === 'rejected' ? 'rejected' : 'reviewed',
-        currentStatus,
-        status,
-        admin_name,
-        admin_email,
+    const auditService = require('./auditService');
+    await auditService.logAction(
+      admin_user_id,
+      status === 'approved' ? 'VERIFY' : status === 'rejected' ? 'REJECT' : 'UPDATE',
+      'payment',
+      orderId,
+      {
+        previous_status: currentStatus,
+        new_status: status,
         reference_number,
         rejection_reason,
-        admin_notes
-      ]
-    )
+        admin_notes,
+        admin_name,
+        admin_email
+      }
+    );
   } catch (auditErr) {
-    // Log but don't fail if audit table doesn't exist
-    console.warn('Payment audit log not available:', auditErr.message)
+    console.warn('Audit log not available:', auditErr.message);
   }
 
   return order
@@ -933,15 +933,23 @@ exports.approvePayment = async (orderId, options = {}) => {
   
   const order = res.rows[0]
   
-  // Log audit
+  // Log to consolidated audit_logs table
   try {
-    await pool.query(
-      `INSERT INTO payment_audit_log (order_id, action, previous_status, new_status, admin_name, admin_email)
-       VALUES ($1, 'approved', $2, 'approved', $3, $4)`,
-      [orderId, currentStatus, admin_name, admin_email]
-    )
+    const auditService = require('./auditService');
+    await auditService.logAction(
+      admin_user_id || null,
+      'VERIFY',
+      'payment',
+      orderId,
+      {
+        previous_status: currentStatus,
+        new_status: 'approved',
+        admin_name,
+        admin_email
+      }
+    );
   } catch (auditErr) {
-    console.warn('Payment audit log not available:', auditErr.message)
+    console.warn('Audit log not available:', auditErr.message);
   }
   
   return order
