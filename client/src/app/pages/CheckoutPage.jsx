@@ -655,7 +655,7 @@ function EmptyCart() {
   )
 }
 
-function SuccessModal({ isOpen, onClose }) {
+function SuccessModal({ isOpen, onClose, onGoToMyPurchase }) {
   return (
     <AnimatePresence>
       {isOpen && (
@@ -681,13 +681,21 @@ function SuccessModal({ isOpen, onClose }) {
               <CheckCircle className="w-10 h-10 text-[var(--text-dark)]" />
             </motion.div>
             <h3 className="text-2xl font-bold text-white mb-2">Order Placed!</h3>
-            <p className="text-[var(--text-muted)] mb-8">You successfully placed your order.</p>
-            <button
-              onClick={onClose}
-              className="w-full py-3.5 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-semibold rounded-xl hover:shadow-[0_0_25px_rgba(212,175,55,0.5)] transition-all"
-            >
-              View My Orders
-            </button>
+            <p className="text-[var(--text-muted)] mb-8">Order placed successfully. View it in Dashboard → My Purchase.</p>
+            <div className="flex flex-col gap-3">
+              <button
+                onClick={onGoToMyPurchase}
+                className="w-full py-3.5 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-semibold rounded-xl hover:shadow-[0_0_25px_rgba(212,175,55,0.5)] transition-all"
+              >
+                Go to My Purchase
+              </button>
+              <button
+                onClick={onClose}
+                className="w-full py-3.5 border border-[var(--border)] text-white font-semibold rounded-xl hover:bg-white/5 transition-all"
+              >
+                Continue Shopping
+              </button>
+            </div>
           </motion.div>
         </motion.div>
       )}
@@ -1124,7 +1132,6 @@ export function CheckoutPage() {
   const itemCount = checkoutItems.reduce((a, b) => a + b.quantity, 0)
   const totalCartItemCount = baseCheckoutItems.reduce((a, b) => a + b.quantity, 0)
   const hasSelectedItems = checkoutItems.length > 0
-  const canUseCashOnDelivery = hasSelectedItems && !hasSelectedCustomBuild
   const canAddMoreAddresses = uniqueAddresses.length < MAX_USER_ADDRESSES
   const allSelectableItemsSelected = !isCustomBuild && !isBuyNow && checkoutItems.length === baseCheckoutItems.length
 
@@ -1280,14 +1287,10 @@ export function CheckoutPage() {
 
   const validatePayment = (paymentMethod, receipt) => {
     if (!paymentMethod) return false
-    if (paymentMethod === 'cash' && hasSelectedCustomBuild) {
-      setOrderError('COD is only available for regular product orders. Customized guitars require down payment.')
-      return false
-    }
     if (paymentMethod === 'gcash' || paymentMethod === 'bank') {
       return !!receipt
     }
-    return true
+    return !!receipt
   }
 
   const handlePlaceOrderClick = () => {
@@ -1377,7 +1380,6 @@ export function CheckoutPage() {
       const methodMap = {
         'gcash': 'gcash',
         'bank': 'bank_transfer',
-        'cash': 'cash'
       }
       const mappedPaymentMethod = methodMap[paymentMethod] || paymentMethod
       const selectedPaymentTerms = hasSelectedCustomBuild
@@ -1449,60 +1451,50 @@ export function CheckoutPage() {
         const currentPaymentAmount = selectedPaymentTerms === 'full'
           ? orderTotalAmount
           : Number((orderTotalAmount * CUSTOM_BUILD_DOWN_PAYMENT_RATE).toFixed(2))
-        const isCodCheckout = mappedPaymentMethod === 'cash'
-        let paymentCreated = isCodCheckout
-
-        // 2. Create payment record with proof when payment is not COD
-        if (!isCodCheckout) {
-          try {
-            const paymentResponse = await fetch(`${API}/api/payments`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              credentials: 'include',
-              body: JSON.stringify({
-                order_id: orderId,
-                method: mappedPaymentMethod,
-                amount: currentPaymentAmount,
-                currency: 'PHP',
-                reference_number: `PROOF-${Date.now()}`,
-                proof_url: receipt // Include the receipt image
-              })
+        // 2. Create payment record with proof
+        try {
+          const paymentResponse = await fetch(`${API}/api/payments`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+              order_id: orderId,
+              method: mappedPaymentMethod,
+              amount: currentPaymentAmount,
+              currency: 'PHP',
+              reference_number: `PROOF-${Date.now()}`,
+              proof_url: receipt // Include the receipt image
             })
+          })
 
-            const paymentData = await paymentResponse.json()
-            console.log('Payment response:', paymentResponse.status, paymentData)
+          const paymentData = await paymentResponse.json()
+          console.log('Payment response:', paymentResponse.status, paymentData)
 
-            if (!paymentResponse.ok) {
-              console.error('Payment creation failed:', paymentData)
-              setOrderError('Order created, but payment record could not be created. Please contact support.')
-              setIsProcessing(false)
-              setShowPaymentModal(false)
-              return
-            }
-
-            paymentCreated = true
-          } catch (paymentError) {
-            console.error('Payment creation error:', paymentError)
+          if (!paymentResponse.ok) {
+            console.error('Payment creation failed:', paymentData)
             setOrderError('Order created, but payment record could not be created. Please contact support.')
             setIsProcessing(false)
             setShowPaymentModal(false)
             return
           }
+        } catch (paymentError) {
+          console.error('Payment creation error:', paymentError)
+          setOrderError('Order created, but payment record could not be created. Please contact support.')
+          setIsProcessing(false)
+          setShowPaymentModal(false)
+          return
         }
 
-        // 3. Only show success if both order and payment were created
-        if (paymentCreated) {
-          if (!isCustomBuild && !isBuyNow) {
-            if (checkoutItems.length === cart.length) {
-              clearCart()
-            } else {
-              checkoutItems.forEach(item => removeFromCart(item.id))
-            }
+        if (!isCustomBuild && !isBuyNow) {
+          if (checkoutItems.length === cart.length) {
+            clearCart()
+          } else {
+            checkoutItems.forEach(item => removeFromCart(item.id))
           }
-          setOrderError(null)
-          setShowPaymentModal(false)
-          setShowSuccessModal(true)
         }
+        setOrderError(null)
+        setShowPaymentModal(false)
+        setShowSuccessModal(true)
       } else {
         console.error('Order failed:', response.status, data)
         setOrderError(data.message || data.error || 'Order failed. Please try again.')
@@ -1525,7 +1517,11 @@ export function CheckoutPage() {
 
   const handleSuccessModalClose = () => {
     setShowSuccessModal(false)
-    navigate('/dashboard?tab=purchases')
+  }
+
+  const handleGoToMyPurchase = () => {
+    setShowSuccessModal(false)
+    navigate('/dashboard', { state: { section: 'purchases' } })
   }
 
   const handleRemove = (id, qty) => updateQuantity(id, -qty)
@@ -1727,10 +1723,9 @@ export function CheckoutPage() {
         isProcessing={isProcessing}
         requiresCustomTerms={hasSelectedCustomBuild}
         downPaymentRate={CUSTOM_BUILD_DOWN_PAYMENT_RATE}
-        allowCashOnDelivery={canUseCashOnDelivery}
       />
 
-      <SuccessModal isOpen={showSuccessModal} onClose={handleSuccessModalClose} />
+      <SuccessModal isOpen={showSuccessModal} onClose={handleSuccessModalClose} onGoToMyPurchase={handleGoToMyPurchase} />
 
       <TermsAndConditionsModal
         isOpen={showTermsModal}

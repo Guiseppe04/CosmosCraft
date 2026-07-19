@@ -35,8 +35,7 @@ exports.createOrder = asyncHandler(async (req, res, next) => {
     throw new AppError('You must agree to the Terms and Conditions before placing your order.', 400)
   }
 
-  const normalizedPaymentMethod = paymentMethod === 'cod' ? 'cash' : paymentMethod
-  if (!['gcash', 'bank_transfer', 'cash'].includes(normalizedPaymentMethod)) {
+  if (!['gcash', 'bank_transfer'].includes(paymentMethod)) {
     throw new AppError('Invalid payment method', 400)
   }
 
@@ -50,7 +49,7 @@ exports.createOrder = asyncHandler(async (req, res, next) => {
     items,
     notes,
     shippingMethod,
-    paymentMethod: normalizedPaymentMethod,
+    paymentMethod,
     billingAddress,
     termsAccepted,
   })

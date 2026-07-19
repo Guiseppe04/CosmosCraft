@@ -24,7 +24,7 @@ export default function TermsAndConditionsModal({ isOpen, onClose }) {
           <div className="border-b border-[var(--border)] px-6 py-5 flex justify-between items-center">
             <div>
               <h3 className="mt-2 text-2xl font-bold text-[var(--text-light)]">
-                Custom Build Terms and Conditions
+                Shop Terms and Conditions
               </h3>
             </div>
             <button
@@ -40,8 +40,62 @@ export default function TermsAndConditionsModal({ isOpen, onClose }) {
           <div className="max-h-[70vh] overflow-y-auto px-6 py-6 space-y-5 text-sm text-[var(--text-muted)]">
             <div className="rounded-2xl border border-[var(--gold-primary)]/35 bg-[var(--gold-primary)]/10 px-5 py-4">
               <p className="font-semibold text-[var(--text-light)]">
-                Please read these terms and conditions carefully before confirming a custom build with
-                {' '}<span className="font-bold">CosmosCraft</span>.
+                Please read these terms and conditions carefully before placing an order with{' '}
+                <span className="font-bold">CosmosCraft</span>.
+              </p>
+            </div>
+
+            {/* ===== REGULAR SHOP PRODUCT TERMS ===== */}
+            <div className="rounded-2xl border border-[var(--gold-primary)]/20 bg-[var(--gold-primary)]/5 px-5 py-4">
+              <h4 className="text-lg font-bold text-[var(--text-light)]">Regular Shop Product Terms</h4>
+              <p className="mt-2 text-xs text-[var(--text-muted)]">
+                These terms apply to standard products such as guitar parts, accessories, strings, pickups, and other non-custom items.
+              </p>
+            </div>
+
+            <section>
+              <h4 className="font-bold text-[var(--text-light)]">Product Availability</h4>
+              <p className="mt-2">
+                All products listed in our shop are sold while supplies last. We cannot guarantee the
+                availability of any item once it goes out of stock. If an item is out of stock after your
+                order is placed, we will notify you and issue a full refund or offer an equivalent replacement.
+              </p>
+            </section>
+
+            <section>
+              <h4 className="font-bold text-[var(--text-light)]">Returns and Exchanges</h4>
+              <p className="mt-2">
+                Returns or exchanges are accepted only for defective or incorrect items within the allowed
+                return period. Items must be unused and returned in their original packaging to be eligible
+                for a return or exchange. We reserve the right to reject any return that does not meet
+                these conditions.
+              </p>
+            </section>
+
+            <section>
+              <h4 className="font-bold text-[var(--text-light)]">Warranty Limitations</h4>
+              <p className="mt-2">
+                Damage caused by improper installation, misuse, modification, or normal wear and tear is
+                not covered by warranty. Our warranty applies only to manufacturing defects under normal
+                use conditions.
+              </p>
+            </section>
+
+            <section>
+              <h4 className="font-bold text-[var(--text-light)]">Shipping Times</h4>
+              <p className="mt-2">
+                Shipping times may vary depending on the shipping method selected, the destination location,
+                and the courier service used. Estimated delivery dates are not guaranteed and may be subject
+                to delays beyond our control.
+              </p>
+            </section>
+
+            {/* ===== CUSTOM BUILD TERMS ===== */}
+            <div className="rounded-2xl border border-[var(--gold-primary)]/20 bg-[var(--gold-primary)]/5 px-5 py-4">
+              <h4 className="text-lg font-bold text-[var(--text-light)]">Custom Guitar Build Terms</h4>
+              <p className="mt-2 text-xs text-[var(--text-muted)]">
+                These terms apply to custom guitar and bass build orders placed through our customization
+                service.
               </p>
             </div>
 
@@ -56,7 +110,6 @@ export default function TermsAndConditionsModal({ isOpen, onClose }) {
                 Once the specifications document is quoted with a price, signed, and paid with a
                 down-payment, the build will be placed in our production queue.
               </p>
-              
             </section>
 
             <section>
@@ -84,8 +137,6 @@ export default function TermsAndConditionsModal({ isOpen, onClose }) {
                 do not offer. This may include specific machine heads, strings, top/back/side woods, or
                 services such as laser engraving or pyrography.
               </p>
-              
-              
             </section>
 
             <section>
@@ -120,7 +171,7 @@ export default function TermsAndConditionsModal({ isOpen, onClose }) {
             <section>
               <h4 className="font-bold text-[var(--text-light)]">Applicable Law</h4>
               <p className="mt-2">
-                By using this site and confirming a custom build, you agree that the laws of the
+                By using this site and placing an order, you agree that the laws of the
                 Philippines, without regard to conflict of law principles, will govern these terms and
                 conditions and any dispute that may arise between you and CosmosCraft, including its
                 business partners and associates.
@@ -151,6 +202,14 @@ export default function TermsAndConditionsModal({ isOpen, onClose }) {
             </section>
 
             <section>
+              <h4 className="font-bold text-[var(--text-light)]">Payment Methods</h4>
+              <p className="mt-2">
+                We currently accept online payment methods including GCash and Bank Transfer. Full payment
+                or down payment (for custom builds) must be completed before orders are processed.
+              </p>
+            </section>
+
+            <section>
               <h4 className="font-bold text-[var(--text-light)]">Questions</h4>
               <p className="mt-2">
                 Questions regarding our Terms and Conditions, Privacy Policy, Return Policy, or other
@@ -168,9 +227,9 @@ export default function TermsAndConditionsModal({ isOpen, onClose }) {
             <section className="rounded-2xl border border-[var(--border)] bg-[var(--surface-elevated)] px-5 py-4">
               <h4 className="font-bold text-[var(--text-light)]">Summary</h4>
               <p className="mt-2">
-                By proceeding with a custom build, you acknowledge that the approved specifications
-                document, payment terms, production limitations, owner-supplied material policy, and
-                shipment risk terms above will apply to your order.
+                By placing an order, you acknowledge and agree to the applicable terms above — whether
+                purchasing regular shop products or commissioning a custom guitar build. All payments
+                are processed through our supported online payment methods.
               </p>
             </section>
           </div>

@@ -103,6 +103,27 @@ async function runStartupMigrations(client) {
   `);
 
   await client.query(`
+    CREATE TABLE IF NOT EXISTS payment_settings (
+      id INTEGER PRIMARY KEY DEFAULT 1,
+      bank_name VARCHAR(255) DEFAULT '',
+      account_name VARCHAR(255) DEFAULT '',
+      account_number VARCHAR(255) DEFAULT '',
+      gcash_number VARCHAR(255) DEFAULT '',
+      maya_number VARCHAR(255) DEFAULT '',
+      qr_image_url TEXT DEFAULT '',
+      notes TEXT DEFAULT '',
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    );
+  `);
+
+  await client.query(`
+    INSERT INTO payment_settings (id, bank_name, account_name, account_number, gcash_number, maya_number, qr_image_url, notes)
+    VALUES (1, '', '', '', '', '', '', '')
+    ON CONFLICT (id) DO NOTHING
+  `);
+
+  await client.query(`
     ALTER TABLE orders
     ADD COLUMN IF NOT EXISTS payment_reference_number VARCHAR(100),
     ADD COLUMN IF NOT EXISTS proof_submitted_at TIMESTAMPTZ,

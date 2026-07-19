@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 import { motion, AnimatePresence } from 'motion/react'
-import { User, CreditCard, MapPin, Lock, Package, Calendar, ChevronRight, Upload, Save, Wallet, ShoppingBag, ShoppingCart, Trash2, Minus, Plus, MessageSquare, Send, Guitar, Clock, Truck, CheckCircle, XCircle, Briefcase, Activity, Star, Loader2, Edit, AlertCircle, X } from 'lucide-react'
+import { User, CreditCard, MapPin, Lock, Package, Calendar, ChevronRight, Upload, Save, Wallet, ShoppingBag, ShoppingCart, Trash2, Minus, Plus, MessageSquare, Send, Guitar, Clock, Truck, CheckCircle, XCircle, Briefcase, Activity, Star, Loader2, Edit, AlertCircle, X, Banknote, Smartphone, Landmark, CreditCard as CreditCardIcon } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useCart } from '../context/CartContext.jsx'
 import { BASE_PRICE, BODY_OPTIONS, BODY_WOOD_OPTIONS, BODY_FINISH_OPTIONS, NECK_OPTIONS, FRETBOARD_OPTIONS, HEADSTOCK_OPTIONS, HEADSTOCK_WOOD_OPTIONS, INLAY_OPTIONS, BRIDGE_OPTIONS, PICKGUARD_OPTIONS_BY_BODY, KNOB_OPTIONS_BY_BODY, HARDWARE_OPTIONS, PICKUP_OPTIONS } from '../lib/guitarBuilderData.js'
@@ -1878,6 +1878,108 @@ export function DashboardPage() {
     </div>
     )
   }
+
+  const PAYMENT_METHODS = [
+    {
+      id: 'bank',
+      name: 'Bank Transfer',
+      icon: Landmark,
+      description: 'Direct bank transfer via BDO Unibank',
+      instructions: [
+        'Go to your bank\'s online banking or mobile app.',
+        'Select "Bank Transfer" as the payment method.',
+        'Enter CosmosCraft\'s BDO account details:',
+        '  • Bank: BDO Unibank',
+        '  • Account Name: CosmosCraft Guitar Shop',
+        '  • Account Number: 1234 5678 9012',
+        'Transfer the exact amount of your order total.',
+        'Upload your proof of payment (screenshot or photo of the transaction receipt) in the Payment Modal.',
+      ],
+    },
+    {
+      id: 'gcash',
+      name: 'GCash',
+      icon: Smartphone,
+      description: 'Mobile payment using GCash app',
+      instructions: [
+        'Open your GCash app.',
+        'Go to "Pay" or "Send Money".',
+        'Scan the CosmosCraft GCash QR code shown during checkout.',
+        'Enter the exact amount of your order total.',
+        'Confirm the payment via your GCash PIN or biometrics.',
+        'Upload your proof of payment (screenshot of the confirmation) in the Payment Modal.',
+      ],
+    },
+    {
+      id: 'maya',
+      name: 'Maya',
+      icon: Banknote,
+      description: 'Pay using Maya (formerly PayMaya)',
+      instructions: [
+        'Open your Maya app.',
+        'Go to "Send Money" or "Pay".',
+        'Enter the CosmosCraft Maya account details shown during checkout.',
+        'Enter the exact amount of your order total.',
+        'Confirm the payment.',
+        'Upload your proof of payment screenshot in the Payment Modal.',
+      ],
+    },
+    {
+      id: 'card',
+      name: 'Credit/Debit Card',
+      icon: CreditCardIcon,
+      description: 'Visa, Mastercard, or other major cards',
+      instructions: [
+        'Select "Card Payment" during checkout.',
+        'Enter your card number, expiry date, and CVV.',
+        'Your payment will be processed securely via our payment gateway.',
+        'You will receive a confirmation email once the payment is approved.',
+      ],
+    },
+  ]
+
+  const renderPaymentsContent = () => (
+    <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-5 sm:p-8">
+      <h2 className="text-2xl font-bold text-white mb-1">Payment Methods</h2>
+      <p className="text-sm text-[var(--text-muted)] mb-8">
+        View available payment options and instructions
+      </p>
+      <div className="grid gap-6">
+        {PAYMENT_METHODS.map((method) => {
+          const Icon = method.icon
+          return (
+            <div
+              key={method.id}
+              className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl p-5 hover:border-[var(--gold-primary)]/40 transition-colors"
+            >
+              <div className="flex items-start gap-4 mb-4">
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[var(--gold-primary)]/20 to-[var(--gold-secondary)]/20 border border-[var(--gold-primary)]/30 flex items-center justify-center flex-shrink-0">
+                  <Icon className="w-6 h-6 text-[var(--gold-primary)]" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-lg font-bold text-white">{method.name}</h3>
+                  <p className="text-sm text-[var(--text-muted)] mt-1">{method.description}</p>
+                </div>
+              </div>
+              <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] px-4 py-3">
+                <p className="text-xs font-semibold text-[var(--gold-primary)] uppercase tracking-wider mb-2">
+                  Instructions
+                </p>
+                <ol className="space-y-1.5">
+                  {method.instructions.map((instruction, idx) => (
+                    <li key={idx} className="text-sm text-[var(--text-muted)] flex items-start gap-2">
+                      <span className="mt-[5px] h-1.5 w-1.5 rounded-full bg-[var(--gold-primary)] shrink-0" />
+                      <span>{instruction}</span>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
 
   const currentMenu = menuItems.find(item => item.id === activeSection)
 

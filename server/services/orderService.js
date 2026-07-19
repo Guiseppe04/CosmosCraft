@@ -431,9 +431,6 @@ exports.createOrder = async (orderData) => {
       throw createValidationError('Address must include a valid 2-letter country code')
     }
 
-    if (paymentMethod === 'cash' && hasCustomBuildItems(items)) {
-      throw createValidationError('COD is only available for regular product orders. Customized guitars require down payment.')
-    }
 
     // Calculate totals
     const subtotal = items.reduce((sum, item) => sum + (item.price * item.quantity), 0)

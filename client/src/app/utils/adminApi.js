@@ -203,6 +203,10 @@ export const adminApi = {
   deleteSubtask: (subtaskId) => request(`/api/projects/subtasks/${subtaskId}`, { method: 'DELETE' }),
   updateSubtask: (subtaskId, body) => request(`/api/projects/subtasks/${subtaskId}`, { method: 'PATCH', body }),
 
+  // Payment Settings
+  getPaymentSettings: () => request('/api/payment-settings'),
+  updatePaymentSettings: (body) => request('/api/payment-settings', { method: 'PUT', body }),
+
   // User Addresses
   updateAddress: (addressId, body) => request(`/api/users/me/addresses/${addressId}`, { method: 'PUT', body }),
   addAddress: (body) => request('/api/users/me/addresses', { method: 'POST', body }),
