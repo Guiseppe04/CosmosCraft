@@ -56,29 +56,6 @@ const STEPS = [
   { id: 5, label: 'Confirmation' },
 ]
 
-const SERVICE_CATEGORY_META = {
-  setup: {
-    name: 'Setup & Intonation',
-    icon: Settings,
-    order: 1,
-  },
-  refinishing: {
-    name: 'Refinishing',
-    icon: Paintbrush,
-    order: 2,
-  },
-  repair: {
-    name: 'Repair & Restoration',
-    icon: Wrench,
-    order: 3,
-  },
-  electronics: {
-    name: 'Electronics Upgrade',
-    icon: Sparkles,
-    order: 4,
-  },
-}
-
 // --- HOLIDAYS ---
 const HOLIDAYS = [
   // Format: 'MM-DD' (month-day)
@@ -266,7 +243,8 @@ export function AppointmentPage() {
   const [availableServices, setAvailableServices] = useState([])
   const [servicesError, setServicesError] = useState('')
   const [servicesLoading, setServicesLoading] = useState(true)
-  const [selectedServicesByCategory, setSelectedServicesByCategory] = useState({})
+  const [serviceSearch, setServiceSearch] = useState('')
+  const [selectedServiceId, setSelectedServiceId] = useState('')
   const [guitarDetails, setGuitarDetails] = useState({ brand: '', model: '', type: 'electric', notes: '' })
   const [serviceReferenceFile, setServiceReferenceFile] = useState(null)
   const [serviceReferencePreviewUrl, setServiceReferencePreviewUrl] = useState('')
@@ -314,6 +292,10 @@ export function AppointmentPage() {
     () => savedBuilds.filter((build) => String(build.id) === String(selectedSavedBuildId)),
     [selectedSavedBuildId, savedBuilds]
   )
+  const selectedService = useMemo(
+    () => availableServices.find((item) => String(item.service_id) === String(selectedServiceId)) || null,
+    [availableServices, selectedServiceId]
+  )
   const selectedGuitarEntries = useMemo(() => {
     if (guitarSelectionMode === 'saved') {
       return selectedSavedBuilds.map((build) => ({
@@ -337,10 +319,15 @@ export function AppointmentPage() {
     }]
   }, [guitarDetails, guitarSelectionMode, hasManualGuitarDetails, selectedSavedBuilds])
   const hasSelectedGuitar = selectedGuitarEntries.length > 0
-  const selectedServices = useMemo(
-    () => Object.values(selectedServicesByCategory).filter(Boolean),
-    [selectedServicesByCategory]
-  )
+  const filteredServices = useMemo(() => {
+    const searchTerm = String(serviceSearch || '').trim().toLowerCase()
+    return availableServices.filter((service) => {
+      if (!searchTerm) return true
+      return [service.name, service.description].some((field) =>
+        String(field || '').toLowerCase().includes(searchTerm)
+      )
+    })
+  }, [availableServices, serviceSearch])
 
   useEffect(() => {
     let isMounted = true
@@ -425,7 +412,7 @@ export function AppointmentPage() {
         return
       }
 
-      const fallbackServiceId = selectedServices[0] || availableServices[0]?.service_id
+      const fallbackServiceId = selectedServiceId || availableServices[0]?.service_id
       if (!fallbackServiceId) {
         setAvailableTimeSet(new Set(timeSlots))
         setSlotAvailabilityStatus('open')
@@ -478,65 +465,29 @@ export function AppointmentPage() {
 
     loadAvailableSlots()
     return () => { isMounted = false }
-  }, [availableServices, selectedDateId, selectedServices, selectedTime, timeSlots, unavailableDateSet])
+  }, [availableServices, selectedDateId, selectedServiceId, selectedTime, timeSlots, unavailableDateSet])
 
   // Derived calculations
   const { maxLeadTime, totalPrice, selectedDetailedServices } = useMemo(() => {
-    let lead = 0
-    let price = 0
-    let details = []
+    if (!selectedService) {
+      return { maxLeadTime: 0, totalPrice: 0, selectedDetailedServices: [] }
+    }
 
-    selectedServices.forEach(selectedId => {
-      const service = availableServices.find((item) => String(item.service_id) === String(selectedId))
-      if (service) {
-        lead = Math.max(lead, inferLeadTimeDays(service))
-        price += Number(service.price || 0)
-        details.push({
-          id: String(service.service_id),
-          name: service.name,
-          price: Number(service.price || 0),
-          desc: service.description || '',
-          duration_minutes: Number(service.duration_minutes || 0),
-          icon: inferServiceIcon(service),
-        })
-      }
-    })
-    return { maxLeadTime: lead, totalPrice: price, selectedDetailedServices: details }
-  }, [availableServices, selectedServices])
-
-  const groupedServices = useMemo(() => {
-    const groups = new Map()
-
-    availableServices.forEach((service) => {
-      const categoryId = String(service.category_id || 'other').trim().toLowerCase() || 'other'
-      const meta = SERVICE_CATEGORY_META[categoryId] || {
-        name: categoryId
-          .split(/[_-]+/)
-          .filter(Boolean)
-          .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
-          .join(' ') || 'Other Services',
-        icon: inferServiceIcon(service),
-        order: 99,
-      }
-
-      if (!groups.has(categoryId)) {
-        groups.set(categoryId, {
-          categoryId,
-          name: meta.name,
-          icon: meta.icon,
-          order: meta.order,
-          services: [],
-        })
-      }
-
-      groups.get(categoryId).services.push(service)
-    })
-
-    return Array.from(groups.values()).sort((left, right) => {
-      if (left.order !== right.order) return left.order - right.order
-      return left.name.localeCompare(right.name)
-    })
-  }, [availableServices])
+    return {
+      maxLeadTime: inferLeadTimeDays(selectedService),
+      totalPrice: Number(selectedService.price || 0),
+      selectedDetailedServices: [
+        {
+          id: String(selectedService.service_id),
+          name: selectedService.name,
+          price: Number(selectedService.price || 0),
+          desc: selectedService.description || '',
+          duration_minutes: Number(selectedService.duration_minutes || 0),
+          icon: inferServiceIcon(selectedService),
+        },
+      ],
+    }
+  }, [selectedService])
 
   const monthMatrix = useMemo(
     () => getMonthMatrix(currentYear, currentMonth, maxLeadTime, unavailableDateSet),
@@ -552,7 +503,7 @@ export function AppointmentPage() {
   // Validation
   const canProceed = () => {
     if (currentStep === 1) return selectedDateId && selectedTime
-    if (currentStep === 2) return selectedServices.length > 0
+    if (currentStep === 2) return Boolean(selectedServiceId)
     if (currentStep === 3) return Boolean(selectedAppointmentType)
     if (currentStep === 4) {
       if (selectedAppointmentType === 'service_home') {
@@ -567,8 +518,8 @@ export function AppointmentPage() {
     if (currentStep === 1) {
       if (!selectedDateId || !selectedTime) return 'Select both appointment date and time.'
     }
-    if (currentStep === 2 && selectedServices.length === 0) {
-      return 'Select at least one service to continue.'
+    if (currentStep === 2 && !selectedServiceId) {
+      return 'Select a service to continue.'
     }
     if (currentStep === 3) {
       if (!selectedAppointmentType) return 'Please choose Home Service: Yes or No.'
@@ -581,26 +532,21 @@ export function AppointmentPage() {
   }
 
   // Handlers
-  const handleToggleService = (categoryId, serviceId) => {
-    const normalizedCategoryId = String(categoryId)
+  const handleToggleService = (serviceId) => {
     const normalizedServiceId = String(serviceId)
-
-    setSelectedServicesByCategory((prev) => ({
-      ...prev,
-      [normalizedCategoryId]: prev[normalizedCategoryId] === normalizedServiceId ? null : normalizedServiceId,
-    }))
+    setSelectedServiceId((prev) => (prev === normalizedServiceId ? '' : normalizedServiceId))
   }
 
-  const renderServiceOption = (categoryId, service) => {
+  const renderServiceOption = (service) => {
     const serviceId = String(service.service_id)
-    const isSelected = selectedServicesByCategory[categoryId] === serviceId
+    const isSelected = String(selectedServiceId) === serviceId
     const Icon = inferServiceIcon(service)
 
     return (
       <button
         key={serviceId}
         type="button"
-        onClick={() => handleToggleService(categoryId, serviceId)}
+        onClick={() => handleToggleService(serviceId)}
         className={`text-left rounded-xl border-2 p-4 transition-all ${
           isSelected
             ? 'border-[#d4af37] bg-[#d4af37]/10'
@@ -657,29 +603,26 @@ export function AppointmentPage() {
 
     return (
       <div className="space-y-6">
-        {groupedServices.map((category) => {
-          const CategoryIcon = category.icon
+        <div className="space-y-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <label className="block text-sm font-medium text-white">Search Services</label>
+              <input
+                value={serviceSearch}
+                onChange={(e) => setServiceSearch(e.target.value)}
+                placeholder="Search by service name or description"
+                className="w-full px-4 py-3 bg-[var(--surface-dark)] text-[var(--text-light)] border border-[var(--border)] rounded-xl text-sm focus:outline-none focus:border-[#d4af37]"
+              />
+            </div>
+            <div className="rounded-full bg-[var(--bg-primary)] px-4 py-3 text-sm font-semibold text-[var(--text-muted)]">
+              {filteredServices.length} service{filteredServices.length === 1 ? '' : 's'} found
+            </div>
+          </div>
 
-          return (
-            <section key={category.categoryId} className="space-y-3">
-              <div className="flex items-center gap-3">
-                <div className="rounded-xl bg-[#d4af37]/15 p-2 text-[#d4af37]">
-                  <CategoryIcon className="h-4 w-4" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-semibold text-[var(--text-light)]">{category.name}</h3>
-                  <p className="text-xs text-[var(--text-muted)]">
-                    {category.services.length} service{category.services.length > 1 ? 's' : ''} available
-                  </p>
-                </div>
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-2">
-                {category.services.map((service) => renderServiceOption(category.categoryId, service))}
-              </div>
-            </section>
-          )
-        })}
+          <div className="grid gap-3 sm:grid-cols-2">
+            {filteredServices.map((service) => renderServiceOption(service))}
+          </div>
+        </div>
       </div>
     )
   }
@@ -772,7 +715,7 @@ export function AppointmentPage() {
         credentials: 'include',
         body: JSON.stringify({
           appointment_type: selectedAppointmentType,
-          services: selectedServices,
+          service_id: selectedServiceId,
           location_id: selectedBranchId,
           address_id: selectedAppointmentType === 'service_home' ? homeServiceAddressId : undefined,
           guitar_details: hasSelectedGuitar
@@ -874,38 +817,6 @@ export function AppointmentPage() {
             
             <div className="space-y-6">
               {renderServiceSelection()}
-              {false && availableServices.map((service) => (
-                <div key={category.categoryId} className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    <category.icon className="w-5 h-5 text-[#d4af37]" />
-                    <h3 className="font-semibold text-[var(--text-light)]">{category.name}</h3>
-                  </div>
-                  <div className="grid sm:grid-cols-2 gap-3 pl-7">
-                    {category.options.map(option => {
-                      const isSelected = selectedServicesByCategory[category.categoryId] === option.id
-                      return (
-                        <button
-                          key={option.id}
-                          onClick={() => handleToggleService(category.categoryId, option.id)}
-                          className={`text-left p-4 rounded-xl border-2 transition-all ${
-                            isSelected 
-                              ? 'border-[#d4af37] bg-[#d4af37]/10' 
-                              : 'border-[var(--border)] bg-theme-surface-deep hover:border-[#d4af37]/30 hover:bg-[var(--surface-elevated)]'
-                          }`}
-                        >
-                          <div className="flex justify-between items-start mb-1">
-                            <span className={`font-semibold text-sm ${isSelected ? 'text-[#d4af37]' : 'text-[var(--text-light)]'}`}>
-                              {option.name}
-                            </span>
-                            <span className="text-sm font-bold text-[var(--text-muted)]">₱{option.price}</span>
-                          </div>
-                          <p className="text-xs text-[var(--text-muted)] leading-relaxed">{option.desc}</p>
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
-              ))}
             </div>
 
           </motion.div>
