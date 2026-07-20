@@ -127,7 +127,7 @@ const appointmentValidation = {
     notes: Joi.string()
       .max(500)
       .optional()
-      .allow('')
+      .allow('', null)
       .trim()
       .messages({
         'string.max': 'Notes cannot exceed 500 characters',

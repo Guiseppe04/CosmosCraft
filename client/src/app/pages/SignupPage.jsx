@@ -1,20 +1,62 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router'
 import { motion } from 'motion/react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { API } from '../utils/apiConfig'
 import { ArrowRight, AlertCircle, CheckCircle2 } from 'lucide-react'
-import { Country } from 'country-state-city'
-import {
-  getAllRegions,
-  getProvincesByRegion,
-  getMunicipalitiesByProvince,
-  getBarangaysByMunicipality,
-} from '@aivangogh/ph-address'
+import { getAllRegions, getProvincesByRegion, getMunicipalitiesByProvince, getBarangaysByMunicipality } from '@aivangogh/ph-address'
 
-const ALL_COUNTRIES = Country.getAllCountries()
-const PHILIPPINES = ALL_COUNTRIES.find(c => c.isoCode === 'PH')
-const COUNTRIES = PHILIPPINES ? [PHILIPPINES] : ALL_COUNTRIES
+// ─── Philippine Phone Input Helpers ──────────────────────────────────────────
+
+/**
+ * Strip all non-digit characters from a string.
+ */
+function stripNonDigits(value) {
+  return String(value || '').replace(/\D/g, '')
+}
+
+/**
+ * Format a raw digit string into a user-friendly PH mobile display.
+ * Expects digits without country prefix: e.g. "9171234567" → "917 123 4567"
+ */
+function formatPhMobileDisplay(digits) {
+  if (!digits) return ''
+  if (digits.length <= 3) return digits
+  if (digits.length <= 6) return `${digits.slice(0, 3)} ${digits.slice(3)}`
+  if (digits.length <= 10) return `${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6)}`
+  return `${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6, 10)}`
+}
+
+/**
+ * Get the raw subscriber number (after +63) from any phone input.
+ * Returns digits only, e.g. "9171234567"
+ */
+function extractPhSubscriberNumber(value) {
+  const digits = stripNonDigits(value)
+  if (!digits) return ''
+  if (digits.startsWith('63')) return digits.slice(2)
+  if (digits.startsWith('0')) return digits.slice(1)
+  return digits
+}
+
+/**
+ * Convert subscriber digits to E.164 format (+639XXXXXXXXX).
+ */
+function toE164(subscriberDigits) {
+  if (!subscriberDigits) return ''
+  return `+63${subscriberDigits}`
+}
+
+/**
+ * Validate Philippine mobile number digits.
+ * Must be exactly 10 digits starting with a valid prefix (9XXXXXXXXX).
+ */
+function isValidPhMobile(subscriberDigits) {
+  if (!subscriberDigits || subscriberDigits.length !== 10) return false
+  return /^9\d{9}$/.test(subscriberDigits)
+}
+
+// ─── Component ───────────────────────────────────────────────────────────────
 
 export function SignupPage() {
   const navigate = useNavigate()
@@ -25,6 +67,7 @@ export function SignupPage() {
     lastName: '',
     email: '',
     phone: '',
+    phoneDisplay: '',
     password: '',
     confirmPassword: '',
     address: {
@@ -33,7 +76,7 @@ export function SignupPage() {
       city: '',
       stateProvince: '',
       postalZipCode: '',
-      country: '',
+      country: 'PH',
     },
     terms: false,
   })
@@ -104,15 +147,6 @@ export function SignupPage() {
       address: { ...prev.address, [field]: value }
     }))
     setErrors(prev => ({ ...prev, [`address.${field}`]: '' }))
-  }
-
-  const formatPhilippinesPhone = (value) => {
-    const digitsOnly = String(value || '').replace(/\D/g, '')
-    if (!digitsOnly) return ''
-    if (digitsOnly.startsWith('0')) return `+63${digitsOnly.slice(1)}`
-    if (digitsOnly.startsWith('63')) return `+63${digitsOnly.slice(2)}`
-    if (digitsOnly.startsWith('9') && digitsOnly.length <= 10) return `+63${digitsOnly}`
-    return value.trim().startsWith('+63') ? `+${digitsOnly}` : value
   }
 
   // Reset PH cascading fields when country changes away from PH
@@ -424,16 +458,43 @@ export function SignupPage() {
                 </motion.div>
 
                 <motion.div animate={errors.phone ? shakeAnimation : {}}>
-                  <label className="block text-xs uppercase tracking-wider font-semibold text-[var(--text-muted)] mb-2">Phone Number (+63) *</label>
-                  <input
-                    type="tel"
-                    value={form.phone}
-                    ref={registerFieldRef('phone')}
-                    onChange={e => updateField('phone', e.target.value)}
-                    onBlur={e => updateField('phone', formatPhilippinesPhone(e.target.value))}
-                    placeholder="+63 912 345 6789"
-                    className={getInputStyles(errors.phone)}
-                  />
+                  <label className="block text-xs uppercase tracking-wider font-semibold text-[var(--text-muted)] mb-2">Phone Number *</label>
+                  <div className={`flex rounded-xl border bg-white/5 backdrop-blur-sm transition-all duration-300 overflow-hidden focus-within:ring-2 ${
+                    errors.phone
+                      ? 'border-red-500/50 bg-red-500/10 focus:ring-red-500/50'
+                      : 'border-white/10 focus:ring-[var(--gold-primary)] hover:border-white/30'
+                  }`}>
+                    {/* Country flag +63 prefix */}
+                    <div className="flex items-center gap-1.5 px-3 py-3 bg-white/5 border-r border-white/10 shrink-0">
+                      <img src="/ph-flag.png" alt="PH flag" className="w-5 h-5 object-cover rounded-sm" />
+                      <span className="text-sm font-semibold text-white/80">+63</span>
+                    </div>
+                    {/* Phone number input */}
+                    <input
+                      type="tel"
+                      value={form.phoneDisplay}
+                      ref={registerFieldRef('phone')}
+                      onChange={e => {
+                        const raw = e.target.value
+                        const subscriber = extractPhSubscriberNumber(raw)
+                        const truncated = subscriber.slice(0, 10)
+                        setForm(prev => ({
+                          ...prev,
+                          phoneDisplay: formatPhMobileDisplay(truncated),
+                          phone: truncated ? toE164(truncated) : '',
+                        }))
+                        setErrors(prev => ({ ...prev, phone: '' }))
+                      }}
+                      onBlur={() => {
+                        const subscriber = extractPhSubscriberNumber(form.phone)
+                        if (subscriber && !isValidPhMobile(subscriber)) {
+                          setErrors(prev => ({ ...prev, phone: 'Enter a valid Philippine mobile number (e.g. 0917 123 4567).' }))
+                        }
+                      }}
+                      placeholder="917 123 4567"
+                      className="w-full px-3 py-3 bg-transparent text-white placeholder-white/30 focus:outline-none text-sm"
+                    />
+                  </div>
                   {errors.phone && <span className="text-xs text-red-400 mt-1.5 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{errors.phone}</span>}
                 </motion.div>
               </div>
@@ -512,17 +573,12 @@ export function SignupPage() {
               {/* Country selector - always shown first */}
               <motion.div animate={errors['address.country'] ? shakeAnimation : {}}>
                 <label className="block text-xs uppercase tracking-wider font-semibold text-[var(--text-muted)] mb-2">Country *</label>
-                <select
-                  value={form.address.country}
-                  ref={registerFieldRef('address.country')}
-                  onChange={e => updateAddressField('country', e.target.value)}
-                  className={`${getInputStyles(errors['address.country'])} appearance-none cursor-pointer`}
-                >
-                  <option value="" disabled className="text-gray-900">Select Country</option>
-                  {COUNTRIES.map(c => (
-                    <option key={c.isoCode} value={c.isoCode} className="text-gray-900">{c.name}</option>
-                  ))}
-                </select>
+                <input
+                  type="text"
+                  value="Philippines"
+                  disabled
+                  className={`${getInputStyles(errors['address.country'])} cursor-not-allowed opacity-70`}
+                />
                 {errors['address.country'] && <span className="text-xs text-red-400 mt-1.5 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{errors['address.country']}</span>}
               </motion.div>
 

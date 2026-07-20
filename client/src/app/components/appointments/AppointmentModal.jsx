@@ -428,7 +428,53 @@ export default function AppointmentModal({
           {appointment.notes && (
             <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-5">
               <h3 className="text-lg font-semibold text-white mb-4">Notes</h3>
-              <p className="text-[var(--text-muted)] whitespace-pre-wrap">{appointment.notes}</p>
+              <div className="space-y-3">
+                {(() => {
+                  const lines = appointment.notes.split('\n')
+                  const textParts = []
+                  const imageParts = []
+                  
+                  lines.forEach(line => {
+                    const imageMatch = line.match(/(https?:\/\/[^\s]+(?:\.jpg|\.jpeg|\.png|\.gif|\.webp|\.bmp)[^\s]*)/i)
+                    if (imageMatch) {
+                      const before = line.replace(imageMatch[0], '').trim()
+                      if (before) textParts.push(before)
+                      imageParts.push(imageMatch[1])
+                    } else {
+                      textParts.push(line)
+                    }
+                  })
+                  
+                  return (
+                    <>
+                      {textParts.filter(Boolean).length > 0 && (
+                        <p className="text-[var(--text-muted)] whitespace-pre-wrap">{textParts.filter(Boolean).join('\n')}</p>
+                      )}
+                      {imageParts.map((url, i) => (
+                        <div key={i} className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] p-2">
+                          <img
+                            src={url}
+                            alt={`Reference image ${i + 1}`}
+                            className="h-48 w-full rounded-lg object-cover"
+                            onError={(e) => { e.target.style.display = 'none' }}
+                          />
+                          <div className="mt-2 flex justify-end">
+                            <a
+                              href={url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-[var(--gold-primary)] hover:underline flex items-center gap-1"
+                            >
+                              <ExternalLink className="w-3 h-3" />
+                              Open full size
+                            </a>
+                          </div>
+                        </div>
+                      ))}
+                    </>
+                  )
+                })()}
+              </div>
             </div>
           )}
 

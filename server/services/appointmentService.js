@@ -151,9 +151,17 @@ exports.createAppointment = async ({ appointment_type = 'service_in_shop', servi
   try {
     await client.query('BEGIN');
 
+    let customerName = '';
+    let customerEmail = '';
+    let customerPhone = '';
+
     if (user_id) {
-      const userResult = await client.query('SELECT user_id FROM users WHERE user_id = $1', [user_id]);
+      const userResult = await client.query('SELECT first_name, last_name, email, phone FROM users WHERE user_id = $1', [user_id]);
       if (userResult.rows.length === 0) throw new AppError('User not found', 400);
+      const user = userResult.rows[0];
+      customerName = `${user.first_name || ''} ${user.last_name || ''}`.trim();
+      customerEmail = user.email || '';
+      customerPhone = user.phone || '';
     }
 
     await assertNoScheduleConflict(client, scheduled_at);
@@ -161,8 +169,8 @@ exports.createAppointment = async ({ appointment_type = 'service_in_shop', servi
     const normalizedGuitarDetails = normalizeGuitarDetails(guitar_details || {});
 
     const appointmentResult = await client.query(
-      `INSERT INTO appointments (user_id, appointment_type, order_id, services, location_id, guitar_details, scheduled_at, status, notes, confirmation_notes, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', $8, $9, now(), now())
+      `INSERT INTO appointments (user_id, appointment_type, order_id, services, location_id, guitar_details, scheduled_at, status, notes, confirmation_notes, customer_name, customer_email, customer_phone, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', $8, $9, $10, $11, $12, now(), now())
        RETURNING *`,
       [
         user_id || null,
@@ -174,6 +182,9 @@ exports.createAppointment = async ({ appointment_type = 'service_in_shop', servi
         scheduled_at,
         notes || null,
         confirmation_notes || null,
+        customerName,
+        customerEmail,
+        customerPhone,
       ]
     );
 
