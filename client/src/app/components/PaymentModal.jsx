@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 
-const GCASH_QR_CODE = '/gcashqrcode.png'
-
-const BANK_DETAILS = {
+const API_URL = import.meta.env.VITE_API_URL
+const FALLBACK_QR = '/gcashqrcode.png'
+const FALLBACK_BANK = {
   bankName: 'BDO Unibank',
   accountName: 'CosmosCraft Guitar Shop',
   accountNumber: '1234 5678 9012'
@@ -85,23 +85,39 @@ export function PaymentModal({
   isProcessing,
   requiresCustomTerms = false,
   downPaymentRate = 0.5,
-  allowCashOnDelivery = false,
 }) {
   const [paymentMethod, setPaymentMethod] = useState('bank')
   const [paymentPlan, setPaymentPlan] = useState('down_payment')
   const [receipt, setReceipt] = useState(null)
   const [error, setError] = useState('')
   const [showGcashQr, setShowGcashQr] = useState(true)
+  const [paymentSettings, setPaymentSettings] = useState(null)
 
   useEffect(() => {
     if (!isOpen) return
 
-    setPaymentMethod(allowCashOnDelivery && !requiresCustomTerms ? 'cash' : 'bank')
+    setPaymentMethod('bank')
     setPaymentPlan(requiresCustomTerms ? 'down_payment' : 'full')
     setReceipt(null)
     setError('')
     setShowGcashQr(true)
-  }, [isOpen, requiresCustomTerms, allowCashOnDelivery])
+
+    // Fetch latest payment settings from API
+    const fetchSettings = async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/payment-settings`, {
+          credentials: 'include',
+        })
+        const json = await res.json()
+        if (json?.success && json?.data) {
+          setPaymentSettings(json.data)
+        }
+      } catch {
+        // Fallback to defaults
+      }
+    }
+    fetchSettings()
+  }, [isOpen, requiresCustomTerms])
 
   const downPaymentAmount = Number.isFinite(Number(total)) ? Number(total) : 0
   const fullPaymentAmount = Number.isFinite(Number(fullTotal)) ? Number(fullTotal) : downPaymentAmount
@@ -117,11 +133,7 @@ export function PaymentModal({
   }
 
   const canSubmit = () => {
-    const hasValidReceipt = paymentMethod === 'gcash' || paymentMethod === 'bank'
-      ? Boolean(receipt)
-      : true
-
-    return hasValidReceipt
+    return Boolean(receipt)
   }
 
   const handleSubmit = () => {
@@ -266,38 +278,26 @@ export function PaymentModal({
 
               <div className="space-y-4">
                 <p className="text-sm font-bold text-slate-900 sm:text-base">Select Payment Method</p>
-                <div className="space-y-2">
-                  <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
-                    COD is only available for regular product orders.
+                {requiresCustomTerms && (
+                  <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    Customized guitars require down payment.
                   </p>
-                  {requiresCustomTerms && (
-                    <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                      Customized guitars require down payment.
-                    </p>
-                  )}
-                </div>
+                )}
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
                   {[
-                    { value: 'gcash', title: 'GCash', subtitle: 'Upload receipt', disabled: false },
-                    { value: 'bank', title: 'Bank Transfer', subtitle: 'BDO account', disabled: false },
-                    { value: 'cash', title: 'Cash on Delivery', subtitle: 'Pay upon delivery', disabled: !allowCashOnDelivery || requiresCustomTerms }
+                    { value: 'gcash', title: 'GCash', subtitle: 'Upload receipt' },
+                    { value: 'bank', title: 'Bank Transfer', subtitle: 'BDO account' },
                   ].map((option) => (
                     <motion.button
                       key={option.value}
                       whileHover={{ scale: 1.02 }}
                       whileTap={{ scale: 0.98 }}
                       type="button"
-                      onClick={() => {
-                        if (option.disabled) return
-                        handleMethodChange(option.value)
-                      }}
-                      disabled={option.disabled}
+                      onClick={() => handleMethodChange(option.value)}
                       className={`relative rounded-2xl border-2 p-5 text-left transition-all duration-300 ${
                         paymentMethod === option.value
                           ? 'border-yellow-400 bg-yellow-50 shadow-lg shadow-yellow-200/50'
-                          : option.disabled
-                            ? 'border-slate-200 bg-slate-100 opacity-60 cursor-not-allowed'
-                            : 'border-slate-200 bg-white hover:border-yellow-300 hover:shadow-md'
+                          : 'border-slate-200 bg-white hover:border-yellow-300 hover:shadow-md'
                       }`}
                     >
                       <div className="flex items-start justify-between gap-3">
@@ -336,7 +336,7 @@ export function PaymentModal({
                   <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-md">
                     {showGcashQr && (
                       <img
-                        src={GCASH_QR_CODE}
+                        src={paymentSettings?.qr_image_url || FALLBACK_QR}
                         alt="GCash QR code"
                         className="mx-auto h-auto w-full max-w-xs object-contain"
                         onError={() => setShowGcashQr(false)}
@@ -370,39 +370,21 @@ export function PaymentModal({
                   <div className="space-y-4 rounded-2xl border border-slate-100 bg-white p-5 shadow-md">
                     <div className="flex items-center justify-between border-b border-slate-200 py-3">
                       <span className="text-sm font-medium text-slate-600">Bank</span>
-                      <span className="font-semibold text-slate-900">{BANK_DETAILS.bankName}</span>
+                      <span className="font-semibold text-slate-900">{paymentSettings?.bank_name || FALLBACK_BANK.bankName}</span>
                     </div>
                     <div className="flex items-center justify-between border-b border-slate-200 py-3">
                       <span className="text-sm font-medium text-slate-600">Account Name</span>
-                      <span className="font-semibold text-slate-900">{BANK_DETAILS.accountName}</span>
+                      <span className="font-semibold text-slate-900">{paymentSettings?.account_name || FALLBACK_BANK.accountName}</span>
                     </div>
                     <div className="flex items-center justify-between py-3">
                       <span className="text-sm font-medium text-slate-600">Account Number</span>
-                      <span className="font-mono font-semibold text-slate-900">{BANK_DETAILS.accountNumber}</span>
+                      <span className="font-mono font-semibold text-slate-900">{paymentSettings?.account_number || FALLBACK_BANK.accountNumber}</span>
                     </div>
                   </div>
                   <p className="text-sm leading-relaxed text-slate-600">
                     Transfer the exact amount of PHP {amountDue.toLocaleString('en-PH', { maximumFractionDigits: 2 })} to this account and upload proof of payment below.
                   </p>
                   <ReceiptUpload label="Upload bank proof" image={receipt} onUpload={setReceipt} onRemove={() => setReceipt(null)} />
-                </motion.div>
-              )}
-
-              {paymentMethod === 'cash' && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  transition={{ duration: 0.2 }}
-                  className="space-y-3 rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-white p-6"
-                >
-                  <p className="font-bold text-slate-900">Cash on Delivery</p>
-                  <p className="text-sm text-slate-700">
-                    Your order will be placed now. Payment is collected upon delivery.
-                  </p>
-                  <p className="text-xs text-slate-500">
-                    No receipt upload is needed for COD orders.
-                  </p>
                 </motion.div>
               )}
             </div>

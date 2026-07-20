@@ -1,0 +1,3884 @@
+/* ============================================================
+   RESPONSIVE STYLES
+   Mobile: 320px – 767px
+   Tablet: 768px – 1279px
+   Desktop: 1280px+ (unchanged)
+   ============================================================ */
+
+/* ============================================================
+   BASE / GLOBAL (applies to both mobile and tablet)
+   ============================================================ */
+@media (max-width: 1279px) {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  img,
+  video,
+  canvas,
+  svg {
+    max-width: 100%;
+    height: auto;
+  }
+  * {
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+  }
+}
+
+/* ============================================================
+   TABLET (768px – 1279px)
+   ============================================================ */
+@media (min-width: 768px) and (max-width: 1279px) {
+  /* ---- Layout / Containers ---- */
+  .max-w-7xl {
+    padding-left: 1.5rem !important;
+    padding-right: 1.5rem !important;
+  }
+
+  /* ---- Grid layouts ---- */
+  [class*="grid md:grid-cols-2"],
+  [class*="grid lg:grid-cols-3"],
+  [class*="grid xl:grid-cols-4"] {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* ---- Dashboard sidebar ---- */
+  [class*="grid xl\\:grid-cols-\\[1fr_1\\.4fr\\]"] {
+    grid-template-columns: 1fr 1.2fr !important;
+  }
+
+  /* ---- Checkout layout ---- */
+  [class*="lg:grid-cols-12"] {
+    grid-template-columns: 1fr 1fr !important;
+  }
+  [class*="lg:col-span-7"] {
+    grid-column: span 1 / span 1 !important;
+  }
+  [class*="lg:col-span-5"] {
+    grid-column: span 1 / span 1 !important;
+  }
+
+  /* ---- Shop grid ---- */
+  [class*="shop-grid"],
+  [class*="product-grid"] {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* ---- Cards ---- */
+  [class*="rounded-2xl"],
+  [class*="rounded-xl"] {
+    padding: 1.25rem !important;
+  }
+
+  /* ---- Modals ---- */
+  [class*="fixed inset-0"] > div {
+    max-width: 90vw !important;
+    margin: 0 auto !important;
+    max-height: 85vh !important;
+    overflow-y: auto !important;
+  }
+
+  /* ---- Tables ---- */
+  table,
+  [class*="table"] {
+    display: block !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* ---- Spacing ---- */
+  .space-y-8 > * {
+    margin-top: 1.5rem !important;
+  }
+  .gap-6 {
+    gap: 1rem !important;
+  }
+  .p-8 {
+    padding: 1.25rem !important;
+  }
+  .p-6 {
+    padding: 1.25rem !important;
+  }
+  .px-8 {
+    padding-left: 1.25rem !important;
+    padding-right: 1.25rem !important;
+  }
+  .py-10 {
+    padding-top: 2.5rem !important;
+    padding-bottom: 2.5rem !important;
+  }
+  .mb-10 {
+    margin-bottom: 1.5rem !important;
+  }
+  .mb-8 {
+    margin-bottom: 1.25rem !important;
+  }
+
+  /* ---- Prevent horizontal scroll ---- */
+  body,
+  #root {
+    overflow-x: hidden !important;
+    width: 100% !important;
+  }
+  [class*="min-h-screen"] {
+    width: 100% !important;
+    overflow-x: hidden !important;
+  }
+
+  /* ---- Forms ---- */
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+    padding: 0.625rem !important;
+  }
+  button,
+  [type="button"],
+  [type="submit"] {
+    min-height: 44px;
+    touch-action: manipulation;
+  }
+
+  /* ---- Typography ---- */
+  h1 {
+    font-size: clamp(1.75rem, 3vw, 2.25rem) !important;
+  }
+  h2 {
+    font-size: clamp(1.5rem, 2.5vw, 1.75rem) !important;
+  }
+  h3 {
+    font-size: clamp(1.25rem, 2vw, 1.5rem) !important;
+  }
+
+  /* ---- Navbar ---- */
+  nav,
+  header {
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+  }
+
+  /* ---- Footer ---- */
+  [class*="footer"] {
+    padding: 2rem 1.5rem !important;
+  }
+
+  /* ---- Features grid ---- */
+  [class*="features-grid"] {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* ---- Stats grid ---- */
+  [class*="stats-grid"] {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* ---- Category grid ---- */
+  [class*="category-grid"] {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* ---- Product cards ---- */
+  [class*="product-card"] {
+    flex-direction: column !important;
+  }
+  [class*="product-card"] img {
+    width: 100% !important;
+    height: auto !important;
+  }
+
+  /* ---- Cart layout ---- */
+  [class*="cart-layout"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ---- My Guitar / Builds ---- */
+  [class*="grid md:grid-cols-2 gap-6"] {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* ---- Profile page ---- */
+  [class*="grid md:grid-cols-2 gap-6"] {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* ---- Guitar Customizer ---- */
+  [class*="customizer-layout"],
+  [class*="builder-layout"] {
+    flex-direction: column !important;
+  }
+  [class*="preview-container"] {
+    width: 100% !important;
+    min-height: 350px !important;
+  }
+  [class*="configuration-panel"] {
+    width: 100% !important;
+  }
+
+  /* ---- Settings ---- */
+  [class*="settings-layout"] {
+    flex-direction: column !important;
+  }
+
+  /* ---- Landing page sections ---- */
+  [class*="landing-section"] {
+    padding: 3rem 1.5rem !important;
+  }
+
+  /* ---- Hero / Banner ---- */
+  [class*="hero"],
+  [class*="banner"] {
+    padding: 3rem 1.5rem !important;
+  }
+
+  /* ---- CTA sections ---- */
+  [class*="cta-section"] {
+    padding: 3rem 1.5rem !important;
+  }
+
+  /* ---- Newsletter ---- */
+  [class*="newsletter"] {
+    flex-direction: column !important;
+    gap: 0.75rem !important;
+  }
+  [class*="newsletter"] input {
+    width: 100% !important;
+  }
+
+  /* ---- Filter bar ---- */
+  [class*="filter-bar"] {
+    flex-wrap: wrap !important;
+    gap: 0.5rem !important;
+  }
+
+  /* ---- Search bar ---- */
+  [class*="search-bar"] {
+    width: 100% !important;
+  }
+
+  /* ---- Pagination ---- */
+  [class*="pagination"] {
+    flex-wrap: wrap !important;
+    justify-content: center !important;
+  }
+
+  /* ---- Tabs ---- */
+  [class*="tabs"] {
+    overflow-x: auto !important;
+    flex-wrap: nowrap !important;
+    -webkit-overflow-scrolling: touch;
+  }
+  [class*="tabs"]::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  /* ---- Breadcrumbs ---- */
+  [class*="breadcrumb"] {
+    flex-wrap: wrap !important;
+    font-size: 0.8rem !important;
+  }
+
+  /* ---- Empty states ---- */
+  [class*="empty-state"] {
+    padding: 2.5rem 1.5rem !important;
+  }
+
+  /* ---- Toast messages ---- */
+  [class*="fixed top-24 left-1/2"] {
+    width: calc(100% - 3rem) !important;
+    max-width: 80vw !important;
+  }
+
+  /* ---- Order summary cards ---- */
+  [class*="flex justify-between items-end"] {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 0.75rem !important;
+  }
+  [class*="text-right items-end"] {
+    text-align: left !important;
+    align-items: flex-start !important;
+    width: 100% !important;
+  }
+
+  /* ---- Purchase order buttons ---- */
+  [class*="mt-4 pt-4 border-t flex justify-end gap-3"] {
+    flex-direction: row !important;
+  }
+
+  /* ---- Build project buttons ---- */
+  [class*="flex gap-2 mt-4 pt-4 border-t"] {
+    flex-direction: row !important;
+  }
+
+  /* ---- Saved build action buttons ---- */
+  [class*="mt-6 space-y-2"] > div {
+    flex-direction: row !important;
+  }
+
+  /* ---- Appointment action required ---- */
+  [class*="sm:col-span-2 mt-4 pt-4"] > div {
+    flex-direction: row !important;
+    text-align: left !important;
+  }
+
+  /* ---- Admin sidebar ---- */
+  [class*="admin-sidebar"] {
+    width: 16rem !important;
+  }
+
+  /* ---- Staff dashboard ---- */
+  [class*="staff-dashboard"] {
+    flex-direction: row !important;
+  }
+
+  /* ---- Feedback page ---- */
+  [class*="feedback-layout"] {
+    flex-direction: row !important;
+  }
+
+  /* ---- Cloudinary assets ---- */
+  [class*="assets-grid"] {
+    grid-template-columns: repeat(3, 1fr) !important;
+  }
+
+  /* ---- POS workspace ---- */
+  [class*="pos-workspace"] {
+    flex-direction: row !important;
+  }
+
+  /* ---- Appointment list ---- */
+  [class*="appointment-list"] {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* ---- Login/Signup pages ---- */
+  [class*="auth-layout"],
+  [class*="login-layout"],
+  [class*="signup-layout"] {
+    flex-direction: row !important;
+    padding: 2rem !important;
+  }
+
+  /* ---- Appointment form ---- */
+  [class*="appointment-form"] {
+    flex-direction: row !important;
+  }
+
+  /* ---- Appointment details modal ---- */
+  [class*="appointment-details"] {
+    flex-direction: row !important;
+  }
+
+  /* ---- Message panel ---- */
+  [class*="message-panel"] {
+    flex-direction: row !important;
+  }
+
+  /* ---- Order management ---- */
+  [class*="order-management"] {
+    overflow-x: auto !important;
+  }
+
+  /* ---- Project progress ---- */
+  [class*="project-progress"] {
+    flex-direction: row !important;
+  }
+
+  /* ---- Body options panel ---- */
+  [class*="body-options"] {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* ---- Electronics options ---- */
+  [class*="electronics-options"] {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* ---- Hardware options ---- */
+  [class*="hardware-options"] {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* ---- Neck options ---- */
+  [class*="neck-options"] {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* ---- Option groups ---- */
+  [class*="option-group"] {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* ---- RGB color picker ---- */
+  [class*="rgb-picker"] {
+    flex-direction: row !important;
+  }
+
+  /* ---- Export options ---- */
+  [class*="export-options"] {
+    flex-direction: row !important;
+  }
+
+  /* ---- Sticker panel ---- */
+  [class*="sticker-panel"] {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* ---- Price panel ---- */
+  [class*="price-panel"] {
+    flex-direction: row !important;
+  }
+
+  /* ---- Builder action bar ---- */
+  [class*="builder-action-bar"] {
+    flex-wrap: wrap !important;
+    gap: 0.5rem !important;
+  }
+
+  /* ---- Builder checkout section ---- */
+  [class*="builder-checkout"] {
+    flex-direction: row !important;
+  }
+
+  /* ---- Builder configuration panel ---- */
+  [class*="builder-config"] {
+    flex-direction: row !important;
+  }
+
+  /* ---- Customization panel ---- */
+  [class*="customization-panel"] {
+    flex-direction: row !important;
+  }
+
+  /* ---- Guitar preview ---- */
+  [class*="guitar-preview"] {
+    width: 100% !important;
+    min-height: 300px !important;
+  }
+
+  /* ---- Asset browser ---- */
+  [class*="asset-browser"] {
+    grid-template-columns: repeat(3, 1fr) !important;
+  }
+
+  /* ---- Summary card ---- */
+  [class*="summary-card"] {
+    flex-direction: row !important;
+  }
+
+  /* ---- Header ---- */
+  [class*="header-content"] {
+    flex-wrap: nowrap !important;
+  }
+
+  /* ---- Brand logos ---- */
+  [class*="brand-logos"] {
+    flex-wrap: wrap !important;
+    justify-content: center !important;
+  }
+
+  /* ---- Testimonial carousel ---- */
+  [class*="testimonial"] {
+    flex-direction: row !important;
+    text-align: left !important;
+  }
+
+  /* ---- Cart drawer ---- */
+  [class*="cart-drawer"] {
+    width: 50% !important;
+    max-width: 24rem !important;
+  }
+
+  /* ---- Unavailable dates manager ---- */
+  [class*="unavailable-dates"] {
+    flex-direction: row !important;
+  }
+
+  /* ---- Appointment calendar ---- */
+  [class*="calendar"] {
+    overflow-x: auto !important;
+  }
+
+  /* ---- OTP verification ---- */
+  [class*="otp-input"] {
+    width: 3rem !important;
+    height: 3rem !important;
+    font-size: 1.5rem !important;
+  }
+
+  /* ---- Social media icons ---- */
+  [class*="social-icons"] {
+    gap: 0.75rem !important;
+  }
+
+  /* ---- Theme toggle ---- */
+  [class*="theme-toggle"] {
+    min-width: 44px !important;
+    min-height: 44px !important;
+  }
+
+  /* ---- Project task tracker ---- */
+  [class*="project-task"] {
+    overflow-x: auto !important;
+  }
+
+  /* ---- Admin topbar ---- */
+  [class*="admin-topbar"] {
+    flex-wrap: wrap !important;
+    gap: 0.5rem !important;
+  }
+
+  /* ---- Section headers ---- */
+  [class*="flex items-center justify-between mb-6"] {
+    flex-direction: row !important;
+    align-items: center !important;
+  }
+
+  /* ---- Dashboard header area ---- */
+  [class*="flex flex-col gap-4 sm:flex-row"] {
+    flex-direction: row !important;
+  }
+
+  /* ---- Profile header ---- */
+  [class*="flex items-center gap-6 mb-10"] {
+    flex-direction: row !important;
+    text-align: left !important;
+  }
+
+  /* ---- Address form buttons ---- */
+  [class*="flex gap-4 mt-6"] {
+    flex-direction: row !important;
+  }
+
+  /* ---- Cancel order buttons ---- */
+  [class*="mt-6 flex gap-3"] {
+    flex-direction: row !important;
+  }
+
+  /* ---- Rating modal buttons ---- */
+  [class*="flex gap-3"] {
+    flex-direction: row !important;
+  }
+
+  /* ---- Delete confirmation buttons ---- */
+  [class*="flex gap-3"] {
+    flex-direction: row !important;
+  }
+
+  /* ---- Build projects header ---- */
+  [class*="flex items-center justify-between mb-6"] > div:last-child {
+    width: auto !important;
+  }
+  [class*="flex items-center justify-between mb-6"] > div:last-child button {
+    width: auto !important;
+  }
+
+  /* ---- Purchase order card ---- */
+  [class*="flex flex-col gap-4 mb-4 border-b"] {
+    flex-direction: row !important;
+  }
+  [class*="flex flex-col gap-2 sm:items-end"] {
+    align-items: flex-end !important;
+  }
+
+  /* ---- Purchase order buttons ---- */
+  [class*="mt-4 pt-4 border-t flex justify-end"] {
+    flex-direction: row !important;
+  }
+  [class*="mt-4 pt-4 border-t flex justify-end"] > button {
+    width: auto !important;
+  }
+
+  /* ---- Appointment header ---- */
+  [class*="flex justify-between items-center mb-6"] {
+    flex-direction: row !important;
+    align-items: center !important;
+  }
+
+  /* ---- Appointment card header ---- */
+  [class*="flex justify-between items-start mb-4 gap-4"] {
+    flex-direction: row !important;
+  }
+
+  /* ---- Appointment reschedule bar ---- */
+  [class*="sm:col-span-2 mt-4 pt-4 border-t border-\\[var\\(--border\\)\\] flex items-center justify-between"] {
+    flex-direction: row !important;
+    text-align: left !important;
+  }
+
+  /* ---- Appointment reschedule bar icon ---- */
+  [class*="flex items-center gap-3"] {
+    flex-direction: row !important;
+  }
+
+  /* ---- Address cards ---- */
+  [class*="flex items-center justify-between mb-2"] {
+    flex-direction: row !important;
+    align-items: center !important;
+  }
+
+  /* ---- Address list ---- */
+  [class*="flex items-center justify-between mb-2"] > div:last-child {
+    width: auto !important;
+  }
+
+  /* ---- Build project card ---- */
+  [class*="flex justify-between items-center"] {
+    flex-wrap: nowrap !important;
+  }
+  [class*="flex justify-between items-center"] > div:first-child {
+    width: auto !important;
+  }
+
+  /* ---- Saved build card ---- */
+  [class*="flex justify-between items-start mb-4 gap-4"] > div:last-child {
+    text-align: right !important;
+  }
+
+  /* ---- View summary total ---- */
+  [class*="flex justify-between items-center border-t"] {
+    flex-direction: row !important;
+    text-align: left !important;
+  }
+
+  /* ---- Order summary cards ---- */
+  [class*="flex justify-between items-end"] {
+    flex-direction: row !important;
+    align-items: flex-end !important;
+  }
+  [class*="text-right items-end"] {
+    text-align: right !important;
+    align-items: flex-end !important;
+  }
+
+  /* ---- Address selection cards ---- */
+  [class*="flex items-start gap-4 p-4"] {
+    flex-direction: row !important;
+  }
+
+  /* ---- Bank details ---- */
+  [class*="flex items-center justify-between border-b"] {
+    flex-direction: row !important;
+    align-items: center !important;
+  }
+
+  /* ---- Checkout item details ---- */
+  [class*="flex items-center justify-between gap-4"] > div:last-child {
+    width: auto !important;
+  }
+
+  /* ---- Cart items ---- */
+  [class*="flex items-center gap-4"] > [class*="w-24 h-24"] {
+    width: 5rem !important;
+    height: 5rem !important;
+  }
+
+  /* ---- Checkout item cards ---- */
+  [class*="flex items-center gap-4"] > [class*="w-20 h-20"] {
+    width: 4rem !important;
+    height: 4rem !important;
+  }
+
+  /* ---- Dashboard cart item ---- */
+  [class*="flex gap-4 p-4 bg-\\[var\\(--bg-primary\\)\\] border border-\\[var\\(--border\\)\\] rounded-xl"] {
+    padding: 1rem !important;
+  }
+
+  /* ---- Dashboard cart item image ---- */
+  [class*="w-24 h-24 rounded-lg overflow-hidden"] {
+    width: 5rem !important;
+    height: 5rem !important;
+  }
+
+  /* ---- Dashboard sidebar ---- */
+  [class*="hidden xl\\:block"] {
+    display: block !important;
+  }
+  [class*="xl\\:hidden"] {
+    display: none !important;
+  }
+
+  /* ---- Dashboard page padding ---- */
+  [class*="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10"] {
+    padding: 1.5rem !important;
+  }
+
+  /* ---- Dashboard card padding ---- */
+  [class*="bg-\\[var\\(--surface-dark\\)\\] border border-\\[var\\(--border\\)\\] rounded-2xl p-5 sm:p-8"] {
+    padding: 1.25rem !important;
+  }
+
+  /* ---- Dashboard card inner padding ---- */
+  [class*="bg-\\[var\\(--bg-primary\\)\\] border border-\\[var\\(--border\\)\\] rounded-xl p-5"] {
+    padding: 1rem !important;
+  }
+
+  /* ---- Dashboard saved builds grid ---- */
+  [class*="grid md:grid-cols-2 gap-6"] {
+    gap: 1rem !important;
+  }
+
+  /* ---- Dashboard appointments list ---- */
+  [class*="max-h-\\[62vh\\] space-y-4 overflow-y-auto pr-2"] {
+    max-height: 55vh !important;
+  }
+
+  /* ---- Dashboard appointment card ---- */
+  [class*="bg-\\[var\\(--bg-primary\\)\\] border border-\\[var\\(--border\\)\\] rounded-xl p-5"] {
+    padding: 1rem !important;
+  }
+
+  /* ---- Dashboard profile section ---- */
+  [class*="flex items-center gap-6 mb-10 pb-8 border-b"] {
+    flex-direction: row !important;
+    text-align: left !important;
+  }
+
+  /* ---- Dashboard profile form ---- */
+  [class*="grid md:grid-cols-2 gap-6"] {
+    gap: 1rem !important;
+  }
+
+  /* ---- Dashboard addresses section ---- */
+  [class*="flex justify-between items-center mb-6"] > button {
+    font-size: 0.8rem !important;
+    padding: 0.5rem 0.75rem !important;
+  }
+
+  /* ---- Dashboard address card ---- */
+  [class*="p-4 rounded-xl border border-\\[var\\(--border\\)\\] bg-\\[var\\(--bg-primary\\)\\]"] {
+    padding: 1rem !important;
+  }
+
+  /* ---- Dashboard address form ---- */
+  [class*="space-y-4 max-w-xl"] {
+    max-width: 100% !important;
+  }
+
+  /* ---- Dashboard password section ---- */
+  [class*="space-y-5 max-w-md"] {
+    max-width: 100% !important;
+  }
+
+  /* ---- Dashboard confirm modal content ---- */
+  [class*="relative w-full max-w-lg rounded-3xl border border-\\[var\\(--border\\)\\] bg-\\[var\\(--surface-dark\\)\\] p-6 sm:p-7"] {
+    padding: 1.25rem !important;
+  }
+
+  /* ---- Dashboard rating modal content ---- */
+  [class*="bg-\\[var\\(--surface-dark\\)\\] border border-\\[var\\(--border\\)\\] rounded-2xl p-6 w-full max-w-md relative"] {
+    padding: 1.25rem !important;
+  }
+
+  /* ---- Dashboard select instrument modal ---- */
+  [class*="bg-\\[var\\(--surface-dark\\)\\] border border-\\[var\\(--border\\)\\] rounded-2xl p-6 w-full max-w-md relative"] {
+    padding: 1.25rem !important;
+  }
+
+  /* ---- Dashboard delete confirmation modal ---- */
+  [class*="bg-\\[var\\(--surface-dark\\)\\] border border-red-500/30 rounded-2xl p-6 w-full max-w-sm relative"] {
+    padding: 1.25rem !important;
+  }
+
+  /* ---- Dashboard view summary modal ---- */
+  [class*="bg-\\[var\\(--surface-dark\\)\\] border border-\\[var\\(--border\\)\\] rounded-2xl p-6 w-full max-w-4xl max-h-full overflow-y-auto relative"] {
+    padding: 1.25rem !important;
+  }
+
+  /* ---- Dashboard view summary modal config section ---- */
+  [class*="bg-\\[var\\(--bg-primary\\)\\] rounded-xl p-5 border border-\\[var\\(--border\\)\\] mb-6"] {
+    padding: 1rem !important;
+  }
+
+  /* ---- Dashboard view summary modal additional parts ---- */
+  [class*="bg-\\[var\\(--bg-primary\\)\\] rounded-xl p-5 border border-\\[var\\(--border\\)\\] mb-6"] {
+    padding: 1rem !important;
+  }
+
+  /* ---- Dashboard view summary modal buy button ---- */
+  [class*="w-full mt-8 py-4 px-4 rounded-xl bg-gradient-to-r"] {
+    padding: 0.75rem 1rem !important;
+    font-size: 1rem !important;
+  }
+
+  /* ---- Dashboard view summary modal close button position ---- */
+  [class*="absolute top-4 right-4"] {
+    top: 0.75rem !important;
+    right: 0.75rem !important;
+  }
+
+  /* ---- Dashboard toast message ---- */
+  [class*="fixed top-24 left-1/2 z-\\[100\\]"] {
+    top: 5.5rem !important;
+    width: calc(100% - 3rem) !important;
+    max-width: 80vw !important;
+  }
+
+  /* ---- Dashboard confirm modal ---- */
+  [class*="fixed inset-0 z-\\[300\\] bg-black/70 backdrop-blur-sm p-4"] {
+    padding: 1rem !important;
+  }
+
+  /* ---- Dashboard rating modal ---- */
+  [class*="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4"] {
+    padding: 1rem !important;
+  }
+
+  /* ---- Configuration breakdown ---- */
+  [class*="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3"] {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* ---- View summary additional parts ---- */
+  [class*="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3"] {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* ---- View summary modal ---- */
+  [class*="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4"] {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* ---- Additional parts in summary ---- */
+  [class*="flex flex-col sm:flex-row justify-between"] {
+    flex-direction: row !important;
+  }
+
+  /* ---- Order items in purchases ---- */
+  [class*="flex items-start justify-between gap-4"] {
+    flex-direction: row !important;
+  }
+
+  /* ---- Shipping selector ---- */
+  [class*="grid sm:grid-cols-2 gap-3"] {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* ---- Appointment cards ---- */
+  [class*="grid sm:grid-cols-2 gap-4"] {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* ---- Appointment reschedule ---- */
+  [class*="grid sm:grid-cols-2 gap-4 mb-4"] {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* ---- Add address modal ---- */
+  [class*="grid grid-cols-2 gap-4"] {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* ---- Address form grid ---- */
+  [class*="grid grid-cols-2 gap-4"] > div {
+    grid-column: auto !important;
+  }
+
+  /* ---- Address form ---- */
+  [class*="col-span-2 md:col-span-1"] {
+    grid-column: span 1 / span 1 !important;
+  }
+
+  /* ---- Payment method selection ---- */
+  [class*="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4"] {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* ---- Payment plan selection ---- */
+  [class*="grid gap-3 sm:grid-cols-2"] {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* ---- Payment Modal ---- */
+  [class*="max-w-2xl"] {
+    max-width: 90vw !important;
+  }
+
+  /* ---- Success Modal ---- */
+  [class*="max-w-sm"] {
+    max-width: 24rem !important;
+  }
+
+  /* ---- Terms Modal ---- */
+  [class*="max-w-lg"] {
+    max-width: 32rem !important;
+  }
+
+  /* ---- Cancel order modal ---- */
+  [class*="max-w-lg"] {
+    max-width: 32rem !important;
+  }
+
+  /* ---- Rating modal ---- */
+  [class*="max-w-md"] {
+    max-width: 28rem !important;
+  }
+
+  /* ---- Build summary modal ---- */
+  [class*="max-w-4xl"] {
+    max-width: 90vw !important;
+  }
+
+  /* ---- Select instrument modal ---- */
+  [class*="max-w-md"] {
+    max-width: 28rem !important;
+  }
+
+  /* ---- Delete confirmation modal ---- */
+  [class*="max-w-sm"] {
+    max-width: 24rem !important;
+  }
+
+  /* ---- Confirm modal ---- */
+  [class*="confirm-modal"] {
+    max-width: 28rem !important;
+  }
+
+  /* ---- Product rating modal ---- */
+  [class*="rating-modal"] {
+    max-width: 28rem !important;
+  }
+
+  /* ---- Toast ---- */
+  [class*="toast"] {
+    max-width: 80vw !important;
+  }
+
+  /* ---- Image with fallback ---- */
+  [class*="image-fallback"] {
+    max-width: 100% !important;
+  }
+
+  /* ---- Builder saved badge ---- */
+  [class*="builder-saved"] {
+    font-size: 0.8rem !important;
+  }
+
+  /* ---- Badges ---- */
+  [class*="badge"] {
+    font-size: 0.7rem !important;
+    padding: 0.125rem 0.5rem !important;
+  }
+
+  /* ---- Tooltips ---- */
+  [class*="tooltip"] {
+    font-size: 0.8rem !important;
+  }
+
+  /* ---- Progress bars ---- */
+  [class*="progress"] {
+    height: 0.6rem !important;
+  }
+
+  /* ---- Loading spinners ---- */
+  [class*="spinner"] {
+    width: 1.5rem !important;
+    height: 1.5rem !important;
+  }
+
+  /* ---- Avatar ---- */
+  [class*="w-10 h-10"] {
+    width: 2.5rem !important;
+    height: 2.5rem !important;
+  }
+  [class*="w-20 h-20"] {
+    width: 4rem !important;
+    height: 4rem !important;
+  }
+
+  /* ---- Icons in buttons ---- */
+  button svg,
+  [class*="btn"] svg {
+    width: 1.125rem !important;
+    height: 1.125rem !important;
+  }
+
+  /* ---- Price displays ---- */
+  [class*="text-3xl font-bold"] {
+    font-size: clamp(1.5rem, 3vw, 2rem) !important;
+  }
+  [class*="text-2xl font-bold"] {
+    font-size: clamp(1.25rem, 2.5vw, 1.75rem) !important;
+  }
+
+  /* ---- Order total display ---- */
+  [class*="text-xl font-bold text-\\[var\\(--gold-primary\\)\\]"] {
+    font-size: clamp(1.125rem, 2vw, 1.375rem) !important;
+  }
+
+  /* ---- Dashboard section title ---- */
+  [class*="text-xl sm:text-2xl font-bold text-white"] {
+    font-size: 1.5rem !important;
+  }
+
+  /* ---- Dashboard section description ---- */
+  [class*="text-sm text-\\[var\\(--text-muted\\)\\] mb-8"] {
+    margin-bottom: 1.5rem !important;
+  }
+
+  /* ---- Dashboard card text ---- */
+  [class*="text-lg font-bold text-white"] {
+    font-size: 1.125rem !important;
+  }
+
+  /* ---- Dashboard card description ---- */
+  [class*="text-xs text-\\[var\\(--text-muted\\)\\]"] {
+    font-size: 0.75rem !important;
+  }
+
+  /* ---- Dashboard card price ---- */
+  [class*="text-lg font-bold text-\\[var\\(--gold-primary\\)\\]"] {
+    font-size: 1.125rem !important;
+  }
+
+  /* ---- Dashboard card buttons ---- */
+  [class*="px-5 py-2\\.5 rounded-xl bg-gradient-to-r"] {
+    padding: 0.625rem 1rem !important;
+    font-size: 0.8rem !important;
+  }
+
+  /* ---- Dashboard card cancel button ---- */
+  [class*="px-4 py-2 rounded-lg border border-red-500/30"] {
+    padding: 0.5rem 0.75rem !important;
+    font-size: 0.8rem !important;
+  }
+
+  /* ---- Dashboard saved build name ---- */
+  [class*="text-lg font-bold text-white"] {
+    font-size: 1rem !important;
+  }
+
+  /* ---- Dashboard saved build price ---- */
+  [class*="text-lg font-bold text-\\[var\\(--gold-primary\\)\\] block"] {
+    font-size: 1rem !important;
+  }
+
+  /* ---- Dashboard saved build action buttons ---- */
+  [class*="flex-1 py-1\\.5 px-2 rounded-lg border"] {
+    padding: 0.5rem 0.625rem !important;
+    font-size: 0.7rem !important;
+  }
+
+  /* ---- Dashboard saved build buy now ---- */
+  [class*="w-full mt-2 py-2\\.5 px-3 rounded-lg bg-gradient-to-r"] {
+    padding: 0.625rem !important;
+    font-size: 0.8rem !important;
+  }
+
+  /* ---- Dashboard appointment title ---- */
+  [class*="font-bold text-white text-lg"] {
+    font-size: 1rem !important;
+  }
+
+  /* ---- Dashboard appointment details ---- */
+  [class*="grid sm:grid-cols-2 gap-4 text-sm mt-4 pt-4 border-t"] {
+    gap: 0.75rem !important;
+  }
+
+  /* ---- Dashboard appointment reschedule form ---- */
+  [class*="mt-4 pt-4 border-t border-\\[var\\(--border\\)\\] bg-\\[var\\(--surface-dark\\)\\] p-4 rounded-xl"] {
+    padding: 1rem !important;
+  }
+
+  /* ---- Dashboard cart item name ---- */
+  [class*="font-semibold text-white truncate"] {
+    font-size: 0.9rem !important;
+  }
+
+  /* ---- Dashboard cart item price ---- */
+  [class*="text-lg font-bold text-\\[var\\(--gold-primary\\)\\] mt-1"] {
+    font-size: 1rem !important;
+  }
+
+  /* ---- Dashboard cart total ---- */
+  [class*="flex items-center justify-between mb-6"] > span:first-child {
+    font-size: 1.125rem !important;
+  }
+  [class*="flex items-center justify-between mb-6"] > span:last-child {
+    font-size: 1.5rem !important;
+  }
+
+  /* ---- Dashboard cart checkout button ---- */
+  [class*="w-full py-3 px-6 rounded-xl bg-gradient-to-r"] {
+    padding: 0.75rem 1.5rem !important;
+    font-size: 1rem !important;
+  }
+
+  /* ---- Dashboard profile name ---- */
+  [class*="text-xl font-bold text-white mb-1"] {
+    font-size: 1.25rem !important;
+  }
+
+  /* ---- Dashboard profile form input ---- */
+  [class*="w-full px-4 py-2\\.5 rounded-lg border"] {
+    padding: 0.625rem !important;
+    font-size: 0.875rem !important;
+  }
+
+  /* ---- Dashboard profile save button ---- */
+  [class*="mt-8 inline-flex items-center gap-2 px-6 py-2\\.5 rounded-full"] {
+    padding: 0.625rem 1.25rem !important;
+    font-size: 0.875rem !important;
+  }
+
+  /* ---- Dashboard address form select ---- */
+  [class*="w-full px-4 py-2\\.5 rounded-lg border border-\\[var\\(--border\\)\\] text-sm text-white bg-\\[var\\(--bg-primary\\)\\]"] {
+    padding: 0.625rem !important;
+  }
+
+  /* ---- Dashboard address form save button ---- */
+  [class*="flex-1 py-2\\.5 rounded-full bg-gradient-to-r"] {
+    padding: 0.625rem !important;
+    font-size: 0.875rem !important;
+  }
+
+  /* ---- Dashboard address form cancel button ---- */
+  [class*="px-6 py-2\\.5 rounded-full border border-\\[var\\(--border\\)\\]"] {
+    padding: 0.625rem 1.25rem !important;
+    font-size: 0.875rem !important;
+  }
+
+  /* ---- Dashboard password input ---- */
+  [class*="w-full px-4 py-2\\.5 pr-16 rounded-lg border"] {
+    padding: 0.625rem !important;
+    padding-right: 3rem !important;
+  }
+
+  /* ---- Dashboard password change button ---- */
+  [class*="mt-6 inline-flex items-center gap-2 px-6 py-2\\.5 rounded-full"] {
+    padding: 0.625rem 1.25rem !important;
+    font-size: 0.875rem !important;
+  }
+
+  /* ---- Dashboard mobile section tabs ---- */
+  [class*="xl\\:hidden rounded-2xl border border-\\[var\\(--border\\)\\] bg-\\[var\\(--surface-dark\\)\\] p-3"] {
+    display: none !important;
+  }
+
+  /* ---- Dashboard sidebar user info ---- */
+  [class*="px-4 sm:px-6 py-4 sm:py-5 border-b border-white/20 flex items-center gap-3"] {
+    padding: 1rem !important;
+  }
+
+  /* ---- Dashboard sidebar menu items ---- */
+  [class*="w-full flex items-center gap-3 px-3 py-2\\.5 rounded-lg"] {
+    padding: 0.625rem !important;
+    font-size: 0.8rem !important;
+  }
+
+  /* ---- Dashboard sidebar spacing ---- */
+  [class*="px-2 sm:px-3 py-3 sm:py-4 space-y-4 sm:space-y-6"] {
+    padding: 0.75rem !important;
+  }
+
+  /* ---- Dashboard confirm modal title ---- */
+  [class*="text-xl font-bold text-white pr-8"] {
+    font-size: 1.25rem !important;
+  }
+
+  /* ---- Dashboard confirm modal button ---- */
+  [class*="flex-1 rounded-xl border border-\\[var\\(--border\\)\\] bg-white/5 py-3 text-sm font-semibold"] {
+    padding: 0.625rem !important;
+    font-size: 0.875rem !important;
+  }
+
+  /* ---- Dashboard confirm modal cancel button ---- */
+  [class*="flex-1 rounded-xl bg-red-500 py-3 text-sm font-bold"] {
+    padding: 0.625rem !important;
+    font-size: 0.875rem !important;
+  }
+
+  /* ---- Dashboard rating modal title ---- */
+  [class*="text-xl font-bold text-white mb-2"] {
+    font-size: 1.25rem !important;
+  }
+
+  /* ---- Dashboard rating modal button ---- */
+  [class*="flex-1 py-2\\.5 rounded-xl border border-\\[var\\(--border\\)\\]"] {
+    padding: 0.625rem !important;
+    font-size: 0.875rem !important;
+  }
+
+  /* ---- Dashboard select instrument modal title ---- */
+  [class*="text-xl font-bold text-white mb-2"] {
+    font-size: 1.25rem !important;
+  }
+
+  /* ---- Dashboard select instrument modal cancel ---- */
+  [class*="mt-6 w-full py-3 rounded-xl border border-\\[var\\(--border\\)\\]"] {
+    padding: 0.625rem !important;
+    font-size: 0.875rem !important;
+  }
+
+  /* ---- Dashboard delete confirmation modal title ---- */
+  [class*="text-xl font-bold text-white mb-2 flex items-center gap-2"] {
+    font-size: 1.25rem !important;
+  }
+
+  /* ---- Dashboard delete confirmation modal button ---- */
+  [class*="flex-1 py-2\\.5 rounded-xl border border-\\[var\\(--border\\)\\]"] {
+    padding: 0.625rem !important;
+    font-size: 0.875rem !important;
+  }
+
+  /* ---- Dashboard view summary modal title ---- */
+  [class*="text-2xl font-bold text-white mb-1"] {
+    font-size: 1.25rem !important;
+  }
+
+  /* ---- Dashboard view summary modal config header ---- */
+  [class*="text-lg font-bold text-white mb-4 border-b border-\\[var\\(--border\\)\\] pb-2 flex justify-between"] {
+    font-size: 1rem !important;
+  }
+
+  /* ---- Dashboard view summary modal grand total label ---- */
+  [class*="text-lg text-\\[var\\(--text-muted\\)\\]"] {
+    font-size: 1rem !important;
+  }
+
+  /* ---- Dashboard view summary modal grand total value ---- */
+  [class*="text-3xl font-bold text-\\[var\\(--gold-primary\\)\\]"] {
+    font-size: 1.5rem !important;
+  }
+
+  /* ---- Dashboard view summary modal buy now button in summary ---- */
+  [class*="w-full mt-8 py-4 px-4 rounded-xl bg-gradient-to-r from-\\[var\\(--gold-primary\\)\\] to-\\[var\\(--gold-secondary\\)\\] text-\\[var\\(--text-dark\\)\\] font-bold text-lg"] {
+    font-size: 1rem !important;
+    padding: 0.75rem 1rem !important;
+  }
+
+  /* ---- Dashboard view summary modal already ordered button in summary ---- */
+  [class*="w-full mt-8 py-4 px-4 rounded-xl border border-\\[var\\(--border\\)\\] text-\\[var\\(--text-muted\\)\\] font-bold text-lg"] {
+    font-size: 1rem !important;
+    padding: 0.75rem 1rem !important;
+  }
+
+  /* ---- Dashboard view summary modal order this build button ---- */
+  [class*="w-full mt-8 py-4 px-4 rounded-xl bg-gradient-to-r from-\\[var\\(--gold-primary\\)\\] to-\\[var\\(--gold-secondary\\)\\] text-\\[var\\(--text-dark\\)\\] font-bold text-lg shadow-\\[0_0_10px_rgba\\(212\\,175\\,55\\,0\\.3\\)\\]"] {
+    font-size: 1rem !important;
+    padding: 0.75rem 1rem !important;
+  }
+
+  /* ---- Dashboard view summary modal buy now button icon ---- */
+  [class*="w-full mt-8 py-4 px-4 rounded-xl"] svg {
+    width: 1.5rem !important;
+    height: 1.5rem !important;
+  }
+
+  /* ---- Dashboard view summary modal close icon ---- */
+  [class*="absolute top-4 right-4 text-\\[var\\(--text-muted\\)\\] hover:text-white transition-colors"] svg {
+    width: 1.5rem !important;
+    height: 1.5rem !important;
+  }
+
+  /* ---- Dashboard view summary modal close icon position ---- */
+  [class*="absolute top-4 right-4"] {
+    top: 0.75rem !important;
+    right: 0.75rem !important;
+  }
+
+  /* ---- Dashboard view summary modal locked warning ---- */
+  [class*="mb-6 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm"] {
+    padding: 0.75rem !important;
+    font-size: 0.8rem !important;
+  }
+
+  /* ---- Dashboard view summary modal config items ---- */
+  [class*="flex justify-between items-center text-sm pb-2 border-b border-\\[var\\(--border\\)\\]"] {
+    font-size: 0.8rem !important;
+  }
+
+  /* ---- Dashboard view summary modal additional parts items ---- */
+  [class*="flex flex-col sm:flex-row justify-between sm:items-center text-sm pb-3 border-b border-\\[var\\(--border\\)\\] gap-2"] {
+    font-size: 0.8rem !important;
+  }
+
+  /* ---- Dashboard view summary modal additional parts name ---- */
+  [class*="text-white block font-medium truncate mb-1\\.5"] {
+    font-size: 0.8rem !important;
+  }
+
+  /* ---- Dashboard view summary modal additional parts price ---- */
+  [class*="text-gray-300 font-mono text-sm"] {
+    font-size: 0.8rem !important;
+  }
+
+  /* ---- Dashboard view summary modal locked info ---- */
+  [class*="mt-4 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200"] {
+    padding: 0.5rem !important;
+    font-size: 0.75rem !important;
+  }
+
+  /* ---- Dashboard view summary modal add parts button ---- */
+  [class*="flex-1 py-1\\.5 px-2 rounded-lg border text-\\[var\\(--text-light\\)\\] text-xs"] {
+    font-size: 0.7rem !important;
+    padding: 0.5rem 0.625rem !important;
+  }
+
+  /* ---- Dashboard view summary modal view summary button ---- */
+  [class*="flex-1 py-1\\.5 px-2 rounded-lg border border-\\[var\\(--border\\)\\] text-\\[var\\(--text-light\\)\\] text-xs"] {
+    font-size: 0.7rem !important;
+    padding: 0.5rem 0.625rem !important;
+  }
+
+  /* ---- Dashboard view summary modal edit build button ---- */
+  [class*="flex-1 py-1\\.5 px-2 rounded-lg border text-xs"] {
+    font-size: 0.7rem !important;
+    padding: 0.5rem 0.625rem !important;
+  }
+
+  /* ---- Dashboard view summary modal delete button ---- */
+  [class*="flex-\\[0\\.5\\] py-1\\.5 px-2 rounded-lg border border-red-500/30 text-red-400 text-xs"] {
+    font-size: 0.7rem !important;
+    padding: 0.5rem 0.625rem !important;
+  }
+
+  /* ---- Dashboard view summary modal awaiting project button ---- */
+  [class*="w-full mt-2 py-2\\.5 px-3 rounded-lg border border-\\[var\\(--border\\)\\] text-\\[var\\(--text-muted\\)\\] font-bold text-sm"] {
+    font-size: 0.8rem !important;
+    padding: 0.625rem !important;
+  }
+
+  /* ---- Dashboard view summary modal buy now button ---- */
+  [class*="w-full mt-2 py-2\\.5 px-3 rounded-lg bg-gradient-to-r from-\\[var\\(--gold-primary\\)\\] to-\\[var\\(--gold-secondary\\)\\] text-\\[var\\(--text-dark\\)\\] font-bold text-sm"] {
+    font-size: 0.8rem !important;
+    padding: 0.625rem !important;
+  }
+
+  /* ---- Dashboard saved build already ordered ---- */
+  [class*="px-2 py-0\\.5 rounded-full border border-emerald-500/30"] {
+    font-size: 0.6rem !important;
+    padding: 0.125rem 0.5rem !important;
+  }
+
+  /* ---- Dashboard saved build limit warning ---- */
+  [class*="mb-6 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3"] {
+    padding: 0.75rem !important;
+  }
+
+  /* ---- Dashboard saved build limit warning text ---- */
+  [class*="text-amber-300 text-sm font-medium"] {
+    font-size: 0.8rem !important;
+  }
+
+  /* ---- Dashboard saved build empty state ---- */
+  [class*="flex flex-col items-center justify-center py-10"] {
+    padding: 2rem 0 !important;
+  }
+
+  /* ---- Dashboard saved build empty state icon ---- */
+  [class*="w-16 h-16 rounded-full border-2"] {
+    width: 3.5rem !important;
+    height: 3.5rem !important;
+  }
+
+  /* ---- Dashboard saved build empty state text ---- */
+  [class*="text-white font-medium mb-1"] {
+    font-size: 1rem !important;
+  }
+
+  /* ---- Dashboard saved build empty state description ---- */
+  [class*="text-sm text-\\[var\\(--text-muted\\)\\] mb-6"] {
+    font-size: 0.8rem !important;
+    margin-bottom: 1.5rem !important;
+  }
+
+  /* ---- Dashboard saved build empty state button ---- */
+  [class*="px-6 py-2\\.5 rounded-full bg-gradient-to-r"] {
+    padding: 0.625rem 1.25rem !important;
+    font-size: 0.8rem !important;
+  }
+
+  /* ---- Dashboard appointment status ---- */
+  [class*="px-3 py-1 rounded-full text-xs font-semibold capitalize border"] {
+    font-size: 0.65rem !important;
+    padding: 0.25rem 0.625rem !important;
+  }
+
+  /* ---- Dashboard appointment detail label ---- */
+  [class*="block text-\\[var\\(--text-muted\\)\\] mb-1"] {
+    font-size: 0.7rem !important;
+  }
+
+  /* ---- Dashboard appointment reschedule bar text ---- */
+  [class*="text-orange-400 font-semibold text-sm"] {
+    font-size: 0.8rem !important;
+  }
+
+  /* ---- Dashboard appointment reschedule bar description ---- */
+  [class*="text-orange-400/80 text-xs mt-0\\.5"] {
+    font-size: 0.7rem !important;
+  }
+
+  /* ---- Dashboard appointment reschedule button ---- */
+  [class*="px-4 py-2 rounded-lg bg-orange-500 text-white font-semibold text-xs"] {
+    font-size: 0.7rem !important;
+    padding: 0.5rem 0.75rem !important;
+  }
+
+  /* ---- Dashboard appointment reschedule form title ---- */
+  [class*="text-white font-semibold mb-3"] {
+    font-size: 0.9rem !important;
+  }
+
+  /* ---- Dashboard appointment reschedule form input ---- */
+  [class*="w-full px-4 py-2\\.5 bg-\\[var\\(--bg-primary\\)\\] border border-\\[var\\(--border\\)\\] rounded-xl text-white text-sm"] {
+    padding: 0.625rem !important;
+  }
+
+  /* ---- Dashboard appointment reschedule form cancel ---- */
+  [class*="px-4 py-2 rounded-lg text-\\[var\\(--text-muted\\)\\] text-sm font-semibold"] {
+    font-size: 0.8rem !important;
+    padding: 0.5rem 0.75rem !important;
+  }
+
+  /* ---- Dashboard appointment reschedule form confirm ---- */
+  [class*="px-4 py-2 rounded-lg bg-\\[var\\(--gold-primary\\)\\] text-black text-sm font-semibold"] {
+    font-size: 0.8rem !important;
+    padding: 0.5rem 0.75rem !important;
+  }
+
+  /* ---- Dashboard book appointment button ---- */
+  [class*="px-4 py-2 rounded-lg bg-gradient-to-r from-\\[var\\(--gold-primary\\)\\] to-\\[var\\(--gold-secondary\\)\\]"] {
+    padding: 0.625rem 0.875rem !important;
+    font-size: 0.8rem !important;
+  }
+
+  /* ---- Dashboard cart item quantity ---- */
+  [class*="flex items-center gap-2 bg-\\[var\\(--surface-dark\\)\\] rounded-lg border border-\\[var\\(--border\\)\\]"] {
+    padding: 0.375rem !important;
+  }
+
+  /* ---- Dashboard cart item quantity value ---- */
+  [class*="w-8 text-center text-white font-medium"] {
+    width: 1.75rem !important;
+    font-size: 0.875rem !important;
+  }
+
+  /* ---- Dashboard cart item subtotal ---- */
+  [class*="text-sm text-\\[var\\(--text-muted\\)\\]"] {
+    font-size: 0.75rem !important;
+  }
+
+  /* ---- Dashboard profile buttons ---- */
+  [class*="flex gap-2"] > label,
+  [class*="flex gap-2"] > button {
+    font-size: 0.7rem !important;
+    padding: 0.5rem 0.75rem !important;
+  }
+
+  /* ---- Dashboard profile form label ---- */
+  [class*="block text-xs font-semibold text-white mb-2"] {
+    font-size: 0.75rem !important;
+  }
+
+  /* ---- Dashboard address card label ---- */
+  [class*="font-semibold text-white capitalize"] {
+    font-size: 0.875rem !important;
+  }
+
+  /* ---- Dashboard address card default badge ---- */
+  [class*="px-2 py-0\\.5 rounded text-\\[10px\\] font-bold"] {
+    font-size: 0.6rem !important;
+    padding: 0.125rem 0.5rem !important;
+  }
+
+  /* ---- Dashboard address card details ---- */
+  [class*="text-sm text-\\[var\\(--text-muted\\)\\] space-y-1"] {
+    font-size: 0.75rem !important;
+  }
+
+  /* ---- Dashboard address empty state ---- */
+  [class*="text-center py-8"] {
+    padding: 2rem 0 !important;
+  }
+
+  /* ---- Dashboard address empty state icon ---- */
+  [class*="w-12 h-12 text-\\[var\\(--text-muted\\)\\] mx-auto mb-3"] {
+    width: 3rem !important;
+    height: 3rem !important;
+  }
+
+  /* ---- Dashboard address form back button ---- */
+  [class*="text-\\[var\\(--gold-primary\\)\\] hover:underline text-sm font-semibold"] {
+    font-size: 0.8rem !important;
+  }
+
+  /* ---- Dashboard address form title ---- */
+  [class*="text-white font-semibold"] {
+    font-size: 1rem !important;
+  }
+
+  /* ---- Dashboard address form category buttons ---- */
+  [class*="flex gap-2"] > button {
+    font-size: 0.75rem !important;
+    padding: 0.5rem !important;
+  }
+
+  /* ---- Dashboard password success/error messages ---- */
+  [class*="mb-6 p-4 rounded-xl"] {
+    padding: 0.75rem !important;
+    margin-bottom: 1.5rem !important;
+  }
+
+  /* ---- Dashboard password section description ---- */
+  [class*="text-sm text-\\[var\\(--text-muted\\)\\] mb-10"] {
+    margin-bottom: 2rem !important;
+  }
+
+  /* ---- Dashboard mobile section tabs container ---- */
+  [class*="xl\\:hidden rounded-2xl border border-\\[var\\(--border\\)\\] bg-\\[var\\(--surface-dark\\)\\] p-3"] {
+    display: none !important;
+  }
+
+  /* ---- Dashboard sidebar user name ---- */
+  [class*="truncate text-sm font-bold text-white"] {
+    font-size: 0.875rem !important;
+  }
+
+  /* ---- Dashboard sidebar user email ---- */
+  [class*="truncate text-xs text-white/60"] {
+    font-size: 0.7rem !important;
+  }
+
+  /* ---- Dashboard sidebar section label ---- */
+  [class*="px-3 mb-2 text-\\[11px\\] font-semibold text-\\[var\\(--text-muted\\)\\] tracking-wide"] {
+    font-size: 0.65rem !important;
+  }
+
+  /* ---- Dashboard sidebar chevron ---- */
+  [class*="w-3\\.5 h-3\\.5"] {
+    width: 0.875rem !important;
+    height: 0.875rem !important;
+  }
+
+  /* ---- Dashboard sidebar section spacing ---- */
+  [class*="space-y-1"] {
+    gap: 0.25rem !important;
+  }
+
+  /* ---- Dashboard confirm modal description ---- */
+  [class*="mt-2 text-sm text-\\[var\\(--text-muted\\)\\]"] {
+    font-size: 0.8rem !important;
+  }
+
+  /* ---- Dashboard confirm modal reasons ---- */
+  [class*="mt-5 space-y-3"] {
+    margin-top: 1rem !important;
+  }
+
+  /* ---- Dashboard confirm modal reason item ---- */
+  [class*="flex cursor-pointer items-center gap-3 rounded-xl border px-4 py-3"] {
+    padding: 0.75rem !important;
+    font-size: 0.8rem !important;
+  }
+
+  /* ---- Dashboard confirm modal textarea ---- */
+  [class*="w-full rounded-xl border border-\\[var\\(--border\\)\\] bg-\\[var\\(--bg-primary\\)\\] px-4 py-3 text-sm"] {
+    padding: 0.625rem !important;
+    font-size: 0.8rem !important;
+  }
+
+  /* ---- Dashboard rating modal description ---- */
+  [class*="text-sm text-\\[var\\(--text-muted\\)\\] mb-6"] {
+    font-size: 0.8rem !important;
+    margin-bottom: 1.5rem !important;
+  }
+
+  /* ---- Dashboard rating modal textarea ---- */
+  [class*="w-full px-4 py-3 rounded-xl border border-\\[var\\(--border\\)\\] bg-\\[var\\(--bg-primary\\)\\] text-sm"] {
+    padding: 0.625rem !important;
+    font-size: 0.8rem !important;
+  }
+
+  /* ---- Dashboard select instrument modal description ---- */
+  [class*="text-sm text-\\[var\\(--text-muted\\)\\] mb-6"] {
+    font-size: 0.8rem !important;
+  }
+
+  /* ---- Dashboard select instrument modal buttons ---- */
+  [class*="w-full p-4 rounded-xl border border-\\[var\\(--border\\)\\]"] {
+    padding: 0.875rem !important;
+  }
+
+  /* ---- Dashboard select instrument modal button text ---- */
+  [class*="block font-bold text-white mb-1"] {
+    font-size: 1rem !important;
+  }
+
+  /* ---- Dashboard select instrument modal button description ---- */
+  [class*="block text-xs text-\\[var\\(--text-muted\\)\\]"] {
+    font-size: 0.75rem !important;
+  }
+
+  /* ---- Dashboard delete confirmation modal description ---- */
+  [class*="text-sm text-\\[var\\(--text-muted\\)\\] mb-6"] {
+    font-size: 0.8rem !important;
+  }
+
+  /* ---- Dashboard view summary modal description ---- */
+  [class*="text-sm text-\\[var\\(--text-muted\\)\\] mb-6"] {
+    font-size: 0.8rem !important;
+  }
+
+  /* ---- Dashboard view summary modal config item label ---- */
+  [class*="block text-xs text-\\[var\\(--text-muted\\)\\] capitalize mb-0\\.5"] {
+    font-size: 0.65rem !important;
+  }
+
+  /* ---- Dashboard view summary modal config item value ---- */
+  [class*="block font-medium text-white truncate"] {
+    font-size: 0.75rem !important;
+  }
+
+  /* ---- Dashboard view summary modal config item price ---- */
+  [class*="text-gray-300 shrink-0 font-mono text-right"] {
+    font-size: 0.75rem !important;
+  }
+
+  /* ---- Dashboard view summary modal additional parts quantity ---- */
+  [class*="flex items-center gap-2 bg-\\[var\\(--surface-dark\\)\\] border border-\\[var\\(--border\\)\\] rounded-md px-1\\.5 py-0\\.5 w-fit"] {
+    padding: 0.25rem 0.5rem !important;
+  }
+
+  /* ---- Dashboard view summary modal additional parts quantity value ---- */
+  [class*="text-\\[var\\(--text-muted\\)\\] text-xs w-4 text-center"] {
+    font-size: 0.7rem !important;
+    width: 1.25rem !important;
+  }
+
+  /* ---- Dashboard view summary modal locked badge ---- */
+  [class*="px-2 py-0\\.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 text-\\[11px\\] font-semibold"] {
+    font-size: 0.6rem !important;
+    padding: 0.125rem 0.5rem !important;
+  }
+
+  /* ---- Dashboard card status badge ---- */
+  [class*="px-2 py-0\\.5 border border-\\[var\\(--border\\)\\] rounded-full text-xs font-semibold"] {
+    font-size: 0.65rem !important;
+    padding: 0.25rem 0.5rem !important;
+  }
+
+  /* ---- Dashboard card progress text ---- */
+  [class*="text-\\[var\\(--gold-primary\\)\\] font-bold text-sm"] {
+    font-size: 0.8rem !important;
+  }
+
+  /* ---- Dashboard card divider ---- */
+  [class*="flex gap-2 mt-4 pt-4 border-t border-\\[var\\(--border\\)\\]"] {
+    margin-top: 1rem !important;
+    padding-top: 1rem !important;
+  }
+
+  /* ---- Dashboard card divider buttons ---- */
+  [class*="flex gap-2 mt-4 pt-4 border-t border-\\[var\\(--border\\)\\]"] > button {
+    font-size: 0.75rem !important;
+    padding: 0.5rem 0.75rem !important;
+  }
+
+  /* ---- Dashboard saved build date ---- */
+  [class*="text-xs text-\\[var\\(--text-muted\\)\\] mt-1"] {
+    font-size: 0.7rem !important;
+  }
+
+  /* ---- Dashboard saved build config items ---- */
+  [class*="flex items-center gap-1"] > span:first-child {
+    font-size: 0.65rem !important;
+    max-width: 4rem !important;
+  }
+  [class*="flex items-center gap-1"] > span:last-child {
+    font-size: 0.65rem !important;
+    max-width: 5rem !important;
+  }
+
+  /* ---- Dashboard saved build includes add-ons ---- */
+  [class*="text-xs text-\\[var\\(--text-muted\\)\\]"] {
+    font-size: 0.65rem !important;
+  }
+
+  /* ---- Dashboard saved build buy now icons ---- */
+  [class*="w-full mt-2 py-2\\.5 px-3 rounded-lg bg-gradient-to-r"] svg {
+    width: 1rem !important;
+    height: 1rem !important;
+  }
+
+  /* ---- Dashboard saved build empty state icon ---- */
+  [class*="w-16 h-16 rounded-full border-2"] svg {
+    width: 1.75rem !important;
+    height: 1.75rem !important;
+  }
+
+  /* ---- Dashboard toast icon ---- */
+  [class*="fixed top-24 left-1/2 z-\\[100\\]"] svg {
+    width: 1.125rem !important;
+    height: 1.125rem !important;
+  }
+
+  /* ---- Dashboard card button icons ---- */
+  [class*="inline-flex h-8 w-8 items-center justify-center"] {
+    width: 1.75rem !important;
+    height: 1.75rem !important;
+  }
+  [class*="inline-flex h-8 w-8 items-center justify-center"] svg {
+    width: 0.875rem !important;
+    height: 0.875rem !important;
+  }
+
+  /* ---- Dashboard card button text ---- */
+  [class*="text-\\[10px\\] uppercase tracking-wide"] {
+    font-size: 0.55rem !important;
+  }
+
+  /* ---- Dashboard card button label ---- */
+  [class*="text-sm font-bold"] {
+    font-size: 0.75rem !important;
+  }
+
+  /* ---- Dashboard card chevron ---- */
+  [class*="ml-1"] svg {
+    width: 0.875rem !important;
+    height: 0.875rem !important;
+  }
+
+  /* ---- Dashboard card project description ---- */
+  [class*="rounded-lg border border-\\[var\\(--border\\)\\] bg-\\[var\\(--surface-dark\\)\\] px-3 py-2\\.5"] {
+    padding: 0.625rem !important;
+  }
+
+  /* ---- Dashboard card project description text ---- */
+  [class*="text-sm text-\\[var\\(--text-muted\\)\\]"] {
+    font-size: 0.8rem !important;
+  }
+
+  /* ---- Dashboard card project description list ---- */
+  [class*="mt-1\\.5 space-y-1"] {
+    margin-top: 0.5rem !important;
+  }
+
+  /* ---- Dashboard card project description list items ---- */
+  [class*="flex items-start gap-2"] > span:first-child {
+    width: 0.5rem !important;
+    height: 0.5rem !important;
+    margin-top: 0.25rem !important;
+  }
+
+  /* ---- Dashboard card project description meta ---- */
+  [class*="mt-2 space-y-1 border-t border-\\[var\\(--border\\)\\] pt-2"] {
+    margin-top: 0.5rem !important;
+    padding-top: 0.5rem !important;
+  }
+
+  /* ---- Dashboard card estimated completion ---- */
+  [class*="text-\\[var\\(--text-muted\\)\\] text-sm mt-2"] {
+    font-size: 0.8rem !important;
+    margin-top: 0.5rem !important;
+  }
+
+  /* ---- Dashboard card status ---- */
+  [class*="px-2 py-0\\.5 border border-\\[var\\(--border\\)\\] rounded-full text-xs"] {
+    font-size: 0.65rem !important;
+  }
+
+  /* ---- Dashboard card progress ---- */
+  [class*="text-\\[var\\(--gold-primary\\)\\] font-bold text-sm"] {
+    font-size: 0.8rem !important;
+  }
+
+  /* ---- Dashboard card hover ---- */
+  [class*="hover\\:border-\\[var\\(--gold-primary\\)\\]/40"] {
+    transition: none !important;
+  }
+
+  /* ---- Purchase tabs ---- */
+  [class*="flex flex-wrap gap-4 text-sm font-medium border-b"] {
+    gap: 0.5rem !important;
+  }
+  [class*="flex flex-wrap gap-4 text-sm font-medium border-b"] > button {
+    font-size: 0.75rem !important;
+    padding: 0.375rem 0.625rem !important;
+  }
+
+  /* ---- Build tabs ---- */
+  [class*="flex flex-wrap gap-6 sm:gap-8 border-b"] {
+    gap: 0.75rem !important;
+  }
+  [class*="flex flex-wrap gap-6 sm:gap-8 border-b"] > button {
+    font-size: 0.8rem !important;
+    padding-bottom: 0.5rem !important;
+  }
+
+  /* ---- Create new build button ---- */
+  [class*="flex gap-3"] > button {
+    font-size: 0.8rem !important;
+    padding: 0.5rem 0.75rem !important;
+  }
+
+  /* ---- Build limit warning ---- */
+  [class*="mb-6 rounded-xl border border-amber-500/30"] {
+    padding: 0.75rem !important;
+    font-size: 0.8rem !important;
+  }
+
+  /* ---- Build project progress ---- */
+  [class*="mt-4 flex items-center gap-4"] {
+    flex-wrap: nowrap !important;
+  }
+
+  /* ---- Order items in purchases ---- */
+  [class*="flex items-start justify-between gap-4"] {
+    flex-direction: row !important;
+  }
+
+  /* ---- Purchase order buttons ---- */
+  [class*="mt-4 pt-4 border-t flex justify-end gap-3"] {
+    flex-direction: row !important;
+  }
+
+  /* ---- Cancel order modal ---- */
+  [class*="space-y-3"] > label {
+    padding: 0.75rem !important;
+  }
+
+  /* ---- Rating modal stars ---- */
+  [class*="flex justify-center gap-2 mb-6"] {
+    gap: 0.5rem !important;
+  }
+  [class*="flex justify-center gap-2 mb-6"] button svg {
+    width: 2rem !important;
+    height: 2rem !important;
+  }
+
+  /* ---- Select instrument modal ---- */
+  [class*="flex flex-col gap-3"] {
+    gap: 0.75rem !important;
+  }
+
+  /* ---- Delete confirmation ---- */
+  [class*="flex items-center gap-2"] > h2 {
+    font-size: 1.25rem !important;
+  }
+
+  /* ---- Order summary warning ---- */
+  [class*="rounded-xl border border-\\[var\\(--gold-primary\\)\\]/30"] {
+    padding: 0.75rem !important;
+  }
+
+  /* ---- Security note ---- */
+  [class*="flex items-center gap-2 text-xs"] {
+    font-size: 0.7rem !important;
+  }
+
+  /* ---- Continue shopping link ---- */
+  [class*="flex items-center justify-between"] > a {
+    font-size: 0.8rem !important;
+  }
+
+  /* ---- Clear cart button ---- */
+  [class*="px-5 py-2\\.5 bg-red-500/10"] {
+    padding: 0.5rem 0.75rem !important;
+    font-size: 0.8rem !important;
+  }
+
+  /* ---- Address category buttons ---- */
+  [class*="flex gap-2"] > button {
+    flex: 1 !important;
+    font-size: 0.75rem !important;
+    padding: 0.5rem !important;
+  }
+
+  /* ---- Gender radio buttons ---- */
+  [class*="flex items-center gap-4 text-sm"] {
+    flex-wrap: nowrap !important;
+  }
+
+  /* ---- Password fields ---- */
+  [class*="pr-16"] {
+    padding-right: 3rem !important;
+  }
+
+  /* ---- Build tree in checkout ---- */
+  [class*="pl-4"] {
+    padding-left: 0.75rem !important;
+  }
+
+  /* ---- Order notes ---- */
+  textarea {
+    min-height: 80px !important;
+  }
+
+  /* ---- Quantity controls ---- */
+  [class*="flex items-center gap-2 bg-\\[var\\(--surface-dark\\)\\]"] {
+    padding: 0.375rem 0.625rem !important;
+  }
+  [class*="flex items-center gap-2 bg-\\[var\\(--surface-dark\\)\\]"] button {
+    padding: 0.25rem !important;
+  }
+
+  /* ---- Cart subtotal ---- */
+  [class*="flex items-center gap-3 mt-3"] {
+    flex-wrap: nowrap !important;
+  }
+
+  /* ---- Payment items list ---- */
+  [class*="flex items-center gap-3 rounded-xl"] {
+    flex-wrap: nowrap !important;
+  }
+
+  /* ---- Receipt upload ---- */
+  [class*="h-64"] {
+    height: 14rem !important;
+  }
+
+  /* ---- GCash QR code ---- */
+  [class*="max-w-xs"] {
+    max-width: 60% !important;
+  }
+
+  /* ---- Terms checkbox ---- */
+  [class*="flex items-start gap-2 text-sm"] {
+    font-size: 0.8rem !important;
+  }
+
+  /* ---- Address edit/delete buttons ---- */
+  [class*="flex items-center gap-3"] > button {
+    padding: 0.5rem !important;
+  }
+
+  /* ---- Appointment reschedule buttons ---- */
+  [class*="flex justify-end gap-2"] {
+    flex-wrap: nowrap !important;
+  }
+
+  /* ---- Saved build card ---- */
+  [class*="flex justify-between items-start mb-4 gap-4"] > div:last-child {
+    text-align: right !important;
+  }
+
+  /* ---- Saved build action buttons ---- */
+  [class*="mt-6 space-y-2"] > div {
+    flex-direction: row !important;
+  }
+  [class*="mt-6 space-y-2"] > div > button {
+    width: auto !important;
+  }
+
+  /* ---- Build project buttons ---- */
+  [class*="flex gap-2 mt-4 pt-4 border-t"] {
+    flex-direction: row !important;
+  }
+  [class*="flex gap-2 mt-4 pt-4 border-t"] > button {
+    width: auto !important;
+  }
+
+  /* ---- Purchase order card ---- */
+  [class*="flex flex-col gap-4 mb-4 border-b"] {
+    flex-direction: row !important;
+  }
+
+  /* ---- Purchase order buttons ---- */
+  [class*="mt-4 pt-4 border-t flex justify-end"] {
+    flex-direction: row !important;
+  }
+  [class*="mt-4 pt-4 border-t flex justify-end"] > button {
+    width: auto !important;
+  }
+
+  /* ---- Appointment action required bar ---- */
+  [class*="sm:col-span-2 mt-4 pt-4 border-t"] > div {
+    flex-direction: row !important;
+    text-align: left !important;
+  }
+
+  /* ---- Appointment reschedule bar ---- */
+  [class*="sm:col-span-2 mt-4 pt-4 border-t border-\\[var\\(--border\\)\\] flex items-center justify-between"] {
+    flex-direction: row !important;
+    text-align: left !important;
+  }
+
+  /* ---- Appointment reschedule bar icon ---- */
+  [class*="flex items-center gap-3"] {
+    flex-direction: row !important;
+  }
+
+  /* ---- Address cards ---- */
+  [class*="flex items-center justify-between mb-2"] {
+    flex-direction: row !important;
+    align-items: center !important;
+  }
+
+  /* ---- Address list ---- */
+  [class*="flex items-center justify-between mb-2"] > div:last-child {
+    width: auto !important;
+  }
+
+  /* ---- Build project card ---- */
+  [class*="flex justify-between items-center"] {
+    flex-wrap: nowrap !important;
+  }
+  [class*="flex justify-between items-center"] > div:first-child {
+    width: auto !important;
+  }
+
+  /* ---- View summary total ---- */
+  [class*="flex justify-between items-center border-t"] {
+    flex-direction: row !important;
+    text-align: left !important;
+  }
+
+  /* ---- Order summary cards ---- */
+  [class*="flex justify-between items-end"] {
+    flex-direction: row !important;
+    align-items: flex-end !important;
+  }
+  [class*="text-right items-end"] {
+    text-align: right !important;
+    align-items: flex-end !important;
+  }
+
+  /* ---- Address selection cards ---- */
+  [class*="flex items-start gap-4 p-4"] {
+    flex-direction: row !important;
+  }
+
+  /* ---- Bank details ---- */
+  [class*="flex items-center justify-between border-b"] {
+    flex-direction: row !important;
+    align-items: center !important;
+  }
+
+  /* ---- Checkout item details ---- */
+  [class*="flex items-center justify-between gap-4"] > div:last-child {
+    width: auto !important;
+  }
+
+  /* ---- Additional parts in summary ---- */
+  [class*="flex flex-col sm:flex-row justify-between"] {
+    flex-direction: row !important;
+  }
+
+  /* ---- Order items in purchases ---- */
+  [class*="flex items-start justify-between gap-4"] {
+    flex-direction: row !important;
+  }
+
+  /* ---- Address form grid ---- */
+  [class*="grid grid-cols-2 gap-4"] > div {
+    grid-column: auto !important;
+  }
+
+  /* ---- Address form ---- */
+  [class*="col-span-2 md:col-span-1"] {
+    grid-column: span 1 / span 1 !important;
+  }
+}
+
+/* ============================================================
+   MOBILE (320px – 767px)
+   ============================================================ */
+@media (max-width: 767px) {
+  /* ---- Typography ---- */
+  body {
+    font-size: clamp(14px, 4vw, 16px);
+  }
+  h1 {
+    font-size: clamp(1.5rem, 6vw, 2rem) !important;
+  }
+  h2 {
+    font-size: clamp(1.25rem, 5vw, 1.75rem) !important;
+  }
+  h3 {
+    font-size: clamp(1.1rem, 4.5vw, 1.5rem) !important;
+  }
+  p,
+  span,
+  li,
+  label,
+  input,
+  select,
+  textarea,
+  button {
+    font-size: clamp(13px, 3.5vw, 15px);
+  }
+
+  /* ---- Layout / Containers ---- */
+  .max-w-7xl {
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+  }
+  .max-w-7xl > .grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ---- Navbar ---- */
+  nav,
+  header,
+  [class*="navbar"],
+  [class*="header"] {
+    padding-left: 0.75rem !important;
+    padding-right: 0.75rem !important;
+  }
+  nav > div,
+  header > div {
+    gap: 0.5rem !important;
+  }
+
+  /* ---- Sidebar (Dashboard) ---- */
+  aside,
+  [class*="sidebar"] {
+    display: none !important;
+  }
+  .xl\\:hidden {
+    display: block !important;
+  }
+
+  /* ---- Dashboard Sections Tabs ---- */
+  [class*="flex gap-2 overflow-x-auto"] {
+    gap: 0.5rem !important;
+    padding-bottom: 0.5rem !important;
+  }
+  [class*="flex gap-2 overflow-x-auto"] > button {
+    font-size: 0.75rem !important;
+    padding: 0.375rem 0.75rem !important;
+  }
+
+  /* ---- Cards ---- */
+  [class*="rounded-2xl"],
+  [class*="rounded-xl"] {
+    padding: 1rem !important;
+  }
+  [class*="grid md:grid-cols-2"],
+  [class*="grid lg:grid-cols-3"],
+  [class*="grid xl:grid-cols-4"] {
+    grid-template-columns: 1fr !important;
+  }
+  [class*="grid sm:grid-cols-2"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ---- Tables ---- */
+  table,
+  [class*="table"] {
+    display: block !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+  table thead,
+  table tbody,
+  table tr {
+    display: block !important;
+  }
+  table td,
+  table th {
+    display: block !important;
+    width: 100% !important;
+    box-sizing: border-box;
+  }
+
+  /* ---- Modals ---- */
+  [class*="fixed inset-0"] > div {
+    max-width: calc(100vw - 2rem) !important;
+    margin: 0 1rem !important;
+    max-height: 90vh !important;
+    overflow-y: auto !important;
+  }
+
+  /* ---- Forms ---- */
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+    padding: 0.75rem !important;
+  }
+  button,
+  [class*="btn"],
+  [type="button"],
+  [type="submit"] {
+    min-height: 44px;
+    touch-action: manipulation;
+  }
+
+  /* ---- Grid layouts ---- */
+  .grid-cols-2 {
+    grid-template-columns: 1fr 1fr !important;
+  }
+  .grid-cols-3,
+  .grid-cols-4,
+  .grid-cols-5,
+  .grid-cols-6 {
+    grid-template-columns: 1fr 1fr !important;
+  }
+
+  /* ---- Landing Page ---- */
+  [class*="hero"],
+  [class*="banner"] {
+    flex-direction: column !important;
+    text-align: center !important;
+    padding: 2rem 1rem !important;
+  }
+  [class*="hero"] img,
+  [class*="banner"] img {
+    max-width: 100% !important;
+    height: auto !important;
+  }
+
+  /* ---- Shop Page ---- */
+  [class*="shop-grid"],
+  [class*="product-grid"] {
+    grid-template-columns: 1fr !important;
+    gap: 1rem !important;
+  }
+
+  /* ---- Product Page ---- */
+  [class*="product-detail"] {
+    flex-direction: column !important;
+  }
+  [class*="product-detail"] > div:first-child {
+    width: 100% !important;
+  }
+
+  /* ---- Cart Page ---- */
+  [class*="cart-layout"],
+  [class*="lg:grid-cols-12"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ---- Checkout Page ---- */
+  [class*="lg:col-span-7"],
+  [class*="lg:col-span-5"] {
+    grid-column: span 1 / span 1 !important;
+  }
+  .sticky {
+    position: static !important;
+  }
+
+  /* ---- My Purchase ---- */
+  [class*="flex-wrap gap-4"] {
+    gap: 0.5rem !important;
+  }
+  [class*="flex-wrap gap-4"] > button {
+    font-size: 0.75rem !important;
+    padding: 0.375rem 0.75rem !important;
+  }
+
+  /* ---- My Guitar / Builds ---- */
+  [class*="grid md:grid-cols-2 gap-6"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ---- Guitar Customizer ---- */
+  [class*="customizer-layout"],
+  [class*="builder-layout"] {
+    flex-direction: column !important;
+  }
+  [class*="preview-container"] {
+    width: 100% !important;
+    min-height: 300px !important;
+  }
+  [class*="configuration-panel"] {
+    width: 100% !important;
+  }
+
+  /* ---- Profile Page ---- */
+  [class*="grid md:grid-cols-2 gap-6"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ---- Settings ---- */
+  [class*="settings-layout"] {
+    flex-direction: column !important;
+  }
+
+  /* ---- Spacing optimizations ---- */
+  .space-y-8 > * {
+    margin-top: 1.5rem !important;
+  }
+  .space-y-6 > * {
+    margin-top: 1rem !important;
+  }
+  .gap-6 {
+    gap: 1rem !important;
+  }
+  .p-8 {
+    padding: 1rem !important;
+  }
+  .p-6 {
+    padding: 1rem !important;
+  }
+  .px-8 {
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+  }
+  .py-10 {
+    padding-top: 2rem !important;
+    padding-bottom: 2rem !important;
+  }
+  .py-8 {
+    padding-top: 1.5rem !important;
+    padding-bottom: 1.5rem !important;
+  }
+  .mb-10 {
+    margin-bottom: 1.5rem !important;
+  }
+  .mb-8 {
+    margin-bottom: 1rem !important;
+  }
+
+  /* ---- Prevent horizontal scroll ---- */
+  body,
+  #root {
+    overflow-x: hidden !important;
+    width: 100% !important;
+  }
+  [class*="min-h-screen"] {
+    width: 100% !important;
+    overflow-x: hidden !important;
+  }
+
+  /* ---- Order summary cards ---- */
+  [class*="flex justify-between items-end"] {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 0.75rem !important;
+  }
+  [class*="text-right items-end"] {
+    text-align: left !important;
+    align-items: flex-start !important;
+    width: 100% !important;
+  }
+
+  /* ---- Address form ---- */
+  [class*="col-span-2 md:col-span-1"] {
+    grid-column: span 2 / span 2 !important;
+  }
+
+  /* ---- Appointment cards ---- */
+  [class*="grid sm:grid-cols-2 gap-4"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ---- Payment Modal ---- */
+  [class*="max-w-2xl"] {
+    max-width: 100% !important;
+  }
+  [class*="grid grid-cols-1 gap-3 sm:grid-cols-2"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ---- Success Modal ---- */
+  [class*="max-w-sm"] {
+    max-width: calc(100vw - 2rem) !important;
+  }
+
+  /* ---- Terms Modal ---- */
+  [class*="max-w-lg"] {
+    max-width: calc(100vw - 2rem) !important;
+  }
+
+  /* ---- Cart items ---- */
+  [class*="flex items-center gap-4"] > [class*="w-24 h-24"] {
+    width: 4rem !important;
+    height: 4rem !important;
+  }
+  [class*="flex items-center justify-between gap-4"] {
+    flex-wrap: wrap !important;
+  }
+
+  /* ---- Order items in purchases ---- */
+  [class*="flex items-start justify-between gap-4"] {
+    flex-direction: column !important;
+    gap: 0.5rem !important;
+  }
+
+  /* ---- Cancel order modal ---- */
+  [class*="max-w-lg"] {
+    max-width: calc(100vw - 2rem) !important;
+  }
+
+  /* ---- Rating modal ---- */
+  [class*="max-w-md"] {
+    max-width: calc(100vw - 2rem) !important;
+  }
+
+  /* ---- Build summary modal ---- */
+  [class*="max-w-4xl"] {
+    max-width: calc(100vw - 2rem) !important;
+  }
+
+  /* ---- Select instrument modal ---- */
+  [class*="max-w-md"] {
+    max-width: calc(100vw - 2rem) !important;
+  }
+
+  /* ---- Delete confirmation modal ---- */
+  [class*="max-w-sm"] {
+    max-width: calc(100vw - 2rem) !important;
+  }
+
+  /* ---- Toast messages ---- */
+  [class*="fixed top-24 left-1/2"] {
+    width: calc(100% - 2rem) !important;
+    max-width: 90vw !important;
+    font-size: 0.875rem !important;
+    padding: 0.75rem 1rem !important;
+  }
+
+  /* ---- Address cards ---- */
+  [class*="flex items-center justify-between mb-2"] {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 0.5rem !important;
+  }
+
+  /* ---- Build project cards ---- */
+  [class*="flex justify-between items-center"] {
+    flex-wrap: wrap !important;
+    gap: 0.5rem !important;
+  }
+
+  /* ---- Build action buttons ---- */
+  [class*="flex gap-2 mt-4 pt-4"] {
+    flex-wrap: wrap !important;
+  }
+  [class*="flex gap-2 mt-4 pt-4"] > button {
+    flex: 1 1 calc(50% - 0.5rem) !important;
+    min-width: 0 !important;
+  }
+
+  /* ---- Saved builds grid ---- */
+  [class*="grid grid-cols-2 gap-2"] {
+    grid-template-columns: 1fr 1fr !important;
+  }
+
+  /* ---- Additional parts in summary ---- */
+  [class*="flex flex-col sm:flex-row justify-between"] {
+    flex-direction: column !important;
+    gap: 0.5rem !important;
+  }
+
+  /* ---- Configuration breakdown ---- */
+  [class*="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ---- Shipping selector ---- */
+  [class*="grid sm:grid-cols-2 gap-3"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ---- Address selection cards ---- */
+  [class*="flex items-start gap-4 p-4"] {
+    flex-direction: column !important;
+    gap: 0.75rem !important;
+  }
+
+  /* ---- Add address modal ---- */
+  [class*="grid grid-cols-2 gap-4"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ---- Appointment reschedule ---- */
+  [class*="grid sm:grid-cols-2 gap-4 mb-4"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ---- Appointment action required ---- */
+  [class*="sm:col-span-2 mt-4 pt-4"] > div {
+    flex-direction: column !important;
+    gap: 0.75rem !important;
+    text-align: center !important;
+  }
+
+  /* ---- Project task tracker ---- */
+  [class*="project-task"] {
+    overflow-x: auto !important;
+  }
+
+  /* ---- Admin sidebar ---- */
+  [class*="admin-sidebar"] {
+    width: 100% !important;
+    position: relative !important;
+  }
+
+  /* ---- Admin topbar ---- */
+  [class*="admin-topbar"] {
+    flex-wrap: wrap !important;
+    gap: 0.5rem !important;
+  }
+
+  /* ---- Staff dashboard ---- */
+  [class*="staff-dashboard"] {
+    flex-direction: column !important;
+  }
+
+  /* ---- Feedback page ---- */
+  [class*="feedback-layout"] {
+    flex-direction: column !important;
+  }
+
+  /* ---- Cloudinary assets ---- */
+  [class*="assets-grid"] {
+    grid-template-columns: 1fr 1fr !important;
+  }
+
+  /* ---- OTP verification ---- */
+  [class*="otp-input"] {
+    width: 2.5rem !important;
+    height: 2.5rem !important;
+    font-size: 1.25rem !important;
+  }
+
+  /* ---- Social media icons ---- */
+  [class*="social-icons"] {
+    gap: 0.5rem !important;
+  }
+
+  /* ---- Testimonial carousel ---- */
+  [class*="testimonial"] {
+    flex-direction: column !important;
+    text-align: center !important;
+  }
+
+  /* ---- Cart drawer ---- */
+  [class*="cart-drawer"] {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  /* ---- POS workspace ---- */
+  [class*="pos-workspace"] {
+    flex-direction: column !important;
+  }
+
+  /* ---- Appointment calendar ---- */
+  [class*="calendar"] {
+    overflow-x: auto !important;
+  }
+
+  /* ---- Appointment list ---- */
+  [class*="appointment-list"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ---- Unavailable dates manager ---- */
+  [class*="unavailable-dates"] {
+    flex-direction: column !important;
+  }
+
+  /* ---- Login/Signup pages ---- */
+  [class*="auth-layout"],
+  [class*="login-layout"],
+  [class*="signup-layout"] {
+    flex-direction: column !important;
+    padding: 1rem !important;
+  }
+  [class*="auth-layout"] > div,
+  [class*="login-layout"] > div,
+  [class*="signup-layout"] > div {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  /* ---- Reset password ---- */
+  [class*="reset-password"] {
+    padding: 1rem !important;
+  }
+
+  /* ---- OAuth pages ---- */
+  [class*="oauth"] {
+    padding: 1rem !important;
+  }
+
+  /* ---- Appointment form ---- */
+  [class*="appointment-form"] {
+    flex-direction: column !important;
+  }
+
+  /* ---- Appointment details modal ---- */
+  [class*="appointment-details"] {
+    flex-direction: column !important;
+  }
+
+  /* ---- Message panel ---- */
+  [class*="message-panel"] {
+    flex-direction: column !important;
+  }
+
+  /* ---- Order management ---- */
+  [class*="order-management"] {
+    overflow-x: auto !important;
+  }
+
+  /* ---- Project progress ---- */
+  [class*="project-progress"] {
+    flex-direction: column !important;
+  }
+
+  /* ---- Body options panel ---- */
+  [class*="body-options"] {
+    grid-template-columns: 1fr 1fr !important;
+  }
+
+  /* ---- Electronics options ---- */
+  [class*="electronics-options"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ---- Hardware options ---- */
+  [class*="hardware-options"] {
+    grid-template-columns: 1fr 1fr !important;
+  }
+
+  /* ---- Neck options ---- */
+  [class*="neck-options"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ---- Option groups ---- */
+  [class*="option-group"] {
+    grid-template-columns: 1fr 1fr !important;
+  }
+
+  /* ---- RGB color picker ---- */
+  [class*="rgb-picker"] {
+    flex-direction: column !important;
+  }
+
+  /* ---- Export options ---- */
+  [class*="export-options"] {
+    flex-direction: column !important;
+  }
+
+  /* ---- Sticker panel ---- */
+  [class*="sticker-panel"] {
+    grid-template-columns: 1fr 1fr !important;
+  }
+
+  /* ---- Price panel ---- */
+  [class*="price-panel"] {
+    flex-direction: column !important;
+  }
+
+  /* ---- Builder action bar ---- */
+  [class*="builder-action-bar"] {
+    flex-wrap: wrap !important;
+    gap: 0.5rem !important;
+  }
+
+  /* ---- Builder checkout section ---- */
+  [class*="builder-checkout"] {
+    flex-direction: column !important;
+  }
+
+  /* ---- Builder configuration panel ---- */
+  [class*="builder-config"] {
+    flex-direction: column !important;
+  }
+
+  /* ---- Builder saved badge ---- */
+  [class*="builder-saved"] {
+    font-size: 0.75rem !important;
+  }
+
+  /* ---- Customization panel ---- */
+  [class*="customization-panel"] {
+    flex-direction: column !important;
+  }
+
+  /* ---- Guitar preview ---- */
+  [class*="guitar-preview"] {
+    width: 100% !important;
+    min-height: 250px !important;
+  }
+
+  /* ---- Image with fallback ---- */
+  [class*="image-fallback"] {
+    max-width: 100% !important;
+  }
+
+  /* ---- Asset browser ---- */
+  [class*="asset-browser"] {
+    grid-template-columns: 1fr 1fr !important;
+  }
+
+  /* ---- Confirm modal ---- */
+  [class*="confirm-modal"] {
+    max-width: calc(100vw - 2rem) !important;
+  }
+
+  /* ---- Summary card ---- */
+  [class*="summary-card"] {
+    flex-direction: column !important;
+  }
+
+  /* ---- Toast ---- */
+  [class*="toast"] {
+    max-width: calc(100vw - 2rem) !important;
+  }
+
+  /* ---- Product rating modal ---- */
+  [class*="rating-modal"] {
+    max-width: calc(100vw - 2rem) !important;
+  }
+
+  /* ---- Theme toggle ---- */
+  [class*="theme-toggle"] {
+    min-width: 44px !important;
+    min-height: 44px !important;
+  }
+
+  /* ---- Header ---- */
+  [class*="header-content"] {
+    flex-wrap: wrap !important;
+    gap: 0.5rem !important;
+  }
+
+  /* ---- Landing page sections ---- */
+  [class*="landing-section"] {
+    padding: 2rem 1rem !important;
+  }
+
+  /* ---- Features grid ---- */
+  [class*="features-grid"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ---- Footer ---- */
+  [class*="footer"] {
+    flex-direction: column !important;
+    text-align: center !important;
+    padding: 1.5rem 1rem !important;
+  }
+  [class*="footer"] > div {
+    flex-direction: column !important;
+    gap: 1rem !important;
+  }
+
+  /* ---- CTA sections ---- */
+  [class*="cta-section"] {
+    flex-direction: column !important;
+    text-align: center !important;
+    padding: 2rem 1rem !important;
+  }
+
+  /* ---- Stats section ---- */
+  [class*="stats-grid"] {
+    grid-template-columns: 1fr 1fr !important;
+  }
+
+  /* ---- Brand logos ---- */
+  [class*="brand-logos"] {
+    flex-wrap: wrap !important;
+    justify-content: center !important;
+  }
+
+  /* ---- Newsletter ---- */
+  [class*="newsletter"] {
+    flex-direction: column !important;
+    gap: 0.75rem !important;
+  }
+  [class*="newsletter"] input {
+    width: 100% !important;
+  }
+
+  /* ---- Category cards ---- */
+  [class*="category-grid"] {
+    grid-template-columns: 1fr 1fr !important;
+  }
+
+  /* ---- Product cards ---- */
+  [class*="product-card"] {
+    flex-direction: column !important;
+  }
+  [class*="product-card"] img {
+    width: 100% !important;
+    height: auto !important;
+  }
+
+  /* ---- Filter bar ---- */
+  [class*="filter-bar"] {
+    flex-wrap: wrap !important;
+    gap: 0.5rem !important;
+  }
+
+  /* ---- Search bar ---- */
+  [class*="search-bar"] {
+    width: 100% !important;
+  }
+
+  /* ---- Pagination ---- */
+  [class*="pagination"] {
+    flex-wrap: wrap !important;
+    justify-content: center !important;
+  }
+
+  /* ---- Breadcrumbs ---- */
+  [class*="breadcrumb"] {
+    flex-wrap: wrap !important;
+    font-size: 0.75rem !important;
+  }
+
+  /* ---- Tabs ---- */
+  [class*="tabs"] {
+    overflow-x: auto !important;
+    flex-wrap: nowrap !important;
+    -webkit-overflow-scrolling: touch;
+  }
+  [class*="tabs"]::-webkit-scrollbar {
+    display: none !important;
+  }
+
+  /* ---- Badges ---- */
+  [class*="badge"] {
+    font-size: 0.625rem !important;
+    padding: 0.125rem 0.5rem !important;
+  }
+
+  /* ---- Tooltips ---- */
+  [class*="tooltip"] {
+    font-size: 0.75rem !important;
+  }
+
+  /* ---- Progress bars ---- */
+  [class*="progress"] {
+    height: 0.5rem !important;
+  }
+
+  /* ---- Loading spinners ---- */
+  [class*="spinner"] {
+    width: 1.25rem !important;
+    height: 1.25rem !important;
+  }
+
+  /* ---- Empty states ---- */
+  [class*="empty-state"] {
+    padding: 2rem 1rem !important;
+  }
+  [class*="empty-state"] [class*="w-16 h-16"] {
+    width: 3rem !important;
+    height: 3rem !important;
+  }
+  [class*="empty-state"] [class*="w-20 h-20"] {
+    width: 3.5rem !important;
+    height: 3.5rem !important;
+  }
+
+  /* ---- Avatar ---- */
+  [class*="w-10 h-10"] {
+    width: 2.25rem !important;
+    height: 2.25rem !important;
+  }
+  [class*="w-20 h-20"] {
+    width: 3.5rem !important;
+    height: 3.5rem !important;
+  }
+
+  /* ---- Icons in buttons ---- */
+  button svg,
+  [class*="btn"] svg {
+    width: 1rem !important;
+    height: 1rem !important;
+  }
+
+  /* ---- Price displays ---- */
+  [class*="text-3xl font-bold"] {
+    font-size: clamp(1.25rem, 5vw, 1.75rem) !important;
+  }
+  [class*="text-2xl font-bold"] {
+    font-size: clamp(1.1rem, 4.5vw, 1.5rem) !important;
+  }
+
+  /* ---- Order total display ---- */
+  [class*="text-xl font-bold text-\\[var\\(--gold-primary\\)\\]"] {
+    font-size: clamp(1rem, 4vw, 1.25rem) !important;
+  }
+
+  /* ---- Section headers ---- */
+  [class*="flex items-center justify-between mb-6"] {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 0.75rem !important;
+  }
+
+  /* ---- Dashboard header area ---- */
+  [class*="flex flex-col gap-4 sm:flex-row"] {
+    flex-direction: column !important;
+    gap: 0.75rem !important;
+  }
+
+  /* ---- Profile header ---- */
+  [class*="flex items-center gap-6 mb-10"] {
+    flex-direction: column !important;
+    text-align: center !important;
+    gap: 1rem !important;
+  }
+
+  /* ---- Address category buttons ---- */
+  [class*="flex gap-2"] > button {
+    flex: 1 !important;
+    font-size: 0.75rem !important;
+    padding: 0.5rem !important;
+  }
+
+  /* ---- Gender radio buttons ---- */
+  [class*="flex items-center gap-4 text-sm"] {
+    flex-wrap: wrap !important;
+    gap: 0.5rem !important;
+  }
+
+  /* ---- Password fields ---- */
+  [class*="pr-16"] {
+    padding-right: 3rem !important;
+  }
+
+  /* ---- Build tree in checkout ---- */
+  [class*="pl-4"] {
+    padding-left: 0.5rem !important;
+  }
+
+  /* ---- Order notes ---- */
+  textarea {
+    min-height: 80px !important;
+  }
+
+  /* ---- Checkout item cards ---- */
+  [class*="flex items-center gap-4"] > [class*="w-20 h-20"] {
+    width: 3.5rem !important;
+    height: 3.5rem !important;
+  }
+
+  /* ---- Checkout item details ---- */
+  [class*="flex items-center justify-between gap-4"] > div:last-child {
+    width: 100% !important;
+    justify-content: space-between !important;
+  }
+
+  /* ---- Quantity controls ---- */
+  [class*="flex items-center gap-2 bg-\\[var\\(--surface-dark\\)\\]"] {
+    padding: 0.25rem 0.5rem !important;
+  }
+  [class*="flex items-center gap-2 bg-\\[var\\(--surface-dark\\)\\]"] button {
+    padding: 0.25rem !important;
+  }
+
+  /* ---- Cart subtotal ---- */
+  [class*="flex items-center gap-3 mt-3"] {
+    flex-wrap: wrap !important;
+  }
+
+  /* ---- Payment method selection ---- */
+  [class*="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ---- Payment plan selection ---- */
+  [class*="grid gap-3 sm:grid-cols-2"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ---- Payment items list ---- */
+  [class*="flex items-center gap-3 rounded-xl"] {
+    flex-wrap: wrap !important;
+  }
+
+  /* ---- Receipt upload ---- */
+  [class*="h-64"] {
+    height: 12rem !important;
+  }
+
+  /* ---- Bank details ---- */
+  [class*="flex items-center justify-between border-b"] {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 0.25rem !important;
+  }
+
+  /* ---- GCash QR code ---- */
+  [class*="max-w-xs"] {
+    max-width: 80% !important;
+  }
+
+  /* ---- Terms checkbox ---- */
+  [class*="flex items-start gap-2 text-sm"] {
+    font-size: 0.75rem !important;
+  }
+
+  /* ---- Order summary warning ---- */
+  [class*="rounded-xl border border-\\[var\\(--gold-primary\\)\\]/30"] {
+    padding: 0.75rem !important;
+  }
+
+  /* ---- Security note ---- */
+  [class*="flex items-center gap-2 text-xs"] {
+    font-size: 0.625rem !important;
+  }
+
+  /* ---- Continue shopping link ---- */
+  [class*="flex items-center justify-between"] > a {
+    font-size: 0.75rem !important;
+  }
+
+  /* ---- Clear cart button ---- */
+  [class*="px-5 py-2\\.5 bg-red-500/10"] {
+    padding: 0.5rem 0.75rem !important;
+    font-size: 0.75rem !important;
+  }
+
+  /* ---- Address form grid ---- */
+  [class*="grid grid-cols-2 gap-4"] > div {
+    grid-column: span 2 / span 2 !important;
+  }
+
+  /* ---- Address form buttons ---- */
+  [class*="flex gap-4 mt-6"] {
+    flex-direction: column !important;
+  }
+
+  /* ---- Address list ---- */
+  [class*="flex items-center justify-between mb-2"] > div:last-child {
+    width: 100% !important;
+    justify-content: flex-start !important;
+  }
+
+  /* ---- Address edit/delete buttons ---- */
+  [class*="flex items-center gap-3"] > button {
+    padding: 0.5rem !important;
+  }
+
+  /* ---- Appointment header ---- */
+  [class*="flex justify-between items-center mb-6"] {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 0.75rem !important;
+  }
+
+  /* ---- Appointment card header ---- */
+  [class*="flex justify-between items-start mb-4 gap-4"] {
+    flex-direction: column !important;
+  }
+
+  /* ---- Appointment action required bar ---- */
+  [class*="sm:col-span-2 mt-4 pt-4 border-t"] > div {
+    flex-direction: column !important;
+    text-align: center !important;
+  }
+
+  /* ---- Appointment reschedule buttons ---- */
+  [class*="flex justify-end gap-2"] {
+    flex-wrap: wrap !important;
+  }
+
+  /* ---- Build projects header ---- */
+  [class*="flex items-center justify-between mb-6"] > div:last-child {
+    width: 100% !important;
+  }
+  [class*="flex items-center justify-between mb-6"] > div:last-child button {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+
+  /* ---- Build project card ---- */
+  [class*="flex justify-between items-center"] > div:first-child {
+    width: 100% !important;
+  }
+
+  /* ---- Build project progress ---- */
+  [class*="mt-4 flex items-center gap-4"] {
+    flex-wrap: wrap !important;
+  }
+
+  /* ---- Build project buttons ---- */
+  [class*="flex gap-2 mt-4 pt-4 border-t"] {
+    flex-direction: column !important;
+  }
+  [class*="flex gap-2 mt-4 pt-4 border-t"] > button {
+    width: 100% !important;
+  }
+
+  /* ---- Saved build card ---- */
+  [class*="flex justify-between items-start mb-4 gap-4"] > div:last-child {
+    text-align: left !important;
+  }
+
+  /* ---- Saved build action buttons ---- */
+  [class*="mt-6 space-y-2"] > div {
+    flex-direction: column !important;
+  }
+  [class*="mt-6 space-y-2"] > div > button {
+    width: 100% !important;
+  }
+
+  /* ---- Build limit warning ---- */
+  [class*="mb-6 rounded-xl border border-amber-500/30"] {
+    padding: 0.75rem !important;
+    font-size: 0.75rem !important;
+  }
+
+  /* ---- Create new build button ---- */
+  [class*="flex gap-3"] > button {
+    font-size: 0.75rem !important;
+    padding: 0.5rem 0.75rem !important;
+  }
+
+  /* ---- Build tabs ---- */
+  [class*="flex flex-wrap gap-6 sm:gap-8 border-b"] {
+    gap: 0.5rem !important;
+  }
+  [class*="flex flex-wrap gap-6 sm:gap-8 border-b"] > button {
+    font-size: 0.75rem !important;
+    padding-bottom: 0.5rem !important;
+  }
+
+  /* ---- Purchase tabs ---- */
+  [class*="flex flex-wrap gap-4 text-sm font-medium border-b"] {
+    gap: 0.25rem !important;
+  }
+  [class*="flex flex-wrap gap-4 text-sm font-medium border-b"] > button {
+    font-size: 0.7rem !important;
+    padding: 0.25rem 0.5rem !important;
+  }
+
+  /* ---- Purchase order card ---- */
+  [class*="flex flex-col gap-4 mb-4 border-b"] {
+    flex-direction: column !important;
+  }
+  [class*="flex flex-col gap-2 sm:items-end"] {
+    align-items: flex-start !important;
+  }
+
+  /* ---- Purchase order buttons ---- */
+  [class*="mt-4 pt-4 border-t flex justify-end"] {
+    flex-direction: column !important;
+    gap: 0.5rem !important;
+  }
+  [class*="mt-4 pt-4 border-t flex justify-end"] > button {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+  [class*="mt-4 pt-4 border-t flex justify-end gap-3"] {
+    flex-direction: column !important;
+  }
+  [class*="mt-4 pt-4 border-t flex justify-end gap-3"] > button {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+
+  /* ---- Cancel order modal ---- */
+  [class*="space-y-3"] > label {
+    padding: 0.75rem !important;
+  }
+
+  /* ---- Cancel order buttons ---- */
+  [class*="mt-6 flex gap-3"] {
+    flex-direction: column !important;
+  }
+
+  /* ---- Rating modal stars ---- */
+  [class*="flex justify-center gap-2 mb-6"] {
+    gap: 0.5rem !important;
+  }
+  [class*="flex justify-center gap-2 mb-6"] button svg {
+    width: 1.75rem !important;
+    height: 1.75rem !important;
+  }
+
+  /* ---- Rating modal buttons ---- */
+  [class*="flex gap-3"] {
+    flex-direction: column !important;
+  }
+
+  /* ---- Select instrument modal ---- */
+  [class*="flex flex-col gap-3"] {
+    gap: 0.5rem !important;
+  }
+
+  /* ---- View summary modal ---- */
+  [class*="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ---- View summary additional parts ---- */
+  [class*="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ---- View summary total ---- */
+  [class*="flex justify-between items-center border-t"] {
+    flex-direction: column !important;
+    gap: 0.5rem !important;
+    text-align: center !important;
+  }
+
+  /* ---- View summary buy button ---- */
+  [class*="w-full mt-8 py-4 px-4"] {
+    margin-top: 1.5rem !important;
+    padding: 0.75rem !important;
+    font-size: 1rem !important;
+  }
+
+  /* ---- Delete confirmation ---- */
+  [class*="flex items-center gap-2"] > h2 {
+    font-size: 1.1rem !important;
+  }
+
+  /* ---- Mobile section tabs in dashboard ---- */
+  [class*="xl\\:hidden rounded-2xl"] {
+    display: block !important;
+  }
+
+  /* ---- Dashboard sidebar hidden on mobile ---- */
+  [class*="hidden xl\\:block"] {
+    display: none !important;
+  }
+
+  /* ---- Dashboard main content ---- */
+  [class*="grid xl\\:grid-cols-\\[1fr_1\\.4fr\\]"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ---- Dashboard page padding ---- */
+  [class*="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10"] {
+    padding: 1rem !important;
+  }
+
+  /* ---- Dashboard section title ---- */
+  [class*="text-xl sm:text-2xl font-bold text-white"] {
+    font-size: 1.25rem !important;
+  }
+
+  /* ---- Dashboard section description ---- */
+  [class*="text-sm text-\\[var\\(--text-muted\\)\\] mb-8"] {
+    margin-bottom: 1.5rem !important;
+  }
+
+  /* ---- Dashboard card padding ---- */
+  [class*="bg-\\[var\\(--surface-dark\\)\\] border border-\\[var\\(--border\\)\\] rounded-2xl p-5 sm:p-8"] {
+    padding: 1rem !important;
+  }
+
+  /* ---- Dashboard card inner padding ---- */
+  [class*="bg-\\[var\\(--bg-primary\\)\\] border border-\\[var\\(--border\\)\\] rounded-xl p-5"] {
+    padding: 0.75rem !important;
+  }
+
+  /* ---- Dashboard card hover ---- */
+  [class*="hover\\:border-\\[var\\(--gold-primary\\)\\]/40"] {
+    transition: none !important;
+  }
+
+  /* ---- Dashboard card text ---- */
+  [class*="text-lg font-bold text-white"] {
+    font-size: 1rem !important;
+  }
+
+  /* ---- Dashboard card description ---- */
+  [class*="text-xs text-\\[var\\(--text-muted\\)\\]"] {
+    font-size: 0.7rem !important;
+  }
+
+  /* ---- Dashboard card price ---- */
+  [class*="text-lg font-bold text-\\[var\\(--gold-primary\\)\\]"] {
+    font-size: 1rem !important;
+  }
+
+  /* ---- Dashboard card status ---- */
+  [class*="px-2 py-0\\.5 border border-\\[var\\(--border\\)\\] rounded-full text-xs"] {
+    font-size: 0.625rem !important;
+  }
+
+  /* ---- Dashboard card progress ---- */
+  [class*="text-\\[var\\(--gold-primary\\)\\] font-bold text-sm"] {
+    font-size: 0.75rem !important;
+  }
+
+  /* ---- Dashboard card buttons ---- */
+  [class*="px-5 py-2\\.5 rounded-xl bg-gradient-to-r"] {
+    padding: 0.5rem 0.75rem !important;
+    font-size: 0.75rem !important;
+  }
+
+  /* ---- Dashboard card button icons ---- */
+  [class*="inline-flex h-8 w-8 items-center justify-center"] {
+    width: 1.5rem !important;
+    height: 1.5rem !important;
+  }
+  [class*="inline-flex h-8 w-8 items-center justify-center"] svg {
+    width: 0.75rem !important;
+    height: 0.75rem !important;
+  }
+
+  /* ---- Dashboard card button text ---- */
+  [class*="text-\\[10px\\] uppercase tracking-wide"] {
+    font-size: 0.5rem !important;
+  }
+
+  /* ---- Dashboard card button label ---- */
+  [class*="text-sm font-bold"] {
+    font-size: 0.7rem !important;
+  }
+
+  /* ---- Dashboard card chevron ---- */
+  [class*="ml-1"] svg {
+    width: 0.75rem !important;
+    height: 0.75rem !important;
+  }
+
+  /* ---- Dashboard card cancel button ---- */
+  [class*="px-4 py-2 rounded-lg border border-red-500/30"] {
+    padding: 0.375rem 0.75rem !important;
+    font-size: 0.75rem !important;
+  }
+
+  /* ---- Dashboard card project description ---- */
+  [class*="rounded-lg border border-\\[var\\(--border\\)\\] bg-\\[var\\(--surface-dark\\)\\] px-3 py-2\\.5"] {
+    padding: 0.5rem !important;
+  }
+
+  /* ---- Dashboard card project description text ---- */
+  [class*="text-sm text-\\[var\\(--text-muted\\)\\]"] {
+    font-size: 0.75rem !important;
+  }
+
+  /* ---- Dashboard card project description list ---- */
+  [class*="mt-1\\.5 space-y-1"] {
+    margin-top: 0.5rem !important;
+  }
+
+  /* ---- Dashboard card project description list items ---- */
+  [class*="flex items-start gap-2"] > span:first-child {
+    width: 0.5rem !important;
+    height: 0.5rem !important;
+    margin-top: 0.25rem !important;
+  }
+
+  /* ---- Dashboard card project description meta ---- */
+  [class*="mt-2 space-y-1 border-t border-\\[var\\(--border\\)\\] pt-2"] {
+    margin-top: 0.5rem !important;
+    padding-top: 0.5rem !important;
+  }
+
+  /* ---- Dashboard card estimated completion ---- */
+  [class*="text-\\[var\\(--text-muted\\)\\] text-sm mt-2"] {
+    font-size: 0.75rem !important;
+    margin-top: 0.5rem !important;
+  }
+
+  /* ---- Dashboard card status badge ---- */
+  [class*="px-2 py-0\\.5 border border-\\[var\\(--border\\)\\] rounded-full text-xs font-semibold"] {
+    font-size: 0.625rem !important;
+    padding: 0.125rem 0.5rem !important;
+  }
+
+  /* ---- Dashboard card progress text ---- */
+  [class*="text-\\[var\\(--gold-primary\\)\\] font-bold text-sm"] {
+    font-size: 0.75rem !important;
+  }
+
+  /* ---- Dashboard card divider ---- */
+  [class*="flex gap-2 mt-4 pt-4 border-t border-\\[var\\(--border\\)\\]"] {
+    margin-top: 0.75rem !important;
+    padding-top: 0.75rem !important;
+  }
+
+  /* ---- Dashboard card divider buttons ---- */
+  [class*="flex gap-2 mt-4 pt-4 border-t border-\\[var\\(--border\\)\\]"] > button {
+    flex: 1 !important;
+    font-size: 0.7rem !important;
+    padding: 0.5rem !important;
+  }
+
+  /* ---- Dashboard saved builds grid ---- */
+  [class*="grid md:grid-cols-2 gap-6"] {
+    gap: 0.75rem !important;
+  }
+
+  /* ---- Dashboard saved build card ---- */
+  [class*="bg-\\[var\\(--bg-primary\\)\\] border border-\\[var\\(--border\\)\\] rounded-xl p-5"] {
+    padding: 0.75rem !important;
+  }
+
+  /* ---- Dashboard saved build header ---- */
+  [class*="flex justify-between items-start mb-4 gap-4"] {
+    margin-bottom: 0.75rem !important;
+  }
+
+  /* ---- Dashboard saved build name ---- */
+  [class*="text-lg font-bold text-white"] {
+    font-size: 0.9rem !important;
+  }
+
+  /* ---- Dashboard saved build date ---- */
+  [class*="text-xs text-\\[var\\(--text-muted\\)\\] mt-1"] {
+    font-size: 0.65rem !important;
+  }
+
+  /* ---- Dashboard saved build price ---- */
+  [class*="text-lg font-bold text-\\[var\\(--gold-primary\\)\\] block"] {
+    font-size: 0.9rem !important;
+  }
+
+  /* ---- Dashboard saved build config ---- */
+  [class*="grid grid-cols-2 gap-2 mt-4 text-sm"] {
+    gap: 0.25rem !important;
+    margin-top: 0.5rem !important;
+  }
+
+  /* ---- Dashboard saved build config items ---- */
+  [class*="flex items-center gap-1"] > span:first-child {
+    font-size: 0.6rem !important;
+    max-width: 3rem !important;
+  }
+  [class*="flex items-center gap-1"] > span:last-child {
+    font-size: 0.6rem !important;
+    max-width: 4rem !important;
+  }
+
+  /* ---- Dashboard saved build locked badge ---- */
+  [class*="mt-4 rounded-lg border border-emerald-500/20"] {
+    padding: 0.5rem !important;
+    font-size: 0.65rem !important;
+  }
+
+  /* ---- Dashboard saved build actions ---- */
+  [class*="mt-6 space-y-2"] {
+    margin-top: 0.75rem !important;
+  }
+
+  /* ---- Dashboard saved build action buttons ---- */
+  [class*="flex-1 py-1\\.5 px-2 rounded-lg border"] {
+    padding: 0.375rem 0.5rem !important;
+    font-size: 0.65rem !important;
+  }
+
+  /* ---- Dashboard saved build buy now ---- */
+  [class*="w-full mt-2 py-2\\.5 px-3 rounded-lg bg-gradient-to-r"] {
+    padding: 0.5rem !important;
+    font-size: 0.75rem !important;
+  }
+
+  /* ---- Dashboard saved build buy now icons ---- */
+  [class*="w-full mt-2 py-2\\.5 px-3 rounded-lg bg-gradient-to-r"] svg {
+    width: 0.875rem !important;
+    height: 0.875rem !important;
+  }
+
+  /* ---- Dashboard saved build already ordered ---- */
+  [class*="px-2 py-0\\.5 rounded-full border border-emerald-500/30"] {
+    font-size: 0.5rem !important;
+    padding: 0.125rem 0.375rem !important;
+  }
+
+  /* ---- Dashboard saved build includes add-ons ---- */
+  [class*="text-xs text-\\[var\\(--text-muted\\)\\]"] {
+    font-size: 0.6rem !important;
+  }
+
+  /* ---- Dashboard saved build limit warning ---- */
+  [class*="mb-6 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3"] {
+    padding: 0.5rem !important;
+  }
+
+  /* ---- Dashboard saved build limit warning text ---- */
+  [class*="text-amber-300 text-sm font-medium"] {
+    font-size: 0.75rem !important;
+  }
+
+  /* ---- Dashboard saved build empty state ---- */
+  [class*="flex flex-col items-center justify-center py-10"] {
+    padding: 1.5rem 0 !important;
+  }
+
+  /* ---- Dashboard saved build empty state icon ---- */
+  [class*="w-16 h-16 rounded-full border-2"] {
+    width: 3rem !important;
+    height: 3rem !important;
+  }
+  [class*="w-16 h-16 rounded-full border-2"] svg {
+    width: 1.5rem !important;
+    height: 1.5rem !important;
+  }
+
+  /* ---- Dashboard saved build empty state text ---- */
+  [class*="text-white font-medium mb-1"] {
+    font-size: 0.9rem !important;
+  }
+
+  /* ---- Dashboard saved build empty state description ---- */
+  [class*="text-sm text-\\[var\\(--text-muted\\)\\] mb-6"] {
+    font-size: 0.75rem !important;
+    margin-bottom: 1rem !important;
+  }
+
+  /* ---- Dashboard saved build empty state button ---- */
+  [class*="px-6 py-2\\.5 rounded-full bg-gradient-to-r"] {
+    padding: 0.5rem 1rem !important;
+    font-size: 0.75rem !important;
+  }
+
+  /* ---- Dashboard appointments list ---- */
+  [class*="max-h-\\[62vh\\] space-y-4 overflow-y-auto pr-2"] {
+    max-height: 50vh !important;
+  }
+
+  /* ---- Dashboard appointment card ---- */
+  [class*="bg-\\[var\\(--bg-primary\\)\\] border border-\\[var\\(--border\\)\\] rounded-xl p-5"] {
+    padding: 0.75rem !important;
+  }
+
+  /* ---- Dashboard appointment header ---- */
+  [class*="flex justify-between items-start mb-4 gap-4"] {
+    margin-bottom: 0.5rem !important;
+  }
+
+  /* ---- Dashboard appointment title ---- */
+  [class*="font-bold text-white text-lg"] {
+    font-size: 0.9rem !important;
+  }
+
+  /* ---- Dashboard appointment service ---- */
+  [class*="text-xs text-\\[var\\(--text-muted\\)\\] mt-1 capitalize"] {
+    font-size: 0.65rem !important;
+  }
+
+  /* ---- Dashboard appointment status ---- */
+  [class*="px-3 py-1 rounded-full text-xs font-semibold capitalize border"] {
+    font-size: 0.6rem !important;
+    padding: 0.125rem 0.5rem !important;
+  }
+
+  /* ---- Dashboard appointment details ---- */
+  [class*="grid sm:grid-cols-2 gap-4 text-sm mt-4 pt-4 border-t"] {
+    margin-top: 0.5rem !important;
+    padding-top: 0.5rem !important;
+    gap: 0.5rem !important;
+  }
+
+  /* ---- Dashboard appointment detail label ---- */
+  [class*="block text-\\[var\\(--text-muted\\)\\] mb-1"] {
+    font-size: 0.65rem !important;
+    margin-bottom: 0.25rem !important;
+  }
+
+  /* ---- Dashboard appointment detail value ---- */
+  [class*="text-white"] {
+    font-size: 0.75rem !important;
+  }
+
+  /* ---- Dashboard appointment notes ---- */
+  [class*="sm:col-span-2 mt-2"] {
+    margin-top: 0.5rem !important;
+  }
+
+  /* ---- Dashboard appointment reschedule bar ---- */
+  [class*="sm:col-span-2 mt-4 pt-4 border-t border-\\[var\\(--border\\)\\] flex items-center justify-between"] {
+    flex-direction: column !important;
+    gap: 0.75rem !important;
+    text-align: center !important;
+    margin-top: 0.5rem !important;
+    padding-top: 0.5rem !important;
+  }
+
+  /* ---- Dashboard appointment reschedule bar icon ---- */
+  [class*="flex items-center gap-3"] {
+    flex-direction: column !important;
+    gap: 0.5rem !important;
+  }
+
+  /* ---- Dashboard appointment reschedule bar text ---- */
+  [class*="text-orange-400 font-semibold text-sm"] {
+    font-size: 0.75rem !important;
+  }
+
+  /* ---- Dashboard appointment reschedule bar description ---- */
+  [class*="text-orange-400/80 text-xs mt-0\\.5"] {
+    font-size: 0.65rem !important;
+  }
+
+  /* ---- Dashboard appointment reschedule button ---- */
+  [class*="px-4 py-2 rounded-lg bg-orange-500 text-white font-semibold text-xs"] {
+    font-size: 0.65rem !important;
+    padding: 0.375rem 0.75rem !important;
+  }
+
+  /* ---- Dashboard appointment reschedule form ---- */
+  [class*="mt-4 pt-4 border-t border-\\[var\\(--border\\)\\] bg-\\[var\\(--surface-dark\\)\\] p-4 rounded-xl"] {
+    padding: 0.75rem !important;
+    margin-top: 0.5rem !important;
+    padding-top: 0.5rem !important;
+  }
+
+  /* ---- Dashboard appointment reschedule form title ---- */
+  [class*="text-white font-semibold mb-3"] {
+    font-size: 0.8rem !important;
+    margin-bottom: 0.5rem !important;
+  }
+
+  /* ---- Dashboard appointment reschedule form inputs ---- */
+  [class*="grid sm:grid-cols-2 gap-4 mb-4"] {
+    gap: 0.5rem !important;
+    margin-bottom: 0.5rem !important;
+  }
+
+  /* ---- Dashboard appointment reschedule form label ---- */
+  [class*="block text-xs uppercase tracking-wider text-\\[var\\(--text-muted\\)\\] font-semibold mb-1"] {
+    font-size: 0.6rem !important;
+  }
+
+  /* ---- Dashboard appointment reschedule form input ---- */
+  [class*="w-full px-4 py-2\\.5 bg-\\[var\\(--bg-primary\\)\\] border border-\\[var\\(--border\\)\\] rounded-xl text-white text-sm"] {
+    padding: 0.5rem !important;
+    font-size: 0.75rem !important;
+  }
+
+  /* ---- Dashboard appointment reschedule form buttons ---- */
+  [class*="flex justify-end gap-2"] {
+    gap: 0.5rem !important;
+  }
+
+  /* ---- Dashboard appointment reschedule form cancel ---- */
+  [class*="px-4 py-2 rounded-lg text-\\[var\\(--text-muted\\)\\] text-sm font-semibold"] {
+    font-size: 0.75rem !important;
+    padding: 0.375rem 0.75rem !important;
+  }
+
+  /* ---- Dashboard appointment reschedule form confirm ---- */
+  [class*="px-4 py-2 rounded-lg bg-\\[var\\(--gold-primary\\)\\] text-black text-sm font-semibold"] {
+    font-size: 0.75rem !important;
+    padding: 0.375rem 0.75rem !important;
+  }
+
+  /* ---- Dashboard book appointment button ---- */
+  [class*="px-4 py-2 rounded-lg bg-gradient-to-r from-\\[var\\(--gold-primary\\)\\] to-\\[var\\(--gold-secondary\\)\\]"] {
+    padding: 0.5rem 0.75rem !important;
+    font-size: 0.75rem !important;
+  }
+
+  /* ---- Dashboard book appointment button icon ---- */
+  [class*="px-4 py-2 rounded-lg bg-gradient-to-r from-\\[var\\(--gold-primary\\)\\] to-\\[var\\(--gold-secondary\\)\\]"] svg {
+    width: 0.875rem !important;
+    height: 0.875rem !important;
+  }
+
+  /* ---- Dashboard cart item ---- */
+  [class*="flex gap-4 p-4 bg-\\[var\\(--bg-primary\\)\\] border border-\\[var\\(--border\\)\\] rounded-xl"] {
+    padding: 0.75rem !important;
+    gap: 0.75rem !important;
+  }
+
+  /* ---- Dashboard cart item image ---- */
+  [class*="w-24 h-24 rounded-lg overflow-hidden"] {
+    width: 4rem !important;
+    height: 4rem !important;
+  }
+
+  /* ---- Dashboard cart item name ---- */
+  [class*="font-semibold text-white truncate"] {
+    font-size: 0.8rem !important;
+  }
+
+  /* ---- Dashboard cart item category ---- */
+  [class*="text-xs text-\\[var\\(--text-muted\\)\\] mt-0\\.5"] {
+    font-size: 0.65rem !important;
+  }
+
+  /* ---- Dashboard cart item price ---- */
+  [class*="text-lg font-bold text-\\[var\\(--gold-primary\\)\\] mt-1"] {
+    font-size: 0.9rem !important;
+    margin-top: 0.25rem !important;
+  }
+
+  /* ---- Dashboard cart item quantity ---- */
+  [class*="flex items-center gap-2 bg-\\[var\\(--surface-dark\\)\\] rounded-lg border border-\\[var\\(--border\\)\\]"] {
+    padding: 0.25rem !important;
+  }
+
+  /* ---- Dashboard cart item quantity button ---- */
+  [class*="p-2 text-\\[var\\(--text-muted\\)\\] hover:text-white"] {
+    padding: 0.25rem !important;
+  }
+
+  /* ---- Dashboard cart item quantity value ---- */
+  [class*="w-8 text-center text-white font-medium"] {
+    width: 1.5rem !important;
+    font-size: 0.8rem !important;
+  }
+
+  /* ---- Dashboard cart item subtotal ---- */
+  [class*="text-sm text-\\[var\\(--text-muted\\)\\]"] {
+    font-size: 0.7rem !important;
+  }
+
+  /* ---- Dashboard cart total ---- */
+  [class*="flex items-center justify-between mb-6"] > span:first-child {
+    font-size: 1rem !important;
+  }
+  [class*="flex items-center justify-between mb-6"] > span:last-child {
+    font-size: 1.25rem !important;
+  }
+
+  /* ---- Dashboard cart checkout button ---- */
+  [class*="w-full py-3 px-6 rounded-xl bg-gradient-to-r"] {
+    padding: 0.75rem !important;
+    font-size: 0.9rem !important;
+  }
+
+  /* ---- Dashboard profile section ---- */
+  [class*="flex items-center gap-6 mb-10 pb-8 border-b"] {
+    flex-direction: column !important;
+    text-align: center !important;
+    gap: 1rem !important;
+    margin-bottom: 1.5rem !important;
+    padding-bottom: 1.5rem !important;
+  }
+
+  /* ---- Dashboard profile avatar ---- */
+  [class*="w-20 h-20 rounded-full overflow-hidden"] {
+    width: 4rem !important;
+    height: 4rem !important;
+  }
+
+  /* ---- Dashboard profile name ---- */
+  [class*="text-xl font-bold text-white mb-1"] {
+    font-size: 1.1rem !important;
+  }
+
+  /* ---- Dashboard profile email ---- */
+  [class*="text-sm text-\\[var\\(--text-muted\\)\\] mb-3"] {
+    font-size: 0.75rem !important;
+    margin-bottom: 0.5rem !important;
+  }
+
+  /* ---- Dashboard profile buttons ---- */
+  [class*="flex gap-2"] > label,
+  [class*="flex gap-2"] > button {
+    font-size: 0.65rem !important;
+    padding: 0.375rem 0.75rem !important;
+  }
+
+  /* ---- Dashboard profile form ---- */
+  [class*="grid md:grid-cols-2 gap-6"] {
+    gap: 0.75rem !important;
+  }
+
+  /* ---- Dashboard profile form label ---- */
+  [class*="block text-xs font-semibold text-white mb-2"] {
+    font-size: 0.7rem !important;
+    margin-bottom: 0.25rem !important;
+  }
+
+  /* ---- Dashboard profile form input ---- */
+  [class*="w-full px-4 py-2\\.5 rounded-lg border"] {
+    padding: 0.5rem !important;
+    font-size: 0.8rem !important;
+  }
+
+  /* ---- Dashboard profile save button ---- */
+  [class*="mt-8 inline-flex items-center gap-2 px-6 py-2\\.5 rounded-full"] {
+    margin-top: 1.5rem !important;
+    padding: 0.5rem 1rem !important;
+    font-size: 0.8rem !important;
+  }
+
+  /* ---- Dashboard addresses section ---- */
+  [class*="flex justify-between items-center mb-6"] > button {
+    font-size: 0.75rem !important;
+    padding: 0.5rem 0.75rem !important;
+  }
+
+  /* ---- Dashboard address card ---- */
+  [class*="p-4 rounded-xl border border-\\[var\\(--border\\)\\] bg-\\[var\\(--bg-primary\\)\\]"] {
+    padding: 0.75rem !important;
+  }
+
+  /* ---- Dashboard address card header ---- */
+  [class*="flex items-center justify-between mb-2"] > div:first-child {
+    flex-wrap: wrap !important;
+  }
+
+  /* ---- Dashboard address card label ---- */
+  [class*="font-semibold text-white capitalize"] {
+    font-size: 0.8rem !important;
+  }
+
+  /* ---- Dashboard address card default badge ---- */
+  [class*="px-2 py-0\\.5 rounded text-\\[10px\\] font-bold"] {
+    font-size: 0.5rem !important;
+    padding: 0.125rem 0.375rem !important;
+  }
+
+  /* ---- Dashboard address card actions ---- */
+  [class*="flex items-center gap-3"] > button {
+    padding: 0.375rem !important;
+  }
+
+  /* ---- Dashboard address card actions icons ---- */
+  [class*="flex items-center gap-3"] > button svg {
+    width: 1rem !important;
+    height: 1rem !important;
+  }
+
+  /* ---- Dashboard address card details ---- */
+  [class*="text-sm text-\\[var\\(--text-muted\\)\\] space-y-1"] {
+    font-size: 0.7rem !important;
+  }
+
+  /* ---- Dashboard address empty state ---- */
+  [class*="text-center py-8"] {
+    padding: 1.5rem 0 !important;
+  }
+
+  /* ---- Dashboard address empty state icon ---- */
+  [class*="w-12 h-12 text-\\[var\\(--text-muted\\)\\] mx-auto mb-3"] {
+    width: 2.5rem !important;
+    height: 2.5rem !important;
+    margin-bottom: 0.5rem !important;
+  }
+
+  /* ---- Dashboard address empty state text ---- */
+  [class*="text-\\[var\\(--text-muted\\)\\] text-sm"] {
+    font-size: 0.75rem !important;
+  }
+
+  /* ---- Dashboard address empty state description ---- */
+  [class*="text-\\[var\\(--text-muted\\)\\] text-xs mt-1"] {
+    font-size: 0.65rem !important;
+  }
+
+  /* ---- Dashboard address form ---- */
+  [class*="space-y-4 max-w-xl"] {
+    max-width: 100% !important;
+  }
+
+  /* ---- Dashboard address form back button ---- */
+  [class*="text-\\[var\\(--gold-primary\\)\\] hover:underline text-sm font-semibold"] {
+    font-size: 0.75rem !important;
+  }
+
+  /* ---- Dashboard address form title ---- */
+  [class*="text-white font-semibold"] {
+    font-size: 0.9rem !important;
+  }
+
+  /* ---- Dashboard address form category buttons ---- */
+  [class*="flex gap-2"] > button {
+    font-size: 0.7rem !important;
+    padding: 0.375rem !important;
+  }
+
+  /* ---- Dashboard address form select ---- */
+  [class*="w-full px-4 py-2\\.5 rounded-lg border border-\\[var\\(--border\\)\\] text-sm text-white bg-\\[var\\(--bg-primary\\)\\]"] {
+    padding: 0.5rem !important;
+    font-size: 0.75rem !important;
+  }
+
+  /* ---- Dashboard address form save button ---- */
+  [class*="flex-1 py-2\\.5 rounded-full bg-gradient-to-r"] {
+    padding: 0.5rem !important;
+    font-size: 0.8rem !important;
+  }
+
+  /* ---- Dashboard address form cancel button ---- */
+  [class*="px-6 py-2\\.5 rounded-full border border-\\[var\\(--border\\)\\]"] {
+    padding: 0.5rem 1rem !important;
+    font-size: 0.8rem !important;
+  }
+}

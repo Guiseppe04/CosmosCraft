@@ -26,6 +26,7 @@ const posRoutes = require('./routes/posRoutes');
 const projectRoutes = require('./routes/projectRoutes');
 const builderPartsRoutes = require('./routes/builderPartsRoutes');
 const cloudinaryRoutes = require('./routes/cloudinaryRoutes');
+const paymentSettingsRoutes = require('./routes/paymentSettingsRoutes');
 const { errorHandler, notFound } = require('./middleware/errorHandler.js');
 const { createRateLimiter } = require('./middleware/rateLimitMiddleware.js');
 
@@ -93,6 +94,10 @@ app.use('/api/pos', posRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/builder-parts', builderPartsRoutes);
 app.use('/api/cloudinary', cloudinaryRoutes);
+app.use('/api/payment-settings', paymentSettingsRoutes);
+// Legacy route alias kept for backwards-compat
+app.use('/user', userRoutes);
+
 app.use(notFound);
 app.use(errorHandler);
 
