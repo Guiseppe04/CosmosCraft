@@ -519,6 +519,27 @@ INSERT INTO payment_config (payment_method, is_active, display_name, instruction
 
 
 -- =============================================
+-- 15B. PAYMENT SETTINGS
+
+CREATE TABLE payment_settings (
+    id INTEGER PRIMARY KEY DEFAULT 1,
+    bank_name VARCHAR(255) NOT NULL DEFAULT '',
+    account_name VARCHAR(255) NOT NULL DEFAULT '',
+    account_number VARCHAR(255) NOT NULL DEFAULT '',
+    gcash_number VARCHAR(255) NOT NULL DEFAULT '',
+    maya_number VARCHAR(255) NOT NULL DEFAULT '',
+    qr_image_url TEXT NOT NULL DEFAULT '',
+    notes TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+);
+
+INSERT INTO payment_settings (id, bank_name, account_name, account_number, gcash_number, maya_number, qr_image_url, notes)
+VALUES (1, '', '', '', '', '', '', '')
+ON CONFLICT (id) DO NOTHING;
+
+
+-- =============================================
 -- 16. SERVICES
 -- =============================================
 
