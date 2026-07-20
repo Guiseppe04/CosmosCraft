@@ -759,6 +759,7 @@ function ImageZoomModal({ src, alt }) {
 const PRODUCT_RULES = {
   sku: [required('SKU')],
   name: [required('Name')],
+  category_id: [required('Category')],
   price: [required('Price'), positive('Price')],
 }
 const CATEGORY_RULES = {
@@ -2650,9 +2651,9 @@ export function AdminPage() {
         ...form,
         image_url: finalImageUrl,
         price: Number(form.price),
-        cost_price: form.cost_price ? Number(form.cost_price) : null,
-        stock: form.stock ? Number(form.stock) : 0,
-        low_stock_threshold: form.low_stock_threshold ? Number(form.low_stock_threshold) : 10,
+        cost_price: form.cost_price !== '' && form.cost_price != null ? Number(form.cost_price) : 0,
+        stock: form.stock !== '' && form.stock != null ? Number(form.stock) : 0,
+        low_stock_threshold: form.low_stock_threshold !== '' && form.low_stock_threshold != null ? Number(form.low_stock_threshold) : 10,
       }
       delete payload.image_file
       delete payload.preview_url

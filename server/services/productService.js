@@ -187,7 +187,7 @@ exports.createProduct = async ({ sku, name, description, price, brand, cost_pric
     await client.query(
       `INSERT INTO inventory (product_id, cost_price, stock, low_stock_threshold)
        VALUES ($1, $2, $3, $4)`,
-      [product.product_id, cost_price || null, stock ?? 0, low_stock_threshold ?? 10]
+      [product.product_id, cost_price != null ? cost_price : 0, stock ?? 0, low_stock_threshold ?? 10]
     );
     
     await client.query('COMMIT');
@@ -255,7 +255,7 @@ exports.updateProduct = async (id, { sku, name, description, price, brand, cost_
       await client.query(
         `INSERT INTO inventory (product_id, cost_price, stock, low_stock_threshold)
          VALUES ($1, $2, $3, $4)`,
-        [id, cost_price || null, stock ?? 0, low_stock_threshold ?? 10]
+        [id, cost_price != null ? cost_price : 0, stock ?? 0, low_stock_threshold ?? 10]
       );
     }
     
