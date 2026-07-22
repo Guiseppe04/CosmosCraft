@@ -38,6 +38,7 @@ export const staffApi = {
   },
   updateProject: (id, body) => request(`/api/projects/${id}`, { method: 'PUT', body }),
   updateProjectStage: (id, body) => request(`/api/projects/${id}`, { method: 'PUT', body }),
+  claimProject: (id) => request(`/api/projects/${id}/claim`, { method: 'POST' }),
 
   // Orders
   getOrders: (params = {}) => {

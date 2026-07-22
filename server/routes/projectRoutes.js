@@ -34,4 +34,11 @@ router.delete('/milestones/:milestoneId', ctrl.deleteMilestone);
 router.post('/milestones/:milestoneId/subtasks', ctrl.createSubtask);
 router.delete('/subtasks/:subtaskId', ctrl.deleteSubtask);
 
+// Claim / unclaim / reassign routes
+router.post('/:id/claim', ctrl.claimProject);
+router.post('/:id/unclaim', ctrl.unclaimProject);
+router.post('/:id/reassign', ctrl.reassignProject);
+router.get('/staff-claims', ctrl.getStaffClaimStatus);
+router.post('/:id/init-workflow', ctrl.initializeWorkflow);
+
 module.exports = router;

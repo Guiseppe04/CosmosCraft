@@ -196,6 +196,13 @@ export const adminApi = {
   getProjectActivity: (id) => request(`/api/projects/${id}/activity`),
   submitProjectFulfillment: (id, body) => request(`/api/projects/${id}/fulfillment`, { method: 'POST', body }),
 
+  // Claim / Unclaim / Reassign
+  claimProject: (id) => request(`/api/projects/${id}/claim`, { method: 'POST' }),
+  unclaimProject: (id) => request(`/api/projects/${id}/unclaim`, { method: 'POST' }),
+  reassignProject: (id, userId) => request(`/api/projects/${id}/reassign`, { method: 'POST', body: { user_id: userId } }),
+  getStaffClaimStatus: () => request('/api/projects/staff-claims'),
+  initializeWorkflow: (id) => request(`/api/projects/${id}/init-workflow`, { method: 'POST' }),
+
   // Milestones & Subtasks
   createMilestone: (projectId, body) => request(`/api/projects/${projectId}/milestones`, { method: 'POST', body }),
   updateMilestone: (milestoneId, body) => request(`/api/projects/milestones/${milestoneId}`, { method: 'PUT', body }),

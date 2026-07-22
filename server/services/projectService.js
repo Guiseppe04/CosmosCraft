@@ -42,11 +42,41 @@ const normalizeProjectStatus = (status) => {
   return null
 }
 
+const generateCustomBuildId = async () => {
+  const now = new Date();
+  const yy = String(now.getFullYear()).slice(-2);
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const dd = String(now.getDate()).padStart(2, '0');
+  const datePrefix = `${yy}${mm}${dd}`;
+
+  // Find the highest existing sequence number for today
+  const res = await pool.query(
+    `SELECT custom_build_id FROM projects 
+     WHERE custom_build_id LIKE $1 
+     ORDER BY custom_build_id DESC LIMIT 1`,
+    [`CMB-${datePrefix}-%`]
+  );
+
+  let nextSeq = 1;
+  if (res.rows.length > 0) {
+    const lastId = res.rows[0].custom_build_id;
+    const lastSeq = parseInt(lastId.split('-')[2], 10);
+    if (!Number.isNaN(lastSeq)) {
+      nextSeq = lastSeq + 1;
+    }
+  }
+
+  return `CMB-${datePrefix}-${String(nextSeq).padStart(4, '0')}`;
+};
+
 const PROJECT_BASE_SELECT = `
   SELECT
     p.*,
     p.title AS name,
     p.notes AS description,
+    p.claimed_by,
+    p.claimed_at,
+    p.custom_build_id,
     o.user_id AS customer_id,
     o.order_number,
     a.line1 AS shipping_line1,
@@ -62,11 +92,15 @@ const PROJECT_BASE_SELECT = `
         ELSE ''
       END,
       COALESCE(u.last_name, '')
-    ) AS customer_name
+    ) AS customer_name,
+    claim_user.first_name AS claimed_first_name,
+    claim_user.last_name AS claimed_last_name,
+    claim_user.role AS claimed_role
   FROM projects p
   JOIN orders o ON o.order_id = p.order_id
   LEFT JOIN addresses a ON a.address_id = o.shipping_address_id
   LEFT JOIN users u ON u.user_id = o.user_id
+  LEFT JOIN users claim_user ON claim_user.user_id = p.claimed_by
 `
 
 const LUZON_LOCATION_KEYWORDS = [
@@ -283,11 +317,14 @@ exports.createProject = async (projectData) => {
   const projectTitle = title || name
   const normalizedStatus = normalizeProjectStatus(status) || 'not_started'
 
+  // Generate unique custom_build_id
+  const customBuildId = await generateCustomBuildId();
+
   const result = await pool.query(
-    `INSERT INTO projects (order_id, title, status, notes, estimated_completion_date)
-     VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO projects (order_id, title, status, notes, estimated_completion_date, custom_build_id)
+     VALUES ($1, $2, $3, $4, $5, $6)
      RETURNING *`,
-    [projectOrderId, projectTitle, normalizedStatus, notes ?? description ?? null, estimated_completion_date || null]
+    [projectOrderId, projectTitle, normalizedStatus, notes ?? description ?? null, estimated_completion_date || null, customBuildId]
   );
   return { ...result.rows[0], name: result.rows[0].title, description: result.rows[0].notes };
 };
@@ -972,5 +1009,382 @@ exports.getActivityLogs = async (projectId) => {
     WHERE l.entity_type = 'project' AND l.entity_id = $1
     ORDER BY l.created_at DESC
   `, [projectId]);
+  return res.rows;
+};
+
+// ─── CLAIM / UNCLAIM / REASSIGN ─────────────────────────────────────────────
+
+const ensureClaimColumns = async () => {
+  const checkRes = await pool.query(
+    `SELECT column_name
+     FROM information_schema.columns
+     WHERE table_name = 'projects'
+       AND table_schema = current_schema()
+       AND column_name IN ('claimed_by', 'claimed_at')`
+  );
+  const existing = new Set(checkRes.rows.map((row) => row.column_name));
+  if (!existing.has('claimed_by')) {
+    await pool.query(`ALTER TABLE projects ADD COLUMN claimed_by UUID REFERENCES users(user_id) ON DELETE SET NULL`);
+  }
+  if (!existing.has('claimed_at')) {
+    await pool.query(`ALTER TABLE projects ADD COLUMN claimed_at TIMESTAMPTZ`);
+  }
+};
+
+const MANUFACTURING_WORKFLOW = [
+  {
+    title: 'Body',
+    order_index: 1,
+    subtasks: [
+      'Shape Carving',
+      'Pickup Cavity',
+      'Electronics Cavity',
+      'Neck Pocket',
+    ],
+  },
+  {
+    title: 'Neck',
+    order_index: 2,
+    subtasks: [
+      'Shape Carving',
+      'Installation of Frets',
+      'Tuning Peg Holes',
+    ],
+  },
+  {
+    title: 'Parts Fitting',
+    order_index: 3,
+    subtasks: [],
+  },
+  {
+    title: 'Paint Processing, Buffing & Polishing',
+    order_index: 4,
+    subtasks: [
+      'Sanding',
+      'Primer',
+      'Base Color',
+      'Top Coat',
+      'Buffing',
+      'Polishing',
+    ],
+  },
+  {
+    title: 'Assembly & Setup',
+    order_index: 5,
+    subtasks: [],
+  },
+  {
+    title: 'Release',
+    order_index: 6,
+    subtasks: [
+      'Final Quality Inspection',
+      'Ready for Release',
+      'Delivered',
+    ],
+  },
+];
+
+/**
+ * Initialize the manufacturing workflow milestones and subtasks for a project.
+ * Only runs if no milestones exist yet.
+ */
+exports.initializeManufacturingWorkflow = async (projectId, userId) => {
+  await ensureClaimColumns();
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Check if milestones already exist
+    const existing = await client.query(
+      'SELECT COUNT(*) FROM project_milestones WHERE project_id = $1',
+      [projectId]
+    );
+    if (parseInt(existing.rows[0].count) > 0) {
+      await client.query('COMMIT');
+      return { initialized: false, message: 'Workflow already exists' };
+    }
+
+    for (const step of MANUFACTURING_WORKFLOW) {
+      const mRes = await client.query(
+        `INSERT INTO project_milestones (project_id, title, order_index, status)
+         VALUES ($1, $2, $3, 'pending') RETURNING milestone_id`,
+        [projectId, step.title, step.order_index]
+      );
+      const milestoneId = mRes.rows[0].milestone_id;
+
+      for (const subtaskTitle of step.subtasks) {
+        await client.query(
+          `INSERT INTO project_subtasks (milestone_id, title, status)
+           VALUES ($1, $2, 'pending')`,
+          [milestoneId, subtaskTitle]
+        );
+      }
+    }
+
+    await logActivity(client, projectId, userId, 'workflow_initialized', {
+      message: 'Manufacturing workflow milestones created',
+    });
+
+    await client.query('COMMIT');
+    return { initialized: true, message: 'Workflow initialized successfully' };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+};
+
+/**
+ * Claim a project:
+ * - Staff and Admins can claim
+ * - Auto-assigns the user as claimed_by
+ * - Changes status from 'not_started' to 'in_progress'
+ * - Only one user can claim at a time (must not already be claimed)
+ * - Initializes manufacturing workflow if not yet initialized
+ */
+exports.claimProject = async (projectId, userId, userRole) => {
+  await ensureClaimColumns();
+  
+  if (!['staff', 'admin', 'super_admin'].includes(userRole)) {
+    throw new AppError('Only staff and admins can claim projects', 403);
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Fetch project
+    const pRes = await client.query(
+      `SELECT * FROM projects WHERE project_id = $1 AND deleted_at IS NULL`,
+      [projectId]
+    );
+    if (pRes.rows.length === 0) throw new AppError('Project not found', 404);
+    const project = pRes.rows[0];
+
+    // Check if already claimed
+    if (project.claimed_by) {
+      // Get claimer info
+      const claimerRes = await client.query(
+        `SELECT first_name, last_name FROM users WHERE user_id = $1`,
+        [project.claimed_by]
+      );
+      const claimerName = claimerRes.rows[0]
+        ? `${claimerRes.rows[0].first_name} ${claimerRes.rows[0].last_name}`
+        : 'another user';
+      throw new AppError(`This project is already claimed by ${claimerName}`, 409);
+    }
+
+    // Check project status - only allow claiming not_started projects
+    const normalizedStatus = normalizeProjectStatus(project.status);
+    if (normalizedStatus !== 'not_started' && normalizedStatus !== 'in_progress') {
+      throw new AppError(`Cannot claim a project with status: ${project.status}`, 400);
+    }
+
+    // Update project: set claimed_by, claimed_at, change status to in_progress
+    await client.query(
+      `UPDATE projects
+       SET claimed_by = $1,
+           claimed_at = CURRENT_TIMESTAMP,
+           status = 'in_progress',
+           updated_at = CURRENT_TIMESTAMP
+       WHERE project_id = $2`,
+      [userId, projectId]
+    );
+
+    // Initialize workflow if not yet done
+    const existing = await client.query(
+      'SELECT COUNT(*) FROM project_milestones WHERE project_id = $1',
+      [projectId]
+    );
+
+    if (parseInt(existing.rows[0].count) === 0) {
+      for (const step of MANUFACTURING_WORKFLOW) {
+        const mRes = await client.query(
+          `INSERT INTO project_milestones (project_id, title, order_index, status)
+           VALUES ($1, $2, $3, 'pending') RETURNING milestone_id`,
+          [projectId, step.title, step.order_index]
+        );
+        const milestoneId = mRes.rows[0].milestone_id;
+
+        for (const subtaskTitle of step.subtasks) {
+          await client.query(
+            `INSERT INTO project_subtasks (milestone_id, title, status)
+             VALUES ($1, $2, 'pending')`,
+            [milestoneId, subtaskTitle]
+          );
+        }
+      }
+      await logActivity(client, projectId, userId, 'workflow_initialized', {
+        message: 'Manufacturing workflow created on claim',
+      });
+    }
+
+    await logActivity(client, projectId, userId, 'project_claimed', {
+      claimed_by: userId,
+    });
+
+    await client.query('COMMIT');
+
+    // Return updated project
+    const updated = await exports.getProjectById(projectId);
+    return updated;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+};
+
+/**
+ * Unclaim a project (admin feature):
+ * - Removes claimed_by and claimed_at
+ * - Reverts status to 'not_started' 
+ * - Keeps workflow intact
+ */
+exports.unclaimProject = async (projectId, userId, userRole) => {
+  await ensureClaimColumns();
+
+  if (!['admin', 'super_admin'].includes(userRole)) {
+    throw new AppError('Only admins can unclaim projects', 403);
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const pRes = await client.query(
+      `SELECT * FROM projects WHERE project_id = $1 AND deleted_at IS NULL`,
+      [projectId]
+    );
+    if (pRes.rows.length === 0) throw new AppError('Project not found', 404);
+    const project = pRes.rows[0];
+
+    if (!project.claimed_by) {
+      throw new AppError('Project is not claimed by anyone', 400);
+    }
+
+    // Reset claimed fields and revert status
+    await client.query(
+      `UPDATE projects
+       SET claimed_by = NULL,
+           claimed_at = NULL,
+           status = 'not_started',
+           updated_at = CURRENT_TIMESTAMP
+       WHERE project_id = $1`,
+      [projectId]
+    );
+
+    await logActivity(client, projectId, userId, 'project_unclaimed', {
+      previous_claimed_by: project.claimed_by,
+    });
+
+    await client.query('COMMIT');
+
+    const updated = await exports.getProjectById(projectId);
+    return updated;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+};
+
+/**
+ * Reassign a project to another user (admin feature).
+ */
+exports.reassignProject = async (projectId, newUserId, currentUserId, userRole) => {
+  await ensureClaimColumns();
+
+  if (!['admin', 'super_admin'].includes(userRole)) {
+    throw new AppError('Only admins can reassign projects', 403);
+  }
+
+  // Validate new user exists and is staff/admin
+  const newUserRes = await pool.query(
+    `SELECT user_id, first_name, last_name, role FROM users WHERE user_id = $1 AND deleted_at IS NULL`,
+    [newUserId]
+  );
+  if (newUserRes.rows.length === 0) throw new AppError('User not found', 404);
+  const newUser = newUserRes.rows[0];
+  if (!['staff', 'admin', 'super_admin'].includes(newUser.role)) {
+    throw new AppError('Can only reassign to staff or admin users', 400);
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const pRes = await client.query(
+      `SELECT * FROM projects WHERE project_id = $1 AND deleted_at IS NULL`,
+      [projectId]
+    );
+    if (pRes.rows.length === 0) throw new AppError('Project not found', 404);
+    const project = pRes.rows[0];
+
+    const previousClaimedBy = project.claimed_by;
+
+    // Update claim
+    await client.query(
+      `UPDATE projects
+       SET claimed_by = $1,
+           claimed_at = CURRENT_TIMESTAMP,
+           status = 'in_progress',
+           updated_at = CURRENT_TIMESTAMP
+       WHERE project_id = $2`,
+      [newUserId, projectId]
+    );
+
+    await logActivity(client, projectId, currentUserId, 'project_reassigned', {
+      from: previousClaimedBy,
+      to: newUserId,
+      to_name: `${newUser.first_name} ${newUser.last_name}`,
+    });
+
+    await client.query('COMMIT');
+
+    const updated = await exports.getProjectById(projectId);
+    return updated;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+};
+
+/**
+ * Get all staff with their currently claimed projects for admin monitoring.
+ */
+exports.getStaffClaimStatus = async () => {
+  const res = await pool.query(`
+    SELECT 
+      u.user_id,
+      u.first_name,
+      u.last_name,
+      u.email,
+      u.role,
+      u.is_active,
+      json_agg(
+        json_build_object(
+          'project_id', p.project_id,
+          'title', p.title,
+          'status', p.status,
+          'progress', p.progress,
+          'claimed_at', p.claimed_at,
+          'order_number', o.order_number
+        )
+        ORDER BY p.claimed_at DESC
+      ) FILTER (WHERE p.project_id IS NOT NULL) AS claimed_projects
+    FROM users u
+    LEFT JOIN projects p ON p.claimed_by = u.user_id AND p.deleted_at IS NULL
+    LEFT JOIN orders o ON o.order_id = p.order_id
+    WHERE u.role IN ('staff', 'admin', 'super_admin')
+      AND u.deleted_at IS NULL
+    GROUP BY u.user_id, u.first_name, u.last_name, u.email, u.role, u.is_active
+    ORDER BY u.first_name ASC
+  `);
   return res.rows;
 };

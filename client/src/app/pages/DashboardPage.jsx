@@ -6,7 +6,7 @@ import { useAuth } from '../context/AuthContext.jsx'
 import { useCart } from '../context/CartContext.jsx'
 import { BASE_PRICE, BODY_OPTIONS, BODY_WOOD_OPTIONS, BODY_FINISH_OPTIONS, NECK_OPTIONS, FRETBOARD_OPTIONS, HEADSTOCK_OPTIONS, HEADSTOCK_WOOD_OPTIONS, INLAY_OPTIONS, BRIDGE_OPTIONS, PICKGUARD_OPTIONS_BY_BODY, KNOB_OPTIONS_BY_BODY, HARDWARE_OPTIONS, PICKUP_OPTIONS } from '../lib/guitarBuilderData.js'
 import { adminApi } from '../utils/adminApi.js'
-import ProjectTaskTracker from '../components/projects/ProjectTaskTracker.jsx'
+import CustomerProjectTracker from '../components/projects/CustomerProjectTracker.jsx'
 import { getAllProvinces, getMunicipalitiesByProvince, getBarangaysByMunicipality } from '@aivangogh/ph-address'
 import { Country } from 'country-state-city'
 import { ConfirmModal } from '../components/ui/ConfirmModal'
@@ -1080,12 +1080,21 @@ export function DashboardPage() {
 
   const renderProjectsContent = () => {
     if (activeProjectView) {
+      const cleanTrackerName = (activeProjectView.name || activeProjectView.title || 'Custom Build')
+        .replace(/\s*\(ORD-[^)]*\)\s*/g, '')
+        .replace(/\s*Order\s*#[^\s]*\s*/gi, '')
+        .trim();
       return (
         <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-4 sm:p-6 lg:p-7 xl:p-8">
           <button onClick={() => setActiveProjectView(null)} className="mb-6 text-[var(--gold-primary)] hover:underline flex items-center gap-2 text-sm font-semibold">
             &larr; Back to Build Projects
           </button>
-          <ProjectTaskTracker projectId={activeProjectView.project_id} isAdmin={false} />
+          <CustomerProjectTracker
+            projectId={activeProjectView.project_id}
+            projectName={cleanTrackerName}
+            projectData={activeProjectView}
+            customBuildId={activeProjectView.customBuildId}
+          />
         </div>
       );
     }
@@ -1132,38 +1141,24 @@ export function DashboardPage() {
           </div>       
         ) : (
           <div className="grid gap-6">
-            {myProjects.map((project) => {
-              const projectDescription = parseProjectDescription(project.description || 'Custom Build Project')
+            {myProjects.map((project, index) => {
+              project.customBuildId = project.custom_build_id;
+
+              // Clean project name - remove any ORD/order references from the stored title
+              const cleanName = (project.name || project.title || 'Custom Build')
+                .replace(/\s*\(ORD-[^)]*\)\s*/g, '')
+                .replace(/\s*Order\s*#[^\s]*\s*/gi, '')
+                .trim();
+
               return (
               <div key={project.project_id} className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl p-5 hover:border-[var(--gold-primary)]/40 transition-colors">
                 <div className="flex justify-between items-center">
                   <div>
-                    <h3 className="text-lg font-bold text-white">{project.name}</h3>
-                    {projectDescription?.title ? (
-                      <div className="mt-2 rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] px-3 py-2.5 text-sm text-[var(--text-muted)]">
-                        <p className="font-semibold text-white">{projectDescription.title}</p>
-                        {projectDescription.bulletItems.length > 0 && (
-                          <ul className="mt-1.5 space-y-1">
-                            {projectDescription.bulletItems.map((item, index) => (
-                              <li key={`${project.project_id}-bullet-${index}`} className="flex items-start gap-2">
-                                <span className="mt-[6px] h-1.5 w-1.5 rounded-full bg-[var(--gold-primary)] shrink-0" />
-                                <span>{item}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                        {projectDescription.metaLines.length > 0 && (
-                          <div className="mt-2 space-y-1 border-t border-[var(--border)] pt-2">
-                            {projectDescription.metaLines.map((line, index) => (
-                              <p key={`${project.project_id}-meta-${index}`} className="break-words">
-                                {line}
-                              </p>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <p className="text-[var(--text-muted)] text-sm mt-1 break-words">{projectDescription?.plainText || 'Custom Build Project'}</p>
+                    <h3 className="text-lg font-bold text-white">{cleanName}</h3>
+                    {project.customBuildId && (
+                      <p className="text-xs text-[var(--text-muted)] mt-1">
+                        Custom Build ID: {project.customBuildId}
+                      </p>
                     )}
                     <p className="text-[var(--text-muted)] text-sm mt-2">
                       Estimated completion:{' '}
@@ -1176,7 +1171,6 @@ export function DashboardPage() {
                       <span className="text-[var(--gold-primary)] font-bold text-sm">{project.progress}% Complete</span>
                     </div>
                   </div>
-                  
                 </div>
                 <div className="flex gap-2 mt-4 pt-4 border-t border-[var(--border)]">
                   {project.progress < 80 && String(project.status || '').toLowerCase() !== 'cancelled' && (
@@ -1203,7 +1197,6 @@ export function DashboardPage() {
                     </span>
                   </button>
                 </div>
-                
               </div>
             )})}
           </div>
