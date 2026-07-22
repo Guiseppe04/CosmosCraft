@@ -125,6 +125,15 @@ router.patch(
  */
 router.delete('/:id', appointmentController.cancelAppointment);
 
+/**
+ * POST /api/appointments/:id/cancel
+ * Cancel appointment (alternative endpoint for customers)
+ * Body:
+ *   - reason (optional) - Cancellation reason
+ * Access: Customers cancel own, Admin/Staff cancel any
+ */
+router.post('/:id/cancel', appointmentController.cancelAppointment);
+
 // ─── GET APPOINTMENTS BY DATE RANGE ───────────────────────────────────────
 
 /**

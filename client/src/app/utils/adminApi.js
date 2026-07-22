@@ -141,6 +141,7 @@ export const adminApi = {
   }),
   rescheduleAppointment: (id, newScheduledAt, reason) => request(`/api/appointments/${id}/reschedule`, { method: 'PATCH', body: { new_scheduled_at: newScheduledAt, reason } }),
   cancelAppointment: (id, reason) => request(`/api/appointments/${id}`, { method: 'DELETE', body: reason ? { reason } : {} }),
+  cancelMyAppointment: (id, reason) => request(`/api/appointments/${id}/cancel`, { method: 'POST', body: reason ? { reason } : {} }),
   getAppointmentStats: (params = {}) => {
     const qs = new URLSearchParams(params).toString()
     return request(`/api/appointments/stats${qs ? '?' + qs : ''}`)
@@ -194,6 +195,13 @@ export const adminApi = {
   getProjectHierarchy: (id) => request(`/api/projects/${id}/hierarchy`),
   getProjectActivity: (id) => request(`/api/projects/${id}/activity`),
   submitProjectFulfillment: (id, body) => request(`/api/projects/${id}/fulfillment`, { method: 'POST', body }),
+
+  // Claim / Unclaim / Reassign
+  claimProject: (id) => request(`/api/projects/${id}/claim`, { method: 'POST' }),
+  unclaimProject: (id) => request(`/api/projects/${id}/unclaim`, { method: 'POST' }),
+  reassignProject: (id, userId) => request(`/api/projects/${id}/reassign`, { method: 'POST', body: { user_id: userId } }),
+  getStaffClaimStatus: () => request('/api/projects/staff-claims'),
+  initializeWorkflow: (id) => request(`/api/projects/${id}/init-workflow`, { method: 'POST' }),
 
   // Milestones & Subtasks
   createMilestone: (projectId, body) => request(`/api/projects/${projectId}/milestones`, { method: 'POST', body }),

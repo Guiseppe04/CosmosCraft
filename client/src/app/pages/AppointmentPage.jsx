@@ -17,6 +17,7 @@ import {
   Check,
   ImagePlus,
   X,
+  FileText,
 } from 'lucide-react'
 
 const APPOINTMENT_BRANCH_STORAGE_KEY = 'cosmoscraft.appointment.branch'
@@ -257,6 +258,8 @@ export function AppointmentPage() {
   const [availableTimeSet, setAvailableTimeSet] = useState(new Set())
   const [slotsLoading, setSlotsLoading] = useState(false)
   const [slotAvailabilityStatus, setSlotAvailabilityStatus] = useState('')
+  // Dedicated notes field for additional information (landmarks, delivery instructions, special requests, etc.)
+  const [additionalNotes, setAdditionalNotes] = useState('')
   
   // Calendar state
   const [currentMonth, setCurrentMonth] = useState(today.getMonth())
@@ -504,7 +507,10 @@ export function AppointmentPage() {
   const canProceed = () => {
     if (currentStep === 1) return selectedDateId && selectedTime
     if (currentStep === 2) return Boolean(selectedServiceId)
-    if (currentStep === 3) return Boolean(selectedAppointmentType)
+    if (currentStep === 3) {
+      if (!hasSelectedGuitar) return false
+      return Boolean(selectedAppointmentType)
+    }
     if (currentStep === 4) {
       if (selectedAppointmentType === 'service_home') {
         return Boolean(homeServiceAddressId && homeServiceContact.trim())
@@ -522,6 +528,7 @@ export function AppointmentPage() {
       return 'Select a service to continue.'
     }
     if (currentStep === 3) {
+      if (!hasSelectedGuitar) return 'Please select a guitar before continuing.'
       if (!selectedAppointmentType) return 'Please choose Home Service: Yes or No.'
     }
     if (currentStep === 4 && selectedAppointmentType === 'service_home') {
@@ -604,21 +611,6 @@ export function AppointmentPage() {
     return (
       <div className="space-y-6">
         <div className="space-y-3">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <label className="block text-sm font-medium text-white">Search Services</label>
-              <input
-                value={serviceSearch}
-                onChange={(e) => setServiceSearch(e.target.value)}
-                placeholder="Search by service name or description"
-                className="w-full px-4 py-3 bg-[var(--surface-dark)] text-[var(--text-light)] border border-[var(--border)] rounded-xl text-sm focus:outline-none focus:border-[#d4af37]"
-              />
-            </div>
-            <div className="rounded-full bg-[var(--bg-primary)] px-4 py-3 text-sm font-semibold text-[var(--text-muted)]">
-              {filteredServices.length} service{filteredServices.length === 1 ? '' : 's'} found
-            </div>
-          </div>
-
           <div className="grid gap-3 sm:grid-cols-2">
             {filteredServices.map((service) => renderServiceOption(service))}
           </div>
@@ -679,6 +671,21 @@ export function AppointmentPage() {
     setGuitarReferencePreviewUrl('')
   }
 
+  // Compute the final notes to send to the API
+  const computedNotes = useMemo(() => {
+    const parts = []
+    if (additionalNotes.trim()) {
+      parts.push(additionalNotes.trim())
+    }
+    if (serviceReferencePreviewUrl && serviceReferenceFile) {
+      parts.push(`Service reference image: ${serviceReferencePreviewUrl}`)
+    }
+    if (guitarReferencePreviewUrl && guitarReferenceFile) {
+      parts.push(`Guitar reference image: ${guitarReferencePreviewUrl}`)
+    }
+    return parts.length > 0 ? parts.join('\n') : null
+  }, [additionalNotes, serviceReferencePreviewUrl, serviceReferenceFile, guitarReferencePreviewUrl, guitarReferenceFile])
+
   const handleSubmit = async () => {
     if (!isAuthenticated) {
       openLogin(() => navigate('/appointments', { replace: true }))
@@ -707,15 +714,22 @@ export function AppointmentPage() {
       if (modifier === 'PM') hours = parseInt(hours, 10) + 12;
       const scheduledAt = new Date(`${selectedDateId}T${hours.toString().padStart(2, '0')}:${minutes}:00`);
 
+      // Build notes: only the additional notes + reference image URLs
+      const finalNotes = [
+        additionalNotes.trim(),
+        serviceReferenceImageUrl ? `Service reference image: ${serviceReferenceImageUrl}` : '',
+        guitarReferenceImageUrl ? `Guitar reference image: ${guitarReferenceImageUrl}` : '',
+      ].filter(Boolean).join('\n') || null
+
       const response = await fetch(`${API}/api/appointments`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
         credentials: 'include',
-        body: JSON.stringify({
+          body: JSON.stringify({
           appointment_type: selectedAppointmentType,
-          service_id: selectedServiceId,
+          services: selectedServiceId ? [selectedServiceId] : [],
           location_id: selectedBranchId,
           address_id: selectedAppointmentType === 'service_home' ? homeServiceAddressId : undefined,
           guitar_details: hasSelectedGuitar
@@ -729,16 +743,7 @@ export function AppointmentPage() {
               }
             : undefined,
           scheduled_at: scheduledAt.toISOString(),
-          notes: [
-            hasSelectedGuitar
-              ? selectedGuitarEntries
-                .map((guitar, index) => `Guitar ${index + 1}: ${guitar.brand} ${guitar.model} (${formatAppointmentGuitarTypeLabel(guitar.type)})`)
-                .join('\n')
-              : '',
-            selectedAppointmentType === 'service_home' ? `Home service contact: ${homeServiceContact}` : '',
-            serviceReferenceImageUrl ? `Service reference image: ${serviceReferenceImageUrl}` : '',
-            guitarReferenceImageUrl ? `Guitar reference image: ${guitarReferenceImageUrl}` : '',
-          ].filter(Boolean).join('\n')
+          notes: finalNotes,
         })
       });
 
@@ -970,6 +975,30 @@ export function AppointmentPage() {
                   </div>
                 )}
               </div>
+
+              {/* Dedicated Notes section for additional information */}
+              <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-4 space-y-3">
+                <div className="flex items-start gap-3">
+                  <div className="rounded-xl p-2 bg-[#d4af37]/10 text-[#d4af37]">
+                    <FileText className="h-4 w-4" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-[var(--text-light)]">Additional Notes (Optional)</p>
+                    <p className="mt-1 text-xs text-[var(--text-muted)]">
+                      Add any extra information such as address landmarks, delivery/service instructions, 
+                      or special requests about your guitar.
+                    </p>
+                  </div>
+                </div>
+                <textarea
+                  value={additionalNotes}
+                  onChange={e => setAdditionalNotes(e.target.value)}
+                  className="w-full h-24 px-4 py-3 bg-[var(--surface-dark)] text-[var(--text-light)] border border-[var(--border)] rounded-xl text-sm resize-none focus:outline-none focus:border-[#d4af37] placeholder:text-[var(--text-muted)]/60"
+                  placeholder="e.g. Gate code: 1234, leave guitar at the front desk, please handle with care..."
+                  maxLength={500}
+                />
+                <p className="text-right text-xs text-[var(--text-muted)]">{additionalNotes.length}/500</p>
+              </div>
             </div>
           </motion.div>
         )
@@ -1150,7 +1179,7 @@ export function AppointmentPage() {
                 <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="pt-6 border-t border-[var(--border)]">
                   <h3 className="text-sm font-bold text-[var(--text-muted)] mb-4 uppercase tracking-wider">Available Time Slots</h3>
                   {slotsLoading && (
-                    <p className="mb-3 text-xs text-[var(--text-muted)]">Checking live availability...</p>
+                    <p className="mb-3 text-xs text-[var(--text-muted)]">Checking time availability</p>
                   )}
                   {!slotsLoading && slotAvailabilityStatus === 'fully_booked' && (
                     <p className="mb-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-300">
@@ -1250,7 +1279,7 @@ export function AppointmentPage() {
                     </ul>
                  </div>
                  
-                 <div>
+                  <div>
                     <p className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-3">Guitar Details</p>
                     <div className="space-y-1 text-sm bg-[var(--surface-dark)] p-3 rounded-lg border border-[var(--border)]">
                       {selectedGuitarEntries.length > 0 ? (
@@ -1275,6 +1304,16 @@ export function AppointmentPage() {
                     </div>
                  </div>
                </div>
+
+               {/* Dedicated Notes section in confirmation - only shown if there's content */}
+               {computedNotes && (
+                 <div className="border-t border-[var(--border)] pt-4">
+                   <p className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-3">Additional Notes</p>
+                   <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] p-3">
+                     <p className="text-sm text-[var(--text-light)] whitespace-pre-wrap">{computedNotes}</p>
+                   </div>
+                 </div>
+               )}
 
                {(serviceReferencePreviewUrl || guitarReferencePreviewUrl) && (
                  <div className="border-t border-[var(--border)] pt-4">
@@ -1476,4 +1515,3 @@ export function AppointmentPage() {
     </div>
   )
 }
-

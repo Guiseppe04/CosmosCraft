@@ -6,7 +6,7 @@ import { useAuth } from '../context/AuthContext.jsx'
 import { useCart } from '../context/CartContext.jsx'
 import { BASE_PRICE, BODY_OPTIONS, BODY_WOOD_OPTIONS, BODY_FINISH_OPTIONS, NECK_OPTIONS, FRETBOARD_OPTIONS, HEADSTOCK_OPTIONS, HEADSTOCK_WOOD_OPTIONS, INLAY_OPTIONS, BRIDGE_OPTIONS, PICKGUARD_OPTIONS_BY_BODY, KNOB_OPTIONS_BY_BODY, HARDWARE_OPTIONS, PICKUP_OPTIONS } from '../lib/guitarBuilderData.js'
 import { adminApi } from '../utils/adminApi.js'
-import ProjectTaskTracker from '../components/projects/ProjectTaskTracker.jsx'
+import CustomerProjectTracker from '../components/projects/CustomerProjectTracker.jsx'
 import { getAllProvinces, getMunicipalitiesByProvince, getBarangaysByMunicipality } from '@aivangogh/ph-address'
 import { Country } from 'country-state-city'
 import { ConfirmModal } from '../components/ui/ConfirmModal'
@@ -23,6 +23,14 @@ const ORDER_CANCEL_REASONS = [
   'Need to change shipping details',
   'Found a better price elsewhere',
   'Payment issue',
+  'Others',
+]
+const APPOINTMENT_CANCEL_REASONS = [
+  'Schedule conflict',
+  'No longer needed',
+  'Found another service provider',
+  'Emergency / Personal reason',
+  'Vehicle / Transportation issue',
   'Others',
 ]
 
@@ -162,6 +170,10 @@ export function DashboardPage() {
   const [reschedulingAptId, setReschedulingAptId] = useState(null)
   const [rescheduleDate, setRescheduleDate] = useState('')
   const [rescheduleTime, setRescheduleTime] = useState('')
+  const [isCancelAppointmentModalOpen, setIsCancelAppointmentModalOpen] = useState(false)
+  const [cancelAppointmentTarget, setCancelAppointmentTarget] = useState(null)
+  const [cancelAppointmentReason, setCancelAppointmentReason] = useState('')
+  const [isCancellingAppointment, setIsCancellingAppointment] = useState(false)
   
   const [ratingModalOrderId, setRatingModalOrderId] = useState(null)
   const [rating, setRating] = useState(0)
@@ -390,6 +402,37 @@ export function DashboardPage() {
       alert("Failed to reschedule: " + err.message);
     }
   };
+
+  const openCancelAppointmentModal = (apt) => {
+    setCancelAppointmentTarget(apt)
+    setCancelAppointmentReason('')
+    setIsCancelAppointmentModalOpen(true)
+  }
+
+  const closeCancelAppointmentModal = (force = false) => {
+    if (isCancellingAppointment && !force) return
+    setIsCancelAppointmentModalOpen(false)
+    setCancelAppointmentTarget(null)
+    setCancelAppointmentReason('')
+  }
+
+  const handleCancelAppointment = async () => {
+    if (!cancelAppointmentTarget?.appointment_id || !cancelAppointmentReason.trim()) {
+      return
+    }
+    try {
+      setIsCancellingAppointment(true)
+      const reason = `Cancelled by customer: ${cancelAppointmentReason.trim()}`
+      await adminApi.cancelMyAppointment(cancelAppointmentTarget.appointment_id, reason)
+      setToastMessage('Appointment has been cancelled.')
+      fetchMyAppointments()
+      closeCancelAppointmentModal(true)
+    } catch (err) {
+      setToastMessage(`Failed to cancel appointment: ${err.message}`)
+    } finally {
+      setIsCancellingAppointment(false)
+    }
+  }
 
   const confirmDelete = async () => {
     if (!buildToDelete) return;
@@ -822,6 +865,34 @@ export function DashboardPage() {
     )
   }
 
+  function formatAppointmentServiceType(type) {
+    if (!type) return '—'
+    if (type === 'service_home') return 'Home Service'
+    if (type === 'service_in_shop') return 'In-store Service'
+    return type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+  }
+
+  function getSelectedGuitarLabel(apt) {
+    const details = apt.guitar_details
+    if (!details) return null
+    const brand = details.brand || ''
+    const model = details.model || ''
+    const type = details.type || ''
+    if (brand || model) {
+      const parts = [brand, model].filter(Boolean)
+      return type ? `${parts.join(' ')} (${type.charAt(0).toUpperCase() + type.slice(1)})` : parts.join(' ')
+    }
+    return null
+  }
+
+  function getAddressLabel(apt) {
+    return apt.customer_address || apt.address || ''
+  }
+
+  function getContactNumber(apt) {
+    return apt.customer_phone || apt.user_phone || apt.phone || ''
+  }
+
   const renderAppointmentsContent = () => (
     <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-5 sm:p-8">
       <div className="flex justify-between items-center mb-6">
@@ -848,19 +919,28 @@ export function DashboardPage() {
         </div>
       ) : (
         <div className="max-h-[62vh] space-y-4 overflow-y-auto pr-2">
-          {myAppointments.map(apt => {
+          {[...myAppointments].sort((a, b) => {
+            const dateA = new Date(a.scheduled_at || a.date || a.created_at || 0)
+            const dateB = new Date(b.scheduled_at || b.date || b.created_at || 0)
+            return dateB - dateA
+          }).map(apt => {
             const apptDate = apt.scheduled_at || apt.date;
             
             // Check if past current time and not completed/cancelled
             const isPast = apptDate && new Date(apptDate) < new Date();
             const needsReschedule = isPast && apt.status !== 'completed' && apt.status !== 'cancelled';
             const isReschedulingThis = reschedulingAptId === (apt.appointment_id || apt.id);
+            
+            const selectedGuitar = getSelectedGuitarLabel(apt);
+            const contactNumber = getContactNumber(apt);
+            const addressLabel = getAddressLabel(apt);
+            const appointmentNotes = apt.notes || '';
 
             return (
               <div key={apt.appointment_id || apt.id} className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl p-5 hover:border-[var(--gold-primary)]/40 transition-colors">
                 <div className="flex justify-between items-start mb-4 gap-4">
                   <div>
-                    <h3 className="font-bold text-white text-lg">{apt.guitar_details ? `${apt.guitar_details.brand} ${apt.guitar_details.model}` : (apt.title || apt.service_name || 'Appointment')}</h3>
+                    <h3 className="font-bold text-white text-lg">Appointment</h3>
                     <p className="text-xs text-[var(--text-muted)] mt-1 capitalize">
                       {Array.isArray(apt.services) ? apt.services.map(s => s.replace(/-/g, ' ')).join(', ') : (apt.service_name || 'Consultation')}
                     </p>
@@ -894,28 +974,82 @@ export function DashboardPage() {
                     </div>
                   </div>
                 ) : (
-                  <div className="grid sm:grid-cols-2 gap-4 text-sm mt-4 pt-4 border-t border-[var(--border)] relative">
+                  <div className="grid sm:grid-cols-2 gap-x-6 gap-y-3 text-sm mt-4 pt-4 border-t border-[var(--border)]">
                     <div>
-                      <span className="block text-[var(--text-muted)] mb-1">Date & Time</span>
+                      <span className="block text-[var(--text-muted)] mb-0.5">Date & Time</span>
                       <span className="text-white">
-                        {apptDate ? new Date(apptDate).toLocaleDateString() : 'â€”'} at {apt.time || (apptDate ? new Date(apptDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'â€”')}
+                        {apptDate ? new Date(apptDate).toLocaleDateString() : '—'} at {apt.time || (apptDate ? new Date(apptDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—')}
                       </span>
                     </div>
-                    {apt.location_id && (
-                      <div> 
-                        <span className="block text-[var(--text-muted)] mb-1">Branch</span>
-                        <span className="text-white capitalize">{apt.location_id}</span>
+                    <div>
+                      <span className="block text-[var(--text-muted)] mb-0.5">Branch</span>
+                      <span className="text-white capitalize">{apt.location_id ? apt.location_id.replace(/-/g, ' ') : '—'}</span>
+                    </div>
+                    <div>
+                      <span className="block text-[var(--text-muted)] mb-0.5">Service Type</span>
+                      <span className="text-white">{formatAppointmentServiceType(apt.appointment_type)}</span>
+                    </div>
+                    <div>
+                      <span className="block text-[var(--text-muted)] mb-0.5">Selected Guitar</span>
+                      <span className="text-white">{selectedGuitar || '—'}</span>
+                    </div>
+                    {appointmentNotes && (
+                      <div className="sm:col-span-2 mt-1">
+                        <span className="block text-[var(--text-muted)] mb-0.5">Notes</span>
+                        <div className="space-y-2">
+                          {(() => {
+                            const lines = appointmentNotes.split('\n')
+                            const textParts = []
+                            const imageParts = []
+                            
+                            lines.forEach(line => {
+                              const imageMatch = line.match(/(https?:\/\/[^\s]+(?:\.jpg|\.jpeg|\.png|\.gif|\.webp|\.bmp)[^\s]*)/i)
+                              if (imageMatch) {
+                                const before = line.replace(imageMatch[0], '').trim()
+                                if (before) textParts.push(before)
+                                imageParts.push(imageMatch[1])
+                              } else {
+                                textParts.push(line)
+                              }
+                            })
+                            
+                            return (
+                              <>
+                                {textParts.filter(Boolean).length > 0 && (
+                                  <span className="text-white/80 text-xs leading-relaxed block bg-[var(--surface-dark)] rounded-lg p-3 border border-[var(--border)]">
+                                    {textParts.filter(Boolean).join('\n')}
+                                  </span>
+                                )}
+                                {imageParts.map((url, i) => (
+                                  <div key={i} className="rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] p-2">
+                                    <img
+                                      src={url}
+                                      alt={`Reference image ${i + 1}`}
+                                      className="h-40 w-full rounded-lg object-cover"
+                                      onError={(e) => { e.target.style.display = 'none' }}
+                                    />
+                                  </div>
+                                ))}
+                              </>
+                            )
+                          })()}
+                        </div>
                       </div>
                     )}
-                    {apt.notes && (
-                      <div className="sm:col-span-2 mt-2">
-                         <span className="block text-[var(--text-muted)] mb-1">Notes</span>
-                         <span className="text-white">{apt.notes}</span>
+
+                    {apt.status !== 'completed' && apt.status !== 'cancelled' && (
+                      <div className="sm:col-span-2 mt-3 pt-4 border-t border-[var(--border)] flex justify-end">
+                        <button
+                          onClick={() => openCancelAppointmentModal(apt)}
+                          className="px-4 py-2 border border-red-500/30 text-red-500 hover:bg-red-500/10 transition-colors rounded-lg text-sm font-semibold"
+                        >
+                          Cancel Appointment
+                        </button>
                       </div>
                     )}
                     
                     {needsReschedule && (
-                      <div className="sm:col-span-2 mt-4 pt-4 border-t border-[var(--border)] flex items-center justify-between bg-orange-500/10 p-4 rounded-xl border border-orange-500/20">
+                      <div className="sm:col-span-2 mt-3 pt-4 border-t border-[var(--border)] flex items-center justify-between bg-orange-500/10 p-4 rounded-xl border border-orange-500/20">
                          <div className="flex items-center gap-3">
                            <AlertCircle className="w-5 h-5 text-orange-400" />
                            <div>
@@ -946,12 +1080,21 @@ export function DashboardPage() {
 
   const renderProjectsContent = () => {
     if (activeProjectView) {
+      const cleanTrackerName = (activeProjectView.name || activeProjectView.title || 'Custom Build')
+        .replace(/\s*\(ORD-[^)]*\)\s*/g, '')
+        .replace(/\s*Order\s*#[^\s]*\s*/gi, '')
+        .trim();
       return (
         <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-4 sm:p-6 lg:p-7 xl:p-8">
           <button onClick={() => setActiveProjectView(null)} className="mb-6 text-[var(--gold-primary)] hover:underline flex items-center gap-2 text-sm font-semibold">
             &larr; Back to Build Projects
           </button>
-          <ProjectTaskTracker projectId={activeProjectView.project_id} isAdmin={false} />
+          <CustomerProjectTracker
+            projectId={activeProjectView.project_id}
+            projectName={cleanTrackerName}
+            projectData={activeProjectView}
+            customBuildId={activeProjectView.customBuildId}
+          />
         </div>
       );
     }
@@ -998,38 +1141,24 @@ export function DashboardPage() {
           </div>       
         ) : (
           <div className="grid gap-6">
-            {myProjects.map((project) => {
-              const projectDescription = parseProjectDescription(project.description || 'Custom Build Project')
+            {myProjects.map((project, index) => {
+              project.customBuildId = project.custom_build_id;
+
+              // Clean project name - remove any ORD/order references from the stored title
+              const cleanName = (project.name || project.title || 'Custom Build')
+                .replace(/\s*\(ORD-[^)]*\)\s*/g, '')
+                .replace(/\s*Order\s*#[^\s]*\s*/gi, '')
+                .trim();
+
               return (
               <div key={project.project_id} className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl p-5 hover:border-[var(--gold-primary)]/40 transition-colors">
                 <div className="flex justify-between items-center">
                   <div>
-                    <h3 className="text-lg font-bold text-white">{project.name}</h3>
-                    {projectDescription?.title ? (
-                      <div className="mt-2 rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] px-3 py-2.5 text-sm text-[var(--text-muted)]">
-                        <p className="font-semibold text-white">{projectDescription.title}</p>
-                        {projectDescription.bulletItems.length > 0 && (
-                          <ul className="mt-1.5 space-y-1">
-                            {projectDescription.bulletItems.map((item, index) => (
-                              <li key={`${project.project_id}-bullet-${index}`} className="flex items-start gap-2">
-                                <span className="mt-[6px] h-1.5 w-1.5 rounded-full bg-[var(--gold-primary)] shrink-0" />
-                                <span>{item}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                        {projectDescription.metaLines.length > 0 && (
-                          <div className="mt-2 space-y-1 border-t border-[var(--border)] pt-2">
-                            {projectDescription.metaLines.map((line, index) => (
-                              <p key={`${project.project_id}-meta-${index}`} className="break-words">
-                                {line}
-                              </p>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <p className="text-[var(--text-muted)] text-sm mt-1 break-words">{projectDescription?.plainText || 'Custom Build Project'}</p>
+                    <h3 className="text-lg font-bold text-white">{cleanName}</h3>
+                    {project.customBuildId && (
+                      <p className="text-xs text-[var(--text-muted)] mt-1">
+                        Custom Build ID: {project.customBuildId}
+                      </p>
                     )}
                     <p className="text-[var(--text-muted)] text-sm mt-2">
                       Estimated completion:{' '}
@@ -1042,7 +1171,6 @@ export function DashboardPage() {
                       <span className="text-[var(--gold-primary)] font-bold text-sm">{project.progress}% Complete</span>
                     </div>
                   </div>
-                  
                 </div>
                 <div className="flex gap-2 mt-4 pt-4 border-t border-[var(--border)]">
                   {project.progress < 80 && String(project.status || '').toLowerCase() !== 'cancelled' && (
@@ -1069,7 +1197,6 @@ export function DashboardPage() {
                     </span>
                   </button>
                 </div>
-                
               </div>
             )})}
           </div>
@@ -2135,6 +2262,93 @@ export function DashboardPage() {
                 >
                   {isCancellingOrder && <Loader2 className="h-4 w-4 animate-spin" />}
                   {isCancellingOrder ? 'Cancelling...' : 'Confirm Cancel'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {isCancelAppointmentModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[300] bg-black/70 backdrop-blur-sm p-4 flex items-center justify-center"
+            onClick={(event) => {
+              if (event.target === event.currentTarget) closeCancelAppointmentModal()
+            }}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 16, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 16, scale: 0.96 }}
+              className="relative w-full max-w-lg rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-6 sm:p-7 shadow-2xl"
+            >
+              <button
+                type="button"
+                onClick={closeCancelAppointmentModal}
+                disabled={isCancellingAppointment}
+                className="absolute right-4 top-4 rounded-lg p-2 text-[var(--text-muted)] hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
+                aria-label="Close cancel appointment modal"
+              >
+                <X className="h-4 w-4" />
+              </button>
+
+              <h3 className="text-xl font-bold text-white pr-8">Cancel Appointment</h3>
+              <p className="mt-2 text-sm text-[var(--text-muted)]">
+                Are you sure you want to cancel this appointment? Please provide a reason for cancellation.
+              </p>
+
+              <div className="mt-5">
+                <label className="mb-3 block text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
+                  Reason for Cancellation <span className="text-red-400">*</span>
+                </label>
+                <div className="space-y-2">
+                  {APPOINTMENT_CANCEL_REASONS.map((reason) => {
+                    const isSelected = cancelAppointmentReason === reason
+                    return (
+                      <label
+                        key={reason}
+                        className={`flex cursor-pointer items-center gap-3 rounded-xl border px-4 py-3 transition-colors ${
+                          isSelected
+                            ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)]/10'
+                            : 'border-[var(--border)] hover:border-[var(--gold-primary)]/40'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="cancel-appointment-reason"
+                          value={reason}
+                          checked={isSelected}
+                          onChange={(event) => setCancelAppointmentReason(event.target.value)}
+                          className="h-4 w-4 accent-[var(--gold-primary)]"
+                        />
+                        <span className="text-sm text-white">{reason}</span>
+                      </label>
+                    )
+                  })}
+                </div>
+              </div>
+
+              <div className="mt-6 flex gap-3">
+                <button
+                  type="button"
+                  onClick={closeCancelAppointmentModal}
+                  disabled={isCancellingAppointment}
+                  className="flex-1 rounded-xl border border-[var(--border)] bg-white/5 py-3 text-sm font-semibold text-white hover:bg-white/10 transition-colors disabled:opacity-50"
+                >
+                  Keep Appointment
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCancelAppointment}
+                  disabled={!cancelAppointmentReason.trim() || isCancellingAppointment}
+                  className="flex-1 rounded-xl bg-red-500 py-3 text-sm font-bold text-white hover:bg-red-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {isCancellingAppointment && <Loader2 className="h-4 w-4 animate-spin" />}
+                  {isCancellingAppointment ? 'Cancelling...' : 'Confirm Cancel'}
                 </button>
               </div>
             </motion.div>

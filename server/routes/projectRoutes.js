@@ -48,4 +48,11 @@ router.delete('/milestones/:milestoneId', validateParams(namedUuidParamSchema('m
 router.post('/milestones/:milestoneId/subtasks', validateParams(namedUuidParamSchema('milestoneId')), validate(createSubtaskSchema), ctrl.createSubtask);
 router.delete('/subtasks/:subtaskId', validateParams(namedUuidParamSchema('subtaskId')), ctrl.deleteSubtask);
 
+// Claim / unclaim / reassign routes
+router.post('/:id/claim', ctrl.claimProject);
+router.post('/:id/unclaim', ctrl.unclaimProject);
+router.post('/:id/reassign', ctrl.reassignProject);
+router.get('/staff-claims', ctrl.getStaffClaimStatus);
+router.post('/:id/init-workflow', ctrl.initializeWorkflow);
+
 module.exports = router;

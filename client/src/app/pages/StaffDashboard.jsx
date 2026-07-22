@@ -15,6 +15,7 @@ import {
   Clock,
   Edit,
   Filter,
+  Hand,
   MoreHorizontal,
   Package,
   Plus,
@@ -23,6 +24,8 @@ import {
   ShoppingBag,
   Wallet,
   X,
+  User,
+  Shield,
 } from 'lucide-react'
 import { Topbar } from '../components/admin/Topbar'
 import { OrderManagement } from '../components/admin/OrderManagement'
@@ -663,14 +666,33 @@ export function StaffDashboard() {
                           </div>
 
                           <div className="mt-5 flex flex-wrap gap-3">
-                            <button
-                              type="button"
-                              onClick={() => setModal({ open: true, type: 'project_tasks', data: project })}
-                              className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] px-4 py-2.5 text-sm font-semibold text-black transition-all hover:shadow-[0_0_20px_rgba(212,175,55,0.35)]"
-                            >
-                              <CheckCircle className="w-4 h-4" />
-                              View Tasks
-                            </button>
+                            {!project.claimed_by ? (
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  try {
+                                    await staffApi.claimProject(project.project_id);
+                                    showToast('Project claimed successfully');
+                                    await fetchProjects();
+                                  } catch (error) {
+                                    showToast(error.message, 'error');
+                                  }
+                                }}
+                                className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] px-4 py-2.5 text-sm font-semibold text-black transition-all hover:shadow-[0_0_20px_rgba(212,175,55,0.35)]"
+                              >
+                                <Hand className="w-4 h-4" />
+                                Claim Task
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setModal({ open: true, type: 'project_tasks', data: project })}
+                                className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] px-4 py-2.5 text-sm font-semibold text-black transition-all hover:shadow-[0_0_20px_rgba(212,175,55,0.35)]"
+                              >
+                                <CheckCircle className="w-4 h-4" />
+                                {project.claimed_by === user?.id ? 'My Tasks' : 'View Tasks'}
+                              </button>
+                            )}
                             <button
                               type="button"
                               onClick={() => {

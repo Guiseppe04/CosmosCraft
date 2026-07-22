@@ -107,3 +107,31 @@ exports.getActivityLogs = asyncHandler(async (req, res, next) => {
   const logs = await projectService.getActivityLogs(req.params.id);
   res.json({ status: 'success', data: logs });
 });
+
+// --- CLAIM / UNCLAIM / REASSIGN ---
+exports.claimProject = asyncHandler(async (req, res, next) => {
+  const project = await projectService.claimProject(req.params.id, req.user.id, req.user.role);
+  res.json({ status: 'success', data: project, message: 'Project claimed successfully' });
+});
+
+exports.unclaimProject = asyncHandler(async (req, res, next) => {
+  const project = await projectService.unclaimProject(req.params.id, req.user.id, req.user.role);
+  res.json({ status: 'success', data: project, message: 'Project unclaimed successfully' });
+});
+
+exports.reassignProject = asyncHandler(async (req, res, next) => {
+  const { user_id } = req.body;
+  if (!user_id) throw new AppError('user_id is required', 400);
+  const project = await projectService.reassignProject(req.params.id, user_id, req.user.id, req.user.role);
+  res.json({ status: 'success', data: project, message: 'Project reassigned successfully' });
+});
+
+exports.getStaffClaimStatus = asyncHandler(async (req, res, next) => {
+  const staff = await projectService.getStaffClaimStatus();
+  res.json({ status: 'success', data: staff });
+});
+
+exports.initializeWorkflow = asyncHandler(async (req, res, next) => {
+  const result = await projectService.initializeManufacturingWorkflow(req.params.id, req.user.id);
+  res.json({ status: 'success', data: result });
+});
