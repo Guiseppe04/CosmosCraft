@@ -28,12 +28,12 @@ router.get(
         
         if (err) {
           console.error('[Google Callback] Auth error:', err);
-          return res.redirect(`${process.env.FRONTEND_URL}/?auth_error=${encodeURIComponent(err.message)}`);
+          return res.redirect(`${process.env.FRONTEND_URL}/?auth_error=${encodeURIComponent('Authentication failed. Please try again.')}`);
         }
 
         if (!user) {
           console.log('[Google Callback] No user found, redirecting to signup');
-          return res.redirect(`${process.env.FRONTEND_URL}/?auth_error=failed`);
+          return res.redirect(`${process.env.FRONTEND_URL}/?auth_error=Authentication failed. Please try again.`);
         }
 
         // User exists or was just created - generate tokens
@@ -61,7 +61,7 @@ router.get(
         return res.redirect(redirectUrl);
       } catch (error) {
         console.error('[Google Callback] Error in callback:', error);
-        return res.redirect(`${process.env.FRONTEND_URL}/?auth_error=${encodeURIComponent(error.message)}`);
+        return res.redirect(`${process.env.FRONTEND_URL}/?auth_error=${encodeURIComponent('Authentication failed. Please try again.')}`);
       }
     })(req, res, next);
   })
@@ -80,11 +80,12 @@ router.get(
     passport.authenticate('facebook', { session: false }, async (err, user, info) => {
       try {
         if (err) {
-          return res.status(500).json({ status: 'error', message: 'Authentication error', error: err.message });
+          console.error('[Facebook Callback] Auth error:', err);
+          return res.redirect(`${process.env.FRONTEND_URL}/?auth_error=${encodeURIComponent('Authentication failed. Please try again.')}`);
         }
 
         if (!user) {
-          return res.redirect(`${process.env.FRONTEND_URL}/?auth_error=failed`);
+          return res.redirect(`${process.env.FRONTEND_URL}/?auth_error=${encodeURIComponent('Authentication failed. Please try again.')}`);
         }
 
         // User exists or was just created - generate tokens

@@ -1910,6 +1910,7 @@ export function AdminPage() {
   const [orderSort, setOrderSort] = useState('newest')
   const [orderPage, setOrderPage] = useState(1)
   const ORDERS_PAGE_SIZE = 10
+  const [ordersPagination, setOrdersPagination] = useState({ page: 1, pageSize: 10, total: 0, totalPages: 1 })
 
   // Inventory tab state
   const [expandedInventoryIds, setExpandedInventoryIds] = useState(new Set())
@@ -2342,11 +2343,12 @@ export function AdminPage() {
     } catch (e) { showToast(e.message, 'error') }
   }, [debouncedSearch, showToast, users])
 
-  const fetchOrders = useCallback(async () => {
+  const fetchOrders = useCallback(async (queryParams = {}) => {
     try {
-      const res = await adminApi.getOrders({ search: debouncedSearch, include_items: true })
+      const res = await adminApi.getOrders({ search: debouncedSearch, include_items: true, ...queryParams })
       const newData = Array.isArray(res.data) ? res.data : res.data?.orders || []
       updateIfChanged(orders, newData, setOrders)
+      setOrdersPagination(res.pagination || { page: 1, pageSize: 10, total: 0, totalPages: 1 })
     } catch (e) { showToast(e.message, 'error') }
   }, [debouncedSearch, showToast, orders])
 
@@ -4745,6 +4747,7 @@ export function AdminPage() {
               orders={visibleOrders}
               onRefresh={fetchOrders}
               user={user}
+              pagination={ordersPagination}
             />
           )}
 

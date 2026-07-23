@@ -1079,7 +1079,7 @@ export function DashboardPage() {
   const renderProjectsContent = () => {
     if (activeProjectView) {
       const cleanTrackerName = (activeProjectView.name || activeProjectView.title || 'Custom Build')
-        .replace(/\s*\(ORD-[^)]*\)\s*/g, '')
+        .replace(/\s*\(((?:PO|CO|SO)-\d{8}-\d+)\)\s*/g, '')
         .replace(/\s*Order\s*#[^\s]*\s*/gi, '')
         .trim();
       return (
@@ -1144,7 +1144,7 @@ export function DashboardPage() {
 
               // Clean project name - remove any ORD/order references from the stored title
               const cleanName = (project.name || project.title || 'Custom Build')
-                .replace(/\s*\(ORD-[^)]*\)\s*/g, '')
+                .replace(/\s*\(((?:PO|CO|SO)-\d{8}-\d+)\)\s*/g, '')
                 .replace(/\s*Order\s*#[^\s]*\s*/gi, '')
                 .trim();
 

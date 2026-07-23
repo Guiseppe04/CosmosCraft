@@ -371,6 +371,7 @@ CREATE INDEX idx_customization_parts_deleted_at ON customization_parts(deleted_a
 CREATE TABLE orders (
     order_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     order_number VARCHAR(30) NOT NULL UNIQUE,
+    order_type VARCHAR(20) NOT NULL DEFAULT 'product',
     user_id UUID,
     shipping_address_id UUID,
     subtotal NUMERIC(12, 2) NOT NULL CHECK (subtotal >= 0),
@@ -419,6 +420,45 @@ CREATE INDEX idx_orders_deleted_at ON orders(deleted_at) WHERE deleted_at IS NOT
 CREATE INDEX idx_orders_status_created ON orders(status, created_at DESC);
 -- Composite index for payment verification workflow
 CREATE INDEX idx_orders_payment_review ON orders(payment_status, reviewed_at) WHERE payment_status IN ('proof_submitted', 'under_review');
+
+-- Check constraint for order_type
+ALTER TABLE orders ADD CONSTRAINT chk_orders_order_type CHECK (order_type IN ('product', 'customization', 'service'));
+
+-- Index on order_type
+CREATE INDEX idx_orders_order_type ON orders(order_type);
+
+-- Composite indexes for optimized search, filter, and sort
+CREATE INDEX idx_orders_type_status_created ON orders(order_type, status, created_at DESC);
+CREATE INDEX idx_orders_payment_status_created ON orders(payment_status, created_at DESC);
+CREATE INDEX idx_orders_amount_created ON orders(total_amount, created_at DESC);
+
+-- Indexes for related tables used in joins
+CREATE INDEX idx_payments_reference_number ON payments(reference_number);
+CREATE INDEX idx_order_items_product_name ON order_items(product_name);
+CREATE INDEX idx_order_items_customization_id ON order_items(customization_id) WHERE customization_id IS NOT NULL;
+
+-- =============================================
+-- 13A. ORDER NUMBER COUNTERS
+-- =============================================
+-- Atomic counter table for generating unique, sequential order numbers
+-- per type and per day (PO-YYYYMMDD-0001, CO-YYYYMMDD-0001, SO-YYYYMMDD-0001)
+
+CREATE TABLE order_number_counters (
+    prefix VARCHAR(2) PRIMARY KEY,
+    date DATE NOT NULL DEFAULT CURRENT_DATE,
+    last_number INT NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_order_number_counters_date ON order_number_counters(date);
+
+-- Seed initial counter rows (day-reset is handled dynamically in application logic)
+INSERT INTO order_number_counters (prefix, date, last_number) VALUES
+    ('PO', CURRENT_DATE, 0),
+    ('CO', CURRENT_DATE, 0),
+    ('SO', CURRENT_DATE, 0)
+ON CONFLICT (prefix) DO NOTHING;
 
 
 -- =============================================

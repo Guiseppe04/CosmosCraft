@@ -11,6 +11,7 @@ const {
   updateShipmentSchema,
   updateOutForDeliverySchema,
   updateOrderSchema,
+  listOrdersSchema,
   orderIdParamSchema,
   uuidParamSchema,
 } = require('../utils/validation.js')
@@ -20,7 +21,7 @@ const {
 router.get('/my-orders', authenticateToken, orderController.getUserOrders)
 
 // --- ADMIN ROUTES ---
-router.get('/', authenticateToken, authorize('staff', 'admin', 'super_admin'), orderController.getAllOrders)
+router.get('/', authenticateToken, authorize('staff', 'admin', 'super_admin'), validate(listOrdersSchema, 'query'), orderController.getAllOrders)
 
 // --- ID-BASED ROUTES (after specific routes) ---
 router.get('/:orderId', authenticateToken, validateParams(orderIdParamSchema), orderController.getOrder)

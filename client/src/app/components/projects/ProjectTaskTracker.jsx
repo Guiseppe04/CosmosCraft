@@ -225,7 +225,7 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
   const trackerTitleRaw = hierarchy?.name || hierarchy?.title || projectName || 'Project Tracker';
   const parsedTrackerHeader = useMemo(() => {
     const text = String(trackerTitleRaw || '');
-    const match = text.match(/^(.*?)\s*\((ORD-[^)]+)\)\s*$/i);
+    const match = text.match(/^(.*?)\s*\(((?:PO|CO|SO)-\d{8}-\d+)\)\s*$/);
     if (!match) {
       return {
         title: text,

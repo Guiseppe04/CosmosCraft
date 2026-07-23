@@ -916,7 +916,7 @@ const buildValidationMiddleware = (schema, source) => {
 
       return res.status(400).json({
         status: 'error',
-        message: 'Validation failed',
+        message: 'Some fields are invalid. Please check the details below.',
         errors,
       });
     }
@@ -956,6 +956,42 @@ exports.saveDefaultWorkflowSchema = Joi.object({
   }),
 });
 
-exports.uuidParamSchema = uuidParamSchema;
+const listOrdersSchema = Joi.object({
+  search: Joi.string().max(100).optional().allow('').trim(),
+  order_type: Joi.string().valid('product', 'customization', 'service').optional(),
+  status: Joi.string().valid(
+    'pending',
+    'processing',
+    'shipped',
+    'out_for_delivery',
+    'delivered',
+    'cancelled'
+  ).optional(),
+  payment_status: Joi.string().valid(
+    'pending',
+    'proof_submitted',
+    'under_review',
+    'approved',
+    'rejected',
+    'failed'
+  ).optional(),
+  date_from: Joi.string().isoDate().optional(),
+  date_to: Joi.string().isoDate().optional(),
+  payment_method: Joi.string().valid('gcash', 'bank_transfer', 'cash').optional(),
+  sort_by: Joi.string().valid(
+    'created_at',
+    'order_number',
+    'total_amount',
+    'status',
+    'payment_status',
+    'customer_name'
+  ).optional(),
+  sort_dir: Joi.string().valid('asc', 'desc').optional(),
+  page: Joi.number().integer().min(1).optional(),
+  page_size: Joi.number().integer().min(1).max(100).optional(),
+  include_items: Joi.alternatives().try(Joi.string(), Joi.boolean()).optional(),
+}).unknown(true);
+
+exports.listOrdersSchema = listOrdersSchema;
 exports.orderIdParamSchema = orderIdParamSchema;
 exports.namedUuidParamSchema = namedUuidParamSchema;

@@ -33,7 +33,7 @@ exports.validate = (schema) => {
 
       return res.status(400).json({
         status: 'error',
-        message: 'Validation failed',
+        message: 'Some fields are invalid. Please check the details below.',
         errors,
       });
     }

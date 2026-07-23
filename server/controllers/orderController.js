@@ -91,8 +91,8 @@ exports.getOrder = asyncHandler(async (req, res, next) => {
 })
 
 exports.getAllOrders = asyncHandler(async (req, res, next) => {
-  const orders = await orderService.getAllOrders(req.query)
-  res.status(200).json({ status: 'success', data: orders })
+  const result = await orderService.getAllOrders(req.query)
+  res.status(200).json({ status: 'success', data: result.orders, pagination: result.pagination })
 })
 
 exports.updateOrder = asyncHandler(async (req, res, next) => {
