@@ -1696,6 +1696,19 @@ export function DashboardPage() {
     }
   }
 
+  const setDefaultAddress = async (addressId) => {
+    try {
+      await adminApi.updateAddress(addressId, { isDefault: true })
+      setToastMessage('Default address updated!')
+      const res = await adminApi.getProfile()
+      if (res?.data?.user?.addresses) {
+        setAddresses(res.data.user.addresses)
+      }
+    } catch (err) {
+      alert("Failed to set default address: " + err.message)
+    }
+  }
+
   const openDeleteConfirm = (addressId) => {
     setConfirm({ open: true, addressId, isBusy: false })
   }
@@ -1926,9 +1939,9 @@ export function DashboardPage() {
           </div>
         </div>
       ) : (
-        <div className="space-y-4">
+         <div className="space-y-4">
           {addresses && addresses.length > 0 ? (
-            addresses.map((addr) => (
+            [...addresses].sort((a, b) => (b.is_default ? 1 : 0) - (a.is_default ? 1 : 0)).map((addr) => (
               <div key={addr.address_id} className="p-4 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]">
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
@@ -1938,6 +1951,11 @@ export function DashboardPage() {
                     {addr.is_default && <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[var(--gold-primary)] text-[var(--text-dark)]">Default</span>}
                   </div>
                   <div className="flex items-center gap-3">
+                    {!addr.is_default && (
+                      <button onClick={() => setDefaultAddress(addr.address_id)} className="p-2.5 hover:bg-[var(--gold-primary)]/20 hover:border hover:border-[var(--gold-primary)] rounded-lg transition-all duration-150" title="Set as default">
+                        <Star className="w-5 h-5 text-[var(--gold-primary)]" />
+                      </button>
+                    )}
                     <button onClick={() => { 
                       setEditingAddressId(addr.address_id)
                       setAddressData({ 
