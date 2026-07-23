@@ -13,6 +13,45 @@ export const GUITAR_CONFIGURATION_ITEMS = [
   { key: 'knobs', category: 'Control Knobs', summaryKey: 'knobs' },
   { key: 'hardware', category: 'Hardware', summaryKey: 'hardware' },
   { key: 'pickups', category: 'Pickups', summaryKey: 'pickups' },
+  // New General options
+  { key: 'dexterity', category: 'Dexterity', summaryKey: 'dexterity' },
+  { key: 'strings', category: 'Strings', summaryKey: 'strings' },
+  { key: 'multiscale', category: 'Multiscale', summaryKey: 'multiscale' },
+  { key: 'scaleLength', category: 'Scale Length', summaryKey: 'scaleLength' },
+  { key: 'caseType', category: 'Case', summaryKey: 'caseType' },
+  // New Body options
+  { key: 'bevel', category: 'Beveled Edges', summaryKey: 'bevel' },
+  { key: 'topWood', category: 'Top Wood', summaryKey: 'topWood' },
+  { key: 'finishType', category: 'Finish Type', summaryKey: 'finishType' },
+  { key: 'topCoat', category: 'Top Coat', summaryKey: 'topCoat' },
+  { key: 'burstFinish', category: 'Burst Finish', summaryKey: 'burstFinish' },
+  // New Neck options
+  { key: 'neckConstruction', category: 'Neck Construction', summaryKey: 'neckConstruction' },
+  { key: 'inlayShape', category: 'Inlay Shape', summaryKey: 'inlayShape' },
+  { key: 'inlayMaterial', category: 'Inlay Material', summaryKey: 'inlayMaterial' },
+  { key: 'frets', category: 'Frets', summaryKey: 'frets' },
+  { key: 'neckRearFinish', category: 'Neck Rear Finish', summaryKey: 'neckRearFinish' },
+  { key: 'headstockShape', category: 'Headstock Shape', summaryKey: 'headstockShape' },
+  { key: 'trussRodCover', category: 'Truss Rod Cover', summaryKey: 'trussRodCover' },
+  // New Electronics options
+  { key: 'electronicsType', category: 'Electronics Type', summaryKey: 'electronicsType' },
+  { key: 'pickupConfiguration', category: 'Pickup Config', summaryKey: 'pickupConfiguration' },
+  { key: 'bridgePickupModel', category: 'Bridge Pickup', summaryKey: 'bridgePickupModel' },
+  { key: 'middlePickupModel', category: 'Middle Pickup', summaryKey: 'middlePickupModel' },
+  { key: 'neckPickupModel', category: 'Neck Pickup', summaryKey: 'neckPickupModel' },
+  { key: 'pickupBobbin', category: 'Pickup Bobbin', summaryKey: 'pickupBobbin' },
+  { key: 'pickupPoleColor', category: 'Pole Piece Color', summaryKey: 'pickupPoleColor' },
+  { key: 'controls', category: 'Controls', summaryKey: 'controls' },
+  // New Hardware options
+  { key: 'saddle', category: 'Saddle', summaryKey: 'saddle' },
+  { key: 'nut', category: 'Nut', summaryKey: 'nut' },
+  { key: 'tuning', category: 'Tuning', summaryKey: 'tuning' },
+  { key: 'stringBrand', category: 'String Brand', summaryKey: 'stringBrand' },
+  { key: 'outputJack', category: 'Output Jack', summaryKey: 'outputJack' },
+  { key: 'strapButtons', category: 'Strap Buttons', summaryKey: 'strapButtons' },
+  { key: 'tunerButtons', category: 'Tuner Buttons', summaryKey: 'tunerButtons' },
+  { key: 'electronicsCavityCover', category: 'Cavity Cover', summaryKey: 'electronicsCavityCover' },
+  { key: 'tremoloCover', category: 'Tremolo Cover', summaryKey: 'tremoloCover' },
 ]
 
 export const BASS_CONFIGURATION_ITEMS = [

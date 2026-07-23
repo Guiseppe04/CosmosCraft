@@ -7,6 +7,11 @@ import {
   NECK_NUT,
   resolveVariant,
 } from '../../lib/guitarBuilderData.js'
+import {
+  resolveTopWoodAsset,
+  resolveFinishAsset,
+  resolveTopCoatAsset,
+} from '../../lib/assetResolver.js'
 
 const layerStyle = (src, extra = {}) => ({
   backgroundImage: `url(${src})`,
@@ -29,13 +34,27 @@ const maskedLayerStyle = (maskSrc, extra = {}) => ({
   ...extra,
 })
 
-function GuitarLayer({ src, maskSrc, style, className = '', layerName = '', protectedLayer = false }) {
-  if (!src && !maskSrc) return null
+const gradientLayerStyle = (gradient, extra = {}) => ({
+  backgroundImage: gradient,
+  backgroundRepeat: 'no-repeat',
+  backgroundPosition: 'center',
+  backgroundSize: 'contain',
+  ...extra,
+})
+
+function GuitarLayer({ src, maskSrc, gradient, style, className = '', layerName = '', protectedLayer = false }) {
+  if (!src && !maskSrc && !gradient) return null
   return (
     <div
       aria-hidden="true"
       className={`absolute inset-0 pointer-events-none select-none ${className}`}
-      style={maskSrc ? maskedLayerStyle(maskSrc, style) : layerStyle(src, style)}
+      style={
+        gradient
+          ? gradientLayerStyle(gradient, style)
+          : maskSrc
+          ? maskedLayerStyle(maskSrc, style)
+          : layerStyle(src, style)
+      }
       data-export-layer="true"
       data-layer={layerName}
       data-layer-src={src || ''}
@@ -85,6 +104,26 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
 
   const knobAsset = guitarBuilder.KNOB_OPTIONS_BY_BODY[config.body]?.[config.knobs]?.src ?? null
 
+  // Resolve top wood texture if selected
+  const topWoodTexture = config.topWood && config.topWood !== 'none'
+    ? resolveTopWoodAsset('electric', config.body || 'dc', config.topWood)
+    : null
+
+  // Resolve finish type color asset based on selected finishType
+  // finishType determines folder: metallic, translucent, sparkle, etc.
+  const finishType = config.finishType || 'solid'
+  const finishColorKey = config.finishColor || config.bodyFinish || 'black'
+  const isUsingDynamicFinish = config.finishType && config.finishType !== 'solid'
+  const finishTypeColorAsset = isUsingDynamicFinish
+    ? resolveFinishAsset('electric', config.body || 'dc', finishType, finishColorKey)
+    : null
+
+  // Resolve top coat overlay asset
+  const topCoat = config.topCoat || 'clearGloss'
+  const topCoatAsset = config.topCoat
+    ? resolveTopCoatAsset('electric', config.body || 'dc', config.topCoat)
+    : null
+
   const pickupLayers = useMemo(() => {
     const layout = config.pickups
     const route = guitarBuilder.PUPPY
@@ -114,16 +153,18 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
   }, [bodyAssets, bridge.assets, colorKey, knobAsset])
 
   const overlayLayers = useMemo(() => {
-    return [
+    const layers = [
       bodyAssets.shadows ? { name: 'body-shadows', src: bodyAssets.shadows, style: { opacity: 0.8, mixBlendMode: 'multiply', zIndex: 200 } } : null,
-      bodyAssets.gloss ? { name: 'body-gloss', src: bodyAssets.gloss, style: { opacity: 0.8, mixBlendMode: 'screen', zIndex: 201 } } : null,
+      bodyAssets.gloss ? { name: 'body-gloss', src: bodyAssets.gloss, style: { opacity: 0.8, mixBlendMode: 'screen', zIndex: 202 } } : null,
     ].filter(Boolean)
+    return layers
   }, [bodyAssets])
 
   const frontNeckLayers = useMemo(() => {
     const headstockTuners = resolveVariant(headstock.tuners, colorKey)
 
     return [
+      // Body wood base
       {
         name: 'body-wood',
         maskSrc: modelBodySrc,
@@ -134,7 +175,32 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
           zIndex: 1,
         },
       },
-      bodyFinish.texture
+      // Top wood layer (above body wood, masked to body shape)
+      topWoodTexture
+        ? {
+            name: 'body-top-wood',
+            maskSrc: modelBodySrc,
+            style: {
+              backgroundImage: `url(${topWoodTexture})`,
+              opacity: 0.8,
+              mixBlendMode: 'normal',
+              zIndex: 2,
+            },
+          }
+        : null,
+      // Finish layer - use finish type color asset when available
+      finishTypeColorAsset
+        ? {
+            name: 'body-finish-type',
+            maskSrc: modelBodySrc,
+            style: {
+              backgroundImage: `url(${finishTypeColorAsset})`,
+              opacity: 1,
+              mixBlendMode: 'normal',
+              zIndex: 3,
+            },
+          }
+        : bodyFinish.texture
         ? {
             name: 'body-finish-texture',
             maskSrc: modelBodySrc,
@@ -142,7 +208,7 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
               backgroundImage: `url(${bodyFinish.texture})`,
               opacity: 1,
               mixBlendMode: 'normal',
-              zIndex: 2,
+              zIndex: 3,
             },
           }
         : bodyFinish.color
@@ -153,7 +219,7 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
               backgroundColor: bodyFinish.color,
               opacity: 1,
               mixBlendMode: 'normal',
-              zIndex: 2,
+              zIndex: 3,
             },
           }
         : null,
@@ -195,7 +261,7 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
       { name: 'headstock-truss-cover', src: headstock.trussCover, className: 'opacity-95', protectedLayer: true, style: { zIndex: 106 } },
       { name: 'headstock-tuners', src: headstockTuners, className: 'opacity-95', protectedLayer: true, style: { zIndex: 107 } },
     ].filter(Boolean)
-  }, [bodyFinish.texture, bodyFinish.color, bodyWood.texture, colorKey, config.body, config.pickups, fretboard.src, headstock, headstockWood.texture, inlay.src, neck.filter, neck.src, hardware.color])
+  }, [bodyFinish.texture, bodyFinish.color, bodyWood.texture, colorKey, config.body, config.pickups, config.topWood, config.finishType, config.finishColor, finishTypeColorAsset, topWoodTexture, fretboard.src, headstock, headstockWood.texture, inlay.src, neck.filter, neck.src, hardware.color, modelBodySrc])
   
   const rearNeckLayers = useMemo(() => {
     const headstockTuners = resolveVariant(headstock.tuners, colorKey)
@@ -211,7 +277,32 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
           zIndex: 1,
         },
       },
-      bodyFinish.texture
+      // Top wood on rear
+      topWoodTexture
+        ? {
+            name: 'body-top-wood',
+            maskSrc: modelBodySrc,
+            style: {
+              backgroundImage: `url(${topWoodTexture})`,
+              opacity: 0.8,
+              mixBlendMode: 'normal',
+              zIndex: 2,
+            },
+          }
+        : null,
+      // Finish on rear
+      finishTypeColorAsset
+        ? {
+            name: 'body-finish-type',
+            maskSrc: modelBodySrc,
+            style: {
+              backgroundImage: `url(${finishTypeColorAsset})`,
+              opacity: 1,
+              mixBlendMode: 'normal',
+              zIndex: 3,
+            },
+          }
+        : bodyFinish.texture
         ? {
             name: 'body-finish-texture',
             maskSrc: modelBodySrc,
@@ -219,56 +310,69 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
               backgroundImage: `url(${bodyFinish.texture})`,
               opacity: 1,
               mixBlendMode: 'normal',
-              zIndex: 2,
+              zIndex: 3,
             },
           }
-        : bodyFinish.color
-        ? {
-            name: 'body-finish-color',
-            maskSrc: modelBodySrc,
-            style: {
-              backgroundColor: bodyFinish.color,
-              opacity: 1,
-              mixBlendMode: 'normal',
-              zIndex: 2,
-            },
-          }
-        : null,
-      {
-        name: 'neck',
-        maskSrc: NECK_MASK,
-        style: {
-          backgroundImage: `url(${neck.src})`,
-          filter: neck.filter,
-          opacity: 0.98,
-          zIndex: 100,
-        },
-        protectedLayer: true,
-      },
-      {
-        name: 'fretboard',
-        maskSrc: NECK_MASK,
-        style: {
-          backgroundImage: `url(${fretboard.src})`,
-          opacity: 0.94,
-          mixBlendMode: 'multiply',
-          zIndex: 101,
-        },
-        protectedLayer: true,
-      },
-      {
-        name: 'headstock-wood',
-        maskSrc: headstock.mask,
-        style: {
-          backgroundImage: `url(${headstockWood.texture})`,
-          opacity: 0.95,
-          zIndex: 102,
-        },
-        protectedLayer: true,
-      },
-      { name: 'headstock-tuners', src: headstockTuners, className: 'opacity-95', protectedLayer: true, style: { zIndex: 103 } },
-    ].filter(Boolean)
-  }, [bodyFinish.texture, bodyFinish.color, bodyWood.texture, colorKey, fretboard.src, headstock, headstockWood.texture, modelBodySrc, neck.filter, neck.src])
+         : bodyFinish.color
+         ? {
+             name: 'body-finish-color',
+             maskSrc: modelBodySrc,
+             style: {
+               backgroundColor: bodyFinish.color,
+               opacity: 1,
+               mixBlendMode: 'normal',
+               zIndex: 3,
+             },
+           }
+         : null,
+       // Top coat on rear view
+       topCoatAsset
+         ? {
+             name: 'body-top-coat',
+             maskSrc: modelBodySrc,
+             style: {
+               backgroundImage: `url(${topCoatAsset})`,
+               opacity: 1,
+               mixBlendMode: 'normal',
+               zIndex: 4,
+             },
+           }
+         : null,
+       {
+         name: 'neck',
+         maskSrc: NECK_MASK,
+         style: {
+           backgroundImage: `url(${neck.src})`,
+           filter: neck.filter,
+           opacity: 0.98,
+           zIndex: 100,
+         },
+         protectedLayer: true,
+       },
+       {
+         name: 'fretboard',
+         maskSrc: NECK_MASK,
+         style: {
+           backgroundImage: `url(${fretboard.src})`,
+           opacity: 0.94,
+           mixBlendMode: 'multiply',
+           zIndex: 101,
+         },
+         protectedLayer: true,
+       },
+       {
+         name: 'headstock-wood',
+         maskSrc: headstock.mask,
+         style: {
+           backgroundImage: `url(${headstockWood.texture})`,
+           opacity: 0.95,
+           zIndex: 102,
+         },
+         protectedLayer: true,
+       },
+       { name: 'headstock-tuners', src: headstockTuners, className: 'opacity-95', protectedLayer: true, style: { zIndex: 103 } },
+     ].filter(Boolean)
+   }, [bodyFinish.texture, bodyFinish.color, bodyWood.texture, colorKey, config.topWood, config.finishType, config.finishColor, finishTypeColorAsset, topWoodTexture, fretboard.src, headstock, headstockWood.texture, modelBodySrc, neck.filter, neck.src, topCoatAsset])
   
   const stringLayer = useMemo(() => {
     return headstock.strings ? { src: headstock.strings, className: 'opacity-95', style: { zIndex: 110 } } : null

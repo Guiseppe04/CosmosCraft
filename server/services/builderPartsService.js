@@ -184,6 +184,102 @@ const listImageFilesRecursive = async (dirPath) => {
   return results;
 };
 
+const resolveBuilderAssetRoot = (guitarType = 'electric') => {
+  const normalizedType = normalizeKey(guitarType);
+  if (normalizedType === 'bass') {
+    return path.resolve(__dirname, '../../client/public/builder/bass_assets');
+  }
+  return path.resolve(__dirname, '../../client/public/builder/electric_assets');
+};
+
+const resolveSharedModelRoot = async (guitarType = 'electric') => {
+  const root = resolveBuilderAssetRoot(guitarType)
+  const entries = await fs.promises.readdir(root, { withFileTypes: true })
+  const modelDirs = entries.filter(e => e.isDirectory() && e.name.endsWith('_assets'))
+    .map(e => e.name)
+    .sort()
+  if (modelDirs.length > 0) {
+    return path.join(root, modelDirs[0], 'models', 'all-models')
+  }
+  return null
+}
+
+const resolveModelSpecificRoot = (guitarType = 'electric', model = 'dc') => {
+  const root = resolveBuilderAssetRoot(guitarType);
+  const modelDir = `${model}_assets`;
+  return path.join(root, modelDir, 'models', model);
+};
+
+const guessLabelFromFilename = (filename) => {
+  const base = path.basename(filename, path.extname(filename));
+  return base
+    .replace(/[-_]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+};
+
+const scanFolder = async (dirPath) => {
+  if (!fs.existsSync(dirPath)) return [];
+  const files = await fs.promises.readdir(dirPath, { withFileTypes: true });
+  const results = [];
+  for (const entry of files) {
+    if (!entry.isFile()) continue;
+    const ext = path.extname(entry.name).toLowerCase();
+    if (IMAGE_EXTENSIONS.has(ext)) {
+      results.push({
+        key: path.basename(entry.name, ext),
+        filename: entry.name,
+        label: guessLabelFromFilename(entry.name),
+      });
+    }
+  }
+  results.sort((a, b) => a.label.localeCompare(b.label));
+  return results;
+};
+
+exports.listBuilderAssets = async ({ guitarType, group, subgroup, model } = {}) => {
+  const normalizedType = normalizeKey(guitarType || 'electric');
+  const normalizedGroup = normalizeKey(group || '');
+  const normalizedSubgroup = normalizeKey(subgroup || '');
+  const normalizedModel = normalizeKey(model || 'dc');
+  const assets = {};
+
+  if (normalizedGroup === 'top-woods' || normalizedGroup === 'top Woods' || normalizedGroup === 'topwoods') {
+    const sharedRoot = await resolveSharedModelRoot(normalizedType)
+    if (!sharedRoot) return assets
+    const dir = path.join(sharedRoot, 'woods-colors', 'top-woods')
+    assets.topWoods = await scanFolder(dir)
+    return assets
+  }
+
+  if (normalizedGroup === 'colors') {
+    const folder = normalizedSubgroup || 'metallics'
+    const validFolders = ['metallics', 'transluscents', 'sparkle', 'fades', 'solids', 'bursts']
+    const targetFolder = validFolders.includes(folder) ? folder : 'metallics'
+    const sharedRoot = await resolveSharedModelRoot(normalizedType)
+    if (!sharedRoot) return assets
+    const dir = path.join(sharedRoot, 'woods-colors', 'colors', targetFolder)
+    assets.finishColors = await scanFolder(dir)
+    assets.folder = targetFolder
+    return assets
+  }
+
+  if (normalizedGroup === 'top-coat' || normalizedGroup === 'topcoat') {
+    const dir = path.join(resolveModelSpecificRoot(normalizedType, normalizedModel), 'back', 'shadows_highlights');
+    assets.topCoats = await scanFolder(dir);
+    return assets;
+  }
+
+  if (normalizedGroup === 'body-masks' || normalizedGroup === 'bodymasks') {
+    const dir = path.join(resolveModelSpecificRoot(normalizedType, normalizedModel), 'bodies', 'front', 'masks');
+    assets.bodyMasks = await scanFolder(dir);
+    return assets;
+  }
+
+  return assets;
+};
+
 const ensureCloudinaryConfigured = () => {
   if (cloudinaryReady) return;
   const hasUrl = Boolean(process.env.CLOUDINARY_URL);

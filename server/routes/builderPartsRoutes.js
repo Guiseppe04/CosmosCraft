@@ -7,6 +7,7 @@ const router = express.Router();
 // Allow public to fetch active generic parts for the builder
 router.get('/', builderPartsController.getAllParts);
 router.get('/model-images', builderPartsController.getModelImages);
+router.get('/assets', builderPartsController.listBuilderAssets);
 router.get('/:id', builderPartsController.getPart);
 
 // Admin / Staff specific CRUD actions

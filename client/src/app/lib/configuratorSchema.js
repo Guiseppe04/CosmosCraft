@@ -1,0 +1,921 @@
+/**
+ * Configurator Schema
+ * 
+ * Data-driven configuration that defines all customizable options,
+ * their dependencies, default values, and how they map to assets.
+ * 
+ * Adding a new model only requires adding its entry here and its asset folders.
+ * No additional UI code is needed.
+ */
+
+import {
+  resolveOptionPreview,
+  resolveBodyMask,
+  resolveBodyWoodAsset,
+  resolveFingerboardWoodAsset,
+  resolveNeckWoodAsset,
+  resolveHeadstockWoodAsset,
+  resolveTopWoodAsset,
+  resolveFinishAsset,
+  resolveTopCoatAsset,
+  resolveShadows,
+  resolveGloss,
+  resolveBodySpecificAsset,
+  resolvePickupRoute,
+  resolvePickupBody,
+  resolvePickupPoles,
+  resolveHeadstockMask,
+  resolveHeadstockTuners,
+  resolveHeadstockStrings,
+  resolveTrussCover,
+  resolveInlay,
+  resolveButtonAsset,
+  getButtonPreview,
+} from './assetResolver'
+
+// ============================================================
+// CATEGORY & MODEL DEFINITIONS
+// ============================================================
+
+export const CATEGORIES = {
+  electric: {
+    label: 'Electric Guitar',
+    icon: 'Guitar',
+    models: {
+      dc: {
+        label: 'DC',
+        note: 'Double-cut access',
+        defaultConfig: {
+          body: 'dc',
+          bodyWood: 'mah',
+          neckWood: 'maple',
+          fingerboardWood: 'rosewood',
+          headstockWood: 'plain-maple',
+          headstockShape: 'gt6',
+          bridge: 'hipshot-hardtail',
+          hardwareColor: 'chrome',
+          knobs: 'black-dome',
+          pickupConfiguration: 'hh',
+          inlayShape: 'id',
+          inlayMaterial: 'white-pearl',
+          topCoat: 'gloss',
+          topWood: 'none',
+          finishType: 'solid',
+          finishColor: 'black',
+          dexterity: 'right',
+          strings: '6',
+          multiscale: 'off',
+          scaleLength: '25.5',
+          case: 'none',
+          bevel: 'off',
+          neckConstruction: '1piece',
+          frets: 'stainless',
+          neckRearFinish: 'none',
+          trussRodCover: 'black',
+          electronicsType: 'passive',
+          bridgePickupModel: 'beryllium',
+          middlePickupModel: 'none',
+          neckPickupModel: 'beryllium',
+          pickupBobbin: 'standard',
+          pickupPoleColor: 'chrome',
+          controls: 'standard',
+          saddle: 'chrome',
+          nut: 'black',
+          tuning: 'eStandard',
+          stringBrand: 'elixir1046',
+          outputJack: 'none',
+          strapButtons: 'off',
+          tunerButtons: 'off',
+          electronicsCavityCover: 'none',
+          tremoloCover: 'none',
+        },
+      },
+      solo: {
+        label: 'Solo',
+        note: 'Modern singlecut body',
+        defaultConfig: {
+          body: 'solo',
+          bodyWood: 'mah',
+          neckWood: 'maple',
+          fingerboardWood: 'rosewood',
+          headstockWood: 'plain-maple',
+          headstockShape: 'gt6',
+          bridge: 'hipshot-hardtail',
+          hardwareColor: 'chrome',
+          knobs: 'black',
+          pickupConfiguration: 'hh',
+          inlayShape: 'id',
+          inlayMaterial: 'white-pearl',
+          topCoat: 'gloss',
+          topWood: 'none',
+          finishType: 'solid',
+          finishColor: 'black',
+          dexterity: 'right',
+          strings: '6',
+          multiscale: 'off',
+          scaleLength: '25.5',
+          case: 'none',
+          bevel: 'off',
+          neckConstruction: '1piece',
+          frets: 'stainless',
+          neckRearFinish: 'none',
+          trussRodCover: 'black',
+          electronicsType: 'passive',
+          bridgePickupModel: 'beryllium',
+          middlePickupModel: 'none',
+          neckPickupModel: 'beryllium',
+          pickupBobbin: 'standard',
+          pickupPoleColor: 'chrome',
+          controls: 'standard',
+          saddle: 'chrome',
+          nut: 'black',
+          tuning: 'eStandard',
+          stringBrand: 'elixir1046',
+          outputJack: 'none',
+          strapButtons: 'off',
+          tunerButtons: 'off',
+          electronicsCavityCover: 'none',
+          tremoloCover: 'none',
+        },
+      },
+      delos: {
+        label: 'Delos',
+        note: 'Contoured body build',
+        defaultConfig: {
+          body: 'delos',
+          bodyWood: 'mah',
+          neckWood: 'maple',
+          fingerboardWood: 'rosewood',
+          headstockWood: 'plain-maple',
+          headstockShape: 'gt6',
+          bridge: 'hipshot-trem',
+          hardwareColor: 'chrome',
+          knobs: 'black',
+          pickupConfiguration: 'hss',
+          inlayShape: 'id',
+          inlayMaterial: 'white-pearl',
+          topCoat: 'gloss',
+          topWood: 'none',
+          finishType: 'solid',
+          finishColor: 'black',
+          dexterity: 'right',
+          strings: '6',
+          multiscale: 'off',
+          scaleLength: '25.5',
+          case: 'none',
+          bevel: 'off',
+          neckConstruction: '1piece',
+          frets: 'stainless',
+          neckRearFinish: 'none',
+          trussRodCover: 'black',
+          electronicsType: 'passive',
+          bridgePickupModel: 'beryllium',
+          middlePickupModel: 'none',
+          neckPickupModel: 'beryllium',
+          pickupBobbin: 'standard',
+          pickupPoleColor: 'chrome',
+          controls: 'standard',
+          saddle: 'chrome',
+          nut: 'black',
+          tuning: 'eStandard',
+          stringBrand: 'elixir1046',
+          outputJack: 'none',
+          strapButtons: 'off',
+          tunerButtons: 'off',
+          electronicsCavityCover: 'none',
+          tremoloCover: 'none',
+        },
+      },
+    },
+  },
+}
+
+// ============================================================
+// OPTION GROUPS & FIELDS
+// ============================================================
+
+/**
+ * Each option field defines:
+ *   key: config property name
+ *   label: Display label
+ *   type: 'select' | 'image-select' | 'color' | 'toggle'
+ *   options: Array of { value, label, note, price?, preview? }
+ *   condition: Optional function(config) => boolean to show/hide
+ *   previewResolver: Function(category, model, value) => image URL or null
+ *   section: The section it belongs to
+ */
+
+export const OPTION_FIELDS = [
+  // ============================================================
+  // 1. GENERAL OPTIONS
+  // ============================================================
+  {
+    section: 'General',
+    key: 'dexterity',
+    label: 'Dexterity',
+    type: 'select',
+    options: [
+      { value: 'right', label: 'Right Handed', note: 'Standard orientation', price: 0 },
+      { value: 'left', label: 'Left Handed', note: 'Reversed orientation', price: 0 },
+    ],
+  },
+  {
+    section: 'General',
+    key: 'strings',
+    label: 'Number of Strings',
+    type: 'select',
+    options: [
+      { value: '6', label: '6 Strings', note: 'Standard six-string', price: 0 },
+      { value: '7', label: '7 Strings', note: 'Extended range', price: 0 },
+      { value: '8', label: '8 Strings', note: 'Extended range', price: 0 },
+    ],
+  },
+  {
+    section: 'General',
+    key: 'multiscale',
+    label: 'Multiscale',
+    type: 'select',
+    options: [
+      { value: 'off', label: 'Off', note: 'Straight scale', price: 0 },
+      { value: 'on', label: 'On', note: 'Multiscale fan', price: 0 },
+    ],
+  },
+  {
+    section: 'General',
+    key: 'scaleLength',
+    label: 'Scale Length',
+    type: 'select',
+    options: [
+      { value: '25.5', label: '25.5"', note: 'Standard scale', price: 0 },
+      { value: '26.5', label: '26.5"', note: 'Baritone scale', price: 0 },
+      { value: '27', label: '27"', note: 'Multiscale low', price: 0 },
+    ],
+  },
+  {
+    section: 'General',
+    key: 'case',
+    label: 'Case',
+    type: 'select',
+    options: [
+      { value: 'none', label: 'No Case', note: 'No case included', price: 0 },
+      { value: 'gigbag', label: 'Gig Bag', note: 'Padded gig bag', price: 60 },
+      { value: 'hardcase', label: 'Hard Case', note: 'Molded hard case', price: 120 },
+    ],
+  },
+
+  // ============================================================
+  // 2. BODY OPTIONS
+  // ============================================================
+  {
+    section: 'Body',
+    key: 'bodyWood',
+    label: 'Body Wood',
+    type: 'image-select',
+    previewResolver: (category, model, value) => resolveBodyWoodAsset(category, model, value),
+    options: [
+      { value: 'ald', label: 'Alder', note: 'Balanced tonewood', price: 0 },
+      { value: 'ash2', label: 'Ash', note: 'Bright snappy tone', price: 0 },
+      { value: 'mah', label: 'Mahogany', note: 'Warm resonant tone', price: 0 },
+      { value: 'lmb', label: 'Black Limba', note: 'Exotic dark wood', price: 0 },
+      { value: 'roasted-ash', label: 'Roasted Ash', note: 'Aged balanced tone', price: 0 },
+      { value: 'summer-ash1', label: 'Summer Ash', note: 'Lightweight tone', price: 0 },
+      { value: 'wal', label: 'Walnut', note: 'Warm rich tone', price: 0 },
+    ],
+  },
+  {
+    section: 'Body',
+    key: 'topWood',
+    label: 'Top Wood',
+    type: 'image-select',
+    previewResolver: (category, model, value) => {
+      if (value === 'none') return null
+      return resolveTopWoodAsset(category, model, value)
+    },
+    options: [
+      { value: 'none', label: 'None', note: 'No top wood', price: 0, noImage: true },
+      { value: 'buckeye', label: 'Buckeye Burl', note: 'Figured burl top', price: 0 },
+      { value: 'burled-maple', label: 'Burled Maple', note: 'Burled maple top', price: 0 },
+      { value: 'claro-walnut', label: 'Claro Walnut', note: 'Premium walnut top', price: 0 },
+      { value: 'flamed-koa', label: 'Flamed Koa', note: 'Exotic flamed top', price: 0 },
+      { value: 'flamed-maple', label: 'Flamed Maple', note: 'Classic flamed top', price: 0 },
+      { value: 'quilted-maple', label: 'Quilted Maple', note: 'Premium quilted top', price: 0 },
+      { value: 'spalted-maple', label: 'Spalted Maple', note: 'Unique spalted top', price: 0 },
+    ],
+  },
+  {
+    section: 'Body',
+    key: 'bevel',
+    label: 'Beveled Body Edges',
+    type: 'select',
+    options: [
+      { value: 'off', label: 'Off', note: 'Square body edges', price: 0 },
+      { value: 'on', label: 'On', note: 'Beveled body edges', price: 40 },
+    ],
+  },
+  {
+    section: 'Body',
+    key: 'finishType',
+    label: 'Finish Type',
+    type: 'select',
+    options: [
+      { value: 'solid', label: 'Solid', note: 'Opaque color finish', price: 0 },
+      { value: 'translucent', label: 'Translucent', note: 'See-through color', price: 35 },
+      { value: 'metallic', label: 'Metallic', note: 'Metallic flake finish', price: 35 },
+      { value: 'sparkle', label: 'Sparkle', note: 'Sparkle finish', price: 40 },
+      { value: 'burst', label: 'Burst', note: 'Gradient burst edges', price: 45 },
+      { value: 'fade', label: 'Fade', note: 'Smooth color fade', price: 45 },
+    ],
+  },
+  {
+    section: 'Body',
+    key: 'finishColor',
+    label: 'Finish Color',
+    type: 'image-select',
+    dependency: 'finishType',
+    previewResolver: (category, model, value, config) => {
+      if (!config.finishType || config.finishType === 'burst' || config.finishType === 'fade') {
+        return getButtonPreview(category, model, 'finish', `${config.finishType || 'solid'}/${value}`)
+      }
+      return resolveFinishAsset(category, model, config.finishType || 'solid', value)
+    },
+    getOptions: (config) => {
+      const finishType = config.finishType || 'solid'
+      // Metallic finish colors -> loads from woods-colors/colors/metallics/
+      if (finishType === 'metallic') {
+        return [
+          { value: 'black', label: 'Black Metallic', price: 35 },
+          { value: 'red', label: 'Red Metallic', price: 35 },
+          { value: 'blue', label: 'Blue Metallic', price: 35 },
+          { value: 'green', label: 'Green Metallic', price: 35 },
+          { value: 'silver', label: 'Silver Metallic', price: 35 },
+          { value: 'gold', label: 'Gold Metallic', price: 35 },
+          { value: 'purple', label: 'Purple Metallic', price: 35 },
+          { value: 'gunmetal', label: 'Gunmetal Metallic', price: 35 },
+        ]
+      }
+      // Translucent finish colors -> loads from woods-colors/colors/transluscents/
+      if (finishType === 'translucent') {
+        return [
+          { value: 'black', label: 'Transparent Black', price: 35 },
+          { value: 'red', label: 'Transparent Red', price: 35 },
+          { value: 'blue', label: 'Transparent Blue', price: 35 },
+          { value: 'green', label: 'Transparent Green', price: 35 },
+          { value: 'amber', label: 'Transparent Amber', price: 35 },
+          { value: 'purple', label: 'Transparent Purple', price: 35 },
+          { value: 'yellow', label: 'Transparent Yellow', price: 35 },
+        ]
+      }
+      // Sparkle finish colors -> loads from woods-colors/colors/sparkle/
+      if (finishType === 'sparkle') {
+        return [
+          { value: 'black', label: 'Black Sparkle', price: 40 },
+          { value: 'red', label: 'Red Sparkle', price: 40 },
+          { value: 'blue', label: 'Blue Sparkle', price: 40 },
+          { value: 'gold', label: 'Gold Sparkle', price: 40 },
+          { value: 'silver', label: 'Silver Sparkle', price: 40 },
+          { value: 'purple', label: 'Purple Sparkle', price: 40 },
+          { value: 'green', label: 'Green Sparkle', price: 40 },
+        ]
+      }
+      // Fade finish colors -> loads from woods-colors/colors/fades/
+      if (finishType === 'fade') {
+        return [
+          { value: 'black-to-red', label: 'Black to Red', price: 45 },
+          { value: 'black-to-blue', label: 'Black to Blue', price: 45 },
+          { value: 'black-to-green', label: 'Black to Green', price: 45 },
+          { value: 'white-to-black', label: 'White to Black', price: 45 },
+          { value: 'red-to-yellow', label: 'Red to Yellow', price: 45 },
+          { value: 'blue-to-purple', label: 'Blue to Purple', price: 45 },
+        ]
+      }
+      if (finishType === 'burst') {
+        return [
+          { value: 'black', label: 'Black Burst', price: 45 },
+          { value: 'red', label: 'Red Burst', price: 45 },
+          { value: 'blue', label: 'Blue Burst', price: 45 },
+          { value: 'tobacco', label: 'Tobacco Burst', price: 45 },
+        ]
+      }
+      // Solid finishes (default) -> loads from woods-colors/colors/solids/
+      return [
+        { value: 'black', label: 'Black', price: 25 },
+        { value: 'white', label: 'White', price: 25 },
+        { value: 'red', label: 'Red', price: 30 },
+        { value: 'blue', label: 'Blue', price: 30 },
+        { value: 'green', label: 'Green', price: 30 },
+        { value: 'yellow', label: 'Yellow', price: 30 },
+        { value: 'orange', label: 'Orange', price: 30 },
+        { value: 'purple', label: 'Purple', price: 30 },
+        { value: 'turquoise', label: 'Turquoise', price: 35 },
+        { value: 'candy-apple-red', label: 'Candy Apple Red', price: 35 },
+        { value: 'coral', label: 'Coral', price: 35 },
+        { value: 'light-blue', label: 'Light Blue', price: 35 },
+      ]
+    },
+  },
+  {
+    section: 'Body',
+    key: 'topCoat',
+    label: 'Top Coat',
+    type: 'image-select',
+    previewResolver: (category, model, value) => resolveTopCoatAsset(category, model, value),
+    options: [
+      { value: 'gloss', label: 'Clear Gloss', note: 'High-gloss clear coat', price: 0 },
+      { value: 'matte', label: 'Satin Matte', note: 'Low-sheen satin', price: 0 },
+      { value: 'open-pore', label: 'Open Pore', note: 'Natural open pore finish', price: 0 },
+    ],
+  },
+
+  // ============================================================
+  // 3. NECK OPTIONS
+  // ============================================================
+  {
+    section: 'Neck',
+    key: 'neckWood',
+    label: 'Neck Wood',
+    type: 'image-select',
+    previewResolver: (category, model, value) => resolveNeckWoodAsset(category, model, value),
+    options: [
+      { value: 'maple', label: 'Maple', note: 'Bright clear tone', price: 0 },
+      { value: 'plain-maple', label: 'Plain Maple', note: 'Standard maple neck', price: 0 },
+      { value: '3mp', label: '3-Piece Maple', note: 'Stable 3-piece maple', price: 0 },
+      { value: '3mm', label: '3-Piece Maple/Mahogany', note: 'Warm 3-piece neck', price: 0 },
+      { value: '3mw', label: '3-Piece Maple/Walnut', note: 'Balanced 3-piece neck', price: 0 },
+      { value: '5mp', label: '5-Piece Maple', note: 'Ultra-stable 5-piece', price: 0 },
+      { value: '5mw', label: '5-Piece Maple/Walnut', note: 'Premium 5-piece neck', price: 0 },
+      { value: '5ml', label: '5-Piece Maple/Limba', note: 'Exotic 5-piece neck', price: 0 },
+      { value: 'waln', label: 'Walnut', note: 'Warm walnut neck', price: 95 },
+      { value: 'rfmn', label: 'Roasted Flamed Maple', note: 'Aged flamed maple', price: 75 },
+      { value: 'lmbn', label: 'Black Limba', note: 'Exotic limba neck', price: 0 },
+    ],
+  },
+  {
+    section: 'Neck',
+    key: 'neckConstruction',
+    label: 'Neck Construction',
+    type: 'select',
+    options: [
+      { value: '1piece', label: '1-Piece', note: 'Single-piece neck', price: 0 },
+      { value: '3piece', label: '3-Piece', note: 'Three-piece neck', price: 0 },
+      { value: '5piece', label: '5-Piece', note: 'Five-piece neck', price: 0 },
+    ],
+  },
+  {
+    section: 'Neck',
+    key: 'fingerboardWood',
+    label: 'Fingerboard Wood',
+    type: 'image-select',
+    previewResolver: (category, model, value) => resolveFingerboardWoodAsset(category, model, value),
+    options: [
+      { value: 'maple', label: 'Maple', note: 'Clean and bright', price: 0 },
+      { value: 'rosewood', label: 'Rosewood', note: 'Classic dark board', price: 60 },
+      { value: 'ebony', label: 'Ebony', note: 'Snappy premium board', price: 80 },
+      { value: 'flamed-maple', label: 'Flamed Maple', note: 'Figured maple board', price: 0 },
+      { value: 'birdseye-maple', label: 'Birdseye Maple', note: 'Unique birdseye grain', price: 0 },
+      { value: 'roasted-maple', label: 'Roasted Maple', note: 'Aged maple board', price: 0 },
+      { value: 'roasted-flame', label: 'Roasted Flame', note: 'Aged flamed board', price: 0 },
+      { value: 'pale-moon-ebony', label: 'Pale Moon Ebony', note: 'Exotic pale ebony', price: 0 },
+      { value: 'zebrawood', label: 'Zebrawood', note: 'Striking zebra grain', price: 0 },
+      { value: 'ziricote', label: 'Ziricote', note: 'Exotic dark grain', price: 0 },
+      { value: 'purple-heart', label: 'Purple Heart', note: 'Vibrant purple wood', price: 0 },
+      { value: 'bloodwood', label: 'Bloodwood', note: 'Deep red board', price: 0 },
+      { value: 'royal-ebony', label: 'Royal Ebony', note: 'Premium dark board', price: 0 },
+      { value: 'richlite', label: 'Richlite', note: 'Modern composite board', price: 0 },
+    ],
+  },
+  {
+    section: 'Neck',
+    key: 'inlayShape',
+    label: 'Inlay Shape',
+    type: 'image-select',
+    previewResolver: (category, model, value) => getButtonPreview(category, model, 'inlay-shape', value),
+    options: [
+      { value: 'id', label: 'Dots', note: 'Classic dot inlays', price: 0 },
+      { value: 'ib', label: 'Blocks', note: 'Block inlays', price: 30 },
+      { value: 'ir', label: 'Reverse Dots', note: 'Reverse dot inlays', price: 30 },
+      { value: 'ik', label: 'Sharktooth', note: 'Aggressive sharkteeth', price: 30 },
+      { value: 'idia', label: 'Diamonds', note: 'Diamond inlays', price: 30 },
+      { value: 'iod', label: 'Offset Dots', note: 'Offset dot positions', price: 30 },
+      { value: 'isod', label: 'Side Offset Dots', note: 'Side offset dots', price: 30 },
+      { value: 'nin', label: 'No Inlays', note: 'Clean fretboard without inlays', price: 0 },
+    ],
+  },
+  {
+    section: 'Neck',
+    key: 'inlayMaterial',
+    label: 'Inlay Material',
+    type: 'image-select',
+    previewResolver: (category, model, value) => getButtonPreview(category, model, 'inlay-material', value),
+    options: [
+      { value: 'white-pearl', label: 'White Pearl', note: 'Classic pearl material', price: 0 },
+      { value: 'abalone', label: 'Abalone', note: 'Premium abalone', price: 35 },
+      { value: 'black', label: 'Black', note: 'Subtle black material', price: 0 },
+      { value: 'white', label: 'White', note: 'Clean white material', price: 0 },
+      { value: 'green', label: 'Green', note: 'Green pearl material', price: 35 },
+      { value: 'red', label: 'Red', note: 'Red pearl material', price: 35 },
+      { value: 'pink', label: 'Pink', note: 'Pink pearl material', price: 35 },
+      { value: 'luminlay', label: 'Luminlay', note: 'Glow-in-the-dark', price: 35 },
+    ],
+  },
+  {
+    section: 'Neck',
+    key: 'frets',
+    label: 'Frets',
+    type: 'select',
+    options: [
+      { value: 'stainless', label: 'Stainless Steel', note: 'Durable stainless frets', price: 60 },
+      { value: 'gold', label: 'Gold EVO', note: 'Premium gold EVO frets', price: 70 },
+      { value: 'nickel', label: 'Nickel Silver', note: 'Standard nickel frets', price: 0 },
+    ],
+  },
+  {
+    section: 'Neck',
+    key: 'neckRearFinish',
+    label: 'Neck Rear Finish',
+    type: 'select',
+    options: [
+      { value: 'none', label: 'Natural', note: 'Natural neck rear', price: 0 },
+      { value: 'tungOil', label: 'Tung Oil', note: 'Tung oil neck finish', price: 0 },
+      { value: 'satin', label: 'Satin', note: 'Smooth satin finish', price: 0 },
+    ],
+  },
+  {
+    section: 'Neck',
+    key: 'headstockShape',
+    label: 'Headstock Shape',
+    type: 'image-select',
+    previewResolver: (category, model, value) => getButtonPreview(category, model, 'headstock-shape', value),
+    options: [
+      { value: 'gt6', label: 'GT6', note: 'Straight 6-in-line', price: 0 },
+      { value: 'gt6r', label: 'GT6R', note: 'Reverse 6-in-line', price: 20 },
+      { value: 'h33', label: 'H33', note: 'Classic inline', price: 45 },
+      { value: 'h33r', label: 'H33R', note: 'Reverse inline', price: 55 },
+      { value: '6in', label: '6 Inline', note: 'Standard 6 inline', price: 0 },
+      { value: '6inr', label: '6 Inline Reverse', note: 'Reverse 6 inline', price: 20 },
+      { value: '624', label: '2×4', note: '2×4 headstock', price: 20 },
+      { value: 'pth', label: 'Pointed', note: 'Pointed headstock', price: 25 },
+      { value: 'pthr', label: 'Pointed Reverse', note: 'Reverse pointed', price: 25 },
+    ],
+  },
+  {
+    section: 'Neck',
+    key: 'trussRodCover',
+    label: 'Truss Rod Cover',
+    type: 'image-select',
+    previewResolver: (category, model, value) => getButtonPreview(category, model, 'truss-cover', value),
+    options: [
+      { value: 'black', label: 'Black', note: 'Black truss rod cover', price: 0 },
+      { value: 'cream', label: 'Cream', note: 'Cream cover', price: 10 },
+      { value: 'white', label: 'White', note: 'White cover', price: 10 },
+      { value: 'red-tortoiseshell', label: 'Red Tortoiseshell', note: 'Tortoiseshell cover', price: 15 },
+      { value: 'white-pearloid', label: 'White Pearloid', note: 'Pearloid cover', price: 15 },
+      { value: 'ebony', label: 'Ebony', note: 'Ebony cover', price: 20 },
+    ],
+  },
+
+  // ============================================================
+  // 4. ELECTRONICS OPTIONS
+  // ============================================================
+  {
+    section: 'Electronics',
+    key: 'electronicsType',
+    label: 'Electronics Type',
+    type: 'select',
+    options: [
+      { value: 'passive', label: 'Passive', note: 'Standard passive electronics', price: 0 },
+      { value: 'active', label: 'Active', note: 'Active preamp electronics', price: 80 },
+    ],
+  },
+  {
+    section: 'Electronics',
+    key: 'pickupConfiguration',
+    label: 'Pickup Configuration',
+    type: 'select',
+    options: [
+      { value: 'hh', label: 'HH (Dual Humbuckers)', note: 'Two humbuckers', price: 135 },
+      { value: 'hss', label: 'HSS (Humbucker + 2 Singles)', note: 'Bridge humbucker, two singles', price: 110 },
+      { value: 'sss', label: 'SSS (3 Single Coils)', note: 'Three single coils', price: 0 },
+      { value: 'p90', label: 'P90-P90', note: 'Dual P90 set', price: 125 },
+    ],
+  },
+  {
+    section: 'Electronics',
+    key: 'bridgePickupModel',
+    label: 'Bridge Pickup',
+    type: 'select',
+    dependency: 'pickupConfiguration',
+    condition: (config) => !config.pickupConfiguration || config.pickupConfiguration !== 'none',
+    options: [
+      { value: 'beryllium', label: 'Beryllium', note: 'Beryllium bridge pickup', price: 0 },
+      { value: 'holdsworth', label: 'Holdsworth', note: 'Holdsworth bridge pickup', price: 0 },
+      { value: 'lithium', label: 'Lithium', note: 'Lithium bridge pickup', price: 0 },
+      { value: 'illusionist', label: 'Illusionist', note: 'Illusionist bridge pickup', price: 0 },
+      { value: 'thorium', label: 'Thorium', note: 'Thorium bridge pickup', price: 0 },
+      { value: 'vantium', label: 'Vantium', note: 'Vantium bridge pickup', price: 0 },
+    ],
+  },
+  {
+    section: 'Electronics',
+    key: 'middlePickupModel',
+    label: 'Middle Pickup',
+    type: 'select',
+    condition: (config) => {
+      const cfg = config.pickupConfiguration || 'hh'
+      return cfg === 'hss' || cfg === 'sss'
+    },
+    options: [
+      { value: 'none', label: 'None', note: 'No middle pickup', price: 0 },
+      { value: 'single-coil', label: 'Single Coil', note: 'Standard single coil', price: 0 },
+    ],
+  },
+  {
+    section: 'Electronics',
+    key: 'neckPickupModel',
+    label: 'Neck Pickup',
+    type: 'select',
+    options: [
+      { value: 'beryllium', label: 'Beryllium', note: 'Beryllium neck pickup', price: 0 },
+      { value: 'holdsworth', label: 'Holdsworth', note: 'Holdsworth neck pickup', price: 0 },
+      { value: 'lithium', label: 'Lithium', note: 'Lithium neck pickup', price: 0 },
+      { value: 'empyrean', label: 'Empyrean', note: 'Empyrean neck pickup', price: 0 },
+      { value: 'vantium', label: 'Vantium', note: 'Vantium neck pickup', price: 0 },
+    ],
+  },
+  {
+    section: 'Electronics',
+    key: 'pickupBobbin',
+    label: 'Pickup Appearance',
+    type: 'image-select',
+    previewResolver: (category, model, value) => getButtonPreview(category, model, 'pickup', value),
+    options: [
+      { value: 'standard', label: 'Standard', note: 'Standard pickup covers', price: 0 },
+      { value: 'open', label: 'Open', note: 'Open coil bobbins', price: 0 },
+      { value: 'singlecoil', label: 'Single Coil', note: 'Single coil style', price: 0 },
+      { value: 'singlecoil-no-pole-pieces', label: 'Single Coil No Poles', note: 'Single coil without visible poles', price: 0 },
+      { value: 'twin-blade', label: 'Twin Blade', note: 'Twin blade style', price: 10 },
+    ],
+  },
+  {
+    section: 'Electronics',
+    key: 'pickupColor',
+    label: 'Pickup Color',
+    type: 'image-select',
+    previewResolver: (category, model, value) => getButtonPreview(category, model, 'pickup-color', value),
+    options: [
+      { value: 'covered-black', label: 'Covered Black', note: 'Black pickup covers', price: 0 },
+      { value: 'covered-gold', label: 'Covered Gold', note: 'Gold pickup covers', price: 10 },
+      { value: 'open-black', label: 'Open Black', note: 'Black open bobbins', price: 0 },
+      { value: 'open-cream', label: 'Open Cream', note: 'Cream open bobbins', price: 0 },
+      { value: 'open-white', label: 'Open White', note: 'White open bobbins', price: 0 },
+      { value: 'chrome', label: 'Chrome', note: 'Chrome covers', price: 10 },
+      { value: 'gold', label: 'Gold', note: 'Gold covers', price: 15 },
+      { value: 'ferrari-red', label: 'Ferrari Red', note: 'Red pickups', price: 10 },
+      { value: 'hot-pink', label: 'Hot Pink', note: 'Pink pickups', price: 10 },
+      { value: 'acid-green', label: 'Acid Green', note: 'Green pickups', price: 10 },
+      { value: 'sky-blue', label: 'Sky Blue', note: 'Blue pickups', price: 10 },
+      { value: 'seafoam-green', label: 'Seafoam Green', note: 'Seafoam pickups', price: 10 },
+    ],
+  },
+  {
+    section: 'Electronics',
+    key: 'pickupPoleColor',
+    label: 'Pole Piece Color',
+    type: 'image-select',
+    previewResolver: (category, model, value) => getButtonPreview(category, model, 'pole-pieces', value),
+    options: [
+      { value: 'black', label: 'Black', note: 'Black pole pieces', price: 0 },
+      { value: 'chrome', label: 'Chrome', note: 'Chrome pole pieces', price: 10 },
+      { value: 'gold', label: 'Gold', note: 'Gold pole pieces', price: 10 },
+    ],
+  },
+  {
+    section: 'Electronics',
+    key: 'controls',
+    label: 'Controls',
+    type: 'select',
+    options: [
+      { value: 'standard', label: 'Standard Controls', note: 'Standard volume/tone', price: 0 },
+      { value: 'deleteTone', label: 'Delete Tone Control', note: 'Remove tone control', price: 0 },
+      { value: 'deleteToneMoveVolume', label: 'Move Volume to Tone', note: 'Move volume to tone position', price: 0 },
+    ],
+  },
+
+  // ============================================================
+  // 5. HARDWARE OPTIONS
+  // ============================================================
+  {
+    section: 'Hardware',
+    key: 'bridge',
+    label: 'Bridge',
+    type: 'image-select',
+    previewResolver: (category, model, value) => getButtonPreview(category, model, 'bridge', value),
+    options: [
+      { value: 'hipshot-hardtail', label: 'Hipshot Hardtail', note: 'Modern hardtail bridge', price: 45 },
+      { value: 'hipshot-trem', label: 'Hipshot Tremolo', note: 'Six-string tremolo bridge', price: 75 },
+      { value: 'floyd-rose', label: 'Floyd Rose Tremolo', note: 'Locking trem bridge', price: 90 },
+    ],
+  },
+  {
+    section: 'Hardware',
+    key: 'saddle',
+    label: 'Saddle',
+    type: 'select',
+    options: [
+      { value: 'chrome', label: 'Chrome', note: 'Chrome saddle', price: 0 },
+      { value: 'black', label: 'Black', note: 'Black saddle', price: 0 },
+      { value: 'gold', label: 'Gold', note: 'Gold saddle', price: 0 },
+    ],
+  },
+  {
+    section: 'Hardware',
+    key: 'hardwareColor',
+    label: 'Hardware Color',
+    type: 'image-select',
+    previewResolver: (category, model, value) => getButtonPreview(category, model, 'hardware-color', value),
+    options: [
+      { value: 'chrome', label: 'Chrome', note: 'Standard bright hardware', price: 0 },
+      { value: 'black', label: 'Black', note: 'Stealth hardware', price: 35 },
+      { value: 'gold', label: 'Gold', note: 'Premium gold finish', price: 60 },
+    ],
+  },
+  {
+    section: 'Hardware',
+    key: 'knobs',
+    label: 'Knobs',
+    type: 'image-select',
+    previewResolver: (category, model, value) => getButtonPreview(category, model, 'knob', value),
+    getOptions: (config, category, model) => {
+      // Knobs can be body-specific; base options are shared
+      return [
+        { value: 'black-dome', label: 'Black Dome', note: 'Black dome knobs', price: 0 },
+        { value: 'chrome-dome', label: 'Chrome Dome', note: 'Chrome dome knobs', price: 0 },
+        { value: 'gold-dome', label: 'Gold Dome', note: 'Gold dome knobs', price: 0 },
+        { value: 'black-plastic', label: 'Black Plastic', note: 'Black plastic knobs', price: 10 },
+        { value: 'white-plastic', label: 'White Plastic', note: 'White plastic knobs', price: 10 },
+        { value: 'tamarind', label: 'Tamarind', note: 'Warm wood-look knobs', price: 15 },
+        { value: 'white-pearl-black', label: 'White Pearl Black', note: 'Pearl inlay on black', price: 20 },
+        { value: 'white-pearl-chrome', label: 'White Pearl Chrome', note: 'Pearl inlay on chrome', price: 20 },
+        { value: 'white-pearl-gold', label: 'White Pearl Gold', note: 'Pearl inlay on gold', price: 20 },
+        { value: 'abalone-black', label: 'Abalone Black', note: 'Abalone inlay black', price: 30 },
+        { value: 'abalone-chrome', label: 'Abalone Chrome', note: 'Abalone inlay chrome', price: 30 },
+        { value: 'abalone-gold', label: 'Abalone Gold', note: 'Abalone inlay gold', price: 30 },
+      ]
+    },
+  },
+  {
+    section: 'Hardware',
+    key: 'nut',
+    label: 'Nut',
+    type: 'select',
+    options: [
+      { value: 'black', label: 'Black TUSQ', note: 'Black Graph Tech TUSQ', price: 25 },
+      { value: 'white', label: 'Ivory TUSQ', note: 'Ivory Graph Tech TUSQ', price: 25 },
+    ],
+  },
+  {
+    section: 'Hardware',
+    key: 'tuning',
+    label: 'Tuning',
+    type: 'select',
+    options: [
+      { value: 'eStandard', label: 'E Standard (10-46)', note: 'E standard tuning', price: 0 },
+      { value: 'dStandard', label: 'D Standard (10-46)', note: 'D standard tuning', price: 0 },
+      { value: 'cStandard', label: 'C Standard (11-56)', note: 'C standard tuning', price: 0 },
+      { value: 'dropC', label: 'Drop C (10-52)', note: 'Drop C tuning', price: 0 },
+      { value: 'dropB', label: 'Drop B (11-56)', note: 'Drop B tuning', price: 0 },
+    ],
+  },
+  {
+    section: 'Hardware',
+    key: 'stringBrand',
+    label: 'String Brand',
+    type: 'select',
+    options: [
+      { value: 'elixir1046', label: 'Elixir 10-46', note: 'Elixir 10-46 strings', price: 0 },
+      { value: 'elixir942', label: 'Elixir 9-42 Super Light', note: 'Elixir 9-42 super light', price: 0 },
+    ],
+  },
+  {
+    section: 'Hardware',
+    key: 'outputJack',
+    label: 'Output Jack',
+    type: 'select',
+    options: [
+      { value: 'none', label: 'Standard', note: 'Standard output jack', price: 0 },
+      { value: 'gold', label: 'Gold Jack', note: 'Gold output jack', price: 15 },
+    ],
+  },
+  {
+    section: 'Hardware',
+    key: 'strapButtons',
+    label: 'Strap Buttons',
+    type: 'select',
+    options: [
+      { value: 'off', label: 'Off', note: 'No strap buttons', price: 0 },
+      { value: 'on', label: 'On', note: 'Strap buttons installed', price: 10 },
+    ],
+  },
+  {
+    section: 'Hardware',
+    key: 'tunerButtons',
+    label: 'Tuner Buttons',
+    type: 'select',
+    options: [
+      { value: 'off', label: 'Off', note: 'No tuner buttons', price: 0 },
+      { value: 'on', label: 'On', note: 'Tuner buttons installed', price: 10 },
+    ],
+  },
+  {
+    section: 'Hardware',
+    key: 'electronicsCavityCover',
+    label: 'Electronics Cavity Cover',
+    type: 'select',
+    options: [
+      { value: 'none', label: 'None', note: 'No cavity cover', price: 0 },
+      { value: 'standard', label: 'Standard Cover', note: 'Standard electronics cavity cover', price: 10 },
+    ],
+  },
+  {
+    section: 'Hardware',
+    key: 'tremoloCover',
+    label: 'Tremolo Cover',
+    type: 'select',
+    options: [
+      { value: 'none', label: 'None', note: 'No tremolo cover', price: 0 },
+      { value: 'standard', label: 'Standard Cover', note: 'Standard tremolo cover', price: 10 },
+    ],
+  },
+]
+
+// ============================================================
+// HELPER: Get options for a field (supports dynamic getOptions)
+// ============================================================
+
+export function getFieldOptions(field, config, category, model) {
+  if (typeof field.getOptions === 'function') {
+    return field.getOptions(config, category, model)
+  }
+  return field.options || []
+}
+
+// ============================================================
+// HELPER: Check if a field should be visible
+// ============================================================
+
+export function isFieldVisible(field, config) {
+  if (!field.condition) return true
+  return field.condition(config)
+}
+
+// ============================================================
+// HELPER: Get fields by section
+// ============================================================
+
+export function getFieldsBySection(section) {
+  return OPTION_FIELDS.filter(f => f.section === section)
+}
+
+// ============================================================
+// HELPER: Build default config for a category/model
+// ============================================================
+
+export function getDefaultConfig(category, model) {
+  const catData = CATEGORIES[category]
+  if (!catData) return {}
+  
+  if (model && catData.models[model]) {
+    return { ...catData.models[model].defaultConfig }
+  }
+  
+  // Build from fields if no model-specific default
+  const defaults = {}
+  OPTION_FIELDS.forEach(field => {
+    if (field.options && field.options.length > 0) {
+      defaults[field.key] = field.options[0].value
+    }
+  })
+  return defaults
+}
+
+// ============================================================
+// HELPER: Get model label
+// ============================================================
+
+export function getModelLabel(category, model) {
+  return CATEGORIES[category]?.models[model]?.label || model
+}
+
+export function getCategoryLabel(category) {
+  return CATEGORIES[category]?.label || category
+}
+
+export default {
+  CATEGORIES,
+  OPTION_FIELDS,
+  getFieldOptions,
+  isFieldVisible,
+  getFieldsBySection,
+  getDefaultConfig,
+  getModelLabel,
+  getCategoryLabel,
+}

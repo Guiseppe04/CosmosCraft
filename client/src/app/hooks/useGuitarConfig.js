@@ -18,7 +18,45 @@ import {
   PICKUP_OPTIONS,
   GUITAR_TYPE_OPTIONS,
   guitarBuilder,
+  // New option data
+  DEXTERITY_OPTIONS,
+  STRING_COUNT_OPTIONS,
+  MULTISCALE_OPTIONS,
+  SCALE_LENGTH_OPTIONS,
+  CASE_OPTIONS,
+  BEVEL_OPTIONS,
+  TOP_WOOD_OPTIONS,
+  FINISH_TYPE_OPTIONS,
+  TOP_COAT_OPTIONS,
+  BURST_FINISH_OPTIONS,
+  NECK_CONSTRUCTION_OPTIONS,
+  INLAY_SHAPE_OPTIONS,
+  INLAY_MATERIAL_OPTIONS,
+  FRET_OPTIONS,
+  NECK_REAR_FINISH_OPTIONS,
+  HEADSTOCK_SHAPE_OPTIONS,
+  TRUSS_ROD_COVER_OPTIONS,
+  ELECTRONICS_TYPE_OPTIONS,
+  PICKUP_CONFIGURATION_OPTIONS,
+  PICKUP_MODEL_BRIDGE_OPTIONS,
+  PICKUP_MODEL_MIDDLE_OPTIONS,
+  PICKUP_MODEL_NECK_OPTIONS,
+  PICKUP_BOBBIN_OPTIONS,
+  PICKUP_POLE_COLOR_OPTIONS,
+  CONTROLS_OPTIONS,
+  SADDLE_OPTIONS,
+  NUT_OPTIONS,
+  TUNING_OPTIONS,
+  STRING_BRAND_OPTIONS,
+  OUTPUT_JACK_OPTIONS,
+  STRAP_BUTTON_OPTIONS,
+  TUNER_BUTTON_OPTIONS,
+  ELECTRONICS_CAVITY_COVER_OPTIONS,
+  TREMOLO_COVER_OPTIONS,
 } from '../lib/guitarBuilderData.js'
+
+import { resolveTopWoodAsset, resolveFinishAsset, resolveTopCoatAsset } from '../lib/assetResolver.js'
+import { listBuilderAssets } from '../utils/apiConfig.js'
 
 const phpFormatter = new Intl.NumberFormat('en-PH', {
   style: 'currency',
@@ -37,6 +75,9 @@ export default function useGuitarConfig() {
   const [builderParts, setBuilderParts] = useState([])
   const [modelImages, setModelImages] = useState([])
   const [loadingPrices, setLoadingPrices] = useState(true)
+  const [dynamicTopWoodList, setDynamicTopWoodList] = useState([])
+  const [dynamicFinishColorList, setDynamicFinishColorList] = useState([])
+  const [dynamicTopCoatList, setDynamicTopCoatList] = useState([])
 
   const fetchBuilderParts = async () => {
     setLoadingPrices(true)
@@ -81,6 +122,55 @@ export default function useGuitarConfig() {
     document.addEventListener('visibilitychange', handleVisibility)
     return () => document.removeEventListener('visibilitychange', handleVisibility)
   }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    const guitarType = config.guitarType || 'electric'
+    const model = config.body || 'dc'
+
+    Promise.all([
+      listBuilderAssets({ guitarType, group: 'top-woods' }),
+      listBuilderAssets({ guitarType, group: 'top-coat', model }),
+    ]).then(([topWoodsRes, topCoatsRes]) => {
+      if (!cancelled) {
+        setDynamicTopWoodList(topWoodsRes.data?.topWoods || [])
+        setDynamicTopCoatList(topCoatsRes.data?.topCoats || [])
+      }
+    }).catch((error) => {
+      if (!cancelled) {
+        console.warn('Failed to fetch dynamic top wood / top coat assets:', error)
+      }
+    })
+
+    return () => { cancelled = true }
+  }, [config.guitarType, config.body])
+
+  useEffect(() => {
+    let cancelled = false
+    const finishType = config.finishType
+    if (!finishType || finishType === 'solid' || finishType === 'burst') {
+      setDynamicFinishColorList([])
+      return
+    }
+    const guitarType = config.guitarType || 'electric'
+
+    listBuilderAssets({
+      guitarType,
+      group: 'colors',
+      subgroup: finishType,
+    }).then(res => {
+      if (!cancelled) {
+        setDynamicFinishColorList(res.data?.finishColors || [])
+      }
+    }).catch((error) => {
+      if (!cancelled) {
+        console.warn('Failed to fetch dynamic finish colors:', error)
+        setDynamicFinishColorList([])
+      }
+    })
+
+    return () => { cancelled = true }
+  }, [config.finishType, config.guitarType])
 
   const priceOverrides = useMemo(() => {
     const overrides = {}
@@ -170,6 +260,7 @@ export default function useGuitarConfig() {
     return override !== undefined ? Number(override) : BASE_PRICE
   }, [priceOverrides])
 
+  // ---- Existing merged options (unchanged) ----
   const mergedBodyOptions = useMemo(() => {
     const merged = { ...BODY_OPTIONS }
     Object.keys(merged).forEach(key => {
@@ -289,6 +380,320 @@ export default function useGuitarConfig() {
     return merged
   }, [priceOverrides])
 
+  // ---- NEW merged options for all new customization fields ----
+  const mergedDexterityOptions = useMemo(() => {
+    const merged = { ...DEXTERITY_OPTIONS }
+    Object.keys(merged).forEach(key => {
+      if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
+    })
+    return merged
+  }, [priceOverrides])
+
+  const mergedStringCountOptions = useMemo(() => {
+    const merged = { ...STRING_COUNT_OPTIONS }
+    Object.keys(merged).forEach(key => {
+      if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
+    })
+    return merged
+  }, [priceOverrides])
+
+  const mergedMultiscaleOptions = useMemo(() => {
+    const merged = { ...MULTISCALE_OPTIONS }
+    Object.keys(merged).forEach(key => {
+      if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
+    })
+    return merged
+  }, [priceOverrides])
+
+  const mergedScaleLengthOptions = useMemo(() => {
+    const merged = { ...SCALE_LENGTH_OPTIONS }
+    Object.keys(merged).forEach(key => {
+      if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
+    })
+    return merged
+  }, [priceOverrides])
+
+  const mergedCaseOptions = useMemo(() => {
+    const merged = { ...CASE_OPTIONS }
+    Object.keys(merged).forEach(key => {
+      if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
+    })
+    return merged
+  }, [priceOverrides])
+
+  const mergedBevelOptions = useMemo(() => {
+    const merged = { ...BEVEL_OPTIONS }
+    Object.keys(merged).forEach(key => {
+      if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
+    })
+    return merged
+  }, [priceOverrides])
+
+  const mergedTopWoodOptions = useMemo(() => {
+    const merged = { ...TOP_WOOD_OPTIONS }
+    Object.keys(merged).forEach(key => {
+      if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
+    })
+    return merged
+  }, [priceOverrides])
+
+  const mergedFinishTypeOptions = useMemo(() => {
+    const merged = { ...FINISH_TYPE_OPTIONS }
+    Object.keys(merged).forEach(key => {
+      if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
+    })
+    return merged
+  }, [priceOverrides])
+
+  const mergedTopCoatOptions = useMemo(() => {
+    const merged = { ...TOP_COAT_OPTIONS }
+    Object.keys(merged).forEach(key => {
+      if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
+    })
+    return merged
+  }, [priceOverrides])
+
+  const mergedDynamicTopWoodOptions = useMemo(() => {
+    if (dynamicTopWoodList.length === 0) return mergedTopWoodOptions
+    const merged = { ...mergedTopWoodOptions }
+    dynamicTopWoodList.forEach(asset => {
+      if (merged[asset.key] === undefined) {
+        merged[asset.key] = { label: asset.label, note: '', price: 0, texture: null }
+      }
+      if (priceOverrides[asset.key] !== undefined) {
+        merged[asset.key] = { ...merged[asset.key], price: priceOverrides[asset.key].price }
+      }
+    })
+    return merged
+  }, [dynamicTopWoodList, mergedTopWoodOptions, priceOverrides])
+
+  const mergedDynamicFinishColorOptions = useMemo(() => {
+    if (dynamicFinishColorList.length === 0) return {}
+    const merged = {}
+    const finishType = config.finishType || 'metallic'
+    dynamicFinishColorList.forEach(asset => {
+      merged[asset.key] = { label: asset.label, note: `${finishType} finish`, price: 0 }
+      if (priceOverrides[asset.key] !== undefined) {
+        merged[asset.key] = { ...merged[asset.key], price: priceOverrides[asset.key].price }
+      }
+    })
+    return merged
+  }, [dynamicFinishColorList, config.finishType, priceOverrides])
+
+  const mergedDynamicTopCoatOptions = useMemo(() => {
+    if (dynamicTopCoatList.length === 0) return mergedTopCoatOptions
+    const merged = { ...mergedTopCoatOptions }
+    dynamicTopCoatList.forEach(asset => {
+      if (merged[asset.key] === undefined) {
+        merged[asset.key] = { label: asset.label, note: '', price: 0 }
+      }
+      if (priceOverrides[asset.key] !== undefined) {
+        merged[asset.key] = { ...merged[asset.key], price: priceOverrides[asset.key].price }
+      }
+    })
+    return merged
+  }, [dynamicTopCoatList, mergedTopCoatOptions, priceOverrides])
+
+  const mergedBurstFinishOptions = useMemo(() => {
+    const merged = { ...BURST_FINISH_OPTIONS }
+    Object.keys(merged).forEach(key => {
+      if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
+    })
+    return merged
+  }, [priceOverrides])
+
+  const mergedNeckConstructionOptions = useMemo(() => {
+    const merged = { ...NECK_CONSTRUCTION_OPTIONS }
+    Object.keys(merged).forEach(key => {
+      if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
+    })
+    return merged
+  }, [priceOverrides])
+
+  const mergedInlayShapeOptions = useMemo(() => {
+    const merged = { ...INLAY_SHAPE_OPTIONS }
+    Object.keys(merged).forEach(key => {
+      if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
+    })
+    return merged
+  }, [priceOverrides])
+
+  const mergedInlayMaterialOptions = useMemo(() => {
+    const merged = { ...INLAY_MATERIAL_OPTIONS }
+    Object.keys(merged).forEach(key => {
+      if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
+    })
+    return merged
+  }, [priceOverrides])
+
+  const mergedFretOptions = useMemo(() => {
+    const merged = { ...FRET_OPTIONS }
+    Object.keys(merged).forEach(key => {
+      if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
+    })
+    return merged
+  }, [priceOverrides])
+
+  const mergedNeckRearFinishOptions = useMemo(() => {
+    const merged = { ...NECK_REAR_FINISH_OPTIONS }
+    Object.keys(merged).forEach(key => {
+      if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
+    })
+    return merged
+  }, [priceOverrides])
+
+  const mergedHeadstockShapeOptions = useMemo(() => {
+    const merged = { ...HEADSTOCK_SHAPE_OPTIONS }
+    Object.keys(merged).forEach(key => {
+      if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
+    })
+    return merged
+  }, [priceOverrides])
+
+  const mergedTrussRodCoverOptions = useMemo(() => {
+    const merged = { ...TRUSS_ROD_COVER_OPTIONS }
+    Object.keys(merged).forEach(key => {
+      if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
+    })
+    return merged
+  }, [priceOverrides])
+
+  const mergedElectronicsTypeOptions = useMemo(() => {
+    const merged = { ...ELECTRONICS_TYPE_OPTIONS }
+    Object.keys(merged).forEach(key => {
+      if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
+    })
+    return merged
+  }, [priceOverrides])
+
+  const mergedPickupConfigurationOptions = useMemo(() => {
+    const merged = { ...PICKUP_CONFIGURATION_OPTIONS }
+    Object.keys(merged).forEach(key => {
+      if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
+    })
+    return merged
+  }, [priceOverrides])
+
+  const mergedBridgePickupModelOptions = useMemo(() => {
+    const merged = { ...PICKUP_MODEL_BRIDGE_OPTIONS }
+    Object.keys(merged).forEach(key => {
+      if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
+    })
+    return merged
+  }, [priceOverrides])
+
+  const mergedMiddlePickupModelOptions = useMemo(() => {
+    const merged = { ...PICKUP_MODEL_MIDDLE_OPTIONS }
+    Object.keys(merged).forEach(key => {
+      if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
+    })
+    return merged
+  }, [priceOverrides])
+
+  const mergedNeckPickupModelOptions = useMemo(() => {
+    const merged = { ...PICKUP_MODEL_NECK_OPTIONS }
+    Object.keys(merged).forEach(key => {
+      if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
+    })
+    return merged
+  }, [priceOverrides])
+
+  const mergedPickupBobbinOptions = useMemo(() => {
+    const merged = { ...PICKUP_BOBBIN_OPTIONS }
+    Object.keys(merged).forEach(key => {
+      if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
+    })
+    return merged
+  }, [priceOverrides])
+
+  const mergedPickupPoleColorOptions = useMemo(() => {
+    const merged = { ...PICKUP_POLE_COLOR_OPTIONS }
+    Object.keys(merged).forEach(key => {
+      if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
+    })
+    return merged
+  }, [priceOverrides])
+
+  const mergedControlsOptions = useMemo(() => {
+    const merged = { ...CONTROLS_OPTIONS }
+    Object.keys(merged).forEach(key => {
+      if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
+    })
+    return merged
+  }, [priceOverrides])
+
+  const mergedSaddleOptions = useMemo(() => {
+    const merged = { ...SADDLE_OPTIONS }
+    Object.keys(merged).forEach(key => {
+      if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
+    })
+    return merged
+  }, [priceOverrides])
+
+  const mergedNutOptions = useMemo(() => {
+    const merged = { ...NUT_OPTIONS }
+    Object.keys(merged).forEach(key => {
+      if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
+    })
+    return merged
+  }, [priceOverrides])
+
+  const mergedTuningOptions = useMemo(() => {
+    const merged = { ...TUNING_OPTIONS }
+    Object.keys(merged).forEach(key => {
+      if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
+    })
+    return merged
+  }, [priceOverrides])
+
+  const mergedStringBrandOptions = useMemo(() => {
+    const merged = { ...STRING_BRAND_OPTIONS }
+    Object.keys(merged).forEach(key => {
+      if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
+    })
+    return merged
+  }, [priceOverrides])
+
+  const mergedOutputJackOptions = useMemo(() => {
+    const merged = { ...OUTPUT_JACK_OPTIONS }
+    Object.keys(merged).forEach(key => {
+      if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
+    })
+    return merged
+  }, [priceOverrides])
+
+  const mergedStrapButtonOptions = useMemo(() => {
+    const merged = { ...STRAP_BUTTON_OPTIONS }
+    Object.keys(merged).forEach(key => {
+      if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
+    })
+    return merged
+  }, [priceOverrides])
+
+  const mergedTunerButtonOptions = useMemo(() => {
+    const merged = { ...TUNER_BUTTON_OPTIONS }
+    Object.keys(merged).forEach(key => {
+      if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
+    })
+    return merged
+  }, [priceOverrides])
+
+  const mergedElectronicsCavityCoverOptions = useMemo(() => {
+    const merged = { ...ELECTRONICS_CAVITY_COVER_OPTIONS }
+    Object.keys(merged).forEach(key => {
+      if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
+    })
+    return merged
+  }, [priceOverrides])
+
+  const mergedTremoloCoverOptions = useMemo(() => {
+    const merged = { ...TREMOLO_COVER_OPTIONS }
+    Object.keys(merged).forEach(key => {
+      if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
+    })
+    return merged
+  }, [priceOverrides])
+
   const getCategoryPrice = (cat) => priceOverrides[`cat:${cat}`]?.price
   const pickguardOptions = useMemo(
     () =>
@@ -344,9 +749,16 @@ export default function useGuitarConfig() {
     setConfig(DEFAULT_CONFIG)
   }, [])
 
+  // Helper to get static price for any option
+  const getStaticOptionPrice = (optionMap, configKey) => {
+    if (!configKey) return 0
+    return optionMap[configKey]?.price ?? 0
+  }
+
   const price = useMemo(() => {
     return (
       dynamicBasePrice +
+      // Old options (unchanged)
       (mergedBodyOptions[config.body]?.price ?? BODY_OPTIONS[config.body]?.price ?? 0) +
       (mergedBodyWoodOptions[config.bodyWood]?.price ?? BODY_WOOD_OPTIONS[config.bodyWood]?.price ?? 0) +
       (mergedBodyFinishOptions[config.bodyFinish]?.price ?? BODY_FINISH_OPTIONS[config.bodyFinish]?.price ?? 0) +
@@ -359,12 +771,71 @@ export default function useGuitarConfig() {
       (pickguardOptions.find(option => option.value === config.pickguard)?.price ?? 0) +
       (knobOptions.find(option => option.value === config.knobs)?.price ?? 0) +
       (mergedHardwareOptions[config.hardware]?.price ?? HARDWARE_OPTIONS[config.hardware]?.price ?? 0) +
-      (mergedPickupOptions[config.pickups]?.price ?? PICKUP_OPTIONS[config.pickups]?.price ?? 0)
+      (mergedPickupOptions[config.pickups]?.price ?? PICKUP_OPTIONS[config.pickups]?.price ?? 0) +
+      // General options
+      (mergedDexterityOptions[config.dexterity]?.price ?? 0) +
+      (mergedStringCountOptions[config.strings]?.price ?? 0) +
+      (mergedMultiscaleOptions[config.multiscale]?.price ?? 0) +
+      (mergedScaleLengthOptions[config.scaleLength]?.price ?? 0) +
+      (mergedCaseOptions[config.case]?.price ?? 0) +
+      // Body new options
+      (mergedBevelOptions[config.bevel]?.price ?? 0) +
+      (mergedTopWoodOptions[config.topWood]?.price ?? 0) +
+      (mergedFinishTypeOptions[config.finishType]?.price ?? 0) +
+      (mergedTopCoatOptions[config.topCoat]?.price ?? 0) +
+      (mergedBurstFinishOptions[config.burstFinish]?.price ?? 0) +
+      // Neck new options
+      (mergedNeckConstructionOptions[config.neckConstruction]?.price ?? 0) +
+      (mergedInlayShapeOptions[config.inlayShape]?.price ?? 0) +
+      (mergedInlayMaterialOptions[config.inlayMaterial]?.price ?? 0) +
+      (mergedFretOptions[config.frets]?.price ?? 0) +
+      (mergedNeckRearFinishOptions[config.neckRearFinish]?.price ?? 0) +
+      (mergedHeadstockShapeOptions[config.headstockShape]?.price ?? 0) +
+      (mergedTrussRodCoverOptions[config.trussRodCover]?.price ?? 0) +
+      // Electronics new options
+      (mergedElectronicsTypeOptions[config.electronicsType]?.price ?? 0) +
+      (mergedPickupConfigurationOptions[config.pickupConfiguration]?.price ?? 0) +
+      (mergedBridgePickupModelOptions[config.bridgePickupModel]?.price ?? 0) +
+      (mergedMiddlePickupModelOptions[config.middlePickupModel]?.price ?? 0) +
+      (mergedNeckPickupModelOptions[config.neckPickupModel]?.price ?? 0) +
+      (mergedPickupBobbinOptions[config.pickupBobbin]?.price ?? 0) +
+      (mergedPickupPoleColorOptions[config.pickupPoleColor]?.price ?? 0) +
+      (mergedControlsOptions[config.controls]?.price ?? 0) +
+      // Hardware new options
+      (mergedSaddleOptions[config.saddle]?.price ?? 0) +
+      (mergedNutOptions[config.nut]?.price ?? 0) +
+      (mergedTuningOptions[config.tuning]?.price ?? 0) +
+      (mergedStringBrandOptions[config.stringBrand]?.price ?? 0) +
+      (mergedOutputJackOptions[config.outputJack]?.price ?? 0) +
+      (mergedStrapButtonOptions[config.strapButtons]?.price ?? 0) +
+      (mergedTunerButtonOptions[config.tunerButtons]?.price ?? 0) +
+      (mergedElectronicsCavityCoverOptions[config.electronicsCavityCover]?.price ?? 0) +
+      (mergedTremoloCoverOptions[config.tremoloCover]?.price ?? 0)
     )
-  }, [config, dynamicBasePrice, mergedBodyOptions, mergedBodyWoodOptions, mergedBodyFinishOptions, mergedNeckOptions, mergedFretboardOptions, mergedHeadstockOptions, mergedHeadstockWoodOptions, mergedInlayOptions, mergedBridgeOptions, pickguardOptions, knobOptions, mergedHardwareOptions, mergedPickupOptions])
+  }, [
+    config, dynamicBasePrice,
+    mergedBodyOptions, mergedBodyWoodOptions, mergedBodyFinishOptions,
+    mergedNeckOptions, mergedFretboardOptions, mergedHeadstockOptions,
+    mergedHeadstockWoodOptions, mergedInlayOptions, mergedBridgeOptions,
+    pickguardOptions, knobOptions, mergedHardwareOptions, mergedPickupOptions,
+    // New deps
+    mergedDexterityOptions, mergedStringCountOptions, mergedMultiscaleOptions,
+    mergedScaleLengthOptions, mergedCaseOptions, mergedBevelOptions,
+    mergedTopWoodOptions, mergedFinishTypeOptions, mergedTopCoatOptions,
+    mergedBurstFinishOptions, mergedNeckConstructionOptions, mergedInlayShapeOptions,
+    mergedInlayMaterialOptions, mergedFretOptions, mergedNeckRearFinishOptions,
+    mergedHeadstockShapeOptions, mergedTrussRodCoverOptions, mergedElectronicsTypeOptions,
+    mergedPickupConfigurationOptions, mergedBridgePickupModelOptions,
+    mergedMiddlePickupModelOptions, mergedNeckPickupModelOptions,
+    mergedPickupBobbinOptions, mergedPickupPoleColorOptions, mergedControlsOptions,
+    mergedSaddleOptions, mergedNutOptions, mergedTuningOptions,
+    mergedStringBrandOptions, mergedOutputJackOptions, mergedStrapButtonOptions,
+    mergedTunerButtonOptions, mergedElectronicsCavityCoverOptions, mergedTremoloCoverOptions,
+  ])
 
   const summary = useMemo(
     () => ({
+      // Old summary (unchanged)
       body: BODY_OPTIONS[config.body]?.label ?? config.body,
       bodyWood: BODY_WOOD_OPTIONS[config.bodyWood]?.label ?? config.bodyWood,
       bodyFinish: BODY_FINISH_OPTIONS[config.bodyFinish]?.label ?? config.bodyFinish,
@@ -378,6 +849,41 @@ export default function useGuitarConfig() {
       knobs: KNOB_OPTIONS_BY_BODY[config.body]?.[config.knobs]?.label ?? config.knobs,
       hardware: HARDWARE_OPTIONS[config.hardware]?.label ?? config.hardware,
       pickups: PICKUP_OPTIONS[config.pickups]?.label ?? config.pickups,
+      // New summary fields
+      dexterity: DEXTERITY_OPTIONS[config.dexterity]?.label ?? config.dexterity,
+      strings: STRING_COUNT_OPTIONS[config.strings]?.label ?? config.strings,
+      multiscale: MULTISCALE_OPTIONS[config.multiscale]?.label ?? config.multiscale,
+      scaleLength: SCALE_LENGTH_OPTIONS[config.scaleLength]?.label ?? config.scaleLength,
+      caseType: CASE_OPTIONS[config.case]?.label ?? config.case,
+      bevel: BEVEL_OPTIONS[config.bevel]?.label ?? config.bevel,
+      topWood: mergedDynamicTopWoodOptions[config.topWood]?.label ?? TOP_WOOD_OPTIONS[config.topWood]?.label ?? config.topWood,
+      finishType: FINISH_TYPE_OPTIONS[config.finishType]?.label ?? config.finishType,
+      topCoat: mergedDynamicTopCoatOptions[config.topCoat]?.label ?? TOP_COAT_OPTIONS[config.topCoat]?.label ?? config.topCoat,
+      burstFinish: BURST_FINISH_OPTIONS[config.burstFinish]?.label ?? config.burstFinish,
+      neckConstruction: NECK_CONSTRUCTION_OPTIONS[config.neckConstruction]?.label ?? config.neckConstruction,
+      inlayShape: INLAY_SHAPE_OPTIONS[config.inlayShape]?.label ?? config.inlayShape,
+      inlayMaterial: INLAY_MATERIAL_OPTIONS[config.inlayMaterial]?.label ?? config.inlayMaterial,
+      frets: FRET_OPTIONS[config.frets]?.label ?? config.frets,
+      neckRearFinish: NECK_REAR_FINISH_OPTIONS[config.neckRearFinish]?.label ?? config.neckRearFinish,
+      headstockShape: HEADSTOCK_SHAPE_OPTIONS[config.headstockShape]?.label ?? config.headstockShape,
+      trussRodCover: TRUSS_ROD_COVER_OPTIONS[config.trussRodCover]?.label ?? config.trussRodCover,
+      electronicsType: ELECTRONICS_TYPE_OPTIONS[config.electronicsType]?.label ?? config.electronicsType,
+      pickupConfiguration: PICKUP_CONFIGURATION_OPTIONS[config.pickupConfiguration]?.label ?? config.pickupConfiguration,
+      bridgePickupModel: PICKUP_MODEL_BRIDGE_OPTIONS[config.bridgePickupModel]?.label ?? config.bridgePickupModel,
+      middlePickupModel: PICKUP_MODEL_MIDDLE_OPTIONS[config.middlePickupModel]?.label ?? config.middlePickupModel,
+      neckPickupModel: PICKUP_MODEL_NECK_OPTIONS[config.neckPickupModel]?.label ?? config.neckPickupModel,
+      pickupBobbin: PICKUP_BOBBIN_OPTIONS[config.pickupBobbin]?.label ?? config.pickupBobbin,
+      pickupPoleColor: PICKUP_POLE_COLOR_OPTIONS[config.pickupPoleColor]?.label ?? config.pickupPoleColor,
+      controls: CONTROLS_OPTIONS[config.controls]?.label ?? config.controls,
+      saddle: SADDLE_OPTIONS[config.saddle]?.label ?? config.saddle,
+      nut: NUT_OPTIONS[config.nut]?.label ?? config.nut,
+      tuning: TUNING_OPTIONS[config.tuning]?.label ?? config.tuning,
+      stringBrand: STRING_BRAND_OPTIONS[config.stringBrand]?.label ?? config.stringBrand,
+      outputJack: OUTPUT_JACK_OPTIONS[config.outputJack]?.label ?? config.outputJack,
+      strapButtons: STRAP_BUTTON_OPTIONS[config.strapButtons]?.label ?? config.strapButtons,
+      tunerButtons: TUNER_BUTTON_OPTIONS[config.tunerButtons]?.label ?? config.tunerButtons,
+      electronicsCavityCover: ELECTRONICS_CAVITY_COVER_OPTIONS[config.electronicsCavityCover]?.label ?? config.electronicsCavityCover,
+      tremoloCover: TREMOLO_COVER_OPTIONS[config.tremoloCover]?.label ?? config.tremoloCover,
     }),
     [config],
   )
@@ -442,6 +948,214 @@ export default function useGuitarConfig() {
     [mergedHardwareOptions],
   )
 
+  // ---- New options arrays (for UI use) ----
+  const dexterityOptions = useMemo(
+    () => Object.entries(mergedDexterityOptions).map(([value, option]) => ({ value, ...option })),
+    [mergedDexterityOptions],
+  )
+  const stringCountOptions = useMemo(
+    () => Object.entries(mergedStringCountOptions).map(([value, option]) => ({ value, ...option })),
+    [mergedStringCountOptions],
+  )
+  const multiscaleOptions = useMemo(
+    () => Object.entries(mergedMultiscaleOptions).map(([value, option]) => ({ value, ...option })),
+    [mergedMultiscaleOptions],
+  )
+  const scaleLengthOptions = useMemo(
+    () => Object.entries(mergedScaleLengthOptions).map(([value, option]) => ({ value, ...option })),
+    [mergedScaleLengthOptions],
+  )
+  const caseOptions = useMemo(
+    () => Object.entries(mergedCaseOptions).map(([value, option]) => ({ value, ...option })),
+    [mergedCaseOptions],
+  )
+  const bevelOptions = useMemo(
+    () => Object.entries(mergedBevelOptions).map(([value, option]) => ({ value, ...option })),
+    [mergedBevelOptions],
+  )
+  const topWoodOptions = useMemo(
+    () => {
+      const base = dynamicTopWoodList.length > 0 ? mergedDynamicTopWoodOptions : mergedTopWoodOptions
+      return Object.entries(base).map(([value, option]) => ({
+        value,
+        ...option,
+        preview: option.texture || resolveTopWoodAsset('electric', config.body || 'dc', value),
+      }))
+    },
+    [dynamicTopWoodList, mergedDynamicTopWoodOptions, mergedTopWoodOptions, config.body],
+  )
+  const finishColorOptions = useMemo(() => {
+    const base = dynamicFinishColorList.length > 0 ? mergedDynamicFinishColorOptions : null
+    if (base && Object.keys(base).length > 0) {
+      return Object.entries(base).map(([value, option]) => {
+        const preview = resolveFinishAsset('electric', config.body || 'dc', config.finishType || 'solid', value)
+        return { value, ...option, preview }
+      })
+    }
+    const finishType = config.finishType
+    if (!finishType || finishType === 'solid') return []
+    const fallbackMap = {
+      metallic: [
+        { value: 'black', label: 'Black Metallic', price: 35 },
+        { value: 'red', label: 'Red Metallic', price: 35 },
+        { value: 'blue', label: 'Blue Metallic', price: 35 },
+        { value: 'green', label: 'Green Metallic', price: 35 },
+        { value: 'silver', label: 'Silver Metallic', price: 35 },
+        { value: 'gold', label: 'Gold Metallic', price: 35 },
+        { value: 'purple', label: 'Purple Metallic', price: 35 },
+        { value: 'gunmetal', label: 'Gunmetal Metallic', price: 35 },
+      ],
+      translucent: [
+        { value: 'black', label: 'Transparent Black', price: 35 },
+        { value: 'red', label: 'Transparent Red', price: 35 },
+        { value: 'blue', label: 'Transparent Blue', price: 35 },
+        { value: 'green', label: 'Transparent Green', price: 35 },
+        { value: 'amber', label: 'Transparent Amber', price: 35 },
+        { value: 'purple', label: 'Transparent Purple', price: 35 },
+        { value: 'yellow', label: 'Transparent Yellow', price: 35 },
+      ],
+      sparkle: [
+        { value: 'black', label: 'Black Sparkle', price: 40 },
+        { value: 'red', label: 'Red Sparkle', price: 40 },
+        { value: 'blue', label: 'Blue Sparkle', price: 40 },
+        { value: 'gold', label: 'Gold Sparkle', price: 40 },
+        { value: 'silver', label: 'Silver Sparkle', price: 40 },
+        { value: 'purple', label: 'Purple Sparkle', price: 40 },
+        { value: 'green', label: 'Green Sparkle', price: 40 },
+      ],
+      fade: [
+        { value: 'black-to-red', label: 'Black to Red', price: 45 },
+        { value: 'black-to-blue', label: 'Black to Blue', price: 45 },
+        { value: 'black-to-green', label: 'Black to Green', price: 45 },
+        { value: 'white-to-black', label: 'White to Black', price: 45 },
+        { value: 'red-to-yellow', label: 'Red to Yellow', price: 45 },
+        { value: 'blue-to-purple', label: 'Blue to Purple', price: 45 },
+      ],
+    }
+    const fallback = fallbackMap[finishType] || []
+    const basePrice = priceOverrides.finishColor?.price ?? 0
+    return fallback.map(option => ({
+      ...option,
+      price: option.price || basePrice,
+      preview: resolveFinishAsset('electric', config.body || 'dc', finishType, option.value),
+    }))
+  }, [dynamicFinishColorList, mergedDynamicFinishColorOptions, config.body, config.finishType, priceOverrides])
+  const finishTypeOptionList = useMemo(
+    () => Object.entries(mergedFinishTypeOptions).map(([value, option]) => ({ value, ...option })),
+    [mergedFinishTypeOptions],
+  )
+  const topCoatOptions = useMemo(
+    () => {
+      const base = dynamicTopCoatList.length > 0 ? mergedDynamicTopCoatOptions : mergedTopCoatOptions
+      return Object.entries(base).map(([value, option]) => ({
+        value,
+        ...option,
+        preview: resolveTopCoatAsset('electric', config.body || 'dc', value),
+      }))
+    },
+    [dynamicTopCoatList, mergedDynamicTopCoatOptions, mergedTopCoatOptions, config.body],
+  )
+  const burstFinishOptionList = useMemo(
+    () => Object.entries(mergedBurstFinishOptions).map(([value, option]) => ({ value, ...option })),
+    [mergedBurstFinishOptions],
+  )
+  const neckConstructionOptionList = useMemo(
+    () => Object.entries(mergedNeckConstructionOptions).map(([value, option]) => ({ value, ...option })),
+    [mergedNeckConstructionOptions],
+  )
+  const inlayShapeOptionList = useMemo(
+    () => Object.entries(mergedInlayShapeOptions).map(([value, option]) => ({ value, ...option })),
+    [mergedInlayShapeOptions],
+  )
+  const inlayMaterialOptionList = useMemo(
+    () => Object.entries(mergedInlayMaterialOptions).map(([value, option]) => ({ value, ...option })),
+    [mergedInlayMaterialOptions],
+  )
+  const fretOptionList = useMemo(
+    () => Object.entries(mergedFretOptions).map(([value, option]) => ({ value, ...option })),
+    [mergedFretOptions],
+  )
+  const neckRearFinishOptionList = useMemo(
+    () => Object.entries(mergedNeckRearFinishOptions).map(([value, option]) => ({ value, ...option })),
+    [mergedNeckRearFinishOptions],
+  )
+  const headstockShapeOptionList = useMemo(
+    () => Object.entries(mergedHeadstockShapeOptions).map(([value, option]) => ({ value, ...option })),
+    [mergedHeadstockShapeOptions],
+  )
+  const trussRodCoverOptionList = useMemo(
+    () => Object.entries(mergedTrussRodCoverOptions).map(([value, option]) => ({ value, ...option })),
+    [mergedTrussRodCoverOptions],
+  )
+  const electronicsTypeOptionList = useMemo(
+    () => Object.entries(mergedElectronicsTypeOptions).map(([value, option]) => ({ value, ...option })),
+    [mergedElectronicsTypeOptions],
+  )
+  const pickupConfigurationOptionList = useMemo(
+    () => Object.entries(mergedPickupConfigurationOptions).map(([value, option]) => ({ value, ...option })),
+    [mergedPickupConfigurationOptions],
+  )
+  const bridgePickupModelOptionList = useMemo(
+    () => Object.entries(mergedBridgePickupModelOptions).map(([value, option]) => ({ value, ...option })),
+    [mergedBridgePickupModelOptions],
+  )
+  const middlePickupModelOptionList = useMemo(
+    () => Object.entries(mergedMiddlePickupModelOptions).map(([value, option]) => ({ value, ...option })),
+    [mergedMiddlePickupModelOptions],
+  )
+  const neckPickupModelOptionList = useMemo(
+    () => Object.entries(mergedNeckPickupModelOptions).map(([value, option]) => ({ value, ...option })),
+    [mergedNeckPickupModelOptions],
+  )
+  const pickupBobbinOptionList = useMemo(
+    () => Object.entries(mergedPickupBobbinOptions).map(([value, option]) => ({ value, ...option })),
+    [mergedPickupBobbinOptions],
+  )
+  const pickupPoleColorOptionList = useMemo(
+    () => Object.entries(mergedPickupPoleColorOptions).map(([value, option]) => ({ value, ...option })),
+    [mergedPickupPoleColorOptions],
+  )
+  const controlsOptionList = useMemo(
+    () => Object.entries(mergedControlsOptions).map(([value, option]) => ({ value, ...option })),
+    [mergedControlsOptions],
+  )
+  const saddleOptionList = useMemo(
+    () => Object.entries(mergedSaddleOptions).map(([value, option]) => ({ value, ...option })),
+    [mergedSaddleOptions],
+  )
+  const nutOptionList = useMemo(
+    () => Object.entries(mergedNutOptions).map(([value, option]) => ({ value, ...option })),
+    [mergedNutOptions],
+  )
+  const tuningOptionList = useMemo(
+    () => Object.entries(mergedTuningOptions).map(([value, option]) => ({ value, ...option })),
+    [mergedTuningOptions],
+  )
+  const stringBrandOptionList = useMemo(
+    () => Object.entries(mergedStringBrandOptions).map(([value, option]) => ({ value, ...option })),
+    [mergedStringBrandOptions],
+  )
+  const outputJackOptionList = useMemo(
+    () => Object.entries(mergedOutputJackOptions).map(([value, option]) => ({ value, ...option })),
+    [mergedOutputJackOptions],
+  )
+  const strapButtonOptionList = useMemo(
+    () => Object.entries(mergedStrapButtonOptions).map(([value, option]) => ({ value, ...option })),
+    [mergedStrapButtonOptions],
+  )
+  const tunerButtonOptionList = useMemo(
+    () => Object.entries(mergedTunerButtonOptions).map(([value, option]) => ({ value, ...option })),
+    [mergedTunerButtonOptions],
+  )
+  const electronicsCavityCoverOptionList = useMemo(
+    () => Object.entries(mergedElectronicsCavityCoverOptions).map(([value, option]) => ({ value, ...option })),
+    [mergedElectronicsCavityCoverOptions],
+  )
+  const tremoloCoverOptionList = useMemo(
+    () => Object.entries(mergedTremoloCoverOptions).map(([value, option]) => ({ value, ...option })),
+    [mergedTremoloCoverOptions],
+  )
+
   const exportConfig = useCallback(() => JSON.stringify(config, null, 2), [config])
 
   const loadConfig = useCallback((raw) => {
@@ -454,6 +1168,7 @@ export default function useGuitarConfig() {
   }, [])
 
   const pricingBreakdown = useMemo(() => ({
+      // Old pricing keys (unchanged)
       base: dynamicBasePrice,
       body: mergedBodyOptions[config.body]?.price ?? BODY_OPTIONS[config.body]?.price ?? 0,
       bodyWood: mergedBodyWoodOptions[config.bodyWood]?.price ?? BODY_WOOD_OPTIONS[config.bodyWood]?.price ?? 0,
@@ -467,8 +1182,62 @@ export default function useGuitarConfig() {
       pickguard: pickguardOptions.find(option => option.value === config.pickguard)?.price ?? 0,
       knobs: knobOptions.find(option => option.value === config.knobs)?.price ?? 0,
       hardware: mergedHardwareOptions[config.hardware]?.price ?? HARDWARE_OPTIONS[config.hardware]?.price ?? 0,
-      pickups: mergedPickupOptions[config.pickups]?.price ?? PICKUP_OPTIONS[config.pickups]?.price ?? 0
-  }), [config, dynamicBasePrice, mergedBodyOptions, mergedBodyWoodOptions, mergedBodyFinishOptions, mergedNeckOptions, mergedFretboardOptions, mergedHeadstockOptions, mergedHeadstockWoodOptions, mergedInlayOptions, mergedBridgeOptions, pickguardOptions, knobOptions, mergedHardwareOptions, mergedPickupOptions])
+      pickups: mergedPickupOptions[config.pickups]?.price ?? PICKUP_OPTIONS[config.pickups]?.price ?? 0,
+      // New pricing keys
+      dexterity: mergedDexterityOptions[config.dexterity]?.price ?? 0,
+      strings: mergedStringCountOptions[config.strings]?.price ?? 0,
+      multiscale: mergedMultiscaleOptions[config.multiscale]?.price ?? 0,
+      scaleLength: mergedScaleLengthOptions[config.scaleLength]?.price ?? 0,
+      caseType: mergedCaseOptions[config.case]?.price ?? 0,
+      bevel: mergedBevelOptions[config.bevel]?.price ?? 0,
+      topWood: mergedDynamicTopWoodOptions[config.topWood]?.price ?? 0,
+      finishType: mergedFinishTypeOptions[config.finishType]?.price ?? 0,
+      topCoat: mergedDynamicTopCoatOptions[config.topCoat]?.price ?? 0,
+      burstFinish: mergedBurstFinishOptions[config.burstFinish]?.price ?? 0,
+      neckConstruction: mergedNeckConstructionOptions[config.neckConstruction]?.price ?? 0,
+      inlayShape: mergedInlayShapeOptions[config.inlayShape]?.price ?? 0,
+      inlayMaterial: mergedInlayMaterialOptions[config.inlayMaterial]?.price ?? 0,
+      frets: mergedFretOptions[config.frets]?.price ?? 0,
+      neckRearFinish: mergedNeckRearFinishOptions[config.neckRearFinish]?.price ?? 0,
+      headstockShape: mergedHeadstockShapeOptions[config.headstockShape]?.price ?? 0,
+      trussRodCover: mergedTrussRodCoverOptions[config.trussRodCover]?.price ?? 0,
+      electronicsType: mergedElectronicsTypeOptions[config.electronicsType]?.price ?? 0,
+      pickupConfiguration: mergedPickupConfigurationOptions[config.pickupConfiguration]?.price ?? 0,
+      bridgePickupModel: mergedBridgePickupModelOptions[config.bridgePickupModel]?.price ?? 0,
+      middlePickupModel: mergedMiddlePickupModelOptions[config.middlePickupModel]?.price ?? 0,
+      neckPickupModel: mergedNeckPickupModelOptions[config.neckPickupModel]?.price ?? 0,
+      pickupBobbin: mergedPickupBobbinOptions[config.pickupBobbin]?.price ?? 0,
+      pickupPoleColor: mergedPickupPoleColorOptions[config.pickupPoleColor]?.price ?? 0,
+      controls: mergedControlsOptions[config.controls]?.price ?? 0,
+      saddle: mergedSaddleOptions[config.saddle]?.price ?? 0,
+      nut: mergedNutOptions[config.nut]?.price ?? 0,
+      tuning: mergedTuningOptions[config.tuning]?.price ?? 0,
+      stringBrand: mergedStringBrandOptions[config.stringBrand]?.price ?? 0,
+      outputJack: mergedOutputJackOptions[config.outputJack]?.price ?? 0,
+      strapButtons: mergedStrapButtonOptions[config.strapButtons]?.price ?? 0,
+      tunerButtons: mergedTunerButtonOptions[config.tunerButtons]?.price ?? 0,
+      electronicsCavityCover: mergedElectronicsCavityCoverOptions[config.electronicsCavityCover]?.price ?? 0,
+      tremoloCover: mergedTremoloCoverOptions[config.tremoloCover]?.price ?? 0,
+  }), [
+    config, dynamicBasePrice,
+    mergedBodyOptions, mergedBodyWoodOptions, mergedBodyFinishOptions,
+    mergedNeckOptions, mergedFretboardOptions, mergedHeadstockOptions,
+    mergedHeadstockWoodOptions, mergedInlayOptions, mergedBridgeOptions,
+    pickguardOptions, knobOptions, mergedHardwareOptions, mergedPickupOptions,
+    // New deps
+    mergedDexterityOptions, mergedStringCountOptions, mergedMultiscaleOptions,
+    mergedScaleLengthOptions, mergedCaseOptions, mergedBevelOptions,
+    mergedTopWoodOptions, mergedFinishTypeOptions, mergedTopCoatOptions,
+    mergedBurstFinishOptions, mergedNeckConstructionOptions, mergedInlayShapeOptions,
+    mergedInlayMaterialOptions, mergedFretOptions, mergedNeckRearFinishOptions,
+    mergedHeadstockShapeOptions, mergedTrussRodCoverOptions, mergedElectronicsTypeOptions,
+    mergedPickupConfigurationOptions, mergedBridgePickupModelOptions,
+    mergedMiddlePickupModelOptions, mergedNeckPickupModelOptions,
+    mergedPickupBobbinOptions, mergedPickupPoleColorOptions, mergedControlsOptions,
+    mergedSaddleOptions, mergedNutOptions, mergedTuningOptions,
+    mergedStringBrandOptions, mergedOutputJackOptions, mergedStrapButtonOptions,
+    mergedTunerButtonOptions, mergedElectronicsCavityCoverOptions, mergedTremoloCoverOptions,
+  ])
 
   const refreshPrices = useCallback(() => {
     fetchBuilderParts()
@@ -503,6 +1272,42 @@ export default function useGuitarConfig() {
       pickupOptions,
       hardwareOptions,
       basePrice: dynamicBasePrice,
+      // New options
+      dexterityOptions,
+      stringCountOptions,
+      multiscaleOptions,
+      scaleLengthOptions,
+      caseOptions,
+      bevelOptions,
+      topWoodOptions,
+      finishColorOptions,
+      finishTypeOptions: finishTypeOptionList,
+      topCoatOptions,
+      burstFinishOptions: burstFinishOptionList,
+      neckConstructionOptions: neckConstructionOptionList,
+      inlayShapeOptions: inlayShapeOptionList,
+      inlayMaterialOptions: inlayMaterialOptionList,
+      fretOptions: fretOptionList,
+      neckRearFinishOptions: neckRearFinishOptionList,
+      headstockShapeOptions: headstockShapeOptionList,
+      trussRodCoverOptions: trussRodCoverOptionList,
+      electronicsTypeOptions: electronicsTypeOptionList,
+      pickupConfigurationOptions: pickupConfigurationOptionList,
+      bridgePickupModelOptions: bridgePickupModelOptionList,
+      middlePickupModelOptions: middlePickupModelOptionList,
+      neckPickupModelOptions: neckPickupModelOptionList,
+      pickupBobbinOptions: pickupBobbinOptionList,
+      pickupPoleColorOptions: pickupPoleColorOptionList,
+      controlsOptions: controlsOptionList,
+      saddleOptions: saddleOptionList,
+      nutOptions: nutOptionList,
+      tuningOptions: tuningOptionList,
+      stringBrandOptions: stringBrandOptionList,
+      outputJackOptions: outputJackOptionList,
+      strapButtonOptions: strapButtonOptionList,
+      tunerButtonOptions: tunerButtonOptionList,
+      electronicsCavityCoverOptions: electronicsCavityCoverOptionList,
+      tremoloCoverOptions: tremoloCoverOptionList,
     },
   }
 }

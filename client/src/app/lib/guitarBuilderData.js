@@ -1,16 +1,41 @@
 // Repointed to Cloudinary collection: cosmoscraft_assets/electric_assets
-// (local /builder/electric_models/* files no longer exist)
+// Falls back to local /builder/ directory when Cloudinary is not configured.
 const CLOUD_NAME = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_CLOUDINARY_CLOUD_NAME) ? import.meta.env.VITE_CLOUDINARY_CLOUD_NAME : ''
+const USE_CLOUDINARY = Boolean(CLOUD_NAME)
 
-export const cloudImage = (root, path) =>
-  `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/${root}/${path}`
+export const cloudImage = (root, path) => {
+  if (USE_CLOUDINARY) {
+    return `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/${root}/${path}`
+  }
+  // Local fallback - serve from public/builder/
+  return `/builder/${path}`
+}
 
-export const asset = path => cloudImage('cosmoscraft_assets/electric_assets', path)
-export const woodAsset = path => cloudImage('cosmoscraft_assets/electric_assets', path)
+export const asset = (path) => {
+  if (USE_CLOUDINARY) {
+    return `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/cosmoscraft_assets/electric_assets/${path}`
+  }
+  // Local fallback - serve from public/builder/
+  // If path starts with a model prefix (dc_assets/, delos_assets/), use as-is
+  // Otherwise prepend dc_assets/models/ for shared all-models assets
+  if (path.startsWith('dc_assets/') || path.startsWith('delos_assets/')) {
+    return `/builder/electric_assets/${path}`
+  }
+  // Shared assets (all-models/...) live under dc_assets/models/
+  return `/builder/electric_assets/dc_assets/models/${path}`
+}
+
+export const woodAsset = path => {
+  if (USE_CLOUDINARY) {
+    return `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/cosmoscraft_assets/electric_assets/${path}`
+  }
+  // Local fallback - serve from public/woodtype/
+  return `/woodtype/${path}`
+}
 
 export const DEFAULT_CONFIG = {
   guitarType: 'electric',
-  body: 'strat',
+  body: 'dc',
   bodyWood: 'rosewood',
   bodyFinish: 'none',
   neck: 'maple',
@@ -254,7 +279,7 @@ export const NECK_FRETS = {
   gold: asset('all-models/necks/6-string/front/24-fret-front/standard/frets/gold.png'),
 }
 export const NECK_NUT = {
-  white: asset('all-models/necks/6-string/front/24-fret-front/standard/nut/white.png'),
+  white: asset('all-models/necks/6-string/front/24-fret-front/standard/nut/black.png'),
   black: asset('all-models/necks/6-string/front/24-fret-front/standard/nut/black.png'),
 }
 
@@ -733,14 +758,13 @@ export const PUPPY = {
     },
     poles: {
       chrome: {
-        bridge: asset('all-models/pickups/6-string/24-frets/standard/pole-pieces/singlecoil/chrome-bridge.png'),
-        middle: asset('all-models/pickups/6-string/24-frets/standard/pole-pieces/singlecoil/chrome-middle.png'),
-        neck: asset('all-models/pickups/6-string/24-frets/standard/pole-pieces/singlecoil/chrome-neck.png'),
+        bridge: asset('all-models/pickups/6-string/24-frets/standard/pole-pieces/singlecoil/black-bridge.png'),
+        middle: asset('all-models/pickups/6-string/24-frets/standard/pole-pieces/singlecoil/black-middle.png'),
+        neck: asset('all-models/pickups/6-string/24-frets/standard/pole-pieces/singlecoil/black-neck.png'),
       },
       black: {
         bridge: asset('all-models/pickups/6-string/24-frets/standard/pole-pieces/singlecoil/black-bridge.png'),
         middle: asset('all-models/pickups/6-string/24-frets/standard/pole-pieces/singlecoil/black-middle.png'),
-        neck: asset('all-models/pickups/6-string/24-frets/standard/pole-pieces/singlecoil/black-neck.png'),
       },
       gold: {
         bridge: asset('all-models/pickups/6-string/24-frets/standard/pole-pieces/singlecoil/chrome-bridge.png'),
@@ -780,16 +804,16 @@ export const PUPPY = {
     },
     poles: {
       chrome: {
-        bridge: asset('all-models/pickups/6-string/24-frets/standard/pole-pieces/humbucker/open/silver-bridge.png'),
-        neck: asset('all-models/pickups/6-string/24-frets/standard/pole-pieces/humbucker/open/silver-neck.png'),
+        bridge: asset('all-models/pickups/6-string/24-frets/standard/pole-pieces/humbucker/open/black-bridge.png'),
+        neck: asset('all-models/pickups/6-string/24-frets/standard/pole-pieces/humbucker/open/black-neck.png'),
       },
       black: {
         bridge: asset('all-models/pickups/6-string/24-frets/standard/pole-pieces/humbucker/open/black-bridge.png'),
         neck: asset('all-models/pickups/6-string/24-frets/standard/pole-pieces/humbucker/open/black-neck.png'),
       },
       gold: {
-        bridge: asset('all-models/pickups/6-string/24-frets/standard/pole-pieces/humbucker/open/silver-bridge.png'),
-        neck: asset('all-models/pickups/6-string/24-frets/standard/pole-pieces/humbucker/open/silver-neck.png'),
+        bridge: asset('all-models/pickups/6-string/24-frets/standard/pole-pieces/humbucker/open/black-bridge.png'),
+        neck: asset('all-models/pickups/6-string/24-frets/standard/pole-pieces/humbucker/open/black-neck.png'),
       },
     },
   },

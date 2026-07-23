@@ -102,6 +102,13 @@ exports.seedCustomizeParts = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+exports.listBuilderAssets = async (req, res, next) => {
+  try {
+    const assets = await builderPartsService.listBuilderAssets(req.query);
+    res.json({ status: 'success', data: assets });
+  } catch (err) { next(err); }
+};
+
 exports.upsertModelImage = async (req, res, next) => {
   try {
     const item = await builderPartsService.upsertModelImage({
