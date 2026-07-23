@@ -605,10 +605,14 @@ exports.createOrderSchema = Joi.object({
       Joi.object({
         product_id: Joi.string().uuid().optional(),
         customization_id: Joi.string().uuid().optional(),
+        productId: Joi.string().optional(),
+        customization: Joi.object().optional(),
         quantity: Joi.number().integer().min(1).required(),
-        unit_price: Joi.number().precision(2).min(0).required(),
+        unit_price: Joi.number().precision(2).min(0).optional(),
+        price: Joi.number().precision(2).min(0).optional(),
         name: Joi.string().max(255).required(),
-      }).or('product_id', 'customization_id')
+        notes: Joi.string().max(500).optional().allow(''),
+      }).or('product_id', 'customization_id', 'productId', 'customization')
     )
     .min(1)
     .required()
