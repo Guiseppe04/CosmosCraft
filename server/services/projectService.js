@@ -253,20 +253,273 @@ const applyProjectTaskTracking = async (db, project, { stats = null, persist = f
   };
 };
 
-exports.getProjects = async () => {
+exports.getAllProjects = async (params = {}) => {
   await ensureProjectArchiveColumns();
-  const result = await pool.query(
-    `${PROJECT_BASE_SELECT}
-     WHERE p.deleted_at IS NULL
-     ORDER BY p.created_at DESC`
+
+  const {
+    search,
+    status,
+    assigned_to,
+    guitar_type,
+    date_from,
+    date_to,
+    due_date_from,
+    due_date_to,
+    completion_percentage,
+    sort_by = 'updated_at',
+    sort_dir = 'desc',
+    page = 1,
+    page_size = 20,
+    include_tasks = false,
+    user_id = null,
+  } = params;
+
+  const limit = Math.min(Math.max(Number(page_size) || 20, 1), 100);
+  const offset = (Math.max(Number(page) || 1, 1) - 1) * limit;
+  const allowedSortColumns = [
+    'updated_at',
+    'created_at',
+    'project_name',
+    'customer_name',
+    'progress',
+    'estimated_completion_date',
+    'status',
+  ];
+  const orderBy = allowedSortColumns.includes(sort_by) ? sort_by : 'updated_at';
+  const orderDir = sort_dir === 'asc' ? 'ASC' : 'DESC';
+
+  const where = ['p.deleted_at IS NULL'];
+  const queryParams = [];
+  let idx = 1;
+
+  if (user_id) {
+    where.push(`o.user_id = $${idx++}`);
+    queryParams.push(user_id);
+  }
+
+  if (status) {
+    where.push(`p.status = $${idx++}`);
+    queryParams.push(status);
+  }
+
+  if (assigned_to) {
+    where.push(
+      `(p.claimed_by = $${idx++} OR EXISTS (SELECT 1 FROM project_team_members ptm WHERE ptm.project_id = p.project_id AND ptm.user_id = $${idx++}))`
+    );
+    queryParams.push(assigned_to, assigned_to);
+  }
+
+  if (guitar_type) {
+    where.push(`c.guitar_type::text ILIKE $${idx++}`);
+    queryParams.push(`%${guitar_type}%`);
+  }
+
+  if (date_from) {
+    where.push(`p.created_at >= $${idx++}`);
+    queryParams.push(date_from);
+  }
+
+  if (date_to) {
+    where.push(`p.created_at <= $${idx++}`);
+    queryParams.push(date_to);
+  }
+
+  if (due_date_from) {
+    where.push(`p.estimated_completion_date >= $${idx++}`);
+    queryParams.push(due_date_from);
+  }
+
+  if (due_date_to) {
+    where.push(`p.estimated_completion_date <= $${idx++}`);
+    queryParams.push(due_date_to);
+  }
+
+  if (completion_percentage !== undefined && completion_percentage !== '') {
+    const num = Number(completion_percentage);
+    if (!Number.isNaN(num)) {
+      where.push(`p.progress = $${idx++}`);
+      queryParams.push(num);
+    }
+  }
+
+  const whereClause = `WHERE ${where.join(' AND ')}`;
+
+  let searchClause = '';
+  if (search && String(search).trim()) {
+    const term = `%${String(search).trim().toLowerCase()}%`;
+    searchClause = `AND (
+      p.title ILIKE $${idx++}
+      OR p.project_id::TEXT ILIKE $${idx++}
+      OR LOWER(u.first_name || ' ' || u.last_name) ILIKE $${idx++}
+      OR LOWER(claim_user.first_name || ' ' || claim_user.last_name) ILIKE $${idx++}
+      OR p.status::TEXT ILIKE $${idx++}
+      OR EXISTS (SELECT 1 FROM order_items oi_search JOIN customizations c_search ON c_search.customization_id = oi_search.customization_id WHERE oi_search.order_id = o.order_id AND c_search.guitar_type::text ILIKE $${idx++})
+      OR o.order_number ILIKE $${idx++}
+      OR EXISTS (SELECT 1 FROM project_tasks pt_search WHERE pt_search.project_id = p.project_id AND pt_search.task_name ILIKE $${idx++})
+      OR p.notes ILIKE $${idx++}
+      OR EXISTS (
+        SELECT 1 FROM project_subtasks pst
+        WHERE pst.milestone_id IN (SELECT milestone_id FROM project_milestones WHERE project_id = p.project_id)
+          AND pst.title ILIKE $${idx++}
+      )
+    )`;
+    for (let i = 0; i < 10; i++) {
+      queryParams.push(term);
+    }
+  }
+
+  const sortColumn =
+    orderBy === 'project_name'
+      ? `p.title ${orderDir}`
+      : orderBy === 'customer_name'
+        ? `u.last_name ${orderDir}, u.first_name ${orderDir}`
+        : orderBy === 'progress'
+          ? `p.progress ${orderDir}`
+          : orderBy === 'estimated_completion_date'
+            ? `p.estimated_completion_date ${orderDir} NULLS LAST`
+            : orderBy === 'status'
+              ? `p.status ${orderDir}`
+              : `p.${orderBy} ${orderDir}`;
+
+  const totalQuery = `
+    SELECT COUNT(DISTINCT p.project_id)::int AS total
+    FROM projects p
+    JOIN orders o ON o.order_id = p.order_id
+    LEFT JOIN users u ON u.user_id = o.user_id
+    LEFT JOIN users claim_user ON claim_user.user_id = p.claimed_by
+    ${whereClause}
+    ${searchClause}
+  `;
+
+  const totalResult = await pool.query(totalQuery, queryParams);
+  const total = totalResult.rows[0]?.total || 0;
+
+  const dataQuery = `
+    SELECT
+      p.*,
+      p.title AS name,
+      p.notes AS description,
+      o.user_id AS customer_id,
+      o.order_number,
+      a.line1 AS shipping_line1,
+      a.line2 AS shipping_line2,
+      a.city AS shipping_city,
+      a.province AS shipping_province,
+      a.postal_code AS shipping_postal_code,
+      a.country AS shipping_country,
+      CONCAT(
+        COALESCE(u.first_name, ''),
+        CASE WHEN COALESCE(u.first_name, '') <> '' AND COALESCE(u.last_name, '') <> '' THEN ' ' ELSE '' END,
+        COALESCE(u.last_name, '')
+      ) AS customer_name,
+      claim_user.first_name AS claimed_first_name,
+      claim_user.last_name AS claimed_last_name,
+      claim_user.role AS claimed_role,
+      (
+        SELECT MAX(c2.guitar_type)
+        FROM order_items oi2
+        JOIN customizations c2 ON c2.customization_id = oi2.customization_id
+        WHERE oi2.order_id = o.order_id
+      ) AS guitar_type
+    FROM projects p
+    JOIN orders o ON o.order_id = p.order_id
+    LEFT JOIN addresses a ON a.address_id = o.shipping_address_id
+    LEFT JOIN users u ON u.user_id = o.user_id
+    LEFT JOIN users claim_user ON claim_user.user_id = p.claimed_by
+    ${whereClause}
+    ${searchClause}
+    ORDER BY ${sortColumn}
+    LIMIT $${idx++} OFFSET $${idx++}
+  `;
+
+  const dataResult = await pool.query(dataQuery, [...queryParams, limit, offset]);
+  const projects = dataResult.rows;
+
+  if (projects.length === 0) {
+    return {
+      projects: [],
+      pagination: { page, page_size: limit, total, total_pages: 1 },
+    };
+  }
+
+  const projectIds = projects.map((p) => p.project_id);
+
+  let taskStatsByProject = {};
+  if (include_tasks === true || include_tasks === 'true') {
+    const taskStatsRes = await pool.query(
+      `SELECT
+        pm.project_id,
+        COUNT(*)::int AS total,
+        COUNT(CASE WHEN ps.status = 'completed' THEN 1 END)::int AS completed
+      FROM project_subtasks ps
+      JOIN project_milestones pm ON ps.milestone_id = pm.milestone_id
+      WHERE pm.project_id = ANY($1)
+      GROUP BY pm.project_id`,
+      [projectIds]
+    );
+    taskStatsByProject = taskStatsRes.rows.reduce((acc, row) => {
+      acc[row.project_id] = { total: row.total, completed: row.completed };
+      return acc;
+    }, {});
+  }
+
+  const customizationRes = await pool.query(
+    `SELECT DISTINCT
+       oi.order_id,
+       c.customization_id,
+       c.guitar_type
+     FROM order_items oi
+     JOIN customizations c ON c.customization_id = oi.customization_id
+     WHERE oi.order_id = ANY(
+       SELECT order_id FROM projects WHERE project_id = ANY($1)
+     )`,
+    [projectIds]
   );
 
-  return Promise.all(
-    result.rows.map(async (project) => {
-      const trackedProject = await applyProjectTaskTracking(pool, project, { persist: true });
-      return attachFulfillmentDetails(trackedProject);
-    })
-  );
+  const customizationsByOrder = customizationRes.rows.reduce((acc, row) => {
+    if (!acc[row.order_id]) acc[row.order_id] = [];
+    acc[row.order_id].push(row);
+    return acc;
+  }, {});
+
+  const enrichedProjects = projects.map((project) => {
+    const taskStats = taskStatsByProject[project.project_id] || { total: 0, completed: 0 };
+    const progress = Math.max(
+      0,
+      Math.min(100, Number.isFinite(Number(project.progress)) ? Number(project.progress) : 0)
+    );
+    const tracking = buildProjectTaskTracking(taskStats, project.status);
+    const orderCustomizations = customizationsByOrder[project.order_id] || [];
+    const primaryGuitarType = orderCustomizations[0]?.guitar_type || project.guitar_type || null;
+
+    return {
+      ...project,
+      progress: tracking.progress || progress,
+      status: tracking.status || project.status,
+      task_summary: tracking.task_summary,
+      customization_ids: orderCustomizations.map((c) => c.customization_id),
+      primary_customization_id: orderCustomizations[0]?.customization_id || null,
+      guitar_type: primaryGuitarType,
+      items: [],
+      payment_method: null,
+      payment: null,
+    };
+  });
+
+  return {
+    projects: enrichedProjects,
+    pagination: {
+      page,
+      page_size: limit,
+      total,
+      total_pages: Math.max(Math.ceil(total / limit), 1),
+    },
+  };
+};
+
+exports.getProjects = async (params = {}) => {
+  const result = await exports.getAllProjects({ ...params, include_tasks: true });
+  return result.projects;
 };
 
 exports.getProjectById = async (projectId) => {
@@ -282,33 +535,14 @@ exports.getProjectById = async (projectId) => {
   return attachFulfillmentDetails(trackedProject);
 };
 
-exports.getMyProjects = async (userId) => {
+exports.getMyProjects = async (userId, params = {}) => {
   await ensureProjectArchiveColumns();
-  const result = await pool.query(
-    `${PROJECT_BASE_SELECT}
-     WHERE o.user_id = $1
-       AND p.deleted_at IS NULL
-     ORDER BY p.created_at DESC`,
-    [userId]
-  );
-  for (let p of result.rows) {
-    const stats = await getProjectTaskStats(pool, p.project_id);
-    const customizationsRes = await pool.query(
-      `SELECT DISTINCT customization_id
-       FROM order_items
-      WHERE order_id = $1
-         AND customization_id IS NOT NULL`,
-      [p.order_id]
-    );
-    const tracking = await applyProjectTaskTracking(pool, p, { stats, persist: true });
-    p.customization_ids = customizationsRes.rows.map(row => row.customization_id);
-    p.primary_customization_id = p.customization_ids[0] || null;
-    p.progress = tracking.progress;
-    p.status = tracking.status;
-    p.task_summary = tracking.task_summary;
+  const result = await exports.getAllProjects({ ...params, user_id: userId, include_tasks: true });
+  const projects = result.projects;
+  for (let p of projects) {
     Object.assign(p, attachFulfillmentDetails(p));
   }
-  return result.rows;
+  return { projects, pagination: result.pagination };
 };
 
 exports.createProject = async (projectData) => {

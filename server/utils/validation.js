@@ -995,3 +995,35 @@ const listOrdersSchema = Joi.object({
 exports.listOrdersSchema = listOrdersSchema;
 exports.orderIdParamSchema = orderIdParamSchema;
 exports.namedUuidParamSchema = namedUuidParamSchema;
+
+const listProjectsSchema = Joi.object({
+  search: Joi.string().max(100).optional().allow('').trim(),
+  status: Joi.string().valid(
+    'not_started',
+    'in_progress',
+    'completed',
+    'cancelled'
+  ).optional(),
+  assigned_to: Joi.string().uuid().optional().allow('', null),
+  guitar_type: Joi.string().trim().min(2).max(80).optional().allow(''),
+  date_from: Joi.string().isoDate().optional(),
+  date_to: Joi.string().isoDate().optional(),
+  due_date_from: Joi.string().isoDate().optional(),
+  due_date_to: Joi.string().isoDate().optional(),
+  completion_percentage: Joi.alternatives().try(Joi.number().integer().min(0).max(100), Joi.string()).optional().allow(''),
+  sort_by: Joi.string().valid(
+    'updated_at',
+    'created_at',
+    'project_name',
+    'customer_name',
+    'progress',
+    'estimated_completion_date',
+    'status'
+  ).optional(),
+  sort_dir: Joi.string().valid('asc', 'desc').optional(),
+  page: Joi.number().integer().min(1).optional(),
+  page_size: Joi.number().integer().min(1).max(100).optional(),
+  include_tasks: Joi.alternatives().try(Joi.string(), Joi.boolean()).optional(),
+}).unknown(true);
+
+exports.listProjectsSchema = listProjectsSchema;

@@ -4,13 +4,13 @@ const defaultWorkflowService = require('../services/defaultWorkflowService');
 
 // --- PROJECT BASE ---
 exports.getProjects = asyncHandler(async (req, res, next) => {
-  const projects = await projectService.getProjects();
-  res.json({ status: 'success', data: projects });
+  const result = await projectService.getAllProjects(req.query);
+  res.json({ status: 'success', data: result.projects, pagination: result.pagination });
 });
 
 exports.getMyProjects = asyncHandler(async (req, res, next) => {
-  const projects = await projectService.getMyProjects(req.user.id);
-  res.json({ status: 'success', data: projects });
+  const result = await projectService.getMyProjects(req.user.id, req.query);
+  res.json({ status: 'success', data: result.projects, pagination: result.pagination });
 });
 
 exports.getProject = asyncHandler(async (req, res, next) => {

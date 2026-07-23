@@ -699,6 +699,20 @@ CREATE INDEX idx_projects_deleted_at ON projects(deleted_at) WHERE deleted_at IS
 -- Composite index for project dashboard filtering by status + progress
 CREATE INDEX idx_projects_status_progress ON projects(status, progress);
 
+-- Composite indexes for optimized project search, filter, and sort
+CREATE INDEX idx_projects_status_created ON projects(status, created_at DESC);
+CREATE INDEX idx_projects_created_at ON projects(created_at DESC);
+CREATE INDEX idx_projects_updated_at ON projects(updated_at DESC);
+CREATE INDEX idx_projects_progress ON projects(progress);
+CREATE INDEX idx_projects_estimated_completion_date ON projects(estimated_completion_date);
+CREATE INDEX idx_projects_title ON projects(title);
+CREATE INDEX idx_projects_notes ON projects(notes);
+
+-- Indexes for related tables used in joins
+CREATE INDEX idx_orders_user_id ON users(user_id);
+CREATE INDEX idx_project_subtasks_assigned_user_id ON project_subtasks(assigned_user_id);
+CREATE INDEX idx_project_subtasks_title ON project_subtasks(title);
+
 
 -- =============================================
 -- 19. PROJECT TASKS

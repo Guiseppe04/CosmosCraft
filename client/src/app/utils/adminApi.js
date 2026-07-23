@@ -114,7 +114,10 @@ export const adminApi = {
     const qs = new URLSearchParams(params).toString()
     return request(`/api/projects${qs ? '?' + qs : ''}`)
   },
-  getMyProjects: () => request('/api/projects/my'),
+  getMyProjects: (params = {}) => {
+    const qs = new URLSearchParams(params).toString()
+    return request(`/api/projects/my${qs ? '?' + qs : ''}`)
+  },
   getProject: (id) => request(`/api/projects/${id}`),
   createProject: (body) => request('/api/projects', { method: 'POST', body }),
   updateProject: (id, body) => request(`/api/projects/${id}`, { method: 'PUT', body }),

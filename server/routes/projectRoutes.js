@@ -15,13 +15,14 @@ const {
   createSubtaskSchema,
   updateSubtaskSchema,
   submitFulfillmentSchema,
+  listProjectsSchema,
 } = require('../utils/validation');
 
 router.use(authenticateToken);
 
 // === CUSTOMER/USER & ADMIN ROUTES ===
 // Users can view hierarchy and update permitted subtasks
-router.get('/my', ctrl.getMyProjects);
+router.get('/my', validate(listProjectsSchema, 'query'), ctrl.getMyProjects);
 router.get('/:id/hierarchy', validateParams(uuidParamSchema), ctrl.getProjectHierarchy);
 router.post('/:id/cancel', validateParams(uuidParamSchema), ctrl.cancelProject);
 router.post('/:id/fulfillment', validateParams(uuidParamSchema), validate(submitFulfillmentSchema), ctrl.submitFulfillmentChoice);
@@ -31,7 +32,7 @@ router.get('/:id/activity', validateParams(uuidParamSchema), ctrl.getActivityLog
 // === ADMIN ONLY ROUTES ===
 router.use(authorize('staff', 'admin', 'super_admin'));
 
-router.get('/', ctrl.getProjects);
+router.get('/', validate(listProjectsSchema, 'query'), ctrl.getProjects);
 
 // Default workflow routes (admin only) — must come before :id to avoid conflict
 router.get('/default-workflow', ctrl.getDefaultWorkflow);
