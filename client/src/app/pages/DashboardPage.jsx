@@ -518,7 +518,6 @@ export function DashboardPage() {
     email: '',
     phone: '',
     gender: 'male',
-    birthDate: '',
   })
   
   const [passwordData, setPasswordData] = useState({
@@ -576,7 +575,6 @@ export function DashboardPage() {
             email: u.email || '',
             phone: u.phone || '',
             gender: 'male',
-            birthDate: u.birthDate ? String(u.birthDate).split('T')[0] : '',
           })
           const resolvedAvatar = u.avatar || u.avatarUrl || u.avatar_url || ''
           if (resolvedAvatar) setProfileImage(resolvedAvatar)
@@ -1551,7 +1549,6 @@ export function DashboardPage() {
         middleName: profileData.middleName,
         lastName: profileData.lastName,
         phone: profileData.phone,
-        birthDate: profileData.birthDate || null,
         ...avatarPayload,
       })
 
