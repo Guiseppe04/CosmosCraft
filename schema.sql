@@ -908,6 +908,84 @@ CREATE INDEX idx_project_subtasks_deleted_at ON project_subtasks(deleted_at) WHE
 
 
 -- =============================================
+-- 27A. DEFAULT WORKFLOW TEMPLATES
+-- =============================================
+-- Stores the editable default workflow for customization projects.
+-- Changes here only affect future projects, not existing ones.
+
+CREATE TABLE default_workflow_steps (
+    step_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    step_name VARCHAR(200) NOT NULL,
+    sort_order SMALLINT NOT NULL DEFAULT 0 CHECK (sort_order >= 0),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_default_workflow_steps_sort ON default_workflow_steps(sort_order);
+
+CREATE TABLE default_workflow_tasks (
+    task_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    step_id UUID NOT NULL REFERENCES default_workflow_steps(step_id) ON DELETE CASCADE,
+    task_name VARCHAR(200) NOT NULL,
+    sort_order SMALLINT NOT NULL DEFAULT 0 CHECK (sort_order >= 0),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_default_workflow_tasks_step ON default_workflow_tasks(step_id);
+CREATE INDEX idx_default_workflow_tasks_sort ON default_workflow_tasks(step_id, sort_order);
+
+-- Seed the default customization workflow
+INSERT INTO default_workflow_steps (step_id, step_name, sort_order) VALUES
+    (gen_random_uuid(), 'Body', 1),
+    (gen_random_uuid(), 'Neck', 2),
+    (gen_random_uuid(), 'Parts Fitting', 3),
+    (gen_random_uuid(), 'Paint Processing', 4),
+    (gen_random_uuid(), 'Assembly & Setup', 5),
+    (gen_random_uuid(), 'Release', 6);
+
+-- Seed tasks for each step (using subqueries to get step_ids)
+DO $$
+DECLARE
+    v_body_id UUID;
+    v_neck_id UUID;
+    v_paint_id UUID;
+    v_release_id UUID;
+BEGIN
+    SELECT step_id INTO v_body_id FROM default_workflow_steps WHERE step_name = 'Body';
+    SELECT step_id INTO v_neck_id FROM default_workflow_steps WHERE step_name = 'Neck';
+    SELECT step_id INTO v_paint_id FROM default_workflow_steps WHERE step_name = 'Paint Processing';
+    SELECT step_id INTO v_release_id FROM default_workflow_steps WHERE step_name = 'Release';
+
+    -- Body tasks
+    INSERT INTO default_workflow_tasks (task_id, step_id, task_name, sort_order) VALUES
+        (gen_random_uuid(), v_body_id, 'Shape Carving', 1),
+        (gen_random_uuid(), v_body_id, 'Pickup Cavity', 2),
+        (gen_random_uuid(), v_body_id, 'Electronics Cavity', 3),
+        (gen_random_uuid(), v_body_id, 'Neck Pocket', 4);
+
+    -- Neck tasks
+    INSERT INTO default_workflow_tasks (task_id, step_id, task_name, sort_order) VALUES
+        (gen_random_uuid(), v_neck_id, 'Shape Carving', 1),
+        (gen_random_uuid(), v_neck_id, 'Install Frets', 2),
+        (gen_random_uuid(), v_neck_id, 'Drill Tuning Peg Holes', 3);
+
+    -- Paint Processing tasks
+    INSERT INTO default_workflow_tasks (task_id, step_id, task_name, sort_order) VALUES
+        (gen_random_uuid(), v_paint_id, 'Sanding', 1),
+        (gen_random_uuid(), v_paint_id, 'Primer', 2),
+        (gen_random_uuid(), v_paint_id, 'Base Color', 3),
+        (gen_random_uuid(), v_paint_id, 'Top Coat', 4),
+        (gen_random_uuid(), v_paint_id, 'Buffing', 5),
+        (gen_random_uuid(), v_paint_id, 'Polishing', 6);
+
+    -- Release tasks
+    INSERT INTO default_workflow_tasks (task_id, step_id, task_name, sort_order) VALUES
+        (gen_random_uuid(), v_release_id, 'Delivery', 1);
+END $$;
+
+
+-- =============================================
 -- 28. NOTIFICATIONS
 -- =============================================
 -- Consolidated notification table: also handles low_stock_alerts
@@ -1591,6 +1669,18 @@ EXECUTE FUNCTION set_updated_at();
 DROP TRIGGER IF EXISTS trg_project_subtasks_set_updated_at ON project_subtasks;
 CREATE TRIGGER trg_project_subtasks_set_updated_at
 BEFORE UPDATE ON project_subtasks
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
+
+DROP TRIGGER IF EXISTS trg_default_workflow_steps_set_updated_at ON default_workflow_steps;
+CREATE TRIGGER trg_default_workflow_steps_set_updated_at
+BEFORE UPDATE ON default_workflow_steps
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
+
+DROP TRIGGER IF EXISTS trg_default_workflow_tasks_set_updated_at ON default_workflow_tasks;
+CREATE TRIGGER trg_default_workflow_tasks_set_updated_at
+BEFORE UPDATE ON default_workflow_tasks
 FOR EACH ROW
 EXECUTE FUNCTION set_updated_at();
 

@@ -32,6 +32,12 @@ router.get('/:id/activity', validateParams(uuidParamSchema), ctrl.getActivityLog
 router.use(authorize('staff', 'admin', 'super_admin'));
 
 router.get('/', ctrl.getProjects);
+
+// Default workflow routes (admin only) — must come before :id to avoid conflict
+router.get('/default-workflow', ctrl.getDefaultWorkflow);
+router.put('/default-workflow', validate(require('../utils/validation').saveDefaultWorkflowSchema), ctrl.updateDefaultWorkflow);
+router.post('/:id/apply-default-workflow', ctrl.applyDefaultWorkflowToProject);
+
 router.get('/:id', validateParams(uuidParamSchema), ctrl.getProject);
 router.post('/', validate(createProjectSchema), ctrl.createProject);
 router.put('/:id', validateParams(uuidParamSchema), validate(updateProjectSchema), ctrl.updateProject);

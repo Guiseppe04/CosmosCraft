@@ -16,6 +16,7 @@ import {
   CartesianGrid, Tooltip, ResponsiveContainer, Cell,
 } from 'recharts'
 import ProjectTaskTracker from '../components/projects/ProjectTaskTracker'
+import DefaultWorkflowEditor from '../components/projects/DefaultWorkflowEditor'
 import AppointmentCalendar from '../components/appointments/AppointmentCalendar'
 import AppointmentList from '../components/appointments/AppointmentList'
 import AppointmentModal from '../components/appointments/AppointmentModal'
@@ -1832,6 +1833,7 @@ export function AdminPage() {
   // Modal state
   const [modal, setModal] = useState({ open: false, type: null, data: null })
   const [showGuitarTypeSelector, setShowGuitarTypeSelector] = useState(false)
+  const [showDefaultWorkflowEditor, setShowDefaultWorkflowEditor] = useState(false)
   const [paymentStatusUpdate, setPaymentStatusUpdate] = useState({ loading: false, orderId: null })
 
   // Confirm dialog state
@@ -4427,6 +4429,19 @@ export function AdminPage() {
                     <p className="mt-1 text-sm text-[var(--text-muted)]">
                       Open a project to manage milestones and subtasks for the build.
                     </p>
+                    {isSuperAdmin && (
+                      <button
+                        onClick={() => setShowDefaultWorkflowEditor(true)}
+                        className="mt-3 inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] text-sm font-semibold text-white transition-all hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)]"
+                      >
+                        <Settings className="w-4 h-4" />
+                        Edit Default Tasks
+                      </button>
+                    )}
+                    <DefaultWorkflowEditor
+                      isOpen={showDefaultWorkflowEditor}
+                      onClose={() => setShowDefaultWorkflowEditor(false)}
+                    />
                   </div>
                   <div className="grid gap-3 sm:grid-cols-3">
                     <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-3">

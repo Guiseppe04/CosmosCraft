@@ -1,5 +1,6 @@
 const { asyncHandler, AppError } = require('../middleware/errorHandler');
 const projectService = require('../services/projectService');
+const defaultWorkflowService = require('../services/defaultWorkflowService');
 
 // --- PROJECT BASE ---
 exports.getProjects = asyncHandler(async (req, res, next) => {
@@ -133,5 +134,25 @@ exports.getStaffClaimStatus = asyncHandler(async (req, res, next) => {
 
 exports.initializeWorkflow = asyncHandler(async (req, res, next) => {
   const result = await projectService.initializeManufacturingWorkflow(req.params.id, req.user.id);
+  res.json({ status: 'success', data: result });
+});
+
+// --- DEFAULT WORKFLOW ---
+exports.getDefaultWorkflow = asyncHandler(async (req, res, next) => {
+  const workflow = await defaultWorkflowService.getDefaultWorkflow();
+  res.json({ status: 'success', data: workflow });
+});
+
+exports.updateDefaultWorkflow = asyncHandler(async (req, res, next) => {
+  const { steps } = req.body;
+  if (!Array.isArray(steps)) {
+    throw new AppError('steps array is required', 400);
+  }
+  const workflow = await defaultWorkflowService.saveDefaultWorkflow(steps);
+  res.json({ status: 'success', data: workflow, message: 'Default workflow updated successfully' });
+});
+
+exports.applyDefaultWorkflowToProject = asyncHandler(async (req, res, next) => {
+  const result = await defaultWorkflowService.applyDefaultWorkflowToProject(req.params.id, req.user.id);
   res.json({ status: 'success', data: result });
 });

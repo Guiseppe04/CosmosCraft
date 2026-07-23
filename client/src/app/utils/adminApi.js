@@ -211,6 +211,11 @@ export const adminApi = {
   deleteSubtask: (subtaskId) => request(`/api/projects/subtasks/${subtaskId}`, { method: 'DELETE' }),
   updateSubtask: (subtaskId, body) => request(`/api/projects/subtasks/${subtaskId}`, { method: 'PATCH', body }),
 
+  // Default Workflow
+  getDefaultWorkflow: () => request('/api/projects/default-workflow'),
+  updateDefaultWorkflow: (body) => request('/api/projects/default-workflow', { method: 'PUT', body }),
+  applyDefaultWorkflow: (projectId) => request(`/api/projects/${projectId}/apply-default-workflow`, { method: 'POST' }),
+
   // Payment Settings
   getPaymentSettings: () => request('/api/payment-settings'),
   updatePaymentSettings: (body) => request('/api/payment-settings', { method: 'PUT', body }),

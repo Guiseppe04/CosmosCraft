@@ -929,6 +929,29 @@ exports.validateBody = (schema) => buildValidationMiddleware(schema, 'body');
 exports.validateQuery = (schema) => buildValidationMiddleware(schema, 'query');
 exports.validateParams = (schema) => buildValidationMiddleware(schema, 'params');
 exports.validate = exports.validateBody;
+exports.saveDefaultWorkflowSchema = Joi.object({
+  steps: Joi.array().min(1).required().items(
+    Joi.object({
+      step_name: Joi.string().trim().min(1).max(200).required().messages({
+        'string.empty': 'Step name is required',
+        'any.required': 'Step name is required',
+      }),
+      sort_order: Joi.number().integer().min(0).optional(),
+      tasks: Joi.array().items(
+        Joi.object({
+          task_name: Joi.string().trim().min(1).max(200).required().messages({
+            'string.empty': 'Task name is required',
+            'any.required': 'Task name is required',
+          }),
+          sort_order: Joi.number().integer().min(0).optional(),
+        })
+      ).optional(),
+    })
+  ).messages({
+    'array.min': 'At least one step is required',
+  }),
+});
+
 exports.uuidParamSchema = uuidParamSchema;
 exports.orderIdParamSchema = orderIdParamSchema;
 exports.namedUuidParamSchema = namedUuidParamSchema;

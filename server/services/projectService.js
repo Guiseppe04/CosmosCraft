@@ -1,5 +1,6 @@
 const { pool } = require('../config/database');
 const { AppError } = require('../middleware/errorHandler');
+const defaultWorkflowService = require('./defaultWorkflowService');
 let projectArchiveColumnsReadyPromise = null;
 
 const ensureProjectArchiveColumns = async () => {
@@ -326,13 +327,33 @@ exports.createProject = async (projectData) => {
      RETURNING *`,
     [projectOrderId, projectTitle, normalizedStatus, notes ?? description ?? null, estimated_completion_date || null, customBuildId]
   );
-  return { ...result.rows[0], name: result.rows[0].title, description: result.rows[0].notes };
+  const createdProject = result.rows[0];
+  const projectId = createdProject.project_id;
+
+  // Apply default workflow for new projects when no milestones exist yet.
+  const milestoneCountRes = await pool.query(
+    'SELECT COUNT(*) FROM project_milestones WHERE project_id = $1',
+    [projectId]
+  );
+  if (parseInt(milestoneCountRes.rows[0].count, 10) === 0) {
+    await defaultWorkflowService.applyDefaultWorkflowToProject(projectId, null);
+  }
+
+  return { ...createdProject, name: createdProject.title, description: createdProject.notes };
 };
 
 exports.updateProject = async (projectId, projectData) => {
   await ensureProjectArchiveColumns();
   const { title, name, status, description, notes, estimated_completion_date } = projectData;
   const normalizedStatus = normalizeProjectStatus(status)
+
+  const existingRes = await pool.query(
+    `SELECT status FROM projects WHERE project_id = $1 AND deleted_at IS NULL`,
+    [projectId]
+  );
+  if (existingRes.rows.length === 0) return null;
+  const existingStatus = normalizeProjectStatus(existingRes.rows[0].status);
+  const updatedStatus = normalizedStatus || existingStatus;
 
   const result = await pool.query(
     `UPDATE projects 
@@ -344,9 +365,20 @@ exports.updateProject = async (projectId, projectData) => {
      WHERE project_id = $5
        AND deleted_at IS NULL
      RETURNING *`,
-    [title || name, normalizedStatus, notes ?? description, estimated_completion_date || null, projectId]
+    [title || name, updatedStatus, notes ?? description, estimated_completion_date || null, projectId]
   );
   if (result.rows.length === 0) return null;
+
+  if (updatedStatus === 'in_progress' && existingStatus !== 'in_progress') {
+    const milestoneCountRes = await pool.query(
+      'SELECT COUNT(*) FROM project_milestones WHERE project_id = $1',
+      [projectId]
+    );
+    if (parseInt(milestoneCountRes.rows[0].count, 10) === 0) {
+      await defaultWorkflowService.applyDefaultWorkflowToProject(projectId, null);
+    }
+  }
+
   return { ...result.rows[0], name: result.rows[0].title, description: result.rows[0].notes };
 };
 
@@ -1086,53 +1118,11 @@ const MANUFACTURING_WORKFLOW = [
 
 /**
  * Initialize the manufacturing workflow milestones and subtasks for a project.
- * Only runs if no milestones exist yet.
+ * Only runs if no milestones exist yet. Uses the database-driven default workflow.
  */
 exports.initializeManufacturingWorkflow = async (projectId, userId) => {
   await ensureClaimColumns();
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-
-    // Check if milestones already exist
-    const existing = await client.query(
-      'SELECT COUNT(*) FROM project_milestones WHERE project_id = $1',
-      [projectId]
-    );
-    if (parseInt(existing.rows[0].count) > 0) {
-      await client.query('COMMIT');
-      return { initialized: false, message: 'Workflow already exists' };
-    }
-
-    for (const step of MANUFACTURING_WORKFLOW) {
-      const mRes = await client.query(
-        `INSERT INTO project_milestones (project_id, title, order_index, status)
-         VALUES ($1, $2, $3, 'pending') RETURNING milestone_id`,
-        [projectId, step.title, step.order_index]
-      );
-      const milestoneId = mRes.rows[0].milestone_id;
-
-      for (const subtaskTitle of step.subtasks) {
-        await client.query(
-          `INSERT INTO project_subtasks (milestone_id, title, status)
-           VALUES ($1, $2, 'pending')`,
-          [milestoneId, subtaskTitle]
-        );
-      }
-    }
-
-    await logActivity(client, projectId, userId, 'workflow_initialized', {
-      message: 'Manufacturing workflow milestones created',
-    });
-
-    await client.query('COMMIT');
-    return { initialized: true, message: 'Workflow initialized successfully' };
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
-  }
+  return defaultWorkflowService.applyDefaultWorkflowToProject(projectId, userId);
 };
 
 /**
@@ -1192,32 +1182,14 @@ exports.claimProject = async (projectId, userId, userRole) => {
       [userId, projectId]
     );
 
-    // Initialize workflow if not yet done
+    // Initialize workflow if not yet done (use database-driven defaults)
     const existing = await client.query(
       'SELECT COUNT(*) FROM project_milestones WHERE project_id = $1',
       [projectId]
     );
 
     if (parseInt(existing.rows[0].count) === 0) {
-      for (const step of MANUFACTURING_WORKFLOW) {
-        const mRes = await client.query(
-          `INSERT INTO project_milestones (project_id, title, order_index, status)
-           VALUES ($1, $2, $3, 'pending') RETURNING milestone_id`,
-          [projectId, step.title, step.order_index]
-        );
-        const milestoneId = mRes.rows[0].milestone_id;
-
-        for (const subtaskTitle of step.subtasks) {
-          await client.query(
-            `INSERT INTO project_subtasks (milestone_id, title, status)
-             VALUES ($1, $2, 'pending')`,
-            [milestoneId, subtaskTitle]
-          );
-        }
-      }
-      await logActivity(client, projectId, userId, 'workflow_initialized', {
-        message: 'Manufacturing workflow created on claim',
-      });
+      await defaultWorkflowService.applyDefaultWorkflowToProject(projectId, userId);
     }
 
     await logActivity(client, projectId, userId, 'project_claimed', {
