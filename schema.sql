@@ -371,6 +371,7 @@ CREATE INDEX idx_customization_parts_deleted_at ON customization_parts(deleted_a
 CREATE TABLE orders (
     order_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     order_number VARCHAR(30) NOT NULL UNIQUE,
+    order_type VARCHAR(20) NOT NULL DEFAULT 'product',
     user_id UUID,
     shipping_address_id UUID,
     subtotal NUMERIC(12, 2) NOT NULL CHECK (subtotal >= 0),
@@ -419,6 +420,45 @@ CREATE INDEX idx_orders_deleted_at ON orders(deleted_at) WHERE deleted_at IS NOT
 CREATE INDEX idx_orders_status_created ON orders(status, created_at DESC);
 -- Composite index for payment verification workflow
 CREATE INDEX idx_orders_payment_review ON orders(payment_status, reviewed_at) WHERE payment_status IN ('proof_submitted', 'under_review');
+
+-- Check constraint for order_type
+ALTER TABLE orders ADD CONSTRAINT chk_orders_order_type CHECK (order_type IN ('product', 'customization', 'service'));
+
+-- Index on order_type
+CREATE INDEX idx_orders_order_type ON orders(order_type);
+
+-- Composite indexes for optimized search, filter, and sort
+CREATE INDEX idx_orders_type_status_created ON orders(order_type, status, created_at DESC);
+CREATE INDEX idx_orders_payment_status_created ON orders(payment_status, created_at DESC);
+CREATE INDEX idx_orders_amount_created ON orders(total_amount, created_at DESC);
+
+-- Indexes for related tables used in joins
+CREATE INDEX idx_payments_reference_number ON payments(reference_number);
+CREATE INDEX idx_order_items_product_name ON order_items(product_name);
+CREATE INDEX idx_order_items_customization_id ON order_items(customization_id) WHERE customization_id IS NOT NULL;
+
+-- =============================================
+-- 13A. ORDER NUMBER COUNTERS
+-- =============================================
+-- Atomic counter table for generating unique, sequential order numbers
+-- per type and per day (PO-YYYYMMDD-0001, CO-YYYYMMDD-0001, SO-YYYYMMDD-0001)
+
+CREATE TABLE order_number_counters (
+    prefix VARCHAR(2) PRIMARY KEY,
+    date DATE NOT NULL DEFAULT CURRENT_DATE,
+    last_number INT NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_order_number_counters_date ON order_number_counters(date);
+
+-- Seed initial counter rows (day-reset is handled dynamically in application logic)
+INSERT INTO order_number_counters (prefix, date, last_number) VALUES
+    ('PO', CURRENT_DATE, 0),
+    ('CO', CURRENT_DATE, 0),
+    ('SO', CURRENT_DATE, 0)
+ON CONFLICT (prefix) DO NOTHING;
 
 
 -- =============================================
@@ -658,6 +698,20 @@ CREATE INDEX idx_projects_fulfillment_method ON projects(fulfillment_method);
 CREATE INDEX idx_projects_deleted_at ON projects(deleted_at) WHERE deleted_at IS NOT NULL;
 -- Composite index for project dashboard filtering by status + progress
 CREATE INDEX idx_projects_status_progress ON projects(status, progress);
+
+-- Composite indexes for optimized project search, filter, and sort
+CREATE INDEX idx_projects_status_created ON projects(status, created_at DESC);
+CREATE INDEX idx_projects_created_at ON projects(created_at DESC);
+CREATE INDEX idx_projects_updated_at ON projects(updated_at DESC);
+CREATE INDEX idx_projects_progress ON projects(progress);
+CREATE INDEX idx_projects_estimated_completion_date ON projects(estimated_completion_date);
+CREATE INDEX idx_projects_title ON projects(title);
+CREATE INDEX idx_projects_notes ON projects(notes);
+
+-- Indexes for related tables used in joins
+CREATE INDEX idx_orders_user_id ON users(user_id);
+CREATE INDEX idx_project_subtasks_assigned_user_id ON project_subtasks(assigned_user_id);
+CREATE INDEX idx_project_subtasks_title ON project_subtasks(title);
 
 
 -- =============================================
@@ -905,6 +959,84 @@ CREATE INDEX idx_project_subtasks_milestone_id ON project_subtasks(milestone_id)
 CREATE INDEX idx_project_subtasks_assigned_user_id ON project_subtasks(assigned_user_id);
 CREATE INDEX idx_project_subtasks_status ON project_subtasks(status);
 CREATE INDEX idx_project_subtasks_deleted_at ON project_subtasks(deleted_at) WHERE deleted_at IS NOT NULL;
+
+
+-- =============================================
+-- 27A. DEFAULT WORKFLOW TEMPLATES
+-- =============================================
+-- Stores the editable default workflow for customization projects.
+-- Changes here only affect future projects, not existing ones.
+
+CREATE TABLE default_workflow_steps (
+    step_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    step_name VARCHAR(200) NOT NULL,
+    sort_order SMALLINT NOT NULL DEFAULT 0 CHECK (sort_order >= 0),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_default_workflow_steps_sort ON default_workflow_steps(sort_order);
+
+CREATE TABLE default_workflow_tasks (
+    task_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    step_id UUID NOT NULL REFERENCES default_workflow_steps(step_id) ON DELETE CASCADE,
+    task_name VARCHAR(200) NOT NULL,
+    sort_order SMALLINT NOT NULL DEFAULT 0 CHECK (sort_order >= 0),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_default_workflow_tasks_step ON default_workflow_tasks(step_id);
+CREATE INDEX idx_default_workflow_tasks_sort ON default_workflow_tasks(step_id, sort_order);
+
+-- Seed the default customization workflow
+INSERT INTO default_workflow_steps (step_id, step_name, sort_order) VALUES
+    (gen_random_uuid(), 'Body', 1),
+    (gen_random_uuid(), 'Neck', 2),
+    (gen_random_uuid(), 'Parts Fitting', 3),
+    (gen_random_uuid(), 'Paint Processing', 4),
+    (gen_random_uuid(), 'Assembly & Setup', 5),
+    (gen_random_uuid(), 'Release', 6);
+
+-- Seed tasks for each step (using subqueries to get step_ids)
+DO $$
+DECLARE
+    v_body_id UUID;
+    v_neck_id UUID;
+    v_paint_id UUID;
+    v_release_id UUID;
+BEGIN
+    SELECT step_id INTO v_body_id FROM default_workflow_steps WHERE step_name = 'Body';
+    SELECT step_id INTO v_neck_id FROM default_workflow_steps WHERE step_name = 'Neck';
+    SELECT step_id INTO v_paint_id FROM default_workflow_steps WHERE step_name = 'Paint Processing';
+    SELECT step_id INTO v_release_id FROM default_workflow_steps WHERE step_name = 'Release';
+
+    -- Body tasks
+    INSERT INTO default_workflow_tasks (task_id, step_id, task_name, sort_order) VALUES
+        (gen_random_uuid(), v_body_id, 'Shape Carving', 1),
+        (gen_random_uuid(), v_body_id, 'Pickup Cavity', 2),
+        (gen_random_uuid(), v_body_id, 'Electronics Cavity', 3),
+        (gen_random_uuid(), v_body_id, 'Neck Pocket', 4);
+
+    -- Neck tasks
+    INSERT INTO default_workflow_tasks (task_id, step_id, task_name, sort_order) VALUES
+        (gen_random_uuid(), v_neck_id, 'Shape Carving', 1),
+        (gen_random_uuid(), v_neck_id, 'Install Frets', 2),
+        (gen_random_uuid(), v_neck_id, 'Drill Tuning Peg Holes', 3);
+
+    -- Paint Processing tasks
+    INSERT INTO default_workflow_tasks (task_id, step_id, task_name, sort_order) VALUES
+        (gen_random_uuid(), v_paint_id, 'Sanding', 1),
+        (gen_random_uuid(), v_paint_id, 'Primer', 2),
+        (gen_random_uuid(), v_paint_id, 'Base Color', 3),
+        (gen_random_uuid(), v_paint_id, 'Top Coat', 4),
+        (gen_random_uuid(), v_paint_id, 'Buffing', 5),
+        (gen_random_uuid(), v_paint_id, 'Polishing', 6);
+
+    -- Release tasks
+    INSERT INTO default_workflow_tasks (task_id, step_id, task_name, sort_order) VALUES
+        (gen_random_uuid(), v_release_id, 'Delivery', 1);
+END $$;
 
 
 -- =============================================
@@ -1591,6 +1723,18 @@ EXECUTE FUNCTION set_updated_at();
 DROP TRIGGER IF EXISTS trg_project_subtasks_set_updated_at ON project_subtasks;
 CREATE TRIGGER trg_project_subtasks_set_updated_at
 BEFORE UPDATE ON project_subtasks
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
+
+DROP TRIGGER IF EXISTS trg_default_workflow_steps_set_updated_at ON default_workflow_steps;
+CREATE TRIGGER trg_default_workflow_steps_set_updated_at
+BEFORE UPDATE ON default_workflow_steps
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
+
+DROP TRIGGER IF EXISTS trg_default_workflow_tasks_set_updated_at ON default_workflow_tasks;
+CREATE TRIGGER trg_default_workflow_tasks_set_updated_at
+BEFORE UPDATE ON default_workflow_tasks
 FOR EACH ROW
 EXECUTE FUNCTION set_updated_at();
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { CheckCircle, Circle, ChevronDown, ChevronRight, Plus, Trash2, User, Clock, AlertCircle, Guitar, Package, Search, Calendar, Truck, Store, ShieldCheck } from 'lucide-react';
+import { CheckCircle, Circle, ChevronDown, ChevronRight, Plus, Trash2, User, Clock, AlertCircle, Guitar, Package, Search, Calendar, Truck, Store, ShieldCheck, Flag } from 'lucide-react';
 import { adminApi } from '../../utils/adminApi';
 import { formatCurrency } from '../../utils/formatCurrency';
 import { useAuth } from '../../context/AuthContext';
@@ -225,7 +225,7 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
   const trackerTitleRaw = hierarchy?.name || hierarchy?.title || projectName || 'Project Tracker';
   const parsedTrackerHeader = useMemo(() => {
     const text = String(trackerTitleRaw || '');
-    const match = text.match(/^(.*?)\s*\((ORD-[^)]+)\)\s*$/i);
+    const match = text.match(/^(.*?)\s*\(((?:PO|CO|SO)-\d{8}-\d+)\)\s*$/);
     if (!match) {
       return {
         title: text,
@@ -404,6 +404,20 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
       await adminApi.deleteSubtask(sId);
       loadData();
     } catch (err) { alert(err.message); }
+  };
+
+  const markMilestoneAsDone = async (milestone) => {
+    if (!isAdmin) return;
+    try {
+      const pendingSubtasks = (milestone.subtasks || []).filter(s => s.status !== 'completed');
+      await Promise.all([
+        adminApi.updateMilestone(milestone.milestone_id, { status: 'completed' }),
+        ...pendingSubtasks.map(s => adminApi.updateSubtask(s.subtask_id, { status: 'completed' }))
+      ]);
+      loadData();
+    } catch (err) {
+      alert(err.message);
+    }
   };
 
   const handleSubmitFulfillment = async () => {
@@ -966,6 +980,15 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
         {/* Milestones Accordion - Only show when showTracker is true (My Guitar section) */}
         {showTracker && (
         <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="rounded-full border border-[var(--border)] bg-[var(--bg-primary)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--gold-primary)]">
+              Project-Specific Tasks
+            </div>
+            <p className="text-xs text-[var(--text-muted)]">
+              These milestones and tasks are specific to this project and were seeded from the global default template on creation.
+            </p>
+          </div>
+
           {hierarchy.milestones?.length === 0 ? (
              <div className="text-center py-12 bg-white/5 border border-[var(--border)] rounded-2xl">
                <AlertCircle className="w-10 h-10 text-[var(--text-muted)] mx-auto mb-3" />
@@ -1009,16 +1032,28 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                      {isAdmin && (
-                        <button onClick={(e) => { e.stopPropagation(); handleDeleteMilestone(milestone.milestone_id); }} className="p-2 hover:bg-red-500/10 rounded-lg text-red-500 transition-colors">
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      )}
-                      <div className="p-2 bg-[var(--bg-primary)] rounded-lg">
-                        {isExpanded ? <ChevronDown className="w-5 h-5 text-white" /> : <ChevronRight className="w-5 h-5 text-white" />}
-                      </div>
-                    </div>
+                     <div className="flex items-center gap-3">
+                       {isAdmin && milestone.status !== 'completed' && (
+                         <button 
+                           onClick={(e) => { e.stopPropagation(); markMilestoneAsDone(milestone); }}
+                           className="p-2 hover:bg-green-500/10 rounded-lg text-green-400 transition-colors"
+                           title="Mark milestone as done"
+                         >
+                           <Flag className="w-4 h-4" />
+                         </button>
+                       )}
+                       {isAdmin && milestone.status === 'completed' && (
+                         <span className="text-xs font-semibold text-green-400 bg-green-500/10 px-2 py-1 rounded-lg border border-green-500/30">Done</span>
+                       )}
+                       {isAdmin && (
+                         <button onClick={(e) => { e.stopPropagation(); handleDeleteMilestone(milestone.milestone_id); }} className="p-2 hover:bg-red-500/10 rounded-lg text-red-500 transition-colors">
+                           <Trash2 className="w-4 h-4" />
+                         </button>
+                       )}
+                       <div className="p-2 bg-[var(--bg-primary)] rounded-lg">
+                         {isExpanded ? <ChevronDown className="w-5 h-5 text-white" /> : <ChevronRight className="w-5 h-5 text-white" />}
+                       </div>
+                     </div>
                   </div>
 
                   {/* Subtasks Block */}
