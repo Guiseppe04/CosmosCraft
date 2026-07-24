@@ -11,6 +11,10 @@ import {
   resolveTopWoodAsset,
   resolveFinishAsset,
   resolveTopCoatAsset,
+  resolveInlay,
+  resolveNeckWoodAsset,
+  resolveHeadstockWoodAsset,
+  resolveFingerboardWoodAsset,
 } from '../../lib/assetResolver.js'
 
 const layerStyle = (src, extra = {}) => ({
@@ -85,12 +89,14 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
     : (guitarBuilder.BODY_FINISH_OPTIONS[config.bodyFinish] ?? guitarBuilder.BODY_FINISH_OPTIONS.none)
   
   const hardware = guitarBuilder.HARDWARE_OPTIONS[config.hardware] ?? guitarBuilder.HARDWARE_OPTIONS.chrome
-  const neck = guitarBuilder.NECK_OPTIONS[config.neck] ?? guitarBuilder.NECK_OPTIONS.maple
-  const fretboard = guitarBuilder.FRETBOARD_OPTIONS[config.fretboard] ?? guitarBuilder.FRETBOARD_OPTIONS.rosewood
+  const neckStatic = guitarBuilder.NECK_OPTIONS[config.neck] ?? guitarBuilder.NECK_OPTIONS.maple
+  const neck = { ...neckStatic, src: resolveNeckWoodAsset('electric', config.body || 'dc', config.neck) || neckStatic.src }
+  const fretboardStatic = guitarBuilder.FRETBOARD_OPTIONS[config.fretboard] ?? guitarBuilder.FRETBOARD_OPTIONS.rosewood
+  const fretboard = { ...fretboardStatic, src: resolveFingerboardWoodAsset('electric', config.body || 'dc', config.fretboard) || fretboardStatic.src }
   const headstock = guitarBuilder.HEADSTOCK_OPTIONS[config.headstock] ?? guitarBuilder.HEADSTOCK_OPTIONS.gt6
-  const headstockWood =
-    guitarBuilder.HEADSTOCK_WOOD_OPTIONS[config.headstockWood] ?? guitarBuilder.HEADSTOCK_WOOD_OPTIONS.rosewood
-  const inlay = guitarBuilder.INLAY_OPTIONS[config.inlays] ?? guitarBuilder.INLAY_OPTIONS.pearl
+  const headstockWoodStatic = guitarBuilder.HEADSTOCK_WOOD_OPTIONS[config.headstockWood] ?? guitarBuilder.HEADSTOCK_WOOD_OPTIONS.rosewood
+  const headstockWood = { ...headstockWoodStatic, texture: resolveHeadstockWoodAsset('electric', config.body || 'dc', config.headstockWood) || headstockWoodStatic.texture }
+  const inlaySrc = config.inlay ? resolveInlay('electric', config.body || 'dc', config.inlay) : null
   const bridge = guitarBuilder.BRIDGE_OPTIONS[config.bridge] ?? guitarBuilder.BRIDGE_OPTIONS.hipshotFixed
   const bodyAssets = guitarBuilder.BODY_LAYER_ASSETS[config.body] ?? guitarBuilder.BODY_LAYER_ASSETS.strat
   const previewLayout = guitarBuilder.PREVIEW_LAYOUTS[config.body] ?? guitarBuilder.PREVIEW_LAYOUTS.strat
@@ -246,7 +252,7 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
         protectedLayer: true,
       },
       { name: 'frets', src: NECK_FRETS[config.pickups === 'hh' ? 'gold' : 'stainless'], className: 'opacity-85', protectedLayer: true, style: { zIndex: 102 } },
-      { name: 'inlays', src: inlay.src, className: 'opacity-95', protectedLayer: true, style: { zIndex: 103 } },
+      { name: 'inlays', src: inlaySrc, className: 'opacity-95', protectedLayer: true, style: { zIndex: 103 } },
       { name: 'nut', src: NECK_NUT[hardware.color === 'black' ? 'black' : 'white'], className: 'opacity-90', protectedLayer: true, style: { zIndex: 104 } },
       {
         name: 'headstock-wood',
@@ -261,7 +267,7 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
       { name: 'headstock-truss-cover', src: headstock.trussCover, className: 'opacity-95', protectedLayer: true, style: { zIndex: 106 } },
       { name: 'headstock-tuners', src: headstockTuners, className: 'opacity-95', protectedLayer: true, style: { zIndex: 107 } },
     ].filter(Boolean)
-  }, [bodyFinish.texture, bodyFinish.color, bodyWood.texture, colorKey, config.body, config.pickups, config.topWood, config.finishType, config.finishColor, finishTypeColorAsset, topWoodTexture, fretboard.src, headstock, headstockWood.texture, inlay.src, neck.filter, neck.src, hardware.color, modelBodySrc])
+  }, [bodyFinish.texture, bodyFinish.color, bodyWood.texture, colorKey, config.body, config.pickups, config.topWood, config.finishType, config.finishColor, finishTypeColorAsset, topWoodTexture, fretboard.src, headstock, headstockWood.texture, inlaySrc, neck.filter, neck.src, hardware.color, modelBodySrc])
   
   const rearNeckLayers = useMemo(() => {
     const headstockTuners = resolveVariant(headstock.tuners, colorKey)
@@ -325,19 +331,18 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
              },
            }
          : null,
-       // Top coat on rear view
-       topCoatAsset
-         ? {
-             name: 'body-top-coat',
-             maskSrc: modelBodySrc,
-             style: {
-               backgroundImage: `url(${topCoatAsset})`,
-               opacity: 1,
-               mixBlendMode: 'normal',
-               zIndex: 4,
-             },
-           }
-         : null,
+        // Top coat on rear view (no mask - apply full rear overlay)
+        topCoatAsset
+          ? {
+              name: 'body-top-coat',
+              style: {
+                backgroundImage: `url(${topCoatAsset})`,
+                opacity: 1,
+                mixBlendMode: 'normal',
+                zIndex: 4,
+              },
+            }
+          : null,
        {
          name: 'neck',
          maskSrc: NECK_MASK,

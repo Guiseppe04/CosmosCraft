@@ -234,9 +234,81 @@ export function resolveNut(category, model, nutColor) {
 
 /**
  * Resolve inlay assets
+ * New structure: inlays/{shape}/{material}.png
+ * Shape folders: ib (blocks), id (dots), idia (diamonds)
  */
-export function resolveInlay(category, model, inlayShape, inlayMaterial) {
-  return resolveSharedAsset(category, model, 'necks', '6-string', 'front', '24-fret-front', 'standard', 'inlays', inlayShape, `id${inlayMaterial}.png`)
+export function resolveInlay(category, model, inlayKey) {
+  return resolveSharedAsset(category, model, 'necks', '6-string', 'front', '24-fret-front', 'standard', 'inlays', `${inlayKey}.png`)
+}
+
+/**
+ * Resolve a neck rear finish overlay
+ */
+export function resolveNeckRearFinishAsset(category, model, finishKey) {
+  return resolveModelAsset(category, model, 'back', 'shadows_highlights', `${finishKey}.png`)
+}
+
+/**
+ * Resolve rear neck/headstock assets
+ */
+export function resolveBackNeckAsset(category, model, assetName) {
+  return resolveSharedAsset(category, model, 'back', 'necks', '6-string', 'back', `${assetName}.png`)
+}
+
+/**
+ * Resolve backplate assets
+ */
+export function resolveBackplateAsset(category, model, backplateKey) {
+  return resolveModelAsset(category, model, 'back', 'backplates', `${backplateKey}.png`)
+}
+
+/**
+ * Resolve output jack assets
+ */
+export function resolveOutputJackAsset(category, model, jackKey) {
+  return resolveModelAsset(category, model, 'back', 'output-jacks', `${jackKey}.png`)
+}
+
+/**
+ * Resolve strap button assets (back)
+ */
+export function resolveBackStrapButtonAsset(category, model, buttonKey) {
+  return resolveModelAsset(category, model, 'back', 'strap buttons', `${buttonKey}.png`)
+}
+
+/**
+ * Resolve string ferrule assets
+ */
+export function resolveStringFerrulesAsset(category, model, ferruleKey) {
+  return resolveModelAsset(category, model, 'back', 'string ferrules', `${ferruleKey}.png`)
+}
+
+/**
+ * Resolve front body knob assets
+ */
+export function resolveKnobAsset(category, model, knobKey) {
+  return resolveModelAsset(category, model, 'bodies', 'front', 'knobs', `${knobKey}.png`)
+}
+
+/**
+ * Resolve front body switch assets
+ */
+export function resolveSwitchAsset(category, model, switchKey) {
+  return resolveModelAsset(category, model, 'bodies', 'front', 'switches', `${switchKey}.png`)
+}
+
+/**
+ * Resolve front body mask assets
+ */
+export function resolveBodyFrontMaskAsset(category, model, maskKey) {
+  return resolveModelAsset(category, model, 'bodies', 'front', 'masks', `${maskKey}.png`)
+}
+
+/**
+ * Resolve front body strap button assets
+ */
+export function resolveBodyStrapButtonAsset(category, model, buttonKey) {
+  return resolveModelAsset(category, model, 'bodies', 'front', 'strap buttons', `${buttonKey}.png`)
 }
 
 /**
@@ -287,10 +359,10 @@ export function resolveOptionPreview(category, model, optionKey, value) {
     bridge: () => getButtonPreview(category, model, 'bridge', value),
     hardware: () => getButtonPreview(category, model, 'hardware-color', value),
     hardwareColor: () => getButtonPreview(category, model, 'hardware-color', value),
-    knobs: () => getButtonPreview(category, model, 'knob', value),
+    knobs: () => resolveKnobAsset(category, model, value),
     headstock: () => getButtonPreview(category, model, 'headstock-shape', value),
     headstockShape: () => getButtonPreview(category, model, 'headstock-shape', value),
-    inlays: () => getButtonPreview(category, model, 'inlay-shape', value),
+    inlays: () => resolveInlay(category, model, value),
     inlayShape: () => getButtonPreview(category, model, 'inlay-shape', value),
     inlayMaterial: () => getButtonPreview(category, model, 'inlay-material', value),
     pickupColor: () => getButtonPreview(category, model, 'pickup-color', value),
@@ -339,6 +411,16 @@ export default {
   resolvePickupBody,
   resolvePickupPoles,
   resolveBodySpecificAsset,
+  resolveNeckRearFinishAsset,
+  resolveBackNeckAsset,
+  resolveBackplateAsset,
+  resolveOutputJackAsset,
+  resolveBackStrapButtonAsset,
+  resolveStringFerrulesAsset,
+  resolveKnobAsset,
+  resolveSwitchAsset,
+  resolveBodyFrontMaskAsset,
+  resolveBodyStrapButtonAsset,
   getButtonPreview,
   resolveOptionPreview,
 }

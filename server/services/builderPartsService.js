@@ -271,10 +271,112 @@ exports.listBuilderAssets = async ({ guitarType, group, subgroup, model } = {}) 
     return assets;
   }
 
-  if (normalizedGroup === 'body-masks' || normalizedGroup === 'bodymasks') {
-    const dir = path.join(resolveModelSpecificRoot(normalizedType, normalizedModel), 'bodies', 'front', 'masks');
-    assets.bodyMasks = await scanFolder(dir);
-    return assets;
+  if (normalizedGroup === 'neck-woods' || normalizedGroup === 'neckwoods') {
+    const sharedRoot = await resolveSharedModelRoot(normalizedType)
+    if (!sharedRoot) return assets
+    const dir = path.join(sharedRoot, 'woods-colors', 'neck-woods')
+    assets.neckWoods = await scanFolder(dir)
+    return assets
+  }
+
+  if (normalizedGroup === 'headstock-woods' || normalizedGroup === 'headstockwoods') {
+    const sharedRoot = await resolveSharedModelRoot(normalizedType)
+    if (!sharedRoot) return assets
+    const dir = path.join(sharedRoot, 'woods-colors', 'headstock-woods')
+    assets.headstockWoods = await scanFolder(dir)
+    return assets
+  }
+
+  if (normalizedGroup === 'fingerboard-woods' || normalizedGroup === 'fingerboardwoods') {
+    const sharedRoot = await resolveSharedModelRoot(normalizedType)
+    if (!sharedRoot) return assets
+    const dir = path.join(sharedRoot, 'woods-colors', 'fingerboard-woods')
+    assets.fingerboardWoods = await scanFolder(dir)
+    return assets
+  }
+
+  if (normalizedGroup === 'inlays') {
+    const sharedRoot = await resolveSharedModelRoot(normalizedType)
+    if (!sharedRoot) return assets
+    const baseDir = path.join(sharedRoot, 'necks', '6-string', 'front', '24-fret-front', 'standard', 'inlays')
+    const shapeDirs = await fs.promises.readdir(baseDir, { withFileTypes: true })
+    const inlays = []
+    for (const shapeDir of shapeDirs) {
+      if (!shapeDir.isDirectory()) continue
+      const shape = shapeDir.name
+      const files = await fs.promises.readdir(path.join(baseDir, shape))
+      for (const file of files) {
+        const ext = path.extname(file).toLowerCase()
+        if (!IMAGE_EXTENSIONS.has(ext)) continue
+        const baseName = path.basename(file, ext)
+        const material = baseName.startsWith(shape) ? baseName.slice(shape.length) : baseName
+        const key = `${shape}-${material}`
+        inlays.push({
+          key,
+          filename: file,
+          label: `${guessLabelFromFilename(shape)} - ${guessLabelFromFilename(material)}`,
+          shape,
+          material,
+        })
+      }
+    }
+    inlays.sort((a, b) => a.label.localeCompare(b.label))
+    assets.inlays = inlays
+    return assets
+  }
+
+  if (normalizedGroup === 'neck-rear-finish' || normalizedGroup === 'neckrearfinish') {
+    const dir = path.join(resolveModelSpecificRoot(normalizedType, normalizedModel), 'back', 'shadows_highlights')
+    assets.neckRearFinishes = await scanFolder(dir)
+    return assets
+  }
+
+  if (normalizedGroup === 'backplates' || normalizedGroup === 'backplate') {
+    const dir = path.join(resolveModelSpecificRoot(normalizedType, normalizedModel), 'back', 'backplates')
+    assets.backplates = await scanFolder(dir)
+    return assets
+  }
+
+  if (normalizedGroup === 'output-jacks' || normalizedGroup === 'outputjacks') {
+    const dir = path.join(resolveModelSpecificRoot(normalizedType, normalizedModel), 'back', 'output-jacks')
+    assets.outputJacks = await scanFolder(dir)
+    return assets
+  }
+
+  if (normalizedGroup === 'back-strap-buttons' || normalizedGroup === 'backstrapbuttons') {
+    const dir = path.join(resolveModelSpecificRoot(normalizedType, normalizedModel), 'back', 'strap buttons')
+    assets.backStrapButtons = await scanFolder(dir)
+    return assets
+  }
+
+  if (normalizedGroup === 'string-ferrules' || normalizedGroup === 'stringferrules') {
+    const dir = path.join(resolveModelSpecificRoot(normalizedType, normalizedModel), 'back', 'string ferrules')
+    assets.stringFerrules = await scanFolder(dir)
+    return assets
+  }
+
+  if (normalizedGroup === 'front-knobs' || normalizedGroup === 'frontknobs') {
+    const dir = path.join(resolveModelSpecificRoot(normalizedType, normalizedModel), 'bodies', 'front', 'knobs')
+    assets.frontKnobs = await scanFolder(dir)
+    return assets
+  }
+
+  if (normalizedGroup === 'front-switches' || normalizedGroup === 'frontswitches') {
+    const dir = path.join(resolveModelSpecificRoot(normalizedType, normalizedModel), 'bodies', 'front', 'switches')
+    assets.frontSwitches = await scanFolder(dir)
+    return assets
+  }
+
+  if (normalizedGroup === 'front-masks' || normalizedGroup === 'frontmasks') {
+    const dir = path.join(resolveModelSpecificRoot(normalizedType, normalizedModel), 'bodies', 'front', 'masks')
+    assets.frontMasks = await scanFolder(dir)
+    return assets
+  }
+
+  if (normalizedGroup === 'front-strap-buttons' || normalizedGroup === 'frontstrapbuttons') {
+    const dir = path.join(resolveModelSpecificRoot(normalizedType, normalizedModel), 'bodies', 'front', 'strap buttons')
+    assets.frontStrapButtons = await scanFolder(dir)
+    return assets
   }
 
   return assets;

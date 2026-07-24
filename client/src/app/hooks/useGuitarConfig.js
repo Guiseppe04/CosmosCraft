@@ -30,8 +30,6 @@ import {
   TOP_COAT_OPTIONS,
   BURST_FINISH_OPTIONS,
   NECK_CONSTRUCTION_OPTIONS,
-  INLAY_SHAPE_OPTIONS,
-  INLAY_MATERIAL_OPTIONS,
   FRET_OPTIONS,
   NECK_REAR_FINISH_OPTIONS,
   HEADSTOCK_SHAPE_OPTIONS,
@@ -55,7 +53,7 @@ import {
   TREMOLO_COVER_OPTIONS,
 } from '../lib/guitarBuilderData.js'
 
-import { resolveTopWoodAsset, resolveFinishAsset, resolveTopCoatAsset } from '../lib/assetResolver.js'
+import { resolveTopWoodAsset, resolveFinishAsset, resolveTopCoatAsset, resolveNeckWoodAsset, resolveHeadstockWoodAsset, resolveFingerboardWoodAsset, resolveInlay, resolveNeckRearFinishAsset, resolveBackNeckAsset, resolveBackplateAsset, resolveOutputJackAsset, resolveKnobAsset, resolveSwitchAsset } from '../lib/assetResolver.js'
 import { listBuilderAssets } from '../utils/apiConfig.js'
 
 const phpFormatter = new Intl.NumberFormat('en-PH', {
@@ -78,6 +76,13 @@ export default function useGuitarConfig() {
   const [dynamicTopWoodList, setDynamicTopWoodList] = useState([])
   const [dynamicFinishColorList, setDynamicFinishColorList] = useState([])
   const [dynamicTopCoatList, setDynamicTopCoatList] = useState([])
+  const [dynamicNeckWoodList, setDynamicNeckWoodList] = useState([])
+  const [dynamicHeadstockWoodList, setDynamicHeadstockWoodList] = useState([])
+  const [dynamicFingerboardWoodList, setDynamicFingerboardWoodList] = useState([])
+  const [dynamicInlayList, setDynamicInlayList] = useState([])
+  const [dynamicNeckRearFinishList, setDynamicNeckRearFinishList] = useState([])
+  const [dynamicBackplateList, setDynamicBackplateList] = useState([])
+  const [dynamicOutputJackList, setDynamicOutputJackList] = useState([])
 
   const fetchBuilderParts = async () => {
     setLoadingPrices(true)
@@ -172,6 +177,64 @@ export default function useGuitarConfig() {
     return () => { cancelled = true }
   }, [config.finishType, config.guitarType])
 
+  useEffect(() => {
+    let cancelled = false
+    const guitarType = config.guitarType || 'electric'
+    Promise.all([
+      listBuilderAssets({ guitarType, group: 'neck-woods' }),
+      listBuilderAssets({ guitarType, group: 'headstock-woods' }),
+      listBuilderAssets({ guitarType, group: 'fingerboard-woods' }),
+    ]).then(([neckRes, headstockRes, fingerboardRes]) => {
+      if (!cancelled) {
+        setDynamicNeckWoodList(neckRes.data?.neckWoods || [])
+        setDynamicHeadstockWoodList(headstockRes.data?.headstockWoods || [])
+        setDynamicFingerboardWoodList(fingerboardRes.data?.fingerboardWoods || [])
+      }
+    }).catch((error) => {
+      if (!cancelled) {
+        console.warn('Failed to fetch dynamic wood assets:', error)
+      }
+    })
+    return () => { cancelled = true }
+  }, [config.guitarType])
+
+  useEffect(() => {
+    let cancelled = false
+    const guitarType = config.guitarType || 'electric'
+    listBuilderAssets({ guitarType, group: 'inlays' }).then(res => {
+      if (!cancelled) {
+        setDynamicInlayList(res.data?.inlays || [])
+      }
+    }).catch((error) => {
+      if (!cancelled) {
+        console.warn('Failed to fetch dynamic inlay assets:', error)
+      }
+    })
+    return () => { cancelled = true }
+  }, [config.guitarType])
+
+  useEffect(() => {
+    let cancelled = false
+    const guitarType = config.guitarType || 'electric'
+    const model = config.body || 'dc'
+    Promise.all([
+      listBuilderAssets({ guitarType, group: 'neck-rear-finish', model }),
+      listBuilderAssets({ guitarType, group: 'backplates', model }),
+      listBuilderAssets({ guitarType, group: 'output-jacks', model }),
+    ]).then(([neckRearRes, backplateRes, jackRes]) => {
+      if (!cancelled) {
+        setDynamicNeckRearFinishList(neckRearRes.data?.neckRearFinishes || [])
+        setDynamicBackplateList(backplateRes.data?.backplates || [])
+        setDynamicOutputJackList(jackRes.data?.outputJacks || [])
+      }
+    }).catch((error) => {
+      if (!cancelled) {
+        console.warn('Failed to fetch dynamic back/rear assets:', error)
+      }
+    })
+    return () => { cancelled = true }
+  }, [config.guitarType, config.body])
+
   const priceOverrides = useMemo(() => {
     const overrides = {}
     const registerOverride = (key, value) => {
@@ -215,7 +278,6 @@ export default function useGuitarConfig() {
         }
       }
     })
-    console.log('[useGuitarConfig] builderParts:', builderParts.length, 'priceOverrides:', overrides, 'guitarType:', config.guitarType)
     return overrides
   }, [builderParts, config.guitarType])
 
@@ -340,6 +402,62 @@ export default function useGuitarConfig() {
     })
     return merged
   }, [priceOverrides])
+
+  const mergedDynamicNeckWoodOptions = useMemo(() => {
+    if (dynamicNeckWoodList.length === 0) return mergedNeckOptions
+    const merged = { ...mergedNeckOptions }
+    dynamicNeckWoodList.forEach(asset => {
+      if (merged[asset.key] === undefined) {
+        merged[asset.key] = { label: asset.label, note: '', price: 0, texture: null }
+      }
+      if (priceOverrides[asset.key] !== undefined) {
+        merged[asset.key] = { ...merged[asset.key], price: priceOverrides[asset.key].price }
+      }
+    })
+    return merged
+  }, [dynamicNeckWoodList, mergedNeckOptions, priceOverrides])
+
+  const mergedDynamicHeadstockWoodOptions = useMemo(() => {
+    if (dynamicHeadstockWoodList.length === 0) return mergedHeadstockWoodOptions
+    const merged = { ...mergedHeadstockWoodOptions }
+    dynamicHeadstockWoodList.forEach(asset => {
+      if (merged[asset.key] === undefined) {
+        merged[asset.key] = { label: asset.label, note: '', price: 0, texture: null }
+      }
+      if (priceOverrides[asset.key] !== undefined) {
+        merged[asset.key] = { ...merged[asset.key], price: priceOverrides[asset.key].price }
+      }
+    })
+    return merged
+  }, [dynamicHeadstockWoodList, mergedHeadstockWoodOptions, priceOverrides])
+
+  const mergedDynamicFingerboardWoodOptions = useMemo(() => {
+    if (dynamicFingerboardWoodList.length === 0) return mergedFretboardOptions
+    const merged = { ...mergedFretboardOptions }
+    dynamicFingerboardWoodList.forEach(asset => {
+      if (merged[asset.key] === undefined) {
+        merged[asset.key] = { label: asset.label, note: '', price: 0, texture: null }
+      }
+      if (priceOverrides[asset.key] !== undefined) {
+        merged[asset.key] = { ...merged[asset.key], price: priceOverrides[asset.key].price }
+      }
+    })
+    return merged
+  }, [dynamicFingerboardWoodList, mergedFretboardOptions, priceOverrides])
+
+  const mergedDynamicInlayOptions = useMemo(() => {
+    if (dynamicInlayList.length === 0) return mergedInlayOptions
+    const merged = { ...mergedInlayOptions }
+    dynamicInlayList.forEach(asset => {
+      if (merged[asset.key] === undefined) {
+        merged[asset.key] = { label: asset.label, note: '', price: 0, src: null }
+      }
+      if (priceOverrides[asset.key] !== undefined) {
+        merged[asset.key] = { ...merged[asset.key], price: priceOverrides[asset.key].price }
+      }
+    })
+    return merged
+  }, [dynamicInlayList, mergedInlayOptions, priceOverrides])
 
   const mergedBridgeOptions = useMemo(() => {
     const merged = { ...BRIDGE_OPTIONS }
@@ -504,22 +622,6 @@ export default function useGuitarConfig() {
 
   const mergedNeckConstructionOptions = useMemo(() => {
     const merged = { ...NECK_CONSTRUCTION_OPTIONS }
-    Object.keys(merged).forEach(key => {
-      if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
-    })
-    return merged
-  }, [priceOverrides])
-
-  const mergedInlayShapeOptions = useMemo(() => {
-    const merged = { ...INLAY_SHAPE_OPTIONS }
-    Object.keys(merged).forEach(key => {
-      if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
-    })
-    return merged
-  }, [priceOverrides])
-
-  const mergedInlayMaterialOptions = useMemo(() => {
-    const merged = { ...INLAY_MATERIAL_OPTIONS }
     Object.keys(merged).forEach(key => {
       if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
     })
@@ -783,13 +885,11 @@ export default function useGuitarConfig() {
       (mergedTopWoodOptions[config.topWood]?.price ?? 0) +
       (mergedFinishTypeOptions[config.finishType]?.price ?? 0) +
       (mergedTopCoatOptions[config.topCoat]?.price ?? 0) +
-      (mergedBurstFinishOptions[config.burstFinish]?.price ?? 0) +
-      // Neck new options
-      (mergedNeckConstructionOptions[config.neckConstruction]?.price ?? 0) +
-      (mergedInlayShapeOptions[config.inlayShape]?.price ?? 0) +
-      (mergedInlayMaterialOptions[config.inlayMaterial]?.price ?? 0) +
-      (mergedFretOptions[config.frets]?.price ?? 0) +
-      (mergedNeckRearFinishOptions[config.neckRearFinish]?.price ?? 0) +
+       (mergedBurstFinishOptions[config.burstFinish]?.price ?? 0) +
+       // Neck new options
+       (mergedNeckConstructionOptions[config.neckConstruction]?.price ?? 0) +
+       (mergedFretOptions[config.frets]?.price ?? 0) +
+       (mergedNeckRearFinishOptions[config.neckRearFinish]?.price ?? 0) +
       (mergedHeadstockShapeOptions[config.headstockShape]?.price ?? 0) +
       (mergedTrussRodCoverOptions[config.trussRodCover]?.price ?? 0) +
       // Electronics new options
@@ -822,8 +922,9 @@ export default function useGuitarConfig() {
     mergedDexterityOptions, mergedStringCountOptions, mergedMultiscaleOptions,
     mergedScaleLengthOptions, mergedCaseOptions, mergedBevelOptions,
     mergedTopWoodOptions, mergedFinishTypeOptions, mergedTopCoatOptions,
-    mergedBurstFinishOptions, mergedNeckConstructionOptions, mergedInlayShapeOptions,
-    mergedInlayMaterialOptions, mergedFretOptions, mergedNeckRearFinishOptions,
+     mergedBurstFinishOptions, mergedNeckConstructionOptions, mergedDynamicInlayOptions,
+     mergedDynamicNeckWoodOptions, mergedDynamicHeadstockWoodOptions, mergedDynamicFingerboardWoodOptions,
+     mergedFretOptions, mergedNeckRearFinishOptions,
     mergedHeadstockShapeOptions, mergedTrussRodCoverOptions, mergedElectronicsTypeOptions,
     mergedPickupConfigurationOptions, mergedBridgePickupModelOptions,
     mergedMiddlePickupModelOptions, mergedNeckPickupModelOptions,
@@ -861,8 +962,7 @@ export default function useGuitarConfig() {
       topCoat: mergedDynamicTopCoatOptions[config.topCoat]?.label ?? TOP_COAT_OPTIONS[config.topCoat]?.label ?? config.topCoat,
       burstFinish: BURST_FINISH_OPTIONS[config.burstFinish]?.label ?? config.burstFinish,
       neckConstruction: NECK_CONSTRUCTION_OPTIONS[config.neckConstruction]?.label ?? config.neckConstruction,
-      inlayShape: INLAY_SHAPE_OPTIONS[config.inlayShape]?.label ?? config.inlayShape,
-      inlayMaterial: INLAY_MATERIAL_OPTIONS[config.inlayMaterial]?.label ?? config.inlayMaterial,
+      inlay: mergedDynamicInlayOptions[config.inlay]?.label ?? INLAY_OPTIONS[config.inlay]?.label ?? config.inlay,
       frets: FRET_OPTIONS[config.frets]?.label ?? config.frets,
       neckRearFinish: NECK_REAR_FINISH_OPTIONS[config.neckRearFinish]?.label ?? config.neckRearFinish,
       headstockShape: HEADSTOCK_SHAPE_OPTIONS[config.headstockShape]?.label ?? config.headstockShape,
@@ -911,24 +1011,74 @@ export default function useGuitarConfig() {
     [],
   )
   const neckOptions = useMemo(
-    () => Object.entries(mergedNeckOptions).map(([value, option]) => ({ value, ...option })),
-    [mergedNeckOptions],
+    () => {
+      const base = dynamicNeckWoodList.length > 0 ? mergedDynamicNeckWoodOptions : mergedNeckOptions
+      return Object.entries(base).map(([value, option]) => ({
+        value,
+        ...option,
+        preview: option.texture || resolveNeckWoodAsset('electric', config.body || 'dc', value),
+      }))
+    },
+    [dynamicNeckWoodList, mergedDynamicNeckWoodOptions, mergedNeckOptions, config.body],
   )
   const fretboardOptions = useMemo(
-    () => Object.entries(mergedFretboardOptions).map(([value, option]) => ({ value, ...option })),
-    [mergedFretboardOptions],
+    () => {
+      const base = dynamicFingerboardWoodList.length > 0 ? mergedDynamicFingerboardWoodOptions : mergedFretboardOptions
+      return Object.entries(base).map(([value, option]) => ({
+        value,
+        ...option,
+        preview: option.texture || resolveFingerboardWoodAsset('electric', config.body || 'dc', value),
+      }))
+    },
+    [dynamicFingerboardWoodList, mergedDynamicFingerboardWoodOptions, mergedFretboardOptions, config.body],
   )
   const headstockOptions = useMemo(
     () => Object.entries(mergedHeadstockOptions).map(([value, option]) => ({ value, ...option, preview: option.logo })),
     [mergedHeadstockOptions],
   )
   const headstockWoodOptions = useMemo(
-    () => Object.entries(mergedHeadstockWoodOptions).map(([value, option]) => ({ value, ...option, preview: option.texture })),
-    [mergedHeadstockWoodOptions],
+    () => {
+      const base = dynamicHeadstockWoodList.length > 0 ? mergedDynamicHeadstockWoodOptions : mergedHeadstockWoodOptions
+      return Object.entries(base).map(([value, option]) => ({
+        value,
+        ...option,
+        preview: option.texture || resolveHeadstockWoodAsset('electric', config.body || 'dc', value),
+      }))
+    },
+    [dynamicHeadstockWoodList, mergedDynamicHeadstockWoodOptions, mergedHeadstockWoodOptions, config.body],
+  )
+  const neckWoodOptions = useMemo(
+    () => {
+      const base = dynamicNeckWoodList.length > 0 ? mergedDynamicNeckWoodOptions : mergedNeckOptions
+      return Object.entries(base).map(([value, option]) => ({
+        value,
+        ...option,
+        preview: option.texture || resolveNeckWoodAsset('electric', config.body || 'dc', value),
+      }))
+    },
+    [dynamicNeckWoodList, mergedDynamicNeckWoodOptions, mergedNeckOptions, config.body],
+  )
+  const fingerboardWoodOptions = useMemo(
+    () => {
+      const base = dynamicFingerboardWoodList.length > 0 ? mergedDynamicFingerboardWoodOptions : mergedFretboardOptions
+      return Object.entries(base).map(([value, option]) => ({
+        value,
+        ...option,
+        preview: option.texture || resolveFingerboardWoodAsset('electric', config.body || 'dc', value),
+      }))
+    },
+    [dynamicFingerboardWoodList, mergedDynamicFingerboardWoodOptions, mergedFretboardOptions, config.body],
   )
   const inlayOptions = useMemo(
-    () => Object.entries(mergedInlayOptions).map(([value, option]) => ({ value, ...option, preview: option.src })),
-    [mergedInlayOptions],
+    () => {
+      const base = dynamicInlayList.length > 0 ? mergedDynamicInlayOptions : mergedInlayOptions
+      return Object.entries(base).map(([value, option]) => ({
+        value,
+        ...option,
+        preview: option.src || resolveInlay('electric', config.body || 'dc', value),
+      }))
+    },
+    [dynamicInlayList, mergedDynamicInlayOptions, mergedInlayOptions, config.body],
   )
   const bridgeOptions = useMemo(
     () =>
@@ -1063,14 +1213,6 @@ export default function useGuitarConfig() {
     () => Object.entries(mergedNeckConstructionOptions).map(([value, option]) => ({ value, ...option })),
     [mergedNeckConstructionOptions],
   )
-  const inlayShapeOptionList = useMemo(
-    () => Object.entries(mergedInlayShapeOptions).map(([value, option]) => ({ value, ...option })),
-    [mergedInlayShapeOptions],
-  )
-  const inlayMaterialOptionList = useMemo(
-    () => Object.entries(mergedInlayMaterialOptions).map(([value, option]) => ({ value, ...option })),
-    [mergedInlayMaterialOptions],
-  )
   const fretOptionList = useMemo(
     () => Object.entries(mergedFretOptions).map(([value, option]) => ({ value, ...option })),
     [mergedFretOptions],
@@ -1195,8 +1337,7 @@ export default function useGuitarConfig() {
       topCoat: mergedDynamicTopCoatOptions[config.topCoat]?.price ?? 0,
       burstFinish: mergedBurstFinishOptions[config.burstFinish]?.price ?? 0,
       neckConstruction: mergedNeckConstructionOptions[config.neckConstruction]?.price ?? 0,
-      inlayShape: mergedInlayShapeOptions[config.inlayShape]?.price ?? 0,
-      inlayMaterial: mergedInlayMaterialOptions[config.inlayMaterial]?.price ?? 0,
+      inlay: mergedDynamicInlayOptions[config.inlay]?.price ?? 0,
       frets: mergedFretOptions[config.frets]?.price ?? 0,
       neckRearFinish: mergedNeckRearFinishOptions[config.neckRearFinish]?.price ?? 0,
       headstockShape: mergedHeadstockShapeOptions[config.headstockShape]?.price ?? 0,
@@ -1228,8 +1369,9 @@ export default function useGuitarConfig() {
     mergedDexterityOptions, mergedStringCountOptions, mergedMultiscaleOptions,
     mergedScaleLengthOptions, mergedCaseOptions, mergedBevelOptions,
     mergedTopWoodOptions, mergedFinishTypeOptions, mergedTopCoatOptions,
-    mergedBurstFinishOptions, mergedNeckConstructionOptions, mergedInlayShapeOptions,
-    mergedInlayMaterialOptions, mergedFretOptions, mergedNeckRearFinishOptions,
+    mergedBurstFinishOptions, mergedNeckConstructionOptions, mergedDynamicInlayOptions,
+    mergedDynamicNeckWoodOptions, mergedDynamicHeadstockWoodOptions, mergedDynamicFingerboardWoodOptions,
+    mergedFretOptions, mergedNeckRearFinishOptions,
     mergedHeadstockShapeOptions, mergedTrussRodCoverOptions, mergedElectronicsTypeOptions,
     mergedPickupConfigurationOptions, mergedBridgePickupModelOptions,
     mergedMiddlePickupModelOptions, mergedNeckPickupModelOptions,
@@ -1279,14 +1421,16 @@ export default function useGuitarConfig() {
       scaleLengthOptions,
       caseOptions,
       bevelOptions,
+      neckWoodOptions,
+      headstockWoodOptions,
+      fingerboardWoodOptions,
       topWoodOptions,
       finishColorOptions,
       finishTypeOptions: finishTypeOptionList,
       topCoatOptions,
       burstFinishOptions: burstFinishOptionList,
       neckConstructionOptions: neckConstructionOptionList,
-      inlayShapeOptions: inlayShapeOptionList,
-      inlayMaterialOptions: inlayMaterialOptionList,
+      inlayOptions,
       fretOptions: fretOptionList,
       neckRearFinishOptions: neckRearFinishOptionList,
       headstockShapeOptions: headstockShapeOptionList,

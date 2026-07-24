@@ -27,8 +27,7 @@ export const GUITAR_CONFIGURATION_ITEMS = [
   { key: 'burstFinish', category: 'Burst Finish', summaryKey: 'burstFinish' },
   // New Neck options
   { key: 'neckConstruction', category: 'Neck Construction', summaryKey: 'neckConstruction' },
-  { key: 'inlayShape', category: 'Inlay Shape', summaryKey: 'inlayShape' },
-  { key: 'inlayMaterial', category: 'Inlay Material', summaryKey: 'inlayMaterial' },
+  { key: 'inlay', category: 'Inlay', summaryKey: 'inlay' },
   { key: 'frets', category: 'Frets', summaryKey: 'frets' },
   { key: 'neckRearFinish', category: 'Neck Rear Finish', summaryKey: 'neckRearFinish' },
   { key: 'headstockShape', category: 'Headstock Shape', summaryKey: 'headstockShape' },

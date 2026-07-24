@@ -1497,60 +1497,32 @@ export function CustomizePage() {
                     </div>
                   </div>
                   
-                  {/* Inlay Shape */}
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Inlay Shape</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.inlayShapeOptions?.map((opt) => (
-                        <OptionButton
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.inlayShape === opt.value}
-                          onClick={() => updateConfig({ inlayShape: opt.value })}
-                        />
-                      ))}
+                   {/* Inlay */}
+                   <div>
+                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Inlay</h3>
+                     <div className="grid grid-cols-2 gap-2">
+                       {options.inlayOptions?.map((opt) => (
+                         <VisualCard
+                           key={opt.value}
+                           option={opt}
+                           isSelected={config.inlay === opt.value}
+                           onClick={() => updateConfig({ inlay: opt.value })}
+                           previewImage={opt.preview}
+                           imageHeight="h-14"
+                         />
+                        ))}
+                      </div>
                     </div>
                   </div>
-                  
-                  {/* Inlay Material */}
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Inlay Material</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.inlayMaterialOptions?.map((opt) => (
-                        <OptionButton
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.inlayMaterial === opt.value}
-                          onClick={() => updateConfig({ inlayMaterial: opt.value })}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                  
-                  {/* Inlays (legacy) */}
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Inlay Style</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.inlayOptions?.map((opt) => (
-                        <OptionButton
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.inlays === opt.value}
-                          onClick={() => updateConfig({ inlays: opt.value })}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-              
-              {/* HARDWARE OPTIONS */}
-              {activeCategory === 'hardware' && (
-                <div className="p-4 space-y-5">
-                  {/* Hardware Color */}
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Hardware Color</h3>
-                    <div className="grid grid-cols-2 gap-2">
+                )}
+                
+                {/* HARDWARE OPTIONS */}
+                {activeCategory === 'hardware' && (
+                  <div className="p-4 space-y-5">
+                    {/* Hardware Color */}
+                    <div>
+                      <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Hardware Color</h3>
+                      <div className="grid grid-cols-2 gap-2">
                       {options.hardwareOptions?.map((opt) => (
                         <OptionButton
                           key={opt.value}
