@@ -45,7 +45,11 @@ function ReceiptUpload({ onUpload, onRemove, image, label }) {
   }
 
   return (
-    <label className="cursor-pointer rounded-2xl border-2 border-dashed border-slate-300 bg-gradient-to-br from-slate-50 to-blue-50 p-8 text-center transition-all hover:border-slate-400 hover:bg-slate-100/50">
+    <motion.div
+      whileHover={{ scale: 1.02 }}
+      className="cursor-pointer rounded-2xl border-2 border-dashed border-slate-300 bg-gradient-to-br from-slate-50 to-blue-50 p-8 text-center transition-all hover:border-slate-400 hover:bg-slate-100/50"
+      onClick={() => fileInputRef.current?.click()}
+    >
       <div className="mb-3 text-4xl">Upload</div>
       <p className="mb-1 text-base font-bold text-slate-900">{label || 'Upload Receipt'}</p>
       <p className="mb-4 text-xs text-slate-500">PNG, JPG, or JPEG. Max 10MB</p>
@@ -67,7 +71,7 @@ function ReceiptUpload({ onUpload, onRemove, image, label }) {
         onChange={handleFileSelect}
         className="hidden"
       />
-    </label>
+    </motion.div>
   )
 }
 

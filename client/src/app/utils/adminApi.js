@@ -114,10 +114,7 @@ export const adminApi = {
     const qs = new URLSearchParams(params).toString()
     return request(`/api/projects${qs ? '?' + qs : ''}`)
   },
-  getMyProjects: (params = {}) => {
-    const qs = new URLSearchParams(params).toString()
-    return request(`/api/projects/my${qs ? '?' + qs : ''}`)
-  },
+  getMyProjects: () => request('/api/projects/my'),
   getProject: (id) => request(`/api/projects/${id}`),
   createProject: (body) => request('/api/projects', { method: 'POST', body }),
   updateProject: (id, body) => request(`/api/projects/${id}`, { method: 'PUT', body }),
@@ -213,11 +210,6 @@ export const adminApi = {
   createSubtask: (milestoneId, body) => request(`/api/projects/milestones/${milestoneId}/subtasks`, { method: 'POST', body }),
   deleteSubtask: (subtaskId) => request(`/api/projects/subtasks/${subtaskId}`, { method: 'DELETE' }),
   updateSubtask: (subtaskId, body) => request(`/api/projects/subtasks/${subtaskId}`, { method: 'PATCH', body }),
-
-  // Default Workflow
-  getDefaultWorkflow: () => request('/api/projects/default-workflow'),
-  updateDefaultWorkflow: (body) => request('/api/projects/default-workflow', { method: 'PUT', body }),
-  applyDefaultWorkflow: (projectId) => request(`/api/projects/${projectId}/apply-default-workflow`, { method: 'POST' }),
 
   // Payment Settings
   getPaymentSettings: () => request('/api/payment-settings'),

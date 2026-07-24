@@ -15,7 +15,6 @@ import {
   getPaymentStatusConfig as getOrderPaymentStatusConfig,
   normalizePaymentStatus,
 } from '../../utils/orderPaymentStatus'
-import { useDebounce } from '../../hooks/useDebounce'
 
 const ORDER_STATUS_LIFECYCLE = [
   { value: 'pending', label: 'Pending', color: '#f59e0b', bgColor: 'bg-amber-500/20', textColor: 'text-amber-400', borderColor: 'border-amber-500/30' },
@@ -1181,14 +1180,9 @@ function OrderStatusPanel({ order, onUpdate }) {
   )
 }
 
-export function OrderManagement({ orders, onRefresh, user, pagination }) {
+export function OrderManagement({ orders, onRefresh, user }) {
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
-  const [orderTypeFilter, setOrderTypeFilter] = useState('all')
-  const [paymentStatusFilter, setPaymentStatusFilter] = useState('all')
-  const [paymentMethodFilter, setPaymentMethodFilter] = useState('all')
-  const [dateFrom, setDateFrom] = useState('')
-  const [dateTo, setDateTo] = useState('')
   const [sortBy, setSortBy] = useState('newest')
   const [page, setPage] = useState(1)
   const [selectedOrder, setSelectedOrder] = useState(null)
@@ -1196,58 +1190,53 @@ export function OrderManagement({ orders, onRefresh, user, pagination }) {
   const [isUpdatingPayment, setIsUpdatingPayment] = useState(false)
   const [isUpdatingOrder, setIsUpdatingOrder] = useState(false)
 
-  const onRefreshRef = useRef(onRefresh)
-  onRefreshRef.current = onRefresh
-
-  const debouncedSearch = useDebounce(searchQuery, 300)
-
-  // Map UI sort values to API sort params
-  const sortMap = {
-    newest: { sort_by: 'created_at', sort_dir: 'desc' },
-    oldest: { sort_by: 'created_at', sort_dir: 'asc' },
-    order_number: { sort_by: 'order_number', sort_dir: 'asc' },
-    customer_name: { sort_by: 'customer_name', sort_dir: 'asc' },
-    highest: { sort_by: 'total_amount', sort_dir: 'desc' },
-    lowest: { sort_by: 'total_amount', sort_dir: 'asc' },
-    status: { sort_by: 'status', sort_dir: 'asc' },
-    payment_status: { sort_by: 'payment_status', sort_dir: 'asc' },
-  }
-
-  const buildQuery = useCallback((pageNum = 1) => {
-    const params = {
-      search: debouncedSearch || undefined,
-      order_type: orderTypeFilter === 'all' ? undefined : orderTypeFilter,
-      status: statusFilter === 'all' ? undefined : statusFilter,
-      payment_status: paymentStatusFilter === 'all' ? undefined : paymentStatusFilter,
-      payment_method: paymentMethodFilter === 'all' ? undefined : paymentMethodFilter,
-      date_from: dateFrom || undefined,
-      date_to: dateTo || undefined,
-      include_items: true,
-      page: pageNum,
-      page_size: 10,
-      ...(sortMap[sortBy] || sortMap.newest),
+  const filteredOrders = useMemo(() => {
+    let result = [...orders]
+    
+    if (statusFilter !== 'all') {
+      result = result.filter(o => o.status === statusFilter)
     }
-    Object.keys(params).forEach(k => params[k] === undefined && delete params[k])
-    return params
-  }, [debouncedSearch, orderTypeFilter, statusFilter, paymentStatusFilter, paymentMethodFilter, dateFrom, dateTo, sortBy])
+    
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase()
+      result = result.filter(o =>
+        o.order_number?.toLowerCase().includes(q) ||
+        o.order_id?.toLowerCase().includes(q) ||
+        o.customer_name?.toLowerCase().includes(q) ||
+        o.first_name?.toLowerCase().includes(q) ||
+        o.last_name?.toLowerCase().includes(q) ||
+        o.email?.toLowerCase().includes(q)
+      )
+    }
+    
+    result.sort((a, b) => {
+      const aVal = a.created_at ? new Date(a.created_at).getTime() : 0
+      const bVal = b.created_at ? new Date(b.created_at).getTime() : 0
+      const aAmt = a.total || a.total_amount || 0
+      const bAmt = b.total || b.total_amount || 0
+      
+      if (sortBy === 'newest') return bVal - aVal
+      if (sortBy === 'oldest') return aVal - bVal
+      if (sortBy === 'highest') return bAmt - aAmt
+      if (sortBy === 'lowest') return aAmt - bAmt
+      return 0
+    })
+    
+    return result
+  }, [orders, statusFilter, searchQuery, sortBy])
 
-  useEffect(() => {
-    setPage(1)
-  }, [debouncedSearch, orderTypeFilter, statusFilter, paymentStatusFilter, paymentMethodFilter, dateFrom, dateTo, sortBy])
+  const paginatedOrders = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE
+    return filteredOrders.slice(start, start + PAGE_SIZE)
+  }, [filteredOrders, page])
 
-  useEffect(() => {
-    const params = buildQuery(page)
-    if (onRefreshRef.current) onRefreshRef.current(params)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, buildQuery])
-
-  const totalPages = pagination?.total_pages || 1
+  const totalPages = Math.ceil(filteredOrders.length / PAGE_SIZE)
 
   const handleUpdatePaymentStatus = async (orderId, newStatus, referenceNumber, notes) => {
     setIsUpdatingPayment(true)
     try {
       await adminApi.updatePaymentStatus(orderId, newStatus, { reference_number: referenceNumber, notes, admin_name: user?.firstName ? `${user.firstName}${user.lastName ? ' ' + user.lastName : ''}` : user?.email, admin_email: user?.email })
-      onRefresh(buildQuery(page))
+      onRefresh()
       setSelectedOrder(null)
     } catch (error) {
       console.error('Failed to update payment status:', error)
@@ -1271,12 +1260,13 @@ export function OrderManagement({ orders, onRefresh, user, pagination }) {
         updateData.tracking_number = trackingInfo
       }
       if (newStatus === 'out_for_delivery') {
+        // Need both tracking number and rider details for out_for_delivery
         if (trackingInfo) {
           updateData.rider_details = trackingInfo
         }
       }
       await adminApi.updateOrder(orderId, updateData)
-      onRefresh(buildQuery(page))
+      onRefresh()
       setSelectedOrder(null)
     } catch (error) {
       console.error('Failed to update order status:', error)
@@ -1296,7 +1286,7 @@ export function OrderManagement({ orders, onRefresh, user, pagination }) {
         admin_name: adminName,
         admin_email: user?.email
       })
-      onRefresh(buildQuery(page))
+      onRefresh()
       setSelectedOrder(null)
     } catch (error) {
       console.error('Failed to verify payment:', error)
@@ -1307,7 +1297,7 @@ export function OrderManagement({ orders, onRefresh, user, pagination }) {
 
   return (
     <motion.div key="order-management" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
         <div className="flex flex-wrap gap-2">
           {ORDER_STATUS_TABS.map((tab) => {
             const isActive = statusFilter === tab.id
@@ -1315,13 +1305,13 @@ export function OrderManagement({ orders, onRefresh, user, pagination }) {
               ? `${tab.bgColor} ${tab.textColor} border ${tab.borderColor}`
               : 'bg-[var(--surface-dark)] text-[var(--text-muted)] hover:text-white'
             const tabCount = tab.id === 'all'
-              ? pagination?.total || 0
+              ? orders.length
               : orders.filter(o => o.status === tab.id).length
             return (
               <button
                 key={tab.id}
                 onClick={() => { setStatusFilter(tab.id); setPage(1) }}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all border ${chipStyles}`}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all border ${chipStyles}`}
               >
                 {tab.label}
                 <span className="ml-2 text-xs opacity-70">({tabCount})</span>
@@ -1338,103 +1328,26 @@ export function OrderManagement({ orders, onRefresh, user, pagination }) {
           >
             <option value="newest">Newest first</option>
             <option value="oldest">Oldest first</option>
-            <option value="order_number">Order Number</option>
-            <option value="customer_name">Customer Name</option>
             <option value="highest">Highest value</option>
             <option value="lowest">Lowest value</option>
-            <option value="status">Order Status</option>
-            <option value="payment_status">Payment Status</option>
           </select>
         </div>
       </div>
 
-      <div className="mb-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="mb-4">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
           <input
             type="text"
-            placeholder="Search orders..."
+            placeholder="Search orders by ID, customer name, or email..."
             value={searchQuery}
             onChange={(e) => { setSearchQuery(e.target.value); setPage(1) }}
-            className="w-full pl-10 pr-4 py-2.5 bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
-          />
-        </div>
-        <select
-          value={orderTypeFilter}
-          onChange={(e) => { setOrderTypeFilter(e.target.value); setPage(1) }}
-          className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
-        >
-          <option value="all">All Order Types</option>
-          <option value="product">Product Orders</option>
-          <option value="customization">Custom Guitar Orders</option>
-          <option value="service">Service Orders</option>
-        </select>
-        <select
-          value={paymentStatusFilter}
-          onChange={(e) => { setPaymentStatusFilter(e.target.value); setPage(1) }}
-          className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
-        >
-          <option value="all">All Payment Statuses</option>
-          <option value="pending">Pending</option>
-          <option value="proof_submitted">Proof Submitted</option>
-          <option value="under_review">Under Review</option>
-          <option value="approved">Approved</option>
-          <option value="rejected">Rejected</option>
-          <option value="failed">Failed</option>
-        </select>
-        <select
-          value={paymentMethodFilter}
-          onChange={(e) => { setPaymentMethodFilter(e.target.value); setPage(1) }}
-          className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
-        >
-          <option value="all">All Payment Methods</option>
-          <option value="gcash">GCash</option>
-          <option value="bank_transfer">Bank Transfer</option>
-          <option value="cash">Cash</option>
-        </select>
-      </div>
-
-      <div className="mb-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div>
-          <label className="block text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-1">Date From</label>
-          <input
-            type="date"
-            value={dateFrom}
-            onChange={(e) => { setDateFrom(e.target.value); setPage(1) }}
-            className="w-full px-3 py-2.5 bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
-          />
-        </div>
-        <div>
-          <label className="block text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-1">Date To</label>
-          <input
-            type="date"
-            value={dateTo}
-            onChange={(e) => { setDateTo(e.target.value); setPage(1) }}
-            className="w-full px-3 py-2.5 bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
+            className="w-full pl-10 pr-4 py-3 bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
           />
         </div>
       </div>
 
-      {(statusFilter !== 'all' || orderTypeFilter !== 'all' || paymentStatusFilter !== 'all' || paymentMethodFilter !== 'all' || dateFrom || dateTo) && (
-        <div className="mb-4 flex flex-wrap gap-2">
-          <button
-            onClick={() => {
-              setStatusFilter('all')
-              setOrderTypeFilter('all')
-              setPaymentStatusFilter('all')
-              setPaymentMethodFilter('all')
-              setDateFrom('')
-              setDateTo('')
-              setPage(1)
-            }}
-            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 border border-red-500/30 text-sm font-medium hover:bg-red-500/20 transition-colors"
-          >
-            <X className="w-3 h-3" /> Clear Filters
-          </button>
-        </div>
-      )}
-
-      {orders.length === 0 ? (
+      {filteredOrders.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 bg-[var(--surface-dark)] rounded-xl border border-[var(--border)]">
           <ShoppingBag className="w-12 h-12 text-[var(--text-muted)] mb-4" />
           <p className="text-[var(--text-muted)]">No orders found</p>
@@ -1457,7 +1370,7 @@ export function OrderManagement({ orders, onRefresh, user, pagination }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {orders.map((order) => {
+                  {paginatedOrders.map((order) => {
                     const orderStatus = order.status || 'pending'
                     const statusConfig = getOrderStatusConfig(orderStatus)
                     const paymentConfig = getPaymentStatusConfig(order.payment_status || 'pending', order)
@@ -1531,7 +1444,7 @@ export function OrderManagement({ orders, onRefresh, user, pagination }) {
           {totalPages > 1 && (
             <div className="flex items-center justify-between mt-4">
               <p className="text-[var(--text-muted)] text-sm">
-                Showing {(page - 1) * PAGE_SIZE + 1} to {Math.min(page * PAGE_SIZE, pagination.total || 0)} of {pagination.total || 0} orders
+                Showing {(page - 1) * PAGE_SIZE + 1} to {Math.min(page * PAGE_SIZE, filteredOrders.length)} of {filteredOrders.length} orders
               </p>
               <div className="flex items-center gap-2">
                 <button

@@ -1433,15 +1433,9 @@ export function CheckoutPage() {
           notes: additionalNotes,
           shippingMethod,
           paymentMethod: mappedPaymentMethod,
+          paymentTerms: selectedPaymentTerms,
           termsAccepted: acceptedTerms,
-          billingAddress: {
-            street: finalAddress.street,
-            street2: finalAddress.street2,
-            city: finalAddress.city,
-            stateProvince: finalAddress.province,
-            postalCode: finalAddress.postalCode,
-            country: finalAddress.country,
-          }
+          billingAddress: finalAddress
         })
       })
 

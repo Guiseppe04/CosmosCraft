@@ -6,7 +6,7 @@ const errorHandler = (err, req, res, next) => {
 
   // Handle PostgreSQL duplicate key errors (e.g., unique email)
   if (err.code === '23505') {
-    const fieldMatch = err.detail?.match(/Key \((.*?)\)=/);
+    const fieldMatch = err.detail.match(/Key \((.*?)\)=/);
     const field = fieldMatch ? fieldMatch[1] : 'Field';
     return res.status(409).json({
       status: 'error',
@@ -15,33 +15,11 @@ const errorHandler = (err, req, res, next) => {
     });
   }
 
-  // Handle PostgreSQL foreign key violations
-  if (err.code === '23503') {
-    const fieldMatch = err.detail?.match(/Key \((.*?)\)=/);
-    const field = fieldMatch ? fieldMatch[1] : 'related field';
-    return res.status(400).json({
-      status: 'error',
-      message: 'A related item was not found. Please check the referenced value and try again.',
-      errors: [{ field, message: 'Related record not found' }],
-    });
-  }
-
-  // Handle PostgreSQL required field (NOT NULL) violations
-  if (err.code === '23502') {
-    const fieldMatch = err.detail?.match(/null value in column "(.*?)"/);
-    const field = fieldMatch ? fieldMatch[1] : 'required field';
-    return res.status(400).json({
-      status: 'error',
-      message: 'A required field is missing. Please provide all required information.',
-      errors: [{ field, message: 'This field is required' }],
-    });
-  }
-
   // Handle JWT errors
   if (err.name === 'JsonWebTokenError') {
     return res.status(401).json({
       status: 'error',
-      message: 'Your session is invalid. Please sign in again.',
+      message: 'Invalid or expired token',
       errors: [{ field: 'token', message: 'Token verification failed' }],
     });
   }
@@ -49,7 +27,7 @@ const errorHandler = (err, req, res, next) => {
   if (err.name === 'TokenExpiredError') {
     return res.status(401).json({
       status: 'error',
-      message: 'Your session has expired. Please sign in again.',
+      message: 'Token has expired',
       errors: [{ field: 'token', message: 'Please refresh your token' }],
     });
   }
@@ -58,34 +36,24 @@ const errorHandler = (err, req, res, next) => {
   if (err.code === '22P02') {
     return res.status(400).json({
       status: 'error',
-      message: 'Invalid ID format. Please provide a valid identifier.',
+      message: 'Invalid ID format',
       errors: [{ field: 'id', message: 'The provided ID is invalid' }],
     });
   }
-
-  const normalizedMessage = Array.isArray(err.message)
-    ? err.message.join('; ')
-    : String(err.message || '');
-
-  const friendlyMessage = normalizedMessage === 'Validation failed'
-    ? 'Some fields are invalid. Please check the details below.'
-    : normalizedMessage;
 
   // Handle custom application errors
   if (err.isApplicationError) {
     return res.status(err.statusCode || 400).json({
       status: 'error',
-      message: friendlyMessage || 'Something went wrong. Please try again later.',
+      message: err.message,
       errors: err.errors || [],
     });
   }
 
-  const statusCode = err.statusCode || 500;
-  return res.status(statusCode).json({
+  // Handle generic errors
+  return res.status(err.statusCode || 500).json({
     status: 'error',
-    message: statusCode >= 500
-      ? 'Something went wrong. Please try again later.'
-      : friendlyMessage || 'Something went wrong. Please try again later.',
+    message: err.message || 'Internal server error',
     ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
   });
 };

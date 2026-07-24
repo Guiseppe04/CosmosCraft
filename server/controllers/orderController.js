@@ -8,7 +8,7 @@ exports.createOrder = asyncHandler(async (req, res, next) => {
     throw new AppError('You must be logged in to place an order', 401)
   }
 
-  const { items, notes, shippingMethod, paymentMethod, billingAddress, termsAccepted } = req.validatedData || req.body
+  const { items, notes, shippingMethod, paymentMethod, billingAddress, termsAccepted } = req.body
 
   // Validate required fields
   if (!items || items.length === 0) {
@@ -91,12 +91,12 @@ exports.getOrder = asyncHandler(async (req, res, next) => {
 })
 
 exports.getAllOrders = asyncHandler(async (req, res, next) => {
-  const result = await orderService.getAllOrders(req.query)
-  res.status(200).json({ status: 'success', data: result.orders, pagination: result.pagination })
+  const orders = await orderService.getAllOrders(req.query)
+  res.status(200).json({ status: 'success', data: orders })
 })
 
 exports.updateOrder = asyncHandler(async (req, res, next) => {
-  const order = await orderService.updateOrder(req.params.id, req.validatedData || req.body)
+  const order = await orderService.updateOrder(req.params.id, req.body)
   if (!order) throw new AppError('Order not found', 404)
   res.status(200).json({ status: 'success', data: order })
 })
@@ -112,7 +112,7 @@ exports.cancelMyOrder = asyncHandler(async (req, res, next) => {
   if (!userId) {
     throw new AppError('You must be logged in', 401);
   }
-  const reason = typeof (req.validatedData?.reason || req.body?.reason) === 'string' ? (req.validatedData?.reason || req.body?.reason).trim() : ''
+  const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : ''
   if (!reason) {
     throw new AppError('Cancellation reason is required', 400)
   }
@@ -128,7 +128,8 @@ exports.cancelMyOrder = asyncHandler(async (req, res, next) => {
 })
 
 exports.updatePaymentStatus = asyncHandler(async (req, res, next) => {
-  const { status, reference_number, rejection_reason, admin_notes } = req.validatedData || req.body
+  const { status, reference_number, rejection_reason, admin_notes } = req.body
+  if (!status) throw new AppError('Payment status is required', 400)
 
   const adminUserId = req.user?.user_id || req.user?.id
   const adminName = req.user?.first_name ? `${req.user.first_name}${req.user.last_name ? ' ' + req.user.last_name : ''}` : null
@@ -161,7 +162,7 @@ exports.approvePayment = asyncHandler(async (req, res, next) => {
 })
 
 exports.updateShipment = asyncHandler(async (req, res, next) => {
-  const { tracking_number, courier_name, rider_name, rider_contact } = req.validatedData || req.body
+  const { tracking_number, courier_name, rider_name, rider_contact } = req.body
   
   if (!tracking_number || !courier_name) {
     throw new AppError('Tracking number and courier name are required', 400)
@@ -178,7 +179,7 @@ exports.updateShipment = asyncHandler(async (req, res, next) => {
 })
 
 exports.updateOutForDelivery = asyncHandler(async (req, res, next) => {
-  const { rider_name, rider_contact } = req.validatedData || req.body
+  const { rider_name, rider_contact } = req.body
   
   if (!rider_name || !rider_contact) {
     throw new AppError('Rider name and contact are required', 400)

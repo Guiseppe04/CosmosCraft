@@ -55,12 +55,11 @@ async function fetchAPI(endpoint, options = {}) {
       }
 
       // Parse error message from response
-      const errorMessage = data?.message
-        || data?.error
-        || (Array.isArray(data?.errors) ? data.errors.map((err) => err.message).filter(Boolean).join(', ') : null)
-        || data?.errors?.[0]?.message
+      const errorMessage = data?.message 
+        || data?.error 
+        || data?.errors?.[0]?.message 
         || 'An error occurred'
-
+      
       throw new Error(errorMessage)
     }
 

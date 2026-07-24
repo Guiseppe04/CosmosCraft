@@ -1,5 +1,5 @@
 const { pool } = require('../config/database')
-const { generateOrderNumber, determineOrderTypePrefix } = require('../utils/orderNumber')
+const { generateUniqueOrderNumber } = require('../utils/orderNumber')
 
 const isValidUUID = (uuid) => {
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -431,7 +431,6 @@ exports.createOrder = async (orderData) => {
       throw createValidationError('Address must include a valid 2-letter country code')
     }
 
-    let shippingAddressId = null
 
     // Calculate totals
     const subtotal = items.reduce((sum, item) => sum + (item.price * item.quantity), 0)
@@ -439,10 +438,11 @@ exports.createOrder = async (orderData) => {
     const tax = subtotal * 0.1
     const total = subtotal + shippingCost + tax
 
-    const orderTypePrefix = determineOrderTypePrefix(items)
-    const orderNumber = await generateOrderNumber(client, orderTypePrefix)
+    // Generate order number
+    const orderNumber = await generateUniqueOrderNumber()
 
     // Insert billing address into addresses table (check for existing first)
+    let shippingAddressId = null
     if (billingAddress.street && billingAddress.city) {
       // Reuse an existing saved address when the full normalized address matches.
       const existingAddr = await client.query(
@@ -479,10 +479,10 @@ exports.createOrder = async (orderData) => {
 
     // Insert order with shipping_address_id
     const orderRes = await client.query(
-      `INSERT INTO orders (order_number, order_type, user_id, shipping_address_id, subtotal, tax_amount, shipping_cost, total_amount, status, payment_status, notes)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending', 'pending', $9)
+      `INSERT INTO orders (order_number, user_id, shipping_address_id, subtotal, tax_amount, shipping_cost, total_amount, status, payment_status, notes)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', 'pending', $8)
        RETURNING *`,
-      [orderNumber, orderTypePrefix === 'CO' ? 'customization' : 'product', userId, shippingAddressId, subtotal, tax, shippingCost, total, notes || null]
+      [orderNumber, userId, shippingAddressId, subtotal, tax, shippingCost, total, notes || null]
     )
     
     const order = orderRes.rows[0]
@@ -651,185 +651,64 @@ exports.getOrderById = async (orderId, userId) => {
 }
 
 exports.getAllOrders = async (params = {}) => {
-  const {
-    search,
-    order_type,
-    status,
-    payment_status,
-    date_from,
-    date_to,
-    payment_method,
-    sort_by = 'created_at',
-    sort_dir = 'desc',
-    page = 1,
-    page_size = 20,
-    include_items = false,
-  } = params;
-
-  const limit = Math.min(Math.max(Number(page_size) || 20, 1), 100)
-  const offset = (Math.max(Number(page) || 1, 1) - 1) * limit
-  const allowedSortColumns = ['created_at', 'order_number', 'total_amount', 'status', 'payment_status', 'customer_name']
-  const orderBy = allowedSortColumns.includes(sort_by) ? sort_by : 'created_at'
-  const orderDir = sort_dir === 'asc' ? 'ASC' : 'DESC'
-
-  const where = []
-  const queryParams = []
-  let idx = 1
-
-  if (order_type) {
-    where.push(`o.order_type = $${idx++}`)
-    queryParams.push(order_type)
-  }
-  if (status) {
-    where.push(`o.status = $${idx++}`)
-    queryParams.push(status)
-  }
-  if (payment_status) {
-    where.push(`o.payment_status = $${idx++}`)
-    queryParams.push(payment_status)
-  }
-  if (date_from) {
-    where.push(`o.created_at >= $${idx++}`)
-    queryParams.push(date_from)
-  }
-  if (date_to) {
-    where.push(`o.created_at <= $${idx++}`)
-    queryParams.push(date_to)
-  }
-  if (payment_method) {
-    where.push(`EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.order_id AND p.method = $${idx++})`)
-    queryParams.push(payment_method)
-  }
-
-  const whereClause = where.length ? `WHERE ${where.join(' AND ')}` : ''
-
-  let searchClause = ''
-  if (search && String(search).trim()) {
-    const term = `%${String(search).trim().toLowerCase()}%`
-    const searchFilters = [
-      `o.order_number ILIKE $${idx++}`,
-      `u.first_name ILIKE $${idx++}`,
-      `u.last_name ILIKE $${idx++}`,
-      `u.email ILIKE $${idx++}`,
-      `u.phone ILIKE $${idx++}`,
-      `oi.product_name ILIKE $${idx++}`,
-      `c.name ILIKE $${idx++}`,
-      `p.reference_number ILIKE $${idx++}`,
-      `o.status::TEXT ILIKE $${idx++}`,
-      `o.payment_status::TEXT ILIKE $${idx++}`,
-    ]
-    searchClause = `AND (${searchFilters.join(' OR ')})`
-    for (let i = 0; i < searchFilters.length; i++) {
-      queryParams.push(term)
-    }
-  }
-
-  const totalQuery = `
-    SELECT COUNT(DISTINCT o.order_id)::int AS total
+  const { search, include_items } = params;
+  let query = `SELECT o.*, 
+    a.line1 as shipping_line1, a.line2 as shipping_line2, a.city as shipping_city, 
+    a.province as shipping_province, a.postal_code as shipping_postal_code, a.country as shipping_country,
+    u.first_name, u.last_name, u.email, u.phone as contact_phone
     FROM orders o
-    LEFT JOIN users u ON o.user_id = u.user_id
-    LEFT JOIN order_items oi ON oi.order_id = o.order_id
-    LEFT JOIN customizations c ON c.customization_id = oi.customization_id
-    LEFT JOIN payments p ON p.order_id = o.order_id
-    ${whereClause}
-    ${searchClause}
-  `
+    LEFT JOIN addresses a ON o.shipping_address_id = a.address_id
+    LEFT JOIN users u ON o.user_id = u.user_id`;
+  const queryParams = [];
 
-  const totalResult = await pool.query(totalQuery, queryParams)
-  const total = totalResult.rows[0]?.total || 0
-
-  const sortColumn = orderBy === 'customer_name'
-    ? `u.last_name ${orderDir}, u.first_name ${orderDir}`
-    : orderBy === 'order_number'
-      ? `o.order_number ${orderDir}`
-      : orderBy === 'total_amount'
-        ? `o.total_amount ${orderDir}`
-        : orderBy === 'status'
-          ? `o.status ${orderDir}`
-          : orderBy === 'payment_status'
-            ? `o.payment_status ${orderDir}`
-            : `o.created_at ${orderDir}`
-
-  const dataQuery = `
-    SELECT
-      o.*,
-      a.line1 AS shipping_line1,
-      a.line2 AS shipping_line2,
-      a.city AS shipping_city,
-      a.province AS shipping_province,
-      a.postal_code AS shipping_postal_code,
-      a.country AS shipping_country,
-      u.first_name,
-      u.last_name,
-      u.email,
-      u.phone AS contact_phone
-    FROM orders o
-    LEFT JOIN addresses a ON a.address_id = o.shipping_address_id
-    LEFT JOIN users u ON u.user_id = o.user_id
-    LEFT JOIN order_items oi ON oi.order_id = o.order_id
-    LEFT JOIN customizations c ON c.customization_id = oi.customization_id
-    LEFT JOIN payments p ON p.order_id = o.order_id
-    ${whereClause}
-    ${searchClause}
-    GROUP BY o.order_id, a.address_id, u.user_id
-    ORDER BY ${sortColumn}
-    LIMIT $${idx++} OFFSET $${idx++}
-  `
-
-  const dataResult = await pool.query(dataQuery, [...queryParams, limit, offset])
-
-  const orderIds = dataResult.rows.map(r => r.order_id)
-  let paymentsByOrder = {}
-  if (orderIds.length > 0) {
-    const paymentsRes = await pool.query(
-      `SELECT DISTINCT ON (order_id) *
-       FROM payments
-       WHERE order_id = ANY($1)
-       ORDER BY order_id, created_at DESC`,
-      [orderIds]
-    )
-    paymentsByOrder = paymentsRes.rows.reduce((acc, payment) => {
-      acc[payment.order_id] = payment
-      return acc
-    }, {})
+  if (search) {
+    query += ` WHERE o.order_number ILIKE $1`;
+    queryParams.push(`%${search}%`);
   }
 
-  let itemsByOrder = {}
+  query += ' ORDER BY o.created_at DESC';
+  const res = await pool.query(query, queryParams);
+  
   if (include_items === 'true' || include_items === true) {
+    const orderIds = res.rows.map(o => o.order_id);
     if (orderIds.length > 0) {
       const itemsRes = await pool.query(
         `SELECT oi.*, pi.image_url FROM order_items oi
          LEFT JOIN product_images pi ON oi.product_id = pi.product_id AND pi.is_primary = true
          WHERE oi.order_id = ANY($1)`,
         [orderIds]
-      )
-      itemsByOrder = itemsRes.rows.reduce((acc, item) => {
-        if (!acc[item.order_id]) acc[item.order_id] = []
-        acc[item.order_id].push(item)
-        return acc
-      }, {})
+      );
+      const itemsByOrder = itemsRes.rows.reduce((acc, item) => {
+        if (!acc[item.order_id]) acc[item.order_id] = [];
+        acc[item.order_id].push(item);
+        return acc;
+      }, {});
+      
+      // Get payment information for all orders
+      const paymentsRes = await pool.query(
+        `SELECT * FROM payments WHERE order_id = ANY($1)`,
+        [orderIds]
+      );
+      const paymentsByOrder = paymentsRes.rows.reduce((acc, payment) => {
+        acc[payment.order_id] = payment;
+        return acc;
+      }, {});
+      return res.rows.map(order => {
+        const payment = paymentsByOrder[order.order_id] || null
+        return {
+          ...order,
+          items: itemsByOrder[order.order_id] || [],
+          payment,
+          payment_method: resolveOrderPaymentMethod(order, payment),
+        }
+      });
     }
   }
-
-  const orders = dataResult.rows.map((order) => {
-    const payment = paymentsByOrder[order.order_id] || null
-    return {
-      ...order,
-      items: itemsByOrder[order.order_id] || [],
-      payment,
-      payment_method: resolveOrderPaymentMethod(order, payment),
-    }
-  })
-
-  return {
-    orders,
-    pagination: {
-      page,
-      page_size: limit,
-      total,
-      total_pages: Math.max(Math.ceil(total / limit), 1),
-    },
-  }
+  
+  return res.rows.map((order) => ({
+    ...order,
+    payment_method: resolveOrderPaymentMethod(order, null),
+  }));
 }
 
 exports.updateOrder = async (orderId, updateData) => {
