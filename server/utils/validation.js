@@ -902,6 +902,11 @@ exports.createBatchNotificationSchema = Joi.object({
 });
 
 const buildValidationMiddleware = (schema, source) => {
+  if (!schema || typeof schema.validate !== 'function') {
+    // Defensive: ensure callers passed a valid Joi schema to avoid hard-to-debug runtime TypeErrors
+    throw new Error('Invalid or missing validation schema supplied to validation middleware');
+  }
+
   return (req, res, next) => {
     const { error, value } = schema.validate(req[source], {
       abortEarly: false,
@@ -932,7 +937,8 @@ const buildValidationMiddleware = (schema, source) => {
 exports.validateBody = (schema) => buildValidationMiddleware(schema, 'body');
 exports.validateQuery = (schema) => buildValidationMiddleware(schema, 'query');
 exports.validateParams = (schema) => buildValidationMiddleware(schema, 'params');
-exports.validate = exports.validateBody;
+// Flexible validate helper: accepts (schema) or (schema, source) where source is 'body'|'query'|'params'
+exports.validate = (schema, source = 'body') => buildValidationMiddleware(schema, source);
 exports.saveDefaultWorkflowSchema = Joi.object({
   steps: Joi.array().min(1).required().items(
     Joi.object({
@@ -994,6 +1000,7 @@ const listOrdersSchema = Joi.object({
 
 exports.listOrdersSchema = listOrdersSchema;
 exports.orderIdParamSchema = orderIdParamSchema;
+exports.uuidParamSchema = uuidParamSchema;
 exports.namedUuidParamSchema = namedUuidParamSchema;
 
 const listProjectsSchema = Joi.object({

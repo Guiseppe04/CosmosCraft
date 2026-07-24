@@ -1,5 +1,6 @@
 const { pool } = require('../config/database');
 const { AppError } = require('../middleware/errorHandler');
+const defaultWorkflowService = require('./defaultWorkflowService');
 
 exports.PAYMENT_METHODS = {
   GCASH: 'gcash',
@@ -98,7 +99,43 @@ async function ensureProjectForCustomBuildOrder(client, orderId) {
     [orderId, title, 'not_started', notes || null]
   );
 
-  return projectRes.rows[0] || null;
+  const createdProject = projectRes.rows[0] || null;
+
+  // Apply default workflow using the provided client so milestones and subtasks are created
+  // within the same transaction where possible.
+  if (createdProject) {
+    try {
+      const defaultWorkflow = await defaultWorkflowService.getDefaultWorkflow();
+      if (Array.isArray(defaultWorkflow) && defaultWorkflow.length > 0) {
+        for (const step of defaultWorkflow) {
+          const mRes = await client.query(
+            `INSERT INTO project_milestones (project_id, title, order_index, status)
+             VALUES ($1, $2, $3, 'pending') RETURNING milestone_id`,
+            [createdProject.project_id, step.step_name, step.sort_order]
+          );
+          const milestoneId = mRes.rows[0].milestone_id;
+
+          const tasks = step.tasks || [];
+          for (const task of tasks) {
+            await client.query(
+              `INSERT INTO project_subtasks (milestone_id, title, status)
+               VALUES ($1, $2, 'pending')`,
+              [milestoneId, task.task_name]
+            );
+          }
+        }
+        await client.query(
+          `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, details)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [null, 'UPDATE', 'project', createdProject.project_id, JSON.stringify({ message: 'Default workflow applied to project (auto-created from payment)' })]
+        );
+      }
+    } catch (err) {
+      console.warn('Failed to apply default workflow to auto-created project:', err.message || err);
+    }
+  }
+
+  return createdProject;
 }
 
 async function getOrderById(orderId) {
