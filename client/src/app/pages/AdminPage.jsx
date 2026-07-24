@@ -16,6 +16,7 @@ import {
   CartesianGrid, Tooltip, ResponsiveContainer, Cell,
 } from 'recharts'
 import ProjectTaskTracker from '../components/projects/ProjectTaskTracker'
+import DefaultWorkflowEditor from '../components/projects/DefaultWorkflowEditor'
 import AppointmentCalendar from '../components/appointments/AppointmentCalendar'
 import AppointmentList from '../components/appointments/AppointmentList'
 import AppointmentModal from '../components/appointments/AppointmentModal'
@@ -759,6 +760,7 @@ function ImageZoomModal({ src, alt }) {
 const PRODUCT_RULES = {
   sku: [required('SKU')],
   name: [required('Name')],
+  category_id: [required('Category')],
   price: [required('Price'), positive('Price')],
 }
 const CATEGORY_RULES = {
@@ -1831,6 +1833,7 @@ export function AdminPage() {
   // Modal state
   const [modal, setModal] = useState({ open: false, type: null, data: null })
   const [showGuitarTypeSelector, setShowGuitarTypeSelector] = useState(false)
+  const [showDefaultWorkflowEditor, setShowDefaultWorkflowEditor] = useState(false)
   const [paymentStatusUpdate, setPaymentStatusUpdate] = useState({ loading: false, orderId: null })
 
   // Confirm dialog state
@@ -1907,6 +1910,21 @@ export function AdminPage() {
   const [orderSort, setOrderSort] = useState('newest')
   const [orderPage, setOrderPage] = useState(1)
   const ORDERS_PAGE_SIZE = 10
+  const [ordersPagination, setOrdersPagination] = useState({ page: 1, pageSize: 10, total: 0, totalPages: 1 })
+
+  // Projects tab state
+  const [projectStatusFilter, setProjectStatusFilter] = useState('all')
+  const [projectAssignedFilter, setProjectAssignedFilter] = useState('all')
+  const [projectGuitarTypeFilter, setProjectGuitarTypeFilter] = useState('all')
+  const [projectDateFrom, setProjectDateFrom] = useState('')
+  const [projectDateTo, setProjectDateTo] = useState('')
+  const [projectDueDateFrom, setProjectDueDateFrom] = useState('')
+  const [projectDueDateTo, setProjectDueDateTo] = useState('')
+  const [projectCompletionFilter, setProjectCompletionFilter] = useState('all')
+  const [projectSort, setProjectSort] = useState('updated')
+  const [projectPage, setProjectPage] = useState(1)
+  const PROJECTS_PAGE_SIZE = 10
+  const [projectsPagination, setProjectsPagination] = useState({ page: 1, pageSize: 10, total: 0, totalPages: 1 })
 
   // Inventory tab state
   const [expandedInventoryIds, setExpandedInventoryIds] = useState(new Set())
@@ -2339,21 +2357,44 @@ export function AdminPage() {
     } catch (e) { showToast(e.message, 'error') }
   }, [debouncedSearch, showToast, users])
 
-  const fetchOrders = useCallback(async () => {
+  const fetchOrders = useCallback(async (queryParams = {}) => {
     try {
-      const res = await adminApi.getOrders({ search: debouncedSearch, include_items: true })
+      const res = await adminApi.getOrders({ search: debouncedSearch, include_items: true, ...queryParams })
       const newData = Array.isArray(res.data) ? res.data : res.data?.orders || []
       updateIfChanged(orders, newData, setOrders)
+      setOrdersPagination(res.pagination || { page: 1, pageSize: 10, total: 0, totalPages: 1 })
     } catch (e) { showToast(e.message, 'error') }
   }, [debouncedSearch, showToast, orders])
 
-  const fetchProjects = useCallback(async () => {
+  const fetchProjects = useCallback(async (queryParams = {}) => {
     try {
-      const res = await adminApi.getProjects({ search: debouncedSearch })
+      const res = await adminApi.getProjects({ search: debouncedSearch, include_tasks: true, ...queryParams })
       const newData = Array.isArray(res.data) ? res.data : res.data?.projects || []
       updateIfChanged(projects, newData, setProjects)
+      setProjectsPagination(res.pagination || { page: 1, pageSize: 10, total: 0, totalPages: 1 })
     } catch (e) { showToast(e.message, 'error') }
   }, [debouncedSearch, showToast, projects])
+
+  const buildProjectQuery = useCallback((pageNum = 1) => {
+    const params = {
+      search: debouncedSearch || undefined,
+      status: projectStatusFilter === 'all' ? undefined : projectStatusFilter,
+      assigned_to: projectAssignedFilter === 'all' ? undefined : projectAssignedFilter,
+      guitar_type: projectGuitarTypeFilter === 'all' ? undefined : projectGuitarTypeFilter,
+      date_from: projectDateFrom || undefined,
+      date_to: projectDateTo || undefined,
+      due_date_from: projectDueDateFrom || undefined,
+      due_date_to: projectDueDateTo || undefined,
+      completion_percentage: projectCompletionFilter !== 'all' ? projectCompletionFilter : undefined,
+      include_tasks: true,
+      page: pageNum,
+      page_size: PROJECTS_PAGE_SIZE,
+      sort_by: ({ updated: 'updated_at', created: 'created_at', name: 'project_name', customer: 'customer_name', progress: 'progress', due: 'estimated_completion_date', status: 'status' })[projectSort] || 'updated_at',
+      sort_dir: 'desc',
+    }
+    Object.keys(params).forEach(k => params[k] === undefined && delete params[k])
+    return params
+  }, [debouncedSearch, projectStatusFilter, projectAssignedFilter, projectGuitarTypeFilter, projectDateFrom, projectDateTo, projectDueDateFrom, projectDueDateTo, projectCompletionFilter, projectSort])
 
   const fetchAppointments = useCallback(async () => {
     setAppointmentLoading(true)
@@ -2532,7 +2573,18 @@ export function AdminPage() {
      if (activeTab === 'appointments') fetchAppointments()
      if (activeTab === 'inventory') { fetchInventory(); fetchParts(); }
      if (activeTab === 'pos') fetchInventory()
-   }, [debouncedSearch]) // eslint-disable-line
+    }, [debouncedSearch]) // eslint-disable-line
+
+    // ── Re-fetch projects when filters/sort/page change ─────────────────────
+    useEffect(() => {
+      if (activeTab === 'projects') {
+        fetchProjects(buildProjectQuery(projectPage))
+      }
+    }, [activeTab, projectStatusFilter, projectAssignedFilter, projectGuitarTypeFilter, projectDateFrom, projectDateTo, projectDueDateFrom, projectDueDateTo, projectCompletionFilter, projectSort, projectPage, fetchProjects]) // eslint-disable-line
+
+    useEffect(() => {
+      setProjectPage(1)
+    }, [projectStatusFilter, projectAssignedFilter, projectGuitarTypeFilter, projectDateFrom, projectDateTo, projectDueDateFrom, projectDueDateTo, projectCompletionFilter, projectSort, debouncedSearch])
 
   useEffect(() => {
     if (activeTab === 'products') fetchProducts()
@@ -2650,9 +2702,9 @@ export function AdminPage() {
         ...form,
         image_url: finalImageUrl,
         price: Number(form.price),
-        cost_price: form.cost_price ? Number(form.cost_price) : null,
-        stock: form.stock ? Number(form.stock) : 0,
-        low_stock_threshold: form.low_stock_threshold ? Number(form.low_stock_threshold) : 10,
+        cost_price: form.cost_price !== '' && form.cost_price != null ? Number(form.cost_price) : 0,
+        stock: form.stock !== '' && form.stock != null ? Number(form.stock) : 0,
+        low_stock_threshold: form.low_stock_threshold !== '' && form.low_stock_threshold != null ? Number(form.low_stock_threshold) : 10,
       }
       delete payload.image_file
       delete payload.preview_url
@@ -4426,6 +4478,19 @@ export function AdminPage() {
                     <p className="mt-1 text-sm text-[var(--text-muted)]">
                       Open a project to manage milestones and subtasks for the build.
                     </p>
+                    {isSuperAdmin && (
+                      <button
+                        onClick={() => setShowDefaultWorkflowEditor(true)}
+                        className="mt-3 inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] text-sm font-semibold text-white transition-all hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)]"
+                      >
+                        <Settings className="w-4 h-4" />
+                        Edit Default Tasks
+                      </button>
+                    )}
+                    <DefaultWorkflowEditor
+                      isOpen={showDefaultWorkflowEditor}
+                      onClose={() => setShowDefaultWorkflowEditor(false)}
+                    />
                   </div>
                   <div className="grid gap-3 sm:grid-cols-3">
                     <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-3">
@@ -4444,7 +4509,167 @@ export function AdminPage() {
                 </div>
               </div>
 
-              {visibleProjects.length === 0 ? (
+              <div className="mb-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
+                  <input
+                    type="text"
+                    placeholder="Search projects..."
+                    value={searchQuery}
+                    onChange={(e) => { setSearchQuery(e.target.value) }}
+                    className="w-full pl-10 pr-4 py-2.5 bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
+                  />
+                </div>
+                <select
+                  value={projectStatusFilter}
+                  onChange={(e) => { setProjectStatusFilter(e.target.value) }}
+                  className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
+                >
+                  <option value="all">All Statuses</option>
+                  <option value="not_started">Not Started</option>
+                  <option value="in_progress">In Progress</option>
+                  <option value="completed">Completed</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+                <select
+                  value={projectAssignedFilter}
+                  onChange={(e) => { setProjectAssignedFilter(e.target.value) }}
+                  className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
+                >
+                  <option value="all">All Assigned Staff</option>
+                  {(users || [])
+                    .filter(u => ['staff', 'admin', 'super_admin'].includes(u.role))
+                    .map(u => (
+                      <option key={u.user_id} value={u.user_id}>
+                        {u.first_name} {u.last_name}
+                      </option>
+                    ))}
+                </select>
+                <select
+                  value={projectSort}
+                  onChange={(e) => { setProjectSort(e.target.value) }}
+                  className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
+                >
+                  <option value="updated">Recently Updated</option>
+                  <option value="created">Recently Created</option>
+                  <option value="name">Project Name</option>
+                  <option value="customer">Customer Name</option>
+                  <option value="progress">Progress</option>
+                  <option value="due">Due Date</option>
+                  <option value="status">Status</option>
+                </select>
+              </div>
+
+              <div className="mb-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <select
+                  value={projectGuitarTypeFilter}
+                  onChange={(e) => { setProjectGuitarTypeFilter(e.target.value) }}
+                  className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
+                >
+                  <option value="all">All Guitar Types</option>
+                  <option value="Electric">Electric</option>
+                  <option value="Acoustic">Acoustic</option>
+                  <option value="Bass">Bass</option>
+                  <option value="Classical">Classical</option>
+                </select>
+                <div>
+                  <label className="block text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-1">Date From</label>
+                  <input
+                    type="date"
+                    value={projectDateFrom}
+                    onChange={(e) => { setProjectDateFrom(e.target.value) }}
+                    className="w-full px-3 py-2.5 bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-1">Date To</label>
+                  <input
+                    type="date"
+                    value={projectDateTo}
+                    onChange={(e) => { setProjectDateTo(e.target.value) }}
+                    className="w-full px-3 py-2.5 bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
+                  />
+                </div>
+                <button
+                  onClick={() => {
+                    setProjectStatusFilter('all')
+                    setProjectAssignedFilter('all')
+                    setProjectGuitarTypeFilter('all')
+                    setProjectDateFrom('')
+                    setProjectDateTo('')
+                    setProjectDueDateFrom('')
+                    setProjectDueDateTo('')
+                    setProjectCompletionFilter('all')
+                    setProjectSort('updated')
+                    setProjectPage(1)
+                  }}
+                  className="inline-flex items-center gap-1 px-3 py-2.5 rounded-xl bg-red-500/10 text-red-400 border border-red-500/30 text-sm font-medium hover:bg-red-500/20 transition-colors w-full justify-center"
+                >
+                  <X className="w-3 h-3" /> Clear Filters
+                </button>
+              </div>
+
+              <div className="mb-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                <div>
+                  <label className="block text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-1">Due Date From</label>
+                  <input
+                    type="date"
+                    value={projectDueDateFrom}
+                    onChange={(e) => { setProjectDueDateFrom(e.target.value) }}
+                    className="w-full px-3 py-2.5 bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-1">Due Date To</label>
+                  <input
+                    type="date"
+                    value={projectDueDateTo}
+                    onChange={(e) => { setProjectDueDateTo(e.target.value) }}
+                    className="w-full px-3 py-2.5 bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
+                  />
+                </div>
+                <select
+                  value={projectCompletionFilter}
+                  onChange={(e) => { setProjectCompletionFilter(e.target.value) }}
+                  className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
+                >
+                  <option value="all">All Completion %</option>
+                  <option value="0">0%</option>
+                  <option value="25">25%</option>
+                  <option value="50">50%</option>
+                  <option value="75">75%</option>
+                  <option value="100">100%</option>
+                </select>
+              </div>
+
+              {(projectStatusFilter !== 'all' || projectAssignedFilter !== 'all' || projectGuitarTypeFilter !== 'all' || projectDateFrom || projectDateTo || projectDueDateFrom || projectDueDateTo || projectCompletionFilter !== 'all') && (
+                <div className="mb-4 flex flex-wrap gap-2">
+                  <span className="text-xs text-[var(--text-muted)]">Active filters:</span>
+                  {projectStatusFilter !== 'all' && (
+                    <span className="px-2 py-1 bg-blue-500/10 text-blue-400 text-xs rounded-lg border border-blue-500/30">Status: {projectStatusFilter}</span>
+                  )}
+                  {projectGuitarTypeFilter !== 'all' && (
+                    <span className="px-2 py-1 bg-purple-500/10 text-purple-400 text-xs rounded-lg border border-purple-500/30">Guitar: {projectGuitarTypeFilter}</span>
+                  )}
+                  {projectCompletionFilter !== 'all' && (
+                    <span className="px-2 py-1 bg-green-500/10 text-green-400 text-xs rounded-lg border border-green-500/30">Progress: {projectCompletionFilter}%</span>
+                  )}
+                  {projectDateFrom && (
+                    <span className="px-2 py-1 bg-amber-500/10 text-amber-400 text-xs rounded-lg border border-amber-500/30">From: {projectDateFrom}</span>
+                  )}
+                  {projectDateTo && (
+                    <span className="px-2 py-1 bg-amber-500/10 text-amber-400 text-xs rounded-lg border border-amber-500/30">To: {projectDateTo}</span>
+                  )}
+                  {projectDueDateFrom && (
+                    <span className="px-2 py-1 bg-indigo-500/10 text-indigo-400 text-xs rounded-lg border border-indigo-500/30">Due From: {projectDueDateFrom}</span>
+                  )}
+                  {projectDueDateTo && (
+                    <span className="px-2 py-1 bg-indigo-500/10 text-indigo-400 text-xs rounded-lg border border-indigo-500/30">Due To: {projectDueDateTo}</span>
+                  )}
+                </div>
+              )}
+
+              {projects.length === 0 ? (
                 <EmptyState
                   icon={Briefcase}
                   label={debouncedSearch ? 'No projects match your search' : 'No projects found'}
@@ -4729,6 +4954,7 @@ export function AdminPage() {
               orders={visibleOrders}
               onRefresh={fetchOrders}
               user={user}
+              pagination={ordersPagination}
             />
           )}
 

@@ -31,7 +31,10 @@ export const staffApi = {
   getProduct: (id) => request(`/api/products/${id}`),
 
   // Projects
-  getMyProjects: () => request('/api/projects/my'),
+  getMyProjects: (params = {}) => {
+    const qs = new URLSearchParams(params).toString()
+    return request(`/api/projects/my${qs ? '?' + qs : ''}`)
+  },
   getAllProjects: (params = {}) => {
     const qs = new URLSearchParams(params).toString()
     return request(`/api/projects${qs ? `?${qs}` : ''}`)

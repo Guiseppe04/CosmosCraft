@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 import { motion, AnimatePresence } from 'motion/react'
 import { User, CreditCard, MapPin, Lock, Package, Calendar, ChevronRight, Upload, Save, Wallet, ShoppingBag, ShoppingCart, Trash2, Minus, Plus, MessageSquare, Send, Guitar, Clock, Truck, CheckCircle, XCircle, Briefcase, Activity, Star, Loader2, Edit, AlertCircle, X, Banknote, Smartphone, Landmark, CreditCard as CreditCardIcon } from 'lucide-react'
@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext.jsx'
 import { useCart } from '../context/CartContext.jsx'
 import { BASE_PRICE, BODY_OPTIONS, BODY_WOOD_OPTIONS, BODY_FINISH_OPTIONS, NECK_OPTIONS, FRETBOARD_OPTIONS, HEADSTOCK_OPTIONS, HEADSTOCK_WOOD_OPTIONS, INLAY_OPTIONS, BRIDGE_OPTIONS, PICKGUARD_OPTIONS_BY_BODY, KNOB_OPTIONS_BY_BODY, HARDWARE_OPTIONS, PICKUP_OPTIONS } from '../lib/guitarBuilderData.js'
 import { adminApi } from '../utils/adminApi.js'
+import { useDebounce } from '../hooks/useDebounce'
 import CustomerProjectTracker from '../components/projects/CustomerProjectTracker.jsx'
 import { getAllProvinces, getMunicipalitiesByProvince, getBarangaysByMunicipality } from '@aivangogh/ph-address'
 import { Country } from 'country-state-city'
@@ -151,6 +152,12 @@ export function DashboardPage() {
   const [buildToDelete, setBuildToDelete] = useState(null)
   
   const [myProjects, setMyProjects] = useState([])
+  const [myProjectSearch, setMyProjectSearch] = useState('')
+  const [myProjectSort, setMyProjectSort] = useState('updated')
+  const [myProjectPage, setMyProjectPage] = useState(1)
+  const MY_PROJECTS_PAGE_SIZE = 6
+  const [myProjectsPagination, setMyProjectsPagination] = useState({ page: 1, pageSize: 6, total: 0, totalPages: 1 })
+  const debouncedMyProjectSearch = useDebounce(myProjectSearch, 300)
   const [myCustomizations, setMyCustomizations] = useState([])
   const [activeProjectView, setActiveProjectView] = useState(null)
   const [activeBuildTab, setActiveBuildTab] = useState('build-projects')
@@ -211,6 +218,14 @@ export function DashboardPage() {
   }, [activeSection])
 
   useEffect(() => {
+    setMyProjectPage(1)
+  }, [myProjectSearch, myProjectSort])
+
+  useEffect(() => {
+    fetchMyProjects()
+  }, [myProjectPage, myProjectSort, debouncedMyProjectSearch, user?.id])
+
+  useEffect(() => {
     if (activeSection !== 'password') {
       setPasswordError('')
       setPasswordSuccessMessage('')
@@ -236,7 +251,12 @@ export function DashboardPage() {
   }
 
   const fetchMyProjects = () => {
-    adminApi.getMyProjects().then(res => setMyProjects(res.data)).catch(console.error)
+    adminApi.getMyProjects({ search: debouncedMyProjectSearch, sort_by: ({ updated: 'updated_at', created: 'created_at', name: 'project_name' })[myProjectSort] || 'updated_at', sort_dir: 'desc', page: myProjectPage, page_size: MY_PROJECTS_PAGE_SIZE, include_tasks: true })
+      .then(res => {
+        setMyProjects(res.data)
+        setMyProjectsPagination(res.pagination || { page: 1, pageSize: MY_PROJECTS_PAGE_SIZE, total: 0, totalPages: 1 })
+      })
+      .catch(console.error)
   }
 
   const fetchMyCustomizations = () => {
@@ -518,7 +538,6 @@ export function DashboardPage() {
     email: '',
     phone: '',
     gender: 'male',
-    birthDate: '',
   })
   
   const [passwordData, setPasswordData] = useState({
@@ -576,7 +595,6 @@ export function DashboardPage() {
             email: u.email || '',
             phone: u.phone || '',
             gender: 'male',
-            birthDate: u.birthDate ? String(u.birthDate).split('T')[0] : '',
           })
           const resolvedAvatar = u.avatar || u.avatarUrl || u.avatar_url || ''
           if (resolvedAvatar) setProfileImage(resolvedAvatar)
@@ -1081,7 +1099,7 @@ export function DashboardPage() {
   const renderProjectsContent = () => {
     if (activeProjectView) {
       const cleanTrackerName = (activeProjectView.name || activeProjectView.title || 'Custom Build')
-        .replace(/\s*\(ORD-[^)]*\)\s*/g, '')
+        .replace(/\s*\(((?:PO|CO|SO)-\d{8}-\d+)\)\s*/g, '')
         .replace(/\s*Order\s*#[^\s]*\s*/gi, '')
         .trim();
       return (
@@ -1129,6 +1147,29 @@ export function DashboardPage() {
         <h2 className="text-2xl font-bold text-white mb-1">Build Projects</h2>
         <p className="text-sm text-[var(--text-muted)] mb-8">Track progress on your custom builds and repairs</p>
 
+        <div className="flex flex-col sm:flex-row gap-3 mb-6">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
+            <input
+              type="text"
+              placeholder="Search projects..."
+              value={myProjectSearch}
+              onChange={(e) => setMyProjectSearch(e.target.value)}
+              className="w-full pl-10 pr-4 py-2.5 bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
+            />
+          </div>
+          <select
+            value={myProjectSort}
+            onChange={(e) => setMyProjectSort(e.target.value)}
+            className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
+          >
+            <option value="updated">Recently Updated</option>
+            <option value="created">Recently Created</option>
+            <option value="name">Project Name</option>
+            <option value="progress">Progress</option>
+          </select>
+        </div>
+
         {myProjects.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-10">
             <div className="w-16 h-16 rounded-full border-2 border-[var(--border)] flex items-center justify-center mb-6">
@@ -1142,11 +1183,11 @@ export function DashboardPage() {
         ) : (
           <div className="grid gap-6">
             {myProjects.map((project, index) => {
-              project.customBuildId = project.custom_build_id;
+              const customBuildId = project.custom_build_id || project.customBuildId;
 
               // Clean project name - remove any ORD/order references from the stored title
               const cleanName = (project.name || project.title || 'Custom Build')
-                .replace(/\s*\(ORD-[^)]*\)\s*/g, '')
+                .replace(/\s*\(((?:PO|CO|SO)-\d{8}-\d+)\)\s*/g, '')
                 .replace(/\s*Order\s*#[^\s]*\s*/gi, '')
                 .trim();
 
@@ -1155,9 +1196,9 @@ export function DashboardPage() {
                 <div className="flex justify-between items-center">
                   <div>
                     <h3 className="text-lg font-bold text-white">{cleanName}</h3>
-                    {project.customBuildId && (
+                    {customBuildId && (
                       <p className="text-xs text-[var(--text-muted)] mt-1">
-                        Custom Build ID: {project.customBuildId}
+                        Custom Build ID: {customBuildId}
                       </p>
                     )}
                     <p className="text-[var(--text-muted)] text-sm mt-2">
@@ -1199,10 +1240,39 @@ export function DashboardPage() {
                 </div>
               </div>
             )})}
+
+            {myProjectsPagination.total_pages > 1 && (
+              <div className="flex items-center justify-between mt-6">
+              <p className="text-[var(--text-muted)] text-sm">
+                Showing {(myProjectPage - 1) * MY_PROJECTS_PAGE_SIZE + 1} to {Math.min(myProjectPage * MY_PROJECTS_PAGE_SIZE, myProjectsPagination.total || 0)} of {myProjectsPagination.total || 0} projects
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setMyProjectPage(p => Math.max(1, p - 1))}
+                  disabled={myProjectPage === 1}
+                  className="p-2 hover:bg-[var(--surface-dark)] rounded-lg transition-colors disabled:opacity-50"
+                >
+                  <ChevronLeft className="w-4 h-4 text-white" />
+                </button>
+                <span className="text-white text-sm">
+                  Page {myProjectPage} of {myProjectsPagination.total_pages}
+                </span>
+                <button
+                  onClick={() => setMyProjectPage(p => Math.min(myProjectsPagination.total_pages, p + 1))}
+                  disabled={myProjectPage === myProjectsPagination.total_pages}
+                  className="p-2 hover:bg-[var(--surface-dark)] rounded-lg transition-colors disabled:opacity-50"
+                >
+                  <ChevronRight className="w-4 h-4 text-white" />
+                </button>
+              </div>
+            </div>
+            )} 
           </div>
+          
         )}
       </div>
     );
+
   };
 
   const renderMyGuitarContent = () => {
@@ -1551,7 +1621,6 @@ export function DashboardPage() {
         middleName: profileData.middleName,
         lastName: profileData.lastName,
         phone: profileData.phone,
-        birthDate: profileData.birthDate || null,
         ...avatarPayload,
       })
 
@@ -1696,6 +1765,19 @@ export function DashboardPage() {
     } catch (err) {
       setConfirm(c => ({ ...c, isBusy: false }))
       alert("Failed to delete address: " + err.message)
+    }
+  }
+
+  const setDefaultAddress = async (addressId) => {
+    try {
+      await adminApi.updateAddress(addressId, { isDefault: true })
+      setToastMessage('Default address updated!')
+      const res = await adminApi.getProfile()
+      if (res?.data?.user?.addresses) {
+        setAddresses(res.data.user.addresses)
+      }
+    } catch (err) {
+      alert("Failed to set default address: " + err.message)
     }
   }
 
@@ -1929,9 +2011,9 @@ export function DashboardPage() {
           </div>
         </div>
       ) : (
-        <div className="space-y-4">
+         <div className="space-y-4">
           {addresses && addresses.length > 0 ? (
-            addresses.map((addr) => (
+            [...addresses].sort((a, b) => (b.is_default ? 1 : 0) - (a.is_default ? 1 : 0)).map((addr) => (
               <div key={addr.address_id} className="p-4 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]">
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
@@ -1941,6 +2023,11 @@ export function DashboardPage() {
                     {addr.is_default && <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[var(--gold-primary)] text-[var(--text-dark)]">Default</span>}
                   </div>
                   <div className="flex items-center gap-3">
+                    {!addr.is_default && (
+                      <button onClick={() => setDefaultAddress(addr.address_id)} className="p-2.5 hover:bg-[var(--gold-primary)]/20 hover:border hover:border-[var(--gold-primary)] rounded-lg transition-all duration-150" title="Set as default">
+                        <Star className="w-5 h-5 text-[var(--gold-primary)]" />
+                      </button>
+                    )}
                     <button onClick={() => { 
                       setEditingAddressId(addr.address_id)
                       setAddressData({ 

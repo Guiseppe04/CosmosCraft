@@ -1,6 +1,6 @@
 const { pool } = require('../config/database');
 const { AppError } = require('../middleware/errorHandler');
-const { generateUniqueOrderNumber } = require('../utils/orderNumber');
+const { generateOrderNumber, determineOrderTypePrefix } = require('../utils/orderNumber');
 
 const TAX_RATE = 0;
 
@@ -330,14 +330,16 @@ async function convertCartToOrder(userId, { shipping_address_id, notes, payment_
   try {
     await client.query('BEGIN');
 
-    const orderNumber = await generateUniqueOrderNumber();
+    const orderTypePrefix = determineOrderTypePrefix(cart.items)
+    const orderNumber = await generateOrderNumber(client, orderTypePrefix)
 
     const orderResult = await client.query(
-      `INSERT INTO orders (order_number, user_id, shipping_address_id, subtotal, tax_amount, shipping_cost, discount_amount, total_amount, status, payment_status, notes)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending', 'pending', $9)
+      `INSERT INTO orders (order_number, order_type, user_id, shipping_address_id, subtotal, tax_amount, shipping_cost, discount_amount, total_amount, status, payment_status, notes)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending', 'pending', $10)
        RETURNING *`,
       [
         orderNumber,
+        orderTypePrefix === 'CO' ? 'customization' : 'product',
         userId,
         shipping_address_id || null,
         cart.subtotal,
