@@ -75,7 +75,6 @@ exports.createProduct = async (req, res, next) => {
     await auditService.logCreate(
       req.user?.user_id || null,
       auditService.MODULES.PRODUCTS,
-      'products',
       product.product_id,
       product,
       req.ip
@@ -110,7 +109,6 @@ exports.updateProduct = async (req, res, next) => {
     await auditService.logUpdate(
       req.user?.user_id || null,
       auditService.MODULES.PRODUCTS,
-      'products',
       product.product_id,
       existing,
       product,
@@ -132,7 +130,6 @@ exports.deleteProduct = async (req, res, next) => {
     await auditService.logDelete(
       req.user?.user_id || null,
       auditService.MODULES.PRODUCTS,
-      'products',
       product.product_id,
       existing,
       req.ip
