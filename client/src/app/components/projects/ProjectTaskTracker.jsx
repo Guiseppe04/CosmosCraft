@@ -410,10 +410,11 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
     if (!isAdmin) return;
     try {
       const pendingSubtasks = (milestone.subtasks || []).filter(s => s.status !== 'completed');
-      await Promise.all([
-        adminApi.updateMilestone(milestone.milestone_id, { status: 'completed' }),
-        ...pendingSubtasks.map(s => adminApi.updateSubtask(s.subtask_id, { status: 'completed' }))
-      ]);
+      // Complete subtasks one by one to respect sequential progression
+      for (const subtask of pendingSubtasks) {
+        await adminApi.updateSubtask(subtask.subtask_id, { status: 'completed' });
+      }
+      await adminApi.updateMilestone(milestone.milestone_id, { status: 'completed' });
       loadData();
     } catch (err) {
       alert(err.message);

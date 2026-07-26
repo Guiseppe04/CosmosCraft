@@ -65,6 +65,7 @@ router.delete('/milestones/:milestoneId', validateParams(namedUuidParamSchema('m
 
 // Subtask routes
 router.post('/milestones/:milestoneId/subtasks', validateParams(namedUuidParamSchema('milestoneId')), validate(createSubtaskSchema), ctrl.createSubtask);
+router.get('/subtasks/:subtaskId', validateParams(namedUuidParamSchema('subtaskId')), ctrl.getSubtask);
 router.delete('/subtasks/:subtaskId', validateParams(namedUuidParamSchema('subtaskId')), ctrl.deleteSubtask);
 
 // Claim / unclaim / reassign routes

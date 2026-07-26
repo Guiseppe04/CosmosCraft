@@ -98,6 +98,12 @@ exports.updateSubtask = asyncHandler(async (req, res, next) => {
   res.json({ status: 'success', data: subtask });
 });
 
+exports.getSubtask = asyncHandler(async (req, res, next) => {
+  const subtask = await projectService.getSubtaskById(req.params.subtaskId);
+  if (!subtask) throw new AppError('Subtask not found', 404);
+  res.json({ status: 'success', data: subtask });
+});
+
 exports.deleteSubtask = asyncHandler(async (req, res, next) => {
   await projectService.deleteSubtask(req.params.subtaskId, req.user.id);
   res.json({ status: 'success', data: null });

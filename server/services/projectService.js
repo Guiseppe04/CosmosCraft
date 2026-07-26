@@ -1178,10 +1178,69 @@ exports.addSubtask = async (milestoneId, data, userId) => {
   }
 };
 
+const ensureProjectHoldCancelColumns = async () => {
+  try {
+    // Check if hold_reason column exists, if not add all hold/cancel columns
+    const checkRes = await pool.query(
+      `SELECT column_name
+       FROM information_schema.columns
+       WHERE table_name = 'projects'
+         AND table_schema = current_schema()
+         AND column_name = 'hold_reason'`
+    );
+    if (checkRes.rows.length === 0) {
+      await pool.query(`ALTER TABLE projects ADD COLUMN hold_reason TEXT`);
+      await pool.query(`ALTER TABLE projects ADD COLUMN hold_option VARCHAR(50) CHECK (hold_option IS NULL OR hold_option IN ('resume_later', 'hold_before_next_step'))`);
+      await pool.query(`ALTER TABLE projects ADD COLUMN hold_at_step VARCHAR(200)`);
+      await pool.query(`ALTER TABLE projects ADD COLUMN hold_requested_at TIMESTAMPTZ`);
+      await pool.query(`ALTER TABLE projects ADD COLUMN hold_approved_by UUID REFERENCES users(user_id) ON DELETE SET NULL`);
+      await pool.query(`ALTER TABLE projects ADD COLUMN hold_approved_at TIMESTAMPTZ`);
+      await pool.query(`ALTER TABLE projects ADD COLUMN resumed_at TIMESTAMPTZ`);
+      await pool.query(`ALTER TABLE projects ADD COLUMN cancel_option VARCHAR(50) CHECK (cancel_option IS NULL OR cancel_option IN ('ship_unfinished', 'pickup_unfinished'))`);
+      await pool.query(`ALTER TABLE projects ADD COLUMN cancel_reason TEXT`);
+      await pool.query(`ALTER TABLE projects ADD COLUMN cancel_requested_at TIMESTAMPTZ`);
+      await pool.query(`ALTER TABLE projects ADD COLUMN cancel_approved_by UUID REFERENCES users(user_id) ON DELETE SET NULL`);
+      await pool.query(`ALTER TABLE projects ADD COLUMN cancel_approved_at TIMESTAMPTZ`);
+      await pool.query(`ALTER TABLE projects ADD COLUMN shipped_at TIMESTAMPTZ`);
+      await pool.query(`ALTER TABLE projects ADD COLUMN ready_for_pickup_at TIMESTAMPTZ`);
+      await pool.query(`ALTER TABLE projects ADD COLUMN picked_up_at TIMESTAMPTZ`);
+      console.log('Added hold/cancel columns to projects table');
+    }
+  } catch (err) {
+    console.warn('Could not add hold/cancel columns:', err.message);
+  }
+};
+
+let holdCancelColumnsEnsured = false;
+
+const ensureSubtaskStatusConstraint = async () => {
+  try {
+    // Widen the CHECK constraint to include 'in_progress'
+    await pool.query(`
+      ALTER TABLE project_subtasks DROP CONSTRAINT IF EXISTS project_subtasks_status_check;
+    `);
+    await pool.query(`
+      ALTER TABLE project_subtasks ADD CONSTRAINT project_subtasks_status_check 
+        CHECK (status IN ('pending', 'in_progress', 'completed'));
+    `);
+  } catch (err) {
+    // Constraint may already exist or not exist, that's fine
+    console.warn('Could not update subtask constraint:', err.message);
+  }
+};
+
+let subtaskConstraintEnsured = false;
+
 exports.updateSubtaskStatus = async (subtaskId, data, userId, userRole) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    
+    // Ensure the subtask status constraint allows 'in_progress'
+    if (!subtaskConstraintEnsured) {
+      await ensureSubtaskStatusConstraint();
+      subtaskConstraintEnsured = true;
+    }
     const sRes = await client.query(`
       SELECT s.*, m.project_id, m.order_index AS milestone_order, m.title AS milestone_title
       FROM project_subtasks s
@@ -1205,6 +1264,11 @@ exports.updateSubtaskStatus = async (subtaskId, data, userId, userRole) => {
 
     // --- SEQUENTIAL PROGRESSION CHECK ---
     if (status === 'completed' && subtask.status !== 'completed') {
+      // Ensure hold/cancel columns exist before querying them
+      if (!holdCancelColumnsEnsured) {
+        await ensureProjectHoldCancelColumns();
+        holdCancelColumnsEnsured = true;
+      }
       // Check if this project is on hold
       const projectRes = await client.query(
         `SELECT status, hold_reason FROM projects WHERE project_id = $1`,
@@ -1231,11 +1295,13 @@ exports.updateSubtaskStatus = async (subtaskId, data, userId, userRole) => {
       );
 
       for (const prevMilestone of prevMilestones.rows) {
-        if (parseInt(prevMilestone.pending_subtasks) > 0) {
-          throw new Error('Previous milestone must be completed first before proceeding to the next step');
-        }
-        if (prevMilestone.status !== 'completed') {
-          throw new Error('Previous milestone must be completed first before proceeding to the next step');
+        const pendingCount = parseInt(prevMilestone.pending_subtasks);
+        if (pendingCount > 0) {
+          throw new Error(
+            `Cannot proceed to "${subtask.milestone_title}" yet. ` +
+            `All tasks in "${prevMilestone.title}" must be completed first. ` +
+            `(${pendingCount} task${pendingCount > 1 ? 's' : ''} remaining)`
+          );
         }
       }
 
@@ -1287,6 +1353,18 @@ exports.updateSubtaskStatus = async (subtaskId, data, userId, userRole) => {
   } finally {
     client.release();
   }
+};
+
+exports.getSubtaskById = async (subtaskId) => {
+  const res = await pool.query(`
+    SELECT s.*, u.first_name as assignee_first, u.last_name as assignee_last,
+           m.project_id, m.title as milestone_title, m.order_index as milestone_order
+    FROM project_subtasks s
+    LEFT JOIN users u ON s.assigned_user_id = u.user_id
+    JOIN project_milestones m ON s.milestone_id = m.milestone_id
+    WHERE s.subtask_id = $1
+  `, [subtaskId]);
+  return res.rows[0] || null;
 };
 
 exports.deleteSubtask = async (subtaskId, userId) => {
@@ -2090,6 +2168,10 @@ exports.getInstallmentSchedule = async (projectId, userId, userRole) => {
     const remainingBalance = totalAmount;
     const today = new Date();
 
+    // Calculate next due date as exactly 1 month from today
+    const nextDueDate = new Date(today);
+    nextDueDate.setMonth(nextDueDate.getMonth() + 1);
+
     return {
       installments: [],
       summary: {
@@ -2098,7 +2180,7 @@ exports.getInstallmentSchedule = async (projectId, userId, userRole) => {
         remaining_balance: remainingBalance,
         total_months: tenureMonths,
         remaining_months: tenureMonths,
-        next_due_date: new Date(today.getFullYear(), today.getMonth() + 1, 15).toISOString(),
+        next_due_date: nextDueDate.toISOString(),
         interest_rate: monthlyRate,
       },
     };

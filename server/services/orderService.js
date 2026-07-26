@@ -1,6 +1,36 @@
 const { pool } = require('../config/database')
 const { generateOrderNumber, determineOrderTypePrefix } = require('../utils/orderNumber')
 
+let ensureOrderItemsColumnsReady = false;
+let ensureOrderItemsColumnsPromise = null;
+
+const ensureOrderItemsColumns = async () => {
+  if (ensureOrderItemsColumnsReady) return;
+  if (!ensureOrderItemsColumnsPromise) {
+    ensureOrderItemsColumnsPromise = (async () => {
+      const checkRes = await pool.query(
+        `SELECT column_name
+         FROM information_schema.columns
+         WHERE table_name = 'order_items'
+           AND table_schema = current_schema()
+           AND column_name IN ('product_sku', 'deleted_at')`
+      );
+      const existing = new Set(checkRes.rows.map((row) => row.column_name));
+      if (!existing.has('product_sku')) {
+        await pool.query(`ALTER TABLE order_items ADD COLUMN product_sku VARCHAR(50)`);
+      }
+      if (!existing.has('deleted_at')) {
+        await pool.query(`ALTER TABLE order_items ADD COLUMN deleted_at TIMESTAMPTZ`);
+      }
+      ensureOrderItemsColumnsReady = true;
+    })().catch((error) => {
+      ensureOrderItemsColumnsPromise = null;
+      throw error;
+    });
+  }
+  await ensureOrderItemsColumnsPromise;
+};
+
 const isValidUUID = (uuid) => {
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
   return uuidRegex.test(uuid)
@@ -412,6 +442,9 @@ const STATUS_FIELD_REQUIREMENTS = {
 
 exports.createOrder = async (orderData) => {
   const { userId, items, notes, shippingMethod, paymentMethod, billingAddress, termsAccepted } = orderData
+  
+  // Ensure database columns exist
+  await ensureOrderItemsColumns()
   
   const client = await pool.connect()
   
