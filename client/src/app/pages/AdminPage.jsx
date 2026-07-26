@@ -88,7 +88,7 @@ import {
   normalizeInventoryPartCategory,
   makePartIdentityKey,
 } from './admin/utils/partHelpers'
-import { generateSlug, updateIfChanged } from './admin/utils/slug'
+import { updateIfChanged } from './admin/utils/slug'
 import { extractOrderPaymentMethod, isCashOnDeliveryOrder } from './admin/utils/orderHelpers'
 import { StatusBadge } from './admin/components/shared/StatusBadge'
 import { EmptyState } from './admin/components/shared/EmptyState'
@@ -2383,7 +2383,6 @@ export function AdminPage() {
                   CATEGORY_RULES={CATEGORY_RULES}
                   isSaving={isSaving}
                   saveCategory={saveCategory}
-                  generateSlug={generateSlug}
                   inputCls={inputCls}
                 />
               )}

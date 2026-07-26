@@ -13,7 +13,7 @@ const { AppError } = require('../middleware/errorHandler');
  */
 exports.getProductStock = async (productId) => {
   const res = await pool.query(
-    `SELECT p.product_id, p.name, p.sku, p.is_active, i.stock, i.low_stock_threshold, i.cost_price
+    `SELECT p.product_id, p.name, p.is_active, i.stock, i.low_stock_threshold, i.cost_price
      FROM products p
      LEFT JOIN inventory i ON p.product_id = i.product_id
      WHERE p.product_id = $1`,
@@ -31,7 +31,7 @@ exports.getProductsWithStock = async ({ search, category_id, low_stock_only } = 
   let idx = 1;
 
   if (search) {
-    where.push(`(p.name ILIKE $${idx} OR p.sku ILIKE $${idx})`);
+    where.push(`(p.name ILIKE $${idx})`);
     params.push(`%${search}%`);
     idx++;
   }
@@ -49,7 +49,7 @@ exports.getProductsWithStock = async ({ search, category_id, low_stock_only } = 
 
   const res = await pool.query(
     `SELECT 
-      p.product_id, p.sku, p.name, p.description, p.price,
+      p.product_id, p.name, p.description, p.price,
       i.cost_price, i.stock, i.low_stock_threshold, i.inventory_id,
       c.name AS category_name,
       (i.stock <= COALESCE(i.low_stock_threshold, 10)) AS is_low_stock,
@@ -105,7 +105,7 @@ exports.addStock = async (productId, quantity, { notes = null, createdBy = null 
 
     // Get product info for response
     const productRes = await client.query(
-      'SELECT product_id, name, sku FROM products WHERE product_id = $1',
+      'SELECT product_id, name FROM products WHERE product_id = $1',
       [productId]
     );
 
@@ -178,7 +178,7 @@ exports.deductStock = async (
 
     // Get product info for response
     const productRes = await client.query(
-      'SELECT product_id, name, sku FROM products WHERE product_id = $1',
+      'SELECT product_id, name FROM products WHERE product_id = $1',
       [productId]
     );
 
@@ -276,7 +276,7 @@ exports.adjustStock = async (productId, quantity, { notes = null, createdBy = nu
 
     // Get product info for response
     const productRes = await client.query(
-      'SELECT product_id, name, sku FROM products WHERE product_id = $1',
+      'SELECT product_id, name FROM products WHERE product_id = $1',
       [productId]
     );
 
@@ -350,7 +350,7 @@ exports.getInventoryLogs = async ({
 
   const res = await pool.query(
     `SELECT 
-      il.log_id, il.product_id, p.sku, p.name AS product_name,
+      il.log_id, il.product_id, p.name AS product_name,
       il.change_type, il.quantity, il.reference_type, il.reference_id,
       il.notes, il.created_by, u.first_name, u.last_name,
       il.created_at
@@ -424,7 +424,7 @@ exports.getInventoryLogsCount = async ({
 exports.getLowStockAlerts = async ({ limit = 50, offset = 0 } = {}) => {
   const res = await pool.query(
     `SELECT 
-      lsa.alert_id, lsa.product_id, p.sku, p.name, p.description,
+      lsa.alert_id, lsa.product_id, p.name, p.description,
       lsa.current_stock, lsa.threshold, lsa.is_read, lsa.read_at,
       lsa.created_at
      FROM low_stock_alerts lsa
@@ -499,7 +499,7 @@ exports.updateProductStock = async (productId, newStock) => {
 
   // Get product info for response
   const productRes = await pool.query(
-    'SELECT product_id, name, sku FROM products WHERE product_id = $1',
+    'SELECT product_id, name FROM products WHERE product_id = $1',
     [productId]
   );
 

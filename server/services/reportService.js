@@ -255,7 +255,7 @@ async function getProductReport(filters = {}) {
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
   const result = await pool.query(
-    `SELECT p.product_id, p.name, p.sku, p.price, c.name as category_name,
+    `SELECT p.product_id, p.name, p.price, c.name as category_name,
             SUM(oi.quantity) as total_sold,
             SUM(oi.quantity * oi.unit_price) as total_revenue,
             i.stock as current_stock
@@ -265,7 +265,7 @@ async function getProductReport(filters = {}) {
      LEFT JOIN orders o ON oi.order_id = o.order_id
      LEFT JOIN categories c ON p.category_id = c.category_id
      ${whereClause}
-     GROUP BY p.product_id, p.name, p.sku, p.price, c.name, i.stock
+     GROUP BY p.product_id, p.name, p.price, c.name, i.stock
      ORDER BY total_sold DESC
      LIMIT $${baseIdx}`,
     [...params, parseInt(limit)]
@@ -296,7 +296,6 @@ async function getProductReport(filters = {}) {
     data: result.rows.map(r => ({
       product_id: r.product_id,
       name: r.name,
-      sku: r.sku,
       price: parseFloat(r.price),
       category_name: r.category_name,
       total_sold: parseInt(r.total_sold || 0),

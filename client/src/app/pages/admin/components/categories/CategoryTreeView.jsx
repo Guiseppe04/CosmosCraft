@@ -27,7 +27,6 @@ function CategoryTreeRow({ category, expandedIds, onToggle, onEdit, onDelete, ca
             <span className="font-semibold text-white">{category.name}</span>
           </div>
         </td>
-        <td className="py-4 px-6 text-[var(--text-muted)] font-mono text-sm">{category.slug}</td>
         <td className="py-4 px-6">
           {hasChildren ? (
             <span className="px-2.5 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wider bg-[var(--gold-primary)]/20 text-[var(--gold-primary)] border border-[var(--gold-primary)]/30">
@@ -100,7 +99,7 @@ export function CategoryTreeView({ categoryTree, categories, expandedCategoryIds
           <thead>
             <tr className="border-b border-[var(--border)]">
               <th className="text-left py-4 px-6 text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold">Name</th>
-              <th className="text-left py-4 px-6 text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold">Slug</th>
+              <th className="text-left py-4 px-6 text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold">Parent</th>
               <th className="text-left py-4 px-6 text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold">Type</th>
               <th className="text-left py-4 px-6 text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold">Status</th>
               <th className="text-left py-4 px-6 text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold">Actions</th>

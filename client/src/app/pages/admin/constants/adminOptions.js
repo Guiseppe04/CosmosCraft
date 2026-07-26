@@ -19,7 +19,6 @@ export const validate = (rules, form) => {
 }
 
 export const PRODUCT_RULES = {
-  sku: [required('SKU')],
   name: [required('Name')],
   category_id: [required('Category')],
   price: [required('Price'), positive('Price')],
@@ -27,7 +26,6 @@ export const PRODUCT_RULES = {
 
 export const CATEGORY_RULES = {
   name: [required('Name')],
-  slug: [required('Slug')],
 }
 
 export const PART_RULES = {

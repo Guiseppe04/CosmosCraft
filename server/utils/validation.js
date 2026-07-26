@@ -320,14 +320,6 @@ exports.changePasswordSchema = Joi.object({
 
 // Product and category validation
 exports.createProductSchema = Joi.object({
-  sku: Joi.string()
-    .max(50)
-    .required()
-    .trim()
-    .messages({
-      'string.max': 'SKU must not exceed 50 characters',
-      'any.required': 'SKU is required',
-    }),
   name: Joi.string()
     .max(150)
     .required()
@@ -404,13 +396,6 @@ exports.createProductSchema = Joi.object({
 });
 
 exports.updateProductSchema = Joi.object({
-  sku: Joi.string()
-    .max(50)
-    .optional()
-    .trim()
-    .messages({
-      'string.max': 'SKU must not exceed 50 characters',
-    }),
   name: Joi.string()
     .max(150)
     .optional()
@@ -492,14 +477,6 @@ exports.createCategorySchema = Joi.object({
       'string.max': 'Category name must not exceed 100 characters',
       'any.required': 'Category name is required',
     }),
-  slug: Joi.string()
-    .max(100)
-    .required()
-    .trim()
-    .messages({
-      'string.max': 'Category slug must not exceed 100 characters',
-      'any.required': 'Category slug is required',
-    }),
   description: Joi.string()
     .optional()
     .allow('')
@@ -519,13 +496,6 @@ exports.updateCategorySchema = Joi.object({
     .trim()
     .messages({
       'string.max': 'Category name must not exceed 100 characters',
-    }),
-  slug: Joi.string()
-    .max(100)
-    .optional()
-    .trim()
-    .messages({
-      'string.max': 'Category slug must not exceed 100 characters',
     }),
   description: Joi.string()
     .optional()

@@ -1,5 +1,4 @@
 import { motion } from 'motion/react'
-import { RefreshCw } from 'lucide-react'
 import { ModalHeader } from '../shared/ModalHeader'
 import { ModalFooter } from '../shared/ModalFooter'
 
@@ -11,11 +10,9 @@ export function CategoryModal({
   categoryTree,
   closeModal,
   validateAndSave,
-  showToast,
   CATEGORY_RULES,
   isSaving,
   saveCategory,
-  generateSlug,
   inputCls,
 }) {
   const fieldBase = 'w-full px-4 py-2.5 bg-[var(--bg-primary)] rounded-xl text-white placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 text-sm transition-colors'
@@ -35,36 +32,13 @@ export function CategoryModal({
             <input
               value={form.name || ''}
               onChange={(e) => {
-                const nameVal = e.target.value
-                setForm(f => ({ ...f, name: nameVal, slug: f.slug || generateSlug(nameVal) }))
+                setForm(f => ({ ...f, name: e.target.value }))
               }}
               placeholder="e.g. Custom Builds, Acoustic Guitars"
               className={formErrors.name ? fieldErr : fieldOk}
             />
             {formErrors.name && <p className="mt-1 text-xs text-red-400">{formErrors.name}</p>}
             <p className="mt-1.5 text-xs text-[var(--text-muted)]">The display name for this category.</p>
-          </div>
-
-          <div>
-            <label className={`block text-xs font-semibold uppercase tracking-wider mb-1.5 ${formErrors.slug ? 'text-red-400' : 'text-[var(--text-muted)]'}`}>URL Slug *</label>
-            <div className="flex items-center gap-2">
-              <input
-                value={form.slug || ''}
-                onChange={(e) => setForm(f => ({ ...f, slug: e.target.value }))}
-                placeholder="custom-builds"
-                className={`${formErrors.slug ? fieldErr : fieldOk} flex-1`}
-              />
-              <button
-                type="button"
-                onClick={() => setForm(f => ({ ...f, slug: generateSlug(f.name) }))}
-                className="p-2.5 bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl hover:border-[var(--gold-primary)] transition-colors"
-                title="Regenerate slug"
-              >
-                <RefreshCw className="w-4 h-4 text-[var(--text-muted)]" />
-              </button>
-            </div>
-            {formErrors.slug && <p className="mt-1 text-xs text-red-400">{formErrors.slug}</p>}
-            <p className="mt-1.5 text-xs text-[var(--text-muted)]">URL-friendly identifier. Auto-generated from name but can be customized.</p>
           </div>
 
           <div>
