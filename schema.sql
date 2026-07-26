@@ -176,7 +176,6 @@ CREATE INDEX idx_addresses_deleted_at ON addresses(deleted_at) WHERE deleted_at 
 CREATE TABLE categories (
     category_id SERIAL PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
-    slug VARCHAR(100) NOT NULL UNIQUE,
     description TEXT,
     parent_id INT,
     sort_order SMALLINT NOT NULL DEFAULT 0,
@@ -188,8 +187,6 @@ CREATE TABLE categories (
     FOREIGN KEY (parent_id) REFERENCES categories(category_id) ON DELETE SET NULL,
     CHECK (sort_order >= 0)
 );
-
-CREATE INDEX idx_categories_slug ON categories(slug);
 CREATE INDEX idx_categories_parent_id ON categories(parent_id);
 CREATE INDEX idx_categories_deleted_at ON categories(deleted_at) WHERE deleted_at IS NOT NULL;
 
@@ -200,7 +197,6 @@ CREATE INDEX idx_categories_deleted_at ON categories(deleted_at) WHERE deleted_a
 
 CREATE TABLE products (
     product_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    sku VARCHAR(50) NOT NULL UNIQUE,
     name VARCHAR(150) NOT NULL,
     description TEXT NOT NULL DEFAULT '',
     price NUMERIC(12, 2) NOT NULL CHECK (price >= 0),
@@ -213,8 +209,6 @@ CREATE TABLE products (
 
     FOREIGN KEY (category_id) REFERENCES categories(category_id) ON DELETE RESTRICT
 );
-
-CREATE INDEX idx_products_sku ON products(sku);
 CREATE INDEX idx_products_brand ON products(brand);
 CREATE INDEX idx_products_category_id ON products(category_id);
 CREATE INDEX idx_products_is_active ON products(is_active);
@@ -470,7 +464,6 @@ CREATE TABLE order_items (
     order_id UUID NOT NULL,
     product_id UUID,
     customization_id UUID,
-    product_sku VARCHAR(50),
     product_name VARCHAR(150),
     quantity INT NOT NULL CHECK (quantity > 0),
     unit_price NUMERIC(12, 2) NOT NULL CHECK (unit_price >= 0),
@@ -481,7 +474,7 @@ CREATE TABLE order_items (
     FOREIGN KEY (order_id) REFERENCES orders(order_id) ON DELETE CASCADE,
     FOREIGN KEY (product_id) REFERENCES products(product_id) ON DELETE SET NULL,
     FOREIGN KEY (customization_id) REFERENCES customizations(customization_id) ON DELETE SET NULL,
-    CHECK ((product_id IS NOT NULL) OR (customization_id IS NOT NULL) OR (product_sku IS NOT NULL))
+    CHECK ((product_id IS NOT NULL) OR (customization_id IS NOT NULL))
 );
 
 CREATE INDEX idx_order_items_order_id ON order_items(order_id);

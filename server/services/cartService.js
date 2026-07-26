@@ -31,7 +31,6 @@ async function getCartWithItems(userId) {
       ci.created_at,
       ci.updated_at,
       p.product_id,
-      p.sku,
       p.name AS product_name,
       p.description AS product_description,
       p.price AS product_base_price,
@@ -66,7 +65,6 @@ async function getCartWithItems(userId) {
     updated_at: item.updated_at,
     product: item.product_id ? {
       product_id: item.product_id,
-      sku: item.sku,
       name: item.product_name,
       description: item.product_description,
       base_price: parseFloat(item.product_base_price),

@@ -19,29 +19,28 @@ exports.getCategoryById = async (id) => {
   return res.rows[0] || null;
 };
 
-exports.createCategory = async ({ name, slug, description, parent_id, sort_order }) => {
+exports.createCategory = async ({ name, description, parent_id, sort_order }) => {
   const res = await pool.query(
-    `INSERT INTO categories (name, slug, description, parent_id, sort_order)
-     VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO categories (name, description, parent_id, sort_order)
+     VALUES ($1, $2, $3, $4)
      RETURNING *`,
-    [name, slug, description || null, parent_id || null, sort_order ?? 0]
+    [name, description || null, parent_id || null, sort_order ?? 0]
   );
   return res.rows[0];
 };
 
-exports.updateCategory = async (id, { name, slug, description, parent_id, sort_order, is_active }) => {
+exports.updateCategory = async (id, { name, description, parent_id, sort_order, is_active }) => {
   const res = await pool.query(
     `UPDATE categories SET
        name        = COALESCE($1, name),
-       slug        = COALESCE($2, slug),
-       description = COALESCE($3, description),
-       parent_id   = $4,
-       sort_order  = COALESCE($5, sort_order),
-       is_active   = COALESCE($6, is_active),
+       description = COALESCE($2, description),
+       parent_id   = $3,
+       sort_order  = COALESCE($4, sort_order),
+       is_active   = COALESCE($5, is_active),
        updated_at  = now()
-     WHERE category_id = $7
+     WHERE category_id = $6
      RETURNING *`,
-    [name, slug, description, parent_id || null, sort_order, is_active, id]
+    [name, description, parent_id || null, sort_order, is_active, id]
   );
   return res.rows[0] || null;
 };
@@ -69,7 +68,7 @@ exports.getAllProducts = async ({
   let idx = 1;
 
   if (search) {
-    where.push(`(p.name ILIKE $${idx} OR p.sku ILIKE $${idx} OR p.brand ILIKE $${idx})`);
+    where.push(`(p.name ILIKE $${idx} OR p.brand ILIKE $${idx})`);
     params.push(`%${search}%`);
     idx++;
   }
@@ -169,17 +168,17 @@ exports.getProductById = async (id) => {
   return { ...res.rows[0], images: images.rows };
 };
 
-exports.createProduct = async ({ sku, name, description, price, brand, cost_price, category_id, stock, low_stock_threshold, is_active }) => {
+exports.createProduct = async ({ name, description, price, brand, cost_price, category_id, stock, low_stock_threshold, is_active }) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     
     // Create product record
     const productRes = await client.query(
-      `INSERT INTO products (sku, name, description, price, brand, category_id, is_active)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO products (name, description, price, brand, category_id, is_active)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
-      [sku, name, description || null, price, brand || null, category_id || null, is_active ?? true]
+      [name, description || null, price, brand || null, category_id || null, is_active ?? true]
     );
     const product = productRes.rows[0];
     
@@ -207,7 +206,7 @@ exports.createProduct = async ({ sku, name, description, price, brand, cost_pric
   }
 };
 
-exports.updateProduct = async (id, { sku, name, description, price, brand, cost_price, category_id, stock, low_stock_threshold, is_active }) => {
+exports.updateProduct = async (id, { name, description, price, brand, cost_price, category_id, stock, low_stock_threshold, is_active }) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -215,17 +214,16 @@ exports.updateProduct = async (id, { sku, name, description, price, brand, cost_
     // Update product record
     const productRes = await client.query(
       `UPDATE products SET
-         sku                = COALESCE($1, sku),
-         name               = COALESCE($2, name),
-         description        = COALESCE($3, description),
-         price              = COALESCE($4, price),
-         brand              = COALESCE($5, brand),
-         category_id        = COALESCE($6, category_id),
-         is_active          = COALESCE($7, is_active),
+         name               = COALESCE($1, name),
+         description        = COALESCE($2, description),
+         price              = COALESCE($3, price),
+         brand              = COALESCE($4, brand),
+         category_id        = COALESCE($5, category_id),
+         is_active          = COALESCE($6, is_active),
          updated_at         = now()
-       WHERE product_id = $8
+       WHERE product_id = $7
        RETURNING *`,
-      [sku, name, description, price, brand, category_id, is_active, id]
+      [name, description, price, brand, category_id, is_active, id]
     );
     
     if (!productRes.rows[0]) {

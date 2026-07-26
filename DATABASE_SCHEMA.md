@@ -73,8 +73,8 @@ Run `schema.sql` against a fresh PostgreSQL database to create the full schema.
 
 ### `categories`
 - Self-referential category hierarchy using `parent_id`.
-- Unique `slug` and active flag. Supports soft-delete.
-- Indexes: `slug`, `parent_id`, `deleted_at`.
+- Includes an active flag and supports soft-delete.
+- Indexes: `parent_id`, `deleted_at`.
 
 ### `products`
 - Product catalog with SKU, brand, category, price, and `is_active`.

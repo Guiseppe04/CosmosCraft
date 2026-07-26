@@ -80,7 +80,7 @@ import {
   getPaymentStatusConfig,
 } from './admin/constants/orderStatus'
 import { validate } from './admin/constants/adminOptions'
-import { ADJUSTMENT_REASONS, ADJUSTMENT_TYPE_LABELS } from './admin/constants/stockAdjustment'
+import { ADJUSTMENT_TYPE_LABELS } from './admin/constants/stockAdjustment'
 import {
   normalizeBuilderPart,
   deriveInventoryPartCategory,
@@ -88,7 +88,7 @@ import {
   normalizeInventoryPartCategory,
   makePartIdentityKey,
 } from './admin/utils/partHelpers'
-import { generateSlug, updateIfChanged } from './admin/utils/slug'
+import { updateIfChanged } from './admin/utils/slug'
 import { extractOrderPaymentMethod, isCashOnDeliveryOrder } from './admin/utils/orderHelpers'
 import { StatusBadge } from './admin/components/shared/StatusBadge'
 import { EmptyState } from './admin/components/shared/EmptyState'
@@ -270,7 +270,7 @@ export function AdminPage() {
   const [inventoryPage, setInventoryPage] = useState(1)
   const INVENTORY_PAGE_SIZE = 10
   const [optimisticStock, setOptimisticStock] = useState({})
-  const [adjustPopover, setAdjustPopover] = useState({ open: false, itemId: null, amount: 0, reason: '', name: '' })
+  const [adjustPopover, setAdjustPopover] = useState({ open: false, itemId: null, amount: 0, name: '' })
   const [form, setForm] = useState({})
   const [formErrors, setFormErrors] = useState({})
   const [isSaving, setIsSaving] = useState(false)
@@ -1382,7 +1382,7 @@ export function AdminPage() {
   const saveStockAdjust = async (overrideForm = {}) => {
     setIsSaving(true)
     try {
-      const { product_id, change_type, quantity, reason, notes } = { ...form, ...overrideForm }
+      const { product_id, change_type, quantity } = { ...form, ...overrideForm }
       if (!product_id || !change_type || !quantity) {
         showToast('Please fill all required fields', 'error'); return
       }
@@ -1392,8 +1392,6 @@ export function AdminPage() {
       const payload = { 
         productId: product_id, 
         quantity: change_type === 'adjustment' ? qty - currentStock : qty,
-        reason: reason || notes,
-        notes: notes 
       }
       if (change_type === 'stock_in') await adminApi.addStock(payload)
       else if (change_type === 'stock_out') await adminApi.deductStock(payload)
@@ -1408,7 +1406,7 @@ export function AdminPage() {
   const savePartStockAdjust = async (overrideForm = {}) => {
     setIsSaving(true)
     try {
-      const { part_id, change_type, quantity, reason, notes } = { ...form, ...overrideForm }
+      const { part_id, change_type, quantity } = { ...form, ...overrideForm }
       if (!part_id || !change_type || !quantity) {
         showToast('Please fill all required fields', 'error'); return
       }
@@ -1434,8 +1432,6 @@ export function AdminPage() {
           last_stock_adjustment: {
             change_type,
             quantity: qty,
-            reason: reason || notes || null,
-            notes: notes || null,
             adjusted_at: new Date().toISOString(),
           },
         },
@@ -2387,7 +2383,6 @@ export function AdminPage() {
                   CATEGORY_RULES={CATEGORY_RULES}
                   isSaving={isSaving}
                   saveCategory={saveCategory}
-                  generateSlug={generateSlug}
                   inputCls={inputCls}
                 />
               )}

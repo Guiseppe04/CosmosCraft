@@ -214,7 +214,7 @@ exports.getSaleById = async (saleId) => {
   // Get items
   const itemsRes = await pool.query(
     `SELECT 
-      psi.item_id, psi.product_id, p.sku, 
+      psi.item_id, psi.product_id,
       psi.service_id, s.name AS service_name,
       psi.item_name, psi.quantity, psi.unit_price,
       psi.discount_amount, psi.subtotal, psi.notes
@@ -356,7 +356,7 @@ exports.addProductItem = async (saleId, productId, quantity, { discount = 0, not
 
     // Get product
     const productRes = await client.query(
-      `SELECT p.product_id, p.name, p.sku, p.price, i.stock FROM products p
+      `SELECT p.product_id, p.name, p.price, i.stock FROM products p
        LEFT JOIN inventory i ON p.product_id = i.product_id
        WHERE p.product_id = $1`,
       [productId]
