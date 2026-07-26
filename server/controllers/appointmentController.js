@@ -190,6 +190,7 @@ exports.updateAppointment = async (req, res, next) => {
       throw new AppError('Customers cannot update appointment status', 403);
     }
 
+    // Customers can update appointment_type, services, location_id, guitar_details for rescheduling
     // Perform update
     const updated = await appointmentService.updateAppointment(id, validated);
 

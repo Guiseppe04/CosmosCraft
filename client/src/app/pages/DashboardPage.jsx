@@ -1066,7 +1066,7 @@ export function DashboardPage() {
                       </div>
                     )}
                     
-                    {needsReschedule && (
+                     {needsReschedule && (
                       <div className="sm:col-span-2 mt-3 pt-4 border-t border-[var(--border)] flex items-center justify-between bg-orange-500/10 p-4 rounded-xl border border-orange-500/20">
                          <div className="flex items-center gap-3">
                            <AlertCircle className="w-5 h-5 text-orange-400" />
@@ -1077,8 +1077,20 @@ export function DashboardPage() {
                          </div>
                          <button 
                            onClick={() => {
-                             setReschedulingAptId(apt.appointment_id || apt.id);
-                             setRescheduleDate(new Date().toISOString().split('T')[0]);
+                             navigate('/appointments', {
+                               state: {
+                                 rescheduleAppointment: {
+                                   appointment_id: apt.appointment_id || apt.id,
+                                   appointment_type: apt.appointment_type,
+                                   services: apt.services,
+                                   location_id: apt.location_id,
+                                   guitar_details: apt.guitar_details,
+                                   notes: apt.notes,
+                                   scheduled_at: apt.scheduled_at,
+                                   status: apt.status,
+                                 }
+                               }
+                             });
                            }} 
                            className="px-4 py-2 rounded-lg bg-orange-500 text-white font-semibold text-xs hover:bg-orange-600 transition"
                          >

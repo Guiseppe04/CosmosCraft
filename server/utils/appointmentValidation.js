@@ -161,6 +161,13 @@ const appointmentValidation = {
   // ─── UPDATE APPOINTMENT ──────────────────────────────────────────────────
 
   updateAppointmentSchema: Joi.object({
+    appointment_type: Joi.string()
+      .valid('service_in_shop', 'service_home', 'pickup')
+      .optional()
+      .messages({
+        'any.only': 'appointment_type must be: service_in_shop, service_home, or pickup',
+      }),
+
     scheduled_at: Joi.date()
       .iso()
       .min('now')
@@ -168,6 +175,26 @@ const appointmentValidation = {
       .messages({
         'date.base': 'Invalid date format',
         'date.min': 'Cannot reschedule to the past',
+      }),
+
+    services: Joi.array().items(Joi.string()).min(1).optional(),
+
+    location_id: Joi.string().allow('').optional(),
+
+    guitar_details: Joi.object({
+      brand: Joi.string().optional(),
+      model: Joi.string().optional(),
+      type: Joi.string().valid(...GUITAR_TYPE_VALUES).optional(),
+      serial: Joi.string().allow('').optional(),
+      notes: Joi.string().allow('').optional(),
+      guitars: Joi.array().items(guitarEntrySchema).min(1).optional(),
+    }).optional(),
+
+    address_id: Joi.string()
+      .uuid()
+      .optional()
+      .messages({
+        'string.guid': 'address_id must be a valid UUID',
       }),
 
     notes: Joi.string()
@@ -186,9 +213,9 @@ const appointmentValidation = {
       .uuid()
       .optional(),
   })
-    .or('scheduled_at', 'notes', 'confirmation_notes', 'staff_id')
+    .min(1)
     .messages({
-      'object.missing': 'At least one field must be provided for update',
+      'object.min': 'At least one field must be provided for update',
     }),
 
   // ─── STATUS UPDATE ──────────────────────────────────────────────────────

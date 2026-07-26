@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react'
-import { useNavigate } from 'react-router'
+import { useNavigate, useLocation } from 'react-router'
 import { motion, AnimatePresence } from 'motion/react'
 import { API } from '../utils/apiConfig'
 import { uploadToCloudinary } from '../utils/cloudinary.js'
@@ -220,6 +220,7 @@ function getMonthMatrix(year, month, maxLeadTimeDays, disabledDateSet = new Set(
 
 export function AppointmentPage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { user, isAuthenticated, isLoadingUser, openLogin } = useAuth()
   const today = new Date()
   const branch = useMemo(() => getAppointmentBranch(), [])
@@ -231,6 +232,10 @@ export function AppointmentPage() {
     const savedBassBuilds = JSON.parse(window.localStorage.getItem('cosmoscraft_saved_bass_builds') || '[]').map((build) => ({ ...build, isBass: true }))
     return [...savedGuitarBuilds, ...savedBassBuilds]
   }, [])
+
+  // Reschedule mode - check if we're editing an existing appointment
+  const rescheduleData = location.state?.rescheduleAppointment || null
+  const isRescheduleMode = Boolean(rescheduleData)
 
   // State
   const [currentStep, setCurrentStep] = useState(1)
@@ -331,6 +336,48 @@ export function AppointmentPage() {
       )
     })
   }, [availableServices, serviceSearch])
+
+  // Pre-fill form when in reschedule mode
+  useEffect(() => {
+    if (!isRescheduleMode || !rescheduleData) return
+
+    // Pre-fill service
+    if (Array.isArray(rescheduleData.services) && rescheduleData.services.length > 0) {
+      setSelectedServiceId(String(rescheduleData.services[0]))
+    }
+
+    // Pre-fill home service option
+    if (rescheduleData.appointment_type === 'service_home') {
+      setHomeServiceOption('yes')
+    } else if (rescheduleData.appointment_type === 'service_in_shop') {
+      setHomeServiceOption('no')
+    }
+
+    // Pre-fill guitar details
+    if (rescheduleData.guitar_details) {
+      const gd = rescheduleData.guitar_details
+      setGuitarDetails({
+        brand: gd.brand || '',
+        model: gd.model || '',
+        type: gd.type || 'electric',
+        notes: gd.notes || '',
+      })
+      // If there are saved builds, try to match
+      if (gd.brand && gd.model && savedBuilds.length > 0) {
+        setGuitarSelectionMode('manual')
+      }
+    }
+
+    // Pre-fill notes
+    if (rescheduleData.notes) {
+      // Extract non-image text from notes
+      const textLines = rescheduleData.notes.split('\n').filter(line => {
+        const imageMatch = line.match(/(https?:\/\/[^\s]+(?:\.jpg|\.jpeg|\.png|\.gif|\.webp|\.bmp)[^\s]*)/i)
+        return !imageMatch
+      })
+      setAdditionalNotes(textLines.filter(Boolean).join('\n'))
+    }
+  }, [isRescheduleMode, rescheduleData, savedBuilds])
 
   useEffect(() => {
     let isMounted = true
@@ -695,6 +742,21 @@ export function AppointmentPage() {
     setIsSubmittingBooking(true)
     
     try {
+      // Validate: reschedule must select a different date/time
+      if (isRescheduleMode && rescheduleData.scheduled_at) {
+        const oldDate = new Date(rescheduleData.scheduled_at)
+        const oldDateId = formatLocalDateId(oldDate)
+        const oldTimeHour = oldDate.getHours()
+        const oldTimeMin = oldDate.getMinutes()
+        const oldTimeLabel = oldDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+        
+        if (selectedDateId === oldDateId && selectedTime === oldTimeLabel) {
+          alert('Please select a different date or time than the original appointment schedule.')
+          setIsSubmittingBooking(false)
+          return
+        }
+      }
+
       let serviceReferenceImageUrl = ''
       let guitarReferenceImageUrl = ''
       if (serviceReferenceFile) {
@@ -721,43 +783,84 @@ export function AppointmentPage() {
         guitarReferenceImageUrl ? `Guitar reference image: ${guitarReferenceImageUrl}` : '',
       ].filter(Boolean).join('\n') || null
 
-      const response = await fetch(`${API}/api/appointments`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        credentials: 'include',
+      if (isRescheduleMode) {
+        // Update existing appointment (reschedule)
+        const response = await fetch(`${API}/api/appointments/${rescheduleData.appointment_id}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          credentials: 'include',
           body: JSON.stringify({
-          appointment_type: selectedAppointmentType,
-          services: selectedServiceId ? [selectedServiceId] : [],
-          location_id: selectedBranchId,
-          address_id: selectedAppointmentType === 'service_home' ? homeServiceAddressId : undefined,
-          guitar_details: hasSelectedGuitar
-            ? {
-                brand: selectedPrimaryGuitar?.brand || '',
-                model: selectedPrimaryGuitar?.model || '',
-                type: selectedPrimaryGuitar?.type || 'electric',
-                serial: selectedPrimaryGuitar?.serial || 'N/A',
-                notes: selectedPrimaryGuitar?.notes || '',
-                guitars: selectedGuitarEntries,
-              }
-            : undefined,
-          scheduled_at: scheduledAt.toISOString(),
-          notes: finalNotes,
-        })
-      });
+            scheduled_at: scheduledAt.toISOString(),
+            appointment_type: selectedAppointmentType,
+            services: selectedServiceId ? [selectedServiceId] : [],
+            location_id: selectedBranchId,
+            guitar_details: hasSelectedGuitar
+              ? {
+                  brand: selectedPrimaryGuitar?.brand || '',
+                  model: selectedPrimaryGuitar?.model || '',
+                  type: selectedPrimaryGuitar?.type || 'electric',
+                  serial: selectedPrimaryGuitar?.serial || 'N/A',
+                  notes: selectedPrimaryGuitar?.notes || '',
+                  guitars: selectedGuitarEntries,
+                }
+              : undefined,
+            notes: finalNotes,
+          })
+        });
 
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.message || 'Failed to create appointment');
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}));
+          throw new Error(errData.message || 'Failed to reschedule appointment');
+        }
+
+        setShowBookingSuccess(true)
+        setTimeout(() => {
+          setShowBookingSuccess(false)
+          setIsSubmittingBooking(false)
+          navigate('/dashboard', { state: { section: 'appointments', message: 'Appointment rescheduled successfully!' } })
+        }, 2000)
+      } else {
+        // Create new appointment
+        const response = await fetch(`${API}/api/appointments`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          credentials: 'include',
+          body: JSON.stringify({
+            appointment_type: selectedAppointmentType,
+            services: selectedServiceId ? [selectedServiceId] : [],
+            location_id: selectedBranchId,
+            address_id: selectedAppointmentType === 'service_home' ? homeServiceAddressId : undefined,
+            guitar_details: hasSelectedGuitar
+              ? {
+                  brand: selectedPrimaryGuitar?.brand || '',
+                  model: selectedPrimaryGuitar?.model || '',
+                  type: selectedPrimaryGuitar?.type || 'electric',
+                  serial: selectedPrimaryGuitar?.serial || 'N/A',
+                  notes: selectedPrimaryGuitar?.notes || '',
+                  guitars: selectedGuitarEntries,
+                }
+              : undefined,
+            scheduled_at: scheduledAt.toISOString(),
+            notes: finalNotes,
+          })
+        });
+
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}));
+          throw new Error(errData.message || 'Failed to create appointment');
+        }
+
+        setShowBookingSuccess(true)
+        setTimeout(() => {
+          setShowBookingSuccess(false)
+          setIsSubmittingBooking(false)
+          navigate('/dashboard')
+        }, 2000)
       }
-
-      setShowBookingSuccess(true)
-      setTimeout(() => {
-        setShowBookingSuccess(false)
-        setIsSubmittingBooking(false)
-        navigate('/dashboard')
-      }, 2000)
 
     } catch (error) {
       console.error('Submission Error:', error);
@@ -1474,6 +1577,8 @@ export function AppointmentPage() {
                  >
                    {isSubmittingBooking ? (
                      <>Processing... <Settings className="w-4 h-4 animate-spin" /></>
+                   ) : isRescheduleMode ? (
+                     "Update Appointment"
                    ) : (
                      "Complete Booking"
                    )}
