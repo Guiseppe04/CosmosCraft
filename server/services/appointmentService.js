@@ -297,7 +297,7 @@ exports.getUserUpcomingAppointments = async (userId) => {
 exports.getAppointmentsByDateRange = async (startDate, endDate, filters = {}) => this.listAppointments({ ...filters, date_from: startDate, date_to: endDate });
 
 exports.updateAppointment = async (appointmentId, updates) => {
-  const { scheduled_at, status, notes, confirmation_notes } = updates;
+  const { scheduled_at, status, notes, confirmation_notes, appointment_type, services, location_id, guitar_details } = updates;
   const client = await pool.connect();
 
   try {
@@ -333,6 +333,23 @@ exports.updateAppointment = async (appointmentId, updates) => {
     if (confirmation_notes !== undefined) {
       setClauses.push(`confirmation_notes = $${idx++}`);
       params.push(confirmation_notes || null);
+    }
+    if (appointment_type !== undefined) {
+      setClauses.push(`appointment_type = $${idx++}`);
+      params.push(appointment_type);
+    }
+    if (services !== undefined) {
+      setClauses.push(`services = $${idx++}`);
+      params.push(JSON.stringify(Array.isArray(services) ? services : []));
+    }
+    if (location_id !== undefined) {
+      setClauses.push(`location_id = $${idx++}`);
+      params.push(location_id || null);
+    }
+    if (guitar_details !== undefined) {
+      const normalizedGuitarDetails = normalizeGuitarDetails(guitar_details || {});
+      setClauses.push(`guitar_details = $${idx++}`);
+      params.push(JSON.stringify(normalizedGuitarDetails));
     }
 
     if (setClauses.length === 0) {
