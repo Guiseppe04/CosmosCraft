@@ -214,6 +214,16 @@ export const adminApi = {
   deleteSubtask: (subtaskId) => request(`/api/projects/subtasks/${subtaskId}`, { method: 'DELETE' }),
   updateSubtask: (subtaskId, body) => request(`/api/projects/subtasks/${subtaskId}`, { method: 'PATCH', body }),
 
+  // Hold / Resume / Cancel with options
+  requestProjectHold: (projectId, body) => request(`/api/projects/${projectId}/hold`, { method: 'POST', body }),
+  approveProjectHold: (projectId, body) => request(`/api/projects/${projectId}/approve-hold`, { method: 'POST', body }),
+  resumeProject: (projectId) => request(`/api/projects/${projectId}/resume`, { method: 'POST' }),
+  requestProjectCancel: (projectId, body) => request(`/api/projects/${projectId}/request-cancel`, { method: 'POST', body }),
+  approveProjectCancel: (projectId, body) => request(`/api/projects/${projectId}/approve-cancel`, { method: 'POST', body }),
+
+  // Installment Schedule
+  getProjectInstallments: (projectId) => request(`/api/projects/${projectId}/installments`),
+
   // Default Workflow
   getDefaultWorkflow: () => request('/api/projects/default-workflow'),
   updateDefaultWorkflow: (body) => request('/api/projects/default-workflow', { method: 'PUT', body }),

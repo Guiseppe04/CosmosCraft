@@ -137,6 +137,39 @@ exports.initializeWorkflow = asyncHandler(async (req, res, next) => {
   res.json({ status: 'success', data: result });
 });
 
+// --- HOLD / RESUME ---
+exports.requestHold = asyncHandler(async (req, res, next) => {
+  const result = await projectService.requestProjectHold(req.params.id, req.user.id, req.user.role, req.body);
+  res.json({ status: 'success', data: result, message: 'Hold request submitted' });
+});
+
+exports.approveHold = asyncHandler(async (req, res, next) => {
+  const result = await projectService.approveProjectHold(req.params.id, req.user.id, req.body);
+  res.json({ status: 'success', data: result, message: 'Hold request processed' });
+});
+
+exports.resumeProject = asyncHandler(async (req, res, next) => {
+  const result = await projectService.resumeProject(req.params.id, req.user.id);
+  res.json({ status: 'success', data: result, message: 'Project resumed' });
+});
+
+// --- CANCEL WITH OPTIONS ---
+exports.requestCancel = asyncHandler(async (req, res, next) => {
+  const result = await projectService.requestProjectCancel(req.params.id, req.user.id, req.user.role, req.body);
+  res.json({ status: 'success', data: result, message: 'Cancellation request submitted' });
+});
+
+exports.approveCancel = asyncHandler(async (req, res, next) => {
+  const result = await projectService.approveProjectCancel(req.params.id, req.user.id, req.body);
+  res.json({ status: 'success', data: result, message: 'Cancellation request processed' });
+});
+
+// --- INSTALLMENT SCHEDULE ---
+exports.getInstallmentSchedule = asyncHandler(async (req, res, next) => {
+  const result = await projectService.getInstallmentSchedule(req.params.id, req.user.id, req.user.role);
+  res.json({ status: 'success', data: result });
+});
+
 // --- DEFAULT WORKFLOW ---
 exports.getDefaultWorkflow = asyncHandler(async (req, res, next) => {
   const workflow = await defaultWorkflowService.getDefaultWorkflow();

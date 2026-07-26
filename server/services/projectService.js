@@ -39,6 +39,7 @@ const normalizeProjectStatus = (status) => {
   if (normalized === 'completed') return 'completed'
   if (normalized === 'in_progress') return 'in_progress'
   if (normalized === 'not_started' || normalized === 'pending') return 'not_started'
+  if (normalized === 'on_hold') return 'on_hold'
 
   return null
 }
@@ -1182,7 +1183,8 @@ exports.updateSubtaskStatus = async (subtaskId, data, userId, userRole) => {
   try {
     await client.query('BEGIN');
     const sRes = await client.query(`
-      SELECT s.*, m.project_id FROM project_subtasks s
+      SELECT s.*, m.project_id, m.order_index AS milestone_order, m.title AS milestone_title
+      FROM project_subtasks s
       JOIN project_milestones m ON s.milestone_id = m.milestone_id
       WHERE s.subtask_id = $1
     `, [subtaskId]);
@@ -1201,7 +1203,42 @@ exports.updateSubtaskStatus = async (subtaskId, data, userId, userRole) => {
     let completedAt = subtask.completed_at;
     let completedBy = subtask.completed_by;
 
+    // --- SEQUENTIAL PROGRESSION CHECK ---
     if (status === 'completed' && subtask.status !== 'completed') {
+      // Check if this project is on hold
+      const projectRes = await client.query(
+        `SELECT status, hold_reason FROM projects WHERE project_id = $1`,
+        [subtask.project_id]
+      );
+      if (projectRes.rows.length > 0) {
+        const projectStatus = normalizeProjectStatus(projectRes.rows[0].status);
+        if (projectStatus === 'on_hold') {
+          throw new Error('Cannot update tasks while the project is on hold');
+        }
+        if (projectStatus === 'cancelled') {
+          throw new Error('Project is cancelled. No further updates allowed');
+        }
+      }
+
+      // Check if previous milestones are all completed (sequential progression)
+      const prevMilestones = await client.query(
+        `SELECT m.milestone_id, m.status, m.order_index,
+                (SELECT COUNT(*) FROM project_subtasks ps WHERE ps.milestone_id = m.milestone_id AND ps.status != 'completed') AS pending_subtasks
+         FROM project_milestones m
+         WHERE m.project_id = $1 AND m.order_index < $2
+         ORDER BY m.order_index ASC`,
+        [subtask.project_id, subtask.milestone_order]
+      );
+
+      for (const prevMilestone of prevMilestones.rows) {
+        if (parseInt(prevMilestone.pending_subtasks) > 0) {
+          throw new Error('Previous milestone must be completed first before proceeding to the next step');
+        }
+        if (prevMilestone.status !== 'completed') {
+          throw new Error('Previous milestone must be completed first before proceeding to the next step');
+        }
+      }
+
       completedAt = new Date();
       completedBy = userId;
     } else if (status === 'pending' || status === 'in_progress') {
@@ -1229,6 +1266,13 @@ exports.updateSubtaskStatus = async (subtaskId, data, userId, userRole) => {
       await client.query(`UPDATE project_milestones SET status = 'completed' WHERE milestone_id = $1`, [mId]);
     } else {
       await client.query(`UPDATE project_milestones SET status = 'in_progress' WHERE milestone_id = $1`, [mId]);
+    }
+
+    // Update project progress tracking
+    const projectData = await client.query(`SELECT * FROM projects WHERE project_id = $1`, [subtask.project_id]);
+    if (projectData.rows.length > 0) {
+      const stats = await getProjectTaskStats(client, subtask.project_id);
+      await applyProjectTaskTracking(client, projectData.rows[0], { stats, persist: true });
     }
 
     if (status && status !== subtask.status) {
@@ -1593,4 +1637,497 @@ exports.getStaffClaimStatus = async () => {
     ORDER BY u.first_name ASC
   `);
   return res.rows;
+};
+
+// ─── HOLD / RESUME ────────────────────────────────────────────────────────────
+
+/**
+ * Customer requests a hold on their project.
+ * @param {string} projectId
+ * @param {string} userId
+ * @param {string} userRole
+ * @param {object} data - { reason, hold_option: 'resume_later'|'hold_before_next_step' }
+ */
+exports.requestProjectHold = async (projectId, userId, userRole, data = {}) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const pRes = await client.query(
+      `${PROJECT_BASE_SELECT} WHERE p.project_id = $1 AND p.deleted_at IS NULL`,
+      [projectId]
+    );
+    if (pRes.rows.length === 0) throw new AppError('Project not found', 404);
+    const project = pRes.rows[0];
+
+    const isPrivileged = ['staff', 'admin', 'super_admin'].includes(userRole);
+    if (!isPrivileged && project.customer_id !== userId) {
+      throw new AppError('You do not have access to this project', 403);
+    }
+
+    const normalizedStatus = normalizeProjectStatus(project.status);
+    if (normalizedStatus === 'cancelled') throw new AppError('Project is already cancelled', 400);
+    if (normalizedStatus === 'completed') throw new AppError('Project is already completed', 400);
+    if (project.hold_reason) throw new AppError('Hold is already requested for this project', 400);
+
+    const holdOption = data.hold_option || 'resume_later';
+    if (!['resume_later', 'hold_before_next_step'].includes(holdOption)) {
+      throw new AppError('Invalid hold option', 400);
+    }
+
+    // Find the current build step for reference
+    let currentStepName = null;
+    const milestones = await client.query(
+      `SELECT * FROM project_milestones WHERE project_id = $1 AND status != 'completed' ORDER BY order_index ASC LIMIT 1`,
+      [projectId]
+    );
+    if (milestones.rows.length > 0) {
+      currentStepName = milestones.rows[0].title;
+    }
+
+    await client.query(
+      `UPDATE projects
+       SET hold_reason = $1,
+           hold_option = $2,
+           hold_at_step = $3,
+           hold_requested_at = CURRENT_TIMESTAMP,
+           status = 'on_hold',
+           updated_at = CURRENT_TIMESTAMP
+       WHERE project_id = $4`,
+      [data.reason || 'Customer requested hold', holdOption, currentStepName, projectId]
+    );
+
+    await logActivity(client, projectId, userId, 'hold_requested', {
+      reason: data.reason,
+      hold_option: holdOption,
+      current_step: currentStepName,
+    });
+
+    await client.query('COMMIT');
+
+    const updated = await exports.getProjectById(projectId);
+    return updated;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+};
+
+/**
+ * Admin approves (or rejects) a hold request.
+ */
+exports.approveProjectHold = async (projectId, userId, data = {}) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const pRes = await client.query(
+      `SELECT * FROM projects WHERE project_id = $1 AND deleted_at IS NULL`,
+      [projectId]
+    );
+    if (pRes.rows.length === 0) throw new AppError('Project not found', 404);
+    const project = pRes.rows[0];
+
+    if (!project.hold_reason) {
+      throw new AppError('No hold request exists for this project', 400);
+    }
+
+    const action = data.action || 'approve'; // 'approve' or 'reject'
+
+    if (action === 'reject') {
+      // Reject the hold - clear hold request and revert status
+      await client.query(
+        `UPDATE projects
+         SET hold_reason = NULL,
+             hold_option = NULL,
+             hold_at_step = NULL,
+             hold_requested_at = NULL,
+             hold_approved_by = NULL,
+             hold_approved_at = NULL,
+             status = $1,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE project_id = $2`,
+        [project.status || 'in_progress', projectId]
+      );
+
+      await logActivity(client, projectId, userId, 'hold_rejected', {
+        reason: data.rejection_reason || 'Rejected by admin',
+      });
+    } else {
+      // Approve the hold
+      await client.query(
+        `UPDATE projects
+         SET hold_approved_by = $1,
+             hold_approved_at = CURRENT_TIMESTAMP,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE project_id = $2`,
+        [userId, projectId]
+      );
+
+      await logActivity(client, projectId, userId, 'hold_approved', {
+        hold_option: project.hold_option,
+        hold_at_step: project.hold_at_step,
+        reason: project.hold_reason,
+      });
+    }
+
+    await client.query('COMMIT');
+
+    const updated = await exports.getProjectById(projectId);
+    return updated;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+};
+
+/**
+ * Admin resumes a held project.
+ */
+exports.resumeProject = async (projectId, userId) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const pRes = await client.query(
+      `SELECT * FROM projects WHERE project_id = $1 AND deleted_at IS NULL`,
+      [projectId]
+    );
+    if (pRes.rows.length === 0) throw new AppError('Project not found', 404);
+    const project = pRes.rows[0];
+
+    const normalizedStatus = normalizeProjectStatus(project.status);
+    if (normalizedStatus !== 'on_hold') {
+      throw new AppError('Project is not on hold', 400);
+    }
+
+    await client.query(
+      `UPDATE projects
+       SET status = 'in_progress',
+           hold_reason = NULL,
+           hold_option = NULL,
+           hold_at_step = NULL,
+           hold_requested_at = NULL,
+           hold_approved_by = NULL,
+           hold_approved_at = NULL,
+           resumed_at = CURRENT_TIMESTAMP,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE project_id = $1`,
+      [projectId]
+    );
+
+    await logActivity(client, projectId, userId, 'project_resumed', {
+      previous_hold_reason: project.hold_reason,
+      resumed_at: new Date(),
+    });
+
+    await client.query('COMMIT');
+
+    const updated = await exports.getProjectById(projectId);
+    return updated;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+};
+
+// ─── CANCEL WITH OPTIONS ─────────────────────────────────────────────────────
+
+/**
+ * Customer requests cancellation with a specific option.
+ * @param {string} projectId
+ * @param {string} userId
+ * @param {string} userRole
+ * @param {object} data - { cancel_option: 'ship_unfinished'|'pickup_unfinished', cancel_reason }
+ */
+exports.requestProjectCancel = async (projectId, userId, userRole, data = {}) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const pRes = await client.query(
+      `${PROJECT_BASE_SELECT} WHERE p.project_id = $1 AND p.deleted_at IS NULL`,
+      [projectId]
+    );
+    if (pRes.rows.length === 0) throw new AppError('Project not found', 404);
+    const project = pRes.rows[0];
+
+    const isPrivileged = ['staff', 'admin', 'super_admin'].includes(userRole);
+    if (!isPrivileged && project.customer_id !== userId) {
+      throw new AppError('You do not have access to this project', 403);
+    }
+
+    const normalizedStatus = normalizeProjectStatus(project.status);
+    if (normalizedStatus === 'cancelled') throw new AppError('Project is already cancelled', 400);
+    if (normalizedStatus === 'completed') throw new AppError('Project is already completed', 400);
+
+    const cancelOption = data.cancel_option;
+    if (!['ship_unfinished', 'pickup_unfinished'].includes(cancelOption)) {
+      throw new AppError('Invalid cancellation option. Choose ship_unfinished or pickup_unfinished', 400);
+    }
+
+    await client.query(
+      `UPDATE projects
+       SET cancel_option = $1,
+           cancel_reason = $2,
+           cancel_requested_at = CURRENT_TIMESTAMP,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE project_id = $3`,
+      [cancelOption, data.cancel_reason || 'Customer requested cancellation', projectId]
+    );
+
+    await logActivity(client, projectId, userId, 'cancel_requested', {
+      cancel_option: cancelOption,
+      cancel_reason: data.cancel_reason,
+    });
+
+    await client.query('COMMIT');
+
+    const updated = await exports.getProjectById(projectId);
+    return updated;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+};
+
+/**
+ * Admin approves (or rejects) a cancellation request.
+ */
+exports.approveProjectCancel = async (projectId, userId, data = {}) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const pRes = await client.query(
+      `${PROJECT_BASE_SELECT} WHERE p.project_id = $1 AND p.deleted_at IS NULL`,
+      [projectId]
+    );
+    if (pRes.rows.length === 0) throw new AppError('Project not found', 404);
+    const project = pRes.rows[0];
+
+    if (!project.cancel_option || !project.cancel_reason) {
+      throw new AppError('No cancellation request exists for this project', 400);
+    }
+
+    const action = data.action || 'approve';
+
+    if (action === 'reject') {
+      // Reject cancellation - clear cancel request
+      await client.query(
+        `UPDATE projects
+         SET cancel_option = NULL,
+             cancel_reason = NULL,
+             cancel_requested_at = NULL,
+             cancel_approved_by = NULL,
+             cancel_approved_at = NULL,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE project_id = $1`,
+        [projectId]
+      );
+
+      await logActivity(client, projectId, userId, 'cancel_rejected', {
+        rejection_reason: data.rejection_reason || 'Rejected by admin',
+        previous_cancel_option: project.cancel_option,
+      });
+    } else {
+      // Approve cancellation
+      const cancelOption = project.cancel_option;
+      let fulfillmentStatus = 'cancelled';
+
+      if (cancelOption === 'ship_unfinished') {
+        fulfillmentStatus = 'shipped_unfinished';
+        await client.query(
+          `UPDATE projects
+           SET status = 'cancelled',
+               cancel_approved_by = $1,
+               cancel_approved_at = CURRENT_TIMESTAMP,
+               shipped_at = CURRENT_TIMESTAMP,
+               fulfillment_status = $2,
+               updated_at = CURRENT_TIMESTAMP
+           WHERE project_id = $3`,
+          [userId, fulfillmentStatus, projectId]
+        );
+      } else if (cancelOption === 'pickup_unfinished') {
+        fulfillmentStatus = 'awaiting_pickup_unfinished';
+        await client.query(
+          `UPDATE projects
+           SET status = 'cancelled',
+               cancel_approved_by = $1,
+               cancel_approved_at = CURRENT_TIMESTAMP,
+               ready_for_pickup_at = CURRENT_TIMESTAMP,
+               fulfillment_status = $2,
+               updated_at = CURRENT_TIMESTAMP
+           WHERE project_id = $3`,
+          [userId, fulfillmentStatus, projectId]
+        );
+      }
+
+      // Cancel the order as well
+      await client.query(
+        `UPDATE orders
+         SET status = 'cancelled',
+             updated_at = CURRENT_TIMESTAMP
+         WHERE order_id = $1 AND status <> 'cancelled'`,
+        [project.order_id]
+      );
+
+      await logActivity(client, projectId, userId, 'cancel_approved', {
+        cancel_option: cancelOption,
+        cancel_reason: project.cancel_reason,
+        fulfillment_status: fulfillmentStatus,
+      });
+    }
+
+    await client.query('COMMIT');
+
+    const updated = await exports.getProjectById(projectId);
+    return updated;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+};
+
+// ─── INSTALLMENT SCHEDULE ─────────────────────────────────────────────────────
+
+let ensureInstallmentTableReady = false;
+let ensureInstallmentTablePromise = null;
+
+const ensureInstallmentTable = async () => {
+  if (ensureInstallmentTableReady) return;
+  if (!ensureInstallmentTablePromise) {
+    ensureInstallmentTablePromise = (async () => {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS project_installment_schedules (
+            schedule_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            project_id UUID NOT NULL REFERENCES projects(project_id) ON DELETE CASCADE,
+            installment_number INT NOT NULL CHECK (installment_number > 0),
+            amount NUMERIC(12, 2) NOT NULL CHECK (amount >= 0),
+            due_date DATE NOT NULL,
+            status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'paid', 'overdue', 'cancelled')),
+            paid_at TIMESTAMPTZ,
+            payment_id UUID REFERENCES payments(payment_id) ON DELETE SET NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            UNIQUE(project_id, installment_number)
+        )
+      `);
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_project_installment_schedules_project 
+        ON project_installment_schedules(project_id)
+      `);
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_project_installment_schedules_status 
+        ON project_installment_schedules(status)
+      `);
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_project_installment_schedules_due_date 
+        ON project_installment_schedules(due_date)
+      `);
+      ensureInstallmentTableReady = true;
+    })().catch((error) => {
+      ensureInstallmentTablePromise = null;
+      throw error;
+    });
+  }
+  await ensureInstallmentTablePromise;
+};
+
+/**
+ * Get installment schedule for a project.
+ */
+exports.getInstallmentSchedule = async (projectId, userId, userRole) => {
+  await ensureInstallmentTable();
+
+  const pRes = await pool.query(
+    `${PROJECT_BASE_SELECT} WHERE p.project_id = $1 AND p.deleted_at IS NULL`,
+    [projectId]
+  );
+  if (pRes.rows.length === 0) throw new AppError('Project not found', 404);
+  const project = pRes.rows[0];
+
+  const isPrivileged = ['staff', 'admin', 'super_admin'].includes(userRole);
+  if (!isPrivileged && project.customer_id !== userId) {
+    throw new AppError('You do not have access to this project', 403);
+  }
+
+  // Get installment schedules
+  const scheduleRes = await pool.query(
+    `SELECT * FROM project_installment_schedules
+     WHERE project_id = $1
+     ORDER BY installment_number ASC`,
+    [projectId]
+  );
+
+  const installments = scheduleRes.rows;
+
+  // If no installments stored yet, compute from order data
+  if (installments.length === 0) {
+    const orderRes = await pool.query(
+      `SELECT total_amount, payment_status FROM orders WHERE order_id = $1`,
+      [project.order_id]
+    );
+    const order = orderRes.rows[0];
+    if (!order) return { installments: [], summary: null };
+
+    const totalAmount = Number(order.total_amount) || 0;
+    const monthlyRate = 0.03; // 3% monthly interest (configurable)
+    const tenureMonths = 6; // Default 6 months (configurable)
+
+    // Simple installment calculation
+    const monthlyPayment = Math.round((totalAmount * (1 + monthlyRate)) / tenureMonths);
+    const remainingBalance = totalAmount;
+    const today = new Date();
+
+    return {
+      installments: [],
+      summary: {
+        total_amount: totalAmount,
+        monthly_payment: monthlyPayment,
+        remaining_balance: remainingBalance,
+        total_months: tenureMonths,
+        remaining_months: tenureMonths,
+        next_due_date: new Date(today.getFullYear(), today.getMonth() + 1, 15).toISOString(),
+        interest_rate: monthlyRate,
+      },
+    };
+  }
+
+  // Calculate summary from actual installment records
+  const totalAmount = installments.reduce((sum, inst) => sum + Number(inst.amount), 0);
+  const paidCount = installments.filter((inst) => inst.status === 'paid').length;
+  const totalCount = installments.length;
+  const paidAmount = installments
+    .filter((inst) => inst.status === 'paid')
+    .reduce((sum, inst) => sum + Number(inst.amount), 0);
+  const remainingBalance = totalAmount - paidAmount;
+  const remainingMonths = totalCount - paidCount;
+
+  // Find the next unpaid installment
+  const nextUnpaid = installments.find((inst) => inst.status === 'pending' || inst.status === 'overdue');
+
+  return {
+    installments,
+    summary: {
+      total_amount: totalAmount,
+      monthly_payment: installments[0]?.amount || 0,
+      remaining_balance: remainingBalance,
+      total_months: totalCount,
+      remaining_months: remainingMonths,
+      next_due_date: nextUnpaid?.due_date || null,
+      paid_amount: paidAmount,
+      paid_count: paidCount,
+    },
+  };
 };

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { CheckCircle, Clock, AlertCircle, Guitar } from 'lucide-react';
+import { CheckCircle, Clock, AlertCircle, Guitar, DollarSign, Calendar, CreditCard } from 'lucide-react';
 import { adminApi } from '../../utils/adminApi';
 
 const formatLabel = (value) => {
@@ -17,6 +17,7 @@ const formatStatus = (status) => {
     'in_progress': 'In Progress',
     'completed': 'Completed',
     'cancelled': 'Cancelled',
+    'on_hold': 'On Hold',
     'pending': 'Pending',
     'delivered': 'Delivered',
   };
@@ -47,14 +48,22 @@ const formatShortDate = (value) => {
   });
 };
 
+const formatCurrency = (value) => {
+  if (value === null || value === undefined) return '—';
+  return new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(value);
+};
+
 export default function CustomerProjectTracker({ projectId, projectName, projectData, customBuildId }) {
   const [hierarchy, setHierarchy] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [installmentData, setInstallmentData] = useState(null);
+  const [installmentLoading, setInstallmentLoading] = useState(false);
 
   useEffect(() => {
     if (projectId) {
       loadData();
+      loadInstallments();
     }
   }, [projectId]);
 
@@ -72,6 +81,18 @@ export default function CustomerProjectTracker({ projectId, projectName, project
     }
   };
 
+  const loadInstallments = async () => {
+    try {
+      setInstallmentLoading(true);
+      const res = await adminApi.getProjectInstallments(projectId);
+      setInstallmentData(res.data);
+    } catch (err) {
+      console.error('Failed to load installments:', err);
+    } finally {
+      setInstallmentLoading(false);
+    }
+  };
+
   const taskSummary = hierarchy?.task_summary || { total: 0, completed: 0, pending: 0 };
   const clampedProgress = Math.min(Math.max(Number(hierarchy?.progress) || 0, 0), 100);
   const milestones = Array.isArray(hierarchy?.milestones) ? hierarchy.milestones : [];
@@ -79,14 +100,10 @@ export default function CustomerProjectTracker({ projectId, projectName, project
   // Find current milestone (first incomplete one) and completed milestones count
   const currentMilestone = milestones.find((m) => {
     const subtasks = Array.isArray(m?.subtasks) ? m.subtasks : [];
-    // If has subtasks, check if not all completed; if no subtasks, check if the step is still pending/in_progress
     if (subtasks.length > 0) {
       return subtasks.some((s) => s.status === 'pending' || s.status === 'in_progress');
     }
-    // If the milestone itself has no subtasks but is completed, skip it
     if (m.status === 'completed') return false;
-    // If the milestone has no subtasks and is not completed, it's either pending or in_progress
-    // Check if previous milestone is completed
     const idx = milestones.indexOf(m);
     if (idx === 0) return true;
     const prev = milestones[idx - 1];
@@ -96,7 +113,6 @@ export default function CustomerProjectTracker({ projectId, projectName, project
 
   const currentTask = currentMilestone?.subtasks?.find((s) => s.status === 'pending' || s.status === 'in_progress');
   
-  // Find which steps are completed (for the step indicators)
   const completedMilestones = milestones.filter((m) => {
     const subtasks = Array.isArray(m?.subtasks) ? m.subtasks : [];
     if (subtasks.length > 0) {
@@ -111,6 +127,8 @@ export default function CustomerProjectTracker({ projectId, projectName, project
   );
 
   const lastUpdated = formatDate(hierarchy?.updated_at || hierarchy?.claimed_at || hierarchy?.created_at);
+
+  const installmentSummary = installmentData?.summary;
 
   if (loading) {
     return (
@@ -177,7 +195,7 @@ export default function CustomerProjectTracker({ projectId, projectName, project
           </div>
         </div>
 
-        {/* Current Manufacturing Step */}
+        {/* Current Build Progress (renamed from Current Manufacturing Step) */}
         {milestones.length > 0 ? (
           <div className="rounded-xl border border-[var(--gold-primary)]/30 bg-[var(--gold-primary)]/5 p-5">
             <div className="flex items-start gap-4">
@@ -190,7 +208,7 @@ export default function CustomerProjectTracker({ projectId, projectName, project
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-xs uppercase tracking-[0.1em] text-[var(--text-muted)]">
-                  {currentMilestone ? 'Current Manufacturing Step' : 'Manufacturing Complete'}
+                  {currentMilestone ? 'Current Build Progress' : 'Manufacturing Complete'}
                 </p>
                 <p className="mt-1.5 font-semibold text-white text-lg">
                   {currentMilestone ? formatLabel(currentMilestone.title) : 'All Steps Completed'}
@@ -246,6 +264,74 @@ export default function CustomerProjectTracker({ projectId, projectName, project
             <p className="mt-1 text-sm text-[var(--text-muted)]">
               The manufacturing process will begin once a staff member claims this project.
             </p>
+          </div>
+        )}
+
+        {/* Installment Schedule */}
+        {installmentSummary && (
+          <div className="mt-6 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <CreditCard className="w-5 h-5 text-[var(--gold-primary)]" />
+              <h3 className="text-white font-bold text-lg">Payment Installment Schedule</h3>
+            </div>
+            
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] p-3">
+                <p className="text-xs uppercase tracking-[0.1em] text-[var(--text-muted)]">Remaining Balance</p>
+                <p className="mt-1 text-lg font-bold text-[var(--gold-primary)]">
+                  {formatCurrency(installmentSummary.remaining_balance)}
+                </p>
+              </div>
+              <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] p-3">
+                <p className="text-xs uppercase tracking-[0.1em] text-[var(--text-muted)]">Monthly Payment</p>
+                <p className="mt-1 text-lg font-bold text-white">
+                  {formatCurrency(installmentSummary.monthly_payment)}
+                </p>
+              </div>
+              <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] p-3">
+                <p className="text-xs uppercase tracking-[0.1em] text-[var(--text-muted)]">Remaining Months</p>
+                <p className="mt-1 text-lg font-bold text-white">
+                  {installmentSummary.remaining_months} / {installmentSummary.total_months}
+                </p>
+              </div>
+              <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] p-3">
+                <p className="text-xs uppercase tracking-[0.1em] text-[var(--text-muted)]">Next Due Date</p>
+                <p className="mt-1 text-lg font-bold text-white">
+                  {installmentSummary.next_due_date ? formatShortDate(installmentSummary.next_due_date) : '—'}
+                </p>
+              </div>
+            </div>
+
+            {/* Installment list */}
+            {installmentData?.installments?.length > 0 && (
+              <div className="mt-4 space-y-2">
+                <p className="text-xs uppercase tracking-[0.1em] text-[var(--text-muted)] mb-2">Payment History</p>
+                {installmentData.installments.map((inst) => (
+                  <div key={inst.schedule_id} className="flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] px-4 py-2.5">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-2 h-2 rounded-full ${
+                        inst.status === 'paid' ? 'bg-green-500' : 
+                        inst.status === 'overdue' ? 'bg-red-500' : 'bg-yellow-500'
+                      }`} />
+                      <span className="text-sm text-white">Month {inst.installment_number}</span>
+                      <span className="text-sm text-[var(--text-muted)]">— {formatCurrency(inst.amount)}</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs text-[var(--text-muted)]">
+                        Due: {formatShortDate(inst.due_date)}
+                      </span>
+                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                        inst.status === 'paid' ? 'bg-green-500/10 text-green-400' :
+                        inst.status === 'overdue' ? 'bg-red-500/10 text-red-400' :
+                        'bg-yellow-500/10 text-yellow-400'
+                      }`}>
+                        {formatLabel(inst.status)}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 

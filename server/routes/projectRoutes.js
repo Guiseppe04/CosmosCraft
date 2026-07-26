@@ -29,6 +29,18 @@ router.post('/:id/fulfillment', validateParams(uuidParamSchema), validate(submit
 router.patch('/subtasks/:subtaskId', validateParams(namedUuidParamSchema('subtaskId')), validate(updateSubtaskSchema), ctrl.updateSubtask);
 router.get('/:id/activity', validateParams(uuidParamSchema), ctrl.getActivityLogs);
 
+// Hold / Resume (customer can request, admin can approve)
+router.post('/:id/hold', validateParams(uuidParamSchema), ctrl.requestHold);
+router.post('/:id/approve-hold', validateParams(uuidParamSchema), ctrl.approveHold);
+router.post('/:id/resume', validateParams(uuidParamSchema), ctrl.resumeProject);
+
+// Cancel with options (customer can request with cancel_option)
+router.post('/:id/request-cancel', validateParams(uuidParamSchema), ctrl.requestCancel);
+router.post('/:id/approve-cancel', validateParams(uuidParamSchema), ctrl.approveCancel);
+
+// Installment schedule
+router.get('/:id/installments', validateParams(uuidParamSchema), ctrl.getInstallmentSchedule);
+
 // === ADMIN ONLY ROUTES ===
 router.use(authorize('staff', 'admin', 'super_admin'));
 

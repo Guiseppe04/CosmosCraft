@@ -173,6 +173,19 @@ export function DashboardPage() {
   const [cancelProjectTarget, setCancelProjectTarget] = useState(null)
   const [isCancellingProject, setIsCancellingProject] = useState(false)
 
+  // Hold / Cancel with options state
+  const [isHoldProjectModalOpen, setIsHoldProjectModalOpen] = useState(false)
+  const [holdProjectTarget, setHoldProjectTarget] = useState(null)
+  const [holdOption, setHoldOption] = useState('resume_later')
+  const [holdReason, setHoldReason] = useState('')
+  const [isHoldingProject, setIsHoldingProject] = useState(false)
+
+  const [isCancelWithOptionsModalOpen, setIsCancelWithOptionsModalOpen] = useState(false)
+  const [cancelWithOptionsTarget, setCancelWithOptionsTarget] = useState(null)
+  const [cancelOption, setCancelOption] = useState('ship_unfinished')
+  const [cancelWithOptionsReason, setCancelWithOptionsReason] = useState('')
+  const [isCancellingWithOptions, setIsCancellingWithOptions] = useState(false)
+
   const [myAppointments, setMyAppointments] = useState([])
   const [reschedulingAptId, setReschedulingAptId] = useState(null)
   const [rescheduleDate, setRescheduleDate] = useState('')
@@ -403,6 +416,76 @@ export function DashboardPage() {
       setIsCancellingProject(false)
     }
   };
+
+  // Hold Project handlers
+  const openHoldProjectModal = (project) => {
+    setHoldProjectTarget(project)
+    setHoldOption('resume_later')
+    setHoldReason('')
+    setIsHoldProjectModalOpen(true)
+  }
+
+  const closeHoldProjectModal = (force = false) => {
+    if (isHoldingProject && !force) return
+    setIsHoldProjectModalOpen(false)
+    setHoldProjectTarget(null)
+    setHoldOption('resume_later')
+    setHoldReason('')
+  }
+
+  const handleHoldProject = async () => {
+    if (!holdProjectTarget?.project_id) return
+
+    try {
+      setIsHoldingProject(true)
+      await adminApi.requestProjectHold(holdProjectTarget.project_id, {
+        hold_option: holdOption,
+        reason: holdReason || 'Customer requested hold',
+      })
+      setToastMessage('Hold request submitted. Admin will review it shortly.');
+      fetchMyProjects();
+      closeHoldProjectModal(true)
+    } catch (err) {
+      setToastMessage(`Failed to request hold: ${err.message}`);
+    } finally {
+      setIsHoldingProject(false)
+    }
+  }
+
+  // Cancel with options handlers
+  const openCancelWithOptionsModal = (project) => {
+    setCancelWithOptionsTarget(project)
+    setCancelOption('ship_unfinished')
+    setCancelWithOptionsReason('')
+    setIsCancelWithOptionsModalOpen(true)
+  }
+
+  const closeCancelWithOptionsModal = (force = false) => {
+    if (isCancellingWithOptions && !force) return
+    setIsCancelWithOptionsModalOpen(false)
+    setCancelWithOptionsTarget(null)
+    setCancelOption('ship_unfinished')
+    setCancelWithOptionsReason('')
+  }
+
+  const handleCancelWithOptions = async () => {
+    if (!cancelWithOptionsTarget?.project_id || !cancelWithOptionsReason.trim()) return
+
+    try {
+      setIsCancellingWithOptions(true)
+      await adminApi.requestProjectCancel(cancelWithOptionsTarget.project_id, {
+        cancel_option: cancelOption,
+        cancel_reason: cancelWithOptionsReason,
+      })
+      setToastMessage('Cancellation request submitted. Admin will review it shortly.');
+      fetchMyProjects();
+      closeCancelWithOptionsModal(true)
+    } catch (err) {
+      setToastMessage(`Failed to request cancellation: ${err.message}`);
+    } finally {
+      setIsCancellingWithOptions(false)
+    }
+  }
 
   const handleRescheduleSubmit = async (aptId) => {
     if (!rescheduleDate || !rescheduleTime) {
@@ -1226,17 +1309,34 @@ export function DashboardPage() {
                   </div>
                 </div>
                 <div className="flex gap-2 mt-4 pt-4 border-t border-[var(--border)]">
-                  {project.progress < 80 && String(project.status || '').toLowerCase() !== 'cancelled' && (
-                    <button
-                      onClick={() => openCancelProjectModal(project)}
-                      className="px-4 py-2 rounded-lg border border-red-500/30 text-red-500 hover:bg-red-500/10 transition-colors text-sm font-semibold"
-                    >
-                      Cancel Project
-                    </button>
+                  {String(project.status || '').toLowerCase() !== 'cancelled' && String(project.status || '').toLowerCase() !== 'completed' && (
+                    <>
+                      {String(project.status || '').toLowerCase() !== 'on_hold' && project.progress < 80 && (
+                        <button
+                          onClick={() => openCancelProjectModal(project)}
+                          className="px-4 py-2 rounded-lg border border-red-500/30 text-red-500 hover:bg-red-500/10 transition-colors text-sm font-semibold"
+                        >
+                          Cancel Project
+                        </button>
+                      )}
+                      {String(project.status || '').toLowerCase() !== 'on_hold' && (
+                        <button
+                          onClick={() => openHoldProjectModal(project)}
+                          className="px-4 py-2 rounded-lg border border-amber-500/30 text-amber-500 hover:bg-amber-500/10 transition-colors text-sm font-semibold"
+                        >
+                          Hold Build
+                        </button>
+                      )}
+                      {String(project.status || '').toLowerCase() === 'on_hold' && (
+                        <span className="px-4 py-2 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-400 text-sm font-semibold">
+                          On Hold
+                        </span>
+                      )}
+                    </>
                   )}
                   <button
                     onClick={() => setActiveProjectView(project)}
-                    className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-bold shadow-[0_0_10px_rgba(212,175,55,0.3)] hover:shadow-[0_0_15px_rgba(212,175,55,0.5)] transition-all flex items-center gap-2"
+                    className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-bold shadow-[0_0_10px_rgba(212,175,55,0.3)] hover:shadow-[0_0_15px rgba(212,175,55,0.5)] transition-all flex items-center gap-2"
                   >
                     <span className="flex items-center gap-3">
                       <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-black/10">
