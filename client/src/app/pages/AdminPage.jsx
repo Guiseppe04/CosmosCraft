@@ -42,6 +42,15 @@ import { uploadToCloudinary } from '../utils/cloudinary'
 import { ConfirmModal } from '../components/ui/ConfirmModal'
 import { useDebounce } from '../hooks/useDebounce'
 import { useSmartPolling } from '../hooks/useSmartPolling'
+import { useProductsAdmin } from '../hooks/useProductsAdmin'
+import { useCategoriesAdmin } from '../hooks/useCategoriesAdmin'
+import { usePartsAdmin } from '../hooks/usePartsAdmin'
+import { useUsersAdmin } from '../hooks/useUsersAdmin'
+import { useOrdersAdmin } from '../hooks/useOrdersAdmin'
+import { useProjectsAdmin } from '../hooks/useProjectsAdmin'
+import { useAppointmentsAdmin } from '../hooks/useAppointmentsAdmin'
+import { useServicesAdmin } from '../hooks/useServicesAdmin'
+import { useInventoryAdmin } from '../hooks/useInventoryAdmin'
 import { buildCategoryTree, flattenCategoryTreeForAdmin } from './admin/utils/categoryTree'
 import {
   VALID_ROLES,
@@ -165,44 +174,64 @@ export function AdminPage() {
     busy: false,
   })
 
+  // ── Toast ────────────────────────────────────────────────────────────────
+  const showToast = useCallback((msg, type = 'success') => {
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    setToasts((prev) => [...prev, { id, msg, type }])
+
+    const timer = setTimeout(() => {
+      setToasts((prev) => prev.filter((toast) => toast.id !== id))
+      toastTimersRef.current.delete(id)
+    }, 3500)
+
+    toastTimersRef.current.set(id, timer)
+  }, [])
+
+  const dismissToast = useCallback((id) => {
+    const timer = toastTimersRef.current.get(id)
+    if (timer) {
+      clearTimeout(timer)
+      toastTimersRef.current.delete(id)
+    }
+    setToasts((prev) => prev.filter((toast) => toast.id !== id))
+  }, [])
+
+  useEffect(() => () => {
+    toastTimersRef.current.forEach((timer) => clearTimeout(timer))
+    toastTimersRef.current.clear()
+  }, [])
+
+  const {
+    parts,
+    partsLoading,
+    partsPagination,
+    partQuery,
+    setPartQuery,
+    fetchParts,
+  } = usePartsAdmin({ debouncedSearch, showToast })
+
+  const {
+    products,
+    productsLoading,
+    productsPagination,
+    productQuery,
+    setProductQuery,
+    fetchProducts,
+  } = useProductsAdmin({ debouncedSearch, showToast })
+
+  const { categories, fetchCategories } = useCategoriesAdmin({ showToast })
+  const { users, fetchUsers } = useUsersAdmin({ debouncedSearch, showToast })
+  const { orders, ordersPagination, fetchOrders, setOrdersPagination } = useOrdersAdmin({ debouncedSearch, showToast })
+  const { projects, projectsPagination, fetchProjects, setProjects, setProjectsPagination } = useProjectsAdmin({ debouncedSearch, showToast })
+  const { appointments, appointmentPagination, setAppointmentPagination, appointmentLoading, unavailableDates, fetchAppointments, fetchUnavailableDates } = useAppointmentsAdmin({ debouncedSearch, showToast })
+  const { services, servicesLoading, servicesPagination, serviceQuery, setServiceQuery, setServices, setServicesPagination, fetchServices } = useServicesAdmin({ debouncedSearch, showToast })
+  const { inventory, inventoryStats, salesReport, setInventory, setInventoryStats, setSalesReport, fetchInventory, fetchSalesReport } = useInventoryAdmin({ products, showToast })
+
   // Filters
   const [userRoleFilter, setUserRoleFilter] = useState('all')
   const [userStatusFilter, setUserStatusFilter] = useState('all')
-  const [productQuery, setProductQuery] = useState({
-    page: 1,
-    pageSize: 10,
-    sortBy: 'created_at',
-    sortDir: 'desc',
-    category_id: '',
-    brand: '',
-    is_active: '',
-    min_price: '',
-    max_price: '',
-  })
-  const [partQuery, setPartQuery] = useState({
-    page: 1,
-    pageSize: 100,
-    sortBy: 'created_at',
-    sortDir: 'desc',
-    guitar_type: '',
-    part_category: '',
-    is_active: '',
-    min_price: '',
-    max_price: '',
-  })
 
   // Data state
-  const [products, setProducts] = useState([])
-  const [categories, setCategories] = useState([])
-  const [parts, setParts] = useState([])
-  const [users, setUsers] = useState([])
-  const [orders, setOrders] = useState([])
-  const [projects, setProjects] = useState([])
-  const [appointments, setAppointments] = useState([])
-  const [inventory, setInventory] = useState([])
-  const [salesReport, setSalesReport] = useState(null)
-  const [inventoryStats, setInventoryStats] = useState(null)
-
   const [wizardTab, setWizardTab] = useState('basic')
   const [inventorySubTab, setInventorySubTab] = useState('products')
 
@@ -220,7 +249,6 @@ export function AdminPage() {
   const [orderSort, setOrderSort] = useState('newest')
   const [orderPage, setOrderPage] = useState(1)
   const ORDERS_PAGE_SIZE = 10
-  const [ordersPagination, setOrdersPagination] = useState({ page: 1, pageSize: 10, total: 0, totalPages: 1 })
 
   // Projects tab state
   const [projectStatusFilter, setProjectStatusFilter] = useState('all')
@@ -234,7 +262,6 @@ export function AdminPage() {
   const [projectSort, setProjectSort] = useState('updated')
   const [projectPage, setProjectPage] = useState(1)
   const PROJECTS_PAGE_SIZE = 10
-  const [projectsPagination, setProjectsPagination] = useState({ page: 1, pageSize: 10, total: 0, totalPages: 1 })
 
   // Inventory tab state
   const [expandedInventoryIds, setExpandedInventoryIds] = useState(new Set())
@@ -255,18 +282,10 @@ export function AdminPage() {
   const [appointmentFormOpen, setAppointmentFormOpen] = useState(false)
   const [appointmentFormData, setAppointmentFormData] = useState(null)
   const [unavailableDatesOpen, setUnavailableDatesOpen] = useState(false)
-  const [unavailableDates, setUnavailableDates] = useState([])
-  const [services, setServices] = useState([])
-  const [appointmentPagination, setAppointmentPagination] = useState({ page: 1, limit: 20, total: 0, pages: 1 })
-  const [appointmentLoading, setAppointmentLoading] = useState(false)
   const [selectedCalendarDate, setSelectedCalendarDate] = useState(null)
   
   const [orderStatusDropdownOpen, setOrderStatusDropdownOpen] = useState(false)
   const [paymentStatusDropdownOpen, setPaymentStatusDropdownOpen] = useState(false)
-  const [productsLoading, setProductsLoading] = useState(false)
-  const [partsLoading, setPartsLoading] = useState(false)
-  const [productsPagination, setProductsPagination] = useState({ page: 1, pageSize: 10, total: 0, totalPages: 1 })
-  const [partsPagination, setPartsPagination] = useState({ page: 1, pageSize: 10, total: 0, totalPages: 1 })
 
   // Category tree expand/collapse state
   const [expandedCategoryIds, setExpandedCategoryIds] = useState(new Set())
@@ -280,15 +299,6 @@ export function AdminPage() {
 
   // Services section state
   const [serviceViewMode, setServiceViewMode] = useState('grid')
-  const [servicesLoading, setServicesLoading] = useState(false)
-  const [servicesPagination, setServicesPagination] = useState({ page: 1, pageSize: 20, total: 0, totalPages: 1 })
-  const [serviceQuery, setServiceQuery] = useState({
-    page: 1,
-    pageSize: 20,
-    sortBy: 'created_at',
-    sortDir: 'desc',
-    is_active: '',
-  })
 
   // Message panel
   const [messagePanelOpen, setMessagePanelOpen] = useState(false)
@@ -541,33 +551,6 @@ export function AdminPage() {
     return { value: `${Math.round((healthyCount / items.length) * 100)}%`, status, statusClass, iconBg }
   })()
 
-  // ── Toast ────────────────────────────────────────────────────────────────
-  const showToast = useCallback((msg, type = 'success') => {
-    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-    setToasts((prev) => [...prev, { id, msg, type }])
-
-    const timer = setTimeout(() => {
-      setToasts((prev) => prev.filter((toast) => toast.id !== id))
-      toastTimersRef.current.delete(id)
-    }, 3500)
-
-    toastTimersRef.current.set(id, timer)
-  }, [])
-
-  const dismissToast = useCallback((id) => {
-    const timer = toastTimersRef.current.get(id)
-    if (timer) {
-      clearTimeout(timer)
-      toastTimersRef.current.delete(id)
-    }
-    setToasts((prev) => prev.filter((toast) => toast.id !== id))
-  }, [])
-
-  useEffect(() => () => {
-    toastTimersRef.current.forEach((timer) => clearTimeout(timer))
-    toastTimersRef.current.clear()
-  }, [])
-
   useEffect(() => {
     try {
       const raw = window.localStorage.getItem(APPOINTMENT_BRANCH_STORAGE_KEY)
@@ -619,67 +602,6 @@ export function AdminPage() {
   }
 
   // ── Data fetching ────────────────────────────────────────────────────────
-  const fetchProducts = useCallback(async () => {
-    setProductsLoading(true)
-    try {
-      const res = await adminApi.getProducts({
-        search: debouncedSearch,
-        ...productQuery,
-      })
-      updateIfChanged(products, res.data || [], setProducts)
-      setProductsPagination(res.pagination || { page: 1, pageSize: 10, total: 0, totalPages: 1 })
-    } catch (e) { showToast(e.message, 'error') }
-    finally { setProductsLoading(false) }
-  }, [debouncedSearch, productQuery, showToast, products])
-
-  const fetchCategories = useCallback(async () => {
-    try {
-      const res = await adminApi.getCategories()
-      const newData = Array.isArray(res.data) ? res.data : res.data?.categories || []
-      updateIfChanged(categories, newData, setCategories)
-    } catch { }
-  }, [categories])
-
-  const fetchParts = useCallback(async () => {
-    setPartsLoading(true)
-    try {
-      const res = await adminApi.getBuilderParts({
-        search: debouncedSearch,
-        page: 1,
-        pageSize: 500,
-      })
-      updateIfChanged(parts, res.data || [], setParts)
-      setPartsPagination(res.pagination || { page: 1, pageSize: 500, total: 0, totalPages: 1 })
-    } catch (e) { showToast(e.message, 'error') }
-    finally { setPartsLoading(false) }
-  }, [debouncedSearch, showToast, parts])
-
-  const fetchUsers = useCallback(async () => {
-    try {
-      const res = await adminApi.getUsers({ search: debouncedSearch })
-      const newData = Array.isArray(res.data) ? res.data : res.data?.users || []
-      updateIfChanged(users, newData, setUsers)
-    } catch (e) { showToast(e.message, 'error') }
-  }, [debouncedSearch, showToast, users])
-
-  const fetchOrders = useCallback(async (queryParams = {}) => {
-    try {
-      const res = await adminApi.getOrders({ search: debouncedSearch, include_items: true, ...queryParams })
-      const newData = Array.isArray(res.data) ? res.data : res.data?.orders || []
-      updateIfChanged(orders, newData, setOrders)
-      setOrdersPagination(res.pagination || { page: 1, pageSize: 10, total: 0, totalPages: 1 })
-    } catch (e) { showToast(e.message, 'error') }
-  }, [debouncedSearch, showToast, orders])
-
-  const fetchProjects = useCallback(async (queryParams = {}) => {
-    try {
-      const res = await adminApi.getProjects({ search: debouncedSearch, include_tasks: true, ...queryParams })
-      const newData = Array.isArray(res.data) ? res.data : res.data?.projects || []
-      updateIfChanged(projects, newData, setProjects)
-      setProjectsPagination(res.pagination || { page: 1, pageSize: 10, total: 0, totalPages: 1 })
-    } catch (e) { showToast(e.message, 'error') }
-  }, [debouncedSearch, showToast, projects])
-
   const buildProjectQuery = useCallback((pageNum = 1) => {
     const params = {
       search: debouncedSearch || undefined,
@@ -700,59 +622,6 @@ export function AdminPage() {
     Object.keys(params).forEach(k => params[k] === undefined && delete params[k])
     return params
   }, [debouncedSearch, projectStatusFilter, projectAssignedFilter, projectGuitarTypeFilter, projectDateFrom, projectDateTo, projectDueDateFrom, projectDueDateTo, projectCompletionFilter, projectSort])
-
-  const fetchAppointments = useCallback(async () => {
-    setAppointmentLoading(true)
-    try {
-      const params = {
-        search: debouncedSearch,
-        limit: appointmentPagination.limit,
-        offset: (appointmentPagination.page - 1) * appointmentPagination.limit,
-      }
-      const res = await adminApi.getAppointments(params)
-      const newData = Array.isArray(res.data) ? res.data : res.data?.appointments || []
-      const total = res.data?.pagination?.total || newData.length
-      const pages = res.data?.pagination?.pages || Math.ceil(total / appointmentPagination.limit)
-      updateIfChanged(appointments, newData, setAppointments)
-      setAppointmentPagination(prev => ({ ...prev, total, pages }))
-    } catch (e) { showToast(e.message, 'error') }
-    finally { setAppointmentLoading(false) }
-  }, [debouncedSearch, showToast, appointments, appointmentPagination.limit, appointmentPagination.page])
-
-  const fetchServices = useCallback(async () => {
-    setServicesLoading(true)
-    try {
-      const params = {
-        sort: serviceQuery.sortBy === 'duration_minutes' ? 'duration' : serviceQuery.sortBy,
-        order: serviceQuery.sortDir,
-        limit: serviceQuery.pageSize,
-        offset: (serviceQuery.page - 1) * serviceQuery.pageSize,
-      }
-      if (debouncedSearch) params.search = debouncedSearch
-      if (serviceQuery.is_active !== '') params.is_active = serviceQuery.is_active
-
-      const res = await adminApi.getServices(params)
-      const newData = Array.isArray(res.data) ? res.data : res.data?.services || []
-      updateIfChanged(services, newData, setServices)
-      const total = res.pagination?.total || newData.length
-      const totalPages = Math.max(Math.ceil(total / serviceQuery.pageSize), 1)
-      setServicesPagination({
-        page: serviceQuery.page,
-        pageSize: serviceQuery.pageSize,
-        total,
-        totalPages,
-      })
-    } catch (e) { showToast(e.message, 'error') }
-    finally { setServicesLoading(false) }
-  }, [debouncedSearch, serviceQuery, services, showToast])
-
-  const fetchUnavailableDates = useCallback(async () => {
-    try {
-      const res = await adminApi.getUnavailableDates()
-      const newData = res.data?.unavailable_dates || []
-      updateIfChanged(unavailableDates, newData, setUnavailableDates)
-    } catch (e) { console.error('Failed to fetch unavailable dates:', e) }
-  }, [showToast, unavailableDates])
 
   // Appointment action handlers
   const handleAppointmentStatusChange = useCallback(async (id, status, reason) => {
@@ -802,44 +671,6 @@ export function AdminPage() {
       fetchUnavailableDates()
     } catch (e) { showToast(e.message, 'error') }
   }, [showToast, fetchUnavailableDates])
-
-  const fetchInventory = useCallback(async () => {
-    try {
-      const statsRes = await adminApi.getInventorySummary()
-      updateIfChanged(inventoryStats, statsRes.data || {}, setInventoryStats)
-      const prodsRes = await adminApi.getInventoryProducts()
-      const rawData = Array.isArray(prodsRes.data) ? prodsRes.data : prodsRes.data?.products || []
-      const productImageMap = new Map(
-        (products || []).map((product) => [
-          product.product_id,
-          product.primary_image || product.image_url || product.product_image || null,
-        ])
-      )
-      const newData = rawData.map((item) => ({
-        ...item,
-        primary_image: item.primary_image || item.image_url || item.product_image || productImageMap.get(item.product_id) || null,
-      }))
-      updateIfChanged(inventory, newData, setInventory)
-    } catch (e) { showToast(e.message, 'error') }
-  }, [showToast, inventoryStats, inventory, products])
-
-  const fetchSalesReport = useCallback(async () => {
-    try {
-      const res = await adminApi.getSalesReport()
-      updateIfChanged(salesReport, res.data || {}, setSalesReport)
-    } catch (e) {
-      showToast(e.message, 'error')
-      setSalesReport({
-        totalGrossSales: 0, totalTransactions: 0, averagePerTransaction: 0, customizationOrders: 0,
-        walkInSales: 0, walkInTransactions: 0, walkInAvg: 0, walkInPercentage: 0,
-        onlineSales: 0, onlineTransactions: 0, onlineAvg: 0, onlinePercentage: 0,
-        customizationSales: 0, customizationTransactions: 0, customizationAvg: 0, customizationPercentage: 0,
-        dailySales: 0, dailyTransactions: 0, weeklySales: 0, weeklyTransactions: 0,
-        monthlySales: 0, monthlyTransactions: 0, bestSellingProducts: [], customizationTypes: [],
-        customizationRevenue: 0, avgCustomization: 0, walkInConversion: 0, onlineConversion: 0,
-      })
-    }
-  }, [showToast, salesReport])
 
   // ── Initial data load on tab change ─────────────────────────────────────
   useEffect(() => {

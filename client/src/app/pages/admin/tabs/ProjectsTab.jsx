@@ -24,6 +24,7 @@ export function ProjectsTab({
   projectDueDateFrom,
   setProjectDueDateFrom,
   projectDueDateTo,
+  setProjectDueDateTo,
   projectCompletionFilter,
   setProjectCompletionFilter,
   setProjectPage,
