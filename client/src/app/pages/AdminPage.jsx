@@ -2024,7 +2024,7 @@ export function AdminPage() {
           {/* Actions bar */}
           {activeTab !== 'pos' && activeTab !== 'inventory' && activeTab !== 'products' && (
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
-            {['product-categories', 'projects', 'services', 'appointments'].includes(activeTab) && (
+            {['product-categories', 'services', 'appointments'].includes(activeTab) && (
               <div className="relative max-w-sm w-full">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
                 <input

@@ -1348,31 +1348,34 @@ export function OrderManagement({ orders, onRefresh, user, pagination }) {
         </div>
       </div>
 
-      <div className="mb-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        <div className="relative">
+      <div className="mb-4 flex flex-wrap items-end gap-4">
+        {/* Search - slightly wider */}
+        <div className="relative min-w-[200px] flex-1 lg:flex-[2]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
           <input
             type="text"
             placeholder="Search orders..."
             value={searchQuery}
             onChange={(e) => { setSearchQuery(e.target.value); setPage(1) }}
-            className="w-full pl-10 pr-4 py-2.5 bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
+            className="w-full pl-10 pr-4 py-2.5 bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] h-[42px]"
           />
         </div>
+        {/* Order Type */}
         <select
           value={orderTypeFilter}
           onChange={(e) => { setOrderTypeFilter(e.target.value); setPage(1) }}
-          className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
+          className="min-w-[150px] flex-1 bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] h-[42px]"
         >
           <option value="all">All Order Types</option>
           <option value="product">Product Orders</option>
           <option value="customization">Custom Guitar Orders</option>
           <option value="service">Service Orders</option>
         </select>
+        {/* Payment Status */}
         <select
           value={paymentStatusFilter}
           onChange={(e) => { setPaymentStatusFilter(e.target.value); setPage(1) }}
-          className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
+          className="min-w-[150px] flex-1 bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] h-[42px]"
         >
           <option value="all">All Payment Statuses</option>
           <option value="pending">Pending</option>
@@ -1382,35 +1385,35 @@ export function OrderManagement({ orders, onRefresh, user, pagination }) {
           <option value="rejected">Rejected</option>
           <option value="failed">Failed</option>
         </select>
+        {/* Payment Method */}
         <select
           value={paymentMethodFilter}
           onChange={(e) => { setPaymentMethodFilter(e.target.value); setPage(1) }}
-          className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
+          className="min-w-[150px] flex-1 bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] h-[42px]"
         >
           <option value="all">All Payment Methods</option>
           <option value="gcash">GCash</option>
           <option value="bank_transfer">Bank Transfer</option>
           <option value="cash">Cash</option>
         </select>
-      </div>
-
-      <div className="mb-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div>
-          <label className="block text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-1">Date From</label>
+        {/* Date From */}
+        <div className="min-w-[140px] flex-1">
+          <label className="block text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-1.5 leading-none">Date From</label>
           <input
             type="date"
             value={dateFrom}
             onChange={(e) => { setDateFrom(e.target.value); setPage(1) }}
-            className="w-full px-3 py-2.5 bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
+            className="w-full px-3 py-2.5 bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] h-[42px]"
           />
         </div>
-        <div>
-          <label className="block text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-1">Date To</label>
+        {/* Date To */}
+        <div className="min-w-[140px] flex-1">
+          <label className="block text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-1.5 leading-none">Date To</label>
           <input
             type="date"
             value={dateTo}
             onChange={(e) => { setDateTo(e.target.value); setPage(1) }}
-            className="w-full px-3 py-2.5 bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
+            className="w-full px-3 py-2.5 bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] h-[42px]"
           />
         </div>
       </div>

@@ -75,21 +75,27 @@ export function ProjectsTab({
         </div>
       </div>
 
-      <div className="mb-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        <div className="relative">
+      {/* Search - full width row */}
+      <div className="mb-4">
+        <div className="relative max-w-full">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
           <input
             type="text"
             placeholder="Search projects..."
             value={searchQuery}
             onChange={(e) => { setSearchQuery(e.target.value) }}
-            className="w-full pl-10 pr-4 py-2.5 bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
+            className="w-full pl-10 pr-4 py-2.5 bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] h-[42px]"
           />
         </div>
+      </div>
+
+      {/* Filters - single responsive row */}
+      <div className="mb-4 flex flex-wrap items-end gap-4">
+        {/* Status */}
         <select
           value={projectStatusFilter}
           onChange={(e) => { setProjectStatusFilter(e.target.value) }}
-          className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
+          className="min-w-[130px] flex-1 bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] h-[42px]"
         >
           <option value="all">All Statuses</option>
           <option value="not_started">Not Started</option>
@@ -97,10 +103,11 @@ export function ProjectsTab({
           <option value="completed">Completed</option>
           <option value="cancelled">Cancelled</option>
         </select>
+        {/* Assigned Staff */}
         <select
           value={projectAssignedFilter}
           onChange={(e) => { setProjectAssignedFilter(e.target.value) }}
-          className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
+          className="min-w-[130px] flex-1 bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] h-[42px]"
         >
           <option value="all">All Assigned Staff</option>
           {(users || [])
@@ -111,10 +118,11 @@ export function ProjectsTab({
               </option>
             ))}
         </select>
+        {/* Sort */}
         <select
           value={projectSort}
           onChange={(e) => { setProjectSort(e.target.value) }}
-          className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
+          className="min-w-[130px] flex-1 bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] h-[42px]"
         >
           <option value="updated">Recently Updated</option>
           <option value="created">Recently Created</option>
@@ -124,13 +132,11 @@ export function ProjectsTab({
           <option value="due">Due Date</option>
           <option value="status">Status</option>
         </select>
-      </div>
-
-      <div className="mb-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        {/* Guitar Type */}
         <select
           value={projectGuitarTypeFilter}
           onChange={(e) => { setProjectGuitarTypeFilter(e.target.value) }}
-          className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
+          className="min-w-[130px] flex-1 bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] h-[42px]"
         >
           <option value="all">All Guitar Types</option>
           <option value="Electric">Electric</option>
@@ -138,66 +144,51 @@ export function ProjectsTab({
           <option value="Bass">Bass</option>
           <option value="Classical">Classical</option>
         </select>
-        <div>
-          <label className="block text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-1">Date From</label>
+        {/* Date From */}
+        <div className="min-w-[130px] flex-1">
+          <label className="block text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-1.5 leading-none">Date From</label>
           <input
             type="date"
             value={projectDateFrom}
             onChange={(e) => { setProjectDateFrom(e.target.value) }}
-            className="w-full px-3 py-2.5 bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
+            className="w-full px-3 py-2.5 bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] h-[42px]"
           />
         </div>
-        <div>
-          <label className="block text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-1">Date To</label>
+        {/* Date To */}
+        <div className="min-w-[130px] flex-1">
+          <label className="block text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-1.5 leading-none">Date To</label>
           <input
             type="date"
             value={projectDateTo}
             onChange={(e) => { setProjectDateTo(e.target.value) }}
-            className="w-full px-3 py-2.5 bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
+            className="w-full px-3 py-2.5 bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] h-[42px]"
           />
         </div>
-        <button
-          onClick={() => {
-            setProjectStatusFilter('all')
-            setProjectAssignedFilter('all')
-            setProjectGuitarTypeFilter('all')
-            setProjectDateFrom('')
-            setProjectDateTo('')
-            setProjectDueDateFrom('')
-            setProjectDueDateTo('')
-            setProjectCompletionFilter('all')
-            setProjectSort('updated')
-            setProjectPage(1)
-          }}
-          className="inline-flex items-center gap-1 px-3 py-2.5 rounded-xl bg-red-500/10 text-red-400 border border-red-500/30 text-sm font-medium hover:bg-red-500/20 transition-colors w-full justify-center"
-        >
-          <X className="w-3 h-3" /> Clear Filters
-        </button>
-      </div>
-
-      <div className="mb-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-        <div>
-          <label className="block text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-1">Due Date From</label>
+        {/* Due Date From */}
+        <div className="min-w-[130px] flex-1">
+          <label className="block text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-1.5 leading-none">Due Date From</label>
           <input
             type="date"
             value={projectDueDateFrom}
             onChange={(e) => { setProjectDueDateFrom(e.target.value) }}
-            className="w-full px-3 py-2.5 bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
+            className="w-full px-3 py-2.5 bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] h-[42px]"
           />
         </div>
-        <div>
-          <label className="block text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-1">Due Date To</label>
+        {/* Due Date To */}
+        <div className="min-w-[130px] flex-1">
+          <label className="block text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-1.5 leading-none">Due Date To</label>
           <input
             type="date"
             value={projectDueDateTo}
             onChange={(e) => { setProjectDueDateTo(e.target.value) }}
-            className="w-full px-3 py-2.5 bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
+            className="w-full px-3 py-2.5 bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] h-[42px]"
           />
         </div>
+        {/* Completion % */}
         <select
           value={projectCompletionFilter}
           onChange={(e) => { setProjectCompletionFilter(e.target.value) }}
-          className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
+          className="min-w-[130px] flex-1 bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] h-[42px]"
         >
           <option value="all">All Completion %</option>
           <option value="0">0%</option>
@@ -208,30 +199,26 @@ export function ProjectsTab({
         </select>
       </div>
 
+      {/* Clear Filters - below the filter row */}
       {(projectStatusFilter !== 'all' || projectAssignedFilter !== 'all' || projectGuitarTypeFilter !== 'all' || projectDateFrom || projectDateTo || projectDueDateFrom || projectDueDateTo || projectCompletionFilter !== 'all') && (
-        <div className="mb-4 flex flex-wrap gap-2">
-          <span className="text-xs text-[var(--text-muted)]">Active filters:</span>
-          {projectStatusFilter !== 'all' && (
-            <span className="px-2 py-1 bg-blue-500/10 text-blue-400 text-xs rounded-lg border border-blue-500/30">Status: {projectStatusFilter}</span>
-          )}
-          {projectGuitarTypeFilter !== 'all' && (
-            <span className="px-2 py-1 bg-purple-500/10 text-purple-400 text-xs rounded-lg border border-purple-500/30">Guitar: {projectGuitarTypeFilter}</span>
-          )}
-          {projectCompletionFilter !== 'all' && (
-            <span className="px-2 py-1 bg-green-500/10 text-green-400 text-xs rounded-lg border border-green-500/30">Progress: {projectCompletionFilter}%</span>
-          )}
-          {projectDateFrom && (
-            <span className="px-2 py-1 bg-amber-500/10 text-amber-400 text-xs rounded-lg border border-amber-500/30">From: {projectDateFrom}</span>
-          )}
-          {projectDateTo && (
-            <span className="px-2 py-1 bg-amber-500/10 text-amber-400 text-xs rounded-lg border border-amber-500/30">To: {projectDateTo}</span>
-          )}
-          {projectDueDateFrom && (
-            <span className="px-2 py-1 bg-indigo-500/10 text-indigo-400 text-xs rounded-lg border border-indigo-500/30">Due From: {projectDueDateFrom}</span>
-          )}
-          {projectDueDateTo && (
-            <span className="px-2 py-1 bg-indigo-500/10 text-indigo-400 text-xs rounded-lg border border-indigo-500/30">Due To: {projectDueDateTo}</span>
-          )}
+        <div className="mb-4">
+          <button
+            onClick={() => {
+              setProjectStatusFilter('all')
+              setProjectAssignedFilter('all')
+              setProjectGuitarTypeFilter('all')
+              setProjectDateFrom('')
+              setProjectDateTo('')
+              setProjectDueDateFrom('')
+              setProjectDueDateTo('')
+              setProjectCompletionFilter('all')
+              setProjectSort('updated')
+              setProjectPage(1)
+            }}
+            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 border border-red-500/30 text-sm font-medium hover:bg-red-500/20 transition-colors"
+          >
+            <X className="w-3 h-3" /> Clear Filters
+          </button>
         </div>
       )}
 
