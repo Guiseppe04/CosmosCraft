@@ -33,10 +33,9 @@ const isAdminRequest = (req) => {
 };
 
 const createRateLimiter = (options = {}) => {
-  return rateLimit({
-    skip: (req, res) => isAdminRequest(req),
-    ...options,
-  });
+  // Temporarily disable rate limiting. Return a no-op middleware so
+  // existing calls remain valid while rate limiting is turned off.
+  return (req, res, next) => next();
 };
 
 module.exports = {
