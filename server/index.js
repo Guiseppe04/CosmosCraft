@@ -32,6 +32,14 @@ const { createRateLimiter } = require('./middleware/rateLimitMiddleware.js');
 
 const app = express();
 
+// Configure `trust proxy` when running behind a reverse proxy (e.g. Render, Heroku).
+// If `TRUST_PROXY` is set it will be used verbatim, otherwise enable in production.
+if (process.env.TRUST_PROXY) {
+  app.set('trust proxy', process.env.TRUST_PROXY === 'true' ? true : process.env.TRUST_PROXY);
+} else if (process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', true);
+}
+
 const generalLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
   max: 300,
