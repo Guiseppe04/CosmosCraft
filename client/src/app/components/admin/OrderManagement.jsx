@@ -5,10 +5,11 @@ import {
   Package, CreditCard, RefreshCw, ChevronLeft, ChevronRight,
   CheckCircle, XCircle, Clock, AlertCircle, Loader2,
   FileText, Image as ImageIcon, ExternalLink, Save, User,
-  History, DollarSign, Trash2, Check, X, Printer,
+  History, DollarSign, Trash2, Check, X, Printer, Calendar,
 } from 'lucide-react'
 import { formatCurrency } from '../../utils/formatCurrency'
 import { adminApi } from '../../utils/adminApi'
+import InstallmentTracking from './InstallmentTracking'
 import {
   PAYMENT_STATUS_MAP,
   getAllowedPaymentStatuses,
@@ -688,6 +689,19 @@ function OrderDetailsModal({ order, onClose, onUpdatePaymentStatus, onUpdateOrde
             <Package className="w-4 h-4 inline mr-2" />
             Update Order Status
           </button>
+          {order.order_type === 'customization' && (
+            <button
+              onClick={() => setActiveSection('installment')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                activeSection === 'installment'
+                  ? 'bg-[var(--gold-primary)] text-black'
+                  : 'text-[var(--text-muted)] hover:text-white'
+              }`}
+            >
+              <Calendar className="w-4 h-4 inline mr-2" />
+              Installment
+            </button>
+          )}
         </div>
 
         <div className="flex-1 overflow-y-auto">
@@ -843,6 +857,13 @@ function OrderDetailsModal({ order, onClose, onUpdatePaymentStatus, onUpdateOrde
             <OrderStatusPanel
               order={order}
               onUpdate={onUpdateOrderStatus}
+            />
+          )}
+
+          {activeSection === 'installment' && (
+            <InstallmentTracking
+              orderId={order.order_id}
+              order={order}
             />
           )}
         </div>

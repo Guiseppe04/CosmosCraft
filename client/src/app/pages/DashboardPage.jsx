@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 import { motion, AnimatePresence } from 'motion/react'
-import { User, CreditCard, MapPin, Lock, Package, Calendar, ChevronRight, ChevronLeft, Search, Upload, Save, Wallet, ShoppingBag, ShoppingCart, Trash2, Minus, Plus, MessageSquare, Send, Guitar, Clock, Truck, CheckCircle, XCircle, Briefcase, Activity, Star, Loader2, Edit, AlertCircle, X, Banknote, Smartphone, Landmark, CreditCard as CreditCardIcon } from 'lucide-react'
+import { User, CreditCard, MapPin, Lock, Package, Calendar, ChevronRight, ChevronLeft, Search, Upload, Save, Wallet, ShoppingBag, ShoppingCart, Trash2, Minus, Plus, MessageSquare, Send, Guitar, Clock, Truck, CheckCircle, XCircle, Briefcase, Activity, Star, Loader2, Edit, AlertCircle, AlertTriangle, X, Banknote, Smartphone, Landmark, CreditCard as CreditCardIcon } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useCart } from '../context/CartContext.jsx'
 import { BASE_PRICE, BODY_OPTIONS, BODY_WOOD_OPTIONS, BODY_FINISH_OPTIONS, NECK_OPTIONS, FRETBOARD_OPTIONS, HEADSTOCK_OPTIONS, HEADSTOCK_WOOD_OPTIONS, INLAY_OPTIONS, BRIDGE_OPTIONS, PICKGUARD_OPTIONS_BY_BODY, KNOB_OPTIONS_BY_BODY, HARDWARE_OPTIONS, PICKUP_OPTIONS } from '../lib/guitarBuilderData.js'
@@ -32,6 +32,15 @@ const APPOINTMENT_CANCEL_REASONS = [
   'Found another service provider',
   'Emergency / Personal reason',
   'Vehicle / Transportation issue',
+  'Others',
+]
+
+const HOLD_REASONS = [
+  'Waiting for parts or materials',
+  'Need to adjust budget or payment',
+  'Personal or schedule conflict',
+  'Design change or revision needed',
+  'Not ready to proceed yet',
   'Others',
 ]
 
@@ -172,12 +181,14 @@ export function DashboardPage() {
   const [isCancelProjectModalOpen, setIsCancelProjectModalOpen] = useState(false)
   const [cancelProjectTarget, setCancelProjectTarget] = useState(null)
   const [isCancellingProject, setIsCancellingProject] = useState(false)
+  const [cancelProjectConfirmed, setCancelProjectConfirmed] = useState(false)
 
   // Hold / Cancel with options state
   const [isHoldProjectModalOpen, setIsHoldProjectModalOpen] = useState(false)
   const [holdProjectTarget, setHoldProjectTarget] = useState(null)
   const [holdOption, setHoldOption] = useState('resume_later')
   const [holdReason, setHoldReason] = useState('')
+  const [holdCustomReason, setHoldCustomReason] = useState('')
   const [isHoldingProject, setIsHoldingProject] = useState(false)
 
   const [isCancelWithOptionsModalOpen, setIsCancelWithOptionsModalOpen] = useState(false)
@@ -185,6 +196,11 @@ export function DashboardPage() {
   const [cancelOption, setCancelOption] = useState('ship_unfinished')
   const [cancelWithOptionsReason, setCancelWithOptionsReason] = useState('')
   const [isCancellingWithOptions, setIsCancellingWithOptions] = useState(false)
+
+  // Resume / Continue Build state
+  const [isResumeProjectModalOpen, setIsResumeProjectModalOpen] = useState(false)
+  const [resumeProjectTarget, setResumeProjectTarget] = useState(null)
+  const [isResumingProject, setIsResumingProject] = useState(false)
 
   const [myAppointments, setMyAppointments] = useState([])
   const [reschedulingAptId, setReschedulingAptId] = useState(null)
@@ -387,6 +403,7 @@ export function DashboardPage() {
 
   const openCancelProjectModal = (project) => {
     setCancelProjectTarget(project)
+    setCancelProjectConfirmed(false)
     setIsCancelProjectModalOpen(true)
   }
 
@@ -394,6 +411,7 @@ export function DashboardPage() {
     if (isCancellingProject && !force) return
     setIsCancelProjectModalOpen(false)
     setCancelProjectTarget(null)
+    setCancelProjectConfirmed(false)
   }
 
   const handleCancelProject = async () => {
@@ -422,6 +440,7 @@ export function DashboardPage() {
     setHoldProjectTarget(project)
     setHoldOption('resume_later')
     setHoldReason('')
+    setHoldCustomReason('')
     setIsHoldProjectModalOpen(true)
   }
 
@@ -431,24 +450,59 @@ export function DashboardPage() {
     setHoldProjectTarget(null)
     setHoldOption('resume_later')
     setHoldReason('')
+    setHoldCustomReason('')
+  }
+
+  const getResolvedHoldReason = () => {
+    if (holdReason === 'Others') return holdCustomReason.trim()
+    return holdReason
   }
 
   const handleHoldProject = async () => {
     if (!holdProjectTarget?.project_id) return
 
+    const resolvedReason = getResolvedHoldReason()
     try {
       setIsHoldingProject(true)
       await adminApi.requestProjectHold(holdProjectTarget.project_id, {
         hold_option: holdOption,
-        reason: holdReason || 'Customer requested hold',
+        reason: resolvedReason || 'Customer requested hold',
       })
-      setToastMessage('Hold request submitted. Admin will review it shortly.');
+      setToastMessage('Project has been placed on hold. Manufacturing is paused.');
       fetchMyProjects();
       closeHoldProjectModal(true)
     } catch (err) {
       setToastMessage(`Failed to request hold: ${err.message}`);
     } finally {
       setIsHoldingProject(false)
+    }
+  }
+
+  // Resume / Continue Build handlers
+  const openResumeProjectModal = (project) => {
+    setResumeProjectTarget(project)
+    setIsResumeProjectModalOpen(true)
+  }
+
+  const closeResumeProjectModal = (force = false) => {
+    if (isResumingProject && !force) return
+    setIsResumeProjectModalOpen(false)
+    setResumeProjectTarget(null)
+  }
+
+  const handleResumeProject = async () => {
+    if (!resumeProjectTarget?.project_id) return
+
+    try {
+      setIsResumingProject(true)
+      await adminApi.resumeProject(resumeProjectTarget.project_id)
+      setToastMessage('Project has been resumed! Manufacturing can continue.');
+      fetchMyProjects();
+      closeResumeProjectModal(true)
+    } catch (err) {
+      setToastMessage(`Failed to resume project: ${err.message}`);
+    } finally {
+      setIsResumingProject(false)
     }
   }
 
@@ -998,198 +1052,198 @@ export function DashboardPage() {
     <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-5 sm:p-8">
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h2 className="text-2xl font-bold text-white mb-1">My Appointments</h2>
-          <p className="text-sm text-[var(--text-muted)]">View and manage your service appointments</p>
-        </div>
-        <button
-          onClick={() => navigate('/appointments')}
-          className="px-4 py-2 rounded-lg bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-semibold text-sm hover:shadow-[0_0_15px_rgba(212,175,55,0.4)] transition-all flex items-center gap-2"
-        >
-          <Calendar className="w-4 h-4" />
-          Book Appointment
-        </button>
-      </div>
-
-      {myAppointments.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-10">
-          <div className="w-16 h-16 rounded-full border-2 border-[var(--border)] flex items-center justify-center mb-6">
-            <Calendar className="w-8 h-8 text-[var(--text-muted)]" />
+            <h2 className="text-2xl font-bold text-white mb-1">My Appointments</h2>
+            <p className="text-sm text-[var(--text-muted)]">View and manage your service appointments</p>
           </div>
-          <p className="text-white font-medium mb-1">No appointments yet</p>
-          <p className="text-sm text-[var(--text-muted)] mb-6">Book a service appointment to see it here</p>
+          <button
+            onClick={() => navigate('/appointments')}
+            className="px-4 py-2 rounded-lg bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-semibold text-sm hover:shadow-[0_0_15px_rgba(212,175,55,0.4)] transition-all flex items-center gap-2"
+          >
+            <Calendar className="w-4 h-4" />
+            Book Appointment
+          </button>
         </div>
-      ) : (
-        <div className="max-h-[62vh] space-y-4 overflow-y-auto pr-2">
-          {[...myAppointments].sort((a, b) => {
-            const dateA = new Date(a.scheduled_at || a.date || a.created_at || 0)
-            const dateB = new Date(b.scheduled_at || b.date || b.created_at || 0)
-            return dateB - dateA
-          }).map(apt => {
-            const apptDate = apt.scheduled_at || apt.date;
-            
-            // Check if past current time and not completed/cancelled
-            const isPast = apptDate && new Date(apptDate) < new Date();
-            const needsReschedule = isPast && apt.status !== 'completed' && apt.status !== 'cancelled';
-            const isReschedulingThis = reschedulingAptId === (apt.appointment_id || apt.id);
-            
-            const selectedGuitar = getSelectedGuitarLabel(apt);
-            const contactNumber = getContactNumber(apt);
-            const addressLabel = getAddressLabel(apt);
-            const appointmentNotes = apt.notes || '';
 
-            return (
-              <div key={apt.appointment_id || apt.id} className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl p-5 hover:border-[var(--gold-primary)]/40 transition-colors">
-                <div className="flex justify-between items-start mb-4 gap-4">
-                  <div>
-                    <h3 className="font-bold text-white text-lg">Appointment</h3>
-                    <p className="text-xs text-[var(--text-muted)] mt-1 capitalize">
-                      {Array.isArray(apt.services) ? apt.services.map(s => s.replace(/-/g, ' ')).join(', ') : (apt.service_name || 'Consultation')}
-                    </p>
+        {myAppointments.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-10">
+            <div className="w-16 h-16 rounded-full border-2 border-[var(--border)] flex items-center justify-center mb-6">
+              <Calendar className="w-8 h-8 text-[var(--text-muted)]" />
+            </div>
+            <p className="text-white font-medium mb-1">No appointments yet</p>
+            <p className="text-sm text-[var(--text-muted)] mb-6">Book a service appointment to see it here</p>
+          </div>
+        ) : (
+          <div className="max-h-[62vh] space-y-4 overflow-y-auto pr-2">
+            {[...myAppointments].sort((a, b) => {
+              const dateA = new Date(a.scheduled_at || a.date || a.created_at || 0)
+              const dateB = new Date(b.scheduled_at || b.date || b.created_at || 0)
+              return dateB - dateA
+            }).map(apt => {
+              const apptDate = apt.scheduled_at || apt.date;
+              
+              // Check if past current time and not completed/cancelled
+              const isPast = apptDate && new Date(apptDate) < new Date();
+              const needsReschedule = isPast && apt.status !== 'completed' && apt.status !== 'cancelled';
+              const isReschedulingThis = reschedulingAptId === (apt.appointment_id || apt.id);
+              
+              const selectedGuitar = getSelectedGuitarLabel(apt);
+              const contactNumber = getContactNumber(apt);
+              const addressLabel = getAddressLabel(apt);
+              const appointmentNotes = apt.notes || '';
+
+              return (
+                <div key={apt.appointment_id || apt.id} className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl p-5 hover:border-[var(--gold-primary)]/40 transition-colors">
+                  <div className="flex justify-between items-start mb-4 gap-4">
+                    <div>
+                      <h3 className="font-bold text-white text-lg">Appointment</h3>
+                      <p className="text-xs text-[var(--text-muted)] mt-1 capitalize">
+                        {Array.isArray(apt.services) ? apt.services.map(s => s.replace(/-/g, ' ')).join(', ') : (apt.service_name || 'Consultation')}
+                      </p>
+                    </div>
+                    <span className={`px-3 py-1 rounded-full text-xs font-semibold capitalize border ${
+                      apt.status === 'approved' ? 'bg-green-500/10 text-green-400 border-green-500/30' : 
+                      apt.status === 'completed' ? 'bg-blue-500/10 text-blue-400 border-blue-500/30' : 
+                      apt.status === 'cancelled' ? 'bg-red-500/10 text-red-500 border-red-500/30' :
+                      'bg-yellow-500/10 text-yellow-500 border-yellow-500/30'
+                    }`}>
+                      {apt.status || 'Pending'}
+                    </span>
                   </div>
-                  <span className={`px-3 py-1 rounded-full text-xs font-semibold capitalize border ${
-                    apt.status === 'approved' ? 'bg-green-500/10 text-green-400 border-green-500/30' : 
-                    apt.status === 'completed' ? 'bg-blue-500/10 text-blue-400 border-blue-500/30' : 
-                    apt.status === 'cancelled' ? 'bg-red-500/10 text-red-500 border-red-500/30' :
-                    'bg-yellow-500/10 text-yellow-500 border-yellow-500/30'
-                  }`}>
-                    {apt.status || 'Pending'}
-                  </span>
-                </div>
-                
-                {isReschedulingThis ? (
-                  <div className="mt-4 pt-4 border-t border-[var(--border)] bg-[var(--surface-dark)] p-4 rounded-xl">
-                    <p className="text-white font-semibold mb-3">Select New Schedule</p>
-                    <div className="grid sm:grid-cols-2 gap-4 mb-4">
-                      <div>
-                        <label className="block text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-1">New Date</label>
-                        <input type="date" min={new Date().toISOString().split('T')[0]} value={rescheduleDate} onChange={(e) => setRescheduleDate(e.target.value)} className="w-full px-4 py-2.5 bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl text-white text-sm" />
-                      </div>
-                      <div>
-                        <label className="block text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-1">New Time</label>
-                        <input type="time" value={rescheduleTime} onChange={(e) => setRescheduleTime(e.target.value)} className="w-full px-4 py-2.5 bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl text-white text-sm" />
-                      </div>
-                    </div>
-                    <div className="flex justify-end gap-2">
-                       <button onClick={() => setReschedulingAptId(null)} className="px-4 py-2 rounded-lg text-[var(--text-muted)] text-sm font-semibold hover:text-white transition">Cancel</button>
-                       <button onClick={() => handleRescheduleSubmit(apt.appointment_id || apt.id)} className="px-4 py-2 rounded-lg bg-[var(--gold-primary)] text-black text-sm font-semibold hover:bg-[var(--gold-secondary)] transition">Confirm Reschedule</button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="grid sm:grid-cols-2 gap-x-6 gap-y-3 text-sm mt-4 pt-4 border-t border-[var(--border)]">
-                    <div>
-                      <span className="block text-[var(--text-muted)] mb-0.5">Date & Time</span>
-                      <span className="text-white">
-                        {apptDate ? new Date(apptDate).toLocaleDateString() : '—'} at {apt.time || (apptDate ? new Date(apptDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—')}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="block text-[var(--text-muted)] mb-0.5">Branch</span>
-                      <span className="text-white capitalize">{apt.location_id ? apt.location_id.replace(/-/g, ' ') : '—'}</span>
-                    </div>
-                    <div>
-                      <span className="block text-[var(--text-muted)] mb-0.5">Service Type</span>
-                      <span className="text-white">{formatAppointmentServiceType(apt.appointment_type)}</span>
-                    </div>
-                    <div>
-                      <span className="block text-[var(--text-muted)] mb-0.5">Selected Guitar</span>
-                      <span className="text-white">{selectedGuitar || '—'}</span>
-                    </div>
-                    {appointmentNotes && (
-                      <div className="sm:col-span-2 mt-1">
-                        <span className="block text-[var(--text-muted)] mb-0.5">Notes</span>
-                        <div className="space-y-2">
-                          {(() => {
-                            const lines = appointmentNotes.split('\n')
-                            const textParts = []
-                            const imageParts = []
-                            
-                            lines.forEach(line => {
-                              const imageMatch = line.match(/(https?:\/\/[^\s]+(?:\.jpg|\.jpeg|\.png|\.gif|\.webp|\.bmp)[^\s]*)/i)
-                              if (imageMatch) {
-                                const before = line.replace(imageMatch[0], '').trim()
-                                if (before) textParts.push(before)
-                                imageParts.push(imageMatch[1])
-                              } else {
-                                textParts.push(line)
-                              }
-                            })
-                            
-                            return (
-                              <>
-                                {textParts.filter(Boolean).length > 0 && (
-                                  <span className="text-white/80 text-xs leading-relaxed block bg-[var(--surface-dark)] rounded-lg p-3 border border-[var(--border)]">
-                                    {textParts.filter(Boolean).join('\n')}
-                                  </span>
-                                )}
-                                {imageParts.map((url, i) => (
-                                  <div key={i} className="rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] p-2">
-                                    <img
-                                      src={url}
-                                      alt={`Reference image ${i + 1}`}
-                                      className="h-40 w-full rounded-lg object-cover"
-                                      onError={(e) => { e.target.style.display = 'none' }}
-                                    />
-                                  </div>
-                                ))}
-                              </>
-                            )
-                          })()}
+                  
+                  {isReschedulingThis ? (
+                    <div className="mt-4 pt-4 border-t border-[var(--border)] bg-[var(--surface-dark)] p-4 rounded-xl">
+                      <p className="text-white font-semibold mb-3">Select New Schedule</p>
+                      <div className="grid sm:grid-cols-2 gap-4 mb-4">
+                        <div>
+                          <label className="block text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-1">New Date</label>
+                          <input type="date" min={new Date().toISOString().split('T')[0]} value={rescheduleDate} onChange={(e) => setRescheduleDate(e.target.value)} className="w-full px-4 py-2.5 bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl text-white text-sm" />
+                        </div>
+                        <div>
+                          <label className="block text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-1">New Time</label>
+                          <input type="time" value={rescheduleTime} onChange={(e) => setRescheduleTime(e.target.value)} className="w-full px-4 py-2.5 bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl text-white text-sm" />
                         </div>
                       </div>
-                    )}
+                      <div className="flex justify-end gap-2">
+                         <button onClick={() => setReschedulingAptId(null)} className="px-4 py-2 rounded-lg text-[var(--text-muted)] text-sm font-semibold hover:text-white transition">Cancel</button>
+                         <button onClick={() => handleRescheduleSubmit(apt.appointment_id || apt.id)} className="px-4 py-2 rounded-lg bg-[var(--gold-primary)] text-black text-sm font-semibold hover:bg-[var(--gold-secondary)] transition">Confirm Reschedule</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="grid sm:grid-cols-2 gap-x-6 gap-y-3 text-sm mt-4 pt-4 border-t border-[var(--border)]">
+                      <div>
+                        <span className="block text-[var(--text-muted)] mb-0.5">Date & Time</span>
+                        <span className="text-white">
+                          {apptDate ? new Date(apptDate).toLocaleDateString() : '—'} at {apt.time || (apptDate ? new Date(apptDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—')}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="block text-[var(--text-muted)] mb-0.5">Branch</span>
+                        <span className="text-white capitalize">{apt.location_id ? apt.location_id.replace(/-/g, ' ') : '—'}</span>
+                      </div>
+                      <div>
+                        <span className="block text-[var(--text-muted)] mb-0.5">Service Type</span>
+                        <span className="text-white">{formatAppointmentServiceType(apt.appointment_type)}</span>
+                      </div>
+                      <div>
+                        <span className="block text-[var(--text-muted)] mb-0.5">Selected Guitar</span>
+                        <span className="text-white">{selectedGuitar || '—'}</span>
+                      </div>
+                      {appointmentNotes && (
+                        <div className="sm:col-span-2 mt-1">
+                          <span className="block text-[var(--text-muted)] mb-0.5">Notes</span>
+                          <div className="space-y-2">
+                            {(() => {
+                              const lines = appointmentNotes.split('\n')
+                              const textParts = []
+                              const imageParts = []
+                              
+                              lines.forEach(line => {
+                                const imageMatch = line.match(/(https?:\/\/[^\s]+(?:\.jpg|\.jpeg|\.png|\.gif|\.webp|\.bmp)[^\s]*)/i)
+                                if (imageMatch) {
+                                  const before = line.replace(imageMatch[0], '').trim()
+                                  if (before) textParts.push(before)
+                                  imageParts.push(imageMatch[1])
+                                } else {
+                                  textParts.push(line)
+                                }
+                              })
+                              
+                              return (
+                                <>
+                                  {textParts.filter(Boolean).length > 0 && (
+                                    <span className="text-white/80 text-xs leading-relaxed block bg-[var(--surface-dark)] rounded-lg p-3 border border-[var(--border)]">
+                                      {textParts.filter(Boolean).join('\n')}
+                                    </span>
+                                  )}
+                                  {imageParts.map((url, i) => (
+                                    <div key={i} className="rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] p-2">
+                                      <img
+                                        src={url}
+                                        alt={`Reference image ${i + 1}`}
+                                        className="h-40 w-full rounded-lg object-cover"
+                                        onError={(e) => { e.target.style.display = 'none' }}
+                                      />
+                                    </div>
+                                  ))}
+                                </>
+                              )
+                            })()}
+                          </div>
+                        </div>
+                      )}
 
-                    {apt.status !== 'completed' && apt.status !== 'cancelled' && (
-                      <div className="sm:col-span-2 mt-3 pt-4 border-t border-[var(--border)] flex justify-end">
-                        <button
-                          onClick={() => openCancelAppointmentModal(apt)}
-                          className="px-4 py-2 border border-red-500/30 text-red-500 hover:bg-red-500/10 transition-colors rounded-lg text-sm font-semibold"
-                        >
-                          Cancel Appointment
-                        </button>
-                      </div>
-                    )}
-                    
-                     {needsReschedule && (
-                      <div className="sm:col-span-2 mt-3 pt-4 border-t border-[var(--border)] flex items-center justify-between bg-orange-500/10 p-4 rounded-xl border border-orange-500/20">
-                         <div className="flex items-center gap-3">
-                           <AlertCircle className="w-5 h-5 text-orange-400" />
-                           <div>
-                             <p className="text-orange-400 font-semibold text-sm">Action Required</p>
-                             <p className="text-orange-400/80 text-xs mt-0.5">This appointment is past due. Please reschedule it.</p>
+                      {apt.status !== 'completed' && apt.status !== 'cancelled' && (
+                        <div className="sm:col-span-2 mt-3 pt-4 border-t border-[var(--border)] flex justify-end">
+                          <button
+                            onClick={() => openCancelAppointmentModal(apt)}
+                            className="px-4 py-2 border border-red-500/30 text-red-500 hover:bg-red-500/10 transition-colors rounded-lg text-sm font-semibold"
+                          >
+                            Cancel Appointment
+                          </button>
+                        </div>
+                      )}
+                      
+                       {needsReschedule && (
+                        <div className="sm:col-span-2 mt-3 pt-4 border-t border-[var(--border)] flex items-center justify-between bg-orange-500/10 p-4 rounded-xl border border-orange-500/20">
+                           <div className="flex items-center gap-3">
+                             <AlertCircle className="w-5 h-5 text-orange-400" />
+                             <div>
+                               <p className="text-orange-400 font-semibold text-sm">Action Required</p>
+                               <p className="text-orange-400/80 text-xs mt-0.5">This appointment is past due. Please reschedule it.</p>
+                             </div>
                            </div>
-                         </div>
-                         <button 
-                           onClick={() => {
-                             navigate('/appointments', {
-                               state: {
-                                 rescheduleAppointment: {
-                                   appointment_id: apt.appointment_id || apt.id,
-                                   appointment_type: apt.appointment_type,
-                                   services: apt.services,
-                                   location_id: apt.location_id,
-                                   guitar_details: apt.guitar_details,
-                                   notes: apt.notes,
-                                   scheduled_at: apt.scheduled_at,
-                                   status: apt.status,
+                           <button 
+                             onClick={() => {
+                               navigate('/appointments', {
+                                 state: {
+                                   rescheduleAppointment: {
+                                     appointment_id: apt.appointment_id || apt.id,
+                                     appointment_type: apt.appointment_type,
+                                     services: apt.services,
+                                     location_id: apt.location_id,
+                                     guitar_details: apt.guitar_details,
+                                     notes: apt.notes,
+                                     scheduled_at: apt.scheduled_at,
+                                     status: apt.status,
+                                   }
                                  }
-                               }
-                             });
-                           }} 
-                           className="px-4 py-2 rounded-lg bg-orange-500 text-white font-semibold text-xs hover:bg-orange-600 transition"
-                         >
-                           Reschedule
-                         </button>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  )
+                               });
+                             }} 
+                             className="px-4 py-2 rounded-lg bg-orange-500 text-white font-semibold text-xs hover:bg-orange-600 transition"
+                           >
+                             Reschedule
+                           </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    )
 
   const renderProjectsContent = () => {
     if (activeProjectView) {
@@ -1311,26 +1365,39 @@ export function DashboardPage() {
                 <div className="flex gap-2 mt-4 pt-4 border-t border-[var(--border)]">
                   {String(project.status || '').toLowerCase() !== 'cancelled' && String(project.status || '').toLowerCase() !== 'completed' && (
                     <>
-                      {String(project.status || '').toLowerCase() !== 'on_hold' && project.progress < 80 && (
-                        <button
-                          onClick={() => openCancelProjectModal(project)}
-                          className="px-4 py-2 rounded-lg border border-red-500/30 text-red-500 hover:bg-red-500/10 transition-colors text-sm font-semibold"
-                        >
-                          Cancel Project
-                        </button>
-                      )}
-                      {String(project.status || '').toLowerCase() !== 'on_hold' && (
-                        <button
-                          onClick={() => openHoldProjectModal(project)}
-                          className="px-4 py-2 rounded-lg border border-amber-500/30 text-amber-500 hover:bg-amber-500/10 transition-colors text-sm font-semibold"
-                        >
-                          Hold Build
-                        </button>
-                      )}
-                      {String(project.status || '').toLowerCase() === 'on_hold' && (
-                        <span className="px-4 py-2 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-400 text-sm font-semibold">
-                          On Hold
-                        </span>
+                      {String(project.status || '').toLowerCase() !== 'on_hold' ? (
+                        <>
+                          {project.progress < 80 && (
+                            <button
+                              onClick={() => openCancelProjectModal(project)}
+                              className="px-4 py-2 rounded-lg border border-red-500/30 text-red-500 hover:bg-red-500/10 transition-colors text-sm font-semibold"
+                            >
+                              Cancel Project
+                            </button>
+                          )}
+                          {String(project.status || '').toLowerCase() !== 'not_started' && (
+                            <button
+                              onClick={() => openHoldProjectModal(project)}
+                              className="px-4 py-2 rounded-lg border border-amber-500/30 text-amber-500 hover:bg-amber-500/10 transition-colors text-sm font-semibold"
+                            >
+                              Hold Build
+                            </button>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          <span className="px-4 py-2 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-400 text-sm font-semibold flex items-center gap-1.5">
+                            <Clock className="w-3.5 h-3.5" />
+                            On Hold
+                          </span>
+                          <button
+                            onClick={() => openResumeProjectModal(project)}
+                            className="px-4 py-2 rounded-lg border border-emerald-500/30 text-emerald-500 hover:bg-emerald-500/10 transition-colors text-sm font-semibold flex items-center gap-1.5"
+                          >
+                            <CheckCircle className="w-3.5 h-3.5" />
+                            Continue Build
+                          </button>
+                        </>
                       )}
                     </>
                   )}
@@ -2356,19 +2423,315 @@ export function DashboardPage() {
         onConfirm={handleConfirmPasswordChange}
         onCancel={() => setIsPasswordConfirmOpen(false)}
       />
-      <ConfirmModal
-        open={isCancelProjectModalOpen}
-        title="Cancel Project"
-        description={cancelProjectTarget?.name
-          ? `${cancelProjectTarget.name} will be cancelled and the build will stop where it is now.`
-          : 'Are you sure you want to cancel this project? This will stop the building progress.'}
-        confirmLabel="Cancel Project"
-        cancelLabel="Keep Project"
-        variant="danger"
-        isBusy={isCancellingProject}
-        onConfirm={handleCancelProject}
-        onCancel={() => closeCancelProjectModal()}
-      />
+
+      {/* Cancel Project Modal - Detailed Warning */}
+      <AnimatePresence>
+        {isCancelProjectModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[300] bg-black/70 backdrop-blur-sm p-4 flex items-center justify-center"
+            onClick={(event) => {
+              if (event.target === event.currentTarget) closeCancelProjectModal()
+            }}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 16, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 16, scale: 0.96 }}
+              className="relative w-full max-w-lg rounded-3xl border border-red-500/30 bg-[var(--surface-dark)] p-6 sm:p-7 shadow-2xl"
+            >
+              <button
+                type="button"
+                onClick={closeCancelProjectModal}
+                disabled={isCancellingProject}
+                className="absolute right-4 top-4 rounded-lg p-2 text-[var(--text-muted)] hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
+                aria-label="Close cancel project modal"
+              >
+                <X className="h-4 w-4" />
+              </button>
+
+              <div className="w-14 h-14 rounded-2xl bg-red-500/15 flex items-center justify-center mb-5">
+                <AlertTriangle className="w-7 h-7 text-red-400" />
+              </div>
+
+              <h3 id="confirm-modal-title" className="text-white text-xl font-bold mb-2">Cancel Project</h3>
+              
+              <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 mb-5">
+                <p className="text-sm text-red-300 font-medium leading-relaxed">
+                  <AlertCircle className="w-4 h-4 inline-block mr-1.5 -mt-0.5" />
+                  <strong className="text-red-200">This action is permanent.</strong> Once cancelled, this project cannot be resumed or reactivated. To continue this build in the future, you must place a new order. Cancellation may affect payments, production progress, and reserved materials.
+                </p>
+              </div>
+
+              <p className="text-sm text-[var(--text-muted)] mb-2">
+                {cancelProjectTarget?.name 
+                  ? `"${cancelProjectTarget.name}" will be cancelled and the build will stop where it is now.`
+                  : 'This project will be cancelled and the build will stop where it is now.'}
+              </p>
+
+              {/* Explicit Confirmation Checkbox */}
+              <div className="mt-5 rounded-xl border border-red-500/30 bg-red-500/5 p-4">
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={cancelProjectConfirmed}
+                    onChange={(e) => setCancelProjectConfirmed(e.target.checked)}
+                    className="mt-0.5 h-5 w-5 accent-red-500 rounded"
+                  />
+                  <span className="text-sm text-white font-medium">
+                    I understand that this action is permanent and cannot be undone. I want to cancel this project.
+                  </span>
+                </label>
+              </div>
+
+              <div className="mt-6 flex gap-3">
+                <button
+                  type="button"
+                  onClick={closeCancelProjectModal}
+                  disabled={isCancellingProject}
+                  className="flex-1 rounded-xl border border-[var(--border)] bg-white/5 py-3 text-sm font-semibold text-white hover:bg-white/10 transition-colors disabled:opacity-50"
+                >
+                  Keep Project
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCancelProject}
+                  disabled={!cancelProjectConfirmed || isCancellingProject}
+                  className="flex-1 rounded-xl bg-red-500 py-3 text-sm font-bold text-white hover:bg-red-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {isCancellingProject && <Loader2 className="h-4 w-4 animate-spin" />}
+                  {isCancellingProject ? 'Cancelling...' : 'Confirm Cancellation'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Hold Build Modal */}
+      <AnimatePresence>
+        {isHoldProjectModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[300] bg-black/70 backdrop-blur-sm p-4 flex items-center justify-center"
+            onClick={(event) => {
+              if (event.target === event.currentTarget) closeHoldProjectModal()
+            }}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 16, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 16, scale: 0.96 }}
+              className="relative w-full max-w-lg rounded-3xl border border-amber-500/30 bg-[var(--surface-dark)] p-6 sm:p-7 shadow-2xl"
+            >
+              <button
+                type="button"
+                onClick={closeHoldProjectModal}
+                disabled={isHoldingProject}
+                className="absolute right-4 top-4 rounded-lg p-2 text-[var(--text-muted)] hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
+                aria-label="Close hold project modal"
+              >
+                <X className="h-4 w-4" />
+              </button>
+
+              <div className="w-14 h-14 rounded-2xl bg-amber-500/15 flex items-center justify-center mb-5">
+                <Clock className="w-7 h-7 text-amber-400" />
+              </div>
+
+              <h3 className="text-white text-xl font-bold mb-2">Hold Build</h3>
+              
+              {holdProjectTarget?.name && (
+                <p className="text-sm text-[var(--text-muted)] mb-5">
+                  Pause manufacturing for <span className="text-white font-semibold">{holdProjectTarget.name}</span>
+                </p>
+              )}
+
+              <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 mb-5">
+                <p className="text-sm text-amber-300 leading-relaxed">
+                  <AlertCircle className="w-4 h-4 inline-block mr-1.5 -mt-0.5" />
+                  Placing this build on hold will pause all manufacturing progress. Staff will not be able to complete or start any build tasks until you resume the project. You can resume it at any time from your dashboard.
+                </p>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)] mb-2">
+                    Hold Option
+                  </label>
+                  <div className="grid gap-2">
+                    {[
+                      { value: 'resume_later', label: 'Resume Later', desc: 'Pause the project entirely. You will resume when ready.' },
+                      { value: 'hold_before_next_step', label: 'Hold Before Next Step', desc: 'Complete the current step, then pause before moving to the next.' },
+                    ].map((opt) => (
+                      <label
+                        key={opt.value}
+                        className={`flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3 transition-colors ${
+                          holdOption === opt.value
+                            ? 'border-amber-500/50 bg-amber-500/10'
+                            : 'border-[var(--border)] hover:border-amber-500/30'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="hold-option"
+                          value={opt.value}
+                          checked={holdOption === opt.value}
+                          onChange={() => setHoldOption(opt.value)}
+                          className="mt-1 h-4 w-4 accent-amber-500"
+                        />
+                        <div>
+                          <span className="text-sm text-white font-medium block">{opt.label}</span>
+                          <span className="text-xs text-[var(--text-muted)] mt-0.5 block">{opt.desc}</span>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)] mb-2">
+                    Reason for Hold <span className="text-red-400">*</span>
+                  </label>
+                  <div className="grid gap-2">
+                    {HOLD_REASONS.map((reason) => {
+                      const isSelected = holdReason === reason
+                      return (
+                        <label
+                          key={reason}
+                          className={`flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3 transition-colors ${
+                            isSelected
+                              ? 'border-amber-500/50 bg-amber-500/10'
+                              : 'border-[var(--border)] hover:border-amber-500/30'
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="hold-reason"
+                            value={reason}
+                            checked={isSelected}
+                            onChange={() => {
+                              setHoldReason(reason)
+                              if (reason !== 'Others') setHoldCustomReason('')
+                            }}
+                            className="mt-1 h-4 w-4 accent-amber-500"
+                          />
+                          <span className="text-sm text-white">{reason}</span>
+                        </label>
+                      )
+                    })}
+                  </div>
+                  {holdReason === 'Others' && (
+                    <div className="mt-4">
+                      <textarea
+                        value={holdCustomReason}
+                        onChange={(e) => setHoldCustomReason(e.target.value)}
+                        placeholder="Please specify your reason..."
+                        maxLength={300}
+                        rows={3}
+                        className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-3 text-sm text-white placeholder:text-[var(--text-muted)] focus:border-amber-500/50 focus:outline-none"
+                      />
+                      <p className="mt-1 text-right text-xs text-[var(--text-muted)]">{holdCustomReason.length}/300</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-6 flex gap-3">
+                <button
+                  type="button"
+                  onClick={closeHoldProjectModal}
+                  disabled={isHoldingProject}
+                  className="flex-1 rounded-xl border border-[var(--border)] bg-white/5 py-3 text-sm font-semibold text-white hover:bg-white/10 transition-colors disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleHoldProject}
+                  disabled={!holdReason.trim() || (holdReason === 'Others' && !holdCustomReason.trim()) || isHoldingProject}
+                  className="flex-1 rounded-xl bg-amber-500 py-3 text-sm font-bold text-black hover:bg-amber-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {isHoldingProject && <Loader2 className="h-4 w-4 animate-spin" />}
+                  {isHoldingProject ? 'Placing on Hold...' : 'Confirm Hold'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Resume / Continue Build Modal */}
+      <AnimatePresence>
+        {isResumeProjectModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[300] bg-black/70 backdrop-blur-sm p-4 flex items-center justify-center"
+            onClick={(event) => {
+              if (event.target === event.currentTarget) closeResumeProjectModal()
+            }}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 16, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 16, scale: 0.96 }}
+              className="relative w-full max-w-lg rounded-3xl border border-emerald-500/30 bg-[var(--surface-dark)] p-6 sm:p-7 shadow-2xl"
+            >
+              <button
+                type="button"
+                onClick={closeResumeProjectModal}
+                disabled={isResumingProject}
+                className="absolute right-4 top-4 rounded-lg p-2 text-[var(--text-muted)] hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
+                aria-label="Close resume project modal"
+              >
+                <X className="h-4 w-4" />
+              </button>
+
+              <div className="w-14 h-14 rounded-2xl bg-emerald-500/15 flex items-center justify-center mb-5">
+                <CheckCircle className="w-7 h-7 text-emerald-400" />
+              </div>
+
+              <h3 className="text-white text-xl font-bold mb-2">Continue Build</h3>
+              
+              {resumeProjectTarget?.name && (
+                <p className="text-sm text-[var(--text-muted)] mb-1">
+                  Resume manufacturing for <span className="text-white font-semibold">{resumeProjectTarget.name}</span>
+                </p>
+              )}
+
+              <p className="text-sm text-[var(--text-muted)] mb-5">
+                This will change the status back to <span className="text-emerald-400 font-semibold">In Progress</span>. Staff will be able to continue working on tasks from the last completed step. All completed tasks and progress will remain unchanged.
+              </p>
+
+              <div className="mt-6 flex gap-3">
+                <button
+                  type="button"
+                  onClick={closeResumeProjectModal}
+                  disabled={isResumingProject}
+                  className="flex-1 rounded-xl border border-[var(--border)] bg-white/5 py-3 text-sm font-semibold text-white hover:bg-white/10 transition-colors disabled:opacity-50"
+                >
+                  Keep On Hold
+                </button>
+                <button
+                  type="button"
+                  onClick={handleResumeProject}
+                  disabled={isResumingProject}
+                  className="flex-1 rounded-xl bg-emerald-500 py-3 text-sm font-bold text-white hover:bg-emerald-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {isResumingProject && <Loader2 className="h-4 w-4 animate-spin" />}
+                  {isResumingProject ? 'Resuming...' : 'Confirm & Resume'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <AnimatePresence>
         {isCancelOrderModalOpen && (
           <motion.div
@@ -2932,9 +3295,9 @@ export function DashboardPage() {
                            <span className="block text-xs text-[var(--text-muted)] capitalize mb-0.5">{key.replace(/([A-Z])/g, ' ').trim()}</span>
                            <span className="block font-medium text-white truncate">{label}</span>
                        </div>
-{price > 0 && (
+                       {price > 0 && (
                           <span className="text-gray-300 shrink-0 font-mono text-right">₱{price.toLocaleString('en-PH')}</span>
-                        )}
+                       )}
                      </div>
                    )
                  }) : (
@@ -2956,7 +3319,7 @@ export function DashboardPage() {
                                <span className="block font-medium text-white truncate">{label}</span>
                            </div>
                            {price > 0 && (
-<span className="text-gray-300 shrink-0 font-mono text-right">₱{price.toLocaleString('en-PH')}</span>
+                             <span className="text-gray-300 shrink-0 font-mono text-right">₱{price.toLocaleString('en-PH')}</span>
                            )}
                          </div>
                        )
@@ -2998,7 +3361,7 @@ export function DashboardPage() {
                <span className="text-lg text-[var(--text-muted)]">Grand Total</span>
                <span className="text-3xl font-bold text-[var(--gold-primary)]">
                  ₱{(Number(viewingBuild.price) + (viewingBuild.additionalParts || []).reduce((sum, p) => sum + (p.price * p.quantity), 0)).toLocaleString('en-PH')}
-               </span>
+              </span>
             </div>
             
             {getBuildLockState(viewingBuild).isLocked ? (
@@ -3047,5 +3410,3 @@ export function DashboardPage() {
 }
 
 export default DashboardPage
-
-

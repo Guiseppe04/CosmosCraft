@@ -169,10 +169,44 @@ export default function CustomerProjectTracker({ projectId, projectName, project
 
         {/* Status & Progress */}
         <div className="grid gap-4 sm:grid-cols-2 mb-6">
-          <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] p-4">
-            <p className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">Status</p>
-            <p className="mt-2 text-lg font-bold text-white">{formatStatus(hierarchy.status)}</p>
-          </div>
+          {String(hierarchy.status || '').toLowerCase() === 'on_hold' ? (
+            <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 sm:col-span-2">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-500/20">
+                  <Clock className="h-4 w-4 text-amber-400" />
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-[0.14em] text-amber-300/70">Status</p>
+                  <p className="text-lg font-bold text-amber-300">On Hold</p>
+                </div>
+              </div>
+              {hierarchy.hold_reason && (
+                <p className="mt-2 text-sm text-amber-200/80 pl-11">
+                  Reason: {hierarchy.hold_reason}
+                </p>
+              )}
+              {hierarchy.hold_requested_at && (
+                <p className="mt-1 text-xs text-amber-300/60 pl-11">
+                  Placed on hold: {formatDate(hierarchy.hold_requested_at)}
+                </p>
+              )}
+              {hierarchy.hold_at_step && (
+                <p className="mt-1 text-xs text-amber-300/60 pl-11">
+                  Paused at: {formatLabel(hierarchy.hold_at_step)}
+                </p>
+              )}
+              <div className="mt-3 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2">
+                <p className="text-xs text-amber-200/70">
+                  Manufacturing is paused. Staff cannot complete or start any build tasks until you resume the project. You can resume it from your dashboard.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] p-4">
+              <p className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">Status</p>
+              <p className="mt-2 text-lg font-bold text-white">{formatStatus(hierarchy.status)}</p>
+            </div>
+          )}
           <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] p-4">
             <p className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">Progress</p>
             <p className="mt-2 text-lg font-bold text-[var(--gold-primary)]">{clampedProgress}%</p>

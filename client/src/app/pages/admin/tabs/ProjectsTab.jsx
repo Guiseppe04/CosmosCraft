@@ -92,17 +92,18 @@ export function ProjectsTab({
       {/* Filters - single responsive row */}
       <div className="mb-4 flex flex-wrap items-end gap-4">
         {/* Status */}
-        <select
-          value={projectStatusFilter}
-          onChange={(e) => { setProjectStatusFilter(e.target.value) }}
-          className="min-w-[130px] flex-1 bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] h-[42px]"
-        >
-          <option value="all">All Statuses</option>
-          <option value="not_started">Not Started</option>
-          <option value="in_progress">In Progress</option>
-          <option value="completed">Completed</option>
-          <option value="cancelled">Cancelled</option>
-        </select>
+          <select
+            value={projectStatusFilter}
+            onChange={(e) => { setProjectStatusFilter(e.target.value) }}
+            className="min-w-[130px] flex-1 bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] h-[42px]"
+          >
+            <option value="all">All Statuses</option>
+            <option value="not_started">Not Started</option>
+            <option value="in_progress">In Progress</option>
+            <option value="on_hold">On Hold</option>
+            <option value="completed">Completed</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
         {/* Assigned Staff */}
         <select
           value={projectAssignedFilter}
@@ -237,7 +238,9 @@ export function ProjectsTab({
             const statusClass = {
               not_started: 'bg-slate-500/10 text-slate-300 border-slate-500/30',
               in_progress: 'bg-blue-500/10 text-blue-300 border-blue-500/30',
+              on_hold: 'bg-amber-500/10 text-amber-300 border-amber-500/30',
               completed: 'bg-green-500/10 text-green-300 border-green-500/30',
+              cancelled: 'bg-red-500/10 text-red-300 border-red-500/30',
             }[status] || 'bg-slate-500/10 text-slate-300 border-slate-500/30'
 
             return (
@@ -253,6 +256,16 @@ export function ProjectsTab({
                     <p className="mt-2 text-sm text-[var(--text-muted)]">
                       Customer: <span className="text-white">{project.customer_name || 'Unassigned'}</span>
                     </p>
+                    {status === 'on_hold' && project.hold_reason && (
+                      <p className="mt-2 text-xs text-amber-300/80">
+                        Hold reason: <span className="font-medium">{project.hold_reason}</span>
+                      </p>
+                    )}
+                    {status === 'on_hold' && project.hold_requested_at && (
+                      <p className="mt-0.5 text-xs text-amber-300/50">
+                        {new Date(project.hold_requested_at).toLocaleDateString()}
+                      </p>
+                    )}
                   </div>
                   <span className={`shrink-0 rounded-full border px-3 py-1 text-xs font-semibold capitalize ${statusClass}`}>
                     {status.replace(/_/g, ' ')}

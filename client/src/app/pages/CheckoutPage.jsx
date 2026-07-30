@@ -1441,7 +1441,16 @@ export function CheckoutPage() {
             stateProvince: finalAddress.province,
             postalCode: finalAddress.postalCode,
             country: finalAddress.country,
-          }
+          },
+          paymentPlan: hasSelectedCustomBuild
+            ? (paymentPlan === 'full' ? 'full_payment' : 'installment')
+            : 'full_payment',
+          initialPaymentPercentage: hasSelectedCustomBuild && paymentPlan !== 'full'
+            ? CUSTOM_BUILD_DOWN_PAYMENT_RATE
+            : undefined,
+          installmentTenureMonths: hasSelectedCustomBuild && paymentPlan !== 'full'
+            ? 6
+            : undefined,
         })
       })
 
