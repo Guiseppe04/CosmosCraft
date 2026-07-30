@@ -4,27 +4,7 @@ const { pool } = require('../config/database');
 const { authenticateToken, authorize } = require('../middleware/auth');
 
 // Ensure the payment_settings table exists with a default row
-async function ensurePaymentSettingsTable() {
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS payment_settings (
-      id INTEGER PRIMARY KEY DEFAULT 1,
-      bank_name VARCHAR(255) DEFAULT '',
-      account_name VARCHAR(255) DEFAULT '',
-      account_number VARCHAR(255) DEFAULT '',
-      gcash_number VARCHAR(255) DEFAULT '',
-      maya_number VARCHAR(255) DEFAULT '',
-      qr_image_url TEXT DEFAULT '',
-      notes TEXT DEFAULT '',
-      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-    )
-  `);
-  await pool.query(`
-    INSERT INTO payment_settings (id, bank_name, account_name, account_number, gcash_number, maya_number, qr_image_url, notes)
-    VALUES (1, '', '', '', '', '', '', '')
-    ON CONFLICT (id) DO NOTHING
-  `);
-}
+
 
 // GET /api/payment-settings - Public route to fetch payment settings for checkout
 router.get('/', async (req, res) => {

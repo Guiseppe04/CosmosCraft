@@ -2208,45 +2208,6 @@ exports.approveProjectCancel = async (projectId, userId, data = {}) => {
 let ensureInstallmentTableReady = false;
 let ensureInstallmentTablePromise = null;
 
-const ensureInstallmentTable = async () => {
-  if (ensureInstallmentTableReady) return;
-  if (!ensureInstallmentTablePromise) {
-    ensureInstallmentTablePromise = (async () => {
-      await pool.query(`
-        CREATE TABLE IF NOT EXISTS project_installment_schedules (
-            schedule_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-            project_id UUID NOT NULL REFERENCES projects(project_id) ON DELETE CASCADE,
-            installment_number INT NOT NULL CHECK (installment_number > 0),
-            amount NUMERIC(12, 2) NOT NULL CHECK (amount >= 0),
-            due_date DATE NOT NULL,
-            status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'paid', 'overdue', 'cancelled')),
-            paid_at TIMESTAMPTZ,
-            payment_id UUID REFERENCES payments(payment_id) ON DELETE SET NULL,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-            updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-            UNIQUE(project_id, installment_number)
-        )
-      `);
-      await pool.query(`
-        CREATE INDEX IF NOT EXISTS idx_project_installment_schedules_project 
-        ON project_installment_schedules(project_id)
-      `);
-      await pool.query(`
-        CREATE INDEX IF NOT EXISTS idx_project_installment_schedules_status 
-        ON project_installment_schedules(status)
-      `);
-      await pool.query(`
-        CREATE INDEX IF NOT EXISTS idx_project_installment_schedules_due_date 
-        ON project_installment_schedules(due_date)
-      `);
-      ensureInstallmentTableReady = true;
-    })().catch((error) => {
-      ensureInstallmentTablePromise = null;
-      throw error;
-    });
-  }
-  await ensureInstallmentTablePromise;
-};
 
 /**
  * Get installment schedule for a project.
