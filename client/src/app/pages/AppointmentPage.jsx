@@ -263,6 +263,16 @@ export function AppointmentPage() {
   const [availableTimeSet, setAvailableTimeSet] = useState(new Set())
   const [slotsLoading, setSlotsLoading] = useState(false)
   const [slotAvailabilityStatus, setSlotAvailabilityStatus] = useState('')
+  // Payment method selection
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('')
+  const PAYMENT_METHODS = [
+    { value: 'cash', label: 'Cash', description: 'Pay with cash on the appointment date' },
+    { value: 'e_wallet', label: 'E-Wallet', description: 'Pay via GCash, Maya, or other e-wallet services' },
+    { value: 'e_bank', label: 'E-Bank', description: 'Pay via online bank transfer' },
+  ]
+  const [paymentProofFile, setPaymentProofFile] = useState(null)
+  const [paymentProofPreviewUrl, setPaymentProofPreviewUrl] = useState('')
+  
   // Dedicated notes field for additional information (landmarks, delivery instructions, special requests, etc.)
   const [additionalNotes, setAdditionalNotes] = useState('')
   
@@ -564,6 +574,13 @@ export function AppointmentPage() {
       }
       return !!selectedBranchId
     }
+    if (currentStep === 5) {
+      if (!selectedPaymentMethod) return false
+      if (selectedPaymentMethod === 'e_wallet' || selectedPaymentMethod === 'e_bank') {
+        return Boolean(paymentProofFile && paymentProofPreviewUrl)
+      }
+      return true
+    }
     return true
   }
 
@@ -705,6 +722,31 @@ export function AppointmentPage() {
     setGuitarReferencePreviewUrl(objectUrl)
   }
 
+  const handlePaymentProofChange = (event) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      alert('Please upload an image file for payment proof.')
+      return
+    }
+    if (file.size > MAX_REFERENCE_IMAGE_BYTES) {
+      alert('Image size must be 10MB or less.')
+      return
+    }
+
+    if (paymentProofPreviewUrl) URL.revokeObjectURL(paymentProofPreviewUrl)
+    const objectUrl = URL.createObjectURL(file)
+    setPaymentProofFile(file)
+    setPaymentProofPreviewUrl(objectUrl)
+  }
+
+  const clearPaymentProof = () => {
+    if (paymentProofPreviewUrl) URL.revokeObjectURL(paymentProofPreviewUrl)
+    setPaymentProofFile(null)
+    setPaymentProofPreviewUrl('')
+  }
+
   const clearReferenceImage = (target) => {
     if (target === 'service') {
       if (serviceReferencePreviewUrl) URL.revokeObjectURL(serviceReferencePreviewUrl)
@@ -759,6 +801,7 @@ export function AppointmentPage() {
 
       let serviceReferenceImageUrl = ''
       let guitarReferenceImageUrl = ''
+      let paymentProofImageUrl = ''
       if (serviceReferenceFile) {
         serviceReferenceImageUrl = await uploadToCloudinary(serviceReferenceFile, {
           folder: 'cosmoscraft/appointments/service-reference',
@@ -767,6 +810,11 @@ export function AppointmentPage() {
       if (guitarReferenceFile) {
         guitarReferenceImageUrl = await uploadToCloudinary(guitarReferenceFile, {
           folder: 'cosmoscraft/appointments/guitar-reference',
+        })
+      }
+      if (paymentProofFile) {
+        paymentProofImageUrl = await uploadToCloudinary(paymentProofFile, {
+          folder: 'cosmoscraft/appointments/payment-proof',
         })
       }
 
@@ -806,6 +854,7 @@ export function AppointmentPage() {
                   guitars: selectedGuitarEntries,
                 }
               : undefined,
+            payment_method: selectedPaymentMethod,
             notes: finalNotes,
           })
         });
@@ -834,6 +883,8 @@ export function AppointmentPage() {
             services: selectedServiceId ? [selectedServiceId] : [],
             location_id: selectedBranchId,
             address_id: selectedAppointmentType === 'service_home' ? homeServiceAddressId : undefined,
+            payment_method: selectedPaymentMethod,
+            payment_proof_url: paymentProofImageUrl || undefined,
             guitar_details: hasSelectedGuitar
               ? {
                   brand: selectedPrimaryGuitar?.brand || '',
@@ -1437,6 +1488,67 @@ export function AppointmentPage() {
                    </div>
                  </div>
                )}
+
+               {/* Payment Method Selection */}
+               <div className="border-t border-[var(--border)] pt-4">
+                 <p className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-3">Payment Method <span className="text-red-400">*</span></p>
+                 <div className="grid sm:grid-cols-3 gap-3">
+                   {PAYMENT_METHODS.map((method) => {
+                     const isSelected = selectedPaymentMethod === method.value
+                     return (
+                       <button
+                         key={method.value}
+                         type="button"
+                         onClick={() => { setSelectedPaymentMethod(method.value); setPaymentProofFile(null); setPaymentProofPreviewUrl('') }}
+                         className={`rounded-xl border-2 p-4 text-left transition-all ${
+                           isSelected
+                             ? 'border-[#d4af37] bg-[#d4af37]/10'
+                             : 'border-[var(--border)] bg-[var(--surface-dark)] hover:border-[#d4af37]/30'
+                         }`}
+                       >
+                         <p className={`text-sm font-semibold ${isSelected ? 'text-[#d4af37]' : 'text-[var(--text-light)]'}`}>
+                           {method.label}
+                         </p>
+                         <p className="mt-1 text-xs text-[var(--text-muted)]">{method.description}</p>
+                       </button>
+                     )
+                   })}
+                 </div>
+                 
+                 {/* Payment Proof Upload - Required for E-Wallet and E-Bank */}
+                 {(selectedPaymentMethod === 'e_wallet' || selectedPaymentMethod === 'e_bank') && (
+                   <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] p-4 space-y-3">
+                     <p className="text-sm font-semibold text-[var(--text-light)]">Upload Payment Proof <span className="text-red-400">*</span></p>
+                     <p className="text-xs text-[var(--text-muted)]">Please upload a screenshot or photo of your payment transaction/receipt as proof of payment.</p>
+                     <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-[var(--border)] px-4 py-2.5 text-sm font-semibold text-[var(--text-light)] hover:border-[#d4af37]/50 hover:text-[#d4af37] transition-colors">
+                       <ImagePlus className="h-4 w-4" />
+                       {paymentProofFile ? 'Change Payment Proof' : 'Upload Payment Proof'}
+                       <input
+                         type="file"
+                         accept="image/*"
+                         className="hidden"
+                         onChange={handlePaymentProofChange}
+                       />
+                     </label>
+                     {paymentProofPreviewUrl && (
+                       <div className="rounded-xl border border-[var(--border)] bg-theme-surface-deep p-3">
+                         <img src={paymentProofPreviewUrl} alt="Payment proof" className="h-40 w-full rounded-lg object-cover" />
+                         <div className="mt-3 flex items-center justify-between text-xs text-[var(--text-muted)]">
+                           <span>{paymentProofFile?.name || 'payment-proof'}</span>
+                           <button
+                             type="button"
+                             onClick={clearPaymentProof}
+                             className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] px-2 py-1 hover:border-red-400/60 hover:text-red-300 transition-colors"
+                           >
+                             <X className="h-3.5 w-3.5" />
+                             Remove
+                           </button>
+                         </div>
+                       </div>
+                     )}
+                   </div>
+                 )}
+               </div>
 
                <div className="border-t border-[var(--border)] pt-4 flex justify-between items-center">
                   <span className="text-sm font-bold text-[var(--text-muted)] uppercase">Estimated Total</span>

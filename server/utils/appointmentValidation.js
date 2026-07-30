@@ -146,6 +146,22 @@ const appointmentValidation = {
         'string.guid': 'staff_id must be a valid UUID',
       }),
 
+    payment_method: Joi.string()
+      .valid('cash', 'e_wallet', 'e_bank')
+      .required()
+      .messages({
+        'any.required': 'payment_method is required. Choose from: cash, e_wallet, or e_bank',
+        'any.only': 'payment_method must be one of: cash, e_wallet, or e_bank',
+      }),
+
+    payment_proof_url: Joi.string()
+      .uri()
+      .optional()
+      .allow('', null)
+      .messages({
+        'string.uri': 'payment_proof_url must be a valid URL',
+      }),
+
     user_id: Joi.string()
       .uuid()
       .optional()

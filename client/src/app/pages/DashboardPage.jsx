@@ -2458,18 +2458,12 @@ export function DashboardPage() {
 
               <h3 id="confirm-modal-title" className="text-white text-xl font-bold mb-2">Cancel Project</h3>
               
-              <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 mb-5">
-                <p className="text-sm text-red-300 font-medium leading-relaxed">
+              <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-5 mb-2">
+                <p className="text-sm text-red-300/90 leading-relaxed">
                   <AlertCircle className="w-4 h-4 inline-block mr-1.5 -mt-0.5" />
-                  <strong className="text-red-200">This action is permanent.</strong> Once cancelled, this project cannot be resumed or reactivated. To continue this build in the future, you must place a new order. Cancellation may affect payments, production progress, and reserved materials.
+                  <strong className="text-red-400">This action is permanent.</strong> Once cancelled, <strong className="text-white">"{cancelProjectTarget?.name || 'This project'}"</strong> will stop at its current build stage and cannot be resumed or reactivated. If you wish to continue this build in the future, you must place a new order. Cancellation may affect payments, production progress, and reserved materials.
                 </p>
               </div>
-
-              <p className="text-sm text-[var(--text-muted)] mb-2">
-                {cancelProjectTarget?.name 
-                  ? `"${cancelProjectTarget.name}" will be cancelled and the build will stop where it is now.`
-                  : 'This project will be cancelled and the build will stop where it is now.'}
-              </p>
 
               {/* Explicit Confirmation Checkbox */}
               <div className="mt-5 rounded-xl border border-red-500/30 bg-red-500/5 p-4">

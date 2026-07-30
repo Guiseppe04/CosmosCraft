@@ -534,6 +534,7 @@ async function getSalesReport(filters = {}) {
   const ordersRange = buildRange('o.created_at');
   const posRange = buildRange('ps.created_at');
   const itemsRange = buildRange('src.created_at');
+  const appointmentRange = buildRange('a.scheduled_at');
 
   const now = new Date();
   const todayStart = new Date(now);
@@ -556,6 +557,7 @@ async function getSalesReport(filters = {}) {
     monthlyPos,
     bestSellingProducts,
     customizationTypes,
+    appointmentPaymentSummary,
   ] = await Promise.all([
     pool.query(
       `SELECT
@@ -702,6 +704,20 @@ async function getSalesReport(filters = {}) {
        ORDER BY revenue DESC, orders DESC`,
       ordersRange.params
     ),
+    pool.query(
+      `SELECT
+          a.payment_method AS method,
+          COUNT(*)::int AS appointments,
+          COALESCE(SUM(s.price), 0)::numeric AS revenue
+       FROM appointments a
+       JOIN services s ON s.service_id::text = ANY(a.services)
+       WHERE a.status = 'completed'
+         AND a.payment_method IS NOT NULL
+       ${appointmentRange.clause}
+       GROUP BY a.payment_method
+       ORDER BY revenue DESC`,
+      appointmentRange.params
+    ),
   ]);
 
   const walkInSales = parseFloat(walkInSummary.rows[0]?.sales || 0);
@@ -762,6 +778,11 @@ async function getSalesReport(filters = {}) {
     avgCustomization: avg(customizationSales, customizationTransactions),
     walkInConversion: pct(walkInTransactions, totalTransactions),
     onlineConversion: pct(onlineTransactions, totalTransactions),
+    appointmentPaymentMethods: appointmentPaymentSummary.rows.map((row) => ({
+      method: row.method,
+      appointments: parseInt(row.appointments || 0, 10),
+      revenue: parseFloat(row.revenue || 0),
+    })),
   };
 }
 
