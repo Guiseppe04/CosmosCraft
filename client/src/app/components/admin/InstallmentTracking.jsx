@@ -105,10 +105,10 @@ export default function InstallmentTracking({ projectId, order, orderId }) {
 
   if (!trackingData || trackingData.payment_plan !== 'installment') {
     return (
-      <div className="bg-[var(--bg-primary)]/30 border border-[var(--border)] rounded-xl p-6 text-center">
-        <CreditCard className="w-8 h-8 text-[var(--text-muted)] mx-auto mb-2" />
-        <p className="text-[var(--text-muted)] text-sm">This order is on Full Payment plan.</p>
-        <p className="text-[var(--text-muted)] text-xs mt-1">No installment tracking available.</p>
+      <div className="bg-green-500/5 border border-green-500/30 rounded-xl p-6 text-center">
+        <CheckCircle className="w-8 h-8 text-green-400 mx-auto mb-2" />
+        <p className="text-white font-semibold">Payment Complete</p>
+        <p className="text-[var(--text-muted)] text-sm mt-1">You paid it in Full Payment.</p>
       </div>
     )
   }
@@ -130,7 +130,18 @@ export default function InstallmentTracking({ projectId, order, orderId }) {
     total_months = tenure_months,
     remaining_months = tenure_months,
     next_due_date = null,
+    last_updated = null,
   } = summary
+
+  // Compute payment status
+  const getPaymentStatus = () => {
+    if (!total_months) return null;
+    if (paid_count === 0) return { label: 'Pending', color: 'text-yellow-400', bg: 'bg-yellow-500/10', border: 'border-yellow-500/30' };
+    if (paid_count >= total_months) return { label: 'Fully Paid', color: 'text-green-400', bg: 'bg-green-500/10', border: 'border-green-500/30' };
+    return { label: 'Ongoing', color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/30' };
+  };
+
+  const paymentStatus = getPaymentStatus();
 
   return (
     <motion.div
@@ -141,10 +152,15 @@ export default function InstallmentTracking({ projectId, order, orderId }) {
       {/* Summary Card */}
       <div className="rounded-2xl border border-[var(--gold-primary)]/30 bg-gradient-to-br from-[var(--gold-primary)]/10 via-[var(--bg-primary)]/70 to-[var(--surface-dark)] p-5">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-white font-bold flex items-center gap-2">
+          <div className="flex items-center gap-2">
             <DollarSign className="w-5 h-5 text-[var(--gold-primary)]" />
-            Installment Plan
-          </h3>
+            <h3 className="text-white font-bold">Installment Plan</h3>
+            {paymentStatus && (
+              <span className={`ml-2 text-xs font-semibold px-2.5 py-1 rounded-full border ${paymentStatus.bg} ${paymentStatus.border} ${paymentStatus.color}`}>
+                {paymentStatus.label}
+              </span>
+            )}
+          </div>
           <span className="text-xs text-[var(--text-muted)]">
             {tenure_months} months • {Math.round(initial_payment_percentage * 100)}% down
           </span>

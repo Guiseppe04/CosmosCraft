@@ -4,7 +4,53 @@ const { AppError } = require('../middleware/errorHandler');
 let defaultWorkflowReady = false;
 let defaultWorkflowPromise = null;
 
+/**
+ * Ensure the default workflow tables exist.
+ * This is a safety net in case the migration hasn't been run.
+ */
+const ensureDefaultWorkflowTables = async () => {
+  if (defaultWorkflowReady) return;
+  if (defaultWorkflowPromise) return defaultWorkflowPromise;
 
+  defaultWorkflowPromise = (async () => {
+    try {
+      // Check if tables exist
+      const checkRes = await pool.query(
+        `SELECT column_name
+         FROM information_schema.columns
+         WHERE table_name = 'default_workflow_steps'
+           AND table_schema = current_schema()`
+      );
+      if (checkRes.rows.length === 0) {
+        await pool.query(`
+          CREATE TABLE IF NOT EXISTS default_workflow_steps (
+            step_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            step_name VARCHAR(200) NOT NULL,
+            sort_order SMALLINT NOT NULL DEFAULT 0 CHECK (sort_order >= 0),
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+          )
+        `);
+        await pool.query(`
+          CREATE TABLE IF NOT EXISTS default_workflow_tasks (
+            task_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            step_id UUID NOT NULL REFERENCES default_workflow_steps(step_id) ON DELETE CASCADE,
+            task_name VARCHAR(200) NOT NULL,
+            sort_order SMALLINT NOT NULL DEFAULT 0 CHECK (sort_order >= 0),
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+          )
+        `);
+      }
+      defaultWorkflowReady = true;
+    } catch (err) {
+      console.warn('Could not create default workflow tables (may already exist):', err.message);
+      defaultWorkflowReady = true;
+    }
+  })();
+
+  return defaultWorkflowPromise;
+};
 
 /**
  * Get the complete default workflow with steps and tasks.

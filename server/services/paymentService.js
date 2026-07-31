@@ -66,6 +66,10 @@ async function ensureProjectForCustomBuildOrder(client, orderId) {
        o.order_id,
        o.order_number,
        o.notes,
+       o.payment_plan,
+       o.total_amount,
+       o.initial_payment_percentage,
+       o.installment_tenure_months,
        COALESCE(c.name, oi.product_name, 'Custom Build') AS build_name
      FROM orders o
      JOIN order_items oi ON oi.order_id = o.order_id
@@ -132,6 +136,27 @@ async function ensureProjectForCustomBuildOrder(client, orderId) {
       }
     } catch (err) {
       console.warn('Failed to apply default workflow to auto-created project:', err.message || err);
+    }
+
+    // If the order is on an installment plan, create the installment schedule
+    if (customBuildOrder.payment_plan === 'installment') {
+      try {
+        const installmentService = require('./installmentService');
+        const totalAmount = Number(customBuildOrder.total_amount) || 0;
+        const initialPaymentPercentage = Number(customBuildOrder.initial_payment_percentage) || 0.50;
+        const tenureMonths = Number(customBuildOrder.installment_tenure_months) || 6;
+
+        await installmentService.createInstallmentSchedule(
+          client,
+          createdProject.project_id,
+          totalAmount,
+          initialPaymentPercentage,
+          tenureMonths,
+          0.03
+        );
+      } catch (err) {
+        console.warn('Could not create installment schedule for auto-created project:', err.message || err);
+      }
     }
   }
 

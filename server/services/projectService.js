@@ -2208,6 +2208,41 @@ exports.approveProjectCancel = async (projectId, userId, data = {}) => {
 let ensureInstallmentTableReady = false;
 let ensureInstallmentTablePromise = null;
 
+/**
+ * Ensure the project_installment_schedules table exists.
+ * This is a safety net in case the migration hasn't been run.
+ */
+const ensureInstallmentTable = async () => {
+  if (ensureInstallmentTableReady) return;
+  if (ensureInstallmentTablePromise) return ensureInstallmentTablePromise;
+
+  ensureInstallmentTablePromise = (async () => {
+    try {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS project_installment_schedules (
+          schedule_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          project_id UUID NOT NULL REFERENCES projects(project_id) ON DELETE CASCADE,
+          installment_number INT NOT NULL CHECK (installment_number > 0),
+          amount NUMERIC(12, 2) NOT NULL CHECK (amount >= 0),
+          due_date DATE NOT NULL,
+          status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'paid', 'overdue', 'cancelled')),
+          paid_at TIMESTAMPTZ,
+          payment_id UUID REFERENCES payments(payment_id) ON DELETE SET NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+          UNIQUE(project_id, installment_number)
+        );
+      `);
+      ensureInstallmentTableReady = true;
+    } catch (err) {
+      // Table might already exist, that's fine
+      console.warn('Could not create installment table (may already exist):', err.message);
+      ensureInstallmentTableReady = true;
+    }
+  })();
+
+  return ensureInstallmentTablePromise;
+};
 
 /**
  * Get installment schedule for a project.
@@ -2240,13 +2275,28 @@ exports.getInstallmentSchedule = async (projectId, userId, userRole) => {
   // If no installments stored yet, compute from order data
   if (installments.length === 0) {
     const orderRes = await pool.query(
-      `SELECT total_amount, payment_status FROM orders WHERE order_id = $1`,
+      `SELECT total_amount, payment_status, payment_plan, initial_payment_amount, monthly_installment_amount, installment_tenure_months FROM orders WHERE order_id = $1`,
       [project.order_id]
     );
     const order = orderRes.rows[0];
-    if (!order) return { installments: [], summary: null };
+    if (!order) return { installments: [], summary: null, payment_plan: null };
 
     const totalAmount = Number(order.total_amount) || 0;
+
+    // Determine if this is an installment plan using the same logic as installmentService.js
+    // Check: payment_plan field, OR presence of installment data fields
+    const hasInstallmentData = Number(order.initial_payment_amount || 0) > 0 || Number(order.monthly_installment_amount || 0) > 0;
+    const isInstallmentPlan = order.payment_plan === 'installment' || hasInstallmentData;
+
+    // If the order is full payment (not installment), show the "You paid it in Full Payment" message
+    if (!isInstallmentPlan) {
+      return {
+        installments: [],
+        summary: null,
+        payment_plan: 'full_payment',
+      };
+    }
+
     const monthlyRate = 0.03; // 3% monthly interest (configurable)
     const tenureMonths = 6; // Default 6 months (configurable)
 
@@ -2267,9 +2317,13 @@ exports.getInstallmentSchedule = async (projectId, userId, userRole) => {
         remaining_balance: remainingBalance,
         total_months: tenureMonths,
         remaining_months: tenureMonths,
+        paid_count: 0,
+        paid_amount: 0,
         next_due_date: nextDueDate.toISOString(),
         interest_rate: monthlyRate,
+        last_updated: null,
       },
+      payment_plan: 'installment',
     };
   }
 
@@ -2286,8 +2340,15 @@ exports.getInstallmentSchedule = async (projectId, userId, userRole) => {
   // Find the next unpaid installment
   const nextUnpaid = installments.find((inst) => inst.status === 'pending' || inst.status === 'overdue');
 
+  // Get the latest updated_at from all installments
+  const lastUpdated = installments.reduce((latest, inst) => {
+    const updated = inst.updated_at || inst.created_at;
+    return updated && (!latest || new Date(updated) > new Date(latest)) ? updated : latest;
+  }, null);
+
   return {
     installments,
+    payment_plan: 'installment',
     summary: {
       total_amount: totalAmount,
       monthly_payment: installments[0]?.amount || 0,
@@ -2297,6 +2358,7 @@ exports.getInstallmentSchedule = async (projectId, userId, userRole) => {
       next_due_date: nextUnpaid?.due_date || null,
       paid_amount: paidAmount,
       paid_count: paidCount,
+      last_updated: lastUpdated,
     },
   };
 };

@@ -4,7 +4,44 @@ const { pool } = require('../config/database');
 const { authenticateToken, authorize } = require('../middleware/auth');
 
 // Ensure the payment_settings table exists with a default row
+let paymentSettingsTableReady = false;
 
+const ensurePaymentSettingsTable = async () => {
+  if (paymentSettingsTableReady) return;
+  try {
+    const checkRes = await pool.query(
+      `SELECT column_name
+       FROM information_schema.columns
+       WHERE table_name = 'payment_settings'
+         AND table_schema = current_schema()`
+    );
+    if (checkRes.rows.length === 0) {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS payment_settings (
+          id INTEGER PRIMARY KEY DEFAULT 1,
+          bank_name VARCHAR(255) NOT NULL DEFAULT '',
+          account_name VARCHAR(255) NOT NULL DEFAULT '',
+          account_number VARCHAR(255) NOT NULL DEFAULT '',
+          gcash_number VARCHAR(255) NOT NULL DEFAULT '',
+          maya_number VARCHAR(255) NOT NULL DEFAULT '',
+          qr_image_url TEXT NOT NULL DEFAULT '',
+          notes TEXT NOT NULL DEFAULT '',
+          created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+        )
+      `);
+      await pool.query(
+        `INSERT INTO payment_settings (id, bank_name, account_name, account_number, gcash_number, maya_number, qr_image_url, notes)
+         VALUES (1, '', '', '', '', '', '', '')
+         ON CONFLICT (id) DO NOTHING`
+      );
+    }
+    paymentSettingsTableReady = true;
+  } catch (err) {
+    console.warn('Could not create payment_settings table (may already exist):', err.message);
+    paymentSettingsTableReady = true;
+  }
+};
 
 // GET /api/payment-settings - Public route to fetch payment settings for checkout
 router.get('/', async (req, res) => {
