@@ -146,7 +146,7 @@ function formatAppointmentResponse(appointment) {
   };
 }
 
-exports.createAppointment = async ({ appointment_type = 'service_in_shop', services = [], location_id, guitar_details, scheduled_at, notes, user_id, order_id = null, confirmation_notes = null }) => {
+exports.createAppointment = async ({ appointment_type = 'service_in_shop', services = [], location_id, guitar_details, scheduled_at, notes, user_id, order_id = null, confirmation_notes = null, payment_method = null, payment_proof_url = null }) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -169,8 +169,8 @@ exports.createAppointment = async ({ appointment_type = 'service_in_shop', servi
     const normalizedGuitarDetails = normalizeGuitarDetails(guitar_details || {});
 
     const appointmentResult = await client.query(
-      `INSERT INTO appointments (user_id, appointment_type, order_id, services, location_id, guitar_details, scheduled_at, status, notes, confirmation_notes, customer_name, customer_email, customer_phone, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', $8, $9, $10, $11, $12, now(), now())
+      `INSERT INTO appointments (user_id, appointment_type, order_id, services, location_id, guitar_details, scheduled_at, status, payment_method, payment_proof_url, notes, confirmation_notes, customer_name, customer_email, customer_phone, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', $8, $9, $10, $11, $12, $13, $14, now(), now())
        RETURNING *`,
       [
         user_id || null,
@@ -180,6 +180,8 @@ exports.createAppointment = async ({ appointment_type = 'service_in_shop', servi
         location_id || null,
         JSON.stringify(normalizedGuitarDetails),
         scheduled_at,
+        payment_method || null,
+        payment_proof_url || null,
         notes || null,
         confirmation_notes || null,
         customerName,
@@ -297,7 +299,7 @@ exports.getUserUpcomingAppointments = async (userId) => {
 exports.getAppointmentsByDateRange = async (startDate, endDate, filters = {}) => this.listAppointments({ ...filters, date_from: startDate, date_to: endDate });
 
 exports.updateAppointment = async (appointmentId, updates) => {
-  const { scheduled_at, status, notes, confirmation_notes, appointment_type, services, location_id, guitar_details } = updates;
+  const { scheduled_at, status, notes, confirmation_notes, appointment_type, services, location_id, guitar_details, payment_method } = updates;
   const client = await pool.connect();
 
   try {
@@ -350,6 +352,10 @@ exports.updateAppointment = async (appointmentId, updates) => {
       const normalizedGuitarDetails = normalizeGuitarDetails(guitar_details || {});
       setClauses.push(`guitar_details = $${idx++}`);
       params.push(JSON.stringify(normalizedGuitarDetails));
+    }
+    if (payment_method !== undefined) {
+      setClauses.push(`payment_method = $${idx++}`);
+      params.push(payment_method || null);
     }
 
     if (setClauses.length === 0) {

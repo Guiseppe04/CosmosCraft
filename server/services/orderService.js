@@ -31,6 +31,37 @@ const ensureOrderItemsColumns = async () => {
   await ensureOrderItemsColumnsPromise;
 };
 
+let ensureInstallmentColumnsReady = false;
+let ensureInstallmentColumnsPromise = null;
+
+const ensureInstallmentColumns = async () => {
+  if (ensureInstallmentColumnsReady) return;
+  if (!ensureInstallmentColumnsPromise) {
+    ensureInstallmentColumnsPromise = (async () => {
+      const checkRes = await pool.query(
+        `SELECT column_name
+         FROM information_schema.columns
+         WHERE table_name = 'orders'
+           AND table_schema = current_schema()
+           AND column_name = 'payment_plan'`
+      );
+      if (checkRes.rows.length === 0) {
+        await pool.query(`ALTER TABLE orders ADD COLUMN payment_plan VARCHAR(20) CHECK (payment_plan IN ('full_payment', 'installment'))`);
+        await pool.query(`ALTER TABLE orders ADD COLUMN initial_payment_percentage NUMERIC(5,2) CHECK (initial_payment_percentage >= 0 AND initial_payment_percentage <= 1)`);
+        await pool.query(`ALTER TABLE orders ADD COLUMN installment_tenure_months INT CHECK (installment_tenure_months >= 1)`);
+        await pool.query(`ALTER TABLE orders ADD COLUMN initial_payment_amount NUMERIC(12, 2) CHECK (initial_payment_amount >= 0)`);
+        await pool.query(`ALTER TABLE orders ADD COLUMN monthly_installment_amount NUMERIC(12, 2) CHECK (monthly_installment_amount >= 0)`);
+        console.log('Added installment plan columns to orders table');
+      }
+      ensureInstallmentColumnsReady = true;
+    })().catch((error) => {
+      ensureInstallmentColumnsPromise = null;
+      throw error;
+    });
+  }
+  await ensureInstallmentColumnsPromise;
+};
+
 const isValidUUID = (uuid) => {
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
   return uuidRegex.test(uuid)
@@ -441,10 +472,11 @@ const STATUS_FIELD_REQUIREMENTS = {
 }
 
 exports.createOrder = async (orderData) => {
-  const { userId, items, notes, shippingMethod, paymentMethod, billingAddress, termsAccepted } = orderData
+  const { userId, items, notes, shippingMethod, paymentMethod, billingAddress, termsAccepted, paymentPlan, initialPaymentPercentage, installmentTenureMonths } = orderData
   
   // Ensure database columns exist
   await ensureOrderItemsColumns()
+  await ensureInstallmentColumns()
   
   const client = await pool.connect()
   
@@ -474,6 +506,32 @@ exports.createOrder = async (orderData) => {
 
     const orderTypePrefix = determineOrderTypePrefix(items)
     const orderNumber = await generateOrderNumber(client, orderTypePrefix)
+
+    // Determine if this is a custom build order
+    const isCustomBuild = hasCustomBuildItems(items)
+
+    // Determine payment plan and initial order status
+    const resolvedPaymentPlan = paymentPlan || 'full_payment';
+    const isInstallment = resolvedPaymentPlan === 'installment';
+    
+    // Calculate installment amounts if applicable
+    let initialPaymentAmount = null;
+    let monthlyInstallmentAmount = null;
+    const resolvedInitialPaymentPercentage = isInstallment ? (Number(initialPaymentPercentage) || 0.50) : null;
+    const resolvedTenureMonths = isInstallment ? (Number(installmentTenureMonths) || 6) : null;
+    
+    if (isInstallment && isCustomBuild) {
+      const financedAmount = total * (1 - resolvedInitialPaymentPercentage);
+      initialPaymentAmount = Math.round(total * resolvedInitialPaymentPercentage * 100) / 100;
+      monthlyInstallmentAmount = financedAmount > 0
+        ? Math.round((financedAmount * (1 + 0.03) / resolvedTenureMonths) * 100) / 100
+        : 0;
+    }
+
+    // Set initial order status based on payment plan
+    // Installment: starts as 'pending' until initial payment is verified
+    // Full payment: starts as 'processing' if payment method is cash, otherwise 'pending'
+    const initialOrderStatus = isInstallment ? 'pending' : 'pending';
 
     // Insert billing address into addresses table (check for existing first)
     if (billingAddress.street && billingAddress.city) {
@@ -510,12 +568,28 @@ exports.createOrder = async (orderData) => {
       }
     }
 
-    // Insert order with shipping_address_id
+    // Insert order with shipping_address_id and installment plan columns
     const orderRes = await client.query(
-      `INSERT INTO orders (order_number, order_type, user_id, shipping_address_id, subtotal, tax_amount, shipping_cost, total_amount, status, payment_status, notes)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending', 'pending', $9)
+      `INSERT INTO orders (order_number, order_type, user_id, shipping_address_id, subtotal, tax_amount, shipping_cost, total_amount, status, payment_status, notes, payment_plan, initial_payment_percentage, installment_tenure_months, initial_payment_amount, monthly_installment_amount)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending', $10, $11, $12, $13, $14, $15)
        RETURNING *`,
-      [orderNumber, orderTypePrefix === 'CO' ? 'customization' : 'product', userId, shippingAddressId, subtotal, tax, shippingCost, total, notes || null]
+      [
+        orderNumber,
+        orderTypePrefix === 'CO' ? 'customization' : 'product',
+        userId,
+        shippingAddressId,
+        subtotal,
+        tax,
+        shippingCost,
+        total,
+        initialOrderStatus,
+        notes || null,
+        isInstallment ? 'installment' : 'full_payment',
+        resolvedInitialPaymentPercentage,
+        resolvedTenureMonths,
+        initialPaymentAmount,
+        monthlyInstallmentAmount,
+      ]
     )
     
     const order = orderRes.rows[0]
@@ -566,6 +640,9 @@ exports.createOrder = async (orderData) => {
     }
     if (paymentMethod) {
       finalNotes += `${finalNotes ? '\n\n' : ''}Payment Method: ${paymentMethod}`
+    }
+    if (isInstallment) {
+      finalNotes += `${finalNotes ? '\n\n' : ''}Payment Plan: Installment (${resolvedTenureMonths} months, ${Math.round(resolvedInitialPaymentPercentage * 100)}% initial payment)`
     }
 
     if (finalNotes) {

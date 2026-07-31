@@ -32,8 +32,8 @@ CREATE TYPE order_payment_status_enum AS ENUM (
     'failed'              -- payment attempt failed (optional fallback)
 );
 CREATE TYPE appointment_status_enum AS ENUM ('pending', 'confirmed', 'in_progress', 'ready_for_pickup', 'completed', 'cancelled');
-CREATE TYPE project_status_enum AS ENUM ('not_started', 'in_progress', 'completed', 'cancelled');
-CREATE TYPE notification_type_enum AS ENUM ('order_update', 'appointment_reminder', 'system', 'promotional', 'low_stock');
+CREATE TYPE project_status_enum AS ENUM ('not_started', 'in_progress', 'on_hold', 'completed', 'cancelled');
+CREATE TYPE notification_type_enum AS ENUM ('order_update', 'appointment_reminder', 'system', 'promotional', 'low_stock', 'project_update');
 
 
 -- =============================================
@@ -322,6 +322,7 @@ CREATE TABLE customizations (
     finish_type VARCHAR(50),
     total_price NUMERIC(12, 2) NOT NULL CHECK (total_price >= 0),
     is_saved BOOLEAN NOT NULL DEFAULT TRUE,
+    is_locked BOOLEAN NOT NULL DEFAULT FALSE,
     deleted_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -675,6 +676,29 @@ CREATE TABLE projects (
     fulfillment_notes TEXT,
     fulfillment_selected_at TIMESTAMPTZ,
     pickup_appointment_id UUID,
+    -- Hold columns
+    hold_reason TEXT,
+    hold_option VARCHAR(50) CHECK (hold_option IN ('resume_later', 'hold_before_next_step')),
+    hold_at_step VARCHAR(200),
+    hold_requested_at TIMESTAMPTZ,
+    hold_approved_by UUID REFERENCES users(user_id) ON DELETE SET NULL,
+    hold_approved_at TIMESTAMPTZ,
+    resumed_at TIMESTAMPTZ,
+    -- Cancel columns
+    cancel_option VARCHAR(50) CHECK (cancel_option IN ('ship_unfinished', 'pickup_unfinished')),
+    cancel_reason TEXT,
+    cancel_requested_at TIMESTAMPTZ,
+    cancel_approved_by UUID REFERENCES users(user_id) ON DELETE SET NULL,
+    cancel_approved_at TIMESTAMPTZ,
+    -- Fulfillment tracking
+    shipped_at TIMESTAMPTZ,
+    ready_for_pickup_at TIMESTAMPTZ,
+    picked_up_at TIMESTAMPTZ,
+    -- Claim / Custom Build
+    custom_build_id VARCHAR(30) UNIQUE,
+    claimed_by UUID REFERENCES users(user_id) ON DELETE SET NULL,
+    claimed_at TIMESTAMPTZ,
+    -- Soft delete / audit
     deleted_at TIMESTAMPTZ,
     deleted_by UUID,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -955,7 +979,31 @@ CREATE INDEX idx_project_subtasks_deleted_at ON project_subtasks(deleted_at) WHE
 
 
 -- =============================================
--- 27A. DEFAULT WORKFLOW TEMPLATES
+-- 27B. PROJECT INSTALLMENT SCHEDULES
+-- =============================================
+-- Tracks installment payment schedules for projects with installment plans.
+
+CREATE TABLE project_installment_schedules (
+    schedule_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    project_id UUID NOT NULL REFERENCES projects(project_id) ON DELETE CASCADE,
+    installment_number INT NOT NULL CHECK (installment_number > 0),
+    amount NUMERIC(12, 2) NOT NULL CHECK (amount >= 0),
+    due_date DATE NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'paid', 'overdue', 'cancelled')),
+    paid_at TIMESTAMPTZ,
+    payment_id UUID REFERENCES payments(payment_id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE(project_id, installment_number)
+);
+
+CREATE INDEX IF NOT EXISTS idx_project_installment_schedules_project ON project_installment_schedules(project_id);
+CREATE INDEX IF NOT EXISTS idx_project_installment_schedules_status ON project_installment_schedules(status);
+CREATE INDEX IF NOT EXISTS idx_project_installment_schedules_due_date ON project_installment_schedules(due_date);
+
+
+-- =============================================
+-- 27C. DEFAULT WORKFLOW TEMPLATES
 -- =============================================
 -- Stores the editable default workflow for customization projects.
 -- Changes here only affect future projects, not existing ones.

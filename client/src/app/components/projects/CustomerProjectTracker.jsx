@@ -129,6 +129,19 @@ export default function CustomerProjectTracker({ projectId, projectName, project
   const lastUpdated = formatDate(hierarchy?.updated_at || hierarchy?.claimed_at || hierarchy?.created_at);
 
   const installmentSummary = installmentData?.summary;
+  const paymentPlan = installmentData?.payment_plan;
+  const isFullPayment = paymentPlan === 'full_payment';
+
+  // Compute payment status
+  const getPaymentStatus = () => {
+    if (!installmentSummary || !installmentSummary.total_months) return null;
+    const { paid_count, total_months } = installmentSummary;
+    if (paid_count === 0) return { label: 'Pending', color: 'text-yellow-400', bg: 'bg-yellow-500/10', border: 'border-yellow-500/30' };
+    if (paid_count >= total_months) return { label: 'Fully Paid', color: 'text-green-400', bg: 'bg-green-500/10', border: 'border-green-500/30' };
+    return { label: 'Ongoing', color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/30' };
+  };
+
+  const paymentStatus = getPaymentStatus();
 
   if (loading) {
     return (
@@ -169,10 +182,44 @@ export default function CustomerProjectTracker({ projectId, projectName, project
 
         {/* Status & Progress */}
         <div className="grid gap-4 sm:grid-cols-2 mb-6">
-          <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] p-4">
-            <p className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">Status</p>
-            <p className="mt-2 text-lg font-bold text-white">{formatStatus(hierarchy.status)}</p>
-          </div>
+          {String(hierarchy.status || '').toLowerCase() === 'on_hold' ? (
+            <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 sm:col-span-2">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-500/20">
+                  <Clock className="h-4 w-4 text-amber-400" />
+                </div>
+                <div>
+                  <p className="text-xs uppercase tracking-[0.14em] text-amber-300/70">Status</p>
+                  <p className="text-lg font-bold text-amber-300">On Hold</p>
+                </div>
+              </div>
+              {hierarchy.hold_reason && (
+                <p className="mt-2 text-sm text-amber-200/80 pl-11">
+                  Reason: {hierarchy.hold_reason}
+                </p>
+              )}
+              {hierarchy.hold_requested_at && (
+                <p className="mt-1 text-xs text-amber-300/60 pl-11">
+                  Placed on hold: {formatDate(hierarchy.hold_requested_at)}
+                </p>
+              )}
+              {hierarchy.hold_at_step && (
+                <p className="mt-1 text-xs text-amber-300/60 pl-11">
+                  Paused at: {formatLabel(hierarchy.hold_at_step)}
+                </p>
+              )}
+              <div className="mt-3 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2">
+                <p className="text-xs text-amber-200/70">
+                  Manufacturing is paused. Staff cannot complete or start any build tasks until you resume the project. You can resume it from your dashboard.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] p-4">
+              <p className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">Status</p>
+              <p className="mt-2 text-lg font-bold text-white">{formatStatus(hierarchy.status)}</p>
+            </div>
+          )}
           <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] p-4">
             <p className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">Progress</p>
             <p className="mt-2 text-lg font-bold text-[var(--gold-primary)]">{clampedProgress}%</p>
@@ -268,11 +315,26 @@ export default function CustomerProjectTracker({ projectId, projectName, project
         )}
 
         {/* Installment Schedule */}
-        {installmentSummary && (
+        {isFullPayment ? (
+          <div className="mt-6 rounded-xl border border-green-500/30 bg-green-500/5 p-5">
+            <div className="flex items-center gap-3">
+              <CheckCircle className="w-6 h-6 text-green-400" />
+              <div>
+                <p className="text-white font-bold text-lg">Payment Complete</p>
+                <p className="text-sm text-[var(--text-muted)]">You paid it in Full Payment.</p>
+              </div>
+            </div>
+          </div>
+        ) : installmentSummary ? (
           <div className="mt-6 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] p-5">
             <div className="flex items-center gap-2 mb-4">
               <CreditCard className="w-5 h-5 text-[var(--gold-primary)]" />
               <h3 className="text-white font-bold text-lg">Payment Installment Schedule</h3>
+              {paymentStatus && (
+                <span className={`ml-auto text-xs font-semibold px-2.5 py-1 rounded-full border ${paymentStatus.bg} ${paymentStatus.border} ${paymentStatus.color}`}>
+                  {paymentStatus.label}
+                </span>
+              )}
             </div>
             
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -289,15 +351,27 @@ export default function CustomerProjectTracker({ projectId, projectName, project
                 </p>
               </div>
               <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] p-3">
-                <p className="text-xs uppercase tracking-[0.1em] text-[var(--text-muted)]">Remaining Months</p>
+                <p className="text-xs uppercase tracking-[0.1em] text-[var(--text-muted)]">Paid Installments</p>
+                <p className="mt-1 text-lg font-bold text-green-400">
+                  {installmentSummary.paid_count || 0} / {installmentSummary.total_months} Paid
+                </p>
+              </div>
+              <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] p-3">
+                <p className="text-xs uppercase tracking-[0.1em] text-[var(--text-muted)]">Remaining Installments</p>
                 <p className="mt-1 text-lg font-bold text-white">
-                  {installmentSummary.remaining_months} / {installmentSummary.total_months}
+                  {installmentSummary.remaining_months} / {installmentSummary.total_months} Remaining
                 </p>
               </div>
               <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] p-3">
                 <p className="text-xs uppercase tracking-[0.1em] text-[var(--text-muted)]">Next Due Date</p>
                 <p className="mt-1 text-lg font-bold text-white">
                   {installmentSummary.next_due_date ? formatShortDate(installmentSummary.next_due_date) : '—'}
+                </p>
+              </div>
+              <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] p-3">
+                <p className="text-xs uppercase tracking-[0.1em] text-[var(--text-muted)]">Last Updated</p>
+                <p className="mt-1 text-lg font-bold text-white">
+                  {installmentSummary.last_updated ? formatDate(installmentSummary.last_updated) : '—'}
                 </p>
               </div>
             </div>
@@ -333,7 +407,7 @@ export default function CustomerProjectTracker({ projectId, projectName, project
               </div>
             )}
           </div>
-        )}
+        ) : null}
 
         {/* Info Row */}
         <div className="mt-6 grid gap-3 sm:grid-cols-2">

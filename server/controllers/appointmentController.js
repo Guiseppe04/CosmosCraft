@@ -75,6 +75,8 @@ exports.createAppointment = async (req, res, next) => {
       user_id: userId,
       order_id: validated.order_id,
       confirmation_notes: validated.confirmation_notes,
+      payment_method: validated.payment_method,
+      payment_proof_url: validated.payment_proof_url,
     });
 
     res.status(201).json({

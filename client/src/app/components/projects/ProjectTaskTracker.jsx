@@ -335,10 +335,15 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
     return 'bg-emerald-500';
   };
 
+  // Check if project is on hold
+  const isOnHold = String(hierarchy?.status || '').toLowerCase() === 'on_hold';
+
   // User Actions
   const toggleSubtaskStatus = async (subtask) => {
     // If not admin, check if updatable
     if (!isAdmin && !subtask.is_customer_updatable) return;
+    // Block admin actions when project is on hold
+    if (isAdmin && isOnHold) return;
 
     try {
       if (subtask.status === 'completed') {
@@ -366,6 +371,7 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
 
   // Admin Actions
   const handleAddMilestone = async () => {
+    if (isOnHold) return;
     try {
       await adminApi.createMilestone(projectId, { title: form.milestoneTitle, description: form.milestoneDesc });
       setIsAddingMilestone(false);
@@ -377,6 +383,7 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
   };
 
   const handleDeleteMilestone = async (mId) => {
+    if (isOnHold) return;
     if(!window.confirm("Are you sure? This deletes all subtasks within this milestone.")) return;
     try {
       await adminApi.deleteMilestone(mId);
@@ -385,6 +392,7 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
   };
 
   const handleAddSubtask = async (mId) => {
+    if (isOnHold) return;
     try {
       await adminApi.createSubtask(mId, { 
         title: form.subtaskTitle, 
@@ -399,6 +407,7 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
   };
 
   const handleDeleteSubtask = async (sId) => {
+    if (isOnHold) return;
     if(!window.confirm("Delete this subtask?")) return;
     try {
       await adminApi.deleteSubtask(sId);
@@ -408,6 +417,7 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
 
   const markMilestoneAsDone = async (milestone) => {
     if (!isAdmin) return;
+    if (isOnHold) return;
     try {
       const pendingSubtasks = (milestone.subtasks || []).filter(s => s.status !== 'completed');
       // Complete subtasks one by one to respect sequential progression
@@ -580,6 +590,44 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
               </div>
             )}
           </div>
+
+          {/* On Hold Banner - shown to both admin and customer */}
+          {String(hierarchy.status || '').toLowerCase() === 'on_hold' && (
+            <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-5">
+              <div className="flex items-start gap-4">
+                <div className="mt-0.5 flex h-10 w-10 items-center justify-center rounded-full bg-amber-500/20 shrink-0">
+                  <Clock className="w-5 h-5 text-amber-400" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold text-amber-300">Build On Hold</p>
+                  {isAdmin ? (
+                    <p className="mt-1 text-xs text-amber-200/70">
+                      This project is currently on hold by the customer. Work cannot continue until the customer resumes the project.
+                    </p>
+                  ) : (
+                    <p className="mt-1 text-xs text-amber-200/70">
+                      Manufacturing is paused. Tasks cannot be updated until the customer resumes the project.
+                    </p>
+                  )}
+                  {hierarchy.hold_reason && (
+                    <p className="mt-2 text-xs text-amber-200/80">
+                      Reason: <span className="font-medium">{hierarchy.hold_reason}</span>
+                    </p>
+                  )}
+                  {hierarchy.hold_requested_at && (
+                    <p className="mt-0.5 text-xs text-amber-300/60">
+                      Placed on hold: {hierarchy.hold_requested_at ? new Date(hierarchy.hold_requested_at).toLocaleString() : '—'}
+                    </p>
+                  )}
+                  {hierarchy.hold_at_step && (
+                    <p className="mt-0.5 text-xs text-amber-300/60">
+                      Paused at: {hierarchy.hold_at_step}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* GUITAR PARTS PANEL */}

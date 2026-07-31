@@ -155,7 +155,7 @@ exports.approveHold = asyncHandler(async (req, res, next) => {
 });
 
 exports.resumeProject = asyncHandler(async (req, res, next) => {
-  const result = await projectService.resumeProject(req.params.id, req.user.id);
+  const result = await projectService.resumeProject(req.params.id, req.user.id, req.user.role);
   res.json({ status: 'success', data: result, message: 'Project resumed' });
 });
 

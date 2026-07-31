@@ -200,10 +200,10 @@ const buildProjectTaskTracking = ({ total, completed }, currentStatus) => {
   const progress = total === 0 ? 0 : Math.round((completed / total) * 100);
   const normalizedCurrentStatus = normalizeProjectStatus(currentStatus);
 
-  if (normalizedCurrentStatus === 'cancelled') {
+  if (normalizedCurrentStatus === 'cancelled' || normalizedCurrentStatus === 'on_hold') {
     return {
       progress,
-      status: 'cancelled',
+      status: normalizedCurrentStatus,
       task_summary: {
         total,
         completed,
@@ -572,6 +572,36 @@ exports.createProject = async (projectData) => {
   );
   if (parseInt(milestoneCountRes.rows[0].count, 10) === 0) {
     await defaultWorkflowService.applyDefaultWorkflowToProject(projectId, null);
+  }
+
+  // If the order is on installment plan, create the installment schedule
+  try {
+    const orderRes = await pool.query(
+      `SELECT payment_plan, total_amount, initial_payment_percentage, installment_tenure_months
+       FROM orders WHERE order_id = $1`,
+      [projectOrderId]
+    );
+    if (orderRes.rows.length > 0) {
+      const order = orderRes.rows[0];
+      if (order.payment_plan === 'installment') {
+        const installmentService = require('./installmentService');
+        const totalAmount = Number(order.total_amount) || 0;
+        const initialPaymentPercentage = Number(order.initial_payment_percentage) || 0.50;
+        const tenureMonths = Number(order.installment_tenure_months) || 6;
+        
+        await installmentService.createInstallmentSchedule(
+          pool,
+          projectId,
+          totalAmount,
+          initialPaymentPercentage,
+          tenureMonths,
+          0.03
+        );
+      }
+    }
+  } catch (err) {
+    console.warn('Could not create installment schedule:', err.message);
+    // Non-blocking - project is still created
   }
 
   return { ...createdProject, name: createdProject.title, description: createdProject.notes };
@@ -1180,6 +1210,24 @@ exports.addSubtask = async (milestoneId, data, userId) => {
 
 const ensureProjectHoldCancelColumns = async () => {
   try {
+    // Always ensure 'on_hold' is a valid value in the project_status_enum
+    await pool.query(`ALTER TYPE project_status_enum ADD VALUE IF NOT EXISTS 'on_hold'`).catch(() => {});
+    // Ensure audit_logs action check constraint allows hold/cancel related actions
+    await pool.query(`
+      ALTER TABLE audit_logs DROP CONSTRAINT IF EXISTS audit_logs_action_check;
+    `).catch(() => {});
+    await pool.query(`
+      ALTER TABLE audit_logs ADD CONSTRAINT audit_logs_action_check
+        CHECK (action IN (
+          'project_claimed', 'project_unclaimed', 'project_reassigned', 'project_cancelled',
+          'project_resumed', 'build_released',
+          'hold_requested', 'hold_approved', 'hold_rejected',
+          'cancel_requested', 'cancel_approved', 'cancel_rejected',
+          'milestone_created', 'milestone_updated', 'milestone_deleted',
+          'subtask_created', 'subtask_deleted', 'subtask_status_changed',
+          'fulfillment_updated'
+        ));
+    `).catch(() => {});
     // Check if hold_reason column exists, if not add all hold/cancel columns
     const checkRes = await pool.query(
       `SELECT column_name
@@ -1343,6 +1391,68 @@ exports.updateSubtaskStatus = async (subtaskId, data, userId, userRole) => {
 
     if (status && status !== subtask.status) {
       await logActivity(client, subtask.project_id, userId, 'subtask_status_changed', { title: subtask.title, status });
+    }
+
+    // ─── BUILD PROJECT → MY PURCHASES TRANSITION ─────────────────────────────
+    // When "Ready for Release" subtask is completed, automatically transition the
+    // associated order from Build Projects to My Purchases with "To Ship" status
+    // (or "Ready for Pickup" if the project has a pickup appointment).
+    if (
+      status === 'completed' &&
+      subtask.status !== 'completed' &&
+      subtask.title &&
+      String(subtask.title).trim().toLowerCase() === 'ready for release'
+    ) {
+      // Fetch the project to determine fulfillment method
+      const projectData = await client.query(
+        `SELECT p.*, o.status AS order_status, o.fulfillment_method
+         FROM projects p
+         JOIN orders o ON o.order_id = p.order_id
+         WHERE p.project_id = $1`,
+        [subtask.project_id]
+      );
+
+      if (projectData.rows.length > 0) {
+        const project = projectData.rows[0];
+        const isPickup = String(project.fulfillment_method || '').trim() === 'pickup_appointment';
+
+        // Update the order status to transition it into My Purchases
+        // "processing" = "To Ship" in the My Purchase tab
+        // For pickup orders, we also set it to "processing" – the existing fulfillment
+        // workflow handles the pickup-specific status on top of this.
+        const newOrderStatus = isPickup ? 'processing' : 'processing';
+        await client.query(
+          `UPDATE orders
+           SET status = $1,
+               updated_at = CURRENT_TIMESTAMP
+           WHERE order_id = $2
+             AND status NOT IN ('cancelled', 'delivered')`,
+          [newOrderStatus, project.order_id]
+        );
+
+        // Update the project status to 'completed' to reflect release
+        await client.query(
+          `UPDATE projects
+           SET status = 'completed',
+               updated_at = CURRENT_TIMESTAMP
+           WHERE project_id = $1`,
+          [subtask.project_id]
+        );
+
+        // Log the release activity
+        await logActivity(
+          client,
+          subtask.project_id,
+          userId,
+          'build_released',
+          {
+            order_id: project.order_id,
+            new_order_status: newOrderStatus,
+            fulfillment_method: project.fulfillment_method,
+            is_pickup: isPickup,
+          }
+        );
+      }
     }
 
     await client.query('COMMIT');
@@ -1727,6 +1837,8 @@ exports.getStaffClaimStatus = async () => {
  * @param {object} data - { reason, hold_option: 'resume_later'|'hold_before_next_step' }
  */
 exports.requestProjectHold = async (projectId, userId, userRole, data = {}) => {
+  await ensureProjectHoldCancelColumns();
+  await ensureClaimColumns();
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -1746,7 +1858,7 @@ exports.requestProjectHold = async (projectId, userId, userRole, data = {}) => {
     const normalizedStatus = normalizeProjectStatus(project.status);
     if (normalizedStatus === 'cancelled') throw new AppError('Project is already cancelled', 400);
     if (normalizedStatus === 'completed') throw new AppError('Project is already completed', 400);
-    if (project.hold_reason) throw new AppError('Hold is already requested for this project', 400);
+    if (normalizedStatus === 'on_hold') throw new AppError('Project is already on hold', 400);
 
     const holdOption = data.hold_option || 'resume_later';
     if (!['resume_later', 'hold_before_next_step'].includes(holdOption)) {
@@ -1864,9 +1976,9 @@ exports.approveProjectHold = async (projectId, userId, data = {}) => {
 };
 
 /**
- * Admin resumes a held project.
+ * Resume a held project (admin or customer who owns the project).
  */
-exports.resumeProject = async (projectId, userId) => {
+exports.resumeProject = async (projectId, userId, userRole) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -1877,6 +1989,20 @@ exports.resumeProject = async (projectId, userId) => {
     );
     if (pRes.rows.length === 0) throw new AppError('Project not found', 404);
     const project = pRes.rows[0];
+
+    // Get the customer_id from the order
+    const orderRes = await client.query(
+      `SELECT user_id FROM orders WHERE order_id = $1`,
+      [project.order_id]
+    );
+    const customerId = orderRes.rows.length > 0 ? orderRes.rows[0].user_id : null;
+
+    const isPrivileged = ['staff', 'admin', 'super_admin'].includes(userRole);
+    const isOwner = customerId === userId;
+
+    if (!isPrivileged && !isOwner) {
+      throw new AppError('You do not have access to this project', 403);
+    }
 
     const normalizedStatus = normalizeProjectStatus(project.status);
     if (normalizedStatus !== 'on_hold') {
@@ -2082,44 +2208,40 @@ exports.approveProjectCancel = async (projectId, userId, data = {}) => {
 let ensureInstallmentTableReady = false;
 let ensureInstallmentTablePromise = null;
 
+/**
+ * Ensure the project_installment_schedules table exists.
+ * This is a safety net in case the migration hasn't been run.
+ */
 const ensureInstallmentTable = async () => {
   if (ensureInstallmentTableReady) return;
-  if (!ensureInstallmentTablePromise) {
-    ensureInstallmentTablePromise = (async () => {
+  if (ensureInstallmentTablePromise) return ensureInstallmentTablePromise;
+
+  ensureInstallmentTablePromise = (async () => {
+    try {
       await pool.query(`
         CREATE TABLE IF NOT EXISTS project_installment_schedules (
-            schedule_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-            project_id UUID NOT NULL REFERENCES projects(project_id) ON DELETE CASCADE,
-            installment_number INT NOT NULL CHECK (installment_number > 0),
-            amount NUMERIC(12, 2) NOT NULL CHECK (amount >= 0),
-            due_date DATE NOT NULL,
-            status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'paid', 'overdue', 'cancelled')),
-            paid_at TIMESTAMPTZ,
-            payment_id UUID REFERENCES payments(payment_id) ON DELETE SET NULL,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-            updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-            UNIQUE(project_id, installment_number)
-        )
-      `);
-      await pool.query(`
-        CREATE INDEX IF NOT EXISTS idx_project_installment_schedules_project 
-        ON project_installment_schedules(project_id)
-      `);
-      await pool.query(`
-        CREATE INDEX IF NOT EXISTS idx_project_installment_schedules_status 
-        ON project_installment_schedules(status)
-      `);
-      await pool.query(`
-        CREATE INDEX IF NOT EXISTS idx_project_installment_schedules_due_date 
-        ON project_installment_schedules(due_date)
+          schedule_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          project_id UUID NOT NULL REFERENCES projects(project_id) ON DELETE CASCADE,
+          installment_number INT NOT NULL CHECK (installment_number > 0),
+          amount NUMERIC(12, 2) NOT NULL CHECK (amount >= 0),
+          due_date DATE NOT NULL,
+          status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'paid', 'overdue', 'cancelled')),
+          paid_at TIMESTAMPTZ,
+          payment_id UUID REFERENCES payments(payment_id) ON DELETE SET NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+          UNIQUE(project_id, installment_number)
+        );
       `);
       ensureInstallmentTableReady = true;
-    })().catch((error) => {
-      ensureInstallmentTablePromise = null;
-      throw error;
-    });
-  }
-  await ensureInstallmentTablePromise;
+    } catch (err) {
+      // Table might already exist, that's fine
+      console.warn('Could not create installment table (may already exist):', err.message);
+      ensureInstallmentTableReady = true;
+    }
+  })();
+
+  return ensureInstallmentTablePromise;
 };
 
 /**
@@ -2153,13 +2275,28 @@ exports.getInstallmentSchedule = async (projectId, userId, userRole) => {
   // If no installments stored yet, compute from order data
   if (installments.length === 0) {
     const orderRes = await pool.query(
-      `SELECT total_amount, payment_status FROM orders WHERE order_id = $1`,
+      `SELECT total_amount, payment_status, payment_plan, initial_payment_amount, monthly_installment_amount, installment_tenure_months FROM orders WHERE order_id = $1`,
       [project.order_id]
     );
     const order = orderRes.rows[0];
-    if (!order) return { installments: [], summary: null };
+    if (!order) return { installments: [], summary: null, payment_plan: null };
 
     const totalAmount = Number(order.total_amount) || 0;
+
+    // Determine if this is an installment plan using the same logic as installmentService.js
+    // Check: payment_plan field, OR presence of installment data fields
+    const hasInstallmentData = Number(order.initial_payment_amount || 0) > 0 || Number(order.monthly_installment_amount || 0) > 0;
+    const isInstallmentPlan = order.payment_plan === 'installment' || hasInstallmentData;
+
+    // If the order is full payment (not installment), show the "You paid it in Full Payment" message
+    if (!isInstallmentPlan) {
+      return {
+        installments: [],
+        summary: null,
+        payment_plan: 'full_payment',
+      };
+    }
+
     const monthlyRate = 0.03; // 3% monthly interest (configurable)
     const tenureMonths = 6; // Default 6 months (configurable)
 
@@ -2180,9 +2317,13 @@ exports.getInstallmentSchedule = async (projectId, userId, userRole) => {
         remaining_balance: remainingBalance,
         total_months: tenureMonths,
         remaining_months: tenureMonths,
+        paid_count: 0,
+        paid_amount: 0,
         next_due_date: nextDueDate.toISOString(),
         interest_rate: monthlyRate,
+        last_updated: null,
       },
+      payment_plan: 'installment',
     };
   }
 
@@ -2199,8 +2340,15 @@ exports.getInstallmentSchedule = async (projectId, userId, userRole) => {
   // Find the next unpaid installment
   const nextUnpaid = installments.find((inst) => inst.status === 'pending' || inst.status === 'overdue');
 
+  // Get the latest updated_at from all installments
+  const lastUpdated = installments.reduce((latest, inst) => {
+    const updated = inst.updated_at || inst.created_at;
+    return updated && (!latest || new Date(updated) > new Date(latest)) ? updated : latest;
+  }, null);
+
   return {
     installments,
+    payment_plan: 'installment',
     summary: {
       total_amount: totalAmount,
       monthly_payment: installments[0]?.amount || 0,
@@ -2210,6 +2358,7 @@ exports.getInstallmentSchedule = async (projectId, userId, userRole) => {
       next_due_date: nextUnpaid?.due_date || null,
       paid_amount: paidAmount,
       paid_count: paidCount,
+      last_updated: lastUpdated,
     },
   };
 };

@@ -632,6 +632,28 @@ exports.createOrderSchema = Joi.object({
     'any.only': 'You must accept the terms and conditions',
     'any.required': 'Terms acceptance is required',
   }),
+  paymentPlan: Joi.string()
+    .valid('full_payment', 'installment')
+    .default('full_payment')
+    .messages({
+      'any.only': 'Payment plan must be full_payment or installment',
+    }),
+  initialPaymentPercentage: Joi.number()
+    .precision(2)
+    .min(0)
+    .max(1)
+    .optional()
+    .messages({
+      'number.min': 'Initial payment percentage must be at least 0',
+      'number.max': 'Initial payment percentage must not exceed 1',
+    }),
+  installmentTenureMonths: Joi.number()
+    .integer()
+    .min(1)
+    .optional()
+    .messages({
+      'number.min': 'Installment tenure must be at least 1 month',
+    }),
 });
 
 exports.cancelMyOrderSchema = Joi.object({

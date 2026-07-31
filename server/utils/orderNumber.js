@@ -43,8 +43,24 @@ async function getNextOrderSequence(client, prefix) {
 }
 
 async function generateOrderNumber(client, prefix) {
-  const { nextSeq, datePrefix } = await getNextOrderSequence(client, prefix)
-  return `${prefix}-${datePrefix}-${String(nextSeq).padStart(4, '0')}`
+  const datePrefix = getTodayDatePrefix()
+  const maxAttempts = 100
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const { nextSeq } = await getNextOrderSequence(client, prefix)
+    const orderNumber = `${prefix}-${datePrefix}-${String(nextSeq).padStart(4, '0')}`
+
+    const existingRes = await client.query(
+      `SELECT 1 FROM orders WHERE order_number = $1 LIMIT 1`,
+      [orderNumber]
+    )
+
+    if (existingRes.rows.length === 0) {
+      return orderNumber
+    }
+  }
+
+  throw new Error(`Could not generate a unique order number for prefix ${prefix} after ${maxAttempts} attempts`)
 }
 
 module.exports = {

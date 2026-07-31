@@ -431,49 +431,7 @@ const uploadToCloudinary = async ({ localPath, guitarType, relativePath }) => {
   }
 };
 
-const ensureBuilderModelImagesTable = async () => {
-  if (builderModelImagesReady) return;
-  if (!builderModelImagesPromise) {
-    builderModelImagesPromise = (async () => {
-      await pool.query(`
-        CREATE TABLE IF NOT EXISTS builder_model_images (
-          model_image_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          guitar_type_code VARCHAR(50) NOT NULL REFERENCES builder_guitar_types(guitar_type_code) ON DELETE CASCADE,
-          model_key VARCHAR(100) NOT NULL,
-          display_name VARCHAR(120) NOT NULL,
-          image_url TEXT,
-          created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-          updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-          UNIQUE (guitar_type_code, model_key)
-        )
-      `);
-      await pool.query(`
-        CREATE INDEX IF NOT EXISTS idx_builder_model_images_guitar_type
-        ON builder_model_images(guitar_type_code)
-      `);
 
-      const seedRows = Object.entries(BUILDER_MODEL_IMAGE_CONFIG).flatMap(([guitarType, models]) =>
-        models.map((model) => [guitarType, model.model_key, model.display_name])
-      );
-
-      for (const [guitarType, modelKey, displayName] of seedRows) {
-        await pool.query(
-          `INSERT INTO builder_model_images (guitar_type_code, model_key, display_name)
-           VALUES ($1, $2, $3)
-           ON CONFLICT (guitar_type_code, model_key) DO NOTHING`,
-          [guitarType, modelKey, displayName]
-        );
-      }
-
-      builderModelImagesReady = true;
-    })().catch((error) => {
-      builderModelImagesPromise = null;
-      throw error;
-    });
-  }
-
-  await builderModelImagesPromise;
-};
 
 const resolveModelDefinition = (guitarType, modelKey) => {
   const normalizedType = normalizeKey(guitarType);

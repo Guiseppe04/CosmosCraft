@@ -224,6 +224,13 @@ export const adminApi = {
   // Installment Schedule
   getProjectInstallments: (projectId) => request(`/api/projects/${projectId}/installments`),
 
+  // Installment Tracking
+  getProjectInstallmentTracking: (projectId) => request(`/api/installments/project/${projectId}`),
+  getOrderInstallmentTracking: (orderId) => request(`/api/installments/project/by-order?orderId=${orderId}`),
+  getOverdueInstallments: () => request('/api/installments/overdue'),
+  markInstallmentPaid: (scheduleId, paymentId) => request(`/api/installments/${scheduleId}/pay`, { method: 'PATCH', body: { payment_id: paymentId } }),
+  runOverdueCheck: () => request('/api/installments/check-overdue', { method: 'POST' }),
+
   // Default Workflow
   getDefaultWorkflow: () => request('/api/projects/default-workflow'),
   updateDefaultWorkflow: (body) => request('/api/projects/default-workflow', { method: 'PUT', body }),

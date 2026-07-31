@@ -8,7 +8,7 @@ exports.createOrder = asyncHandler(async (req, res, next) => {
     throw new AppError('You must be logged in to place an order', 401)
   }
 
-  const { items, notes, shippingMethod, paymentMethod, billingAddress, termsAccepted } = req.validatedData || req.body
+  const { items, notes, shippingMethod, paymentMethod, billingAddress, termsAccepted, paymentPlan, initialPaymentPercentage, installmentTenureMonths } = req.validatedData || req.body
 
   // Validate required fields
   if (!items || items.length === 0) {
@@ -52,6 +52,9 @@ exports.createOrder = asyncHandler(async (req, res, next) => {
     paymentMethod,
     billingAddress,
     termsAccepted,
+    paymentPlan,
+    initialPaymentPercentage,
+    installmentTenureMonths,
   })
 
   res.status(201).json({
