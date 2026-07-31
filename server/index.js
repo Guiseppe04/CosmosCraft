@@ -86,6 +86,7 @@ app.get('/health', (req, res) => {
 });
 
 app.use('/auth', authLimiter, authRoutes);
+app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/guitars', guitarRoutes);
@@ -102,6 +103,8 @@ app.use('/api/inventory', inventoryRoutes);
 app.use('/api/pos', posRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/builder-parts', builderPartsRoutes);
+// Legacy alias for older client code or asset path requests that omit /api
+app.use('/builder-parts', builderPartsRoutes);
 app.use('/api/cloudinary', cloudinaryRoutes);
 app.use('/api/payment-settings', paymentSettingsRoutes);
 app.use('/api/installments', installmentRoutes);

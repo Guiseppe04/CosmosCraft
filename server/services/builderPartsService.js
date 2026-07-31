@@ -64,6 +64,35 @@ const CUSTOMIZE_CATALOG_MODULES = {
   },
 };
 
+const ensureBuilderModelImagesTable = async () => {
+  if (builderModelImagesReady) return;
+  if (builderModelImagesPromise) return builderModelImagesPromise;
+
+  builderModelImagesPromise = (async () => {
+    try {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS builder_model_images (
+          model_image_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          guitar_type_code VARCHAR(50) NOT NULL REFERENCES builder_guitar_types(guitar_type_code) ON DELETE CASCADE,
+          model_key VARCHAR(100) NOT NULL,
+          display_name VARCHAR(120) NOT NULL,
+          image_url TEXT,
+          deleted_at TIMESTAMPTZ,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+          UNIQUE (guitar_type_code, model_key)
+        );
+      `);
+      builderModelImagesReady = true;
+    } catch (err) {
+      console.warn('Could not create builder_model_images table (may already exist):', err.message);
+      builderModelImagesReady = true;
+    }
+  })();
+
+  return builderModelImagesPromise;
+};
+
 const normalizeKey = (value) => String(value || '').trim().toLowerCase();
 
 const titleCase = (value) =>
@@ -238,6 +267,173 @@ const scanFolder = async (dirPath) => {
   return results;
 };
 
+const getAssetFolderPatterns = (normalizedGroup, normalizedSubgroup, normalizedModel) => {
+  const validColorFolders = ['metallics', 'transluscents', 'sparkle', 'fades', 'solids', 'bursts'];
+  const model = normalizedModel || 'dc';
+  switch (normalizedGroup) {
+    case 'top-woods':
+    case 'topwoods':
+    case 'top woods':
+      return ['%woods-colors/top-woods%'];
+    case 'colors': {
+      const folder = validColorFolders.includes(normalizedSubgroup) ? normalizedSubgroup : 'metallics';
+      return [`%woods-colors/colors/${folder}%`];
+    }
+    case 'top-coat':
+    case 'topcoat':
+      return [`%models/${model}/back/shadows_highlights%`];
+    case 'neck-woods':
+    case 'neckwoods':
+      return ['%woods-colors/neck-woods%'];
+    case 'headstock-woods':
+    case 'headstockwoods':
+      return ['%woods-colors/headstock-woods%'];
+    case 'fingerboard-woods':
+    case 'fingerboardwoods':
+      return ['%woods-colors/fingerboard-woods%'];
+    case 'inlays':
+      return ['%necks/6-string/front/24-fret-front/standard/inlays%'];
+    case 'neck-rear-finish':
+    case 'neckrearfinish':
+      return [`%models/${model}/back/shadows_highlights%`];
+    case 'backplates':
+    case 'backplate':
+      return [`%models/${model}/back/backplates%`];
+    case 'output-jacks':
+    case 'outputjacks':
+      return [`%models/${model}/back/output-jacks%`];
+    case 'back-strap-buttons':
+    case 'backstrapbuttons':
+      return [`%models/${model}/back/strap buttons%`];
+    case 'string-ferrules':
+    case 'stringferrules':
+      return [`%models/${model}/back/string ferrules%`];
+    case 'front-knobs':
+    case 'frontknobs':
+      return [`%models/${model}/bodies/front/knobs%`];
+    case 'front-switches':
+    case 'frontswitches':
+      return [`%models/${model}/bodies/front/switches%`];
+    case 'front-masks':
+    case 'frontmasks':
+      return [`%models/${model}/bodies/front/masks%`];
+    case 'front-strap-buttons':
+    case 'frontstrapbuttons':
+      return [`%models/${model}/bodies/front/strap buttons%`];
+    default:
+      return [];
+  }
+};
+
+const getAssetResponseKey = (normalizedGroup) => {
+  switch (normalizedGroup) {
+    case 'top-woods':
+    case 'topwoods':
+    case 'top woods':
+      return 'topWoods';
+    case 'colors':
+      return 'finishColors';
+    case 'top-coat':
+    case 'topcoat':
+      return 'topCoats';
+    case 'neck-woods':
+    case 'neckwoods':
+      return 'neckWoods';
+    case 'headstock-woods':
+    case 'headstockwoods':
+      return 'headstockWoods';
+    case 'fingerboard-woods':
+    case 'fingerboardwoods':
+      return 'fingerboardWoods';
+    case 'inlays':
+      return 'inlays';
+    case 'neck-rear-finish':
+    case 'neckrearfinish':
+      return 'neckRearFinishes';
+    case 'backplates':
+    case 'backplate':
+      return 'backplates';
+    case 'output-jacks':
+    case 'outputjacks':
+      return 'outputJacks';
+    case 'back-strap-buttons':
+    case 'backstrapbuttons':
+      return 'backStrapButtons';
+    case 'string-ferrules':
+    case 'stringferrules':
+      return 'stringFerrules';
+    case 'front-knobs':
+    case 'frontknobs':
+      return 'frontKnobs';
+    case 'front-switches':
+    case 'frontswitches':
+      return 'frontSwitches';
+    case 'front-masks':
+    case 'frontmasks':
+      return 'frontMasks';
+    case 'front-strap-buttons':
+    case 'frontstrapbuttons':
+      return 'frontStrapButtons';
+    default:
+      return null;
+  }
+};
+
+const queryBuilderAssetRows = async (guitarType, patterns) => {
+  if (!patterns || patterns.length === 0) return [];
+  const params = [normalizeKey(guitarType || 'electric')];
+  const conditions = patterns.map((_, index) => {
+    const placeholder = `$${index + 2}`;
+    return `(folder_key ILIKE ${placeholder} OR metadata->'import_source'->>'relative_path' ILIKE ${placeholder})`;
+  });
+  const sql = `
+    SELECT part_id, name, folder_key, type_mapping, image_url, metadata
+    FROM guitar_builder_parts
+    WHERE guitar_type = $1
+      AND is_active = true
+      AND (${conditions.join(' OR ')})
+  `;
+  const res = await pool.query(sql, [...params, ...patterns]);
+  return res.rows;
+};
+
+const buildAssetFromPartRow = (row, normalizedGroup) => {
+  const importPath = row?.metadata?.import_source?.relative_path;
+  let filename = null;
+  if (typeof importPath === 'string' && importPath.trim()) {
+    filename = path.basename(importPath.trim());
+  } else if (typeof row?.image_url === 'string' && row.image_url.trim()) {
+    try {
+      filename = path.basename(new URL(row.image_url.trim()).pathname);
+    } catch (_) {
+      filename = path.basename(row.image_url.trim());
+    }
+  }
+
+  const ext = filename ? path.extname(filename) : '';
+  const key = filename ? path.basename(filename, ext) : normalizeKey(row.name || row.type_mapping || '');
+  const label = guessLabelFromFilename(filename || row.name || key);
+  const asset = {
+    key,
+    filename,
+    label,
+  };
+
+  if (normalizedGroup === 'inlays') {
+    const parts = typeof importPath === 'string' ? importPath.split('/') : [];
+    const inlayIndex = parts.findIndex((part) => part === 'inlays');
+    const shape = inlayIndex >= 0 && parts.length > inlayIndex + 1 ? parts[inlayIndex + 1] : null;
+    let material = filename ? path.basename(filename, ext) : row.name || key;
+    if (shape && material?.startsWith(shape)) {
+      material = material.slice(shape.length) || material;
+    }
+    asset.shape = shape;
+    asset.material = material;
+  }
+
+  return asset;
+};
+
 exports.listBuilderAssets = async ({ guitarType, group, subgroup, model } = {}) => {
   const normalizedType = normalizeKey(guitarType || 'electric');
   const normalizedGroup = normalizeKey(group || '');
@@ -245,7 +441,26 @@ exports.listBuilderAssets = async ({ guitarType, group, subgroup, model } = {}) 
   const normalizedModel = normalizeKey(model || 'dc');
   const assets = {};
 
-  if (normalizedGroup === 'top-woods' || normalizedGroup === 'top Woods' || normalizedGroup === 'topwoods') {
+  const patterns = getAssetFolderPatterns(normalizedGroup, normalizedSubgroup, normalizedModel);
+  if (patterns.length > 0) {
+    try {
+      const rows = await queryBuilderAssetRows(normalizedType, patterns);
+      if (rows.length > 0) {
+        const items = rows
+          .map((row) => buildAssetFromPartRow(row, normalizedGroup))
+          .sort((a, b) => String(a.label || '').localeCompare(String(b.label || '')));
+        const responseKey = getAssetResponseKey(normalizedGroup);
+        if (responseKey) {
+          assets[responseKey] = items;
+          return assets;
+        }
+      }
+    } catch (error) {
+      console.warn('Builder asset DB query failed, falling back to filesystem scan:', error?.message || error);
+    }
+  }
+
+  if (normalizedGroup === 'top-woods' || normalizedGroup === 'top woods' || normalizedGroup === 'topwoods') {
     const sharedRoot = await resolveSharedModelRoot(normalizedType)
     if (!sharedRoot) return assets
     const dir = path.join(sharedRoot, 'woods-colors', 'top-woods')

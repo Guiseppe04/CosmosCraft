@@ -18,7 +18,7 @@ const CLOUD_NAME = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_
   ? import.meta.env.VITE_CLOUDINARY_CLOUD_NAME 
   : ''
 
-const USE_CLOUDINARY = Boolean(CLOUD_NAME)
+const USE_CLOUDINARY = Boolean(CLOUD_NAME) && !import.meta.env.DEV
 
 /**
  * Resolve an asset path using either Cloudinary or local files

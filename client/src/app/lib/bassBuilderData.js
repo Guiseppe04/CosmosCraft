@@ -1,12 +1,28 @@
 // Repointed to Cloudinary collection: cosmoscraft_assets/bass_assets
 // (local /builder/bass_models/* files no longer exist)
 const CLOUD_NAME = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_CLOUDINARY_CLOUD_NAME) ? import.meta.env.VITE_CLOUDINARY_CLOUD_NAME : ''
+const USE_CLOUDINARY = Boolean(CLOUD_NAME) && !import.meta.env.DEV
 
-export const cloudImage = (root, path) =>
-  `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/${root}/${path}`
+export const cloudImage = (root, path) => {
+  if (!USE_CLOUDINARY) {
+    return `/builder/bass_assets/${String(path || '').replace(/^\/+/, '')}`
+  }
+  return `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/${root}/${path}`
+}
 
-export const bassAsset = (path) => cloudImage('cosmoscraft_assets/bass_assets', String(path || '').replace(/^\/+/, ''))
-export const bassWoodAsset = (path) => cloudImage('cosmoscraft_assets/bass_assets', String(path || '').replace(/^\/+/, ''))
+export const bassAsset = (path) => {
+  if (!USE_CLOUDINARY) {
+    return `/builder/bass_assets/${String(path || '').replace(/^\/+/, '')}`
+  }
+  return cloudImage('cosmoscraft_assets/bass_assets', String(path || '').replace(/^\/+/, ''))
+}
+
+export const bassWoodAsset = (path) => {
+  if (!USE_CLOUDINARY) {
+    return `/builder/bass_assets/${String(path || '').replace(/^\/+/, '')}`
+  }
+  return cloudImage('cosmoscraft_assets/bass_assets', String(path || '').replace(/^\/+/, ''))
+}
 
 // Reuse the new customization schema from the electric builder.
 // Bass-conditional: STRING_COUNT_OPTIONS (6/7/8) is omitted (bass uses 4/5/6).

@@ -1,7 +1,7 @@
 // Repointed to Cloudinary collection: cosmoscraft_assets/electric_assets
 // Falls back to local /builder/ directory when Cloudinary is not configured.
 const CLOUD_NAME = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_CLOUDINARY_CLOUD_NAME) ? import.meta.env.VITE_CLOUDINARY_CLOUD_NAME : ''
-const USE_CLOUDINARY = Boolean(CLOUD_NAME)
+const USE_CLOUDINARY = Boolean(CLOUD_NAME) && !import.meta.env.DEV
 
 export const cloudImage = (root, path) => {
   if (USE_CLOUDINARY) {

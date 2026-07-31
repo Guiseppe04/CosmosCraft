@@ -1334,7 +1334,7 @@ export function CustomizePage() {
                     <div>
                       <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-3">Body Finish Color</h3>
                       <RGBColorPicker
-                        value={config.bodyFinish || '#1a1a1a'}
+                        value={config.bodyFinish && config.bodyFinish !== 'none' ? config.bodyFinish : '#1a1a1a'}
                         onChange={(color) => updateConfig({ bodyFinish: color })}
                         label="Select Guitar Body Color"
                       />
