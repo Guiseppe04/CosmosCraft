@@ -1252,15 +1252,17 @@ export function OrderManagement({ orders, onRefresh, user, pagination }) {
     return params
   }, [debouncedSearch, orderTypeFilter, statusFilter, paymentStatusFilter, paymentMethodFilter, dateFrom, dateTo, sortBy])
 
-  useEffect(() => {
-    setPage(1)
-  }, [debouncedSearch, orderTypeFilter, statusFilter, paymentStatusFilter, paymentMethodFilter, dateFrom, dateTo, sortBy])
+  const requestOrdersPage = useCallback((targetPage = 1) => {
+    const safePage = Math.max(1, Math.min(targetPage, Math.max(1, pagination?.total_pages || 1)))
+    setPage(safePage)
+    const params = buildQuery(safePage)
+    if (onRefreshRef.current) onRefreshRef.current(params)
+  }, [buildQuery, pagination?.total_pages])
 
   useEffect(() => {
-    const params = buildQuery(page)
-    if (onRefreshRef.current) onRefreshRef.current(params)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, buildQuery])
+    setPage(1)
+    requestOrdersPage(1)
+  }, [debouncedSearch, orderTypeFilter, statusFilter, paymentStatusFilter, paymentMethodFilter, dateFrom, dateTo, sortBy, requestOrdersPage])
 
   const totalPages = pagination?.total_pages || 1
 
@@ -1559,7 +1561,7 @@ export function OrderManagement({ orders, onRefresh, user, pagination }) {
               </p>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  onClick={() => requestOrdersPage(Math.max(1, page - 1))}
                   disabled={page === 1}
                   className="p-2 hover:bg-[var(--surface-dark)] rounded-lg transition-colors disabled:opacity-50"
                 >
@@ -1569,7 +1571,7 @@ export function OrderManagement({ orders, onRefresh, user, pagination }) {
                   Page {page} of {totalPages}
                 </span>
                 <button
-                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  onClick={() => requestOrdersPage(Math.min(totalPages, page + 1))}
                   disabled={page === totalPages}
                   className="p-2 hover:bg-[var(--surface-dark)] rounded-lg transition-colors disabled:opacity-50"
                 >

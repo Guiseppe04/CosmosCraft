@@ -131,8 +131,8 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
       setLogs(logsRes.data || []);
       
       // Auto-expand all milestones
-      if (res.data?.milestones) {
-        setExpandedMilestones(new Set(res.data.milestones.map(m => m.milestone_id)));
+      if (hierarchyRes.data?.milestones) {
+        setExpandedMilestones(new Set(hierarchyRes.data.milestones.map(m => m.milestone_id)));
       }
       setError(null);
     } catch (err) {
