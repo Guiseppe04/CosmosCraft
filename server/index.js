@@ -38,7 +38,7 @@ const app = express();
 if (process.env.TRUST_PROXY) {
   app.set('trust proxy', process.env.TRUST_PROXY === 'true' ? true : process.env.TRUST_PROXY);
 } else if (process.env.NODE_ENV === 'production') {
-  app.set('trust proxy', true);
+  app.set('trust proxy', 1);
 }
 
 const generalLimiter = createRateLimiter({
