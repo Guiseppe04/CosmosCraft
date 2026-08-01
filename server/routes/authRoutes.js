@@ -51,6 +51,11 @@ const updateOauthCodeFailure = async (code, errorMessage) => {
   );
 };
 
+const clearAuthCookies = (res) => {
+  res.clearCookie('accessToken', { httpOnly: true, secure: true, sameSite: 'none' });
+  res.clearCookie('refreshToken', { httpOnly: true, secure: true, sameSite: 'none' });
+};
+
 // OAuth Routes - Use standard Passport middleware
 router.get(
   '/google',
@@ -60,6 +65,7 @@ router.get(
 // Google Callback - use custom callback to capture user
 router.get('/google/callback', oauthSingleUseGuard('google'), asyncHandler(async (req, res, next) => {
   console.log('[Google Callback] Request received:', { query: req.query, params: req.params });
+  clearAuthCookies(res);
   
   passport.authenticate('google', { session: false }, async (err, user, info) => {
     try {
@@ -141,6 +147,7 @@ router.get(
 
 // Facebook Callback - use custom callback to capture user
 router.get('/facebook/callback', oauthSingleUseGuard('facebook'), asyncHandler(async (req, res, next) => {
+  clearAuthCookies(res);
   passport.authenticate('facebook', { session: false }, async (err, user, info) => {
     try {
       if (err) {

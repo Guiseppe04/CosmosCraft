@@ -26,10 +26,16 @@ const getOauthCodeRow = async (hash) => {
   return result.rows[0];
 };
 
+const clearAuthCookies = (res) => {
+  res.clearCookie('accessToken', { httpOnly: true, secure: true, sameSite: 'none' });
+  res.clearCookie('refreshToken', { httpOnly: true, secure: true, sameSite: 'none' });
+};
+
 const oauthSingleUseGuard = (provider) => {
   return async (req, res, next) => {
     try {
       const code = req.query.code || req.body.code;
+      clearAuthCookies(res);
       if (!code) return next();
 
       const hash = crypto.createHash('sha256').update(code).digest('hex');
