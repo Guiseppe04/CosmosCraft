@@ -1,6 +1,7 @@
 const { pool } = require('../config/database');
 const { AppError } = require('../middleware/errorHandler');
 const defaultWorkflowService = require('./defaultWorkflowService');
+const inventoryService = require('./inventoryService');
 let projectArchiveColumnsReadyPromise = null;
 
 const ensureProjectArchiveColumns = async () => {
@@ -199,6 +200,20 @@ const getPartStockStatus = (stock, quantity = 1) => {
   return 'in_stock';
 };
 
+const buildPartKey = (part = {}) => {
+  const base = [
+    part?.source || 'unknown',
+    part?.category || 'other',
+    part?.name || 'unnamed',
+    part?.customization_id || 'global',
+    part?.product_id || 'none',
+  ]
+    .filter(Boolean)
+    .join('::');
+
+  return base.toLowerCase().replace(/[^a-z0-9_]+/g, '-').replace(/(^-|-$)/g, '');
+};
+
 const buildRequiredPartsPayload = (customization = {}, linkedParts = []) => {
   const requiredParts = [];
   const customizationId = customization?.customization_id || null;
@@ -207,7 +222,7 @@ const buildRequiredPartsPayload = (customization = {}, linkedParts = []) => {
     const value = customization?.[fieldName];
     if (!value) return;
 
-    requiredParts.push({
+    const part = {
       customization_id: customizationId,
       name: String(value),
       category,
@@ -218,7 +233,22 @@ const buildRequiredPartsPayload = (customization = {}, linkedParts = []) => {
       needs_purchase: true,
       price: 0,
       part_type: fieldName,
-    });
+      part_key: buildPartKey({
+        source: 'configuration',
+        category,
+        name: String(value),
+        customization_id: customizationId,
+      }),
+      is_received: false,
+      received_quantity: 0,
+      pending_quantity: 1,
+      is_fully_received: false,
+      received_at: null,
+      received_by: null,
+      supplier: null,
+    };
+
+    requiredParts.push(part);
   });
 
   (Array.isArray(linkedParts) ? linkedParts : []).forEach((part) => {
@@ -238,13 +268,47 @@ const buildRequiredPartsPayload = (customization = {}, linkedParts = []) => {
       price: Number(part?.price) || 0,
       product_id: part?.product_id || null,
       is_active: part?.is_active !== false,
+      part_key: buildPartKey({
+        source: 'additional_parts',
+        category: 'additional_parts',
+        name: part?.name || part?.part_name || 'Additional part',
+        customization_id: customizationId,
+        product_id: part?.product_id || null,
+      }),
+      is_received: false,
+      received_quantity: 0,
+      pending_quantity: quantity,
+      is_fully_received: false,
+      received_at: null,
+      received_by: null,
+      supplier: null,
     });
   });
 
   return requiredParts;
 };
 
+const getProjectPartReceiptState = (auditRows = []) => {
+  const receiptState = new Map();
+
+  (Array.isArray(auditRows) ? auditRows : []).forEach((row) => {
+    const details = typeof row?.details === 'string' ? JSON.parse(row.details) : row?.details;
+    if (!details || !details.part_key) return;
+
+    const previous = receiptState.get(details.part_key) || { received_quantity: 0 };
+    receiptState.set(details.part_key, {
+      received_quantity: Number(previous.received_quantity || 0) + Number(details.received_quantity || 0),
+      received_at: details.received_at || previous.received_at || null,
+      received_by: details.received_by || previous.received_by || null,
+      supplier: details.supplier || previous.supplier || null,
+    });
+  });
+
+  return receiptState;
+};
+
 exports.__testOnlyBuildRequiredPartsPayload = buildRequiredPartsPayload;
+exports.__testOnlyGetProjectPartReceiptState = getProjectPartReceiptState;
 
 const getProjectTaskStats = async (db, projectId) => {
   const result = await db.query(
@@ -874,6 +938,7 @@ exports.getProjectRequiredParts = async (projectId) => {
     const customizationResult = await client.query(
       `SELECT DISTINCT
          c.customization_id,
+         c.created_at,
          c.guitar_type,
          c.body_wood,
          c.neck_wood,
@@ -885,7 +950,7 @@ exports.getProjectRequiredParts = async (projectId) => {
        FROM order_items oi
        JOIN customizations c ON c.customization_id = oi.customization_id
        WHERE oi.order_id = $1
-       ORDER BY c.created_at ASC`,
+       ORDER BY c.created_at ASC, c.customization_id ASC`,
       [project.order_id]
     );
 
@@ -913,10 +978,40 @@ exports.getProjectRequiredParts = async (projectId) => {
       linkedParts = linkedPartsResult.rows;
     }
 
-    return customizationResult.rows.flatMap((customization) => buildRequiredPartsPayload(
+    const requiredParts = customizationResult.rows.flatMap((customization) => buildRequiredPartsPayload(
       customization,
       linkedParts.filter((part) => part.customization_id === customization.customization_id)
     ));
+
+    const receiptsResult = await client.query(
+      `SELECT details
+       FROM audit_logs
+       WHERE entity_type = 'project'
+         AND entity_id = $1
+         AND action = 'project_part_received'
+       ORDER BY created_at ASC`,
+      [projectId]
+    );
+
+    const receiptState = getProjectPartReceiptState(receiptsResult.rows);
+
+    return requiredParts.map((part) => {
+      const receipt = receiptState.get(part.part_key) || null;
+      const receivedQuantity = Number(receipt?.received_quantity || 0);
+      const requiredQuantity = Number(part.quantity) || 1;
+      const pendingQuantity = Math.max(requiredQuantity - receivedQuantity, 0);
+      const isFullyReceived = pendingQuantity === 0 && requiredQuantity > 0;
+      return {
+        ...part,
+        is_received: receivedQuantity > 0,
+        received_quantity: receivedQuantity,
+        pending_quantity: pendingQuantity,
+        is_fully_received: isFullyReceived,
+        received_at: receipt?.received_at || null,
+        received_by: receipt?.received_by || null,
+        supplier: receipt?.supplier || null,
+      };
+    });
   } finally {
     client.release();
   }
@@ -968,6 +1063,106 @@ exports.requestProjectProcurement = async (projectId, userId) => {
     required_parts: requiredParts,
     purchase_items: purchaseItems,
     requested_at: new Date(),
+  };
+};
+
+exports.receiveProjectRequiredPart = async (projectId, partKey, payload = {}, userId) => {
+  const requiredParts = await exports.getProjectRequiredParts(projectId);
+  if (requiredParts === null) {
+    throw new AppError('Project not found', 404);
+  }
+
+  const part = requiredParts.find((candidate) => candidate.part_key === partKey);
+  if (!part) {
+    throw new AppError('Required part not found', 404);
+  }
+
+  const receivedQuantity = Math.max(1, Number(payload.quantity) || Number(part.quantity) || 1);
+  const supplier = payload.supplier || null;
+
+  if (part.product_id) {
+    await inventoryService.addStock(part.product_id, receivedQuantity, {
+      notes: `Project required part received for ${part.name}`,
+      createdBy: userId,
+    });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, details)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [
+        userId,
+        'project_part_received',
+        'project',
+        projectId,
+        JSON.stringify({
+          part_key: part.part_key,
+          part_name: part.name,
+          quantity: Number(receivedQuantity),
+          received_quantity: Number(receivedQuantity),
+          received_at: new Date().toISOString(),
+          received_by: userId,
+          supplier,
+          product_id: part.product_id || null,
+        }),
+      ]
+    );
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+
+  const refreshedParts = await exports.getProjectRequiredParts(projectId);
+  const refreshedPart = refreshedParts.find((candidate) => candidate.part_key === partKey);
+  const allPartsReceived = refreshedParts.every((candidate) => candidate.is_fully_received);
+
+  if (allPartsReceived) {
+    const currentProjectRes = await pool.query(
+      `SELECT status, progress FROM projects WHERE project_id = $1`,
+      [projectId]
+    );
+
+    if (currentProjectRes.rows.length > 0) {
+      const currentProject = currentProjectRes.rows[0];
+      const nextStatus = normalizeProjectStatus(currentProject.status) === 'completed' ? 'completed' : 'in_progress';
+      await pool.query(
+        `UPDATE projects
+         SET status = $1,
+             progress = GREATEST(COALESCE(progress, 0), 100),
+             updated_at = CURRENT_TIMESTAMP
+         WHERE project_id = $2`,
+        [nextStatus, projectId]
+      );
+
+      await pool.query(
+        `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, details)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [
+          userId,
+          'project_ready_for_assembly',
+          'project',
+          projectId,
+          JSON.stringify({
+            all_parts_received: true,
+            status: nextStatus,
+            received_at: new Date().toISOString(),
+          }),
+        ]
+      );
+    }
+  }
+
+  return {
+    part: refreshedPart || part,
+    quantity_received: Number(receivedQuantity),
+    stock_updated: Boolean(part.product_id),
+    all_parts_received: allPartsReceived,
   };
 };
 

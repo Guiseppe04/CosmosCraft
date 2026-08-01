@@ -104,6 +104,11 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
   const [procurementSaving, setProcurementSaving] = useState(false);
   const [procurementFeedback, setProcurementFeedback] = useState(null);
   const [procurementRequestedAt, setProcurementRequestedAt] = useState(null);
+  const [receivingPartKey, setReceivingPartKey] = useState(null);
+  const [receivingQuantity, setReceivingQuantity] = useState('1');
+  const [receivingSupplier, setReceivingSupplier] = useState('');
+  const [receivingSaving, setReceivingSaving] = useState(false);
+  const [receivingFeedback, setReceivingFeedback] = useState(null);
   const [pendingUncheckSubtask, setPendingUncheckSubtask] = useState(null);
 
   useEffect(() => {
@@ -238,7 +243,9 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
     const outOfStock = requiredParts.filter((part) => part.stock_status === 'out_of_stock').length;
     const unknownStock = requiredParts.filter((part) => part.stock_status === 'unknown').length;
     const needsPurchase = requiredParts.filter((part) => part.needs_purchase).length;
-    return { configuredCount, additionalCount, inStock, lowStock, outOfStock, unknownStock, needsPurchase };
+    const receivedCount = requiredParts.filter((part) => part.is_fully_received).length;
+    const pendingCount = requiredParts.filter((part) => !part.is_fully_received && (part.pending_quantity || part.quantity)).length;
+    return { configuredCount, additionalCount, inStock, lowStock, outOfStock, unknownStock, needsPurchase, receivedCount, pendingCount };
   }, [requiredParts]);
 
   const getStockBadgeStyle = (stockStatus) => {
@@ -327,6 +334,7 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
     projectData?.estimated_completion_date ||
     projectData?.end_date
   );
+  const isReadyForAssembly = requiredParts.length > 0 && requiredParts.every((part) => part.is_fully_received);
 
   // Group parts by category
   const groupedParts = resolvedParts.reduce((groups, part) => {
@@ -527,6 +535,38 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
     }
   };
 
+  const handleReceivePart = async (part) => {
+    try {
+      setReceivingSaving(true);
+      setReceivingFeedback(null);
+      setReceivingPartKey(part.part_key);
+
+      const quantity = Number(receivingQuantity) || Number(part.quantity) || 1;
+      const payload = {
+        quantity,
+        supplier: receivingSupplier || null,
+      };
+
+      const result = await adminApi.receiveProjectRequiredPart(projectId, part.part_key, payload);
+      await loadData();
+      setReceivingFeedback({
+        type: 'success',
+        message: `${part.name} marked as received with ${result.quantity_received || quantity} unit(s).`,
+      });
+      setReceivingQuantity('1');
+      setReceivingSupplier('');
+      setReceivingPartKey(null);
+    } catch (err) {
+      setReceivingFeedback({
+        type: 'error',
+        message: err.message || 'Failed to mark part as received.',
+      });
+    } finally {
+      setReceivingSaving(false);
+      setReceivingPartKey(null);
+    }
+  };
+
 
   if (loading) return <div className="text-center py-10 text-[var(--text-muted)] animate-pulse">Loading tracker data...</div>;
   if (error) return <div className="text-red-400 p-4 border border-red-500/30 bg-red-500/10 rounded-xl">{error}</div>;
@@ -566,6 +606,12 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
             <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-3 text-left lg:text-right whitespace-nowrap">
               <span className="text-[var(--gold-primary)] text-3xl md:text-4xl font-black leading-none">{clampedProgress}%</span>
               <p className="mt-1 text-white font-semibold">{formatStatusLabel(hierarchy.status)}</p>
+              {isReadyForAssembly && (
+                <div className="mt-2 inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-300">
+                  <CheckCircle className="h-3.5 w-3.5" />
+                  Ready for Assembly
+                </div>
+              )}
             </div>
           </div>
 
@@ -710,7 +756,7 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
                 </span>
               </div>
             </div>
-            <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
               <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-300">
                 {requiredPartSummary.inStock} in stock
               </span>
@@ -725,6 +771,12 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
               </span>
               <span className="rounded-full border border-sky-500/30 bg-sky-500/10 px-3 py-1 text-xs font-semibold text-sky-300">
                 {requiredPartSummary.needsPurchase} needs purchase
+              </span>
+              <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-300">
+                {requiredPartSummary.receivedCount} received
+              </span>
+              <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-semibold text-amber-300">
+                {requiredPartSummary.pendingCount} pending
               </span>
             </div>
             <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-4">
@@ -775,6 +827,38 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
                       <span>Qty: {part.quantity}</span>
                       <span>Stock: {part.stock === null || part.stock === undefined ? 'unknown' : part.stock}</span>
                       <span>Price: {part.price ? formatCurrency(part.price) : '—'}</span>
+                    </div>
+                    <div className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]/70 p-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <label className="text-[10px] uppercase tracking-[0.2em] text-[var(--text-muted)]">Qty received</label>
+                        <input
+                          type="number"
+                          min="1"
+                          value={receivingQuantity}
+                          onChange={(e) => setReceivingQuantity(e.target.value)}
+                          className="w-20 rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] px-2 py-2 text-sm text-white"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Supplier"
+                          value={receivingSupplier}
+                          onChange={(e) => setReceivingSupplier(e.target.value)}
+                          className="min-w-[120px] flex-1 rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] px-2 py-2 text-sm text-white"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleReceivePart(part)}
+                          disabled={receivingSaving || part.is_received}
+                          className="rounded-lg bg-emerald-500/20 px-3 py-2 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-500/30 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {receivingSaving && receivingPartKey === part.part_key ? 'Receiving...' : part.is_received ? 'Received' : 'Receive'}
+                        </button>
+                      </div>
+                      {part.is_received && (
+                        <p className="mt-2 text-[11px] text-emerald-300">
+                          Received {part.received_quantity || 0} unit(s) {part.received_at ? `on ${new Date(part.received_at).toLocaleString()}` : ''}
+                        </p>
+                      )}
                     </div>
                   </div>
                 ))}

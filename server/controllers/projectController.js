@@ -66,6 +66,16 @@ exports.getProjectRequiredParts = asyncHandler(async (req, res, next) => {
   res.json({ status: 'success', data: result });
 });
 
+exports.receiveRequiredPart = asyncHandler(async (req, res, next) => {
+  const result = await projectService.receiveProjectRequiredPart(
+    req.params.id,
+    req.params.partKey,
+    req.body,
+    req.user.id
+  );
+  res.json({ status: 'success', data: result, message: 'Required part marked as received' });
+});
+
 exports.requestProjectProcurement = asyncHandler(async (req, res, next) => {
   const result = await projectService.requestProjectProcurement(req.params.id, req.user.id);
   res.json({ status: 'success', data: result, message: 'Procurement request submitted' });

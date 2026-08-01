@@ -532,6 +532,22 @@ const uuidParamSchema = Joi.object({
     }),
 }).unknown(true);
 
+const projectPartReceiveParamsSchema = Joi.object({
+  id: Joi.string()
+    .uuid()
+    .required()
+    .messages({
+      'string.guid': 'ID must be a valid UUID',
+      'any.required': 'ID is required',
+    }),
+  partKey: Joi.string()
+    .trim()
+    .required()
+    .messages({
+      'any.required': 'Part key is required',
+    }),
+}).unknown(true);
+
 const orderIdParamSchema = Joi.object({
   orderId: Joi.string()
     .uuid()
@@ -931,6 +947,7 @@ exports.validateQuery = (schema) => buildValidationMiddleware(schema, 'query');
 exports.validateParams = (schema) => buildValidationMiddleware(schema, 'params');
 // Flexible validate helper: accepts (schema) or (schema, source) where source is 'body'|'query'|'params'
 exports.validate = (schema, source = 'body') => buildValidationMiddleware(schema, source);
+exports.projectPartReceiveParamsSchema = projectPartReceiveParamsSchema;
 exports.saveDefaultWorkflowSchema = Joi.object({
   steps: Joi.array().min(1).required().items(
     Joi.object({

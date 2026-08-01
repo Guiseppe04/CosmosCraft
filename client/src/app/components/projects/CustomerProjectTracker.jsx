@@ -107,8 +107,11 @@ export default function CustomerProjectTracker({ projectId, projectName, project
     const lowStock = requiredParts.filter((part) => part.stock_status === 'low_stock').length;
     const outOfStock = requiredParts.filter((part) => part.stock_status === 'out_of_stock').length;
     const unknownStock = requiredParts.filter((part) => part.stock_status === 'unknown').length;
-    return { configuredCount, additionalCount, inStock, lowStock, outOfStock, unknownStock };
+    const receivedCount = requiredParts.filter((part) => part.is_fully_received).length;
+    const pendingCount = requiredParts.filter((part) => !part.is_fully_received && (part.pending_quantity || part.quantity)).length;
+    return { configuredCount, additionalCount, inStock, lowStock, outOfStock, unknownStock, receivedCount, pendingCount };
   }, [requiredParts]);
+  const isReadyForAssembly = requiredParts.length > 0 && requiredParts.every((part) => part.is_fully_received);
 
   const getStockBadgeStyle = (stockStatus) => {
     switch (stockStatus) {
@@ -250,6 +253,12 @@ export default function CustomerProjectTracker({ projectId, projectName, project
           <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] p-4">
             <p className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">Progress</p>
             <p className="mt-2 text-lg font-bold text-[var(--gold-primary)]">{clampedProgress}%</p>
+            {isReadyForAssembly && (
+              <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-300">
+                <CheckCircle className="h-3.5 w-3.5" />
+                Ready for Assembly
+              </div>
+            )}
           </div>
         </div>
 
@@ -281,6 +290,12 @@ export default function CustomerProjectTracker({ projectId, projectName, project
               </span>
               <span className="rounded-full border border-slate-500/30 bg-slate-500/10 px-3 py-1 text-xs font-semibold text-slate-300">
                 {requiredPartSummary.unknownStock} unknown
+              </span>
+              <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-300">
+                {requiredPartSummary.receivedCount} received
+              </span>
+              <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-semibold text-amber-300">
+                {requiredPartSummary.pendingCount} pending
               </span>
             </div>
             <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-4">

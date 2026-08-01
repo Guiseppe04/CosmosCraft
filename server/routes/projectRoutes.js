@@ -6,6 +6,7 @@ const {
   validate,
   validateParams,
   uuidParamSchema,
+  projectPartReceiveParamsSchema,
   namedUuidParamSchema,
   createProjectSchema,
   updateProjectSchema,
@@ -25,6 +26,7 @@ router.use(authenticateToken);
 router.get('/my', validate(listProjectsSchema, 'query'), ctrl.getMyProjects);
 router.get('/:id/hierarchy', validateParams(uuidParamSchema), ctrl.getProjectHierarchy);
 router.get('/:id/required-parts', validateParams(uuidParamSchema), ctrl.getProjectRequiredParts);
+router.post('/:id/required-parts/:partKey/receive', validateParams(projectPartReceiveParamsSchema), ctrl.receiveRequiredPart);
 router.post('/:id/procurement-request', validateParams(uuidParamSchema), ctrl.requestProjectProcurement);
 router.post('/:id/cancel', validateParams(uuidParamSchema), ctrl.cancelProject);
 router.post('/:id/fulfillment', validateParams(uuidParamSchema), validate(submitFulfillmentSchema), ctrl.submitFulfillmentChoice);
