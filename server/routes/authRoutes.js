@@ -10,6 +10,8 @@ const router = express.Router();
 
 // Helper to generate tokens (import from utils)
 const { generateTokens } = require('../utils/generateTokens');
+const crypto = require('crypto');
+const { pool } = require('../config/database');
 
 // OAuth Routes - Use standard Passport middleware
 router.get(
@@ -28,6 +30,16 @@ router.get('/google/callback', oauthSingleUseGuard('google'), asyncHandler(async
       if (err) {
         console.error('[Google Callback] Auth error:', err);
         const payload = { status: 'error', code: 'OAUTH_ERROR', provider: 'google', message: err.message || 'Authentication failed. Please try again.' };
+        // Mark oauth_codes as failed so duplicate callers know
+        try {
+          const code = req.query.code || req.body.code;
+          if (code) {
+            const hash = crypto.createHash('sha256').update(code).digest('hex');
+            await pool.query('UPDATE oauth_codes SET status = $1, error_message = $2, processed_at = now() WHERE code_hash = $3', ['failed', err.message || 'oauth_error', hash]);
+          }
+        } catch (uErr) {
+          console.error('[Google Callback] Failed to mark oauth_codes failed:', uErr);
+        }
         if (req.headers.accept && req.headers.accept.includes('application/json')) return res.status(400).json(payload);
         return res.redirect(`${process.env.FRONTEND_URL}/?auth_error=${encodeURIComponent(payload.message)}&auth_code=${payload.code}`);
       }
@@ -43,6 +55,20 @@ router.get('/google/callback', oauthSingleUseGuard('google'), asyncHandler(async
       const roleSummary = await rbacService.getUserRoleSummary(user.user_id, false);
       const { accessToken, refreshToken } = await generateTokens(user.user_id, roleSummary.role);
       console.log('[Google Callback] Tokens generated for user:', user.user_id);
+
+      // Update oauth_codes record to mark success so duplicate callers can proceed
+      try {
+        const code = req.query.code || req.body.code;
+        if (code) {
+          const hash = crypto.createHash('sha256').update(code).digest('hex');
+          await pool.query(
+            'UPDATE oauth_codes SET status = $1, user_id = $2, processed_at = now() WHERE code_hash = $3',
+            ['success', user.user_id, hash]
+          );
+        }
+      } catch (uErr) {
+        console.error('[Google Callback] Failed to update oauth_codes record:', uErr);
+      }
 
       res.cookie('accessToken', accessToken, {
         httpOnly: true,
@@ -83,6 +109,16 @@ router.get('/facebook/callback', oauthSingleUseGuard('facebook'), asyncHandler(a
     try {
       if (err) {
         console.error('[Facebook Callback] Auth error:', err);
+          // Mark oauth_codes as failed
+          try {
+            const code = req.query.code || req.body.code;
+            if (code) {
+              const hash = crypto.createHash('sha256').update(code).digest('hex');
+              await pool.query('UPDATE oauth_codes SET status = $1, error_message = $2, processed_at = now() WHERE code_hash = $3', ['failed', err.message || 'oauth_error', hash]);
+            }
+          } catch (uErr) {
+            console.error('[Facebook Callback] Failed to mark oauth_codes failed:', uErr);
+          }
         const payload = { status: 'error', code: 'OAUTH_ERROR', provider: 'facebook', message: err.message || 'Authentication failed. Please try again.' };
         if (req.headers.accept && req.headers.accept.includes('application/json')) return res.status(400).json(payload);
         return res.redirect(`${process.env.FRONTEND_URL}/?auth_error=${encodeURIComponent(payload.message)}&auth_code=${payload.code}`);
@@ -111,6 +147,20 @@ router.get('/facebook/callback', oauthSingleUseGuard('facebook'), asyncHandler(a
         sameSite: 'none',
         maxAge: 7 * 24 * 60 * 60 * 1000,
       });
+
+      // Update oauth_codes record to mark success so duplicate callers can proceed
+      try {
+        const code = req.query.code || req.body.code;
+        if (code) {
+          const hash = crypto.createHash('sha256').update(code).digest('hex');
+          await pool.query(
+            'UPDATE oauth_codes SET status = $1, user_id = $2, processed_at = now() WHERE code_hash = $3',
+            ['success', user.user_id, hash]
+          );
+        }
+      } catch (uErr) {
+        console.error('[Facebook Callback] Failed to update oauth_codes record:', uErr);
+      }
 
       return res.redirect(`${process.env.FRONTEND_URL}/auth/success?userId=${user.user_id}&provider=facebook`);
     } catch (error) {
