@@ -1,58 +1,18 @@
-const nodemailer = require('nodemailer');
-const dns = require('dns');
-const util = require('util');
-
-// Optionally prefer IPv4 when resolving SMTP hosts to avoid IPv6 routing issues in some platforms
-if (process.env.MAIL_PREFER_IPV4 === 'true' && dns.setDefaultResultOrder) {
-  try {
-    dns.setDefaultResultOrder('ipv4first');
-    console.log('Mailer: preferring IPv4 DNS results');
-  } catch (e) {
-    // ignore if unsupported
-  }
-}
+const brevo = require('@getbrevo/brevo');
 
 /**
- * Email Service - Send emails using Nodemailer
- * Supports both Gmail and custom SMTP configurations
+ * Email Service - Send emails using Brevo Transactional Email API
+ * Uses HTTPS-based API instead of SMTP to avoid connection timeouts on Render
  */
 
-const MAIL_HOST = process.env.MAIL_HOST || 'smtp.gmail.com';
-const MAIL_PORT = Number(process.env.MAIL_PORT) || 587;
-const MAIL_USER = process.env.MAIL_USER;
-const MAIL_PASS = process.env.MAIL_PASS;
+const MAIL_FROM = process.env.MAIL_FROM || 'noreply@cosmos-craft.com';
+const MAIL_FROM_NAME = process.env.MAIL_FROM_NAME || 'CosmosCraft';
 
-// Gmail requires the From address to match the authenticated account (or a verified alias).
-// If MAIL_FROM is not set, or doesn't match the auth user, fall back to MAIL_USER.
-// This prevents "Sender address rejected: not owned by user" errors from Gmail.
-const MAIL_FROM = process.env.MAIL_FROM && process.env.MAIL_FROM !== 'noreply@cosmoscraft.com'
-  ? process.env.MAIL_FROM
-  : MAIL_USER;
+const apiInstance = new brevo.TransactionalEmailsApi();
+apiInstance.setApiKey(brevo.TransactionalEmailsApiApiKeys.apiKey, process.env.BREVO_API_KEY);
 
-const transporter = nodemailer.createTransport({
-  host: MAIL_HOST,
-  port: MAIL_PORT,
-  secure: process.env.MAIL_SECURE === 'true' || false, // true for 465, false for other ports
-  auth: {
-    user: MAIL_USER,
-    pass: MAIL_PASS,
-  },
-  connectionTimeout: Number(process.env.MAIL_CONNECTION_TIMEOUT) || 10000,
-  greetingTimeout: Number(process.env.MAIL_GREETING_TIMEOUT) || 5000,
-  socketTimeout: Number(process.env.MAIL_SOCKET_TIMEOUT) || 10000,
-  tls: {
-    rejectUnauthorized: process.env.MAIL_TLS_REJECT_UNAUTHORIZED !== 'false'
-  },
-  // Force IPv4 for the SMTP socket itself. Independent of dns.setDefaultResultOrder
-  // above — protects against ENETUNREACH on platforms like Render that lack
-  // outbound IPv6 routing, even if MAIL_PREFER_IPV4 isn't set.
-  family: process.env.MAIL_FORCE_IPV4 === 'false' ? undefined : 4,
-});
-
-// Log mail config (without password) to help diagnose Render deployment issues
-console.log(`Mailer config: host=${MAIL_HOST} port=${MAIL_PORT} user=${MAIL_USER} from=${MAIL_FROM} secure=${process.env.MAIL_SECURE === 'true' || false}`);
-if (!MAIL_USER || !MAIL_PASS) {
-  console.warn('Mailer WARNING: MAIL_USER or MAIL_PASS is not set. Email sending will fail. Check Render environment variables.');
+if (!process.env.BREVO_API_KEY) {
+  console.warn('Mailer WARNING: BREVO_API_KEY is not set. Email sending will fail. Check Render environment variables.');
 }
 
 /**
@@ -62,24 +22,23 @@ if (!MAIL_USER || !MAIL_PASS) {
  * @param {string} options.subject - Email subject
  * @param {string} options.html - Email body (HTML)
  * @param {string} options.text - Email body (Plain text fallback)
- * @returns {Promise<Object>} Transporter response
+ * @returns {Promise<Object>} Brevo API response
  */
 exports.sendMail = async (options) => {
   try {
-    const mailOptions = {
-      from: MAIL_FROM,
-      to: options.to,
-      subject: options.subject,
-      html: options.html,
-      text: options.text,
-    };
+    const email = new brevo.SendSmtpEmail();
+    email.sender = { name: MAIL_FROM_NAME, email: MAIL_FROM };
+    email.to = [{ email: options.to }];
+    email.subject = options.subject;
+    email.htmlContent = options.html;
+    email.textContent = options.text;
+
     const maxAttempts = Number(process.env.MAIL_SEND_RETRIES) || 3;
     let attempt = 0;
     while (attempt < maxAttempts) {
       try {
-        const sendPromise = util.promisify(transporter.sendMail).bind(transporter);
-        const result = await sendPromise(mailOptions);
-        console.log('Email sent:', result.messageId);
+        const result = await apiInstance.sendTransacEmail(email);
+        console.log('Email sent:', result.body.messageId);
         return result;
       } catch (err) {
         attempt += 1;
@@ -711,11 +670,13 @@ exports.sendOrderConfirmation = async (to, order) => {
 };
 
 /**
- * Verify transporter connection on startup
+ * Verify Brevo API connection on startup
  */
 exports.verifyConnection = async () => {
   try {
-    await transporter.verify();
+    const accountApi = new brevo.AccountApi();
+    accountApi.setApiKey(brevo.AccountApiApiKeys.apiKey, process.env.BREVO_API_KEY);
+    await accountApi.getAccount();
     console.log('Email service connected successfully');
     return true;
   } catch (error) {
