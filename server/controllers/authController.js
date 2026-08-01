@@ -131,7 +131,7 @@ exports.emailSignup = asyncHandler(async (req, res, next) => {
     try {
       await mailService.sendVerificationEmail(newUser.email, otp);
     } catch (mailError) {
-      console.error('Failed to send verification email:', mailError);
+      console.error('Failed to send verification email to', newUser.email, ':', mailError.message || mailError);
     }
 
     const roleSummary = await rbacService.getUserRoleSummary(newUser.user_id, false);

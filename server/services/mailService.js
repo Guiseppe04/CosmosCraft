@@ -17,21 +17,43 @@ if (process.env.MAIL_PREFER_IPV4 === 'true' && dns.setDefaultResultOrder) {
  * Supports both Gmail and custom SMTP configurations
  */
 
+const MAIL_HOST = process.env.MAIL_HOST || 'smtp.gmail.com';
+const MAIL_PORT = Number(process.env.MAIL_PORT) || 587;
+const MAIL_USER = process.env.MAIL_USER;
+const MAIL_PASS = process.env.MAIL_PASS;
+
+// Gmail requires the From address to match the authenticated account (or a verified alias).
+// If MAIL_FROM is not set, or doesn't match the auth user, fall back to MAIL_USER.
+// This prevents "Sender address rejected: not owned by user" errors from Gmail.
+const MAIL_FROM = process.env.MAIL_FROM && process.env.MAIL_FROM !== 'noreply@cosmoscraft.com'
+  ? process.env.MAIL_FROM
+  : MAIL_USER;
+
 const transporter = nodemailer.createTransport({
-  host: process.env.MAIL_HOST || 'smtp.gmail.com',
-  port: Number(process.env.MAIL_PORT) || 587,
+  host: MAIL_HOST,
+  port: MAIL_PORT,
   secure: process.env.MAIL_SECURE === 'true' || false, // true for 465, false for other ports
   auth: {
-    user: process.env.MAIL_USER,
-    pass: process.env.MAIL_PASS,
+    user: MAIL_USER,
+    pass: MAIL_PASS,
   },
   connectionTimeout: Number(process.env.MAIL_CONNECTION_TIMEOUT) || 10000,
   greetingTimeout: Number(process.env.MAIL_GREETING_TIMEOUT) || 5000,
   socketTimeout: Number(process.env.MAIL_SOCKET_TIMEOUT) || 10000,
   tls: {
     rejectUnauthorized: process.env.MAIL_TLS_REJECT_UNAUTHORIZED !== 'false'
-  }
+  },
+  // Force IPv4 for the SMTP socket itself. Independent of dns.setDefaultResultOrder
+  // above — protects against ENETUNREACH on platforms like Render that lack
+  // outbound IPv6 routing, even if MAIL_PREFER_IPV4 isn't set.
+  family: process.env.MAIL_FORCE_IPV4 === 'false' ? undefined : 4,
 });
+
+// Log mail config (without password) to help diagnose Render deployment issues
+console.log(`Mailer config: host=${MAIL_HOST} port=${MAIL_PORT} user=${MAIL_USER} from=${MAIL_FROM} secure=${process.env.MAIL_SECURE === 'true' || false}`);
+if (!MAIL_USER || !MAIL_PASS) {
+  console.warn('Mailer WARNING: MAIL_USER or MAIL_PASS is not set. Email sending will fail. Check Render environment variables.');
+}
 
 /**
  * Send a single email
@@ -45,7 +67,7 @@ const transporter = nodemailer.createTransport({
 exports.sendMail = async (options) => {
   try {
     const mailOptions = {
-      from: process.env.MAIL_FROM || process.env.MAIL_USER,
+      from: MAIL_FROM,
       to: options.to,
       subject: options.subject,
       html: options.html,
