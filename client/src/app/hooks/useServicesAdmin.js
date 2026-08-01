@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { adminApi } from '../utils/adminApi'
 import { updateIfChanged } from '../pages/admin/utils/slug'
 
@@ -15,8 +15,21 @@ export function useServicesAdmin({ debouncedSearch, showToast, initialQuery = DE
   const [servicesLoading, setServicesLoading] = useState(false)
   const [servicesPagination, setServicesPagination] = useState({ page: 1, pageSize: 20, total: 0, totalPages: 1 })
   const [serviceQuery, setServiceQuery] = useState(initialQuery)
+  const servicesRef = useRef(services)
+  const inFlightRequestRef = useRef(null)
+
+  useEffect(() => {
+    servicesRef.current = services
+  }, [services])
 
   const fetchServices = useCallback(async () => {
+    const requestKey = JSON.stringify({ search: debouncedSearch, ...serviceQuery })
+    if (inFlightRequestRef.current === requestKey) {
+      if (import.meta.env.DEV) console.debug('[useServicesAdmin] skipping duplicate request', requestKey)
+      return
+    }
+
+    inFlightRequestRef.current = requestKey
     setServicesLoading(true)
     try {
       const params = {
@@ -30,7 +43,10 @@ export function useServicesAdmin({ debouncedSearch, showToast, initialQuery = DE
 
       const res = await adminApi.getServices(params)
       const newData = Array.isArray(res.data) ? res.data : res.data?.services || []
-      updateIfChanged(services, newData, setServices)
+      if (JSON.stringify(servicesRef.current) !== JSON.stringify(newData)) {
+        servicesRef.current = newData
+        setServices(newData)
+      }
       const total = res.pagination?.total || newData.length
       const totalPages = Math.max(Math.ceil(total / serviceQuery.pageSize), 1)
       setServicesPagination({
@@ -43,8 +59,11 @@ export function useServicesAdmin({ debouncedSearch, showToast, initialQuery = DE
       showToast(e.message, 'error')
     } finally {
       setServicesLoading(false)
+      if (inFlightRequestRef.current === requestKey) {
+        inFlightRequestRef.current = null
+      }
     }
-  }, [debouncedSearch, serviceQuery, services, showToast])
+  }, [debouncedSearch, serviceQuery, showToast])
 
   return {
     services,

@@ -1,16 +1,35 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { adminApi } from '../utils/adminApi'
-import { updateIfChanged } from '../pages/admin/utils/slug'
 
 export function useInventoryAdmin({ products, showToast }) {
   const [inventory, setInventory] = useState([])
   const [inventoryStats, setInventoryStats] = useState(null)
   const [salesReport, setSalesReport] = useState(null)
+  const inventoryRef = useRef(inventory)
+  const inventoryStatsRef = useRef(inventoryStats)
+  const salesReportRef = useRef(salesReport)
+
+  useEffect(() => {
+    inventoryRef.current = inventory
+  }, [inventory])
+
+  useEffect(() => {
+    inventoryStatsRef.current = inventoryStats
+  }, [inventoryStats])
+
+  useEffect(() => {
+    salesReportRef.current = salesReport
+  }, [salesReport])
 
   const fetchInventory = useCallback(async () => {
     try {
       const statsRes = await adminApi.getInventorySummary()
-      updateIfChanged(inventoryStats, statsRes.data || {}, setInventoryStats)
+      const nextStats = statsRes.data || {}
+      if (JSON.stringify(inventoryStatsRef.current) !== JSON.stringify(nextStats)) {
+        inventoryStatsRef.current = nextStats
+        setInventoryStats(nextStats)
+      }
+
       const prodsRes = await adminApi.getInventoryProducts()
       const rawData = Array.isArray(prodsRes.data) ? prodsRes.data : prodsRes.data?.products || []
       const productImageMap = new Map(
@@ -23,19 +42,26 @@ export function useInventoryAdmin({ products, showToast }) {
         ...item,
         primary_image: item.primary_image || item.image_url || item.product_image || productImageMap.get(item.product_id) || null,
       }))
-      updateIfChanged(inventory, newData, setInventory)
+      if (JSON.stringify(inventoryRef.current) !== JSON.stringify(newData)) {
+        inventoryRef.current = newData
+        setInventory(newData)
+      }
     } catch (e) {
       showToast(e.message, 'error')
     }
-  }, [showToast, inventoryStats, inventory, products])
+  }, [showToast, products])
 
   const fetchSalesReport = useCallback(async () => {
     try {
       const res = await adminApi.getSalesReport()
-      updateIfChanged(salesReport, res.data || {}, setSalesReport)
+      const nextSalesReport = res.data || {}
+      if (JSON.stringify(salesReportRef.current) !== JSON.stringify(nextSalesReport)) {
+        salesReportRef.current = nextSalesReport
+        setSalesReport(nextSalesReport)
+      }
     } catch (e) {
       showToast(e.message, 'error')
-      setSalesReport({
+      const fallbackSalesReport = {
         totalGrossSales: 0, totalTransactions: 0, averagePerTransaction: 0, customizationOrders: 0,
         walkInSales: 0, walkInTransactions: 0, walkInAvg: 0, walkInPercentage: 0,
         onlineSales: 0, onlineTransactions: 0, onlineAvg: 0, onlinePercentage: 0,
@@ -43,9 +69,13 @@ export function useInventoryAdmin({ products, showToast }) {
         dailySales: 0, dailyTransactions: 0, weeklySales: 0, weeklyTransactions: 0,
         monthlySales: 0, monthlyTransactions: 0, bestSellingProducts: [], customizationTypes: [],
         customizationRevenue: 0, avgCustomization: 0, walkInConversion: 0, onlineConversion: 0,
-      })
+      }
+      if (JSON.stringify(salesReportRef.current) !== JSON.stringify(fallbackSalesReport)) {
+        salesReportRef.current = fallbackSalesReport
+        setSalesReport(fallbackSalesReport)
+      }
     }
-  }, [showToast, salesReport])
+  }, [showToast])
 
   return {
     inventory,

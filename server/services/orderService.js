@@ -772,11 +772,11 @@ exports.getAllOrders = async (params = {}) => {
     sort_by = 'created_at',
     sort_dir = 'desc',
     page = 1,
-    page_size = 20,
+    page_size = 10,
     include_items = false,
   } = params;
 
-  const limit = Math.min(Math.max(Number(page_size) || 20, 1), 100)
+  const limit = Math.min(Math.max(Number(page_size) || 10, 1), 100)
   const offset = (Math.max(Number(page) || 1, 1) - 1) * limit
   const allowedSortColumns = ['created_at', 'order_number', 'total_amount', 'status', 'payment_status', 'customer_name']
   const orderBy = allowedSortColumns.includes(sort_by) ? sort_by : 'created_at'

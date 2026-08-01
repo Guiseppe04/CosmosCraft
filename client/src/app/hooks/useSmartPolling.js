@@ -1,5 +1,11 @@
 import { useEffect, useRef, useCallback } from 'react'
 
+const debugLog = (...args) => {
+  if (import.meta.env.DEV) {
+    console.debug('[useSmartPolling]', ...args)
+  }
+}
+
 /**
  * useSmartPolling
  *
@@ -26,6 +32,7 @@ export function useSmartPolling(fetchFn, {
   const currentIntervalRef = useRef(interval)
   const lastDataRef = useRef(null)
   const fetchFnRef = useRef(fetchFn)
+  const inFlightRef = useRef(false)
 
   // Keep fetchFn ref current without triggering re-mounts
   useEffect(() => { fetchFnRef.current = fetchFn }, [fetchFn])
@@ -36,9 +43,19 @@ export function useSmartPolling(fetchFn, {
     timerRef.current = setTimeout(async () => {
       // If tab is hidden, skip the fetch and keep the same interval
       if (document.visibilityState === 'hidden') {
+        debugLog('skipping poll while tab is hidden')
         scheduleNext()
         return
       }
+
+      if (inFlightRef.current) {
+        debugLog('skipping poll because another request is already in flight')
+        scheduleNext()
+        return
+      }
+
+      inFlightRef.current = true
+      debugLog('polling', { interval: currentIntervalRef.current, enabled })
 
       try {
         const newData = await fetchFnRef.current()
@@ -51,17 +68,22 @@ export function useSmartPolling(fetchFn, {
             currentIntervalRef.current * backoffFactor,
             maxInterval
           )
+          debugLog('poll completed without changes; backing off', { nextInterval: currentIntervalRef.current })
         } else {
           // New data → reset to base interval
           currentIntervalRef.current = interval
+          debugLog('poll completed with changes; resetting interval', { nextInterval: currentIntervalRef.current })
         }
         lastDataRef.current = newSnapshot
-      } catch {
+      } catch (error) {
+        debugLog('poll failed', error)
         // On error apply backoff too
         currentIntervalRef.current = Math.min(
           currentIntervalRef.current * backoffFactor,
           maxInterval
         )
+      } finally {
+        inFlightRef.current = false
       }
 
       scheduleNext()
@@ -79,6 +101,7 @@ export function useSmartPolling(fetchFn, {
     lastDataRef.current = null
 
     // Immediate first call
+    debugLog('starting smart polling', { enabled, interval })
     fetchFnRef.current().catch(() => {})
 
     // Then schedule subsequent polls
@@ -90,6 +113,7 @@ export function useSmartPolling(fetchFn, {
         // Tab became visible → fetch immediately and restart schedule
         currentIntervalRef.current = interval
         if (timerRef.current) clearTimeout(timerRef.current)
+        debugLog('visibility changed to visible; refreshing immediately')
         fetchFnRef.current().catch(() => {})
         scheduleNext()
       }
