@@ -11,19 +11,6 @@ export function OAuthSuccessPage() {
 
   useEffect(() => {
     const userId = searchParams.get('userId')
-    const authError = searchParams.get('auth_error')
-    const authCode = searchParams.get('auth_code')
-
-    if (authError || authCode) {
-      const codeMap = {
-        AUTH_CODE_USED: 'Authorization code already used. Please try signing in again.',
-        OAUTH_ERROR: authError || 'Authentication failed. Please try again.',
-      }
-      const message = authCode ? (codeMap[authCode] || authError) : authError
-      setError(message || 'Authentication failed. Please try again.')
-      setTimeout(() => navigate('/'), 2500)
-      return
-    }
 
     if (!userId) {
       setError('Authentication failed. Please try again.')

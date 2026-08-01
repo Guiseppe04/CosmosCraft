@@ -4,6 +4,7 @@ import { LoginModal } from '../auth/LoginModal.jsx'
 import { CartDrawer } from '../cart/CartDrawer.jsx'
 import { useEffect } from 'react'
 import { useToast } from '../ui/Toast.jsx'
+import { useRef } from 'react'
 
 /**
  * RootLayout Component (fromFigma)
@@ -13,12 +14,18 @@ export function RootLayout() {
   const location = useLocation()
   const navigate = useNavigate()
   const { toast } = useToast()
+  const handledSearchRef = useRef(new Set())
   const isAdminOrStaff = location.pathname.startsWith('/admin') || location.pathname.startsWith('/staff') || location.pathname.startsWith('/staff/')
 
   // Show structured OAuth errors passed as query params (auth_error, auth_code)
   useEffect(() => {
     try {
-      const params = new URLSearchParams(location.search)
+      const search = location.search || ''
+      if (!search) return
+      // avoid repeating for the same query (handles StrictMode double-render)
+      if (handledSearchRef.current.has(search)) return
+
+      const params = new URLSearchParams(search)
       const authError = params.get('auth_error')
       const authCode = params.get('auth_code')
       if (authError || authCode) {
@@ -30,7 +37,8 @@ export function RootLayout() {
         }
         const message = authCode ? (codeMap[authCode] || authError || 'Authentication failed.') : authError
         toast.error(message || 'Authentication failed')
-        // Clear query params to avoid repeated toasts
+        // mark handled and clear query params to avoid repeated toasts
+        handledSearchRef.current.add(search)
         navigate(location.pathname, { replace: true })
       }
     } catch (e) {
