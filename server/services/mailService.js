@@ -1,4 +1,16 @@
 const nodemailer = require('nodemailer');
+const dns = require('dns');
+const util = require('util');
+
+// Optionally prefer IPv4 when resolving SMTP hosts to avoid IPv6 routing issues in some platforms
+if (process.env.MAIL_PREFER_IPV4 === 'true' && dns.setDefaultResultOrder) {
+  try {
+    dns.setDefaultResultOrder('ipv4first');
+    console.log('Mailer: preferring IPv4 DNS results');
+  } catch (e) {
+    // ignore if unsupported
+  }
+}
 
 /**
  * Email Service - Send emails using Nodemailer
@@ -7,12 +19,18 @@ const nodemailer = require('nodemailer');
 
 const transporter = nodemailer.createTransport({
   host: process.env.MAIL_HOST || 'smtp.gmail.com',
-  port: process.env.MAIL_PORT || 587,
+  port: Number(process.env.MAIL_PORT) || 587,
   secure: process.env.MAIL_SECURE === 'true' || false, // true for 465, false for other ports
   auth: {
     user: process.env.MAIL_USER,
     pass: process.env.MAIL_PASS,
   },
+  connectionTimeout: Number(process.env.MAIL_CONNECTION_TIMEOUT) || 10000,
+  greetingTimeout: Number(process.env.MAIL_GREETING_TIMEOUT) || 5000,
+  socketTimeout: Number(process.env.MAIL_SOCKET_TIMEOUT) || 10000,
+  tls: {
+    rejectUnauthorized: process.env.MAIL_TLS_REJECT_UNAUTHORIZED !== 'false'
+  }
 });
 
 /**
@@ -33,12 +51,26 @@ exports.sendMail = async (options) => {
       html: options.html,
       text: options.text,
     };
-
-    const result = await transporter.sendMail(mailOptions);
-    console.log('Email sent:', result.messageId);
-    return result;
+    const maxAttempts = Number(process.env.MAIL_SEND_RETRIES) || 3;
+    let attempt = 0;
+    while (attempt < maxAttempts) {
+      try {
+        const sendPromise = util.promisify(transporter.sendMail).bind(transporter);
+        const result = await sendPromise(mailOptions);
+        console.log('Email sent:', result.messageId);
+        return result;
+      } catch (err) {
+        attempt += 1;
+        console.error(`Email sending error (attempt ${attempt}):`, err && err.message ? err.message : err);
+        if (attempt >= maxAttempts) {
+          throw err;
+        }
+        // simple backoff
+        await new Promise((r) => setTimeout(r, attempt * 1000));
+      }
+    }
   } catch (error) {
-    console.error('Email sending error:', error);
+    console.error('Email sending error (final):', error);
     throw error;
   }
 };

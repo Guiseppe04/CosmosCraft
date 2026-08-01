@@ -157,7 +157,9 @@ exports.emailSignup = asyncHandler(async (req, res, next) => {
       data: { user: { id: newUser.user_id, email: newUser.email, is_verified: newUser.is_verified } }
     });
   } catch (error) {
-    if (error.message.includes('already exists')) throw new AppError('Email address already used.', 409);
+    if (error.message && error.message.includes('already exists')) {
+      throw new AppError('An account with this email already exists.', 409, [], 'EMAIL_EXISTS');
+    }
     throw new AppError(error.message || 'Signup failed', 400);
   }
 });
@@ -325,7 +327,7 @@ exports.resendOTP = asyncHandler(async (req, res, next) => {
     await mailService.sendVerificationEmail(user.email, otp);
   } catch (mailError) {
     console.error('Failed to send OTP:', mailError);
-    throw new AppError('Failed to send OTP email', 500);
+    throw new AppError('Unable to send verification email. Please try again later.', 502, [], 'EMAIL_SEND_FAILED');
   }
 
   res.status(200).json({ status: 'success', message: 'OTP sent to your email' });
