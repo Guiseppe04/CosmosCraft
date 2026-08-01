@@ -6,6 +6,26 @@ const { pool } = require('../config/database');
  * Inserts a hash of the authorization code into the `oauth_codes` table.
  * If the code hash already exists, the middleware returns a structured error.
  */
+let oauthUserIdColumnExists;
+
+const ensureOauthUserIdColumn = async () => {
+  if (oauthUserIdColumnExists !== undefined) return oauthUserIdColumnExists;
+  const result = await pool.query(
+    `SELECT 1 FROM information_schema.columns WHERE table_name = 'oauth_codes' AND column_name = 'oauth_user_id' LIMIT 1`
+  );
+  oauthUserIdColumnExists = result.rows.length > 0;
+  return oauthUserIdColumnExists;
+};
+
+const getOauthCodeRow = async (hash) => {
+  const hasOauthUserId = await ensureOauthUserIdColumn();
+  const query = hasOauthUserId
+    ? 'SELECT status, oauth_user_id, user_id, error_message FROM oauth_codes WHERE code_hash = $1'
+    : 'SELECT status, user_id, error_message FROM oauth_codes WHERE code_hash = $1';
+  const result = await pool.query(query, [hash]);
+  return result.rows[0];
+};
+
 const oauthSingleUseGuard = (provider) => {
   return async (req, res, next) => {
     try {
@@ -32,12 +52,12 @@ const oauthSingleUseGuard = (provider) => {
           const start = Date.now();
 
           while (Date.now() - start < maxPollMs) {
-            const r = await pool.query('SELECT status, user_id, error_message FROM oauth_codes WHERE code_hash = $1', [hash]);
-            const row = r.rows[0];
+            const row = await getOauthCodeRow(hash);
             if (row) {
-              if (row.status === 'success' && row.user_id) {
+              const duplicateUserId = row.oauth_user_id ?? (row.user_id != null ? String(row.user_id) : null);
+              if (row.status === 'success' && duplicateUserId) {
                 // Another request completed successfully: redirect to success
-                const redirect = `${process.env.FRONTEND_URL}/auth/success?userId=${row.user_id}&provider=${provider}`;
+                const redirect = `${process.env.FRONTEND_URL}/auth/success?userId=${encodeURIComponent(duplicateUserId)}&provider=${provider}`;
                 return res.redirect(redirect);
               }
               if (row.status === 'failed') {

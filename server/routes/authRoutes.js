@@ -13,6 +13,44 @@ const { generateTokens } = require('../utils/generateTokens');
 const crypto = require('crypto');
 const { pool } = require('../config/database');
 
+let oauthUserIdColumnExists;
+
+const ensureOauthUserIdColumn = async () => {
+  if (oauthUserIdColumnExists !== undefined) return oauthUserIdColumnExists;
+  const result = await pool.query(
+    `SELECT 1 FROM information_schema.columns WHERE table_name = 'oauth_codes' AND column_name = 'oauth_user_id' LIMIT 1`
+  );
+  oauthUserIdColumnExists = result.rows.length > 0;
+  return oauthUserIdColumnExists;
+};
+
+const updateOauthCodeSuccess = async (code, userId) => {
+  if (!code) return;
+  const hash = crypto.createHash('sha256').update(code).digest('hex');
+  const hasColumn = await ensureOauthUserIdColumn();
+
+  if (hasColumn) {
+    await pool.query(
+      'UPDATE oauth_codes SET status = $1, oauth_user_id = $2, processed_at = now() WHERE code_hash = $3',
+      ['success', String(userId), hash]
+    );
+  } else {
+    await pool.query(
+      'UPDATE oauth_codes SET status = $1, user_id = $2, processed_at = now() WHERE code_hash = $3',
+      ['success', userId, hash]
+    );
+  }
+};
+
+const updateOauthCodeFailure = async (code, errorMessage) => {
+  if (!code) return;
+  const hash = crypto.createHash('sha256').update(code).digest('hex');
+  await pool.query(
+    'UPDATE oauth_codes SET status = $1, error_message = $2, processed_at = now() WHERE code_hash = $3',
+    ['failed', errorMessage, hash]
+  );
+};
+
 // OAuth Routes - Use standard Passport middleware
 router.get(
   '/google',
@@ -47,6 +85,11 @@ router.get('/google/callback', oauthSingleUseGuard('google'), asyncHandler(async
       if (!user) {
         console.log('[Google Callback] No user found, redirecting to signup');
         const msg = 'Authentication failed. Please try again.';
+        try {
+          await updateOauthCodeFailure(req.query.code || req.body.code, msg);
+        } catch (uErr) {
+          console.error('[Google Callback] Failed to mark oauth_codes failed:', uErr);
+        }
         if (req.headers.accept && req.headers.accept.includes('application/json')) return res.status(400).json({ status: 'error', message: msg });
         return res.redirect(`${process.env.FRONTEND_URL}/?auth_error=${encodeURIComponent(msg)}`);
       }
@@ -58,14 +101,7 @@ router.get('/google/callback', oauthSingleUseGuard('google'), asyncHandler(async
 
       // Update oauth_codes record to mark success so duplicate callers can proceed
       try {
-        const code = req.query.code || req.body.code;
-        if (code) {
-          const hash = crypto.createHash('sha256').update(code).digest('hex');
-          await pool.query(
-            'UPDATE oauth_codes SET status = $1, user_id = $2, processed_at = now() WHERE code_hash = $3',
-            ['success', user.user_id, hash]
-          );
-        }
+        await updateOauthCodeSuccess(req.query.code || req.body.code, user.user_id);
       } catch (uErr) {
         console.error('[Google Callback] Failed to update oauth_codes record:', uErr);
       }
@@ -126,6 +162,11 @@ router.get('/facebook/callback', oauthSingleUseGuard('facebook'), asyncHandler(a
 
       if (!user) {
         const msg = 'Authentication failed. Please try again.';
+        try {
+          await updateOauthCodeFailure(req.query.code || req.body.code, msg);
+        } catch (uErr) {
+          console.error('[Facebook Callback] Failed to mark oauth_codes failed:', uErr);
+        }
         if (req.headers.accept && req.headers.accept.includes('application/json')) return res.status(400).json({ status: 'error', message: msg });
         return res.redirect(`${process.env.FRONTEND_URL}/?auth_error=${encodeURIComponent(msg)}`);
       }
@@ -150,14 +191,7 @@ router.get('/facebook/callback', oauthSingleUseGuard('facebook'), asyncHandler(a
 
       // Update oauth_codes record to mark success so duplicate callers can proceed
       try {
-        const code = req.query.code || req.body.code;
-        if (code) {
-          const hash = crypto.createHash('sha256').update(code).digest('hex');
-          await pool.query(
-            'UPDATE oauth_codes SET status = $1, user_id = $2, processed_at = now() WHERE code_hash = $3',
-            ['success', user.user_id, hash]
-          );
-        }
+        await updateOauthCodeSuccess(req.query.code || req.body.code, user.user_id);
       } catch (uErr) {
         console.error('[Facebook Callback] Failed to update oauth_codes record:', uErr);
       }
