@@ -15,6 +15,8 @@ const { pool } = require('../config/database');
 
 let oauthUserIdColumnExists;
 
+const getFrontendUrl = () => process.env.FRONTEND_URL || process.env.FRONTEND_URL_PROD || 'http://localhost:3000';
+
 const ensureOauthUserIdColumn = async () => {
   if (oauthUserIdColumnExists !== undefined) return oauthUserIdColumnExists;
   const result = await pool.query(
@@ -85,7 +87,7 @@ router.get('/google/callback', oauthSingleUseGuard('google'), asyncHandler(async
           console.error('[Google Callback] Failed to mark oauth_codes failed:', uErr);
         }
         if (req.headers.accept && req.headers.accept.includes('application/json')) return res.status(400).json(payload);
-        return res.redirect(`${process.env.FRONTEND_URL}/?auth_error=${encodeURIComponent(payload.message)}&auth_code=${payload.code}`);
+        return res.redirect(`${getFrontendUrl()}/?auth_error=${encodeURIComponent(payload.message)}&auth_code=${payload.code}`);
       }
 
       if (!user) {
@@ -97,7 +99,7 @@ router.get('/google/callback', oauthSingleUseGuard('google'), asyncHandler(async
           console.error('[Google Callback] Failed to mark oauth_codes failed:', uErr);
         }
         if (req.headers.accept && req.headers.accept.includes('application/json')) return res.status(400).json({ status: 'error', message: msg });
-        return res.redirect(`${process.env.FRONTEND_URL}/?auth_error=${encodeURIComponent(msg)}`);
+        return res.redirect(`${getFrontendUrl()}/?auth_error=${encodeURIComponent(msg)}`);
       }
 
       // User exists or was just created - generate tokens
@@ -126,7 +128,7 @@ router.get('/google/callback', oauthSingleUseGuard('google'), asyncHandler(async
         maxAge: 7 * 24 * 60 * 60 * 1000,
       });
 
-      const redirectUrl = `${process.env.FRONTEND_URL}/auth/success?userId=${user.user_id}&provider=google`;
+      const redirectUrl = `${getFrontendUrl()}/auth/success?userId=${user.user_id}&provider=google`;
       console.log('[Google Callback] Redirecting to:', redirectUrl);
       
       return res.redirect(redirectUrl);
@@ -134,7 +136,7 @@ router.get('/google/callback', oauthSingleUseGuard('google'), asyncHandler(async
       console.error('[Google Callback] Error in callback:', error);
       const payload = { status: 'error', code: 'OAUTH_ERROR', provider: 'google', message: 'Authentication failed. Please try again.' };
       if (req.headers.accept && req.headers.accept.includes('application/json')) return res.status(500).json(payload);
-      return res.redirect(`${process.env.FRONTEND_URL}/?auth_error=${encodeURIComponent(payload.message)}&auth_code=${payload.code}`);
+      return res.redirect(`${getFrontendUrl()}/?auth_error=${encodeURIComponent(payload.message)}&auth_code=${payload.code}`);
     }
   })(req, res, next);
 }));
@@ -164,7 +166,7 @@ router.get('/facebook/callback', oauthSingleUseGuard('facebook'), asyncHandler(a
           }
         const payload = { status: 'error', code: 'OAUTH_ERROR', provider: 'facebook', message: err.message || 'Authentication failed. Please try again.' };
         if (req.headers.accept && req.headers.accept.includes('application/json')) return res.status(400).json(payload);
-        return res.redirect(`${process.env.FRONTEND_URL}/?auth_error=${encodeURIComponent(payload.message)}&auth_code=${payload.code}`);
+        return res.redirect(`${getFrontendUrl()}/?auth_error=${encodeURIComponent(payload.message)}&auth_code=${payload.code}`);
       }
 
       if (!user) {
@@ -175,7 +177,7 @@ router.get('/facebook/callback', oauthSingleUseGuard('facebook'), asyncHandler(a
           console.error('[Facebook Callback] Failed to mark oauth_codes failed:', uErr);
         }
         if (req.headers.accept && req.headers.accept.includes('application/json')) return res.status(400).json({ status: 'error', message: msg });
-        return res.redirect(`${process.env.FRONTEND_URL}/?auth_error=${encodeURIComponent(msg)}`);
+        return res.redirect(`${getFrontendUrl()}/?auth_error=${encodeURIComponent(msg)}`);
       }
 
       // User exists or was just created - generate tokens
@@ -203,7 +205,7 @@ router.get('/facebook/callback', oauthSingleUseGuard('facebook'), asyncHandler(a
         console.error('[Facebook Callback] Failed to update oauth_codes record:', uErr);
       }
 
-      return res.redirect(`${process.env.FRONTEND_URL}/auth/success?userId=${user.user_id}&provider=facebook`);
+      return res.redirect(`${getFrontendUrl()}/auth/success?userId=${user.user_id}&provider=facebook`);
     } catch (error) {
       next(error);
     }

@@ -64,9 +64,17 @@ const authLimiter = createRateLimiter({
 });
 
 app.use(generalLimiter);
+const allowedOrigins = ['http://localhost:5173', 'http://localhost:3000', process.env.FRONTEND_URL, process.env.FRONTEND_URL_PROD].filter(Boolean);
+
 app.use(
   cors({
-    origin: ['http://localhost:5173', 'http://localhost:3000', process.env.FRONTEND_URL].filter(Boolean),
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+      callback(new Error(`Origin ${origin} not allowed by CORS`));
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   })

@@ -8,6 +8,8 @@ const { pool } = require('../config/database');
  */
 let oauthUserIdColumnExists;
 
+const getFrontendUrl = () => process.env.FRONTEND_URL || process.env.FRONTEND_URL_PROD || 'http://localhost:3000';
+
 const ensureOauthUserIdColumn = async () => {
   if (oauthUserIdColumnExists !== undefined) return oauthUserIdColumnExists;
   const result = await pool.query(
@@ -63,13 +65,13 @@ const oauthSingleUseGuard = (provider) => {
               const duplicateUserId = row.oauth_user_id ?? (row.user_id != null ? String(row.user_id) : null);
               if (row.status === 'success' && duplicateUserId) {
                 // Another request completed successfully: redirect to success
-                const redirect = `${process.env.FRONTEND_URL}/auth/success?userId=${encodeURIComponent(duplicateUserId)}&provider=${provider}`;
+                const redirect = `${getFrontendUrl()}/auth/success?userId=${encodeURIComponent(duplicateUserId)}&provider=${provider}`;
                 return res.redirect(redirect);
               }
               if (row.status === 'failed') {
                 const payload = { status: 'error', code: 'AUTH_CODE_USED', message: row.error_message || 'Authorization code already used or processing failed. Please try signing in again.' };
                 if (req.headers.accept && req.headers.accept.includes('application/json')) return res.status(409).json(payload);
-                return res.redirect(`${process.env.FRONTEND_URL}/?auth_error=${encodeURIComponent(payload.message)}&auth_code=${payload.code}`);
+                return res.redirect(`${getFrontendUrl()}/?auth_error=${encodeURIComponent(payload.message)}&auth_code=${payload.code}`);
               }
             }
             // wait and poll again
@@ -85,7 +87,7 @@ const oauthSingleUseGuard = (provider) => {
           if (req.headers.accept && req.headers.accept.includes('application/json')) {
             return res.status(409).json(payload);
           }
-          const redirect = `${process.env.FRONTEND_URL}/?auth_error=${encodeURIComponent(payload.message)}&auth_code=${payload.code}`;
+          const redirect = `${getFrontendUrl()}/?auth_error=${encodeURIComponent(payload.message)}&auth_code=${payload.code}`;
           return res.redirect(redirect);
         }
         throw err;
