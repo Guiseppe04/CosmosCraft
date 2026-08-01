@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { motion } from 'motion/react';
 import { CheckCircle, Clock, AlertCircle, Guitar, DollarSign, Calendar, CreditCard } from 'lucide-react';
 import { adminApi } from '../../utils/adminApi';
@@ -55,6 +55,7 @@ const formatCurrency = (value) => {
 
 export default function CustomerProjectTracker({ projectId, projectName, projectData, customBuildId }) {
   const [hierarchy, setHierarchy] = useState(null);
+  const [requiredParts, setRequiredParts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [installmentData, setInstallmentData] = useState(null);
@@ -70,8 +71,12 @@ export default function CustomerProjectTracker({ projectId, projectName, project
   const loadData = async () => {
     try {
       setLoading(true);
-      const res = await adminApi.getProjectHierarchy(projectId);
-      setHierarchy(res.data);
+      const [hierarchyRes, requiredPartsRes] = await Promise.all([
+        adminApi.getProjectHierarchy(projectId),
+        adminApi.getProjectRequiredParts(projectId),
+      ]);
+      setHierarchy(hierarchyRes.data);
+      setRequiredParts(Array.isArray(requiredPartsRes.data) ? requiredPartsRes.data : []);
       setError(null);
     } catch (err) {
       console.error(err);
@@ -95,6 +100,28 @@ export default function CustomerProjectTracker({ projectId, projectName, project
 
   const taskSummary = hierarchy?.task_summary || { total: 0, completed: 0, pending: 0 };
   const clampedProgress = Math.min(Math.max(Number(hierarchy?.progress) || 0, 0), 100);
+  const requiredPartSummary = useMemo(() => {
+    const configuredCount = requiredParts.filter((part) => part.source === 'configuration').length;
+    const additionalCount = requiredParts.filter((part) => part.source === 'additional_parts').length;
+    const inStock = requiredParts.filter((part) => part.stock_status === 'in_stock').length;
+    const lowStock = requiredParts.filter((part) => part.stock_status === 'low_stock').length;
+    const outOfStock = requiredParts.filter((part) => part.stock_status === 'out_of_stock').length;
+    const unknownStock = requiredParts.filter((part) => part.stock_status === 'unknown').length;
+    return { configuredCount, additionalCount, inStock, lowStock, outOfStock, unknownStock };
+  }, [requiredParts]);
+
+  const getStockBadgeStyle = (stockStatus) => {
+    switch (stockStatus) {
+      case 'in_stock':
+        return 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30';
+      case 'low_stock':
+        return 'bg-amber-500/10 text-amber-300 border-amber-500/30';
+      case 'out_of_stock':
+        return 'bg-red-500/10 text-red-300 border-red-500/30';
+      default:
+        return 'bg-slate-500/10 text-slate-300 border-slate-500/30';
+    }
+  };
   const milestones = Array.isArray(hierarchy?.milestones) ? hierarchy.milestones : [];
 
   // Find current milestone (first incomplete one) and completed milestones count
@@ -225,6 +252,73 @@ export default function CustomerProjectTracker({ projectId, projectName, project
             <p className="mt-2 text-lg font-bold text-[var(--gold-primary)]">{clampedProgress}%</p>
           </div>
         </div>
+
+        {requiredParts.length > 0 && (
+          <div className="mb-6 rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)]/70 p-4">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">Procurement snapshot</p>
+                <p className="mt-1 text-sm font-semibold text-white">Your build requires {requiredParts.length} planned parts</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <span className="rounded-full border border-[var(--gold-primary)]/30 bg-[var(--gold-primary)]/10 px-3 py-1 text-xs font-semibold text-[var(--gold-primary)]">
+                  {requiredPartSummary.configuredCount} configured
+                </span>
+                <span className="rounded-full border border-sky-500/30 bg-sky-500/10 px-3 py-1 text-xs font-semibold text-sky-300">
+                  {requiredPartSummary.additionalCount} additional
+                </span>
+              </div>
+            </div>
+            <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-300">
+                {requiredPartSummary.inStock} in stock
+              </span>
+              <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-semibold text-amber-300">
+                {requiredPartSummary.lowStock} low stock
+              </span>
+              <span className="rounded-full border border-red-500/30 bg-red-500/10 px-3 py-1 text-xs font-semibold text-red-300">
+                {requiredPartSummary.outOfStock} out of stock
+              </span>
+              <span className="rounded-full border border-slate-500/30 bg-slate-500/10 px-3 py-1 text-xs font-semibold text-slate-300">
+                {requiredPartSummary.unknownStock} unknown
+              </span>
+            </div>
+            <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-4">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <p className="text-sm font-semibold text-white">Required part details</p>
+                  <p className="text-xs text-[var(--text-muted)]">Showing up to 6 items for quick review.</p>
+                </div>
+                <span className="text-xs text-[var(--text-muted)]">{requiredParts.length} total</span>
+              </div>
+              <div className="grid gap-3">
+                {requiredParts.slice(0, 6).map((part) => (
+                  <div key={`${part.category}-${part.name}-${part.source}-${part.product_id || 'anon'}`} className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-white truncate">{part.name}</p>
+                        <p className="mt-1 text-xs text-[var(--text-muted)] truncate">
+                          {part.category || 'Other'} • {part.source === 'configuration' ? 'Configured' : 'Additional part'}
+                        </p>
+                      </div>
+                      <span className={`rounded-full px-2 py-1 text-[10px] font-semibold ${getStockBadgeStyle(part.stock_status)}`}>
+                        {part.stock_status?.replace('_', ' ') || 'unknown'}
+                      </span>
+                    </div>
+                    <div className="mt-3 grid gap-2 sm:grid-cols-3 text-[0.75rem] text-[var(--text-muted)]">
+                      <span>Qty: {part.quantity}</span>
+                      <span>Stock: {part.stock === null || part.stock === undefined ? 'unknown' : part.stock}</span>
+                      <span>Price: {part.price ? formatCurrency(part.price) : '—'}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {requiredParts.length > 6 && (
+                <p className="mt-3 text-xs text-[var(--text-muted)]">Showing 6 of {requiredParts.length} required parts. Contact support for detailed procurement status.</p>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Progress Bar */}
         <div className="mb-6">

@@ -61,6 +61,16 @@ exports.getProjectHierarchy = asyncHandler(async (req, res, next) => {
   res.json({ status: 'success', data: hierarchy });
 });
 
+exports.getProjectRequiredParts = asyncHandler(async (req, res, next) => {
+  const result = await projectService.getProjectRequiredParts(req.params.id);
+  res.json({ status: 'success', data: result });
+});
+
+exports.requestProjectProcurement = asyncHandler(async (req, res, next) => {
+  const result = await projectService.requestProjectProcurement(req.params.id, req.user.id);
+  res.json({ status: 'success', data: result, message: 'Procurement request submitted' });
+});
+
 exports.submitFulfillmentChoice = asyncHandler(async (req, res, next) => {
   const result = await projectService.submitFulfillmentChoice(
     req.params.id,

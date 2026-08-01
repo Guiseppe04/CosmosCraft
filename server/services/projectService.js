@@ -179,6 +179,73 @@ const buildFulfillmentAppointmentNotes = (project, method, notes) => {
   return lines.join(' | ');
 };
 
+const REQUIRED_PART_FIELD_MAP = [
+  ['body_wood', 'body'],
+  ['neck_wood', 'neck'],
+  ['fingerboard_wood', 'fretboard'],
+  ['bridge_type', 'bridge'],
+  ['pickups', 'pickups'],
+  ['color', 'finish'],
+  ['finish_type', 'finish'],
+];
+
+const getPartStockStatus = (stock, quantity = 1) => {
+  const normalizedStock = Number(stock);
+  const normalizedQuantity = Number(quantity) || 1;
+
+  if (!Number.isFinite(normalizedStock)) return 'unknown';
+  if (normalizedStock <= 0) return 'out_of_stock';
+  if (normalizedStock < normalizedQuantity) return 'low_stock';
+  return 'in_stock';
+};
+
+const buildRequiredPartsPayload = (customization = {}, linkedParts = []) => {
+  const requiredParts = [];
+  const customizationId = customization?.customization_id || null;
+
+  REQUIRED_PART_FIELD_MAP.forEach(([fieldName, category]) => {
+    const value = customization?.[fieldName];
+    if (!value) return;
+
+    requiredParts.push({
+      customization_id: customizationId,
+      name: String(value),
+      category,
+      quantity: 1,
+      source: 'configuration',
+      stock: null,
+      stock_status: 'unknown',
+      needs_purchase: true,
+      price: 0,
+      part_type: fieldName,
+    });
+  });
+
+  (Array.isArray(linkedParts) ? linkedParts : []).forEach((part) => {
+    const quantity = Number(part?.quantity) || 1;
+    const stock = part?.stock ?? null;
+    const stockStatus = getPartStockStatus(stock, quantity);
+
+    requiredParts.push({
+      customization_id: customizationId,
+      name: part?.name || part?.part_name || 'Additional part',
+      category: 'additional_parts',
+      quantity,
+      source: 'additional_parts',
+      stock,
+      stock_status: stockStatus,
+      needs_purchase: stockStatus !== 'in_stock',
+      price: Number(part?.price) || 0,
+      product_id: part?.product_id || null,
+      is_active: part?.is_active !== false,
+    });
+  });
+
+  return requiredParts;
+};
+
+exports.__testOnlyBuildRequiredPartsPayload = buildRequiredPartsPayload;
+
 const getProjectTaskStats = async (db, projectId) => {
   const result = await db.query(
     `SELECT
@@ -791,6 +858,119 @@ const logActivity = async (client, projectId, userId, actionType, details) => {
   );
 };
 
+exports.getProjectRequiredParts = async (projectId) => {
+  await ensureProjectArchiveColumns();
+  const client = await pool.connect();
+  try {
+    const pResult = await client.query(
+      `${PROJECT_BASE_SELECT}
+       WHERE p.project_id = $1
+         AND p.deleted_at IS NULL`,
+      [projectId]
+    );
+    if (pResult.rows.length === 0) return null;
+
+    const project = pResult.rows[0];
+    const customizationResult = await client.query(
+      `SELECT DISTINCT
+         c.customization_id,
+         c.guitar_type,
+         c.body_wood,
+         c.neck_wood,
+         c.fingerboard_wood,
+         c.bridge_type,
+         c.pickups,
+         c.color,
+         c.finish_type
+       FROM order_items oi
+       JOIN customizations c ON c.customization_id = oi.customization_id
+       WHERE oi.order_id = $1
+       ORDER BY c.created_at ASC`,
+      [project.order_id]
+    );
+
+    const customizationIds = customizationResult.rows.map((row) => row.customization_id);
+    let linkedParts = [];
+
+    if (customizationIds.length > 0) {
+      const linkedPartsResult = await client.query(
+        `SELECT
+           cp.part_id::text AS part_id,
+           cp.customization_id,
+           cp.part_name AS name,
+           cp.quantity,
+           cp.price,
+           p.product_id,
+           p.is_active,
+           i.stock
+         FROM customization_parts cp
+         LEFT JOIN products p ON p.product_id = cp.product_id
+         LEFT JOIN inventory i ON i.product_id = cp.product_id
+         WHERE cp.customization_id = ANY($1::uuid[])
+         ORDER BY cp.created_at ASC`,
+        [customizationIds]
+      );
+      linkedParts = linkedPartsResult.rows;
+    }
+
+    return customizationResult.rows.flatMap((customization) => buildRequiredPartsPayload(
+      customization,
+      linkedParts.filter((part) => part.customization_id === customization.customization_id)
+    ));
+  } finally {
+    client.release();
+  }
+};
+
+exports.requestProjectProcurement = async (projectId, userId) => {
+  const requiredParts = await exports.getProjectRequiredParts(projectId);
+  if (requiredParts === null) {
+    throw new AppError('Project not found', 404);
+  }
+
+  const purchaseItems = requiredParts.filter((part) => part.needs_purchase);
+  if (purchaseItems.length === 0) {
+    return {
+      required_parts: requiredParts,
+      purchase_items: [],
+      requested_at: new Date(),
+      message: 'No procurement required for this project.',
+    };
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, details)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [
+        userId,
+        'UPDATE',
+        'project',
+        projectId,
+        JSON.stringify({
+          procurement_requested: true,
+          purchase_count: purchaseItems.length,
+          requested_at: new Date().toISOString(),
+        }),
+      ]
+    );
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+
+  return {
+    required_parts: requiredParts,
+    purchase_items: purchaseItems,
+    requested_at: new Date(),
+  };
+};
+
 exports.getProjectHierarchy = async (projectId) => {
   await ensureProjectArchiveColumns();
   const client = await pool.connect();
@@ -895,6 +1075,10 @@ exports.getProjectHierarchy = async (projectId) => {
 
     project.customization_ids = customizationIds;
     project.parts = [...configuredParts, ...linkedParts];
+    project.required_parts = customizationResult.rows.flatMap((customization) => buildRequiredPartsPayload(
+      customization,
+      linkedParts.filter((part) => part.customization_id === customization.customization_id)
+    ));
 
     // Fetch milestones
     const mResult = await client.query('SELECT * FROM project_milestones WHERE project_id = $1 ORDER BY order_index ASC, created_at ASC', [projectId]);

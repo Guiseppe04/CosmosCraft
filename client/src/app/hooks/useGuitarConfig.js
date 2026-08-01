@@ -84,16 +84,16 @@ export default function useGuitarConfig() {
   const [dynamicBackplateList, setDynamicBackplateList] = useState([])
   const [dynamicOutputJackList, setDynamicOutputJackList] = useState([])
 
-  const fetchBuilderParts = async () => {
+  const fetchBuilderParts = useCallback(async (guitarType = 'electric') => {
     setLoadingPrices(true)
     try {
       const [partsResponse, modelImagesResponse] = await Promise.all([
         axios.get(`${API_URL}/api/builder-parts`, {
-          params: { is_active: true, guitar_type: 'electric', pageSize: 500, _t: Date.now() },
+          params: { is_active: true, guitar_type: guitarType, pageSize: 500, _t: Date.now() },
           headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache', 'Expires': '0' }
         }),
         axios.get(`${API_URL}/api/builder-parts/model-images`, {
-          params: { guitar_type: 'electric', _t: Date.now() },
+          params: { guitar_type: guitarType, _t: Date.now() },
           headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache', 'Expires': '0' }
         }),
       ])
@@ -106,14 +106,14 @@ export default function useGuitarConfig() {
     } finally {
       setLoadingPrices(false)
     }
-  }
-
-  useEffect(() => {
-    fetchBuilderParts()
   }, [])
 
   useEffect(() => {
-    const handleFocus = () => fetchBuilderParts()
+    fetchBuilderParts(config.guitarType || 'electric')
+  }, [config.guitarType, fetchBuilderParts])
+
+  useEffect(() => {
+    const handleFocus = () => fetchBuilderParts(config.guitarType || 'electric')
     window.addEventListener('focus', handleFocus)
     return () => window.removeEventListener('focus', handleFocus)
   }, [])
@@ -121,7 +121,7 @@ export default function useGuitarConfig() {
   useEffect(() => {
     const handleVisibility = () => {
       if (!document.hidden) {
-        fetchBuilderParts()
+        fetchBuilderParts(config.guitarType || 'electric')
       }
     }
     document.addEventListener('visibilitychange', handleVisibility)
@@ -310,6 +310,42 @@ export default function useGuitarConfig() {
     )
   }
 
+  const mergeOptionsFromBuilderParts = useCallback((baseOptions, { partCategory, typeMappings = [] } = {}) => {
+    const merged = { ...baseOptions }
+    const normalizedType = String(config.guitarType || 'electric').trim().toLowerCase()
+
+    builderParts.forEach((part) => {
+      const partType = typeof part.guitar_type === 'string' ? part.guitar_type.trim().toLowerCase() : ''
+      const matchesType = !partType || partType === normalizedType
+      if (!matchesType) return
+
+      const normalizedCategory = typeof part.part_category === 'string' ? part.part_category.trim().toLowerCase() : ''
+      const normalizedTypeMapping = typeof part.type_mapping === 'string' ? part.type_mapping.trim().toLowerCase() : ''
+      const metadata = part?.metadata && typeof part.metadata === 'object' ? part.metadata : {}
+      const optionKey = typeof metadata.option_key === 'string' ? metadata.option_key.trim() : ''
+      const variant = typeof metadata.variant === 'string' ? metadata.variant.trim() : ''
+
+      if (!optionKey) return
+      if (partCategory && normalizedCategory !== String(partCategory).trim().toLowerCase()) return
+      if (typeMappings.length > 0 && !typeMappings.includes(normalizedTypeMapping)) return
+
+      const normalizedOptionKey = String(optionKey).trim()
+      const existingOption = merged[normalizedOptionKey]
+      const nextOption = {
+        ...(existingOption || {}),
+        label: existingOption?.label || part?.name || normalizedOptionKey,
+        note: existingOption?.note || part?.description || '',
+        price: Number(part?.price) || existingOption?.price || 0,
+      }
+
+      if (part?.image_url) nextOption.src = part.image_url
+      if (variant) nextOption.variant = variant
+      merged[normalizedOptionKey] = nextOption
+    })
+
+    return merged
+  }, [builderParts, config.guitarType])
+
   const dynamicBasePrice = useMemo(() => {
     const candidates = [
       priceOverrides.base?.price,
@@ -324,64 +360,64 @@ export default function useGuitarConfig() {
 
   // ---- Existing merged options (unchanged) ----
   const mergedBodyOptions = useMemo(() => {
-    const merged = { ...BODY_OPTIONS }
+    const merged = mergeOptionsFromBuilderParts(BODY_OPTIONS, { partCategory: 'body', typeMappings: ['body'] })
     Object.keys(merged).forEach(key => {
       if (priceOverrides[key] !== undefined) {
         merged[key] = { ...merged[key], price: priceOverrides[key].price }
       }
     })
     return merged
-  }, [priceOverrides])
+  }, [mergeOptionsFromBuilderParts, priceOverrides])
 
   const mergedBodyWoodOptions = useMemo(() => {
-    const merged = { ...BODY_WOOD_OPTIONS }
+    const merged = mergeOptionsFromBuilderParts(BODY_WOOD_OPTIONS, { partCategory: 'wood_type', typeMappings: ['bodywood'] })
     Object.keys(merged).forEach(key => {
       if (priceOverrides[key] !== undefined) {
         merged[key] = { ...merged[key], price: priceOverrides[key].price }
       }
     })
     return merged
-  }, [priceOverrides])
+  }, [mergeOptionsFromBuilderParts, priceOverrides])
 
   const mergedBodyFinishOptions = useMemo(() => {
-    const merged = { ...BODY_FINISH_OPTIONS }
+    const merged = mergeOptionsFromBuilderParts(BODY_FINISH_OPTIONS, { partCategory: 'finish', typeMappings: ['bodyfinish'] })
     Object.keys(merged).forEach(key => {
       if (priceOverrides[key] !== undefined) {
         merged[key] = { ...merged[key], price: priceOverrides[key].price }
       }
     })
     return merged
-  }, [priceOverrides])
+  }, [mergeOptionsFromBuilderParts, priceOverrides])
 
   const mergedNeckOptions = useMemo(() => {
-    const merged = { ...NECK_OPTIONS }
+    const merged = mergeOptionsFromBuilderParts(NECK_OPTIONS, { partCategory: 'neck', typeMappings: ['neck'] })
     Object.keys(merged).forEach(key => {
       if (priceOverrides[key] !== undefined) {
         merged[key] = { ...merged[key], price: priceOverrides[key].price }
       }
     })
     return merged
-  }, [priceOverrides])
+  }, [mergeOptionsFromBuilderParts, priceOverrides])
 
   const mergedFretboardOptions = useMemo(() => {
-    const merged = { ...FRETBOARD_OPTIONS }
+    const merged = mergeOptionsFromBuilderParts(FRETBOARD_OPTIONS, { partCategory: 'fretboard', typeMappings: ['fretboard'] })
     Object.keys(merged).forEach(key => {
       if (priceOverrides[key] !== undefined) {
         merged[key] = { ...merged[key], price: priceOverrides[key].price }
       }
     })
     return merged
-  }, [priceOverrides])
+  }, [mergeOptionsFromBuilderParts, priceOverrides])
 
   const mergedHeadstockOptions = useMemo(() => {
-    const merged = { ...HEADSTOCK_OPTIONS }
+    const merged = mergeOptionsFromBuilderParts(HEADSTOCK_OPTIONS, { partCategory: 'misc', typeMappings: ['headstock'] })
     Object.keys(merged).forEach(key => {
       if (priceOverrides[key] !== undefined) {
         merged[key] = { ...merged[key], price: priceOverrides[key].price }
       }
     })
     return merged
-  }, [priceOverrides])
+  }, [mergeOptionsFromBuilderParts, priceOverrides])
 
   const mergedHeadstockWoodOptions = useMemo(() => {
     const merged = { ...HEADSTOCK_WOOD_OPTIONS }
@@ -460,7 +496,7 @@ export default function useGuitarConfig() {
   }, [dynamicInlayList, mergedInlayOptions, priceOverrides])
 
   const mergedBridgeOptions = useMemo(() => {
-    const merged = { ...BRIDGE_OPTIONS }
+    const merged = mergeOptionsFromBuilderParts(BRIDGE_OPTIONS, { partCategory: 'bridge', typeMappings: ['bridge'] })
     const bridgeCatPrice = priceOverrides['cat:bridge']?.price
     Object.keys(merged).forEach(key => {
       const specific = getOptionOverride('bridge', key)
@@ -470,10 +506,10 @@ export default function useGuitarConfig() {
       }
     })
     return merged
-  }, [priceOverrides])
+  }, [mergeOptionsFromBuilderParts, priceOverrides])
 
   const mergedHardwareOptions = useMemo(() => {
-    const merged = { ...HARDWARE_OPTIONS }
+    const merged = mergeOptionsFromBuilderParts(HARDWARE_OPTIONS, { partCategory: 'hardware', typeMappings: ['hardware'] })
     const hardwareCatPrice = priceOverrides['cat:hardware']?.price
     Object.keys(merged).forEach(key => {
       const specific = getOptionOverride('hardware', key)
@@ -483,10 +519,10 @@ export default function useGuitarConfig() {
       }
     })
     return merged
-  }, [priceOverrides])
+  }, [mergeOptionsFromBuilderParts, priceOverrides])
 
   const mergedPickupOptions = useMemo(() => {
-    const merged = { ...PICKUP_OPTIONS }
+    const merged = mergeOptionsFromBuilderParts(PICKUP_OPTIONS, { partCategory: 'pickups', typeMappings: ['pickups'] })
     const pickupsCatPrice = priceOverrides['cat:pickups']?.price
     Object.keys(merged).forEach(key => {
       const specific = getOptionOverride('pickups', key)
@@ -496,7 +532,7 @@ export default function useGuitarConfig() {
       }
     })
     return merged
-  }, [priceOverrides])
+  }, [mergeOptionsFromBuilderParts, priceOverrides])
 
   // ---- NEW merged options for all new customization fields ----
   const mergedDexterityOptions = useMemo(() => {

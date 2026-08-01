@@ -78,6 +78,7 @@ const formatDisplayDate = (value) => {
 export default function ProjectTaskTracker({ projectId, projectName, isAdmin = false, parts = [], projectData = null, showTracker = true }) {
   const { user } = useAuth();
   const [hierarchy, setHierarchy] = useState(null);
+  const [requiredParts, setRequiredParts] = useState([]);
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -100,6 +101,9 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
   const [fulfillmentNotes, setFulfillmentNotes] = useState('');
   const [fulfillmentSaving, setFulfillmentSaving] = useState(false);
   const [fulfillmentFeedback, setFulfillmentFeedback] = useState(null);
+  const [procurementSaving, setProcurementSaving] = useState(false);
+  const [procurementFeedback, setProcurementFeedback] = useState(null);
+  const [procurementRequestedAt, setProcurementRequestedAt] = useState(null);
   const [pendingUncheckSubtask, setPendingUncheckSubtask] = useState(null);
 
   useEffect(() => {
@@ -111,10 +115,14 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
   const loadData = async () => {
     try {
       setLoading(true);
-      const res = await adminApi.getProjectHierarchy(projectId);
-      setHierarchy(res.data);
+      const [hierarchyRes, requiredPartsRes, logsRes] = await Promise.all([
+        adminApi.getProjectHierarchy(projectId),
+        adminApi.getProjectRequiredParts(projectId),
+        adminApi.getProjectActivity(projectId),
+      ]);
+      setHierarchy(hierarchyRes.data);
+      setRequiredParts(Array.isArray(requiredPartsRes.data) ? requiredPartsRes.data : []);
       
-      const logsRes = await adminApi.getProjectActivity(projectId);
       setLogs(logsRes.data || []);
       
       // Auto-expand all milestones
@@ -222,6 +230,29 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
   }, [hierarchy?.parts, parts]);
   const taskSummary = hierarchy?.task_summary || { total: 0, completed: 0, pending: 0 };
   const pickupTimeSlots = useMemo(() => buildPickupTimeSlots(pickupDate), [pickupDate]);
+  const requiredPartSummary = useMemo(() => {
+    const configuredCount = requiredParts.filter((part) => part.source === 'configuration').length;
+    const additionalCount = requiredParts.filter((part) => part.source === 'additional_parts').length;
+    const inStock = requiredParts.filter((part) => part.stock_status === 'in_stock').length;
+    const lowStock = requiredParts.filter((part) => part.stock_status === 'low_stock').length;
+    const outOfStock = requiredParts.filter((part) => part.stock_status === 'out_of_stock').length;
+    const unknownStock = requiredParts.filter((part) => part.stock_status === 'unknown').length;
+    const needsPurchase = requiredParts.filter((part) => part.needs_purchase).length;
+    return { configuredCount, additionalCount, inStock, lowStock, outOfStock, unknownStock, needsPurchase };
+  }, [requiredParts]);
+
+  const getStockBadgeStyle = (stockStatus) => {
+    switch (stockStatus) {
+      case 'in_stock':
+        return 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30';
+      case 'low_stock':
+        return 'bg-amber-500/10 text-amber-300 border-amber-500/30';
+      case 'out_of_stock':
+        return 'bg-red-500/10 text-red-300 border-red-500/30';
+      default:
+        return 'bg-slate-500/10 text-slate-300 border-slate-500/30';
+    }
+  };
   const trackerTitleRaw = hierarchy?.name || hierarchy?.title || projectName || 'Project Tracker';
   const parsedTrackerHeader = useMemo(() => {
     const text = String(trackerTitleRaw || '');
@@ -466,6 +497,36 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
     }
   };
 
+  const handleRequestProcurement = async () => {
+    try {
+      setProcurementSaving(true);
+      setProcurementFeedback(null);
+
+      const result = await adminApi.requestProjectProcurement(projectId);
+      await loadData();
+      setProcurementRequestedAt(result.requested_at || new Date().toISOString());
+
+      if (result.purchase_items && result.purchase_items.length > 0) {
+        setProcurementFeedback({
+          type: 'success',
+          message: `Procurement request created for ${result.purchase_items.length} items.`,
+        });
+      } else {
+        setProcurementFeedback({
+          type: 'info',
+          message: 'No procurement needed; all required parts are in stock or unknown.',
+        });
+      }
+    } catch (err) {
+      setProcurementFeedback({
+        type: 'error',
+        message: err.message || 'Failed to request procurement.',
+      });
+    } finally {
+      setProcurementSaving(false);
+    }
+  };
+
 
   if (loading) return <div className="text-center py-10 text-[var(--text-muted)] animate-pulse">Loading tracker data...</div>;
   if (error) return <div className="text-red-400 p-4 border border-red-500/30 bg-red-500/10 rounded-xl">{error}</div>;
@@ -629,6 +690,101 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
             </div>
           )}
         </div>
+
+        {requiredParts.length > 0 && (
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)]/60 p-5">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className="text-xs uppercase tracking-[0.2em] text-[var(--text-muted)]">Procurement snapshot</p>
+                <h3 className="mt-1 text-lg font-bold text-white">Required parts for build execution</h3>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <span className="rounded-full border border-[var(--gold-primary)]/30 bg-[var(--gold-primary)]/10 px-3 py-1 text-xs font-semibold text-[var(--gold-primary)]">
+                  {requiredParts.length} required items
+                </span>
+                <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-300">
+                  {requiredPartSummary.configuredCount} configured
+                </span>
+                <span className="rounded-full border border-sky-500/30 bg-sky-500/10 px-3 py-1 text-xs font-semibold text-sky-300">
+                  {requiredPartSummary.additionalCount} additional
+                </span>
+              </div>
+            </div>
+            <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-300">
+                {requiredPartSummary.inStock} in stock
+              </span>
+              <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-semibold text-amber-300">
+                {requiredPartSummary.lowStock} low stock
+              </span>
+              <span className="rounded-full border border-red-500/30 bg-red-500/10 px-3 py-1 text-xs font-semibold text-red-300">
+                {requiredPartSummary.outOfStock} out of stock
+              </span>
+              <span className="rounded-full border border-slate-500/30 bg-slate-500/10 px-3 py-1 text-xs font-semibold text-slate-300">
+                {requiredPartSummary.unknownStock} unknown
+              </span>
+              <span className="rounded-full border border-sky-500/30 bg-sky-500/10 px-3 py-1 text-xs font-semibold text-sky-300">
+                {requiredPartSummary.needsPurchase} needs purchase
+              </span>
+            </div>
+            <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-3">
+                <div>
+                  <p className="text-sm font-semibold text-white">Required part details</p>
+                  <p className="text-xs text-[var(--text-muted)]">Showing up to 8 items for quick review.</p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {procurementRequestedAt && (
+                    <span className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-3 py-1 text-xs font-semibold text-cyan-300">
+                      Procurement requested
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleRequestProcurement}
+                    disabled={procurementSaving}
+                    className="rounded-full bg-[var(--gold-primary)] px-3 py-2 text-xs font-semibold text-black transition hover:bg-[var(--gold-secondary)] disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {procurementSaving ? 'Requesting...' : 'Request procurement'}
+                  </button>
+                </div>
+              </div>
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-xs text-[var(--text-muted)]">{requiredParts.length} total</span>
+                {procurementRequestedAt && (
+                  <span className="text-xs text-[var(--text-muted)]">
+                    Requested: {new Date(procurementRequestedAt).toLocaleString()}
+                  </span>
+                )}
+              </div>
+              <div className="grid gap-3">
+                {requiredParts.slice(0, 8).map((part) => (
+                  <div key={`${part.category}-${part.name}-${part.source}-${part.product_id || 'anon'}`} className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-white truncate">{part.name}</p>
+                        <p className="mt-1 text-xs text-[var(--text-muted)] truncate">
+                          {part.category || 'Other'} • {part.source === 'configuration' ? 'Configured' : 'Additional part'}
+                        </p>
+                      </div>
+                      <span className={`rounded-full px-2 py-1 text-[10px] font-semibold ${getStockBadgeStyle(part.stock_status)}`}>
+                        {part.stock_status?.replace('_', ' ') || 'unknown'}
+                      </span>
+                    </div>
+                    <div className="mt-3 grid gap-2 sm:grid-cols-3 text-[0.75rem] text-[var(--text-muted)]">
+                      <span>Qty: {part.quantity}</span>
+                      <span>Stock: {part.stock === null || part.stock === undefined ? 'unknown' : part.stock}</span>
+                      <span>Price: {part.price ? formatCurrency(part.price) : '—'}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {requiredParts.length > 8 && (
+                <p className="mt-3 text-xs text-[var(--text-muted)]">Showing 8 of {requiredParts.length} required parts. View more in the full project details.</p>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* GUITAR PARTS PANEL */}
         {resolvedParts.length > 0 && (
