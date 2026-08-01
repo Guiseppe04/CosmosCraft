@@ -811,7 +811,7 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
               </div>
               <div className="grid gap-3">
                 {requiredParts.slice(0, 8).map((part) => (
-                  <div key={`${part.category}-${part.name}-${part.source}-${part.product_id || 'anon'}`} className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] p-4">
+                  <div key={part.part_key || `${part.category}-${part.name}-${part.source}-${part.product_id || 'anon'}`} className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] p-4">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="text-sm font-semibold text-white truncate">{part.name}</p>

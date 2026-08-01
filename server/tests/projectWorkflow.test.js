@@ -57,6 +57,23 @@ assert.strictEqual(additionalPart.pending_quantity, 2);
 assert.strictEqual(additionalPart.is_fully_received, false);
 assert.ok(additionalPart.part_key.includes('additional_parts'));
 
+// Configuration parts sharing a category (e.g. finish) must still get unique part_keys
+// when their values match (e.g. color "None" and finish_type "None").
+const finishCollisionCustomization = {
+  customization_id: '44444444-4444-4444-4444-444444444444',
+  guitar_type: 'electric',
+  color: 'None',
+  finish_type: 'None',
+};
+const finishParts = buildRequiredPartsPayload(finishCollisionCustomization, []);
+const finishKeys = finishParts.map((part) => part.part_key);
+assert.ok(finishParts.length >= 2, 'expected at least two finish-related parts');
+assert.strictEqual(
+  new Set(finishKeys).size,
+  finishKeys.length,
+  'expected every required part to have a unique part_key'
+);
+
 const receiptState = getProjectPartReceiptState([
   {
     details: {
