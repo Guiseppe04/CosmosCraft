@@ -1162,18 +1162,15 @@ CREATE INDEX idx_otp_attempts_created_at ON otp_attempts(created_at DESC);
 CREATE TABLE password_reset_tokens (
     token_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL,
-    token VARCHAR(255) NOT NULL,
-    new_password_hash VARCHAR(255) NOT NULL,
+    token_hash TEXT NOT NULL UNIQUE,
     expires_at TIMESTAMPTZ NOT NULL,
-    is_used BOOLEAN NOT NULL DEFAULT FALSE,
+    used_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 
-    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
-    UNIQUE(user_id, token)
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
 );
 
 CREATE INDEX idx_password_reset_tokens_user_id ON password_reset_tokens(user_id);
-CREATE INDEX idx_password_reset_tokens_token ON password_reset_tokens(token);
 CREATE INDEX idx_password_reset_tokens_expires_at ON password_reset_tokens(expires_at);
 
 

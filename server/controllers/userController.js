@@ -307,24 +307,3 @@ exports.requestPasswordChange = asyncHandler(async (req, res, next) => {
   });
 });
 
-/**
- * Verify Password Reset Token
- */
-exports.verifyPasswordResetToken = asyncHandler(async (req, res, next) => {
-  const { token, userId } = req.body;
-
-  if (!token || !userId) {
-    throw new AppError('Token and user ID are required', 400);
-  }
-
-  try {
-    await userService.verifyPasswordResetToken(userId, token);
-  } catch (error) {
-    throw new AppError('Invalid or expired token', 400);
-  }
-
-  res.status(200).json({
-    status: 'success',
-    message: 'Password updated successfully',
-  });
-});

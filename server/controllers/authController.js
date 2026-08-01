@@ -1,10 +1,19 @@
+const crypto = require('crypto');
 const { asyncHandler, AppError } = require('../middleware/errorHandler');
 const { generateTokens, verifyRefreshToken, revokeRefreshToken } = require('../utils/generateTokens');
 const { generateOTPWithExpiry, verifyOTP } = require('../utils/otp');
 const userService = require('../services/userService');
 const rbacService = require('../services/rbacService');
 const mailService = require('../services/mailService');
-const { validate, emailSignupSchema, emailLoginSchema, oauthSignupSchema } = require('../utils/validation');
+const { pool } = require('../config/database');
+const {
+  validate,
+  emailSignupSchema,
+  emailLoginSchema,
+  oauthSignupSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
+} = require('../utils/validation');
 
 const getFrontendUrl = () => {
   const prodUrl = process.env.FRONTEND_URL_PROD;
@@ -331,4 +340,127 @@ exports.resendOTP = asyncHandler(async (req, res, next) => {
   }
 
   res.status(200).json({ status: 'success', message: 'OTP sent to your email' });
+});
+
+// Forgot Password (POST /auth/forgot-password)
+exports.forgotPassword = asyncHandler(async (req, res, next) => {
+  const { error, value } = forgotPasswordSchema.validate(req.body, { abortEarly: false });
+  if (error) {
+    const errors = error.details.map((detail) => ({ field: detail.path.join('.'), message: detail.message }));
+    throw new AppError('Validation failed', 400, errors);
+  }
+
+  const GENERIC_RESPONSE = 'If an account exists for this email, a reset link has been sent.';
+  // Artificial delay applied on paths that don't perform a real email send so the
+  // response timing stays consistent and doesn't leak whether the email exists.
+  const MIMIC_EMAIL_SEND_DELAY_MS = 500;
+
+  try {
+    const user = await userService.getUserByEmail(value.email.toLowerCase());
+
+    if (!user) {
+      await new Promise((resolve) => setTimeout(resolve, MIMIC_EMAIL_SEND_DELAY_MS));
+      return res.status(200).json({ status: 'success', message: GENERIC_RESPONSE });
+    }
+
+    // OAuth-only accounts have no password and cannot use this flow. mailService only
+    // exposes password-reset / password-change templates, so we intentionally skip
+    // sending rather than inventing a new template. (Tradeoff: these users receive no
+    // email; a dedicated "sign in with Google/Facebook" template would avoid confusion.)
+    if (!user.password_hash) {
+      await new Promise((resolve) => setTimeout(resolve, MIMIC_EMAIL_SEND_DELAY_MS));
+      return res.status(200).json({ status: 'success', message: GENERIC_RESPONSE });
+    }
+
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+    // Invalidate any previous unused tokens so only one active token exists per user.
+    await pool.query(
+      'DELETE FROM password_reset_tokens WHERE user_id = $1 AND used_at IS NULL',
+      [user.user_id]
+    );
+
+    await pool.query(
+      `INSERT INTO password_reset_tokens (user_id, token_hash, expires_at)
+       VALUES ($1, $2, $3)`,
+      [user.user_id, tokenHash, expiresAt]
+    );
+
+    const resetLink = `${getFrontendUrl()}/reset-password?token=${rawToken}`;
+    await mailService.sendPasswordResetEmail(user.email, resetLink);
+
+    return res.status(200).json({ status: 'success', message: GENERIC_RESPONSE });
+  } catch (err) {
+    // Log server-side for debugging, but never leak details that could aid enumeration.
+    console.error('[forgotPassword] Error:', err);
+    return res.status(200).json({ status: 'success', message: GENERIC_RESPONSE });
+  }
+});
+
+// Reset Password (POST /auth/reset-password)
+exports.resetPassword = asyncHandler(async (req, res, next) => {
+  const { error, value } = resetPasswordSchema.validate(req.body, { abortEarly: false });
+  if (error) {
+    const errors = error.details.map((detail) => ({ field: detail.path.join('.'), message: detail.message }));
+    throw new AppError('Validation failed', 400, errors);
+  }
+
+  const INVALID_OR_EXPIRED = 'This reset link is invalid or has expired. Please request a new one.';
+
+  const tokenHash = crypto.createHash('sha256').update(value.token).digest('hex');
+
+  const tokenRes = await pool.query(
+    'SELECT * FROM password_reset_tokens WHERE token_hash = $1',
+    [tokenHash]
+  );
+  const tokenRecord = tokenRes.rows[0];
+
+  if (!tokenRecord || tokenRecord.used_at || new Date(tokenRecord.expires_at) < new Date()) {
+    throw new AppError(INVALID_OR_EXPIRED, 400);
+  }
+
+  const userRes = await pool.query(
+    'SELECT email FROM users WHERE user_id = $1',
+    [tokenRecord.user_id]
+  );
+  if (userRes.rows.length === 0) {
+    throw new AppError(INVALID_OR_EXPIRED, 400);
+  }
+  const userEmail = userRes.rows[0].email;
+
+  // Reuse the same bcrypt hashing / update used by email-signup and change-password
+  // (userService.setPassword → bcrypt.hash(password, 12)).
+  await userService.setPassword(tokenRecord.user_id, value.newPassword);
+
+  // Mark this token consumed and invalidate any other outstanding tokens for the user.
+  await pool.query(
+    'UPDATE password_reset_tokens SET used_at = now() WHERE token_id = $1',
+    [tokenRecord.token_id]
+  );
+  await pool.query(
+    'DELETE FROM password_reset_tokens WHERE user_id = $1 AND used_at IS NULL',
+    [tokenRecord.user_id]
+  );
+
+  // Revoke all existing refresh sessions so old devices get logged out after a reset.
+  await pool.query(
+    'UPDATE refresh_tokens SET is_revoked = true WHERE user_id = $1 AND is_revoked = false',
+    [tokenRecord.user_id]
+  );
+
+  // Notify the user in case they didn't initiate the change.
+  try {
+    const frontendUrl = getFrontendUrl();
+    await mailService.sendPasswordChangeConfirmationEmail(userEmail, `${frontendUrl}/login`);
+  } catch (mailError) {
+    console.error('Failed to send password change confirmation email:', mailError);
+  }
+
+  return res.status(200).json({
+    status: 'success',
+    message: 'Password updated successfully. Please sign in with your new password.',
+    data: { redirectTo: '/login' },
+  });
 });

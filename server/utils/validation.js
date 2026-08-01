@@ -114,6 +114,42 @@ exports.oauthSignupSchema = Joi.object({
   lastName: nameFields.lastName,
 }).unknown(true);
 
+// Reusable password rule — single source of truth shared by email signup
+// and password reset so the rules never drift apart.
+const passwordField = Joi.string()
+  .min(8)
+  .max(64)
+  .pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*[^A-Za-z0-9]).{8,64}$/)
+  .required()
+  .messages({
+    'string.min': 'Password must be at least 8 characters',
+    'string.max': 'Password must not exceed 64 characters',
+    'string.pattern.base': 'Password must include uppercase, lowercase, and special character',
+    'any.required': 'Password is required',
+  });
+
+// Forgot Password
+exports.forgotPasswordSchema = Joi.object({
+  email: Joi.string()
+    .email()
+    .required()
+    .lowercase()
+    .messages({
+      'string.email': 'Please provide a valid email address',
+      'any.required': 'Email is required',
+    }),
+});
+
+// Reset Password (POST /auth/reset-password)
+exports.resetPasswordSchema = Joi.object({
+  token: Joi.string()
+    .required()
+    .messages({
+      'any.required': 'Reset token is required',
+    }),
+  newPassword: passwordField,
+});
+
 // Email/Password Signup
 exports.emailSignupSchema = Joi.object({
   firstName: nameFields.firstName,

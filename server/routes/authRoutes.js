@@ -1,5 +1,6 @@
 const express = require('express');
 const passport = require('passport');
+const rateLimit = require('express-rate-limit');
 const authController = require('../controllers/authController.js');
 const { authenticateToken, optionalAuthenticateToken } = require('../middleware/auth.js');
 const { asyncHandler } = require('../middleware/errorHandler');
@@ -7,6 +8,19 @@ const rbacService = require('../services/rbacService');
 const { oauthSingleUseGuard } = require('../middleware/oauthGuard');
 
 const router = express.Router();
+
+// Dedicated rate limiter scoped to the forgot-password route only.
+// Prevents abuse/spam of the email-sending endpoint (max 5 requests per IP per hour).
+const forgotPasswordLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    status: 429,
+    error: 'Too many password reset requests. Please try again later.',
+  },
+});
 
 // Helper to generate tokens (import from utils)
 const { generateTokens } = require('../utils/generateTokens');
@@ -222,6 +236,10 @@ router.post('/email-login', authController.emailLogin);
 // OTP Verification Routes
 router.post('/verify-otp', authController.verifyEmailOTP);
 router.post('/resend-otp', authController.resendOTP);
+
+// Password Reset Routes
+router.post('/forgot-password', forgotPasswordLimiter, authController.forgotPassword);
+router.post('/reset-password', authController.resetPassword);
 
 // Token & Auth Routes
 router.post('/refresh', authController.refreshAccessToken);
