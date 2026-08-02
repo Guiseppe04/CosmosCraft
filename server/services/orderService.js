@@ -185,6 +185,7 @@ const getAddressSignature = (address = {}) => ([
   address.line1 ?? address.streetLine1 ?? address.street,
   address.line2 ?? address.streetLine2 ?? address.street2,
   address.city,
+  address.barangay ?? '',
   address.province ?? address.stateProvince,
   address.postal_code ?? address.postalZipCode ?? address.postalCode,
   normalizeCountryCode(address.country, ''),
@@ -506,6 +507,7 @@ exports.createOrder = async (orderData) => {
       throw createValidationError('Address must include a valid 2-letter country code')
     }
 
+    const providedShippingAddressId = orderData.shippingAddressId || billingAddress?.shippingAddressId || null
     let shippingAddressId = null
 
     // Calculate totals
@@ -543,11 +545,23 @@ exports.createOrder = async (orderData) => {
     // Full payment: starts as 'processing' if payment method is cash, otherwise 'pending'
     const initialOrderStatus = isInstallment ? 'pending' : 'pending';
 
-    // Insert billing address into addresses table (check for existing first)
-    if (billingAddress.street && billingAddress.city) {
+    if (providedShippingAddressId) {
+      const allowedAddress = await client.query(
+        `SELECT address_id FROM addresses WHERE address_id = $1 AND user_id = $2`,
+        [providedShippingAddressId, userId]
+      )
+      if (allowedAddress.rows.length === 0) {
+        throw createValidationError('Selected shipping address is invalid or does not belong to the current user', 400)
+      }
+      shippingAddressId = providedShippingAddressId
+    } else if (billingAddress?.street && billingAddress?.city) {
+      const normalizedBillingProvince = billingAddress.province || billingAddress.stateProvince || null
+      const normalizedBillingPostalCode = billingAddress.postalCode || billingAddress.postalZipCode || null
+      const normalizedBillingStreet2 = billingAddress.street2 || billingAddress.streetLine2 || null
+
       // Reuse an existing saved address when the full normalized address matches.
       const existingAddr = await client.query(
-        `SELECT address_id, line1, line2, city, province, postal_code, country
+        `SELECT address_id, line1, line2, city, barangay, province, postal_code, country
          FROM addresses
          WHERE user_id = $1`,
         [userId]
@@ -559,18 +573,20 @@ exports.createOrder = async (orderData) => {
       if (matchedAddress) {
         shippingAddressId = matchedAddress.address_id
       } else {
+        const normalizedBillingBarangay = billingAddress.barangay || null
         const addressRes = await client.query(
-          `INSERT INTO addresses (user_id, label, line1, line2, city, province, postal_code, country)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          `INSERT INTO addresses (user_id, label, line1, line2, city, barangay, province, postal_code, country)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
            RETURNING address_id`,
           [
             userId,
             'Shipping Address',
             billingAddress.street,
-            billingAddress.street2 || null,
+            normalizedBillingStreet2,
             billingAddress.city,
-            billingAddress.province || null,
-            billingAddress.postalCode || null,
+            normalizedBillingBarangay,
+            normalizedBillingProvince,
+            normalizedBillingPostalCode,
             normalizedCountryCode
           ]
         )

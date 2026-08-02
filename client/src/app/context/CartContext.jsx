@@ -43,6 +43,7 @@ export function CartProvider({ children }) {
   const [cart, setCart] = useState([])
   const [isOpen, setIsOpen] = useState(false)
   const [itemAddedStates, setItemAddedStates] = useState({})
+  const [selectedItemIds, setSelectedItemIds] = useState(null)
 
   const showToastMessage = useCallback((message) => {
     setGlobalToast(message)
@@ -210,9 +211,63 @@ export function CartProvider({ children }) {
     return itemAddedStates[productId] || false
   }, [itemAddedStates])
 
+  useEffect(() => {
+    if (!cart.length) {
+      setSelectedItemIds([])
+      return
+    }
+
+    setSelectedItemIds(prev => {
+      if (prev === null) return null
+      const cartIds = new Set(cart.map(item => String(item.id)))
+      return prev.filter(id => cartIds.has(String(id)))
+    })
+  }, [cart])
+
+  const toggleItemSelection = useCallback((productId) => {
+    const normalizedProductId = String(productId)
+    setSelectedItemIds(prev => {
+      const currentSelection = prev === null
+        ? cart.map(item => String(item.id))
+        : prev.map(String)
+
+      const hasId = currentSelection.includes(normalizedProductId)
+      const nextSelection = currentSelection.filter(id => id !== normalizedProductId)
+
+      if (!hasId) {
+        nextSelection.push(normalizedProductId)
+      }
+
+      const cartIds = cart.map(item => String(item.id))
+      const allSelected = cartIds.length > 0 && cartIds.every(id => nextSelection.includes(id))
+      return allSelected ? null : nextSelection
+    })
+  }, [cart])
+
+  const toggleSelectAllItems = useCallback(() => {
+    const cartIds = cart.map(item => String(item.id))
+    const allSelected = selectedItemIds === null || cartIds.length > 0 && cartIds.every(id => (selectedItemIds || []).includes(id))
+
+    setSelectedItemIds(allSelected ? [] : null)
+  }, [cart, selectedItemIds])
+
+  const clearSelectedItems = useCallback(() => {
+    setSelectedItemIds([])
+  }, [])
+
+  const getSelectedItemIds = useCallback(() => {
+    const cartIds = cart.map(item => String(item.id))
+    if (selectedItemIds === null) return cartIds
+    return selectedItemIds.map(String).filter(id => cartIds.includes(id))
+  }, [cart, selectedItemIds])
+
   const removeFromCart = useCallback((productId) => {
     const item = cart.find(i => i.id === productId)
     setCart(prevCart => prevCart.filter(item => item.id !== productId))
+    setSelectedItemIds(prev => {
+      if (prev === null) return null
+      return prev.filter(id => String(id) !== String(productId))
+    })
     setItemAddedStates(prev => {
       const newState = { ...prev }
       delete newState[productId]
@@ -260,6 +315,7 @@ export function CartProvider({ children }) {
 
   const clearCart = useCallback(() => {
     setCart([])
+    setSelectedItemIds([])
     if (isAuthenticated) {
       api.cart.clearCart().catch(console.error)
     }
@@ -285,6 +341,12 @@ export function CartProvider({ children }) {
     getCartCount,
     isItemAtMaxQuantity,
     getItemAddedState,
+    selectedItemIds,
+    setSelectedItemIds,
+    toggleItemSelection,
+    toggleSelectAllItems,
+    clearSelectedItems,
+    getSelectedItemIds,
   }
 
   return (

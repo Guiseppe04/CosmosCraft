@@ -710,7 +710,9 @@ async function getSalesReport(filters = {}) {
           COUNT(*)::int AS appointments,
           COALESCE(SUM(s.price), 0)::numeric AS revenue
        FROM appointments a
-       JOIN services s ON s.service_id::text = ANY(a.services)
+        JOIN services s ON s.service_id::text IN (
+          SELECT (jsonb_array_elements_text(a.services))::text
+        )
        WHERE a.status = 'completed'
          AND a.payment_method IS NOT NULL
        ${appointmentRange.clause}

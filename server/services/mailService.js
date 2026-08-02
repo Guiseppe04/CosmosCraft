@@ -1,19 +1,19 @@
-const nodemailer = require('nodemailer');
+const brevo = require('@getbrevo/brevo');
 
 /**
- * Email Service - Send emails using Nodemailer
- * Supports both Gmail and custom SMTP configurations
+ * Email Service - Send emails using Brevo Transactional Email API
+ * Uses HTTPS-based API instead of SMTP to avoid connection timeouts on Render
  */
 
-const transporter = nodemailer.createTransport({
-  host: process.env.MAIL_HOST || 'smtp.gmail.com',
-  port: process.env.MAIL_PORT || 587,
-  secure: process.env.MAIL_SECURE === 'true' || false, // true for 465, false for other ports
-  auth: {
-    user: process.env.MAIL_USER,
-    pass: process.env.MAIL_PASS,
-  },
-});
+const MAIL_FROM = process.env.MAIL_FROM || 'noreply@cosmos-craft.com';
+const MAIL_FROM_NAME = process.env.MAIL_FROM_NAME || 'CosmosCraft';
+
+const apiInstance = new brevo.TransactionalEmailsApi();
+apiInstance.setApiKey(brevo.TransactionalEmailsApiApiKeys.apiKey, process.env.BREVO_API_KEY);
+
+if (!process.env.BREVO_API_KEY) {
+  console.warn('Mailer WARNING: BREVO_API_KEY is not set. Email sending will fail. Check Render environment variables.');
+}
 
 /**
  * Send a single email
@@ -22,23 +22,36 @@ const transporter = nodemailer.createTransport({
  * @param {string} options.subject - Email subject
  * @param {string} options.html - Email body (HTML)
  * @param {string} options.text - Email body (Plain text fallback)
- * @returns {Promise<Object>} Transporter response
+ * @returns {Promise<Object>} Brevo API response
  */
 exports.sendMail = async (options) => {
   try {
-    const mailOptions = {
-      from: process.env.MAIL_FROM || process.env.MAIL_USER,
-      to: options.to,
-      subject: options.subject,
-      html: options.html,
-      text: options.text,
-    };
+    const email = new brevo.SendSmtpEmail();
+    email.sender = { name: MAIL_FROM_NAME, email: MAIL_FROM };
+    email.to = [{ email: options.to }];
+    email.subject = options.subject;
+    email.htmlContent = options.html;
+    email.textContent = options.text;
 
-    const result = await transporter.sendMail(mailOptions);
-    console.log('Email sent:', result.messageId);
-    return result;
+    const maxAttempts = Number(process.env.MAIL_SEND_RETRIES) || 3;
+    let attempt = 0;
+    while (attempt < maxAttempts) {
+      try {
+        const result = await apiInstance.sendTransacEmail(email);
+        console.log('Email sent:', result.body.messageId);
+        return result;
+      } catch (err) {
+        attempt += 1;
+        console.error(`Email sending error (attempt ${attempt}):`, err && err.message ? err.message : err);
+        if (attempt >= maxAttempts) {
+          throw err;
+        }
+        // simple backoff
+        await new Promise((r) => setTimeout(r, attempt * 1000));
+      }
+    }
   } catch (error) {
-    console.error('Email sending error:', error);
+    console.error('Email sending error (final):', error);
     throw error;
   }
 };
@@ -657,11 +670,13 @@ exports.sendOrderConfirmation = async (to, order) => {
 };
 
 /**
- * Verify transporter connection on startup
+ * Verify Brevo API connection on startup
  */
 exports.verifyConnection = async () => {
   try {
-    await transporter.verify();
+    const accountApi = new brevo.AccountApi();
+    accountApi.setApiKey(brevo.AccountApiApiKeys.apiKey, process.env.BREVO_API_KEY);
+    await accountApi.getAccount();
     console.log('Email service connected successfully');
     return true;
   } catch (error) {

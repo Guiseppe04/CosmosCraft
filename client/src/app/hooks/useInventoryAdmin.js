@@ -21,7 +21,8 @@ export function useInventoryAdmin({ products, showToast }) {
     salesReportRef.current = salesReport
   }, [salesReport])
 
-  const fetchInventory = useCallback(async () => {
+  const fetchInventory = useCallback(async (options = {}) => {
+    const { silent = false } = options
     try {
       const statsRes = await adminApi.getInventorySummary()
       const nextStats = statsRes.data || {}
@@ -47,7 +48,8 @@ export function useInventoryAdmin({ products, showToast }) {
         setInventory(newData)
       }
     } catch (e) {
-      showToast(e.message, 'error')
+      if (!silent) showToast(e.message, 'error')
+      throw e
     }
   }, [showToast, products])
 
