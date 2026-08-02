@@ -7,8 +7,10 @@ export function useAppointmentsAdmin({ debouncedSearch, showToast }) {
   const [appointmentPagination, setAppointmentPagination] = useState({ page: 1, limit: 20, total: 0, pages: 1 })
   const [appointmentLoading, setAppointmentLoading] = useState(false)
   const [unavailableDates, setUnavailableDates] = useState([])
+  const [availableDates, setAvailableDates] = useState([])
   const appointmentsRef = useRef(appointments)
   const unavailableDatesRef = useRef(unavailableDates)
+  const availableDatesRef = useRef(availableDates)
   const inFlightRequestRef = useRef(null)
 
   useEffect(() => {
@@ -18,6 +20,10 @@ export function useAppointmentsAdmin({ debouncedSearch, showToast }) {
   useEffect(() => {
     unavailableDatesRef.current = unavailableDates
   }, [unavailableDates])
+
+  useEffect(() => {
+    availableDatesRef.current = availableDates
+  }, [availableDates])
 
   const fetchAppointments = useCallback(async () => {
     const requestKey = JSON.stringify({ search: debouncedSearch, limit: appointmentPagination.limit, offset: (appointmentPagination.page - 1) * appointmentPagination.limit })
@@ -66,14 +72,29 @@ export function useAppointmentsAdmin({ debouncedSearch, showToast }) {
     }
   }, [])
 
+  const fetchAvailableDates = useCallback(async (dateFrom, dateTo) => {
+    try {
+      const res = await adminApi.getAvailableDates(dateFrom, dateTo)
+      const newData = res.data?.available_dates || []
+      if (JSON.stringify(availableDatesRef.current) !== JSON.stringify(newData)) {
+        availableDatesRef.current = newData
+        setAvailableDates(newData)
+      }
+    } catch (e) {
+      console.error('Failed to fetch available dates:', e)
+    }
+  }, [])
+
   return {
     appointments,
     appointmentPagination,
     appointmentLoading,
     unavailableDates,
+    availableDates,
     setAppointments,
     setAppointmentPagination,
     fetchAppointments,
     fetchUnavailableDates,
+    fetchAvailableDates,
   }
 }

@@ -81,6 +81,10 @@ export const staffApi = {
   checkAvailability: (serviceId, scheduledAt) =>
     request(`/api/appointments/services/${serviceId}/availability?scheduled_at=${scheduledAt}`),
   getUnavailableDates: () => request('/api/appointments/unavailable-dates'),
+  getAvailableDates: (dateFrom, dateTo) => {
+    const qs = new URLSearchParams({ date_from: dateFrom, date_to: dateTo }).toString()
+    return request(`/api/appointments/available-dates?${qs}`)
+  },
   addUnavailableDate: (data) => request('/api/appointments/unavailable-dates', { method: 'POST', body: data }),
   removeUnavailableDate: (id) => request(`/api/appointments/unavailable-dates/${id}`, { method: 'DELETE' }),
 

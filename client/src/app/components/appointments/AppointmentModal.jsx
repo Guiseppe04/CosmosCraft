@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
+import { API } from '../../utils/apiConfig'
 import {
   X, Calendar, Clock, User, Mail, Phone, FileText, CreditCard,
   CheckCircle, XCircle, AlertCircle, Loader2, ChevronDown,
@@ -10,21 +11,18 @@ import { format, parseISO } from 'date-fns'
 // Status configuration
 const STATUS_CONFIG = {
   pending: { label: 'Pending', color: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' },
-  approved: { label: 'Approved', color: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
   confirmed: { label: 'Confirmed', color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' },
-  in_progress: { label: 'In Progress', color: 'bg-purple-500/20 text-purple-400 border-purple-500/30' },
-  ready_for_pickup: { label: 'Ready for Pickup', color: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30' },
-  completed: { label: 'Completed', color: 'bg-green-500/20 text-green-400 border-green-500/30' },
   cancelled: { label: 'Cancelled', color: 'bg-red-500/20 text-red-400 border-red-500/30' },
+  completed: { label: 'Completed', color: 'bg-green-500/20 text-green-400 border-green-500/30' },
+  no_show: { label: 'No Show', color: 'bg-orange-500/20 text-orange-400 border-orange-500/30' },
 }
 
 const STATUS_OPTIONS = [
-  { value: 'pending', label: 'Pending' },
-  { value: 'confirmed', label: 'Confirmed' },
-  { value: 'in_progress', label: 'In Progress' },
-  { value: 'ready_for_pickup', label: 'Ready for Pickup' },
-  { value: 'completed', label: 'Completed' },
-  { value: 'cancelled', label: 'Cancelled' },
+  { value: 'pending', label: 'Pending', description: 'Awaiting approval or confirmation' },
+  { value: 'confirmed', label: 'Confirmed', description: 'Scheduled and locked in' },
+  { value: 'completed', label: 'Completed', description: 'Finished successfully' },
+  { value: 'cancelled', label: 'Cancelled', description: 'Terminated before occurrence' },
+  { value: 'no_show', label: 'No Show', description: 'Participant did not arrive' },
 ]
 
 // Image modal for viewing payment proof
@@ -153,11 +151,49 @@ export default function AppointmentModal({
   }
 
   const getServicesDisplay = () => {
-    if (!appointment.services) return 'N/A'
-    if (Array.isArray(appointment.services)) {
-      return appointment.services.map(s => s.replace(/-/g, ' ')).join(', ')
+    if (appointment.service_name) {
+      return String(appointment.service_name)
     }
-    return appointment.services
+
+    if (Array.isArray(appointment.service_names) && appointment.service_names.length > 0) {
+      return appointment.service_names
+        .map((name) => String(name).replace(/-/g, ' '))
+        .filter(Boolean)
+        .join(', ')
+    }
+
+    if (Array.isArray(appointment.services)) {
+      return appointment.services
+        .map((service) => {
+          if (typeof service === 'string') return service.replace(/-/g, ' ')
+          if (typeof service === 'number') return String(service)
+          if (service?.name) return String(service.name)
+          if (service?.service_name) return String(service.service_name)
+          return String(service || '')
+        })
+        .filter(Boolean)
+        .join(', ')
+    }
+
+    if (typeof appointment.services === 'string') {
+      try {
+        const parsed = JSON.parse(appointment.services)
+        if (Array.isArray(parsed)) {
+          return parsed
+            .map((service) => {
+              if (typeof service === 'string') return service.replace(/-/g, ' ')
+              if (typeof service === 'number') return String(service)
+              if (service?.name) return String(service.name)
+              if (service?.service_name) return String(service.service_name)
+              return String(service || '')
+            })
+            .filter(Boolean)
+            .join(', ')
+        }
+      } catch (err) { /* fall back to raw */ }
+    }
+
+    return appointment.services || 'N/A'
   }
 
   const getAppointmentGuitars = () => {
@@ -240,8 +276,8 @@ export default function AppointmentModal({
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-xl sm:text-2xl font-semibold text-white">Appointment Details</h2>
-              <p className="text-[var(--text-muted)] text-sm mt-1">
-                ID: {appointment.appointment_id?.slice(0, 8)}...
+              <p className="text-[var(--text-muted)] text-sm mt-1 font-mono">
+                Ref: {appointment.reference_code || appointment.appointment_id}
               </p>
             </div>
             <button
@@ -286,7 +322,10 @@ export default function AppointmentModal({
                             appointment.status === option.value ? 'bg-[var(--gold-primary)]/10 text-[var(--gold-primary)]' : 'text-white'
                           }`}
                         >
-                          {option.label}
+                          <div className="font-semibold">{option.label}</div>
+                          {option.description && (
+                            <div className="text-xs text-[var(--text-muted)]">{option.description}</div>
+                          )}
                         </button>
                       ))}
                     </motion.div>
@@ -377,7 +416,7 @@ export default function AppointmentModal({
 
           {/* Service Section */}
           <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-5">
-            <h3 className="text-lg font-semibold text-white mb-4">Service</h3>
+            <h3 className="text-lg font-semibold text-white mb-4">Requested Service</h3>
             <div className="flex items-start gap-3">
               <div className="w-10 h-10 rounded-xl bg-[var(--gold-primary)]/20 flex items-center justify-center flex-shrink-0">
                 <FileText className="w-5 h-5 text-[var(--gold-primary)]" />
@@ -407,7 +446,7 @@ export default function AppointmentModal({
                     </p>
                     <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
                       <p className="text-[var(--text-muted)]">
-                        Type: <span className="text-white capitalize">{guitar?.type || 'N/A'}</span>
+                        Type: <span className="text-white">{guitar?.type ? guitar.type.charAt(0).toUpperCase() + guitar.type.slice(1) : 'N/A'}</span>
                       </p>
                       <p className="text-[var(--text-muted)]">
                         Serial: <span className="text-white">{guitar?.serial || guitar?.serialNumber || 'N/A'}</span>
@@ -424,7 +463,15 @@ export default function AppointmentModal({
             )}
           </div>
 
-          {/* Notes Section */}
+          {/* Reason Section */}
+          {appointment.reason && (
+            <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-5">
+              <h3 className="text-lg font-semibold text-white mb-4">Reason</h3>
+              <p className="text-[var(--text-muted)] whitespace-pre-wrap">{appointment.reason}</p>
+            </div>
+          )}
+
+          {/* Notes Section - customer-submitted only */}
           {appointment.notes && (
             <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-5">
               <h3 className="text-lg font-semibold text-white mb-4">Notes</h3>
@@ -434,6 +481,7 @@ export default function AppointmentModal({
                   const textParts = []
                   const imageParts = []
                   
+                  const SYSTEM_NOTE_PREFIXES = ['Cancelled:', 'Status changed:', 'Rescheduled:', 'Cancelled on', 'Guitar ']
                   lines.forEach(line => {
                     const imageMatch = line.match(/(https?:\/\/[^\s]+(?:\.jpg|\.jpeg|\.png|\.gif|\.webp|\.bmp)[^\s]*)/i)
                     if (imageMatch) {
@@ -441,6 +489,9 @@ export default function AppointmentModal({
                       if (before) textParts.push(before)
                       imageParts.push(imageMatch[1])
                     } else {
+                      const trimmed = line.trim()
+                      const isSystemLine = SYSTEM_NOTE_PREFIXES.some((prefix) => trimmed.startsWith(prefix))
+                      if (isSystemLine || !trimmed) return
                       textParts.push(line)
                     }
                   })

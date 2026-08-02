@@ -171,6 +171,12 @@ export const adminApi = {
   updateService: (id, body) => request(`/api/services/${id}`, { method: 'PUT', body }),
   deleteService: (id) => request(`/api/services/${id}`, { method: 'DELETE' }),
 
+  // Available Dates
+  getAvailableDates: (dateFrom, dateTo) => {
+    const qs = new URLSearchParams({ date_from: dateFrom, date_to: dateTo }).toString()
+    return request(`/api/appointments/available-dates?${qs}`)
+  },
+
   // Unavailable Dates
   getUnavailableDates: () => request('/api/appointments/unavailable-dates'),
   setUnavailableDate: (date, reason) => request('/api/appointments/unavailable-dates', { method: 'POST', body: { date, reason } }),

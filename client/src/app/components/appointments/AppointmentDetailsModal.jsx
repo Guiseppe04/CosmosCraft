@@ -51,6 +51,23 @@ function formatAmount(value) {
   return `PHP ${value.toLocaleString('en-PH', { maximumFractionDigits: 2 })}`
 }
 
+const SYSTEM_NOTE_PREFIXES = ['Cancelled:', 'Status changed:', 'Rescheduled:', 'Cancelled on', 'Guitar ']
+
+function cleanCustomerNotes(rawNotes) {
+  if (!rawNotes) return ''
+  const lines = String(rawNotes).split('\n')
+  const kept = []
+  lines.forEach((line) => {
+    const trimmed = line.trim()
+    if (!trimmed) return
+    if (/(https?:\/\/[^\s]+(?:\.jpg|\.jpeg|\.png|\.gif|\.webp|\.bmp)[^\s]*)/i.test(trimmed)) return
+    const isSystemLine = SYSTEM_NOTE_PREFIXES.some((prefix) => trimmed.startsWith(prefix))
+    if (isSystemLine) return
+    kept.push(trimmed)
+  })
+  return kept.join('\n')
+}
+
 const AppointmentDetailsModal = ({ show, onClose, appointment, onEdit, onCancel, onComplete }) => {
   const services = useMemo(
     () => parseServices(appointment?.services, appointment?.service_name),
@@ -65,7 +82,7 @@ const AppointmentDetailsModal = ({ show, onClose, appointment, onEdit, onCancel,
   const customerAddress = appointment.customer_address || appointment.address || ''
   const scheduledAt = appointment.scheduled_at || appointment.date
   const status = String(appointment.status || '').toLowerCase()
-  const reference = appointment.referenceNumber || appointment.appointment_id || ''
+  const reference = appointment.reference_code || appointment.referenceNumber || appointment.appointment_id || ''
   const clientType = appointment.user_id ? 'Existing' : 'Guest'
 
   const serviceRows = services.map((service, index) => ({
@@ -82,7 +99,9 @@ const AppointmentDetailsModal = ({ show, onClose, appointment, onEdit, onCancel,
     ? 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20'
     : status === 'cancelled'
       ? 'text-red-500 bg-red-500/10 border-red-500/20'
-      : 'text-amber-500 bg-amber-500/10 border-amber-500/20'
+      : status === 'no_show'
+        ? 'text-orange-500 bg-orange-500/10 border-orange-500/20'
+        : 'text-amber-500 bg-amber-500/10 border-amber-500/20'
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -119,12 +138,22 @@ const AppointmentDetailsModal = ({ show, onClose, appointment, onEdit, onCancel,
                   </span>
                 </div>
 
-                <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] p-3">
-                  <p className="text-xs uppercase tracking-wide text-[var(--text-muted)]">Notes</p>
-                  <p className="mt-1.5 text-sm leading-relaxed text-white/90">
-                    {appointment.notes || EMPTY_LABEL}
-                  </p>
-                </div>
+                {cleanCustomerNotes(appointment.notes) && (
+                  <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] p-3">
+                    <p className="text-xs uppercase tracking-wide text-[var(--text-muted)]">Notes</p>
+                    <p className="mt-1.5 text-sm leading-relaxed text-white/90">
+                      {cleanCustomerNotes(appointment.notes)}
+                    </p>
+                  </div>
+                )}
+                {appointment.reason && (
+                  <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] p-3">
+                    <p className="text-xs uppercase tracking-wide text-[var(--text-muted)]">Reason</p>
+                    <p className="mt-1.5 text-sm leading-relaxed text-white/90">
+                      {appointment.reason}
+                    </p>
+                  </div>
+                )}
               </div>
             </section>
 

@@ -19,6 +19,13 @@ const validate = (data, schema) => {
   return value;
 };
 
+const validateDateAvailability = async (date) => {
+  const isUnavailable = await appointmentService.isDateUnavailable(date);
+  if (isUnavailable) {
+    throw new AppError('Selected appointment date is unavailable', 400);
+  }
+};
+
 // ─── HELPER: AUTHORIZATION ──────────────────────────────────────────────────
 
 /**
@@ -54,10 +61,13 @@ async function checkAppointmentAccess(appointmentId, userId, userRole) {
  */
 exports.createAppointment = async (req, res, next) => {
   try {
-    // Validate request
-    const validated = validate(req.body, appointmentValidation.createAppointmentSchema);
+// Validate request
+     const validated = validate(req.body, appointmentValidation.createAppointmentSchema);
 
-    const isPrivilegedRole = ['admin', 'super_admin', 'staff'].includes(req.user.role);
+     // Validate date availability
+     await validateDateAvailability(validated.scheduled_at);
+
+     const isPrivilegedRole = ['admin', 'super_admin', 'staff'].includes(req.user.role);
     if (!isPrivilegedRole && validated.user_id && validated.user_id !== req.user.id) {
       throw new AppError('Customers can only create appointments for their own account', 403);
     }
@@ -181,13 +191,18 @@ exports.updateAppointment = async (req, res, next) => {
       req.user.role
     );
 
-    // Validate update schema
-    const validated = validate(
-      req.body,
-      appointmentValidation.updateAppointmentSchema
-    );
+// Validate update schema
+     const validated = validate(
+       req.body,
+       appointmentValidation.updateAppointmentSchema
+     );
 
-    // Staff/Admin can update status, customers cannot
+     // Validate date availability if scheduled_at is being updated
+     if (validated.scheduled_at) {
+       await validateDateAvailability(validated.scheduled_at);
+     }
+
+     // Staff/Admin can update status, customers cannot
     if (req.user.role === 'customer' && validated.status !== undefined) {
       throw new AppError('Customers cannot update appointment status', 403);
     }
@@ -225,18 +240,21 @@ exports.rescheduleAppointment = async (req, res, next) => {
       req.user.role
     );
 
-    // Validate reschedule schema
-    const validated = validate(
-      req.body,
-      appointmentValidation.rescheduleSchema
-    );
+// Validate reschedule schema
+     const validated = validate(
+       req.body,
+       appointmentValidation.rescheduleSchema
+     );
 
-    // Perform reschedule
-    const updated = await appointmentService.rescheduleAppointment(
-      id,
-      validated.new_scheduled_at,
-      validated.reason
-    );
+     // Validate date availability
+     await validateDateAvailability(validated.new_scheduled_at);
+
+     // Perform reschedule
+     const updated = await appointmentService.rescheduleAppointment(
+       id,
+       validated.new_scheduled_at,
+       validated.reason
+     );
 
     res.json({
       status: 'success',
@@ -676,6 +694,39 @@ exports.getUserStats = async (req, res, next) => {
       data: {
         user_id: userId,
         booking_stats: stats,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ─── AVAILABLE DATES ────────────────────────────────────────────────
+
+/**
+ * GET /appointments/available-dates
+ * Get dates with available slots within a date range
+ * Query params:
+ *   - date_from (required) - ISO date string
+ *   - date_to (required) - ISO date string
+ * Access: Any authenticated user
+ */
+exports.getAvailableDates = async (req, res, next) => {
+  try {
+    const validated = validate(
+      req.query,
+      appointmentValidation.dateRangeSchema
+    );
+
+    const dates = await appointmentService.getAvailableDates(
+      validated.date_from,
+      validated.date_to
+    );
+
+    res.json({
+      status: 'success',
+      data: {
+        available_dates: dates,
       },
     });
   } catch (err) {

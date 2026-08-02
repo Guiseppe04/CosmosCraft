@@ -243,9 +243,10 @@ export function StaffDashboard() {
   const [services, setServices] = useState([])
   const [inventoryStats, setInventoryStats] = useState(null)
   const [inventoryAlerts, setInventoryAlerts] = useState([])
-  const [unavailableDates, setUnavailableDates] = useState([])
+const [unavailableDates, setUnavailableDates] = useState([])
+   const [availableDates, setAvailableDates] = useState([])
 
-  const [loadingInventory, setLoadingInventory] = useState(false)
+   const [loadingInventory, setLoadingInventory] = useState(false)
   const [loadingAppointments, setLoadingAppointments] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
@@ -332,16 +333,28 @@ export function StaffDashboard() {
     }
   }, [showToast])
 
-  const fetchUnavailableDates = useCallback(async () => {
-    try {
-      const res = await staffApi.getUnavailableDates()
-      setUnavailableDates(res.data?.unavailable_dates || [])
-    } catch (error) {
-      showToast(error.message, 'error')
-    }
-  }, [showToast])
+const fetchUnavailableDates = useCallback(async () => {
+     try {
+       const res = await staffApi.getUnavailableDates()
+       setUnavailableDates(res.data?.unavailable_dates || [])
+     } catch (error) {
+       showToast(error.message, 'error')
+     }
+   }, [showToast])
 
-  const fetchAppointments = useCallback(async () => {
+   const fetchAvailableDates = useCallback(async () => {
+     try {
+       const today = new Date()
+       const dateFrom = today.toISOString().slice(0, 10)
+       const dateTo = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+       const res = await staffApi.getAvailableDates(dateFrom, dateTo)
+       setAvailableDates(res.data?.available_dates || [])
+     } catch (error) {
+       console.error('Failed to fetch available dates:', error)
+     }
+   }, [])
+
+   const fetchAppointments = useCallback(async () => {
     setLoadingAppointments(true)
     try {
       const res = await staffApi.getAppointments({
@@ -366,15 +379,15 @@ export function StaffDashboard() {
     if (activeTab === 'projects') fetchProjects()
     if (activeTab === 'orders') fetchOrders()
     if (activeTab === 'inventory' || activeTab === 'pos') loadInventoryBundle()
-    if (activeTab === 'appointments') { fetchAppointments(); fetchServices(); fetchUnavailableDates() }
+    if (activeTab === 'appointments') { fetchAppointments(); fetchServices(); fetchUnavailableDates(); fetchAvailableDates() }
     if (activeTab === 'schedule') { fetchAppointments(); fetchProjects() }
-  }, [activeTab, fetchAppointments, fetchOrders, fetchProjects, fetchServices, fetchUnavailableDates, loadInventoryBundle])
+  }, [activeTab, fetchAppointments, fetchOrders, fetchProjects, fetchServices, fetchUnavailableDates, fetchAvailableDates, loadInventoryBundle])
 
   useSmartPolling(useCallback(async () => {
     if (activeTab === 'overview') { await Promise.all([fetchAppointments(), loadInventoryBundle()]); return }
     if (activeTab === 'inventory' || activeTab === 'pos') { await loadInventoryBundle(); return }
-    if (activeTab === 'appointments' || activeTab === 'schedule') { await Promise.all([fetchAppointments(), fetchUnavailableDates()]) }
-  }, [activeTab, fetchAppointments, fetchUnavailableDates, loadInventoryBundle]), { interval: 10000, maxInterval: 60000, backoffFactor: 1.5, enabled: true })
+    if (activeTab === 'appointments' || activeTab === 'schedule') { await Promise.all([fetchAppointments(), fetchUnavailableDates(), fetchAvailableDates()]) }
+  }, [activeTab, fetchAppointments, fetchUnavailableDates, fetchAvailableDates, loadInventoryBundle]), { interval: 10000, maxInterval: 60000, backoffFactor: 1.5, enabled: true })
 
   const visibleInventory = useMemo(() => {
     const lookup = Object.fromEntries(products.map((item) => [item.product_id, item]))
@@ -410,12 +423,12 @@ export function StaffDashboard() {
       if (activeTab === 'projects') await fetchProjects()
       if (activeTab === 'orders') await fetchOrders()
       if (activeTab === 'inventory' || activeTab === 'pos') await loadInventoryBundle()
-      if (activeTab === 'appointments') await Promise.all([fetchAppointments(), fetchServices(), fetchUnavailableDates()])
+      if (activeTab === 'appointments') await Promise.all([fetchAppointments(), fetchServices(), fetchUnavailableDates(), fetchAvailableDates()])
       if (activeTab === 'schedule') await Promise.all([fetchAppointments(), fetchProjects()])
     } finally {
       setRefreshing(false)
     }
-  }, [activeTab, fetchAppointments, fetchOrders, fetchProjects, fetchServices, fetchUnavailableDates, loadInventoryBundle])
+  }, [activeTab, fetchAppointments, fetchOrders, fetchProjects, fetchServices, fetchUnavailableDates, fetchAvailableDates, loadInventoryBundle])
 
   const saveStockAdjust = useCallback(async () => {
     setIsSaving(true)
@@ -716,7 +729,7 @@ export function StaffDashboard() {
                 {filteredInventory.length > 0 && <div className="mt-6 flex items-center justify-between border-t border-[var(--border)] pt-4"><p className="text-sm text-[var(--text-muted)]">Showing {(inventoryPage - 1) * pageSize + 1}-{Math.min(inventoryPage * pageSize, filteredInventory.length)} of {filteredInventory.length}</p><div className="flex items-center gap-2"><button type="button" onClick={() => setInventoryPage((p) => Math.max(1, p - 1))} disabled={inventoryPage === 1} className="rounded-xl border border-[var(--border)] p-2 text-[var(--text-muted)] disabled:opacity-40"><ChevronLeft className="h-4 w-4" /></button><span className="text-sm text-white">{inventoryPage} / {totalPages}</span><button type="button" onClick={() => setInventoryPage((p) => Math.min(totalPages, p + 1))} disabled={inventoryPage >= totalPages} className="rounded-xl border border-[var(--border)] p-2 text-[var(--text-muted)] disabled:opacity-40"><ChevronRight className="h-4 w-4" /></button></div></div>}
               </div>
             </div>}
-            {activeTab === 'appointments' && <div className="space-y-6"><div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"><div><h3 className="text-lg font-semibold text-white">Appointment desk</h3><p className="text-sm text-[var(--text-muted)]">Staff uses the same appointment action model as admin now.</p></div><div className="flex flex-wrap gap-2"><button type="button" onClick={() => setUnavailableDatesOpen(true)} className="inline-flex items-center gap-2 rounded-2xl bg-[var(--surface-dark)] px-4 py-2.5 text-sm font-semibold text-white"><CalendarX className="h-4 w-4" />Mark unavailable</button><button type="button" onClick={() => { setAppointmentFormData(null); setSelectedCalendarDate(null); setAppointmentFormOpen(true) }} className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] px-4 py-2.5 text-sm font-semibold text-black"><Plus className="h-4 w-4" />New appointment</button></div></div><AppointmentCalendar appointments={appointments} unavailableDates={unavailableDates.map((entry) => entry?.date || entry).filter(Boolean)} isAdminMode onAppointmentClick={(item) => { setSelectedAppointment(item); setAppointmentModalOpen(true) }} onCreateAppointment={(_, date) => { setSelectedCalendarDate(date); setAppointmentFormData(null); setAppointmentFormOpen(true) }} /><div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6"><AppointmentList appointments={appointments} loading={loadingAppointments} onRefresh={fetchAppointments} onViewDetails={(item) => { setSelectedAppointment(item); setAppointmentModalOpen(true) }} onEdit={(item) => { setAppointmentFormData(item); setAppointmentFormOpen(true) }} onCreateNew={() => { setAppointmentFormData(null); setAppointmentFormOpen(true) }} pagination={appointmentPagination} onPageChange={(page) => setAppointmentPagination((p) => ({ ...p, page }))} selectedDate={selectedCalendarDate} /></div></div>}
+            {activeTab === 'appointments' && <div className="space-y-6"><div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"><div><h3 className="text-lg font-semibold text-white">Appointment desk</h3><p className="text-sm text-[var(--text-muted)]">Staff uses the same appointment action model as admin now.</p></div><div className="flex flex-wrap gap-2"><button type="button" onClick={() => setUnavailableDatesOpen(true)} className="inline-flex items-center gap-2 rounded-2xl bg-[var(--surface-dark)] px-4 py-2.5 text-sm font-semibold text-white"><CalendarX className="h-4 w-4" />Mark unavailable</button><button type="button" onClick={() => { setAppointmentFormData(null); setSelectedCalendarDate(null); setAppointmentFormOpen(true) }} className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] px-4 py-2.5 text-sm font-semibold text-black"><Plus className="h-4 w-4" />New appointment</button></div></div><AppointmentCalendar appointments={appointments} unavailableDates={unavailableDates.map((entry) => entry?.date || entry).filter(Boolean)} availableDates={availableDates} isAdminMode onAppointmentClick={(item) => { setSelectedAppointment(item); setAppointmentModalOpen(true) }} onCreateAppointment={(_, date) => { setSelectedCalendarDate(date); setAppointmentFormData(null); setAppointmentFormOpen(true) }} /><div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6"><AppointmentList appointments={appointments} loading={loadingAppointments} onRefresh={fetchAppointments} onViewDetails={(item) => { setSelectedAppointment(item); setAppointmentModalOpen(true) }} onEdit={(item) => { setAppointmentFormData(item); setAppointmentFormOpen(true) }} onCreateNew={() => { setAppointmentFormData(null); setAppointmentFormOpen(true) }} pagination={appointmentPagination} onPageChange={(page) => setAppointmentPagination((p) => ({ ...p, page }))} selectedDate={selectedCalendarDate} /></div></div>}
             {activeTab === 'pos' && (
               <PosWorkspace
                 inventoryItems={visibleInventory}

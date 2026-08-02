@@ -223,7 +223,7 @@ export function AdminPage() {
   const { users, fetchUsers } = useUsersAdmin({ debouncedSearch, showToast })
   const { orders, ordersPagination, fetchOrders, setOrdersPagination } = useOrdersAdmin({ debouncedSearch, showToast })
   const { projects, projectsPagination, fetchProjects, setProjects, setProjectsPagination } = useProjectsAdmin({ debouncedSearch, showToast })
-  const { appointments, appointmentPagination, setAppointmentPagination, appointmentLoading, unavailableDates, fetchAppointments, fetchUnavailableDates } = useAppointmentsAdmin({ debouncedSearch, showToast })
+  const { appointments, appointmentPagination, setAppointmentPagination, appointmentLoading, unavailableDates, availableDates, fetchAppointments, fetchUnavailableDates, fetchAvailableDates } = useAppointmentsAdmin({ debouncedSearch, showToast })
   const { services, servicesLoading, servicesPagination, serviceQuery, setServiceQuery, setServices, setServicesPagination, fetchServices } = useServicesAdmin({ debouncedSearch, showToast })
   const { inventory, inventoryStats, salesReport, setInventory, setInventoryStats, setSalesReport, fetchInventory, fetchSalesReport } = useInventoryAdmin({ products, showToast })
 
@@ -683,7 +683,7 @@ export function AdminPage() {
       'users': fetchUsers,
       'orders': fetchOrders,
       'projects': fetchProjects,
-      'appointments': () => { fetchAppointments(); fetchServices(); fetchUnavailableDates(); },
+      'appointments': () => { fetchAppointments(); fetchServices(); fetchUnavailableDates(); fetchAvailableDates(); },
       'inventory': () => { fetchInventory(); fetchParts(); fetchProducts(); },
       'pos': () => { fetchInventory(); fetchProducts(); },
       'sales-report': fetchSalesReport,
@@ -1473,6 +1473,7 @@ export function AdminPage() {
       Scheduled: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
       Cancelled: 'bg-red-500/20 text-red-400 border-red-500/30',
       cancelled: 'bg-red-500/20 text-red-400 border-red-500/30',
+      no_show: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
       'Low Stock': 'bg-orange-500/20 text-orange-400 border-orange-500/30',
       'Out of Stock': 'bg-red-500/20 text-red-400 border-red-500/30',
       processing: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
@@ -2269,21 +2270,22 @@ export function AdminPage() {
 
           {/* ── APPOINTMENTS ───────────────────────────────────────────────── */}
           {activeTab === 'appointments' && (
-            <AppointmentsTab
-              visibleAppointments={visibleAppointments}
-              appointmentLoading={appointmentLoading}
-              appointmentPagination={appointmentPagination}
-              selectedCalendarDate={selectedCalendarDate}
-              unavailableDates={unavailableDates.map((entry) => entry?.date || entry).filter(Boolean)}
-              fetchAppointments={fetchAppointments}
-              setSelectedAppointment={setSelectedAppointment}
-              setAppointmentModalOpen={setAppointmentModalOpen}
-              setAppointmentFormData={setAppointmentFormData}
-              setAppointmentFormOpen={setAppointmentFormOpen}
-              setUnavailableDatesOpen={setUnavailableDatesOpen}
-              setAppointmentPagination={setAppointmentPagination}
-              isSuperAdmin={isSuperAdmin}
-            />
+<AppointmentsTab
+               visibleAppointments={visibleAppointments}
+               appointmentLoading={appointmentLoading}
+               appointmentPagination={appointmentPagination}
+               selectedCalendarDate={selectedCalendarDate}
+               unavailableDates={unavailableDates.map((entry) => entry?.date || entry).filter(Boolean)}
+               availableDates={availableDates}
+               fetchAppointments={fetchAppointments}
+               setSelectedAppointment={setSelectedAppointment}
+               setAppointmentModalOpen={setAppointmentModalOpen}
+               setAppointmentFormData={setAppointmentFormData}
+               setAppointmentFormOpen={setAppointmentFormOpen}
+               setUnavailableDatesOpen={setUnavailableDatesOpen}
+               setAppointmentPagination={setAppointmentPagination}
+               isSuperAdmin={isSuperAdmin}
+             />
           )}
 
           {/* ── INVENTORY ──────────────────────────────────────────────────── */}

@@ -58,6 +58,7 @@ const STATUS_COLORS = {
   ready_for_pickup: { bg: 'bg-cyan-500/20', text: 'text-cyan-400', border: 'border-cyan-500/30', label: 'Ready for Pickup' },
   completed: { bg: 'bg-green-500/20', text: 'text-green-400', border: 'border-green-500/30', label: 'Completed' },
   cancelled: { bg: 'bg-red-500/20', text: 'text-red-400', border: 'border-red-500/30', label: 'Cancelled' },
+  no_show: { bg: 'bg-orange-500/20', text: 'text-orange-400', border: 'border-orange-500/30', label: 'No Show' },
   approved: { bg: 'bg-blue-500/20', text: 'text-blue-400', border: 'border-blue-500/30', label: 'Approved' },
 }
 
@@ -195,6 +196,7 @@ export default function AppointmentCalendar({
   onAppointmentClick,
   holidays = [],
   unavailableDates = [],
+  availableDates = [],
   isAdminMode = false,
   onCreateAppointment,
   onToggleDate,
@@ -211,11 +213,15 @@ export default function AppointmentCalendar({
     return new Set(source.map(toISODate).filter(Boolean))
   }, [holidays])
 
-  const unavailableSet = useMemo(() => {
-    return new Set(unavailableDates.map(toISODate).filter(Boolean))
-  }, [unavailableDates])
+const unavailableSet = useMemo(() => {
+     return new Set(unavailableDates.map(toISODate).filter(Boolean))
+   }, [unavailableDates])
 
-  const appointmentsByDate = useMemo(() => {
+   const availableSet = useMemo(() => {
+     return new Set(availableDates.map(toISODate).filter(Boolean))
+   }, [availableDates])
+
+   const appointmentsByDate = useMemo(() => {
     const map = new Map()
     appointments.forEach((appointment) => {
       const dateKey = toISODate(appointment.scheduled_at || appointment.date)
@@ -245,25 +251,28 @@ export default function AppointmentCalendar({
   const selectedDate = selectedDateId ? parseLocalDateFromISO(selectedDateId) : null
   const selectedDateLabel = selectedDateId ? format(selectedDate, 'MMMM d, yyyy') : null
 
-  const getDateStatus = (dateKey) => {
-    const date = parseLocalDateFromISO(dateKey)
-    const dayOfWeek = date.getDay()
-    const isSunday = dayOfWeek === 0
-    const isHoliday = holidaySet.has(dateKey)
-    const isPast = date < today
-    const isUnavailable = unavailableSet.has(dateKey)
-    const isDisabled = isSunday || isHoliday || isPast || (isAdminMode ? false : isUnavailable)
-    const status = isHoliday
-      ? HOLIDAY_LABELS[dateKey] || 'Holiday'
-      : isSunday
-        ? 'Sunday Closed'
-        : isPast
-          ? 'Past'
-          : isUnavailable
-            ? 'Marked Unavailable'
-            : 'Available'
-    return { isSunday, isHoliday, isPast, isDisabled, isUnavailable, status }
-  }
+const getDateStatus = (dateKey) => {
+     const date = parseLocalDateFromISO(dateKey)
+     const dayOfWeek = date.getDay()
+     const isSunday = dayOfWeek === 0
+     const isHoliday = holidaySet.has(dateKey)
+     const isPast = date < today
+     const isUnavailable = unavailableSet.has(dateKey)
+     const isAvailable = availableSet.has(dateKey)
+     const isDisabled = isSunday || isHoliday || isPast || (isAdminMode ? false : isUnavailable)
+     const status = isHoliday
+       ? HOLIDAY_LABELS[dateKey] || 'Holiday'
+       : isSunday
+         ? 'Sunday Closed'
+         : isPast
+           ? 'Past'
+           : isUnavailable
+             ? 'Marked Unavailable'
+             : isAvailable
+               ? 'Has Availability'
+               : 'Available'
+     return { isSunday, isHoliday, isPast, isDisabled, isUnavailable, isAvailable, status }
+   }
 
   const handleDateSelect = (dateKey, isUnavailableCell) => {
     if (isAdminMode && isUnavailableCell) {
@@ -426,82 +435,91 @@ export default function AppointmentCalendar({
                     return <div key={`empty-${weekIndex}-${dayIndex}`} className="h-20 rounded-3xl bg-[var(--surface-dark)]" />
                   }
 
-                  const dateKey = day.id
-                  const bookingCount = appointmentsByDate.get(dateKey)?.length || 0
-                  const { isSunday, isHoliday, isPast, isDisabled, isUnavailable, status } = getDateStatus(dateKey)
-                  const isSelected = dateKey && selectedDateId === dateKey
-                  const isHolidayCell = isDisabled && isHoliday
-                  const isSundayClosed = isDisabled && isSunday
-                  const isPastDate = isDisabled && isPast
-                  const isUnavailableCell = isUnavailable
+const dateKey = day.id
+                   const bookingCount = appointmentsByDate.get(dateKey)?.length || 0
+                   const { isSunday, isHoliday, isPast, isDisabled, isUnavailable, isAvailable, status } = getDateStatus(dateKey)
+                   const isSelected = dateKey && selectedDateId === dateKey
+                   const isHolidayCell = isDisabled && isHoliday
+                   const isSundayClosed = isDisabled && isSunday
+                   const isPastDate = isDisabled && isPast
+                   const isUnavailableCell = isUnavailable
+                   const isAvailableCell = isAvailable && !isUnavailable && !isHoliday && !isSunday && !isPast
 
-                  const cellClasses = isSelected
-                    ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)]/15 text-white shadow-lg shadow-[var(--gold-primary)]/10'
-                    : isHolidayCell
-                      ? 'border-[#758A93]/30 bg-[#758A93]/10 text-[#c9d2db] cursor-not-allowed'
-                      : isSundayClosed || isPastDate
-                        ? 'border-slate-500/35 bg-slate-700/30 text-slate-100 cursor-not-allowed'
-                        : isUnavailableCell
-                          ? 'border-amber-500/30 bg-amber-500/10 text-amber-200 cursor-pointer hover:border-amber-400 hover:bg-amber-500/20'
-                          : bookingCount
-                            ? 'border-red-500/10 bg-red-500/10 text-red-200 hover:border-red-400 hover:bg-red-500/15'
-                            : 'border-[var(--border)] bg-[var(--surface-dark)] text-white hover:border-[var(--gold-primary)] hover:bg-[var(--surface-elevated)]'
+                   const cellClasses = isSelected
+                     ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)]/15 text-white shadow-lg shadow-[var(--gold-primary)]/10'
+                     : isHolidayCell
+                       ? 'border-[#758A93]/30 bg-[#758A93]/10 text-[#c9d2db] cursor-not-allowed'
+                       : isSundayClosed || isPastDate
+                         ? 'border-slate-500/35 bg-slate-700/30 text-slate-100 cursor-not-allowed'
+                         : isUnavailableCell
+                           ? 'border-amber-500/30 bg-amber-500/10 text-amber-200 cursor-pointer hover:border-amber-400 hover:bg-amber-500/20'
+                           : isAvailableCell
+                             ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200 cursor-pointer hover:border-emerald-400 hover:bg-emerald-500/20'
+                             : bookingCount
+                               ? 'border-red-500/10 bg-red-500/10 text-red-200 hover:border-red-400 hover:bg-red-500/15'
+                               : 'border-[var(--border)] bg-[var(--surface-dark)] text-white hover:border-[var(--gold-primary)] hover:bg-[var(--surface-elevated)]'
 
-                  const badgeClasses = isHolidayCell
-                    ? 'bg-[#758A93]/15 text-[#c9d2db] border border-[#758A93]/20'
-                    : isSundayClosed || isPastDate
-                      ? 'bg-slate-600/35 text-slate-100 border border-slate-400/35'
-                      : isUnavailableCell
-                        ? 'bg-amber-500/15 text-amber-200 border border-amber-500/20'
-                        : bookingCount
-                          ? 'bg-red-500/15 text-red-200 border border-red-500/20'
-                          : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/20'
+                   const badgeClasses = isHolidayCell
+                     ? 'bg-[#758A93]/15 text-[#c9d2db] border border-[#758A93]/20'
+                     : isSundayClosed || isPastDate
+                       ? 'bg-slate-600/35 text-slate-100 border border-slate-400/35'
+                       : isUnavailableCell
+                         ? 'bg-amber-500/15 text-amber-200 border border-amber-500/20'
+                         : isAvailableCell
+                           ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/20'
+                           : bookingCount
+                             ? 'bg-red-500/15 text-red-200 border border-red-500/20'
+                             : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/20'
 
-                  return (
-                    <button
-                      key={dateKey}
-                      type="button"
-                      onClick={() => handleDateSelect(dateKey, isUnavailableCell)}
-                      title={status}
-                      disabled={isSunday || isHoliday || (isPast && !isAdminMode && !isUnavailableCell)}
-                      className={`flex h-20 flex-col items-center justify-between rounded-3xl border px-3 py-3 text-sm transition-all ${cellClasses}`}
-                    >
-                      <div className="flex w-full items-center justify-between">
-                        <span className="text-lg font-semibold">{day.dayNumber}</span>
-                        {isPast && (
-                          <span className="rounded-full border border-slate-400/30 bg-slate-700/35 px-2 py-1 text-[10px] uppercase tracking-[0.2em] text-slate-200">
-                            Past
-                          </span>
-                        )}
-                      </div>
+                   return (
+                     <button
+                       key={dateKey}
+                       type="button"
+                       onClick={() => handleDateSelect(dateKey, isUnavailableCell)}
+                       title={status}
+                       disabled={isSunday || isHoliday || (isPast && !isAdminMode && !isUnavailableCell)}
+                       className={`flex h-20 flex-col items-center justify-between rounded-3xl border px-3 py-3 text-sm transition-all ${cellClasses}`}
+                     >
+                       <div className="flex w-full items-center justify-between">
+                         <span className="text-lg font-semibold">{day.dayNumber}</span>
+                         {isPast && (
+                           <span className="rounded-full border border-slate-400/30 bg-slate-700/35 px-2 py-1 text-[10px] uppercase tracking-[0.2em] text-slate-200">
+                             Past
+                           </span>
+                         )}
+                       </div>
 
-                      <span className={`inline-flex items-center gap-2 rounded-full px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.15em] ${badgeClasses}`}>
-                        {isUnavailableCell ? 'Unavailable' : isDisabled ? status : bookingCount ? `${bookingCount} booked` : 'Available'}
-                      </span>
+                       <span className={`inline-flex items-center gap-2 rounded-full px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.15em] ${badgeClasses}`}>
+                         {isUnavailableCell ? 'Unavailable' : isDisabled ? status : isAvailableCell ? 'Available' : bookingCount ? `${bookingCount} booked` : 'Available'}
+                       </span>
                     </button>
                   )
                 })
               )}
             </div>
 
-            <div className="mt-6 grid gap-2 sm:grid-cols-4 text-sm text-[var(--text-muted)]">
-              <div className="flex items-center gap-2 rounded-3xl border border-green-500/20 bg-green-500/10 px-3 py-2">
-                <span className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
-                Available
-              </div>
-              <div className="flex items-center gap-2 rounded-3xl border border-red-500/20 bg-red-500/10 px-3 py-2">
-                <span className="h-2.5 w-2.5 rounded-full bg-red-400" />
-                Booked
-              </div>
-              <div className="flex items-center gap-2 rounded-3xl border border-amber-500/20 bg-amber-500/10 px-3 py-2">
-                <span className="h-2.5 w-2.5 rounded-full bg-amber-400" />
-                Marked Unavailable
-              </div>
-              <div className="flex items-center gap-2 rounded-3xl border border-[#758A93]/20 bg-[#758A93]/10 px-3 py-2">
-                <span className="h-2.5 w-2.5 rounded-full bg-[#758A93]" />
-                Holiday / Sunday Closed
-              </div>
-            </div>
+<div className="mt-6 grid gap-2 sm:grid-cols-5 text-sm text-[var(--text-muted)]">
+               <div className="flex items-center gap-2 rounded-3xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2">
+                 <span className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
+                 Has Availability
+               </div>
+               <div className="flex items-center gap-2 rounded-3xl border border-green-500/20 bg-green-500/10 px-3 py-2">
+                 <span className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
+                 Open
+               </div>
+               <div className="flex items-center gap-2 rounded-3xl border border-red-500/20 bg-red-500/10 px-3 py-2">
+                 <span className="h-2.5 w-2.5 rounded-full bg-red-400" />
+                 Booked
+               </div>
+               <div className="flex items-center gap-2 rounded-3xl border border-amber-500/20 bg-amber-500/10 px-3 py-2">
+                 <span className="h-2.5 w-2.5 rounded-full bg-amber-400" />
+                 Marked Unavailable
+               </div>
+               <div className="flex items-center gap-2 rounded-3xl border border-[#758A93]/20 bg-[#758A93]/10 px-3 py-2">
+                 <span className="h-2.5 w-2.5 rounded-full bg-[#758A93]" />
+                 Holiday / Sunday Closed
+               </div>
+             </div>
             {isAdminMode && (
               <p className="mt-4 text-xs text-[var(--text-muted)] text-center">
                 Click on any available date (Mon-Sat) to view time slots. Click on marked unavailable dates to toggle availability.
