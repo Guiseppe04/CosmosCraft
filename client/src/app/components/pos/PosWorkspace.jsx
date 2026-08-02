@@ -480,7 +480,7 @@ export function PosWorkspace({
   }, [showToast])
 
   const lastSaleTimestampRef = useRef(null)
-  const prevSalesRef = useRef(null)
+  const latestSalesRef = useRef(null)
 
   const pollRecentSales = useCallback(async () => {
     const result = await loadRecentSales({ silent: true })
@@ -494,7 +494,7 @@ export function PosWorkspace({
       } else if (!lastSaleTimestampRef.current) {
         lastSaleTimestampRef.current = latestTimestamp
       }
-      prevSalesRef.current = result.data
+      latestSalesRef.current = result.data
     }
     return result
   }, [loadRecentSales, showToast])
