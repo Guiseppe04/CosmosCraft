@@ -2832,10 +2832,16 @@ const ensureInstallmentTable = async () => {
           status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'paid', 'overdue', 'cancelled')),
           paid_at TIMESTAMPTZ,
           payment_id UUID REFERENCES payments(payment_id) ON DELETE SET NULL,
+          paid_in_advance BOOLEAN NOT NULL DEFAULT FALSE,
           created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
           updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
           UNIQUE(project_id, installment_number)
         );
+      `);
+      // Backfill the paid_in_advance column on databases created before the column existed.
+      await pool.query(`
+        ALTER TABLE project_installment_schedules
+        ADD COLUMN IF NOT EXISTS paid_in_advance BOOLEAN NOT NULL DEFAULT FALSE
       `);
       ensureInstallmentTableReady = true;
     } catch (err) {

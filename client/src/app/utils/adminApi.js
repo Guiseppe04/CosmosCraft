@@ -226,12 +226,14 @@ export const adminApi = {
 
   // Installment Schedule
   getProjectInstallments: (projectId) => request(`/api/projects/${projectId}/installments`),
+  createAdvancePayment: (projectId, body) => request(`/api/projects/${projectId}/advance-payment`, { method: 'POST', body }),
 
   // Installment Tracking
   getProjectInstallmentTracking: (projectId) => request(`/api/installments/project/${projectId}`),
   getOrderInstallmentTracking: (orderId) => request(`/api/installments/project/by-order?orderId=${orderId}`),
   getOverdueInstallments: () => request('/api/installments/overdue'),
   markInstallmentPaid: (scheduleId, paymentId) => request(`/api/installments/${scheduleId}/pay`, { method: 'PATCH', body: { payment_id: paymentId } }),
+  cancelAdvancePayment: (paymentId) => request(`/api/installments/${paymentId}/advance-payment/cancel`, { method: 'PATCH' }),
   runOverdueCheck: () => request('/api/installments/check-overdue', { method: 'POST' }),
 
   // Default Workflow

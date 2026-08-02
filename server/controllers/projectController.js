@@ -1,6 +1,7 @@
 const { asyncHandler, AppError } = require('../middleware/errorHandler');
 const projectService = require('../services/projectService');
 const defaultWorkflowService = require('../services/defaultWorkflowService');
+const installmentService = require('../services/installmentService');
 
 // --- PROJECT BASE ---
 exports.getProjects = asyncHandler(async (req, res, next) => {
@@ -202,8 +203,33 @@ exports.approveCancel = asyncHandler(async (req, res, next) => {
 
 // --- INSTALLMENT SCHEDULE ---
 exports.getInstallmentSchedule = asyncHandler(async (req, res, next) => {
-  const result = await projectService.getInstallmentSchedule(req.params.id, req.user.id, req.user.role);
+  const userId = req.user?.id || req.user?.user_id;
+  const result = await projectService.getInstallmentSchedule(req.params.id, userId, req.user?.role);
   res.json({ status: 'success', data: result });
+});
+
+// --- ADVANCE PAYMENT ---
+// Allows a customer to pay one or more future installments ahead of their due date.
+// Accessible to any authenticated user who owns the project.
+exports.createAdvancePayment = asyncHandler(async (req, res, next) => {
+  const userId = req.user?.id || req.user?.user_id;
+  const { schedule_ids, payment_method, amount, reference_number, proof_url, currency } = req.validatedData || req.body;
+
+  const result = await installmentService.createAdvancePayment(req.params.id, schedule_ids, {
+    user_id: userId,
+    role: req.user?.role || 'customer',
+    method: payment_method,
+    amount,
+    reference_number,
+    proof_url,
+    currency,
+  });
+
+  res.status(201).json({
+    status: 'success',
+    data: result,
+    message: 'Advance payment processed successfully',
+  });
 });
 
 // --- DEFAULT WORKFLOW ---

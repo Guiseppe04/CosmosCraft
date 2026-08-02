@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { CheckCircle, Clock, AlertCircle, Guitar, DollarSign, Calendar, CreditCard } from 'lucide-react';
+import { CheckCircle, Clock, AlertCircle, Guitar, DollarSign, Calendar, CreditCard, Zap } from 'lucide-react';
 import { adminApi } from '../../utils/adminApi';
+import AdvancePaymentModal from '../payments/AdvancePaymentModal';
 
 const formatLabel = (value) => {
   if (!value) return '';
@@ -59,6 +60,7 @@ export default function CustomerProjectTracker({ projectId, projectName, project
   const [error, setError] = useState(null);
   const [installmentData, setInstallmentData] = useState(null);
   const [installmentLoading, setInstallmentLoading] = useState(false);
+  const [advancePaymentOpen, setAdvancePaymentOpen] = useState(false);
 
   useEffect(() => {
     if (projectId) {
@@ -142,6 +144,24 @@ export default function CustomerProjectTracker({ projectId, projectName, project
   };
 
   const paymentStatus = getPaymentStatus();
+
+  // Whether the Advance Payment option should be offered.
+  // Disabled when the project is fully paid or there are no unpaid installments.
+  const totalMonths = installmentSummary?.total_months || 0;
+  const paidCount = installmentSummary?.paid_count || 0;
+  const remainingMonths = installmentSummary?.remaining_months || 0;
+  const isFullyPaid = totalMonths > 0 && paidCount >= totalMonths;
+  // An advance payment is awaiting admin confirmation when an installment is
+  // flagged paid_in_advance but not yet marked 'paid'.
+  const hasPendingAdvance = (installmentData?.installments || []).some(
+    (inst) => inst.paid_in_advance && inst.status !== 'paid'
+  );
+  const canAdvancePay = !isFullPayment && !isFullyPaid && remainingMonths > 0 && Boolean(installmentData?.installments?.length) && !hasPendingAdvance;
+
+  // Refresh installment data after an advance payment
+  const handleAdvancePaymentSuccess = () => {
+    loadInstallments();
+  };
 
   if (loading) {
     return (
@@ -335,6 +355,26 @@ export default function CustomerProjectTracker({ projectId, projectName, project
                   {paymentStatus.label}
                 </span>
               )}
+              <button
+                type="button"
+                onClick={() => setAdvancePaymentOpen(true)}
+                disabled={!canAdvancePay}
+                className={`ml-2 inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold text-white transition-all ${
+                  canAdvancePay
+                    ? 'bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] hover:opacity-90'
+                    : 'cursor-not-allowed bg-slate-500/40'
+                }`}
+                title={
+                  isFullyPaid
+                    ? 'Project is fully paid'
+                    : canAdvancePay
+                      ? 'Pay one or more future installments in advance'
+                      : 'Advance payment unavailable'
+                }
+              >
+                <Zap className="h-3.5 w-3.5" />
+                Advance Payment
+              </button>
             </div>
             
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -395,11 +435,18 @@ export default function CustomerProjectTracker({ projectId, projectName, project
                         Due: {formatShortDate(inst.due_date)}
                       </span>
                       <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                        inst.status === 'paid' ? 'bg-green-500/10 text-green-400' :
-                        inst.status === 'overdue' ? 'bg-red-500/10 text-red-400' :
-                        'bg-yellow-500/10 text-yellow-400'
+                        inst.paid_in_advance && inst.status !== 'paid'
+                          ? 'bg-amber-500/10 text-amber-400'
+                          : inst.status === 'paid' ? 'bg-green-500/10 text-green-400' :
+                          inst.status === 'overdue' ? 'bg-red-500/10 text-red-400' :
+                          'bg-yellow-500/10 text-yellow-400'
                       }`}>
-                        {formatLabel(inst.status)}
+                        {inst.paid_in_advance && inst.status !== 'paid' ? 'Awaiting Confirmation' : formatLabel(inst.status)}
+                        {inst.status === 'paid' && inst.paid_in_advance && (
+                          <span className="ml-1 inline-flex items-center rounded-full bg-blue-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-blue-400">
+                            In Advance
+                          </span>
+                        )}
                       </span>
                     </div>
                   </div>
@@ -408,6 +455,15 @@ export default function CustomerProjectTracker({ projectId, projectName, project
             )}
           </div>
         ) : null}
+
+        {/* Advance Payment Modal */}
+          <AdvancePaymentModal
+            isOpen={advancePaymentOpen}
+            onClose={() => setAdvancePaymentOpen(false)}
+            projectId={projectId}
+            installments={installmentData?.installments || []}
+            onSuccess={handleAdvancePaymentSuccess}
+          />
 
         {/* Info Row */}
         <div className="mt-6 grid gap-3 sm:grid-cols-2">

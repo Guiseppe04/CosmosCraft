@@ -1043,3 +1043,27 @@ const listProjectsSchema = Joi.object({
 }).unknown(true);
 
 exports.listProjectsSchema = listProjectsSchema;
+
+const createAdvancePaymentSchema = Joi.object({
+  schedule_ids: Joi.array().items(Joi.string().uuid()).min(1).required()
+    .messages({
+      'array.min': 'At least one installment must be selected',
+      'any.required': 'Installment selection is required',
+      'array.includes': 'Each selected installment must be a valid UUID',
+    }),
+  payment_method: Joi.string().valid('gcash', 'bank_transfer', 'cash').required()
+    .messages({
+      'any.only': 'Payment method must be one of: gcash, bank_transfer, cash',
+      'any.required': 'Payment method is required',
+    }),
+  amount: Joi.number().positive().precision(2).required()
+    .messages({
+      'number.positive': 'Amount must be a positive number',
+      'any.required': 'Amount is required',
+    }),
+  currency: Joi.string().length(3).uppercase().default('PHP'),
+  reference_number: Joi.string().max(100).optional().allow(null, ''),
+  proof_url: Joi.string().optional().allow(null, ''),
+});
+
+exports.createAdvancePaymentSchema = createAdvancePaymentSchema;

@@ -994,6 +994,7 @@ CREATE TABLE project_installment_schedules (
     status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'paid', 'overdue', 'cancelled')),
     paid_at TIMESTAMPTZ,
     payment_id UUID REFERENCES payments(payment_id) ON DELETE SET NULL,
+    paid_in_advance BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE(project_id, installment_number)
@@ -1002,6 +1003,7 @@ CREATE TABLE project_installment_schedules (
 CREATE INDEX IF NOT EXISTS idx_project_installment_schedules_project ON project_installment_schedules(project_id);
 CREATE INDEX IF NOT EXISTS idx_project_installment_schedules_status ON project_installment_schedules(status);
 CREATE INDEX IF NOT EXISTS idx_project_installment_schedules_due_date ON project_installment_schedules(due_date);
+CREATE INDEX IF NOT EXISTS idx_project_installment_schedules_paid_in_advance ON project_installment_schedules(paid_in_advance);
 
 
 -- =============================================

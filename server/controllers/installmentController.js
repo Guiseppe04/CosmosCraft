@@ -121,6 +121,24 @@ exports.markInstallmentPaid = asyncHandler(async (req, res, next) => {
 });
 
 /**
+ * Admin cancels a pending advance payment.
+ * Un-links the covered installments and cancels the payment record.
+ */
+exports.cancelAdvancePayment = asyncHandler(async (req, res, next) => {
+  const { paymentId } = req.params;
+
+  if (!paymentId) throw new AppError('Payment ID is required', 400);
+
+  const result = await installmentService.cancelAdvancePayment(paymentId, req.user?.id || req.user?.user_id);
+
+  res.json({
+    status: 'success',
+    data: result,
+    message: 'Advance payment cancelled and installments un-linked',
+  });
+});
+
+/**
  * Run overdue check (can be called by cron or manually by admin).
  */
 exports.runOverdueCheck = asyncHandler(async (req, res, next) => {

@@ -19,6 +19,9 @@ router.get('/overdue', ctrl.getOverdueInstallments);
 // Mark an installment as paid
 router.patch('/:scheduleId/pay', ctrl.markInstallmentPaid);
 
+// Cancel a pending advance payment (un-link installments + cancel payment)
+router.patch('/:paymentId/advance-payment/cancel', ctrl.cancelAdvancePayment);
+
 // Manually run overdue check
 router.post('/check-overdue', ctrl.runOverdueCheck);
 
