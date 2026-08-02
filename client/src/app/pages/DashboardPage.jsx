@@ -6,6 +6,8 @@ import { useAuth } from '../context/AuthContext.jsx'
 import { useCart } from '../context/CartContext.jsx'
 import { BASE_PRICE, BODY_OPTIONS, BODY_WOOD_OPTIONS, BODY_FINISH_OPTIONS, NECK_OPTIONS, FRETBOARD_OPTIONS, HEADSTOCK_OPTIONS, HEADSTOCK_WOOD_OPTIONS, INLAY_OPTIONS, BRIDGE_OPTIONS, PICKGUARD_OPTIONS_BY_BODY, KNOB_OPTIONS_BY_BODY, HARDWARE_OPTIONS, PICKUP_OPTIONS } from '../lib/guitarBuilderData.js'
 import { adminApi } from '../utils/adminApi.js'
+import { formatPaymentMethod } from '../utils/paymentMethodUtils'
+import { getPaymentStatusConfig } from '../utils/orderPaymentStatus'
 import { useDebounce } from '../hooks/useDebounce'
 import CustomerProjectTracker from '../components/projects/CustomerProjectTracker.jsx'
 import { getAllProvinces, getMunicipalitiesByProvince, getBarangaysByMunicipality } from '@aivangogh/ph-address'
@@ -210,6 +212,17 @@ export function DashboardPage() {
   const [cancelAppointmentTarget, setCancelAppointmentTarget] = useState(null)
   const [cancelAppointmentReason, setCancelAppointmentReason] = useState('')
   const [isCancellingAppointment, setIsCancellingAppointment] = useState(false)
+  const [isPaymentConfirmedModalOpen, setIsPaymentConfirmedModalOpen] = useState(false)
+  const [isRequestRefundModalOpen, setIsRequestRefundModalOpen] = useState(false)
+  const [refundReason, setRefundReason] = useState('')
+  const [isRequestingRefund, setIsRequestingRefund] = useState(false)
+
+  const DIGITAL_PAYMENT_METHODS = ['gcash', 'e_wallet', 'e_bank', 'bank_transfer']
+  const isDigitalPayment = (method) => DIGITAL_PAYMENT_METHODS.includes(method?.toLowerCase())
+  const isPaymentConfirmed = (status) => {
+    const normalized = (status || 'pending').toLowerCase()
+    return ['verified', 'approved', 'paid'].includes(normalized)
+  }
   
   const [ratingModalOrderId, setRatingModalOrderId] = useState(null)
   const [rating, setRating] = useState(0)
@@ -564,6 +577,53 @@ export function DashboardPage() {
     setCancelAppointmentTarget(apt)
     setCancelAppointmentReason('')
     setIsCancelAppointmentModalOpen(true)
+  }
+
+  const handleCancelClick = (apt) => {
+    const isDigital = isDigitalPayment(apt.payment_method)
+    const confirmed = isPaymentConfirmed(apt.payment_status)
+    if (isDigital && confirmed) {
+      setCancelAppointmentTarget(apt)
+      setIsPaymentConfirmedModalOpen(true)
+    } else if (isDigital && !confirmed) {
+      setCancelAppointmentTarget(apt)
+      setRefundReason('')
+      setIsRequestRefundModalOpen(true)
+    } else {
+      openCancelAppointmentModal(apt)
+    }
+  }
+
+  const handleRequestRefund = async () => {
+    if (!cancelAppointmentTarget?.appointment_id) return
+    try {
+      setIsRequestingRefund(true)
+      await adminApi.createRefundRequest({
+        appointment_id: cancelAppointmentTarget.appointment_id,
+        payment_reference: cancelAppointmentTarget.payment_reference || cancelAppointmentTarget.payment_proof_url || '',
+        amount: cancelAppointmentTarget.amount || null,
+        reason: refundReason.trim(),
+      })
+      setToastMessage('Refund request submitted successfully. You may now cancel your appointment.')
+      setIsRequestRefundModalOpen(false)
+      setRefundReason('')
+      openCancelAppointmentModal(cancelAppointmentTarget)
+    } catch (err) {
+      setToastMessage(`Failed to submit refund request: ${err.message}`)
+    } finally {
+      setIsRequestingRefund(false)
+    }
+  }
+
+  const handleContinueWithoutRefund = () => {
+    setIsRequestRefundModalOpen(false)
+    openCancelAppointmentModal(cancelAppointmentTarget)
+  }
+
+  const handleKeepAppointment = () => {
+    setIsPaymentConfirmedModalOpen(false)
+    setIsRequestRefundModalOpen(false)
+    setCancelAppointmentTarget(null)
   }
 
   const closeCancelAppointmentModal = (force = false) => {
@@ -1144,10 +1204,19 @@ export function DashboardPage() {
                         <span className="block text-[var(--text-muted)] mb-0.5">Service Type</span>
                         <span className="text-white">{formatAppointmentServiceType(apt.appointment_type)}</span>
                       </div>
-                      <div>
-                        <span className="block text-[var(--text-muted)] mb-0.5">Selected Guitar</span>
-                        <span className="text-white">{selectedGuitar || '—'}</span>
-                      </div>
+                       <div>
+                         <span className="block text-[var(--text-muted)] mb-0.5">Selected Guitar</span>
+                         <span className="text-white">{selectedGuitar || '—'}</span>
+                       </div>
+                       <div className="sm:col-span-2">
+                         <span className="block text-[var(--text-muted)] mb-0.5">Payment</span>
+                         <div className="flex items-center gap-3">
+                           <span className="text-white">{formatPaymentMethod(apt.payment_method)}</span>
+                           <span className={`px-2.5 py-1 rounded-full text-xs font-semibold border ${getPaymentStatusConfig(apt.payment_status).bgColor} ${getPaymentStatusConfig(apt.payment_status).textColor} ${getPaymentStatusConfig(apt.payment_status).borderColor}`}>
+                             {getPaymentStatusConfig(apt.payment_status).label}
+                           </span>
+                         </div>
+                       </div>
                       {appointmentNotes && (
                         <div className="sm:col-span-2 mt-1">
                           <span className="block text-[var(--text-muted)] mb-0.5">Notes</span>
@@ -1195,7 +1264,7 @@ export function DashboardPage() {
                       {apt.status !== 'completed' && apt.status !== 'cancelled' && (
                         <div className="sm:col-span-2 mt-3 pt-4 border-t border-[var(--border)] flex justify-end">
                           <button
-                            onClick={() => openCancelAppointmentModal(apt)}
+                            onClick={() => handleCancelClick(apt)}
                             className="px-4 py-2 border border-red-500/30 text-red-500 hover:bg-red-500/10 transition-colors rounded-lg text-sm font-semibold"
                           >
                             Cancel Appointment
@@ -2905,6 +2974,144 @@ export function DashboardPage() {
                 >
                   {isCancellingAppointment && <Loader2 className="h-4 w-4 animate-spin" />}
                   {isCancellingAppointment ? 'Cancelling...' : 'Confirm Cancel'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ─── Payment Confirmed Warning Modal ───────────────────────────────── */}
+      <AnimatePresence>
+        {isPaymentConfirmedModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[300] bg-black/70 backdrop-blur-sm p-4 flex items-center justify-center"
+            onClick={(event) => {
+              if (event.target === event.currentTarget) handleKeepAppointment()
+            }}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 16, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 16, scale: 0.96 }}
+              className="relative w-full max-w-lg rounded-3xl border border-red-500/30 bg-[var(--surface-dark)] p-6 sm:p-7 shadow-2xl"
+            >
+              <div className="mb-4 flex items-center gap-3">
+                <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-red-500/20">
+                  <AlertTriangle className="h-6 w-6 text-red-400" />
+                </div>
+                <h3 className="text-xl font-bold text-white">Payment Already Confirmed</h3>
+              </div>
+
+              <p className="text-sm text-[var(--text-muted)] mb-4">
+                Your payment has already been confirmed by the administrator.
+                Payments made through <strong>GCash, E-Wallet, or E-Bank</strong> are{' '}
+                <strong className="text-red-400">non-refundable</strong> once they have been confirmed.
+                By cancelling this appointment, you acknowledge that the payment cannot be refunded.
+              </p>
+
+              <div className="mt-6 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsPaymentConfirmedModalOpen(false)}
+                  className="flex-1 rounded-xl border border-[var(--border)] bg-white/5 py-3 text-sm font-semibold text-white hover:bg-white/10 transition-colors"
+                >
+                  Keep Appointment
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsPaymentConfirmedModalOpen(false)
+                    openCancelAppointmentModal(cancelAppointmentTarget)
+                  }}
+                  className="flex-1 rounded-xl bg-red-500 py-3 text-sm font-bold text-white hover:bg-red-600 transition-colors"
+                >
+                  Cancel Appointment
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ─── Request Refund Modal ─────────────────────────────────────────────── */}
+      <AnimatePresence>
+        {isRequestRefundModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[300] bg-black/70 backdrop-blur-sm p-4 flex items-center justify-center"
+            onClick={(event) => {
+              if (event.target === event.currentTarget) handleKeepAppointment()
+            }}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 16, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 16, scale: 0.96 }}
+              className="relative w-full max-w-lg rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-6 sm:p-7 shadow-2xl"
+            >
+              <button
+                type="button"
+                onClick={handleKeepAppointment}
+                disabled={isRequestingRefund}
+                className="absolute right-4 top-4 rounded-lg p-2 text-[var(--text-muted)] hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
+                aria-label="Close"
+              >
+                <X className="h-4 w-4" />
+              </button>
+
+              <h3 className="text-xl font-bold text-white mb-2">Request Refund</h3>
+              <p className="mt-2 text-sm text-[var(--text-muted)] mb-4">
+                Your payment has <strong>not yet been confirmed</strong> by the administrator.
+                You may submit a refund request before cancelling this appointment.
+                Once your refund request is reviewed, the administrator will approve or
+                reject it based on your payment status.
+              </p>
+
+              <div className="mt-4">
+                <label className="block text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)] mb-2">
+                  Reason (optional)
+                </label>
+                <textarea
+                  value={refundReason}
+                  onChange={(e) => setRefundReason(e.target.value)}
+                  rows={3}
+                  disabled={isRequestingRefund}
+                  className="w-full px-4 py-3 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] text-white text-sm focus:border-[var(--gold-primary)] focus:outline-none resize-none disabled:opacity-50"
+                  placeholder="Briefly explain the reason for the refund..."
+                />
+              </div>
+
+              <div className="mt-6 flex flex-col gap-3">
+                <button
+                  type="button"
+                  onClick={handleRequestRefund}
+                  disabled={isRequestingRefund}
+                  className="flex items-center justify-center gap-2 rounded-xl bg-[var(--gold-primary)] py-3 text-sm font-bold text-black hover:bg-[var(--gold-secondary)] transition-colors disabled:opacity-60"
+                >
+                  {isRequestingRefund && <Loader2 className="h-4 w-4 animate-spin" />}
+                  {isRequestingRefund ? 'Submitting...' : 'Request Refund'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleContinueWithoutRefund}
+                  disabled={isRequestingRefund}
+                  className="rounded-xl border border-[var(--border)] bg-white/5 py-3 text-sm font-semibold text-white hover:bg-white/10 transition-colors disabled:opacity-50"
+                >
+                  Continue Without Refund
+                </button>
+                <button
+                  type="button"
+                  onClick={handleKeepAppointment}
+                  disabled={isRequestingRefund}
+                  className="rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] py-3 text-sm font-semibold text-[var(--text-muted)] hover:text-white transition-colors disabled:opacity-50"
+                >
+                  Keep Appointment
                 </button>
               </div>
             </motion.div>

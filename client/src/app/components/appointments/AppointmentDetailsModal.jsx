@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react'
 import { format } from 'date-fns'
-import { Calendar, Clock3, Mail, MapPin, Phone, UserCircle2, X } from 'lucide-react'
+import { Calendar, Clock3, Mail, MapPin, Phone, UserCircle2, X, CreditCard, Image } from 'lucide-react'
+import { formatPaymentMethod } from '../../utils/paymentMethodUtils'
 
 const EMPTY_LABEL = 'N/A'
 
@@ -130,6 +131,35 @@ const AppointmentDetailsModal = ({ show, onClose, appointment, onEdit, onCancel,
                   <span className="text-sm font-medium text-[var(--text-muted)]">Total</span>
                   <span className="text-base font-semibold text-white">{formatAmount(totalAmount)}</span>
                 </div>
+              </div>
+            </section>
+
+            <section>
+              <p className="mb-2 text-sm font-medium text-[var(--text-muted)]">Payment Method</p>
+              <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] p-4">
+                <div className="flex items-center gap-3 text-sm">
+                  <div className="w-10 h-10 rounded-xl bg-[var(--gold-primary)]/20 flex items-center justify-center flex-shrink-0">
+                    <CreditCard className="h-4 w-4 text-[var(--gold-primary)]" />
+                  </div>
+                  <span className="text-[var(--text-muted)]">Payment Method</span>
+                  <span className="ml-auto text-white">{formatPaymentMethod(appointment.payment_method)}</span>
+                </div>
+                {appointment.payment_proof_url && (
+                  <div className="mt-3 flex items-center gap-3 text-sm">
+                    <div className="w-10 h-10 rounded-xl bg-[var(--gold-primary)]/20 flex items-center justify-center flex-shrink-0">
+                      <Image className="h-4 w-4 text-[var(--gold-primary)]" />
+                    </div>
+                    <span className="text-[var(--text-muted)]">Payment Proof</span>
+                    <a
+                      href={appointment.payment_proof_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="ml-auto text-[var(--gold-primary)] hover:text-[#ffe270] transition-colors text-xs font-medium"
+                    >
+                      View Proof
+                    </a>
+                  </div>
+                )}
               </div>
             </section>
 

@@ -582,6 +582,9 @@ export function StaffDashboard() {
   const cancelAppointment = useCallback(async (id, reason) => {
     try { await staffApi.cancelAppointment(id, reason); showToast('Appointment cancelled'); await fetchAppointments() } catch (error) { showToast(error.message, 'error') }
   }, [fetchAppointments, showToast])
+  const updateAppointmentPaymentStatus = useCallback(async (id, paymentStatus) => {
+    try { await staffApi.updateAppointmentPaymentStatus(id, paymentStatus); showToast('Payment status updated'); await fetchAppointments() } catch (error) { showToast(error.message, 'error') }
+  }, [fetchAppointments, showToast])
   const submitAppointment = useCallback(async (payload) => {
     try {
       if (appointmentFormData?.appointment_id) await staffApi.updateAppointment(appointmentFormData.appointment_id, payload)
@@ -970,7 +973,7 @@ export function StaffDashboard() {
           </motion.div>
         )}
       </AnimatePresence>
-      <AppointmentModal isOpen={appointmentModalOpen} onClose={() => { setAppointmentModalOpen(false); setSelectedAppointment(null) }} appointment={selectedAppointment} onStatusChange={updateAppointmentStatus} onReschedule={rescheduleAppointment} onCancel={cancelAppointment} loading={loadingAppointments} />
+      <AppointmentModal isOpen={appointmentModalOpen} onClose={() => { setAppointmentModalOpen(false); setSelectedAppointment(null) }} appointment={selectedAppointment} onStatusChange={updateAppointmentStatus} onReschedule={rescheduleAppointment} onCancel={cancelAppointment} onPaymentStatusUpdate={updateAppointmentPaymentStatus} loading={loadingAppointments} />
       <AppointmentForm isOpen={appointmentFormOpen} onClose={() => { setAppointmentFormOpen(false); setAppointmentFormData(null); setSelectedCalendarDate(null) }} onSubmit={submitAppointment} initialData={appointmentFormData} services={services} users={[]} loading={loadingAppointments} selectedDate={selectedCalendarDate} />
       <UnavailableDatesManager isOpen={unavailableDatesOpen} onClose={() => setUnavailableDatesOpen(false)} unavailableDates={unavailableDates} onAddUnavailable={async (date, reason) => { try { await staffApi.addUnavailableDate({ date, reason }); showToast('Date marked unavailable'); await fetchUnavailableDates() } catch (error) { showToast(error.message, 'error') } }} onRemoveUnavailable={async (id) => { try { await staffApi.removeUnavailableDate(id); showToast('Date reopened'); await fetchUnavailableDates() } catch (error) { showToast(error.message, 'error') } }} loading={loadingAppointments} />
     </div>

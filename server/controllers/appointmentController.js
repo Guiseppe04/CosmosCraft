@@ -798,3 +798,101 @@ exports.updatePaymentStatus = async (req, res, next) => {
     next(err);
   }
 };
+
+// ─── REFUND REQUESTS ──────────────────────────────────────────────────────────
+
+/**
+ * POST /api/appointments/refund-requests
+ * Create a refund request linked to an appointment
+ * Access: Authenticated users
+ */
+exports.createRefundRequest = async (req, res, next) => {
+  try {
+    const validated = validate(
+      req.body,
+      appointmentValidation.createRefundRequestSchema
+    );
+
+    const { appointment_id, payment_reference, amount, reason } = validated;
+
+    const appointment = await checkAppointmentAccess(appointment_id, req.user.user_id, req.user.role);
+
+    const refundRequest = await appointmentService.createRefundRequest({
+      appointment_id,
+      user_id: req.user.user_id,
+      payment_method: appointment.payment_method,
+      payment_reference,
+      amount,
+      reason,
+    });
+
+    res.status(201).json({
+      status: 'success',
+      data: {
+        refund_request: refundRequest,
+      },
+      message: 'Refund request submitted successfully',
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * GET /api/appointments/refund-requests
+ * Get refund requests (admin/staff all, customer own)
+ * Access: Authenticated users
+ */
+exports.getRefundRequests = async (req, res, next) => {
+  try {
+    let result;
+
+    if (req.user.role === 'customer') {
+      result = await appointmentService.getAllRefundRequests({ user_id: req.user.user_id });
+    } else {
+      const { status, user_id, limit, offset } = req.query;
+      result = await appointmentService.getAllRefundRequests({
+        status,
+        user_id: user_id || null,
+        limit: limit ? parseInt(limit) : 50,
+        offset: offset ? parseInt(offset) : 0,
+      });
+    }
+
+    res.json({
+      status: 'success',
+      data: result,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * GET /api/appointments/:id/refund-requests
+ * Get refund requests for a specific appointment
+ * Access: Appointment owner or admin/staff
+ */
+exports.getRefundRequestsByAppointment = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const appointment = await appointmentService.getAppointmentById(id);
+    if (!appointment) {
+      throw new AppError('Appointment not found', 404);
+    }
+
+    await checkAppointmentAccess(id, req.user.user_id, req.user.role);
+
+    const refundRequests = await appointmentService.getRefundRequestsByAppointment(id);
+
+    res.json({
+      status: 'success',
+      data: {
+        refund_requests: refundRequests,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+};

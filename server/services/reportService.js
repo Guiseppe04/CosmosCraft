@@ -146,29 +146,29 @@ async function getPaymentReport(filters = {}) {
 }
 
 async function getAppointmentReport(filters = {}) {
-  const { start_date, end_date, status, service_id } = filters;
+  const { start_date, end_date, status, service_id, payment_method } = filters;
   const { conditions, params } = buildDateFilter(parseDate(start_date), parseDate(end_date), 'scheduled_at');
-  const baseIdx = params.length + 1;
+  let baseIdx = params.length + 1;
 
   if (status) {
     conditions.push(`a.status = $${baseIdx++}`);
     params.push(status);
   }
-  if (service_id) {
-    conditions.push(`a.service_id = $${baseIdx++}`);
-    params.push(service_id);
+  if (payment_method) {
+    conditions.push(`a.payment_method = $${baseIdx++}`);
+    params.push(payment_method);
   }
 
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
   const result = await pool.query(
-    `SELECT s.name as service_name, a.status,
+    `SELECT s.name as service_name, a.status, a.payment_method,
             COUNT(*) as count,
             COUNT(CASE WHEN a.status = 'completed' THEN 1 END) as completed_count
      FROM appointments a
-     JOIN services s ON a.service_id = s.service_id
+     JOIN services s ON s.service_id::text = ANY(a.services)
      ${whereClause}
-     GROUP BY s.name, a.status
+     GROUP BY s.name, a.status, a.payment_method
      ORDER BY s.name, a.status`,
     params
   );
@@ -178,6 +178,9 @@ async function getAppointmentReport(filters = {}) {
         COUNT(*) as total_appointments,
         SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
         SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) as approved,
+        SUM(CASE WHEN status = 'confirmed' THEN 1 ELSE 0 END) as confirmed,
+        SUM(CASE WHEN status = 'in_progress' THEN 1 ELSE 0 END) as in_progress,
+        SUM(CASE WHEN status = 'ready_for_pickup' THEN 1 ELSE 0 END) as ready_for_pickup,
         SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed,
         SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled
      FROM appointments a
@@ -188,7 +191,7 @@ async function getAppointmentReport(filters = {}) {
   const serviceStats = await pool.query(
     `SELECT s.name, s.service_id, COUNT(*) as total_appointments
      FROM appointments a
-     JOIN services s ON a.service_id = s.service_id
+     JOIN services s ON s.service_id::text = ANY(a.services)
      ${whereClause}
      GROUP BY s.name, s.service_id
      ORDER BY total_appointments DESC
@@ -196,10 +199,27 @@ async function getAppointmentReport(filters = {}) {
     params
   );
 
+  const paymentMethodStats = await pool.query(
+    `SELECT 
+        a.payment_method as method,
+        COUNT(*) as count,
+        COUNT(CASE WHEN a.status = 'completed' THEN 1 END) as completed_count
+     FROM appointments a
+     ${whereClause}
+     GROUP BY a.payment_method
+     ORDER BY count DESC`,
+    params
+  );
+
   return {
     data: result.rows,
     summary: summaryResult.rows[0],
     top_services: serviceStats.rows,
+    by_payment_method: paymentMethodStats.rows.map(r => ({
+      method: r.method,
+      count: parseInt(r.count, 10),
+      completed_count: parseInt(r.completed_count, 10),
+    })),
   };
 }
 
@@ -824,7 +844,7 @@ async function exportReport(reportType, filters = {}) {
   switch (reportType) {
     case 'orders': data = await getOrderReport(filters); break;
     case 'payments': data = await getPaymentReport(filters); break;
-    case 'appointments': data = await getAppointmentReport(filters); break;
+    case 'appointments': data = await getAppointmentReport({ start_date: filters.start_date, end_date: filters.end_date, status: filters.status, payment_method: filters.payment_method }); break;
     case 'products': data = await getProductReport(filters); break;
     case 'users': data = await getUserReport(filters); break;
     case 'revenue': data = await getRevenueReport(filters); break;

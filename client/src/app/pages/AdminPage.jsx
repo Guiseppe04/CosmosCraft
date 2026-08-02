@@ -648,6 +648,14 @@ export function AdminPage() {
     } catch (e) { showToast(e.message, 'error') }
   }, [showToast, fetchAppointments])
 
+  const handleAppointmentPaymentStatusUpdate = useCallback(async (id, paymentStatus) => {
+    try {
+      await adminApi.updateAppointmentPaymentStatus(id, paymentStatus)
+      showToast(`Payment status updated to ${paymentStatus}`, 'success')
+      fetchAppointments()
+    } catch (e) { showToast(e.message, 'error') }
+  }, [showToast, fetchAppointments])
+
   const handleCreateAppointment = useCallback(async (data) => {
     try {
       await adminApi.createAppointment(data)
@@ -2670,6 +2678,7 @@ export function AdminPage() {
         onStatusChange={handleAppointmentStatusChange}
         onReschedule={handleAppointmentReschedule}
         onCancel={handleAppointmentCancel}
+        onPaymentStatusUpdate={handleAppointmentPaymentStatusUpdate}
         loading={appointmentLoading}
       />
 

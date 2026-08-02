@@ -69,6 +69,7 @@ export function useInventoryAdmin({ products, showToast }) {
         dailySales: 0, dailyTransactions: 0, weeklySales: 0, weeklyTransactions: 0,
         monthlySales: 0, monthlyTransactions: 0, bestSellingProducts: [], customizationTypes: [],
         customizationRevenue: 0, avgCustomization: 0, walkInConversion: 0, onlineConversion: 0,
+        appointmentPaymentMethods: [],
       }
       if (JSON.stringify(salesReportRef.current) !== JSON.stringify(fallbackSalesReport)) {
         salesReportRef.current = fallbackSalesReport

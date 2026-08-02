@@ -1,4 +1,6 @@
 import { ModalHeader } from '../shared/ModalHeader'
+import { CreditCard } from 'lucide-react'
+import { formatPaymentMethod } from '../../../../utils/paymentMethodUtils'
 
 export function ViewAppointmentModal({ modal, closeModal }) {
   if (!modal.data) return null
@@ -127,6 +129,31 @@ export function ViewAppointmentModal({ modal, closeModal }) {
               <p className="text-[var(--text-muted)] text-sm italic">No detailed guitar specs provided.</p>
             )}
           </div>
+        </div>
+
+        <div className="bg-[var(--bg-primary)] p-5 rounded-xl border border-[var(--border)]">
+          <p className="text-[11px] font-semibold uppercase tracking-widest text-[var(--text-muted)] mb-3">Payment Method</p>
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-xl bg-[var(--gold-primary)]/20 flex items-center justify-center flex-shrink-0">
+              <CreditCard className="w-5 h-5 text-[var(--gold-primary)]" />
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-wider text-[var(--text-muted)]">Method</p>
+              <p className="text-white font-semibold mt-1">{formatPaymentMethod(apt.payment_method)}</p>
+            </div>
+          </div>
+          {apt.payment_proof_url && (
+            <div className="mt-3">
+              <a
+                href={apt.payment_proof_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-xs text-[var(--gold-primary)] hover:text-[#ffe270] transition-colors"
+              >
+                View Payment Proof
+              </a>
+            </div>
+          )}
         </div>
 
         <div className="bg-[var(--bg-primary)] p-5 rounded-xl border border-[var(--border)]">

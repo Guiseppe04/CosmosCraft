@@ -225,6 +225,11 @@ const appointmentValidation = {
       .allow('')
       .trim(),
 
+    payment_method: Joi.string()
+      .valid('cash', 'e_wallet', 'e_bank', 'gcash', 'bank_transfer')
+      .optional()
+      .allow('', null),
+
     staff_id: Joi.string()
       .uuid()
       .optional(),
@@ -308,7 +313,7 @@ const appointmentValidation = {
         'string.guid': 'Invalid user_id format',
       }),
 
-    service_id: Joi.string()
+     service_id: Joi.string()
       .optional(),
 
     order_id: Joi.string()
@@ -317,6 +322,10 @@ const appointmentValidation = {
       .messages({
         'string.guid': 'Invalid order_id format',
       }),
+
+    payment_method: Joi.string()
+      .valid('cash', 'e_wallet', 'e_bank', 'gcash', 'bank_transfer')
+      .optional(),
 
     staff_id: Joi.string()
       .uuid()
@@ -403,12 +412,16 @@ const appointmentValidation = {
         'date.min': 'end_date must be after or equal to start_date',
       }),
 
-    appointment_type: Joi.string()
+     appointment_type: Joi.string()
       .valid('service_in_shop', 'service_home', 'pickup')
       .optional(),
 
     status: Joi.string()
       .valid('pending', 'confirmed', 'in_progress', 'completed', 'ready_for_pickup', 'cancelled')
+      .optional(),
+
+    payment_method: Joi.string()
+      .valid('cash', 'e_wallet', 'e_bank', 'gcash', 'bank_transfer')
       .optional(),
 
     limit: Joi.number()
@@ -501,6 +514,43 @@ const appointmentValidation = {
       .positive()
       .optional()
       .default(60),
+  }),
+
+  // ─── REFUND REQUEST ────────────────────────────────────────────────────────
+
+  createRefundRequestSchema: Joi.object({
+    appointment_id: Joi.string()
+      .uuid()
+      .required()
+      .messages({
+        'any.required': 'appointment_id is required',
+        'string.empty': 'appointment_id is required',
+        'string.guid': 'appointment_id must be a valid UUID',
+      }),
+
+    payment_reference: Joi.string()
+      .max(255)
+      .optional()
+      .allow('')
+      .messages({
+        'string.max': 'payment_reference cannot exceed 255 characters',
+      }),
+
+    amount: Joi.number()
+      .precision(2)
+      .positive()
+      .optional()
+      .messages({
+        'number.positive': 'amount must be greater than 0',
+      }),
+
+    reason: Joi.string()
+      .max(2000)
+      .optional()
+      .allow('')
+      .messages({
+        'string.max': 'reason cannot exceed 2000 characters',
+      }),
   }),
 };
 

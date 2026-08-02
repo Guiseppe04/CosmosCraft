@@ -6,6 +6,8 @@ import {
   Image, ExternalLink, RotateCcw, Trash2, Save
 } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
+import { formatPaymentMethod } from '../../utils/paymentMethodUtils'
+import { getPaymentStatusConfig } from '../../utils/orderPaymentStatus'
 
 // Status configuration
 const STATUS_CONFIG = {
@@ -92,7 +94,7 @@ export default function AppointmentModal({
   onStatusChange,
   onReschedule,
   onCancel,
-  onDelete,
+  onPaymentStatusUpdate,
   loading = false,
 }) {
   const [showStatusDropdown, setShowStatusDropdown] = useState(false)
@@ -104,6 +106,15 @@ export default function AppointmentModal({
   const [cancelReason, setCancelReason] = useState('')
   const [actionLoading, setActionLoading] = useState(false)
 
+  const handleConfirmPayment = async () => {
+    setActionLoading(true)
+    try {
+      await onPaymentStatusUpdate?.(appointment.appointment_id, 'verified')
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
   // Reset form state when appointment changes
   useEffect(() => {
     if (appointment) {
@@ -114,6 +125,8 @@ export default function AppointmentModal({
   }, [appointment])
 
   if (!isOpen || !appointment) return null
+
+  const paymentStatusConfig = getPaymentStatusConfig(appointment.payment_status)
 
   const handleStatusChange = async (newStatus) => {
     setShowStatusDropdown(false)
@@ -479,37 +492,53 @@ export default function AppointmentModal({
           )}
 
           {/* Payment Section */}
-          {(appointment.payment_method || appointment.payment_proof_url) && (
-            <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-5">
-              <h3 className="text-lg font-semibold text-white mb-4">Payment</h3>
-              <div className="space-y-4">
-                {appointment.payment_method && (
-                  <div className="flex items-start gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-[var(--gold-primary)]/20 flex items-center justify-center flex-shrink-0">
-                      <CreditCard className="w-5 h-5 text-[var(--gold-primary)]" />
-                    </div>
-                    <div>
-                      <p className="text-xs uppercase tracking-wider text-[var(--text-muted)]">Payment Method</p>
-                      <p className="text-white font-semibold mt-1 capitalize">{appointment.payment_method}</p>
-                    </div>
-                  </div>
-                )}
-                {appointment.payment_proof_url && (
-                  <div>
-                    <p className="text-xs uppercase tracking-wider text-[var(--text-muted)] mb-2">Payment Proof</p>
-                    <button
-                      type="button"
-                      onClick={() => setShowImageModal(true)}
-                      className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] text-[var(--text-muted)] hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)] transition-colors"
-                    >
-                      <Image className="w-4 h-4" />
-                      View Proof
-                    </button>
-                  </div>
-                )}
+          <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-5">
+            <h3 className="text-lg font-semibold text-white mb-4">Payment Method</h3>
+            <div className="space-y-4">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-xl bg-[var(--gold-primary)]/20 flex items-center justify-center flex-shrink-0">
+                  <CreditCard className="w-5 h-5 text-[var(--gold-primary)]" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-xs uppercase tracking-wider text-[var(--text-muted)]">Payment Method</p>
+                  <p className="text-white font-semibold mt-1 capitalize">{formatPaymentMethod(appointment.payment_method)}</p>
+                </div>
+                <div className="flex items-center">
+                  <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${paymentStatusConfig.bgColor} ${paymentStatusConfig.textColor} ${paymentStatusConfig.borderColor}`}>
+                    {paymentStatusConfig.label}
+                  </span>
+                </div>
               </div>
+
+              {appointment.payment_method !== 'cash' && appointment.payment_proof_url && onPaymentStatusUpdate && !['approved', 'verified'].includes(paymentStatusConfig.value) && (
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    onClick={handleConfirmPayment}
+                    disabled={actionLoading}
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-[var(--gold-primary)]/30 bg-[var(--gold-primary)]/10 text-[var(--gold-primary)] hover:bg-[var(--gold-primary)]/20 transition-colors disabled:opacity-50"
+                  >
+                    {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                    Confirm Payment Received
+                  </button>
+                </div>
+              )}
+
+              {appointment.payment_proof_url && (
+                <div>
+                  <p className="text-xs uppercase tracking-wider text-[var(--text-muted)] mb-2">Payment Proof</p>
+                  <button
+                    type="button"
+                    onClick={() => setShowImageModal(true)}
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] text-[var(--text-muted)] hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)] transition-colors"
+                  >
+                    <Image className="w-4 h-4" />
+                    View Proof
+                  </button>
+                </div>
+              )}
             </div>
-          )}
+          </div>
 
           {/* Actions Section */}
           <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-5">

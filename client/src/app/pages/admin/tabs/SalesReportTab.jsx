@@ -1,7 +1,8 @@
 import { motion } from 'motion/react'
-import { BarChart3, DollarSign, ShoppingBag, TrendingUp, Clock, Calendar } from 'lucide-react'
+import { BarChart3, DollarSign, ShoppingBag, TrendingUp, Clock, Calendar, CreditCard } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 import { formatCurrency } from '../../../utils/formatCurrency'
+import { formatPaymentMethod } from '../../../utils/paymentMethodUtils'
 
 export function SalesReportTab({ salesReport }) {
   return (
@@ -121,7 +122,25 @@ export function SalesReportTab({ salesReport }) {
               </div>
             </div>
           )}
-        </div>
+
+        {(salesReport.appointmentPaymentMethods || []).length > 0 && (
+          <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6">
+            <h2 className="text-white text-xl font-semibold mb-6">Appointment Payments by Method</h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {salesReport.appointmentPaymentMethods.map((entry) => (
+                <div key={entry.method} className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl p-4 text-center">
+                  <div className="w-10 h-10 rounded-xl bg-[var(--gold-primary)]/20 flex items-center justify-center mx-auto mb-2">
+                    <CreditCard className="w-5 h-5 text-[var(--gold-primary)]" />
+                  </div>
+                  <p className="text-sm font-medium text-[var(--text-muted)] uppercase tracking-wider">{formatPaymentMethod(entry.method)}</p>
+                  <p className="text-white text-lg font-bold mt-1">{entry.appointments || 0} appointments</p>
+                  <p className="text-[var(--gold-primary)] text-sm mt-1">{formatCurrency(entry.revenue || 0)}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
       ) : (
         <div className="text-center py-12">
           <BarChart3 className="w-16 h-16 text-[var(--gold-primary)] mx-auto mb-4" />

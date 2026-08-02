@@ -217,7 +217,7 @@ exports.getAppointmentById = async (appointmentId) => {
   return formatAppointmentResponse(result.rows[0]);
 };
 
-exports.listAppointments = async ({ user_id, appointment_type, status, date_from, date_to, search, sort_by = 'scheduled_at', sort_order = 'asc', limit = 20, offset = 0 } = {}) => {
+exports.listAppointments = async ({ user_id, appointment_type, status, date_from, date_to, search, payment_method, sort_by = 'scheduled_at', sort_order = 'asc', limit = 20, offset = 0 } = {}) => {
   let where = [];
   let params = [];
   let idx = 1;
@@ -227,6 +227,7 @@ exports.listAppointments = async ({ user_id, appointment_type, status, date_from
   if (status) { where.push(`a.status = $${idx++}`); params.push(status); }
   if (date_from) { where.push(`a.scheduled_at >= $${idx++}`); params.push(date_from); }
   if (date_to) { where.push(`a.scheduled_at <= $${idx++}`); params.push(date_to); }
+  if (payment_method) { where.push(`a.payment_method = $${idx++}`); params.push(payment_method); }
   if (search) {
     where.push(`(u.first_name ILIKE $${idx} OR u.last_name ILIKE $${idx} OR u.email ILIKE $${idx} OR a.notes ILIKE $${idx} OR CAST(a.appointment_id AS TEXT) ILIKE $${idx})`);
     params.push(`%${search}%`);
@@ -261,6 +262,7 @@ exports.getAppointmentsCount = async (filters = {}) => {
   if (filters.user_id) { where.push(`a.user_id = $${idx++}`); params.push(filters.user_id); }
   if (filters.appointment_type) { where.push(`a.appointment_type = $${idx++}`); params.push(filters.appointment_type); }
   if (filters.status) { where.push(`a.status = $${idx++}`); params.push(filters.status); }
+  if (filters.payment_method) { where.push(`a.payment_method = $${idx++}`); params.push(filters.payment_method); }
   if (filters.search) {
     where.push(`(u.first_name ILIKE $${idx} OR u.last_name ILIKE $${idx} OR u.email ILIKE $${idx} OR a.notes ILIKE $${idx} OR CAST(a.appointment_id AS TEXT) ILIKE $${idx})`);
     params.push(`%${filters.search}%`);
@@ -632,5 +634,74 @@ exports.getDailyAppointmentLoad = async (date, excludeAppointmentId = null) => {
     max_appointments: MAX_APPOINTMENTS_PER_DAY,
     is_unavailable: Boolean(isUnavailable),
     is_fully_booked: count >= MAX_APPOINTMENTS_PER_DAY,
+  };
+};
+
+// ─── REFUND REQUESTS ──────────────────────────────────────────────────────────
+
+exports.createRefundRequest = async ({ appointment_id, user_id, payment_method, payment_reference, amount, reason }) => {
+  const result = await pool.query(
+    `INSERT INTO refund_requests (
+      appointment_id, user_id, payment_method, payment_reference, amount, reason, status
+    ) VALUES (
+      $1, $2, $3, $4, $5, $6, 'pending'
+    ) RETURNING *`,
+    [appointment_id, user_id, payment_method, payment_reference || null, amount || null, reason || null]
+  );
+  return result.rows[0];
+};
+
+exports.getRefundRequestsByAppointment = async (appointmentId) => {
+  const result = await pool.query(
+    `SELECT r.*, u.first_name, u.last_name, u.email
+     FROM refund_requests r
+     JOIN users u ON r.user_id = u.user_id
+     WHERE r.appointment_id = $1
+     ORDER BY r.created_at DESC`,
+    [appointmentId]
+  );
+  return result.rows;
+};
+
+exports.getRefundRequestById = async (refundId) => {
+  const result = await pool.query('SELECT * FROM refund_requests WHERE refund_id = $1', [refundId]);
+  return result.rows[0] || null;
+};
+
+exports.getAllRefundRequests = async ({ status, user_id, sort_by = 'created_at', sort_order = 'desc', limit = 50, offset = 0 } = {}) => {
+  const params = [];
+  let idx = 1;
+  let whereClause = '';
+
+  if (status) {
+    whereClause = `WHERE status = $${idx++}`;
+    params.push(status);
+  }
+
+  if (user_id) {
+    whereClause += (whereClause ? ' AND ' : 'WHERE ') + `user_id = $${idx++}`;
+    params.push(user_id);
+  }
+
+  const countResult = await pool.query(
+    `SELECT COUNT(*) as total FROM refund_requests ${whereClause}`,
+    params.slice(0, idx - 1)
+  );
+
+  const result = await pool.query(
+    `SELECT r.*, u.first_name, u.last_name, u.email
+     FROM refund_requests r
+     JOIN users u ON r.user_id = u.user_id
+     ${whereClause}
+     ORDER BY ${sort_by === 'created_at' ? 'r.created_at' : sort_by} ${sort_order === 'desc' ? 'DESC' : 'ASC'}
+     LIMIT $${idx} OFFSET $${idx + 1}`,
+    [...params.slice(0, idx - 1), limit, offset]
+  );
+
+  return {
+    refund_requests: result.rows,
+    total: parseInt(countResult.rows[0].total),
+    limit,
+    offset,
   };
 };

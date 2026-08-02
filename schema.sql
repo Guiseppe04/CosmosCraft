@@ -33,7 +33,7 @@ CREATE TYPE order_payment_status_enum AS ENUM (
 );
 CREATE TYPE appointment_status_enum AS ENUM ('pending', 'confirmed', 'in_progress', 'ready_for_pickup', 'completed', 'cancelled');
 CREATE TYPE project_status_enum AS ENUM ('not_started', 'in_progress', 'on_hold', 'completed', 'cancelled');
-CREATE TYPE notification_type_enum AS ENUM ('order_update', 'appointment_reminder', 'system', 'promotional', 'low_stock', 'project_update');
+CREATE TYPE notification_type_enum AS ENUM ('order_update', 'appointment_reminder', 'system', 'promotional', 'low_stock', 'project_update', 'refund');
 
 
 -- =============================================
@@ -632,6 +632,7 @@ CREATE INDEX idx_appointments_services_gin ON appointments USING GIN (services);
 CREATE INDEX idx_appointments_scheduled_at ON appointments(scheduled_at);
 CREATE INDEX idx_appointments_status ON appointments(status);
 CREATE INDEX idx_appointments_payment_status ON appointments(payment_status);
+CREATE INDEX idx_appointments_payment_method ON appointments(payment_method) WHERE payment_method IS NOT NULL;
 CREATE INDEX idx_appointments_deleted_at ON appointments(deleted_at) WHERE deleted_at IS NOT NULL;
 -- Composite index for calendar/scheduling queries
 CREATE INDEX idx_appointments_schedule_status ON appointments(scheduled_at, status);
@@ -657,6 +658,34 @@ CREATE TABLE unavailable_dates (
 CREATE INDEX idx_unavailable_dates_date ON unavailable_dates(date);
 CREATE INDEX idx_unavailable_dates_created_by ON unavailable_dates(created_by);
 CREATE INDEX idx_unavailable_dates_deleted_at ON unavailable_dates(deleted_at) WHERE deleted_at IS NOT NULL;
+
+
+-- =============================================
+-- 17B. REFUND REQUESTS
+-- =============================================
+
+CREATE TYPE refund_status_enum AS ENUM ('pending', 'approved', 'rejected', 'processed');
+
+CREATE TABLE refund_requests (
+    refund_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    appointment_id UUID NOT NULL REFERENCES appointments(appointment_id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    payment_method VARCHAR(50) NOT NULL,
+    payment_reference VARCHAR(255),
+    amount NUMERIC(12, 2) CHECK (amount >= 0),
+    reason TEXT,
+    status refund_status_enum NOT NULL DEFAULT 'pending',
+    reviewed_by UUID REFERENCES users(user_id) ON DELETE SET NULL,
+    reviewed_at TIMESTAMPTZ,
+    reviewed_notes TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_refund_requests_appointment ON refund_requests(appointment_id);
+CREATE INDEX idx_refund_requests_user_id ON refund_requests(user_id);
+CREATE INDEX idx_refund_requests_status ON refund_requests(status);
+CREATE INDEX idx_refund_requests_created_at ON refund_requests(created_at DESC);
 
 
 -- =============================================

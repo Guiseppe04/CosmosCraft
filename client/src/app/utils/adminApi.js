@@ -145,9 +145,22 @@ export const adminApi = {
   rescheduleAppointment: (id, newScheduledAt, reason) => request(`/api/appointments/${id}/reschedule`, { method: 'PATCH', body: { new_scheduled_at: newScheduledAt, reason } }),
   cancelAppointment: (id, reason) => request(`/api/appointments/${id}`, { method: 'DELETE', body: reason ? { reason } : {} }),
   cancelMyAppointment: (id, reason) => request(`/api/appointments/${id}/cancel`, { method: 'POST', body: reason ? { reason } : {} }),
+  updateAppointmentPaymentStatus: (id, paymentStatus) => request(`/api/appointments/${id}/payment-status`, { method: 'PATCH', body: { payment_status: paymentStatus } }),
+
+  // Refund Requests
+  createRefundRequest: (body) => request('/api/appointments/refund-requests', { method: 'POST', body }),
+  getRefundRequestsForAppointment: (aptId) => request(`/api/appointments/${aptId}/refund-requests`),
+  getRefundRequests: (params = {}) => {
+    const qs = new URLSearchParams(params).toString()
+    return request(`/api/appointments/refund-requests${qs ? '?' + qs : ''}`)
+  },
   getAppointmentStats: (params = {}) => {
     const qs = new URLSearchParams(params).toString()
     return request(`/api/appointments/stats${qs ? '?' + qs : ''}`)
+  },
+  getAppointmentReport: (params = {}) => {
+    const qs = new URLSearchParams(params).toString()
+    return request(`/api/reports/appointments${qs ? '?' + qs : ''}`)
   },
   getAvailableSlots: (serviceId, date, slotDuration = 30) => request(`/api/appointments/services/${serviceId}/availability/slots?date=${date}&slot_duration=${slotDuration}`),
   checkAvailability: (serviceId, scheduledAt) => request(`/api/appointments/services/${serviceId}/availability?scheduled_at=${scheduledAt}`),

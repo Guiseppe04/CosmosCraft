@@ -68,6 +68,11 @@ export const staffApi = {
     request(`/api/appointments/${id}/reschedule`, { method: 'PATCH', body: { new_scheduled_at: newScheduledAt, reason } }),
   cancelAppointment: (id, reason) =>
     request(`/api/appointments/${id}`, { method: 'DELETE', body: reason ? { reason } : {} }),
+  updateAppointmentPaymentStatus: (id, paymentStatus) =>
+    request(`/api/appointments/${id}/payment-status`, { method: 'PATCH', body: { payment_status: paymentStatus } }),
+
+  // Refund Requests
+  createRefundRequest: (body) => request('/api/appointments/refund-requests', { method: 'POST', body }),
   getAppointmentStats: (params = {}) => {
     const qs = new URLSearchParams(params).toString()
     return request(`/api/appointments/stats${qs ? `?${qs}` : ''}`)

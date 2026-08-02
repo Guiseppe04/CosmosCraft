@@ -19,8 +19,8 @@ exports.getPaymentReport = async (req, res, next) => {
 
 exports.getAppointmentReport = async (req, res, next) => {
   try {
-    const { start_date, end_date, status, service_id } = req.query;
-    const result = await reportService.getAppointmentReport({ start_date, end_date, status, service_id });
+    const { start_date, end_date, status, service_id, payment_method } = req.query;
+    const result = await reportService.getAppointmentReport({ start_date, end_date, status, service_id, payment_method });
     res.json({ status: 'success', data: result });
   } catch (err) { next(err); }
 };
@@ -90,9 +90,9 @@ exports.getCustomizationReport = async (req, res, next) => {
 
 exports.exportReport = async (req, res, next) => {
   try {
-    const { type, start_date, end_date } = req.query;
+    const { type, start_date, end_date, status, payment_method } = req.query;
     if (!type) throw new AppError('Report type is required', 400);
-    const result = await reportService.exportReport(type, { start_date, end_date });
+    const result = await reportService.exportReport(type, { start_date, end_date, status, payment_method });
     res.json({ status: 'success', data: result });
   } catch (err) { next(err); }
 };
