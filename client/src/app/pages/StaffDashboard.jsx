@@ -403,21 +403,109 @@ const fetchUnavailableDates = useCallback(async () => {
     return (inventory.length ? inventory : products).map((item) => ({ ...(lookup[item.product_id] || {}), ...item, stock: Number(item.stock || 0), low_stock_threshold: Number(item.low_stock_threshold || 10), price: Number(item.price || lookup[item.product_id]?.price || 0) }))
   }, [inventory, products])
 
-  const visibleParts = useMemo(() => parts.map((item) => ({ ...item, stock: Number(item.stock ?? item.quantity ?? 0), low_stock_threshold: 10 })), [parts])
-  const inventoryRows = inventorySubTab === 'products' ? visibleInventory : visibleParts
-  const filteredInventory = useMemo(() => {
-    const rows = inventoryRows.filter((item) => {
-      const state = getInventoryState(Number(item.stock || 0), Number(item.low_stock_threshold || 10))
-      if (inventoryStatusFilter === 'all') return true
-      if (inventoryStatusFilter === 'healthy') return state.label === 'Healthy'
-      if (inventoryStatusFilter === 'warning') return state.label === 'Warning'
-      if (inventoryStatusFilter === 'critical') return state.label === 'Critical'
-      if (inventoryStatusFilter === 'out_of_stock') return state.label === 'Out of Stock'
-      return true
+  const visibleParts = useMemo(() => (parts || []).map((part) => normalizeBuilderPart(part)), [parts])
+
+  const inventoryIsProducts = inventorySubTab === 'products'
+  const inventoryCurrentFilter = inventoryIsProducts ? productsInventoryFilter : partsInventoryFilter
+  const inventoryPartCategoryOptions = useMemo(() => {
+    const presentCategories = new Set((visibleParts || []).map((part) => part.inventory_category).filter(Boolean))
+    return [
+      { value: 'body', label: 'Body' },
+      { value: 'neck', label: 'Neck' },
+      { value: 'pickups', label: 'Pickups' },
+      { value: 'hardware', label: 'Hardware' },
+      { value: 'electronics', label: 'Electronics' },
+      { value: 'accessories', label: 'Accessories' },
+    ].filter(({ value }) => presentCategories.has(value))
+  }, [visibleParts])
+
+  const filteredProductsInventory = useMemo(() => {
+    const prods = visibleInventory.map(p => ({ ...p, type: 'product', stock: p.stock, name: p.name, sku: p.sku, low_stock_threshold: p.low_stock_threshold, part_id: p.product_id }))
+    let result = [...prods]
+    const searchTerm = String(productsInventoryFilter.search || '').trim().toLowerCase()
+    if (searchTerm) {
+      result = result.filter((item) =>
+        String(item.name || '').toLowerCase().includes(searchTerm) ||
+        String(item.sku || '').toLowerCase().includes(searchTerm)
+      )
+    }
+    const statusFilter = productsInventoryFilter.status
+    if (statusFilter !== 'all') {
+      result = result.filter(item => {
+        const stock = Number(item.stock ?? 0)
+        const threshold = Number(item.low_stock_threshold ?? 10)
+        if (statusFilter === 'out_of_stock') return stock === 0
+        if (statusFilter === 'critical') return stock > 0 && stock <= threshold
+        if (statusFilter === 'warning') return stock > threshold && stock <= threshold * 2
+        if (statusFilter === 'healthy') return stock > threshold * 2
+        return true
+      })
+    }
+    result.sort((a, b) => {
+      if (productsInventoryFilter.sort === 'name') return (a.name || '').localeCompare(b.name || '')
+      if (productsInventoryFilter.sort === 'sku') return (a.sku || '').localeCompare(b.sku || '')
+      if (productsInventoryFilter.sort === 'stock_low') return Number(a.stock || 0) - Number(b.stock || 0)
+      if (productsInventoryFilter.sort === 'stock_high') return Number(b.stock || 0) - Number(a.stock || 0)
+      return 0
     })
-    rows.sort((a, b) => inventorySort === 'stock_low' ? Number(a.stock || 0) - Number(b.stock || 0) : inventorySort === 'stock_high' ? Number(b.stock || 0) - Number(a.stock || 0) : inventorySort === 'sku' ? String(a.sku || a.type_mapping || '').localeCompare(String(b.sku || b.type_mapping || '')) : String(a.name || '').localeCompare(String(b.name || '')))
-    return rows
-  }, [inventoryRows, inventorySort, inventoryStatusFilter])
+    return result
+  }, [visibleInventory, productsInventoryFilter])
+
+  const paginatedProductsInventory = useMemo(() => {
+    const start = (inventoryPage - 1) * INVENTORY_PAGE_SIZE
+    return filteredProductsInventory.slice(start, start + INVENTORY_PAGE_SIZE)
+  }, [filteredProductsInventory, inventoryPage])
+
+  const filteredPartsInventory = useMemo(() => {
+    const pts = visibleParts.map((p) => ({
+      ...p,
+      type: 'part',
+      stock: Number(p.stock ?? p.quantity ?? 0),
+      name: p.name,
+      sku: p.type_mapping,
+      low_stock_threshold: 10,
+    }))
+    let result = [...pts]
+    const searchTerm = String(partsInventoryFilter.search || '').trim().toLowerCase()
+    if (searchTerm) {
+      result = result.filter((item) =>
+        String(item.name || '').toLowerCase().includes(searchTerm) ||
+        String(item.sku || '').toLowerCase().includes(searchTerm) ||
+        String(item.inventory_category || '').toLowerCase().includes(searchTerm)
+      )
+    }
+    const categoryFilter = partsInventoryFilter.category || 'all'
+    if (categoryFilter !== 'all') {
+      result = result.filter((item) => item.inventory_category === categoryFilter)
+    }
+    const statusFilter = partsInventoryFilter.status
+    if (statusFilter !== 'all') {
+      result = result.filter(item => {
+        const stock = Number(item.stock ?? 0)
+        const threshold = 10
+        if (statusFilter === 'out_of_stock') return stock === 0
+        if (statusFilter === 'critical') return stock > 0 && stock <= threshold
+        if (statusFilter === 'warning') return stock > threshold && stock <= threshold * 2
+        if (statusFilter === 'healthy') return stock > threshold * 2
+        return true
+      })
+    }
+    result.sort((a, b) => {
+      const categoryCompare = (a.inventory_category || '').localeCompare(b.inventory_category || '')
+      if (categoryCompare !== 0) return categoryCompare
+      if (partsInventoryFilter.sort === 'name') return (a.name || '').localeCompare(b.name || '')
+      if (partsInventoryFilter.sort === 'sku') return (a.sku || '').localeCompare(b.sku || '')
+      if (partsInventoryFilter.sort === 'stock_low') return Number(a.stock || 0) - Number(b.stock || 0)
+      if (partsInventoryFilter.sort === 'stock_high') return Number(b.stock || 0) - Number(a.stock || 0)
+      return 0
+    })
+    return result
+  }, [visibleParts, partsInventoryFilter])
+
+  const paginatedPartsInventory = useMemo(() => {
+    const start = (inventoryPage - 1) * INVENTORY_PAGE_SIZE
+    return filteredPartsInventory.slice(start, start + INVENTORY_PAGE_SIZE)
+  }, [filteredPartsInventory, inventoryPage])
 
   const inventoryCurrentRows = inventoryIsProducts ? filteredProductsInventory : filteredPartsInventory
   const inventoryTotalPages = Math.max(1, Math.ceil(inventoryCurrentRows.length / INVENTORY_PAGE_SIZE))
@@ -791,23 +879,25 @@ const fetchUnavailableDates = useCallback(async () => {
               </motion.div>
             )}
             {activeTab === 'orders' && <OrderManagement orders={orders} onRefresh={fetchOrders} user={user} />}
-            {activeTab === 'inventory' && <div className="space-y-6">
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6"><p className="text-sm text-[var(--text-muted)]">Tracked products</p><p className="mt-3 text-3xl font-bold text-white">{inventoryStats?.total_products || visibleInventory.length}</p></div>
-                <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6"><p className="text-sm text-[var(--text-muted)]">Low stock</p><p className="mt-3 text-3xl font-bold text-white">{inventoryStats?.low_stock_count || inventoryAlerts.length}</p></div>
-                <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6"><p className="text-sm text-[var(--text-muted)]">Out of stock</p><p className="mt-3 text-3xl font-bold text-white">{inventoryStats?.out_of_stock_count || 0}</p></div>
-                <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6"><p className="text-sm text-[var(--text-muted)]">Inventory value</p><p className="mt-3 text-3xl font-bold text-white">{formatCurrency(Number(inventoryStats?.total_inventory_value || 0))}</p></div>
-              </div>
-              <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6">
-                <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                  <div className="flex flex-wrap gap-2"><button type="button" onClick={() => { setInventorySubTab('products'); setInventoryPage(1) }} className={`rounded-2xl px-4 py-2.5 text-sm font-semibold ${inventorySubTab === 'products' ? 'bg-[var(--gold-primary)] text-black' : 'border border-[var(--border)] text-[var(--text-muted)]'}`}>Products</button><button type="button" onClick={() => { setInventorySubTab('parts'); setInventoryPage(1) }} className={`rounded-2xl px-4 py-2.5 text-sm font-semibold ${inventorySubTab === 'parts' ? 'bg-[var(--gold-primary)] text-black' : 'border border-[var(--border)] text-[var(--text-muted)]'}`}>Builder Parts</button></div>
-                  <div className="flex items-center gap-2"><select value={inventoryStatusFilter} onChange={(e) => setInventoryStatusFilter(e.target.value)} className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-3 py-2 text-sm text-white"><option value="all">All</option><option value="healthy">Healthy</option><option value="warning">Warning</option><option value="critical">Critical</option><option value="out_of_stock">Out of Stock</option></select><select value={inventorySort} onChange={(e) => setInventorySort(e.target.value)} className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-3 py-2 text-sm text-white"><option value="name">Name</option><option value="sku">SKU / Mapping</option><option value="stock_low">Stock low-high</option><option value="stock_high">Stock high-low</option></select></div>
-                </div>
-                {loadingInventory ? 
-                <div className="py-16 text-center text-[var(--text-muted)]">Loading inventory...</div> : filteredInventory.length === 0 ? <EmptyState icon={Package} label="No inventory items found" description="Try another search or filter." /> : <div className="space-y-3">{pagedInventory.map((item) => { const state = getInventoryState(Number(item.stock || 0), Number(item.low_stock_threshold || 10)); return ( <div key={item.product_id || item.part_id} className="flex flex-col gap-4 rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)]/60 p-4 md:flex-row md:items-center md:justify-between" > <div> <p className="font-semibold text-white">{item.name}</p> <p className="mt-1 text-sm text-[var(--text-muted)]"> {inventorySubTab === 'products' ? item.sku || 'No SKU' : item.type_mapping || 'No mapping'} </p> </div> <div className="flex items-center gap-3"> <span className="font-mono text-white">{item.stock}</span> <StatusBadge label={state.label} variant={state.variant} /> <button type="button" onClick={() => { if (inventorySubTab === 'products') { setForm({ product_id: item.product_id, quantity: '', change_type: '', reason: '', notes: '' }); setModal({ open: true, type: 'inventory', data: { product_id: item.product_id, name: item.name, stock: item.stock } }); } else { setForm({ part_id: item.part_id, quantity: '', change_type: '', reason: '', notes: '' }); setModal({ open: true, type: 'inventory', data: { part_id: item.part_id, name: item.name, stock: item.stock } }); } setFormErrors({}); }} className="rounded-xl p-2 text-[var(--text-muted)] hover:bg-[var(--gold-primary)]/10 hover:text-[var(--gold-primary)]" > <Edit className="h-4 w-4" /> </button> </div> </div> ); })}</div>}
-                {filteredInventory.length > 0 && <div className="mt-6 flex items-center justify-between border-t border-[var(--border)] pt-4"><p className="text-sm text-[var(--text-muted)]">Showing {(inventoryPage - 1) * pageSize + 1}-{Math.min(inventoryPage * pageSize, filteredInventory.length)} of {filteredInventory.length}</p><div className="flex items-center gap-2"><button type="button" onClick={() => setInventoryPage((p) => Math.max(1, p - 1))} disabled={inventoryPage === 1} className="rounded-xl border border-[var(--border)] p-2 text-[var(--text-muted)] disabled:opacity-40"><ChevronLeft className="h-4 w-4" /></button><span className="text-sm text-white">{inventoryPage} / {totalPages}</span><button type="button" onClick={() => setInventoryPage((p) => Math.min(totalPages, p + 1))} disabled={inventoryPage >= totalPages} className="rounded-xl border border-[var(--border)] p-2 text-[var(--text-muted)] disabled:opacity-40"><ChevronRight className="h-4 w-4" /></button></div></div>}
-              </div>
-            </div>}
+            {activeTab === 'inventory' && <InventoryTab
+              inventoryIsProducts={inventoryIsProducts}
+              inventorySubTab={inventorySubTab}
+              setInventorySubTab={setInventorySubTab}
+              inventoryCurrentFilter={inventoryCurrentFilter}
+              inventoryPartCategoryOptions={inventoryPartCategoryOptions}
+              inventoryCurrentPageRows={inventoryCurrentPageRows}
+              inventoryGroupedPartPageRows={inventoryGroupedPartPageRows}
+              inventoryCurrentRows={inventoryCurrentRows}
+              inventoryTotalPages={inventoryTotalPages}
+              inventoryPage={inventoryPage}
+              setInventoryPage={setInventoryPage}
+              inventoryPageSize={INVENTORY_PAGE_SIZE}
+              setProductsInventoryFilter={setProductsInventoryFilter}
+              setPartsInventoryFilter={setPartsInventoryFilter}
+              resolveInventoryImage={resolveInventoryImage}
+              openModal={openModal}
+              isSuperAdmin={isSuperAdmin}
+            />}
             {activeTab === 'appointments' && <div className="space-y-6"><div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"><div><h3 className="text-lg font-semibold text-white">Appointment desk</h3><p className="text-sm text-[var(--text-muted)]">Staff uses the same appointment action model as admin now.</p></div><div className="flex flex-wrap gap-2"><button type="button" onClick={() => setUnavailableDatesOpen(true)} className="inline-flex items-center gap-2 rounded-2xl bg-[var(--surface-dark)] px-4 py-2.5 text-sm font-semibold text-white"><CalendarX className="h-4 w-4" />Mark unavailable</button><button type="button" onClick={() => { setAppointmentFormData(null); setSelectedCalendarDate(null); setAppointmentFormOpen(true) }} className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] px-4 py-2.5 text-sm font-semibold text-black"><Plus className="h-4 w-4" />New appointment</button></div></div><AppointmentCalendar appointments={appointments} unavailableDates={unavailableDates.map((entry) => entry?.date || entry).filter(Boolean)} isAdminMode onAppointmentClick={(item) => { setSelectedAppointment(item); setAppointmentModalOpen(true) }} onCreateAppointment={(_, date) => { setSelectedCalendarDate(date); setAppointmentFormData(null); setAppointmentFormOpen(true) }} /><div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6"><AppointmentList appointments={appointments} loading={loadingAppointments} onRefresh={fetchAppointments} onViewDetails={(item) => { setSelectedAppointment(item); setAppointmentModalOpen(true) }} onEdit={(item) => { setAppointmentFormData(item); setAppointmentFormOpen(true) }} onCreateNew={() => { setAppointmentFormData(null); setAppointmentFormOpen(true) }} pagination={appointmentPagination} onPageChange={(page) => setAppointmentPagination((p) => ({ ...p, page }))} selectedDate={selectedCalendarDate} /></div></div>}
             {activeTab === 'pos' && (
               <PosWorkspace
