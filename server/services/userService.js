@@ -226,10 +226,6 @@ exports.addAddress = async (userId, addressData) => {
       return exports.getUserById(userId);
     }
 
-    if (existing.rows.length >= 2) {
-      throw new Error('Maximum 2 addresses allowed.');
-    }
-
     const isFirst = existing.rows.length === 0;
     const isDefault = isFirst || addressData.isDefault;
 

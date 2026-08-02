@@ -535,6 +535,10 @@ exports.createOrder = async (orderData) => {
 
     // Insert billing address into addresses table (check for existing first)
     if (billingAddress.street && billingAddress.city) {
+      const normalizedBillingProvince = billingAddress.province || billingAddress.stateProvince || null
+      const normalizedBillingPostalCode = billingAddress.postalCode || billingAddress.postalZipCode || null
+      const normalizedBillingStreet2 = billingAddress.street2 || billingAddress.streetLine2 || null
+
       // Reuse an existing saved address when the full normalized address matches.
       const existingAddr = await client.query(
         `SELECT address_id, line1, line2, city, province, postal_code, country
@@ -557,10 +561,10 @@ exports.createOrder = async (orderData) => {
             userId,
             'Shipping Address',
             billingAddress.street,
-            billingAddress.street2 || null,
+            normalizedBillingStreet2,
             billingAddress.city,
-            billingAddress.province || null,
-            billingAddress.postalCode || null,
+            normalizedBillingProvince,
+            normalizedBillingPostalCode,
             normalizedCountryCode
           ]
         )

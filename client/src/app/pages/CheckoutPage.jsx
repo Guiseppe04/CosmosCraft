@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import { PaymentModal } from '../components/PaymentModal.jsx'
 import TermsAndConditionsModal from '../components/TermsAndConditionsModal.jsx'
+import { AddressForm } from '../components/AddressForm.jsx'
 import { API } from '../utils/apiConfig'
 import { getCustomBuildSummaryTree } from '../utils/customBuildSummary.js'
 import { Country, State } from 'country-state-city'
@@ -21,7 +22,6 @@ const PHILIPPINES = ALL_COUNTRIES.find(c => c.isoCode === 'PH')
 const OTHER_COUNTRIES = ALL_COUNTRIES.filter(c => c.isoCode !== 'PH')
 const COUNTRIES = PHILIPPINES ? [PHILIPPINES, ...OTHER_COUNTRIES] : ALL_COUNTRIES
 const CUSTOM_BUILD_DOWN_PAYMENT_RATE = 0.5
-const MAX_USER_ADDRESSES = 2
 const ORDER_TAX_RATE = 0
 
 const normalizeAddressValue = (value) => String(value || '')
@@ -225,7 +225,7 @@ function AddressSelectionCard({ addresses, selectedAddressId, onSelectAddress, o
   }
 
   const defaultAddress = addresses?.find(a => a.is_default)
-  const displayAddresses = addresses?.length > 0 ? addresses : []
+  const displayAddresses = addresses?.length > 0 ? [...addresses].sort((a, b) => (b.is_default ? 1 : 0) - (a.is_default ? 1 : 0)) : []
 
   return (
     <div className={`bg-[var(--surface-dark)] border rounded-xl overflow-hidden transition-colors ${
@@ -254,17 +254,13 @@ function AddressSelectionCard({ addresses, selectedAddressId, onSelectAddress, o
               <MapPin className="w-8 h-8 text-[var(--text-muted)]" />
             </div>
             <p className="text-[var(--text-muted)] mb-4">No address found. Please add one to continue.</p>
-            {canAddNew ? (
-              <button
-                onClick={onAddNew}
-                className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-semibold rounded-lg hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all"
-              >
-                <PlusCircle className="w-4 h-4" />
-                Add New Address
-              </button>
-            ) : (
-              <p className="text-sm text-[var(--text-muted)]">Maximum of 2 addresses reached.</p>
-            )}
+            <button
+              onClick={onAddNew}
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-semibold rounded-lg hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all"
+            >
+              <PlusCircle className="w-4 h-4" />
+              Add New Address
+            </button>
           </div>
         ) : (
           <div className="space-y-3">
@@ -311,17 +307,13 @@ function AddressSelectionCard({ addresses, selectedAddressId, onSelectAddress, o
               )
             })}
             
-            {canAddNew ? (
-              <button
-                onClick={onAddNew}
-                className="w-full mt-3 flex items-center justify-center gap-2 p-3 border border-dashed border-[var(--border)] rounded-xl text-[var(--text-muted)] hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)] transition-colors"
-              >
-                <PlusCircle className="w-4 h-4" />
-                <span className="text-sm font-medium">Add New Address</span>
-              </button>
-            ) : (
-              <p className="mt-3 text-center text-sm text-[var(--text-muted)]">Maximum of 2 addresses reached.</p>
-            )}
+            <button
+              onClick={onAddNew}
+              className="w-full mt-3 flex items-center justify-center gap-2 p-3 border border-dashed border-[var(--border)] rounded-xl text-[var(--text-muted)] hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)] transition-colors"
+            >
+              <PlusCircle className="w-4 h-4" />
+              <span className="text-sm font-medium">Add New Address</span>
+            </button>
           </div>
         )}
       </div>
@@ -703,132 +695,7 @@ function SuccessModal({ isOpen, onClose, onGoToMyPurchase }) {
   )
 }
 
-function AddAddressModal({ isOpen, onClose, onSave, isSaving, locationData: propLocationData, setLocationData: propSetLocationData }) {
-  const [formData, setFormData] = useState({
-    label: 'Home',
-    country: 'PH',
-    streetLine1: '',
-    streetLine2: '',
-    province: '',
-    city: '',
-    barangay: '',
-    stateProvince: '',
-    postalZipCode: '',
-    isDefault: false
-  })
-  const [errors, setErrors] = useState({})
-  const isExternalData = !!propLocationData
-  const [internalLocationData, setInternalLocationData] = useState({
-    provinces: [],
-    cities: [],
-    barangays: []
-  })
-  const locationData = propLocationData || internalLocationData
-  const setLocationData = propSetLocationData || setInternalLocationData
-
-  const isPhilippines = formData.country === 'PH'
-
-  useEffect(() => {
-    if (isPhilippines) {
-      if (isExternalData && propLocationData?.provinces?.length === 0) {
-        try {
-          const provinces = getAllProvinces()
-          propSetLocationData({ provinces, cities: [], barangays: [] })
-        } catch (err) {
-          console.error('Failed to load provinces:', err)
-        }
-      } else if (!isExternalData && internalLocationData.provinces.length === 0) {
-        try {
-          const provinces = getAllProvinces()
-          setInternalLocationData({ provinces, cities: [], barangays: [] })
-        } catch (err) {
-          console.error('Failed to load provinces:', err)
-        }
-      }
-    } else {
-      if (isExternalData) {
-        propSetLocationData({ provinces: [], cities: [], barangays: [] })
-      } else {
-        setInternalLocationData({ provinces: [], cities: [], barangays: [] })
-      }
-      setFormData(prev => ({ ...prev, province: '', city: '', barangay: '', stateProvince: '' }))
-    }
-  }, [isPhilippines, isExternalData])
-
-  const handleProvinceChange = (provinceCode, provinceName) => {
-    setFormData(prev => ({ ...prev, province: provinceCode, city: '', barangay: '', stateProvince: provinceName }))
-    if (provinceCode) {
-      try {
-        const cities = getMunicipalitiesByProvince(provinceCode)
-        if (isExternalData) {
-          propSetLocationData({ provinces: locationData.provinces, cities, barangays: [] })
-        } else {
-          setLocationData(prev => ({ ...prev, cities, barangays: [] }))
-        }
-      } catch (err) {
-        console.error('Failed to load cities:', err)
-      }
-    }
-  }
-
-  const handleCityChange = (cityCode, cityName) => {
-    setFormData(prev => ({ ...prev, city: cityCode, barangay: '', stateProvince: cityName }))
-    if (cityCode) {
-      try {
-        const barangays = getBarangaysByMunicipality(cityCode)
-        if (isExternalData) {
-          const currentCities = locationData.cities
-          const currentProvinces = locationData.provinces
-          propSetLocationData({ provinces: currentProvinces, cities: currentCities, barangays })
-        } else {
-          setLocationData(prev => ({ ...prev, barangays }))
-        }
-      } catch (err) {
-        console.error('Failed to load barangays:', err)
-      }
-    }
-  }
-
-  const handleBarangayChange = (barangayCode) => {
-    setFormData(prev => ({ ...prev, barangay: barangayCode }))
-  }
-
-  const validate = () => {
-    const newErrors = {}
-    if (!formData.streetLine1?.trim()) newErrors.streetLine1 = 'Street address is required'
-    if (isPhilippines) {
-      if (!formData.province) newErrors.province = 'Province is required'
-      if (!formData.city) newErrors.city = 'City is required'
-    } else {
-      if (!formData.city?.trim()) newErrors.city = 'City is required'
-      if (!formData.stateProvince?.trim()) newErrors.stateProvince = 'Province is required'
-    }
-    if (!formData.postalZipCode?.trim()) newErrors.postalZipCode = 'Postal code is required'
-    setErrors(newErrors)
-    return Object.keys(newErrors).length === 0
-  }
-
-  const handleSubmit = () => {
-    if (validate()) {
-      onSave(formData)
-    }
-  }
-
-  const handleChange = (field, value) => {
-    const fieldMap = {
-      'street': 'streetLine1',
-      'barangay': 'streetLine2',
-      'city': 'city',
-      'province': 'stateProvince',
-      'postalCode': 'postalZipCode'
-    }
-    const actualField = fieldMap[field] || field
-    setFormData(prev => ({ ...prev, [actualField]: value }))
-    if (errors[actualField]) {
-      setErrors(prev => ({ ...prev, [actualField]: null }))
-    }
-  }
-
+function AddAddressModal({ isOpen, onClose, onSave, isSaving }) {
   if (!isOpen) return null
 
   return (
@@ -845,186 +712,19 @@ function AddAddressModal({ isOpen, onClose, onSave, isSaving, locationData: prop
         className="w-full max-w-md bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6 max-h-[90vh] overflow-y-auto"
       >
         <div className="flex items-center justify-between mb-6">
-          <h3 className="text-xl font-bold text-[var(--text-light)]">Add New Address</h3>
+          <h3 className="text-xl font-bold text-[var(--text-light)]">Add Shipping Address</h3>
           <button onClick={onClose} className="p-2 hover:bg-[var(--surface-elevated)] rounded-lg transition-colors">
             <X className="w-5 h-5 text-[var(--text-muted)]" />
           </button>
         </div>
 
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-[var(--text-muted)] mb-1.5">Address Category</label>
-            <div className="flex gap-2">
-              {['Home', 'Work', 'Other'].map((label) => (
-                <button
-                  key={label}
-                  type="button"
-                  onClick={() => setFormData(prev => ({ ...prev, label }))}
-                  className={`flex-1 py-2 rounded-lg border text-sm font-medium transition-all ${
-                    formData.label === label
-                      ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)]/10 text-white'
-                      : 'border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--gold-primary)]/50'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-[var(--text-muted)] mb-1.5">Country *</label>
-            <select
-              value={formData.country}
-              onChange={(e) => setFormData(prev => ({ ...prev, country: e.target.value }))}
-              className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--text-light)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]/20 focus:border-[var(--gold-primary)] appearance-none cursor-pointer"
-            >
-              <option value="" disabled className="bg-[var(--surface-dark)]">Select Country</option>
-              {COUNTRIES.map(c => (
-                <option key={c.isoCode} value={c.isoCode} className="bg-[var(--surface-dark)]">{c.name}</option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-[var(--text-muted)] mb-1.5">Street Address *</label>
-            <input
-              type="text"
-              value={formData.streetLine1}
-              onChange={(e) => handleChange('street', e.target.value)}
-              className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--text-light)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]/20 focus:border-[var(--gold-primary)]"
-              placeholder="House number, street name"
-            />
-            {errors.streetLine1 && <p className="text-xs text-red-400 mt-1.5">{errors.streetLine1}</p>}
-          </div>
-
-          {isPhilippines ? (
-            <>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-1.5">Province *</label>
-                  <select
-                    value={formData.province}
-                    onChange={(e) => {
-                      const opt = locationData.provinces.find(p => p.psgcCode === e.target.value)
-                      handleProvinceChange(e.target.value, opt?.name || '')
-                    }}
-                    className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--text-light)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]/20 focus:border-[var(--gold-primary)] appearance-none cursor-pointer"
-                  >
-                    <option value="" className="bg-[var(--surface-dark)]">Select Province</option>
-                    {locationData.provinces.map(p => (
-                      <option key={p.psgcCode} value={p.psgcCode} className="bg-[var(--surface-dark)]">{p.name}</option>
-                    ))}
-                  </select>
-                  {errors.province && <p className="text-xs text-red-400 mt-1.5">{errors.province}</p>}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-[var(--text-muted)] mb-1.5">City / Municipality *</label>
-                  <select
-                    value={formData.city}
-                    onChange={(e) => {
-                      const opt = locationData.cities.find(c => c.psgcCode === e.target.value)
-                      handleCityChange(e.target.value, opt?.name || '')
-                    }}
-                    disabled={!formData.province}
-                    className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--text-light)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]/20 focus:border-[var(--gold-primary)] appearance-none cursor-pointer disabled:opacity-50"
-                  >
-                    <option value="" className="bg-[var(--surface-dark)]">{formData.province ? 'Select City' : 'Select a province first'}</option>
-                    {locationData.cities.map(c => (
-                      <option key={c.psgcCode} value={c.psgcCode} className="bg-[var(--surface-dark)]">{c.name}</option>
-                    ))}
-                  </select>
-                  {errors.city && <p className="text-xs text-red-400 mt-1.5">{errors.city}</p>}
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-[var(--text-muted)] mb-1.5">Barangay (Optional)</label>
-                <select
-                  value={formData.barangay}
-                  onChange={(e) => handleBarangayChange(e.target.value)}
-                  disabled={!formData.city}
-                  className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--text-light)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]/20 focus:border-[var(--gold-primary)] appearance-none cursor-pointer disabled:opacity-50"
-                >
-                  <option value="" className="bg-[var(--surface-dark)]">{formData.city ? 'Select Barangay' : 'Select a city first'}</option>
-                  {locationData.barangays.map(b => (
-                    <option key={b.psgcCode} value={b.name} className="bg-[var(--surface-dark)]">{b.name}</option>
-                  ))}
-                </select>
-              </div>
-            </>
-          ) : (
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-[var(--text-muted)] mb-1.5">State / Province *</label>
-                <input
-                  type="text"
-                  value={formData.stateProvince}
-                  onChange={(e) => handleChange('province', e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--text-light)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]/20 focus:border-[var(--gold-primary)]"
-                  placeholder="State / Province"
-                />
-                {errors.stateProvince && <p className="text-xs text-red-400 mt-1.5">{errors.stateProvince}</p>}
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-[var(--text-muted)] mb-1.5">City *</label>
-                <input
-                  type="text"
-                  value={formData.city}
-                  onChange={(e) => handleChange('city', e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--text-light)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]/20 focus:border-[var(--gold-primary)]"
-                  placeholder="City"
-                />
-                {errors.city && <p className="text-xs text-red-400 mt-1.5">{errors.city}</p>}
-              </div>
-            </div>
-          )}
-
-          <div>
-            <label className="block text-sm font-medium text-[var(--text-muted)] mb-1.5">Postal Code *</label>
-            <input
-              type="text"
-              value={formData.postalZipCode}
-              onChange={(e) => handleChange('postalCode', e.target.value)}
-              className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--text-light)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]/20 focus:border-[var(--gold-primary)]"
-              placeholder="1234"
-            />
-            {errors.postalZipCode && <p className="text-xs text-red-400 mt-1.5">{errors.postalZipCode}</p>}
-          </div>
-
-          <label className="flex items-center gap-3 cursor-pointer pt-2">
-            <input
-              type="checkbox"
-              checked={formData.isDefault}
-              onChange={(e) => setFormData(prev => ({ ...prev, isDefault: e.target.checked }))}
-              className="w-5 h-5 rounded border-[var(--border)] text-[var(--gold-primary)] focus:ring-[var(--gold-primary)] cursor-pointer"
-            />
-            <span className="text-sm font-medium text-white">Set as default address</span>
-          </label>
-        </div>
-
-        <div className="flex gap-3 mt-6">
-          <button
-            onClick={onClose}
-            className="flex-1 py-3 border border-[var(--border)] text-[var(--text-light)] font-medium rounded-xl hover:border-[var(--gold-primary)] transition-all"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSubmit}
-            disabled={isSaving}
-            className="flex-1 py-3 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-medium rounded-xl hover:shadow-[0_0_15px_rgba(212,175,55,0.4)] transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-          >
-            {isSaving ? (
-              <>
-                <div className="w-4 h-4 border-2 border-[var(--text-dark)] border-t-transparent rounded-full animate-spin" />
-                Saving...
-              </>
-            ) : (
-              'Save Address'
-            )}
-          </button>
-        </div>
+        <AddressForm
+          initialAddress={{}}
+          onSubmit={onSave}
+          onCancel={onClose}
+          submitLabel="Save Address"
+          isSubmitting={isSaving}
+        />
       </motion.div>
     </motion.div>
   )
@@ -1132,7 +832,7 @@ export function CheckoutPage() {
   const itemCount = checkoutItems.reduce((a, b) => a + b.quantity, 0)
   const totalCartItemCount = baseCheckoutItems.reduce((a, b) => a + b.quantity, 0)
   const hasSelectedItems = checkoutItems.length > 0
-  const canAddMoreAddresses = uniqueAddresses.length < MAX_USER_ADDRESSES
+  const canAddMoreAddresses = true
   const allSelectableItemsSelected = !isCustomBuild && !isBuyNow && checkoutItems.length === baseCheckoutItems.length
 
   const handleSelectAddress = (addressId) => {
@@ -1141,10 +841,6 @@ export function CheckoutPage() {
   }
 
   const handleAddNewAddress = () => {
-    if (!canAddMoreAddresses) {
-      alert(`You can only save up to ${MAX_USER_ADDRESSES} addresses.`)
-      return
-    }
     setShowAddAddressModal(true)
   }
 
@@ -1185,11 +881,6 @@ export function CheckoutPage() {
   }
 
   const handleSaveAddress = async (addressData) => {
-    if (uniqueAddresses.length >= MAX_USER_ADDRESSES) {
-      alert(`You can only save up to ${MAX_USER_ADDRESSES} addresses.`)
-      return
-    }
-
     setIsSavingAddress(true)
     try {
       const countryCode = addressData.country

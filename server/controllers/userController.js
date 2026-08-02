@@ -83,7 +83,7 @@ exports.updateProfile = asyncHandler(async (req, res, next) => {
 });
 
 /**
- * Add Address (max 2)
+ * Add Address
  */
 exports.addAddress = asyncHandler(async (req, res, next) => {
   // Validate input

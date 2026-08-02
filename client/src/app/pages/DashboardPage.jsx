@@ -8,6 +8,7 @@ import { BASE_PRICE, BODY_OPTIONS, BODY_WOOD_OPTIONS, BODY_FINISH_OPTIONS, NECK_
 import { adminApi } from '../utils/adminApi.js'
 import { useDebounce } from '../hooks/useDebounce'
 import CustomerProjectTracker from '../components/projects/CustomerProjectTracker.jsx'
+import { AddressForm } from '../components/AddressForm.jsx'
 import { getAllProvinces, getMunicipalitiesByProvince, getBarangaysByMunicipality } from '@aivangogh/ph-address'
 import { Country } from 'country-state-city'
 import { ConfirmModal } from '../components/ui/ConfirmModal'
@@ -16,7 +17,6 @@ const ALL_COUNTRIES = Country.getAllCountries()
 const PHILIPPINES = ALL_COUNTRIES.find(c => c.isoCode === 'PH')
 const OTHER_COUNTRIES = ALL_COUNTRIES.filter(c => c.isoCode !== 'PH')
 const COUNTRIES = PHILIPPINES ? [PHILIPPINES, ...OTHER_COUNTRIES] : ALL_COUNTRIES
-const MAX_USER_ADDRESSES = 2
 const MAX_SAVED_GUITAR_BUILDS = 10
 const ORDER_CANCEL_REASONS = [
   'Changed my mind',
@@ -690,13 +690,14 @@ export function DashboardPage() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   
   const [addressData, setAddressData] = useState({
-    category: 'Home',
+    label: 'Home',
     country: 'PH',
     streetLine1: '',
     streetLine2: '',
     province: '',
     city: '',
     barangay: '',
+    stateProvince: '',
     postalZipCode: '',
     isDefault: true
   })
@@ -704,6 +705,7 @@ export function DashboardPage() {
   const [addresses, setAddresses] = useState([])
   const [addressesLoading, setAddressesLoading] = useState(false)
   const [editingAddressId, setEditingAddressId] = useState(null)
+  const [isSavingAddress, setIsSavingAddress] = useState(false)
 
   const [locationData, setLocationData] = useState({
     provinces: [],
@@ -1890,32 +1892,15 @@ export function DashboardPage() {
     }
   }
 
-  const handleSaveAddress = async () => {
+  const handleSaveAddress = async (payload) => {
     try {
-      if (!editingAddressId && addresses.length >= MAX_USER_ADDRESSES) {
-        alert(`You can only save up to ${MAX_USER_ADDRESSES} addresses.`)
-        return
-      }
-
-      const provinceLabel = locationData.provinces.find(p => p.psgcCode === addressData.province)?.name || addressData.province
-      const cityLabel = locationData.cities.find(c => c.psgcCode === addressData.city)?.name || addressData.city
-      
-      const addressPayload = {
-        label: addressData.category,
-        streetLine1: addressData.streetLine1,
-        streetLine2: addressData.streetLine2,
-        city: cityLabel || addressData.city,
-        stateProvince: provinceLabel || addressData.province,
-        postalZipCode: addressData.postalZipCode,
-        country: addressData.country,
-        isDefault: addressData.isDefault,
-      }
       if (editingAddressId) {
-        await adminApi.updateAddress(editingAddressId, addressPayload)
+        await adminApi.updateAddress(editingAddressId, payload)
         setToastMessage('Address updated successfully!')
         setEditingAddressId(null)
+        setIsAddingAddress(false)
       } else {
-        await adminApi.addAddress(addressPayload)
+        await adminApi.addAddress(payload)
         setToastMessage('Address added successfully!')
         setIsAddingAddress(false)
       }
@@ -1923,10 +1908,21 @@ export function DashboardPage() {
       if (res?.data?.user?.addresses) {
         setAddresses(res.data.user.addresses)
       }
-      setAddressData({ category: 'Home', country: 'PH', streetLine1: '', streetLine2: '', province: '', city: '', barangay: '', postalZipCode: '', isDefault: true })
+      setAddressData({
+        label: 'Home',
+        country: 'PH',
+        streetLine1: '',
+        streetLine2: '',
+        province: '',
+        city: '',
+        barangay: '',
+        stateProvince: '',
+        postalZipCode: '',
+        isDefault: true,
+      })
       setLocationData(prev => ({ ...prev, cities: [], barangays: [] }))
     } catch (err) {
-      alert("Failed to save address: " + err.message)
+      alert('Failed to save address: ' + err.message)
     }
   }
 
@@ -2048,7 +2044,7 @@ export function DashboardPage() {
   }
 
   const renderAddressesContent = () => {
-    const canAddMoreAddresses = addresses.length < MAX_USER_ADDRESSES
+    const canShowAddButton = !isAddingAddress && !editingAddressId
 
     if (addressesLoading) {
       return (
@@ -2059,216 +2055,152 @@ export function DashboardPage() {
         </div>
       )
     }
+
     return (
-    <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-5 sm:p-8">
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h2 className="text-2xl font-bold text-white mb-1">My Addresses</h2>
-          <p className="text-sm text-[var(--text-muted)]">Manage your shipping addresses</p>
-        </div>
-        {!isAddingAddress && canAddMoreAddresses && (
-          <button
-            onClick={() => setIsAddingAddress(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-[var(--gold-primary)] text-sm font-semibold text-[var(--gold-primary)] hover:bg-[var(--gold-primary)] hover:text-[var(--text-dark)] transition-colors"
-          >
-            + Add New Address
-          </button>
-        )}
-      </div>
-
-      {!canAddMoreAddresses && !isAddingAddress && !editingAddressId && (
-        <p className="mb-6 text-sm text-[var(--text-muted)]">Maximum of 2 addresses reached.</p>
-      )}
-
-      {isAddingAddress || editingAddressId ? (
-        <div className="space-y-4 max-w-xl">
-          <div className="flex items-center gap-2 mb-4">
-            <button onClick={() => { setIsAddingAddress(false); setEditingAddressId(null); setAddressData({ category: 'Home', country: 'PH', streetLine1: '', streetLine2: '', province: '', city: '', barangay: '', postalZipCode: '', isDefault: true }); setLocationData(prev => ({ ...prev, cities: [], barangays: [] })) }} className="text-[var(--gold-primary)] hover:underline text-sm font-semibold flex items-center gap-1">
-              Back
-            </button>
-            <span className="text-white font-semibold">{editingAddressId ? 'Edit Address' : 'Add New Address'}</span>
-          </div>
-          
+      <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-5 sm:p-8">
+        <div className="flex justify-between items-center mb-6">
           <div>
-            <label className="block text-xs font-semibold text-[var(--text-muted)] mb-2">Address Category</label>
-            <div className="flex gap-2">
-              {['Home', 'Work', 'Other'].map((cat) => (
-                <button
-                  key={cat}
-                  type="button"
-                  onClick={() => setAddressData(prev => ({ ...prev, category: cat }))}
-                  className={`flex-1 py-2 rounded-lg border text-sm font-medium transition-all ${
-                    addressData.category === cat
-                      ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)]/10 text-white'
-                      : 'border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--gold-primary)]/50'
-                  }`}
-                >
-                  {cat}
-                </button>
-              ))}
-            </div>
+            <h2 className="text-2xl font-bold text-white mb-1">My Addresses</h2>
+            <p className="text-sm text-[var(--text-muted)]">Manage your shipping addresses</p>
           </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-[var(--text-muted)] mb-2">Country *</label>
-            <select
-              value={addressData.country}
-              onChange={e => setAddressData(p => ({ ...p, country: e.target.value }))}
-              className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] appearance-none cursor-pointer"
+          {canShowAddButton && (
+            <button
+              onClick={() => setIsAddingAddress(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-[var(--gold-primary)] text-sm font-semibold text-[var(--gold-primary)] hover:bg-[var(--gold-primary)] hover:text-[var(--text-dark)] transition-colors"
             >
-              <option value="" disabled className="bg-[var(--surface-dark)]">Select Country</option>
-              {COUNTRIES.map(c => (
-                <option key={c.isoCode} value={c.isoCode} className="bg-[var(--surface-dark)]">{c.name}</option>
-              ))}
-            </select>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="col-span-2">
-               <label className="block text-xs font-semibold text-[var(--text-muted)] mb-2">Street Line 1 *</label>
-               <input type="text" value={addressData.streetLine1} onChange={e => setAddressData(p => ({...p, streetLine1: e.target.value}))} className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]" />
-            </div>
-            <div className="col-span-2">
-               <label className="block text-xs font-semibold text-[var(--text-muted)] mb-2">Street Line 2 (Optional)</label>
-               <input type="text" value={addressData.streetLine2} onChange={e => setAddressData(p => ({...p, streetLine2: e.target.value}))} className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]" />
-            </div>
-            <div className="col-span-2 md:col-span-1">
-              <label className="block text-xs font-semibold text-[var(--text-muted)] mb-2">Province</label>
-              <select 
-                value={addressData.province}
-                onChange={(e) => {
-                  const opt = locationData.provinces.find(p => p.psgcCode === e.target.value)
-                  handleProvinceChange(e.target.value, opt?.name || '')
-                }}
-                className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
-              >
-                <option value="" className="bg-[var(--surface-dark)]">Select Province</option>
-                {locationData.provinces.map(p => (
-                  <option key={p.psgcCode} value={p.psgcCode} className="bg-[var(--surface-dark)]">{p.name}</option>
-                ))}
-              </select>
-            </div>
-            <div className="col-span-2 md:col-span-1">
-              <label className="block text-xs font-semibold text-[var(--text-muted)] mb-2">City / Municipality</label>
-              <select 
-                value={addressData.city}
-                onChange={(e) => {
-                  const opt = locationData.cities.find(c => c.psgcCode === e.target.value)
-                  handleCityChange(e.target.value, opt?.name || '')
-                }}
-                disabled={!addressData.province}
-                className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] disabled:opacity-50"
-              >
-                <option value="" className="bg-[var(--surface-dark)]">{addressData.province ? 'Select City' : 'Select a province first'}</option>
-                {locationData.cities.map(c => (
-                  <option key={c.psgcCode} value={c.psgcCode} className="bg-[var(--surface-dark)]">{c.name}</option>
-                ))}
-              </select>
-            </div>
-            <div className="col-span-2">
-              <label className="block text-xs font-semibold text-[var(--text-muted)] mb-2">Barangay</label>
-              <select 
-                value={addressData.barangay}
-                onChange={e => handleBarangayChange(e.target.value)}
-                disabled={!addressData.city}
-                className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] disabled:opacity-50"
-              >
-                <option value="" className="bg-[var(--surface-dark)]">{addressData.city ? 'Select Barangay' : 'Select a city first'}</option>
-                {locationData.barangays.map(b => (
-                  <option key={b.psgcCode} value={b.name} className="bg-[var(--surface-dark)]">{b.name}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-               <label className="block text-xs font-semibold text-[var(--text-muted)] mb-2">Postal / Zip Code</label>
-               <input type="text" value={addressData.postalZipCode} onChange={e => setAddressData(p => ({...p, postalZipCode: e.target.value}))} className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] text-sm text-white bg-[var(--bg-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]" />
-            </div>
-          </div>
-          <div className="flex gap-4 mt-6">
-            <button onClick={handleSaveAddress} className="flex-1 py-2.5 rounded-full bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-bold shadow-[0_0_15px_rgba(212,175,55,0.3)]">{editingAddressId ? 'Update Address' : 'Save Address'}</button>
-            <button onClick={() => { setIsAddingAddress(false); setEditingAddressId(null); setAddressData({ category: 'Home', country: 'PH', streetLine1: '', streetLine2: '', province: '', city: '', barangay: '', postalZipCode: '', isDefault: true }); setLocationData(prev => ({ ...prev, cities: [], barangays: [] })) }} className="px-6 py-2.5 rounded-full border border-[var(--border)] text-white hover:bg-white/5 transition-all">Cancel</button>
-          </div>
-        </div>
-      ) : (
-         <div className="space-y-4">
-          {addresses && addresses.length > 0 ? (
-            [...addresses].sort((a, b) => (b.is_default ? 1 : 0) - (a.is_default ? 1 : 0)).map((addr) => (
-              <div key={addr.address_id} className="p-4 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold text-white capitalize">
-                      {addr.label || 'Address'}
-                    </span>
-                    {addr.is_default && <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[var(--gold-primary)] text-[var(--text-dark)]">Default</span>}
-                  </div>
-                  <div className="flex items-center gap-3">
-                    {!addr.is_default && (
-                      <button onClick={() => setDefaultAddress(addr.address_id)} className="p-2.5 hover:bg-[var(--gold-primary)]/20 hover:border hover:border-[var(--gold-primary)] rounded-lg transition-all duration-150" title="Set as default">
-                        <Star className="w-5 h-5 text-[var(--gold-primary)]" />
-                      </button>
-                    )}
-                    <button onClick={() => { 
-                      setEditingAddressId(addr.address_id)
-                      setAddressData({ 
-                        category: addr.label || 'Home',
-                        country: addr.country || 'PH',
-                        streetLine1: addr.street_line1 || '', 
-                        streetLine2: addr.street_line2 || '', 
-                        province: addr.province || '',
-                        city: addr.city || '', 
-                        barangay: addr.barangay || '',
-                        postalZipCode: addr.postal_code || '', 
-                        isDefault: addr.is_default || false 
-                      })
-                      const loadCascade = async () => {
-                        try {
-                          const provinces = getAllProvinces()
-                          setLocationData(prev => ({ ...prev, provinces }))
-                          if (addr.province) {
-                            const province = provinces.find(p => p.name === addr.province || p.psgcCode === addr.province)
-                            if (province) {
-                              const cities = getMunicipalitiesByProvince(province.psgcCode)
-                              setLocationData(prev => ({ ...prev, cities }))
-                            }
-                          }
-                          if (addr.city) {
-                            const cities = locationData.cities.length > 0 ? locationData.cities : (addr.province ? getMunicipalitiesByProvince(addr.province) : [])
-                            const city = cities.find(c => c.name === addr.city || c.psgcCode === addr.city)
-                            if (city) {
-                              const barangays = getBarangaysByMunicipality(city.psgcCode)
-                              setLocationData(prev => ({ ...prev, barangays }))
-                            }
-                          }
-                        } catch (e) {
-                          console.error('Failed to load cascade:', e)
-                        }
-                      }
-                      loadCascade()
-                    }} className="p-2.5 hover:bg-[var(--gold-primary)]/20 hover:border hover:border-[var(--gold-primary)] rounded-lg transition-all duration-150">
-                      <Edit className="w-5 h-5 text-[var(--gold-primary)]" />
-                    </button>
-                    <button onClick={() => openDeleteConfirm(addr.address_id)} className="p-2.5 hover:bg-red-500/20 hover:border hover:border-red-500 rounded-lg transition-all duration-150">
-                      <Trash2 className="w-5 h-5 text-red-400" />
-                    </button>
-                  </div>
-                </div>
-                <div className="text-sm text-[var(--text-muted)] space-y-1">
-                  {formatAddressFull(addr)?.map((line, idx) => (
-                    <p key={idx}>{line}</p>
-                  ))}
-                </div>
-              </div>
-            ))
-          ) : (
-            <div className="text-center py-8">
-              <MapPin className="w-12 h-12 text-[var(--text-muted)] mx-auto mb-3 opacity-50" />
-              <p className="text-[var(--text-muted)] text-sm">No address added yet</p>
-              <p className="text-[var(--text-muted)] text-xs mt-1">Add an address to streamline your checkout process</p>
-            </div>
+              + Add New Address
+            </button>
           )}
         </div>
-      )}
-    </div>
+
+        {isAddingAddress || editingAddressId ? (
+          <div className="space-y-4 max-w-xl">
+            <div className="flex items-center gap-2 mb-4">
+              <button
+                onClick={() => {
+                  setIsAddingAddress(false)
+                  setEditingAddressId(null)
+                  setAddressData({
+                    label: 'Home',
+                    country: 'PH',
+                    streetLine1: '',
+                    streetLine2: '',
+                    province: '',
+                    city: '',
+                    barangay: '',
+                    stateProvince: '',
+                    postalZipCode: '',
+                    isDefault: true,
+                  })
+                  setLocationData(prev => ({ ...prev, cities: [], barangays: [] }))
+                }}
+                className="text-[var(--gold-primary)] hover:underline text-sm font-semibold flex items-center gap-1"
+              >
+                Back
+              </button>
+              <span className="text-white font-semibold">{editingAddressId ? 'Edit Address' : 'Add New Address'}</span>
+            </div>
+
+            <AddressForm
+              initialAddress={addressData}
+              onSubmit={handleSaveAddress}
+              onCancel={() => {
+                setIsAddingAddress(false)
+                setEditingAddressId(null)
+                setAddressData({
+                  label: 'Home',
+                  country: 'PH',
+                  streetLine1: '',
+                  streetLine2: '',
+                  province: '',
+                  city: '',
+                  barangay: '',
+                  stateProvince: '',
+                  postalZipCode: '',
+                  isDefault: true,
+                })
+                setLocationData(prev => ({ ...prev, cities: [], barangays: [] }))
+              }}
+              submitLabel={editingAddressId ? 'Update Address' : 'Save Address'}
+              isSubmitting={isSavingAddress}
+            />
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {addresses && addresses.length > 0 ? (
+              [...addresses]
+                .sort((a, b) => (b.is_default ? 1 : 0) - (a.is_default ? 1 : 0))
+                .map((addr) => (
+                  <div key={addr.address_id} className="p-4 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-white capitalize">{addr.label || 'Address'}</span>
+                        {addr.is_default && (
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[var(--gold-primary)] text-[var(--text-dark)]">
+                            Default
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3">
+                        {!addr.is_default && (
+                          <button onClick={() => setDefaultAddress(addr.address_id)} className="p-2.5 hover:bg-[var(--gold-primary)]/20 hover:border hover:border-[var(--gold-primary)] rounded-lg transition-all duration-150" title="Set as default">
+                            <Star className="w-5 h-5 text-[var(--gold-primary)]" />
+                          </button>
+                        )}
+                        <button
+                          onClick={() => {
+                            const provinces = getAllProvinces()
+                            const matchedProvince = provinces.find((p) => p.name === addr.province || p.psgcCode === addr.province)
+                            const provinceCode = matchedProvince?.psgcCode || addr.province || ''
+
+                            const cities = provinceCode ? getMunicipalitiesByProvince(provinceCode) : []
+                            const matchedCity = cities.find((c) => c.name === addr.city || c.psgcCode === addr.city)
+                            const cityCode = matchedCity?.psgcCode || addr.city || ''
+
+                            const barangays = cityCode ? getBarangaysByMunicipality(cityCode) : []
+
+                            setEditingAddressId(addr.address_id)
+                            setAddressData({
+                              label: addr.label || 'Home',
+                              country: addr.country || 'PH',
+                              streetLine1: addr.street_line1 || '',
+                              streetLine2: addr.street_line2 || '',
+                              province: provinceCode,
+                              city: cityCode,
+                              barangay: addr.barangay || '',
+                              stateProvince: addr.province || '',
+                              postalZipCode: addr.postal_code || '',
+                              isDefault: addr.is_default || false,
+                            })
+                            setLocationData({ provinces, cities, barangays })
+                            setIsAddingAddress(true)
+                          }}
+                          className="p-2.5 hover:bg-[var(--gold-primary)]/20 hover:border hover:border-[var(--gold-primary)] rounded-lg transition-all duration-150"
+                        >
+                          <Edit className="w-5 h-5 text-[var(--gold-primary)]" />
+                        </button>
+                        <button onClick={() => openDeleteConfirm(addr.address_id)} className="p-2.5 hover:bg-red-500/20 hover:border hover:border-red-500 rounded-lg transition-all duration-150">
+                          <Trash2 className="w-5 h-5 text-red-400" />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="text-sm text-[var(--text-muted)] space-y-1">
+                      {formatAddressFull(addr)?.map((line, idx) => (
+                        <p key={idx}>{line}</p>
+                      ))}
+                    </div>
+                  </div>
+                ))
+            ) : (
+              <div className="text-center py-8">
+                <MapPin className="w-12 h-12 text-[var(--text-muted)] mx-auto mb-3 opacity-50" />
+                <p className="text-[var(--text-muted)] text-sm">No address added yet</p>
+                <p className="text-[var(--text-muted)] text-xs mt-1">Add an address to streamline your checkout process</p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     )
   }
 
