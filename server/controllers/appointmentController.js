@@ -775,7 +775,7 @@ exports.updatePaymentStatus = async (req, res, next) => {
       throw new AppError('payment_status is required', 400);
     }
 
-    const validStatuses = ['pending', 'awaiting_approval', 'paid', 'failed'];
+    const validStatuses = ['pending', 'awaiting_approval', 'paid', 'failed', 'verified', 'for_verification', 'rejected', 'refunded', 'approved'];
     if (!validStatuses.includes(payment_status)) {
       throw new AppError('Invalid payment status', 400);
     }

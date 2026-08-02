@@ -496,11 +496,11 @@ exports.updatePaymentStatus = async (appointmentId, paymentStatus, paymentMethod
   const params = [appointmentId, paymentStatus];
   let idx = 3;
 
-  if (paymentMethod !== undefined) {
+  if (paymentMethod !== undefined && paymentMethod !== null) {
     setClauses.push(`payment_method = $${idx++}`);
     params.push(paymentMethod);
   }
-  if (paymentProofUrl !== undefined) {
+  if (paymentProofUrl !== undefined && paymentProofUrl !== null) {
     setClauses.push(`payment_proof_url = $${idx++}`);
     params.push(paymentProofUrl);
   }
@@ -508,7 +508,7 @@ exports.updatePaymentStatus = async (appointmentId, paymentStatus, paymentMethod
   setClauses.push('updated_at = now()');
 
   await pool.query(
-    `UPDATE appointments SET ${setClauses.join(', ')} WHERE appointment_id = $${idx} RETURNING *`,
+    `UPDATE appointments SET ${setClauses.join(', ')} WHERE appointment_id = $1 RETURNING *`,
     params
   );
   return this.getAppointmentById(appointmentId);

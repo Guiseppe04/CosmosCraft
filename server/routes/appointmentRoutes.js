@@ -7,6 +7,8 @@
 const express = require('express');
 const { authenticateToken, authorize } = require('../middleware/auth');
 const appointmentController = require('../controllers/appointmentController');
+const { validate } = require('../utils/validation');
+const { appointmentValidation } = require('../utils/appointmentValidation');
 
 const router = express.Router();
 

@@ -1208,15 +1208,30 @@ export function DashboardPage() {
                          <span className="block text-[var(--text-muted)] mb-0.5">Selected Guitar</span>
                          <span className="text-white">{selectedGuitar || '—'}</span>
                        </div>
-                       <div className="sm:col-span-2">
-                         <span className="block text-[var(--text-muted)] mb-0.5">Payment</span>
-                         <div className="flex items-center gap-3">
-                           <span className="text-white">{formatPaymentMethod(apt.payment_method)}</span>
-                           <span className={`px-2.5 py-1 rounded-full text-xs font-semibold border ${getPaymentStatusConfig(apt.payment_status).bgColor} ${getPaymentStatusConfig(apt.payment_status).textColor} ${getPaymentStatusConfig(apt.payment_status).borderColor}`}>
-                             {getPaymentStatusConfig(apt.payment_status).label}
-                           </span>
-                         </div>
-                       </div>
+                        <div className="sm:col-span-2">
+                          <span className="block text-[var(--text-muted)] mb-0.5">Payment</span>
+                          <div className="flex items-center gap-3">
+                            <span className="text-white">{formatPaymentMethod(apt.payment_method)}</span>
+                            <span className={`px-2.5 py-1 rounded-full text-xs font-semibold border ${getPaymentStatusConfig(apt.payment_status).bgColor} ${getPaymentStatusConfig(apt.payment_status).textColor} ${getPaymentStatusConfig(apt.payment_status).borderColor}`}>
+                              {getPaymentStatusConfig(apt.payment_status).label}
+                            </span>
+                          </div>
+                          {isDigitalPayment(apt.payment_method) && (
+                            <div className="mt-1.5">
+                              {isPaymentConfirmed(apt.payment_status) ? (
+                                <p className="text-xs text-red-400 flex items-center gap-1">
+                                  <AlertTriangle className="w-3 h-3" />
+                                  Non-refundable once payment is confirmed
+                                </p>
+                              ) : (
+                                <p className="text-xs text-[var(--text-muted)] flex items-center gap-1">
+                                  <AlertCircle className="w-3 h-3" />
+                                  A refund request can be submitted when cancelling
+                                </p>
+                              )}
+                            </div>
+                          )}
+                        </div>
                       {appointmentNotes && (
                         <div className="sm:col-span-2 mt-1">
                           <span className="block text-[var(--text-muted)] mb-0.5">Notes</span>
