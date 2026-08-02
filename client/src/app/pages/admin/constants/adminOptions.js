@@ -89,9 +89,9 @@ export const PART_CATEGORIES_BY_GUITAR_TYPE = {
 export const BUILDER_CATEGORY_MAP = {
   pricing: ['basePrice'],
   body: ['body', 'bodyWood', 'bodyFinish', 'pickguard'],
-  neck: ['neck', 'fretboard', 'headstock', 'headstockWood', 'inlays'],
-  hardware: ['hardware', 'bridge', 'knobs'],
-  electronics: ['pickups'],
+  neck: ['neck', 'fretboard', 'headstock', 'headstockShape', 'headstockWood', 'inlays', 'inlayShape', 'inlayMaterial', 'neckConstruction', 'frets', 'trussRodCover', 'neckRearFinish'],
+  hardware: ['hardware', 'bridge', 'knobs', 'saddle', 'nut', 'outputJack', 'strapButtons', 'tunerButtons', 'tremoloCover'],
+  electronics: ['pickups', 'pickupConfiguration', 'pickupBobbin', 'pickupPoleColor', 'bridgePickupModel', 'middlePickupModel', 'neckPickupModel', 'electronicsType', 'controls', 'electronicsCavityCover'],
 }
 
 export const SLOT_TO_PART_CATEGORY = {
@@ -103,12 +103,34 @@ export const SLOT_TO_PART_CATEGORY = {
   neck: 'neck',
   fretboard: 'fretboard',
   headstock: 'misc',
+  headstockShape: 'misc',
   headstockWood: 'wood_type',
   inlays: 'misc',
+  inlayShape: 'misc',
+  inlayMaterial: 'misc',
+  neckConstruction: 'neck',
+  frets: 'neck',
+  trussRodCover: 'misc',
+  neckRearFinish: 'misc',
   hardware: 'hardware',
   bridge: 'bridge',
   knobs: 'hardware',
+  saddle: 'hardware',
+  nut: 'hardware',
+  outputJack: 'hardware',
+  strapButtons: 'hardware',
+  tunerButtons: 'hardware',
+  tremoloCover: 'hardware',
   pickups: 'pickups',
+  pickupConfiguration: 'pickups',
+  pickupBobbin: 'pickups',
+  pickupPoleColor: 'pickups',
+  bridgePickupModel: 'pickups',
+  middlePickupModel: 'pickups',
+  neckPickupModel: 'pickups',
+  electronicsType: 'electronics',
+  controls: 'electronics',
+  electronicsCavityCover: 'electronics',
 }
 
 export const INVENTORY_PART_CATEGORY_OPTIONS = [

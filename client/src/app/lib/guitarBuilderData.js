@@ -22,6 +22,10 @@ export const asset = (path) => {
     if (path.startsWith('dc/') || path.startsWith('rs/') || path.startsWith('solo/')) {
       return `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/cosmoscraft_assets/electric_assets/dc_assets/models/${path}`
     }
+    // Shared assets (all-models/...) live under dc_assets/models/
+    if (path.startsWith('all-models/')) {
+      return `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/cosmoscraft_assets/electric_assets/dc_assets/models/${path}`
+    }
     return `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/cosmoscraft_assets/electric_assets/${path}`
   }
   // Local fallback - serve from public/builder/
@@ -41,10 +45,7 @@ export const asset = (path) => {
 }
 
 export const woodAsset = path => {
-  if (USE_CLOUDINARY) {
-    return `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/cosmoscraft_assets/electric_assets/${path}`
-  }
-  // Local fallback - serve from public/woodtype/
+  // Wood type textures are served from public/woodtype/ (not uploaded to Cloudinary)
   return `/woodtype/${path}`
 }
 
