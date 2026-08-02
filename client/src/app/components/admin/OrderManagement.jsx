@@ -1285,7 +1285,7 @@ export function OrderManagement({ orders, onRefresh, user, pagination }) {
     try {
       await adminApi.updatePaymentStatus(orderId, newStatus, { reference_number: referenceNumber, notes, admin_name: user?.firstName ? `${user.firstName}${user.lastName ? ' ' + user.lastName : ''}` : user?.email, admin_email: user?.email })
       onRefresh(buildQuery(page))
-      setSelectedOrder(null)
+      setSelectedOrder(prev => prev ? { ...prev, payment_status: newStatus } : null)
     } catch (error) {
       console.error('Failed to update payment status:', error)
     } finally {
@@ -1335,7 +1335,7 @@ export function OrderManagement({ orders, onRefresh, user, pagination }) {
         admin_email: user?.email
       })
       onRefresh(buildQuery(page))
-      setSelectedOrder(null)
+      setSelectedOrder(prev => prev ? { ...prev, payment_status: newStatus } : null)
     } catch (error) {
       console.error('Failed to verify payment:', error)
     } finally {
