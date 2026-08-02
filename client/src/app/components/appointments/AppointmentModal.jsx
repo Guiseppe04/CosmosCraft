@@ -173,6 +173,7 @@ export default function AppointmentModal({
   const [rescheduleTime, setRescheduleTime] = useState('')
   const [cancelReason, setCancelReason] = useState('')
   const [actionLoading, setActionLoading] = useState(false)
+  const [currentAppointment, setCurrentAppointment] = useState(appointment)
   const [unavailableDates, setUnavailableDates] = useState(new Set())
   const [availableSlots, setAvailableSlots] = useState(new Set())
   const [slotsLoading, setSlotsLoading] = useState(false)
@@ -181,7 +182,10 @@ export default function AppointmentModal({
   const [timeError, setTimeError] = useState('')
   const [servicesList, setServicesList] = useState([])
 
-  // Fetch unavailable dates and services on mount
+  // Sync currentAppointment when appointment prop changes
+  useEffect(() => {
+    setCurrentAppointment(appointment)
+  }, [appointment])
   useEffect(() => {
     let isMounted = true
 
@@ -381,10 +385,12 @@ export default function AppointmentModal({
     setActionLoading(true)
     try {
       const parsedTime = parseTimeLabelTo24(rescheduleTime)
-      const newScheduledAt = parsedTime
+      const localTimeString = parsedTime
         ? `${rescheduleDate}T${String(parsedTime.hour).padStart(2, '0')}:${String(parsedTime.minute).padStart(2, '0')}:00`
         : `${rescheduleDate}T${rescheduleTime}:00`
+      const newScheduledAt = new Date(localTimeString).toISOString()
       await onReschedule?.(appointment.appointment_id, newScheduledAt)
+      setCurrentAppointment(prev => prev ? { ...prev, scheduled_at: newScheduledAt } : prev)
       setShowRescheduleModal(false)
       setDateError('')
       setTimeError('')
@@ -610,12 +616,12 @@ export default function AppointmentModal({
                 </div>
                 <div>
                   <p className="text-xs uppercase tracking-wider text-[var(--text-muted)]">Date & Time</p>
-                  <p className="text-white font-semibold mt-1">
-                    {appointment.scheduled_at ? format(parseISO(appointment.scheduled_at), 'MMMM d, yyyy h:mm a') : 'N/A'}
-                  </p>
+<p className="text-white font-semibold mt-1">
+                     {currentAppointment?.scheduled_at ? format(parseISO(currentAppointment.scheduled_at), 'MMMM d, yyyy h:mm a') : 'N/A'}
+                   </p>
                 </div>
               </div>
-              {appointment.estimated_end_at && (
+              {currentAppointment?.estimated_end_at && (
                 <div className="flex items-start gap-3">
                   <div className="w-10 h-10 rounded-xl bg-[var(--gold-primary)]/20 flex items-center justify-center flex-shrink-0">
                     <Clock className="w-5 h-5 text-[var(--gold-primary)]" />
@@ -623,7 +629,7 @@ export default function AppointmentModal({
                   <div>
                     <p className="text-xs uppercase tracking-wider text-[var(--text-muted)]">End Time</p>
                     <p className="text-white font-semibold mt-1">
-                      {format(parseISO(appointment.estimated_end_at), 'h:mm a')}
+                      {currentAppointment?.estimated_end_at ? format(parseISO(currentAppointment.estimated_end_at), 'h:mm a') : 'N/A'}
                     </p>
                   </div>
                 </div>
