@@ -477,7 +477,7 @@ const VALID_STATUS_TRANSITIONS = {
 
 const STATUS_FIELD_REQUIREMENTS = {
   'shipped': ['tracking_number'],
-  'out_for_delivery': ['tracking_number', 'rider_details'],
+  'out_for_delivery': ['rider_name'],
   'delivered': ['tracking_number']
 }
 
@@ -978,24 +978,11 @@ exports.updateOrder = async (orderId, updateData) => {
       
       if (STATUS_FIELD_REQUIREMENTS[status]) {
         // Check for required fields - accept either in updateData or existing order
-        // Also support rider_details combining rider_name and rider_contact
-        const orderRiderDetails = order.rider_name || order.rider_contact || null
-        const orderFields = {
-          ...order,
-          rider_details: orderRiderDetails
-        }
-        
-        const missingFields = STATUS_FIELD_REQUIREMENTS[status].filter(field => 
-          !updateData[field] && !orderFields[field]
+        const missingFields = STATUS_FIELD_REQUIREMENTS[status].filter(field =>
+          !updateData[field] && !order[field]
         );
         if (missingFields.length > 0) {
           throw new Error(`Missing required fields for status '${status}': ${missingFields.join(', ')}`);
-        }
-        
-        // Map rider_details to separate fields if provided
-        if (updateData.rider_details && !updateData.rider_name && !updateData.rider_contact) {
-          updateData.rider_name = updateData.rider_details
-          updateData.rider_contact = updateData.rider_details
         }
       }
     }

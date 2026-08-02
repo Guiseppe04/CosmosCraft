@@ -57,7 +57,7 @@ export function DashboardTab({
                 <p className="text-[var(--text-muted)] mt-1">Revenue across the last 6 months.</p>
               </div>
             </div>
-            <div className="h-72 min-h-[200px] w-full">
+            <div className="h-72 min-h-[200px] w-full overflow-hidden">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={[
                   { month: 'Jan', revenue: 42000 }, { month: 'Feb', revenue: 38000 },

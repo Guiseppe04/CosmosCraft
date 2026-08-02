@@ -29,7 +29,7 @@ export function OrderStatusModal({
       const updateData = { status: form.order_status }
       if (form.tracking_info) {
         if (form.order_status === 'shipped') updateData.tracking_number = form.tracking_info
-        if (form.order_status === 'out_for_delivery') updateData.rider_details = form.tracking_info
+        if (form.order_status === 'out_for_delivery') updateData.rider_name = form.tracking_info
       }
       await adminApi.updateOrder(modal.data.order_id, updateData)
       showToast(`Order status updated to ${form.order_status}!`)
