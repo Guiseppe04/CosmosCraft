@@ -97,9 +97,9 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
   const [fulfillmentSaving, setFulfillmentSaving] = useState(false);
   const [fulfillmentFeedback, setFulfillmentFeedback] = useState(null);
   const [receivingPartKey, setReceivingPartKey] = useState(null);
-  const [receivingQuantity, setReceivingQuantity] = useState('1');
-  const [receivingSaving, setReceivingSaving] = useState(false);
-  const [receivingFeedback, setReceivingFeedback] = useState(null);
+  const [togglingPartKey, setTogglingPartKey] = useState(null);
+  const [togglingSaving, setTogglingSaving] = useState(false);
+  const [togglingFeedback, setTogglingFeedback] = useState(null);
   const [pendingUncheckSubtask, setPendingUncheckSubtask] = useState(null);
   const [isEditingCompletion, setIsEditingCompletion] = useState(false);
   const [editCompletionValue, setEditCompletionValue] = useState('');
@@ -426,6 +426,32 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
     }
   };
 
+  const handleToggleReceive = async (part) => {
+    try {
+      setTogglingSaving(true);
+      setTogglingFeedback(null);
+      setTogglingPartKey(part.part_key);
+
+      const newReceivedState = !part.is_received;
+      const result = await adminApi.toggleProjectRequiredPart(projectId, part.part_key, newReceivedState);
+      await loadData();
+      setTogglingFeedback({
+        type: 'success',
+        message: newReceivedState
+          ? `${result.part?.name || part.name} marked as received.`
+          : `${result.part?.name || part.name} unmarked.`,
+      });
+    } catch (err) {
+      setTogglingFeedback({
+        type: 'error',
+        message: err.message || 'Failed to update part status.',
+      });
+    } finally {
+      setTogglingSaving(false);
+      setTogglingPartKey(null);
+    }
+  };
+
 
   if (loading) return <div className="text-center py-10 text-[var(--text-muted)] animate-pulse">Loading tracker data...</div>;
   if (error) return <div className="text-red-400 p-4 border border-red-500/30 bg-red-500/10 rounded-xl">{error}</div>;
@@ -661,39 +687,33 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
                         </p>
                       </div>
                       <span className={`rounded-full px-2 py-1 text-[10px] font-semibold ${getStockBadgeStyle(part.stock_status)}`}>
-                        {part.stock_status?.replace('_', ' ') || 'unknown'}
+                        {part.stock_status === 'unknown' || !part.stock_status ? 'Not Linked' : part.stock_status.replace('_', ' ')}
                       </span>
                     </div>
-                    <div className="mt-3 grid gap-2 sm:grid-cols-3 text-[0.75rem] text-[var(--text-muted)]">
-                      <span>Qty: {part.quantity}</span>
-                      <span>Stock: {part.stock === null || part.stock === undefined ? 'unknown' : part.stock}</span>
-                      <span>Price: {part.price ? formatCurrency(part.price) : '—'}</span>
-                    </div>
-                    <div className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]/70 p-3">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <label className="text-[10px] uppercase tracking-[0.2em] text-[var(--text-muted)]">Qty received</label>
-                        <input
-                          type="number"
-                          min="1"
-                          value={receivingQuantity}
-                          onChange={(e) => setReceivingQuantity(e.target.value)}
-                          className="w-20 rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] px-2 py-2 text-sm text-white"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => handleReceivePart(part)}
-                          disabled={receivingSaving || part.is_received}
-                          className="rounded-lg bg-emerald-500/20 px-3 py-2 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-500/30 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          {receivingSaving && receivingPartKey === part.part_key ? 'Receiving...' : part.is_received ? 'Received' : 'Receive'}
-                        </button>
-                      </div>
-                      {part.is_received && (
-                        <p className="mt-2 text-[11px] text-emerald-300">
-                          Received {part.received_quantity || 0} unit(s) {part.received_at ? `on ${new Date(part.received_at).toLocaleString()}` : ''}
-                        </p>
-                      )}
-                    </div>
+                     <div className="mt-3 grid gap-2 sm:grid-cols-3 text-[0.75rem] text-[var(--text-muted)]">
+                       <span>Qty: {part.quantity}</span>
+                       <span>Stock: {part.stock !== null && part.stock !== undefined ? part.stock : 'Not Linked'}</span>
+                       <span>Price: {part.price || part.price === 0 ? formatCurrency(part.price) : 'Not Linked'}</span>
+                     </div>
+                     <div className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]/70 p-3">
+                       <label className="flex items-center gap-2 cursor-pointer">
+                         <input
+                           type="checkbox"
+                           checked={part.is_received}
+                           onChange={() => handleToggleReceive(part)}
+                           disabled={togglingSaving && togglingPartKey === part.part_key}
+                           className="w-4 h-4 rounded border-[var(--border)] bg-[var(--surface-dark)] text-[var(--gold-primary)] focus:ring-[var(--gold-primary)]"
+                         />
+                         <span className="text-xs font-semibold text-white">
+                           {part.is_received ? 'Received' : 'Not Received'}
+                         </span>
+                       </label>
+                       {togglingFeedback && togglingPartKey === part.part_key && (
+                         <p className={`mt-2 text-[11px] ${togglingFeedback.type === 'error' ? 'text-red-400' : 'text-emerald-300'}`}>
+                           {togglingFeedback.message}
+                         </p>
+                       )}
+                     </div>
                   </div>
                 ))}
               </div>

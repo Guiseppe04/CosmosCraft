@@ -296,14 +296,14 @@ export default function CustomerProjectTracker({ projectId, projectName, project
                           {part.category || 'Other'} • {part.source === 'configuration' ? 'Configured' : 'Additional part'}
                         </p>
                       </div>
-                      <span className={`rounded-full px-2 py-1 text-[10px] font-semibold ${getStockBadgeStyle(part.stock_status)}`}>
-                        {part.stock_status?.replace('_', ' ') || 'unknown'}
-                      </span>
+                  <span className={`rounded-full px-2 py-1 text-[10px] font-semibold ${getStockBadgeStyle(part.stock_status)}`}>
+                    {part.stock_status === 'unknown' || !part.stock_status ? 'Not Linked' : part.stock_status.replace('_', ' ')}
+                  </span>
                     </div>
                     <div className="mt-3 grid gap-2 sm:grid-cols-3 text-[0.75rem] text-[var(--text-muted)]">
                       <span>Qty: {part.quantity}</span>
-                      <span>Stock: {part.stock === null || part.stock === undefined ? 'unknown' : part.stock}</span>
-                      <span>Price: {part.price ? formatCurrency(part.price) : '—'}</span>
+                      <span>Stock: {part.stock !== null && part.stock !== undefined ? part.stock : 'Not Linked'}</span>
+                      <span>Price: {part.price || part.price === 0 ? formatCurrency(part.price) : 'Not Linked'}</span>
                     </div>
                   </div>
                 ))}

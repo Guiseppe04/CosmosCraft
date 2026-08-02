@@ -190,6 +190,16 @@ const REQUIRED_PART_FIELD_MAP = [
   ['finish_type', 'finish'],
 ];
 
+const PART_TYPE_TO_BUILDER_TYPE_MAPPING = {
+  body_wood: 'bodyWood',
+  neck_wood: 'neck',
+  fingerboard_wood: 'fretboard',
+  bridge_type: 'bridge',
+  pickups: 'pickups',
+  color: 'bodyFinish',
+  finish_type: 'finishType',
+};
+
 const getPartStockStatus = (stock, quantity = 1) => {
   const normalizedStock = Number(stock);
   const normalizedQuantity = Number(quantity) || 1;
@@ -296,11 +306,13 @@ const getProjectPartReceiptState = (auditRows = []) => {
     if (!details || !details.part_key) return;
 
     const previous = receiptState.get(details.part_key) || { received_quantity: 0 };
+    const receivedQuantity = Number(previous.received_quantity || 0) + Number(details.received_quantity || 0);
+    
     receiptState.set(details.part_key, {
-      received_quantity: Number(previous.received_quantity || 0) + Number(details.received_quantity || 0),
-      received_at: details.received_at || previous.received_at || null,
-      received_by: details.received_by || previous.received_by || null,
-      supplier: details.supplier || previous.supplier || null,
+      received_quantity: receivedQuantity,
+      received_at: receivedQuantity > 0 ? (details.received_at || previous.received_at || null) : null,
+      received_by: receivedQuantity > 0 ? (details.received_by || previous.received_by || null) : null,
+      supplier: receivedQuantity > 0 ? (details.supplier || previous.supplier || null) : null,
     });
   });
 
@@ -995,14 +1007,114 @@ exports.getProjectRequiredParts = async (projectId) => {
 
     const receiptState = getProjectPartReceiptState(receiptsResult.rows);
 
-    return requiredParts.map((part) => {
-      const receipt = receiptState.get(part.part_key) || null;
+    let builderPartsLookup = null;
+    let productsByNameLookup = null;
+    try {
+      const columnCheck = await client.query(
+        `SELECT column_name FROM information_schema.columns WHERE table_name = 'guitar_builder_parts' AND column_name = 'product_id'`
+      );
+      if (columnCheck.rows.length === 0) {
+        console.warn('[projectService] guitar_builder_parts.product_id column missing. Stock/price lookup will still work but inventory sync requires migration 005.');
+      }
+      if (customizationResult.rows.length > 0) {
+        const guitarTypes = [...new Set(customizationResult.rows.map(r => r.guitar_type).filter(Boolean))];
+        if (guitarTypes.length > 0) {
+          const lowercasedTypes = guitarTypes.map(t => t.toLowerCase());
+          const builderRes = await client.query(
+            `SELECT gbp.part_id, gbp.guitar_type, gbp.type_mapping, gbp.name, gbp.price, gbp.stock
+             FROM guitar_builder_parts gbp
+             WHERE LOWER(gbp.guitar_type) = ANY($1::text[])
+               AND gbp.is_active = true`,
+            [lowercasedTypes]
+          );
+          console.log(`[projectService] Found ${builderRes.rows.length} active builder parts for guitar types: ${lowercasedTypes.join(', ')}`);
+          if (builderRes.rows.length > 0 && builderRes.rows.length <= 50) {
+            console.log('[projectService] Builder parts:', builderRes.rows.map(r => `${r.guitar_type}|${r.type_mapping}|${r.name}|stock=${r.stock}|price=${r.price}`).join(' || '));
+          }
+          builderPartsLookup = new Map();
+          for (const row of builderRes.rows) {
+            const mapKey = `${(row.guitar_type || '').toLowerCase()}::${(row.type_mapping || '').toLowerCase()}`;
+            if (!builderPartsLookup.has(mapKey)) {
+              builderPartsLookup.set(mapKey, []);
+            }
+            builderPartsLookup.get(mapKey).push(row);
+          }
+
+          const productNames = [...new Set(builderRes.rows.map(r => r.name).filter(Boolean))];
+          if (productNames.length > 0) {
+            const productsRes = await client.query(
+              `SELECT name, price FROM products WHERE name = ANY($1::text[]) AND is_active = true`,
+              [productNames]
+            );
+            productsByNameLookup = new Map();
+            for (const row of productsRes.rows) {
+              productsByNameLookup.set(row.name.toLowerCase(), row.price);
+            }
+            console.log(`[projectService] Loaded ${productsByNameLookup.size} product prices from products table`);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load builder parts lookup:', err.message);
+      builderPartsLookup = null;
+      productsByNameLookup = null;
+    }
+
+    const enrichedParts = [];
+    for (const part of requiredParts) {
+      let enrichedPart = { ...part };
+
+      if (enrichedPart.source === 'configuration' && builderPartsLookup) {
+        const customization = customizationResult.rows.find(c => c.customization_id === enrichedPart.customization_id);
+        if (customization?.guitar_type) {
+          const builderTypeMapping = PART_TYPE_TO_BUILDER_TYPE_MAPPING[enrichedPart.part_type];
+          if (builderTypeMapping) {
+            const mapKey = `${(customization.guitar_type || '').toLowerCase()}::${builderTypeMapping.toLowerCase()}`;
+            const candidates = builderPartsLookup.get(mapKey) || [];
+            const match = candidates.find(p =>
+              (p.name || '').toLowerCase().includes((enrichedPart.name || '').toLowerCase())
+            );
+            if (match) {
+              const productPrice = productsByNameLookup?.get((match.name || '').toLowerCase());
+              const finalPrice = match.price > 0 ? match.price : (productPrice || 0);
+              console.log(`[projectService] MATCHED part "${enrichedPart.name}" (${enrichedPart.part_type}) → builder part "${match.name}" stock=${match.stock} price=${finalPrice}${productPrice ? ' (from products table)' : ''}`);
+              enrichedPart.product_id = enrichedPart.product_id || null;
+              enrichedPart.stock = match.stock ?? null;
+              enrichedPart.price = finalPrice;
+              enrichedPart.stock_status = getPartStockStatus(match.stock, enrichedPart.quantity);
+              enrichedPart.needs_purchase = enrichedPart.stock_status !== 'in_stock';
+            } else {
+              const fallbackCandidates = builderPartsLookup.get(`${(customization.guitar_type || '').toLowerCase()}::${(enrichedPart.name || '').toLowerCase().split(' ')[0] || ''}`) || [];
+              const fallbackMatch = fallbackCandidates.find(p =>
+                (p.name || '').toLowerCase().includes((enrichedPart.name || '').toLowerCase())
+              );
+              if (fallbackMatch) {
+                const productPrice = productsByNameLookup?.get((fallbackMatch.name || '').toLowerCase());
+                const finalPrice = fallbackMatch.price > 0 ? fallbackMatch.price : (productPrice || 0);
+                console.log(`[projectService] FALLBACK MATCHED part "${enrichedPart.name}" → "${fallbackMatch.name}" stock=${fallbackMatch.stock} price=${finalPrice}`);
+                enrichedPart.product_id = enrichedPart.product_id || null;
+                enrichedPart.stock = fallbackMatch.stock ?? null;
+                enrichedPart.price = finalPrice;
+                enrichedPart.stock_status = getPartStockStatus(fallbackMatch.stock, enrichedPart.quantity);
+                enrichedPart.needs_purchase = enrichedPart.stock_status !== 'in_stock';
+              } else if (candidates.length > 0) {
+                console.warn(`[projectService] NO MATCH for part "${enrichedPart.name}" (type: ${enrichedPart.part_type}, key: ${mapKey}). Candidates: ${candidates.map(c => c.name).join(' | ')}`);
+              } else {
+                console.warn(`[projectService] NO CANDIDATES for part "${enrichedPart.name}" (type: ${enrichedPart.part_type}, key: ${mapKey}). All keys: ${[...builderPartsLookup.keys()].join(', ')}`);
+              }
+            }
+          }
+        }
+      }
+
+      const receipt = receiptState.get(enrichedPart.part_key) || null;
       const receivedQuantity = Number(receipt?.received_quantity || 0);
-      const requiredQuantity = Number(part.quantity) || 1;
+      const requiredQuantity = Number(enrichedPart.quantity) || 1;
       const pendingQuantity = Math.max(requiredQuantity - receivedQuantity, 0);
       const isFullyReceived = pendingQuantity === 0 && requiredQuantity > 0;
-      return {
-        ...part,
+
+      enrichedParts.push({
+        ...enrichedPart,
         is_received: receivedQuantity > 0,
         received_quantity: receivedQuantity,
         pending_quantity: pendingQuantity,
@@ -1010,8 +1122,10 @@ exports.getProjectRequiredParts = async (projectId) => {
         received_at: receipt?.received_at || null,
         received_by: receipt?.received_by || null,
         supplier: receipt?.supplier || null,
-      };
-    });
+      });
+    }
+
+    return enrichedParts;
   } finally {
     client.release();
   }
@@ -1078,10 +1192,9 @@ exports.receiveProjectRequiredPart = async (projectId, partKey, payload = {}, us
   }
 
   const receivedQuantity = Math.max(1, Number(payload.quantity) || Number(part.quantity) || 1);
-  const supplier = payload.supplier || null;
 
   if (part.product_id) {
-    await inventoryService.addStock(part.product_id, receivedQuantity, {
+    await inventoryService.deductStock(part.product_id, receivedQuantity, {
       notes: `Project required part received for ${part.name}`,
       createdBy: userId,
     });
@@ -1105,7 +1218,7 @@ exports.receiveProjectRequiredPart = async (projectId, partKey, payload = {}, us
           received_quantity: Number(receivedQuantity),
           received_at: new Date().toISOString(),
           received_by: userId,
-          supplier,
+          supplier: null,
           product_id: part.product_id || null,
         }),
       ]
@@ -1163,6 +1276,118 @@ exports.receiveProjectRequiredPart = async (projectId, partKey, payload = {}, us
     quantity_received: Number(receivedQuantity),
     stock_updated: Boolean(part.product_id),
     all_parts_received: allPartsReceived,
+  };
+};
+
+exports.toggleProjectRequiredPart = async (projectId, partKey, received, userId) => {
+  const requiredParts = await exports.getProjectRequiredParts(projectId);
+  if (requiredParts === null) {
+    throw new AppError('Project not found', 404);
+  }
+
+  const part = requiredParts.find((candidate) => candidate.part_key === partKey);
+  if (!part) {
+    throw new AppError('Required part not found', 404);
+  }
+
+  const quantity = Number(part.quantity) || 1;
+
+  if (received) {
+    if (part.product_id) {
+      await inventoryService.deductStock(part.product_id, quantity, {
+        notes: `Project required part received for ${part.name}`,
+        createdBy: userId,
+      });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(
+        `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, details)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [
+          userId,
+          'project_part_received',
+          'project',
+          projectId,
+          JSON.stringify({
+            part_key: part.part_key,
+            part_name: part.name,
+            quantity,
+            received_quantity: quantity,
+            received_at: new Date().toISOString(),
+            received_by: userId,
+            supplier: null,
+            product_id: part.product_id || null,
+          }),
+        ]
+      );
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  } else {
+    const projectRes = await pool.query(
+      `SELECT progress, status FROM projects WHERE project_id = $1`,
+      [projectId]
+    );
+    const projectProgress = Number(projectRes.rows[0]?.progress || 0);
+    const projectStatus = projectRes.rows[0]?.status || '';
+
+    if (projectProgress >= 100 || normalizeProjectStatus(projectStatus) === 'completed') {
+      throw new AppError('Cannot uncheck part: project has already progressed beyond the stage that consumes this part.', 400);
+    }
+
+    if (part.product_id) {
+      await inventoryService.addStock(part.product_id, quantity, {
+        notes: `Project required part unchecked for ${part.name}`,
+        createdBy: userId,
+      });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(
+        `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, details)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [
+          userId,
+          'project_part_unreceived',
+          'project',
+          projectId,
+          JSON.stringify({
+            part_key: part.part_key,
+            part_name: part.name,
+            quantity,
+            received_quantity: -quantity,
+            received_at: null,
+            received_by: null,
+            supplier: null,
+            product_id: part.product_id || null,
+          }),
+        ]
+      );
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  const refreshedParts = await exports.getProjectRequiredParts(projectId);
+  const refreshedPart = refreshedParts.find((candidate) => candidate.part_key === partKey);
+
+  return {
+    part: refreshedPart || part,
+    received,
+    stock_updated: Boolean(part.product_id),
   };
 };
 
