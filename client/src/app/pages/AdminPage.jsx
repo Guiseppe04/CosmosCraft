@@ -322,7 +322,8 @@ export function AdminPage() {
   const visibleCategories = useMemo(() => flattenCategoryTreeForAdmin(categoryTree), [categoryTree])
   const visibleOrders = orders || []
   const visibleProjects = projects || []
-  const visibleAppointments = appointments || []
+  const visibleAppointments = useMemo(() => appointments || [], [appointments])
+  const normalizedUnavailableDates = useMemo(() => unavailableDates.map((entry) => entry?.date || entry).filter(Boolean), [unavailableDates])
   const visibleInventory = useMemo(() => {
     const source = (inventory && inventory.length > 0) ? inventory : (products || [])
     return source.map((item) => ({
@@ -735,23 +736,23 @@ export function AdminPage() {
    }, [activeTab, fetchServices])
 
    // ── Smart polling: active tab ────────────────────────────────────────────
-   const pollingFn = useCallback(async () => {
-     const map = {
-       'products': fetchProducts,
-       'guitar-parts': fetchParts,
-       'product-categories': fetchCategories,
-       'users': fetchUsers,
-       'orders': fetchOrders,
-       'projects': fetchProjects,
-       'services': fetchServices,
-       'appointments': fetchAppointments,
-       'inventory': fetchInventory,
-       'pos': fetchInventory,
-       'sales-report': fetchSalesReport,
-       'dashboard': async () => { await fetchOrders(); await fetchProjects(); await fetchAppointments() },
-     }
-     return map[activeTab]?.()
-   }, [activeTab, fetchProducts, fetchParts, fetchCategories, fetchUsers, fetchOrders, fetchProjects, fetchServices, fetchAppointments, fetchInventory, fetchSalesReport])
+    const pollingFn = useCallback(async () => {
+      const map = {
+        'products': fetchProducts,
+        'guitar-parts': fetchParts,
+        'product-categories': fetchCategories,
+        'users': fetchUsers,
+        'orders': fetchOrders,
+        'projects': fetchProjects,
+        'services': fetchServices,
+        'appointments': () => fetchAppointments({ silent: true }),
+        'inventory': fetchInventory,
+        'pos': fetchInventory,
+        'sales-report': fetchSalesReport,
+        'dashboard': async () => { await fetchOrders(); await fetchProjects(); await fetchAppointments({ silent: true }) },
+      }
+      return map[activeTab]?.()
+    }, [activeTab, fetchProducts, fetchParts, fetchCategories, fetchUsers, fetchOrders, fetchProjects, fetchServices, fetchAppointments, fetchInventory, fetchSalesReport])
 
   const pollingEnabled = ['dashboard', 'orders', 'inventory', 'pos', 'projects', 'appointments'].includes(activeTab)
   useSmartPolling(pollingFn, { interval: 5000, maxInterval: 60000, backoffFactor: 1.5, enabled: pollingEnabled })
@@ -2275,7 +2276,7 @@ export function AdminPage() {
                appointmentLoading={appointmentLoading}
                appointmentPagination={appointmentPagination}
                selectedCalendarDate={selectedCalendarDate}
-               unavailableDates={unavailableDates.map((entry) => entry?.date || entry).filter(Boolean)}
+                unavailableDates={normalizedUnavailableDates}
                availableDates={availableDates}
                fetchAppointments={fetchAppointments}
                setSelectedAppointment={setSelectedAppointment}
