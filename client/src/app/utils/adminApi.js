@@ -198,7 +198,6 @@ export const adminApi = {
   getProjectHierarchy: (id) => request(`/api/projects/${id}/hierarchy`),
   getProjectRequiredParts: (id) => request(`/api/projects/${id}/required-parts`),
   receiveProjectRequiredPart: (id, partKey, body = {}) => request(`/api/projects/${id}/required-parts/${encodeURIComponent(partKey)}/receive`, { method: 'POST', body }),
-  requestProjectProcurement: (id, body = {}) => request(`/api/projects/${id}/procurement-request`, { method: 'POST', body }),
   getProjectActivity: (id) => request(`/api/projects/${id}/activity`),
   submitProjectFulfillment: (id, body) => request(`/api/projects/${id}/fulfillment`, { method: 'POST', body }),
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { CheckCircle, Circle, ChevronDown, ChevronRight, Plus, Trash2, User, Clock, AlertCircle, Guitar, Package, Search, Calendar, Truck, Store, ShieldCheck, Flag } from 'lucide-react';
+import { CheckCircle, Circle, ChevronDown, ChevronRight, Plus, Trash2, User, Clock, AlertCircle, Calendar, Truck, Store, ShieldCheck, Flag } from 'lucide-react';
 import { adminApi } from '../../utils/adminApi';
 import { formatCurrency } from '../../utils/formatCurrency';
 import { useAuth } from '../../context/AuthContext';
@@ -83,11 +83,6 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Parts panel state
-  const [partsSearchQuery, setPartsSearchQuery] = useState('');
-  const [expandedPartCategories, setExpandedPartCategories] = useState(new Set());
-  const [isPartsPanelExpanded, setIsPartsPanelExpanded] = useState(true);
-
   // Exanded state for accordions
   const [expandedMilestones, setExpandedMilestones] = useState(new Set());
 
@@ -101,15 +96,13 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
   const [fulfillmentNotes, setFulfillmentNotes] = useState('');
   const [fulfillmentSaving, setFulfillmentSaving] = useState(false);
   const [fulfillmentFeedback, setFulfillmentFeedback] = useState(null);
-  const [procurementSaving, setProcurementSaving] = useState(false);
-  const [procurementFeedback, setProcurementFeedback] = useState(null);
-  const [procurementRequestedAt, setProcurementRequestedAt] = useState(null);
   const [receivingPartKey, setReceivingPartKey] = useState(null);
   const [receivingQuantity, setReceivingQuantity] = useState('1');
-  const [receivingSupplier, setReceivingSupplier] = useState('');
   const [receivingSaving, setReceivingSaving] = useState(false);
   const [receivingFeedback, setReceivingFeedback] = useState(null);
   const [pendingUncheckSubtask, setPendingUncheckSubtask] = useState(null);
+  const [isEditingCompletion, setIsEditingCompletion] = useState(false);
+  const [editCompletionValue, setEditCompletionValue] = useState('');
 
   useEffect(() => {
     if (projectId) {
@@ -164,89 +157,14 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
     });
   };
 
-  const togglePartCategory = (category) => {
-    setExpandedPartCategories(prev => {
-      const next = new Set(prev);
-      if (next.has(category)) next.delete(category);
-      else next.add(category);
-      return next;
-    });
-  };
-
-  const normalizePartValue = (value) => String(value || '')
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '');
-
-  const scoreCatalogMatch = (projectPart, catalogPart) => {
-    const projectName = normalizePartValue(projectPart?.name);
-    const catalogName = normalizePartValue(catalogPart?.name);
-    if (!projectName || projectName !== catalogName) return -1;
-
-    let score = 5;
-
-    const projectGuitarType = normalizePartValue(projectPart?.guitar_type);
-    const catalogGuitarType = normalizePartValue(catalogPart?.guitar_type);
-    if (!projectGuitarType || !catalogGuitarType || projectGuitarType === catalogGuitarType) {
-      score += 3;
-    } else if (catalogGuitarType === 'general') {
-      score += 1;
-    } else {
-      return -1;
-    }
-
-    const projectCategory = normalizePartValue(projectPart?.type_mapping || projectPart?.part_category);
-    const catalogCategory = normalizePartValue(catalogPart?.type_mapping || catalogPart?.part_category);
-    if (projectCategory && catalogCategory) {
-      if (projectCategory === catalogCategory) score += 3;
-      else if (catalogCategory.includes(projectCategory) || projectCategory.includes(catalogCategory)) score += 1;
-    }
-
-    return score;
-  };
-
-  const resolvedParts = useMemo(() => {
-    const projectParts = Array.isArray(hierarchy?.parts) ? hierarchy.parts : [];
-    const catalogParts = Array.isArray(parts) ? parts : [];
-
-    if (projectParts.length === 0) return catalogParts;
-    if (catalogParts.length === 0) return projectParts;
-
-    return projectParts.map((projectPart) => {
-      const matchedCatalogPart = catalogParts
-        .map((catalogPart) => ({
-          catalogPart,
-          score: scoreCatalogMatch(projectPart, catalogPart),
-        }))
-        .filter((entry) => entry.score >= 0)
-        .sort((a, b) => b.score - a.score)[0]?.catalogPart;
-
-      if (!matchedCatalogPart) return projectPart;
-
-      return {
-        ...matchedCatalogPart,
-        ...projectPart,
-        image_url: projectPart.image_url || matchedCatalogPart.image_url || null,
-        stock: projectPart.stock ?? matchedCatalogPart.stock ?? null,
-        price: projectPart.price ?? matchedCatalogPart.price ?? null,
-        is_active: projectPart.is_active ?? matchedCatalogPart.is_active,
-      };
-    });
-  }, [hierarchy?.parts, parts]);
-  const taskSummary = hierarchy?.task_summary || { total: 0, completed: 0, pending: 0 };
   const pickupTimeSlots = useMemo(() => buildPickupTimeSlots(pickupDate), [pickupDate]);
   const requiredPartSummary = useMemo(() => {
     const configuredCount = requiredParts.filter((part) => part.source === 'configuration').length;
     const additionalCount = requiredParts.filter((part) => part.source === 'additional_parts').length;
-    const inStock = requiredParts.filter((part) => part.stock_status === 'in_stock').length;
-    const lowStock = requiredParts.filter((part) => part.stock_status === 'low_stock').length;
-    const outOfStock = requiredParts.filter((part) => part.stock_status === 'out_of_stock').length;
-    const unknownStock = requiredParts.filter((part) => part.stock_status === 'unknown').length;
     const needsPurchase = requiredParts.filter((part) => part.needs_purchase).length;
-    const receivedCount = requiredParts.filter((part) => part.is_fully_received).length;
-    const pendingCount = requiredParts.filter((part) => !part.is_fully_received && (part.pending_quantity || part.quantity)).length;
-    return { configuredCount, additionalCount, inStock, lowStock, outOfStock, unknownStock, needsPurchase, receivedCount, pendingCount };
+    return { configuredCount, additionalCount, needsPurchase };
   }, [requiredParts]);
+  const taskSummary = hierarchy?.task_summary || { total: 0, completed: 0, pending: 0 };
 
   const getStockBadgeStyle = (stockStatus) => {
     switch (stockStatus) {
@@ -336,44 +254,6 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
   );
   const isReadyForAssembly = requiredParts.length > 0 && requiredParts.every((part) => part.is_fully_received);
 
-  // Group parts by category
-  const groupedParts = resolvedParts.reduce((groups, part) => {
-    const category = part.type_mapping || part.part_category || 'Other';
-    if (!groups[category]) {
-      groups[category] = [];
-    }
-    groups[category].push(part);
-    return groups;
-  }, {});
-
-  // Filter parts based on search query
-  const getFilteredParts = () => {
-    const filtered = {};
-    Object.entries(groupedParts).forEach(([category, categoryParts]) => {
-      const filteredCategoryParts = categoryParts.filter(part =>
-        part.name.toLowerCase().includes(partsSearchQuery.toLowerCase())
-      );
-      if (filteredCategoryParts.length > 0) {
-        filtered[category] = filteredCategoryParts;
-      }
-    });
-    return filtered;
-  };
-
-  const getStockColor = (stock) => {
-    if (stock === null || stock === undefined || Number.isNaN(Number(stock))) return 'text-slate-300';
-    if (stock === 0) return 'text-red-400';
-    if (stock <= 5) return 'text-amber-400';
-    return 'text-emerald-400';
-  };
-
-  const getStockDot = (stock) => {
-    if (stock === null || stock === undefined || Number.isNaN(Number(stock))) return 'bg-slate-400';
-    if (stock === 0) return 'bg-red-500';
-    if (stock <= 5) return 'bg-amber-500';
-    return 'bg-emerald-500';
-  };
-
   // Check if project is on hold
   const isOnHold = String(hierarchy?.status || '').toLowerCase() === 'on_hold';
 
@@ -459,7 +339,6 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
     if (isOnHold) return;
     try {
       const pendingSubtasks = (milestone.subtasks || []).filter(s => s.status !== 'completed');
-      // Complete subtasks one by one to respect sequential progression
       for (const subtask of pendingSubtasks) {
         await adminApi.updateSubtask(subtask.subtask_id, { status: 'completed' });
       }
@@ -467,6 +346,18 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
       loadData();
     } catch (err) {
       alert(err.message);
+    }
+  };
+
+  const handleSaveEstimatedCompletion = async () => {
+    try {
+      await adminApi.updateProject(projectId, {
+        estimated_completion_date: editCompletionValue || null,
+      });
+      await loadData();
+      setIsEditingCompletion(false);
+    } catch (err) {
+      alert('Failed to update estimated completion: ' + err.message);
     }
   };
 
@@ -505,36 +396,6 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
     }
   };
 
-  const handleRequestProcurement = async () => {
-    try {
-      setProcurementSaving(true);
-      setProcurementFeedback(null);
-
-      const result = await adminApi.requestProjectProcurement(projectId);
-      await loadData();
-      setProcurementRequestedAt(result.requested_at || new Date().toISOString());
-
-      if (result.purchase_items && result.purchase_items.length > 0) {
-        setProcurementFeedback({
-          type: 'success',
-          message: `Procurement request created for ${result.purchase_items.length} items.`,
-        });
-      } else {
-        setProcurementFeedback({
-          type: 'info',
-          message: 'No procurement needed; all required parts are in stock or unknown.',
-        });
-      }
-    } catch (err) {
-      setProcurementFeedback({
-        type: 'error',
-        message: err.message || 'Failed to request procurement.',
-      });
-    } finally {
-      setProcurementSaving(false);
-    }
-  };
-
   const handleReceivePart = async (part) => {
     try {
       setReceivingSaving(true);
@@ -544,7 +405,6 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
       const quantity = Number(receivingQuantity) || Number(part.quantity) || 1;
       const payload = {
         quantity,
-        supplier: receivingSupplier || null,
       };
 
       const result = await adminApi.receiveProjectRequiredPart(projectId, part.part_key, payload);
@@ -554,7 +414,6 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
         message: `${part.name} marked as received with ${result.quantity_received || quantity} unit(s).`,
       });
       setReceivingQuantity('1');
-      setReceivingSupplier('');
       setReceivingPartKey(null);
     } catch (err) {
       setReceivingFeedback({
@@ -597,9 +456,32 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
               </p>
               <p className="mt-2 text-sm text-[var(--text-muted)]">
                 Estimated completion:{' '}
-                <span className="text-white font-medium">
-                  {estimatedCompletionDisplay || 'Not set'}
-                </span>
+                {isAdmin && isEditingCompletion ? (
+                  <input
+                    type="date"
+                    value={editCompletionValue}
+                    onChange={(e) => setEditCompletionValue(e.target.value)}
+                    onBlur={handleSaveEstimatedCompletion}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleSaveEstimatedCompletion();
+                      if (e.key === 'Escape') setIsEditingCompletion(false);
+                    }}
+                    className="ml-2 rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] px-2 py-1 text-sm text-white"
+                    autoFocus
+                  />
+                ) : (
+                  <span
+                    className={`text-white font-medium ${isAdmin ? 'cursor-pointer hover:underline' : ''}`}
+                    onClick={() => {
+                      if (isAdmin) {
+                        setEditCompletionValue(formatInputDate(estimatedCompletionDisplay) || '');
+                        setIsEditingCompletion(true);
+                      }
+                    }}
+                  >
+                    {estimatedCompletionDisplay || 'Not set'}
+                  </span>
+                )}
               </p>
             </div>
 
@@ -757,61 +639,20 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
               </div>
             </div>
             <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-              <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-300">
-                {requiredPartSummary.inStock} in stock
-              </span>
-              <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-semibold text-amber-300">
-                {requiredPartSummary.lowStock} low stock
-              </span>
-              <span className="rounded-full border border-red-500/30 bg-red-500/10 px-3 py-1 text-xs font-semibold text-red-300">
-                {requiredPartSummary.outOfStock} out of stock
-              </span>
-              <span className="rounded-full border border-slate-500/30 bg-slate-500/10 px-3 py-1 text-xs font-semibold text-slate-300">
-                {requiredPartSummary.unknownStock} unknown
-              </span>
               <span className="rounded-full border border-sky-500/30 bg-sky-500/10 px-3 py-1 text-xs font-semibold text-sky-300">
                 {requiredPartSummary.needsPurchase} needs purchase
               </span>
-              <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-300">
-                {requiredPartSummary.receivedCount} received
-              </span>
-              <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-semibold text-amber-300">
-                {requiredPartSummary.pendingCount} pending
-              </span>
             </div>
             <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-4">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-3">
+              <div className="flex items-center justify-between mb-3">
                 <div>
                   <p className="text-sm font-semibold text-white">Required part details</p>
                   <p className="text-xs text-[var(--text-muted)]">Showing up to 8 items for quick review.</p>
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  {procurementRequestedAt && (
-                    <span className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-3 py-1 text-xs font-semibold text-cyan-300">
-                      Procurement requested
-                    </span>
-                  )}
-                  <button
-                    type="button"
-                    onClick={handleRequestProcurement}
-                    disabled={procurementSaving}
-                    className="rounded-full bg-[var(--gold-primary)] px-3 py-2 text-xs font-semibold text-black transition hover:bg-[var(--gold-secondary)] disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {procurementSaving ? 'Requesting...' : 'Request procurement'}
-                  </button>
-                </div>
-              </div>
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-xs text-[var(--text-muted)]">{requiredParts.length} total</span>
-                {procurementRequestedAt && (
-                  <span className="text-xs text-[var(--text-muted)]">
-                    Requested: {new Date(procurementRequestedAt).toLocaleString()}
-                  </span>
-                )}
               </div>
               <div className="grid gap-3">
-                {requiredParts.slice(0, 8).map((part) => (
-                  <div key={`${part.category}-${part.name}-${part.source}-${part.product_id || 'anon'}`} className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] p-4">
+                {requiredParts.slice(0, 8).map((part, idx) => (
+                  <div key={`${part.part_key || `${part.category}-${part.name}-${part.source}-${part.product_id || 'anon'}`}-${idx}`} className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] p-4">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="text-sm font-semibold text-white truncate">{part.name}</p>
@@ -838,13 +679,6 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
                           onChange={(e) => setReceivingQuantity(e.target.value)}
                           className="w-20 rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] px-2 py-2 text-sm text-white"
                         />
-                        <input
-                          type="text"
-                          placeholder="Supplier"
-                          value={receivingSupplier}
-                          onChange={(e) => setReceivingSupplier(e.target.value)}
-                          className="min-w-[120px] flex-1 rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] px-2 py-2 text-sm text-white"
-                        />
                         <button
                           type="button"
                           onClick={() => handleReceivePart(part)}
@@ -868,194 +702,6 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
               )}
             </div>
           </div>
-        )}
-
-        {/* GUITAR PARTS PANEL */}
-        {resolvedParts.length > 0 && (
-        <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-5 flex flex-col">
-          <button
-            type="button"
-            onClick={() => setIsPartsPanelExpanded((prev) => !prev)}
-            className="mb-4 w-full flex items-center justify-between gap-3"
-          >
-            <div className="flex items-center gap-2 min-w-0">
-              <Guitar className="w-5 h-5 text-[var(--gold-primary)]" />
-              <h3 className="text-white font-bold text-lg">Project Parts</h3>
-              <span className="px-2 py-0.5 bg-[var(--gold-primary)]/20 text-[var(--gold-primary)] text-xs font-bold rounded-full">
-                {resolvedParts.length}
-              </span>
-            </div>
-            <motion.div
-              initial={false}
-              animate={{ rotate: isPartsPanelExpanded ? 180 : 0 }}
-              transition={{ duration: 0.2 }}
-              className="shrink-0"
-            >
-              <ChevronDown className="w-4 h-4 text-[var(--text-muted)]" />
-            </motion.div>
-          </button>
-
-          <AnimatePresence initial={false}>
-            {isPartsPanelExpanded && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: 'auto', opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.2 }}
-                className="overflow-hidden"
-              >
-                {/* Search Input */}
-                <div className="mb-4 relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
-                  <input
-                    type="text"
-                    placeholder="Filter parts..."
-                    value={partsSearchQuery}
-                    onChange={(e) => setPartsSearchQuery(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2.5 bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl text-white placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] text-sm"
-                  />
-                </div>
-
-                {/* Parts List */}
-                <div className="flex-1 overflow-y-auto pr-2 space-y-3 custom-scrollbar">
-                  {resolvedParts.length === 0 ? (
-                    <div className="text-center py-12 flex flex-col items-center justify-center">
-                      <Guitar className="w-12 h-12 text-[var(--text-muted)]/30 mb-3" />
-                      <p className="text-[var(--text-muted)] text-sm font-semibold">No parts linked to this project yet.</p>
-                    </div>
-                  ) : Object.keys(getFilteredParts()).length === 0 ? (
-                    <div className="text-center py-8">
-                      <Package className="w-8 h-8 text-[var(--text-muted)]/30 mx-auto mb-2" />
-                      <p className="text-[var(--text-muted)] text-xs">No parts match your search.</p>
-                    </div>
-                  ) : (
-                    Object.entries(getFilteredParts()).map(([category, categoryParts]) => {
-                      const isExpanded = expandedPartCategories.has(category) || Object.keys(getFilteredParts()).length === 1;
-                      
-                      return (
-                        <div key={category} className="overflow-hidden">
-                          {/* Category Header */}
-                          <button
-                            onClick={() => togglePartCategory(category)}
-                            className="w-full flex items-center justify-between p-3 bg-[var(--bg-primary)]/60 border-l-2 border-[var(--gold-primary)] hover:bg-[var(--bg-primary)] transition-colors rounded-lg"
-                          >
-                            <div className="flex items-center gap-2">
-                              <span className="text-white font-semibold text-sm capitalize">{category}</span>
-                              <span className="px-2 py-0.5 bg-[var(--gold-primary)]/20 text-[var(--gold-primary)] text-xs font-bold rounded-full">
-                                {categoryParts.length}
-                              </span>
-                            </div>
-                            <motion.div
-                              initial={false}
-                              animate={{ rotate: isExpanded ? 180 : 0 }}
-                              transition={{ duration: 0.2 }}
-                            >
-                              <ChevronDown className="w-4 h-4 text-[var(--text-muted)]" />
-                            </motion.div>
-                          </button>
-
-                          {/* Parts Cards (Collapsible) */}
-                          <AnimatePresence>
-                            {isExpanded && (
-                              <motion.div
-                                initial={{ height: 0, opacity: 0 }}
-                                animate={{ height: 'auto', opacity: 1 }}
-                                exit={{ height: 0, opacity: 0 }}
-                                transition={{ duration: 0.2 }}
-                                className="space-y-2 mt-2"
-                              >
-                                {categoryParts.map((part) => {
-                                  const stock = part.stock === null || part.stock === undefined ? null : Number(part.stock);
-                                  const hasInventoryState = Number.isFinite(stock);
-                                  const isLowStock = hasInventoryState && stock > 0 && stock <= 5;
-                                  const isOutOfStock = hasInventoryState && stock === 0;
-
-                                  return (
-                                    <div
-                                      key={part.part_id}
-                                      className="p-3 bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl hover:border-[var(--gold-primary)]/30 transition-all"
-                                    >
-                                      {/* Part Header */}
-                                      <div className="flex gap-3 mb-2">
-                                        {/* Image */}
-                                        <div className="w-10 h-10 flex-shrink-0 rounded-lg bg-black/30 overflow-hidden border border-[var(--border)] flex items-center justify-center">
-                                          {part.image_url ? (
-                                            <img
-                                              src={part.image_url}
-                                              alt={part.name}
-                                              className="w-full h-full object-contain"
-                                            />
-                                          ) : (
-                                            <Guitar className="w-5 h-5 text-[var(--text-muted)]/50" />
-                                          )}
-                                        </div>
-
-                                        {/* Info */}
-                                        <div className="flex-1 min-w-0">
-                                          <p className="text-white font-semibold text-xs line-clamp-1">{part.name}</p>
-                                          <div className="flex flex-wrap gap-1 mt-1">
-                                            <span className="px-1.5 py-0.5 bg-[var(--gold-primary)]/20 text-[var(--gold-primary)] text-[10px] font-bold uppercase rounded">
-                                              {category}
-                                            </span>
-                                            {part.guitar_type && (
-                                              <span className="px-1.5 py-0.5 bg-gray-500/20 text-gray-400 text-[10px] font-medium rounded capitalize">
-                                                {part.guitar_type}
-                                              </span>
-                                            )}
-                                          </div>
-                                        </div>
-                                      </div>
-
-                                      {/* Stock & Price */}
-                                      <div className="flex items-center justify-between pt-2 border-t border-[var(--border)]/30">
-                                        <div className="flex items-center gap-1">
-                                          <span className={`w-2 h-2 rounded-full ${getStockDot(stock)}`} />
-                                          <span className={`text-xs font-semibold ${getStockColor(stock)}`}>
-                                            {!hasInventoryState
-                                              ? 'Configured'
-                                              : isOutOfStock
-                                              ? 'Out of stock'
-                                              : isLowStock
-                                              ? `Low: ${stock}`
-                                              : `${stock} in stock`}
-                                          </span>
-                                        </div>
-                                        {part.price && (
-                                          <span className="text-[var(--gold-primary)] font-bold text-xs">
-                                            {formatCurrency(part.price, true)}
-                                          </span>
-                                        )}
-                                      </div>
-
-                                      {/* Active Badge */}
-                                      {part.is_active !== undefined && (
-                                        <div className="mt-2 flex justify-end">
-                                          <span
-                                            className={`px-2 py-0.5 text-[10px] font-semibold rounded-full border ${
-                                              part.is_active
-                                                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-                                                : 'bg-gray-500/10 text-gray-400 border-gray-500/30'
-                                            }`}
-                                          >
-                                            {part.is_active ? 'Active' : 'Inactive'}
-                                          </span>
-                                        </div>
-                                      )}
-                                    </div>
-                                  );
-                                })}
-                              </motion.div>
-                            )}
-                          </AnimatePresence>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
         )}
 
         {/* Finished Notification */}

@@ -891,6 +891,7 @@ CREATE TABLE guitar_builder_parts (
     type_mapping VARCHAR(100) NOT NULL,
     price NUMERIC(12, 2) NOT NULL DEFAULT 0 CHECK (price >= 0),
     stock INT NOT NULL DEFAULT 0 CHECK (stock >= 0),
+    product_id UUID REFERENCES products(product_id) ON DELETE SET NULL,
     image_url TEXT,
     metadata JSONB DEFAULT '{}'::jsonb,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
@@ -907,6 +908,7 @@ CREATE INDEX idx_guitar_builder_parts_guitar_type ON guitar_builder_parts(guitar
 CREATE INDEX idx_guitar_builder_parts_part_category ON guitar_builder_parts(part_category);
 CREATE INDEX idx_guitar_builder_parts_folder_key ON guitar_builder_parts(folder_key);
 CREATE INDEX idx_guitar_builder_parts_lookup ON guitar_builder_parts(guitar_type, part_category, is_active);
+CREATE INDEX idx_guitar_builder_parts_product_id ON guitar_builder_parts(product_id) WHERE product_id IS NOT NULL;
 CREATE INDEX idx_guitar_builder_parts_deleted_at ON guitar_builder_parts(deleted_at) WHERE deleted_at IS NOT NULL;
 
 

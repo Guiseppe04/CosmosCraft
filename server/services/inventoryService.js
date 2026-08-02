@@ -1,6 +1,14 @@
 const { pool } = require('../config/database');
 const { AppError } = require('../middleware/errorHandler');
 
+const syncStockToBuilderParts = async (productId, delta) => {
+  if (!productId || delta === 0) return;
+  await pool.query(
+    `UPDATE guitar_builder_parts SET stock = stock + $1, updated_at = now() WHERE product_id = $2`,
+    [delta, productId]
+  );
+};
+
 /**
  * INVENTORY SERVICE
  * Manages product stock, inventory logs, and low stock tracking
@@ -119,6 +127,8 @@ exports.addStock = async (productId, quantity, { notes = null, createdBy = null 
 
     await client.query('COMMIT');
 
+    await syncStockToBuilderParts(productId, quantity);
+
     return {
       product: { ...productRes.rows[0], stock: updateRes.rows[0].stock },
       log: logRes.rows[0]
@@ -208,6 +218,8 @@ exports.deductStock = async (
 
     await client.query('COMMIT');
 
+    await syncStockToBuilderParts(productId, -quantity);
+
     return {
       product: { ...productRes.rows[0], stock: updateRes.rows[0].stock },
       log: logRes.rows[0]
@@ -289,6 +301,8 @@ exports.adjustStock = async (productId, quantity, { notes = null, createdBy = nu
     );
 
     await client.query('COMMIT');
+
+    await syncStockToBuilderParts(productId, quantity);
 
     return {
       product: { ...productRes.rows[0], stock: updateRes.rows[0].stock },
@@ -486,6 +500,13 @@ exports.updateProductStock = async (productId, newStock) => {
     throw new AppError('Stock cannot be negative', 400);
   }
 
+  const existingRes = await pool.query(
+    'SELECT stock FROM inventory WHERE product_id = $1',
+    [productId]
+  );
+  const oldStock = Number(existingRes.rows[0]?.stock || 0);
+  const delta = newStock - oldStock;
+
   const res = await pool.query(
     `UPDATE inventory SET stock = $1, updated_at = now() 
      WHERE product_id = $2 
@@ -496,6 +517,8 @@ exports.updateProductStock = async (productId, newStock) => {
   if (!res.rows[0]) {
     throw new AppError('Product inventory not found', 404);
   }
+
+  await syncStockToBuilderParts(productId, delta);
 
   // Get product info for response
   const productRes = await pool.query(

@@ -1,6 +1,14 @@
 const { pool } = require('../config/database')
 const { generateOrderNumber, determineOrderTypePrefix } = require('../utils/orderNumber')
 
+const syncStockToBuilderParts = async (productId, delta) => {
+  if (!productId || delta === 0) return;
+  await pool.query(
+    'UPDATE guitar_builder_parts SET stock = stock + $1, updated_at = now() WHERE product_id = $2',
+    [delta, productId]
+  );
+};
+
 let ensureOrderItemsColumnsReady = false;
 let ensureOrderItemsColumnsPromise = null;
 
@@ -410,6 +418,8 @@ const validateAndDeductInventory = async (client, reservations, orderId) => {
        RETURNING stock`,
       [quantity, productId]
     )
+
+    await syncStockToBuilderParts(productId, -quantity)
 
     await client.query(
       `INSERT INTO inventory_logs (product_id, change_type, quantity, reference_type, reference_id)
