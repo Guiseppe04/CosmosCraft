@@ -237,8 +237,64 @@ export function resolveNut(category, model, nutColor) {
  * New structure: inlays/{shape}/{material}.png
  * Shape folders: ib (blocks), id (dots), idia (diamonds)
  */
-export function resolveInlay(category, model, inlayKey) {
-  return resolveSharedAsset(category, model, 'necks', '6-string', 'front', '24-fret-front', 'standard', 'inlays', `${inlayKey}.png`)
+export function resolveInlay(category, model, inlayKey, materialKey = null) {
+  const shapeFolders = {
+    dots: 'id',
+    diamonds: 'idia',
+    blocks: 'ib',
+  }
+
+  const normalizeShape = (shape) => {
+    if (!shape) return 'dots'
+    const normalized = String(shape).trim().toLowerCase()
+    if (normalized === 'dot') return 'dots'
+    if (normalized === 'diamond') return 'diamonds'
+    if (normalized === 'box' || normalized === 'block' || normalized === 'blocks') return 'blocks'
+    if (['dots', 'diamonds', 'blocks'].includes(normalized)) return normalized
+    return 'dots'
+  }
+
+  const normalizeMaterial = (material) => {
+    if (!material) return 'white-pearl'
+    const normalized = String(material).trim().toLowerCase().replace(/_/g, '-')
+    const map = {
+      pearl: 'white-pearl',
+      'white-pearl': 'white-pearl',
+      black: 'black',
+      green: 'green',
+      luminlay: 'luminlay',
+      pink: 'pink',
+      red: 'red',
+      abalone: 'abalone',
+    }
+    return map[normalized] || normalized
+  }
+
+  let shape = 'dots'
+  let material = 'white-pearl'
+
+  if (materialKey) {
+    shape = normalizeShape(inlayKey)
+    material = normalizeMaterial(materialKey)
+  } else if (typeof inlayKey === 'string') {
+    const rawKey = inlayKey.trim().toLowerCase().replace(/_/g, '-')
+    const prefixMatch = rawKey.match(/^(id|idia|ib)-?(.*)$/)
+
+    if (prefixMatch) {
+      const prefix = prefixMatch[1]
+      material = normalizeMaterial(prefixMatch[2] || 'white-pearl')
+      shape = prefix === 'idia' ? 'diamonds' : prefix === 'ib' ? 'blocks' : 'dots'
+    } else if (['dots', 'diamonds', 'blocks'].includes(rawKey)) {
+      shape = rawKey
+      material = 'white-pearl'
+    } else {
+      material = normalizeMaterial(rawKey)
+    }
+  }
+
+  const folder = shapeFolders[shape] || 'id'
+  const filename = `${folder}${material}.png`
+  return resolveSharedAsset(category, model, 'necks', '6-string', 'front', '24-fret-front', 'standard', 'inlays', folder, filename)
 }
 
 /**

@@ -13,6 +13,8 @@ import {
   HEADSTOCK_WOOD_OPTIONS,
   HARDWARE_OPTIONS,
   INLAY_OPTIONS,
+  INLAY_SHAPE_OPTIONS,
+  INLAY_MATERIAL_OPTIONS,
   KNOB_OPTIONS_BY_BODY,
   PICKGUARD_OPTIONS_BY_BODY,
   PICKUP_OPTIONS,
@@ -81,6 +83,94 @@ export default function useGuitarConfig() {
   const [dynamicFingerboardWoodList, setDynamicFingerboardWoodList] = useState([])
   const [dynamicInlayList, setDynamicInlayList] = useState([])
   const [dynamicNeckRearFinishList, setDynamicNeckRearFinishList] = useState([])
+
+  const INLAY_MATERIALS_BY_SHAPE = {
+    dots: ['abalone', 'black', 'green', 'luminlay', 'pink', 'red', 'pearl'],
+    diamonds: ['abalone', 'black', 'green', 'luminlay', 'pink', 'red', 'pearl'],
+    blocks: ['abalone', 'black', 'green', 'pink', 'red', 'pearl'],
+  }
+
+  const normalizeInlayShape = (shape) => {
+    if (!shape) return 'dots'
+    const normalized = String(shape).trim().toLowerCase()
+    if (normalized === 'dot') return 'dots'
+    if (normalized === 'diamond') return 'diamonds'
+    if (normalized === 'box' || normalized === 'block') return 'blocks'
+    if (['dots', 'diamonds', 'blocks'].includes(normalized)) return normalized
+    return 'dots'
+  }
+
+  const normalizeInlayMaterial = (material) => {
+    if (!material) return 'pearl'
+    const normalized = String(material).trim().toLowerCase().replace(/_/g, '-')
+    if (normalized === 'white-pearl' || normalized === 'pearl') return 'pearl'
+    if (['black', 'green', 'luminlay', 'pink', 'red', 'abalone'].includes(normalized)) return normalized
+    return 'pearl'
+  }
+
+  const parseLegacyInlay = (legacyValue) => {
+    if (!legacyValue || typeof legacyValue !== 'string') return null
+    const rawKey = legacyValue.trim().toLowerCase().replace(/_/g, '-')
+    const prefixMatch = rawKey.match(/^(id|idia|ib)-?(.*)$/)
+    if (!prefixMatch) {
+      return { shape: 'dots', material: normalizeInlayMaterial(rawKey) }
+    }
+    const prefix = prefixMatch[1]
+    const materialKey = prefixMatch[2] || 'white-pearl'
+    return {
+      shape: prefix === 'idia' ? 'diamonds' : prefix === 'ib' ? 'blocks' : 'dots',
+      material: normalizeInlayMaterial(materialKey),
+    }
+  }
+
+  const buildLegacyInlayKey = (shape, material) => {
+    const folderMap = {
+      dots: 'id',
+      diamonds: 'idia',
+      blocks: 'ib',
+    }
+    const key = folderMap[normalizeInlayShape(shape)] || 'id'
+    const mat = normalizeInlayMaterial(material)
+    return `${key}-${mat}`
+  }
+
+  const normalizeTrussRodCover = (cover) => {
+    if (!cover) return 'black'
+    const normalized = String(cover).trim().toLowerCase().replace(/_/g, '-')
+    if (normalized === 'cream') return 'creme'
+    if (normalized === 'red-tortoiseshell' || normalized === 'redtortoiseshell' || normalized === 'red_tortoiseshell') return 'red-tortoise'
+    if (normalized === 'white-pearloid' || normalized === 'whitepearloid' || normalized === 'white_pearl') return 'pearloid'
+    if (normalized === 'purpleheart' || normalized === 'purple-heart') return 'purpleheart'
+    if (['black', 'creme', 'white', 'pearloid', 'ebony', 'purpleheart', 'red-tortoise'].includes(normalized)) return normalized
+    return 'black'
+  }
+
+  const normalizeHeadstockShape = (shape) => {
+    if (!shape) return 'gt6'
+    const s = String(shape).trim().toLowerCase().replace(/_/g, '-')
+    // map common legacy or human-friendly names to canonical shape keys
+    const map = {
+      gt6: 'gt6',
+      gt6r: 'gt6r',
+      h33: 'h33',
+      h33r: 'h33r',
+      '6in': '6in',
+      '6inr': '6inr',
+      '6kr': '6kr',
+      '624': '624',
+      '2x4': '624',
+      pth: 'pth',
+      pthr: 'pthr',
+      pointed: 'pth',
+      'pointed-reverse': 'pthr',
+    }
+    if (map[s]) return map[s]
+    // tolerant fallbacks
+    if (s.includes('point')) return s.includes('reverse') ? 'pthr' : 'pth'
+    if (s.includes('gt6')) return s.includes('r') ? 'gt6r' : 'gt6'
+    return s
+  }
+
   const [dynamicBackplateList, setDynamicBackplateList] = useState([])
   const [dynamicOutputJackList, setDynamicOutputJackList] = useState([])
 
@@ -214,6 +304,22 @@ export default function useGuitarConfig() {
   }, [config.guitarType])
 
   useEffect(() => {
+    const shape = normalizeInlayShape(config.inlayShape)
+    const legacyInlay = parseLegacyInlay(config.inlay || config.inlays)
+    const materialSource = config.inlayMaterial || (legacyInlay ? legacyInlay.material : undefined)
+    const material = normalizeInlayMaterial(materialSource)
+    const allowed = INLAY_MATERIALS_BY_SHAPE[shape] || INLAY_MATERIALS_BY_SHAPE.dots
+
+    if (config.inlayShape !== shape || !allowed.includes(material) || config.inlayMaterial !== material) {
+      setConfig(prev => ({
+        ...prev,
+        inlayShape: shape,
+        inlayMaterial: allowed.includes(material) ? material : 'pearl',
+      }))
+    }
+  }, [config.inlayShape, config.inlayMaterial, config.inlay, config.inlays])
+
+  useEffect(() => {
     let cancelled = false
     const guitarType = config.guitarType || 'electric'
     const model = config.body || 'dc'
@@ -313,6 +419,7 @@ export default function useGuitarConfig() {
   const mergeOptionsFromBuilderParts = useCallback((baseOptions, { partCategory, typeMappings = [] } = {}) => {
     const merged = { ...baseOptions }
     const normalizedType = String(config.guitarType || 'electric').trim().toLowerCase()
+    const normalizedTypeMappings = typeMappings.map(mapping => String(mapping).trim().toLowerCase())
 
     builderParts.forEach((part) => {
       const partType = typeof part.guitar_type === 'string' ? part.guitar_type.trim().toLowerCase() : ''
@@ -327,7 +434,7 @@ export default function useGuitarConfig() {
 
       if (!optionKey) return
       if (partCategory && normalizedCategory !== String(partCategory).trim().toLowerCase()) return
-      if (typeMappings.length > 0 && !typeMappings.includes(normalizedTypeMapping)) return
+      if (normalizedTypeMappings.length > 0 && !normalizedTypeMappings.includes(normalizedTypeMapping)) return
 
       const normalizedOptionKey = String(optionKey).trim()
       const existingOption = merged[normalizedOptionKey]
@@ -420,24 +527,44 @@ export default function useGuitarConfig() {
   }, [mergeOptionsFromBuilderParts, priceOverrides])
 
   const mergedHeadstockWoodOptions = useMemo(() => {
-    const merged = { ...HEADSTOCK_WOOD_OPTIONS }
+    const merged = mergeOptionsFromBuilderParts(HEADSTOCK_WOOD_OPTIONS, { partCategory: 'wood_type', typeMappings: ['headstockwood'] })
     Object.keys(merged).forEach(key => {
       if (priceOverrides[key] !== undefined) {
         merged[key] = { ...merged[key], price: priceOverrides[key].price }
       }
     })
     return merged
-  }, [priceOverrides])
+  }, [mergeOptionsFromBuilderParts, priceOverrides])
 
   const mergedInlayOptions = useMemo(() => {
-    const merged = { ...INLAY_OPTIONS }
+    const merged = mergeOptionsFromBuilderParts(INLAY_OPTIONS, { partCategory: 'misc', typeMappings: ['inlays', 'inlay'] })
     Object.keys(merged).forEach(key => {
       if (priceOverrides[key] !== undefined) {
         merged[key] = { ...merged[key], price: priceOverrides[key].price }
       }
     })
     return merged
-  }, [priceOverrides])
+  }, [mergeOptionsFromBuilderParts, priceOverrides])
+
+  const mergedInlayShapeOptions = useMemo(() => {
+    const merged = mergeOptionsFromBuilderParts(INLAY_SHAPE_OPTIONS, { partCategory: 'misc', typeMappings: ['inlayShape', 'inlay-shape', 'inlayshape'] })
+    Object.keys(merged).forEach(key => {
+      if (priceOverrides[key] !== undefined) {
+        merged[key] = { ...merged[key], price: priceOverrides[key].price }
+      }
+    })
+    return merged
+  }, [mergeOptionsFromBuilderParts, priceOverrides])
+
+  const mergedInlayMaterialOptions = useMemo(() => {
+    const merged = mergeOptionsFromBuilderParts(INLAY_MATERIAL_OPTIONS, { partCategory: 'misc', typeMappings: ['inlayMaterial', 'inlay-material', 'inlaymaterial'] })
+    Object.keys(merged).forEach(key => {
+      if (priceOverrides[key] !== undefined) {
+        merged[key] = { ...merged[key], price: priceOverrides[key].price }
+      }
+    })
+    return merged
+  }, [mergeOptionsFromBuilderParts, priceOverrides])
 
   const mergedDynamicNeckWoodOptions = useMemo(() => {
     if (dynamicNeckWoodList.length === 0) return mergedNeckOptions
@@ -495,6 +622,19 @@ export default function useGuitarConfig() {
     return merged
   }, [dynamicInlayList, mergedInlayOptions, priceOverrides])
 
+  const inlayShapeOptions = useMemo(
+    () => Object.entries(mergedInlayShapeOptions).map(([value, option]) => ({ value, ...option })),
+    [mergedInlayShapeOptions],
+  )
+
+  const inlayMaterialOptions = useMemo(() => {
+    const shape = normalizeInlayShape(config.inlayShape)
+    const allowed = INLAY_MATERIALS_BY_SHAPE[shape] || INLAY_MATERIALS_BY_SHAPE.dots
+    return Object.entries(mergedInlayMaterialOptions)
+      .filter(([value]) => allowed.includes(value))
+      .map(([value, option]) => ({ value, ...option }))
+  }, [mergedInlayMaterialOptions, config.inlayShape])
+
   const mergedBridgeOptions = useMemo(() => {
     const merged = mergeOptionsFromBuilderParts(BRIDGE_OPTIONS, { partCategory: 'bridge', typeMappings: ['bridge'] })
     const bridgeCatPrice = priceOverrides['cat:bridge']?.price
@@ -536,76 +676,76 @@ export default function useGuitarConfig() {
 
   // ---- NEW merged options for all new customization fields ----
   const mergedDexterityOptions = useMemo(() => {
-    const merged = { ...DEXTERITY_OPTIONS }
+    const merged = mergeOptionsFromBuilderParts(DEXTERITY_OPTIONS, { partCategory: 'misc', typeMappings: ['dexterity'] })
     Object.keys(merged).forEach(key => {
       if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
     })
     return merged
-  }, [priceOverrides])
+  }, [mergeOptionsFromBuilderParts, priceOverrides])
 
   const mergedStringCountOptions = useMemo(() => {
-    const merged = { ...STRING_COUNT_OPTIONS }
+    const merged = mergeOptionsFromBuilderParts(STRING_COUNT_OPTIONS, { partCategory: 'misc', typeMappings: ['strings'] })
     Object.keys(merged).forEach(key => {
       if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
     })
     return merged
-  }, [priceOverrides])
+  }, [mergeOptionsFromBuilderParts, priceOverrides])
 
   const mergedMultiscaleOptions = useMemo(() => {
-    const merged = { ...MULTISCALE_OPTIONS }
+    const merged = mergeOptionsFromBuilderParts(MULTISCALE_OPTIONS, { partCategory: 'misc', typeMappings: ['multiscale'] })
     Object.keys(merged).forEach(key => {
       if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
     })
     return merged
-  }, [priceOverrides])
+  }, [mergeOptionsFromBuilderParts, priceOverrides])
 
   const mergedScaleLengthOptions = useMemo(() => {
-    const merged = { ...SCALE_LENGTH_OPTIONS }
+    const merged = mergeOptionsFromBuilderParts(SCALE_LENGTH_OPTIONS, { partCategory: 'misc', typeMappings: ['scaleLength'] })
     Object.keys(merged).forEach(key => {
       if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
     })
     return merged
-  }, [priceOverrides])
+  }, [mergeOptionsFromBuilderParts, priceOverrides])
 
   const mergedCaseOptions = useMemo(() => {
-    const merged = { ...CASE_OPTIONS }
+    const merged = mergeOptionsFromBuilderParts(CASE_OPTIONS, { partCategory: 'misc', typeMappings: ['case'] })
     Object.keys(merged).forEach(key => {
       if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
     })
     return merged
-  }, [priceOverrides])
+  }, [mergeOptionsFromBuilderParts, priceOverrides])
 
   const mergedBevelOptions = useMemo(() => {
-    const merged = { ...BEVEL_OPTIONS }
+    const merged = mergeOptionsFromBuilderParts(BEVEL_OPTIONS, { partCategory: 'misc', typeMappings: ['bevel'] })
     Object.keys(merged).forEach(key => {
       if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
     })
     return merged
-  }, [priceOverrides])
+  }, [mergeOptionsFromBuilderParts, priceOverrides])
 
   const mergedTopWoodOptions = useMemo(() => {
-    const merged = { ...TOP_WOOD_OPTIONS }
+    const merged = mergeOptionsFromBuilderParts(TOP_WOOD_OPTIONS, { partCategory: 'misc', typeMappings: ['topWood'] })
     Object.keys(merged).forEach(key => {
       if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
     })
     return merged
-  }, [priceOverrides])
+  }, [mergeOptionsFromBuilderParts, priceOverrides])
 
   const mergedFinishTypeOptions = useMemo(() => {
-    const merged = { ...FINISH_TYPE_OPTIONS }
+    const merged = mergeOptionsFromBuilderParts(FINISH_TYPE_OPTIONS, { partCategory: 'misc', typeMappings: ['finishType'] })
     Object.keys(merged).forEach(key => {
       if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
     })
     return merged
-  }, [priceOverrides])
+  }, [mergeOptionsFromBuilderParts, priceOverrides])
 
   const mergedTopCoatOptions = useMemo(() => {
-    const merged = { ...TOP_COAT_OPTIONS }
+    const merged = mergeOptionsFromBuilderParts(TOP_COAT_OPTIONS, { partCategory: 'misc', typeMappings: ['topCoat'] })
     Object.keys(merged).forEach(key => {
       if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
     })
     return merged
-  }, [priceOverrides])
+  }, [mergeOptionsFromBuilderParts, priceOverrides])
 
   const mergedDynamicTopWoodOptions = useMemo(() => {
     if (dynamicTopWoodList.length === 0) return mergedTopWoodOptions
@@ -649,188 +789,188 @@ export default function useGuitarConfig() {
   }, [dynamicTopCoatList, mergedTopCoatOptions, priceOverrides])
 
   const mergedBurstFinishOptions = useMemo(() => {
-    const merged = { ...BURST_FINISH_OPTIONS }
+    const merged = mergeOptionsFromBuilderParts(BURST_FINISH_OPTIONS, { partCategory: 'misc', typeMappings: ['burstFinish'] })
     Object.keys(merged).forEach(key => {
       if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
     })
     return merged
-  }, [priceOverrides])
+  }, [mergeOptionsFromBuilderParts, priceOverrides])
 
   const mergedNeckConstructionOptions = useMemo(() => {
-    const merged = { ...NECK_CONSTRUCTION_OPTIONS }
+    const merged = mergeOptionsFromBuilderParts(NECK_CONSTRUCTION_OPTIONS, { partCategory: 'misc', typeMappings: ['neckConstruction'] })
     Object.keys(merged).forEach(key => {
       if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
     })
     return merged
-  }, [priceOverrides])
+  }, [mergeOptionsFromBuilderParts, priceOverrides])
 
   const mergedFretOptions = useMemo(() => {
-    const merged = { ...FRET_OPTIONS }
+    const merged = mergeOptionsFromBuilderParts(FRET_OPTIONS, { partCategory: 'misc', typeMappings: ['frets'] })
     Object.keys(merged).forEach(key => {
       if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
     })
     return merged
-  }, [priceOverrides])
+  }, [mergeOptionsFromBuilderParts, priceOverrides])
 
   const mergedNeckRearFinishOptions = useMemo(() => {
-    const merged = { ...NECK_REAR_FINISH_OPTIONS }
+    const merged = mergeOptionsFromBuilderParts(NECK_REAR_FINISH_OPTIONS, { partCategory: 'misc', typeMappings: ['neckRearFinish'] })
     Object.keys(merged).forEach(key => {
       if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
     })
     return merged
-  }, [priceOverrides])
+  }, [mergeOptionsFromBuilderParts, priceOverrides])
 
   const mergedHeadstockShapeOptions = useMemo(() => {
-    const merged = { ...HEADSTOCK_SHAPE_OPTIONS }
+    const merged = mergeOptionsFromBuilderParts(HEADSTOCK_SHAPE_OPTIONS, { partCategory: 'misc', typeMappings: ['headstockShape'] })
     Object.keys(merged).forEach(key => {
       if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
     })
     return merged
-  }, [priceOverrides])
+  }, [mergeOptionsFromBuilderParts, priceOverrides])
 
   const mergedTrussRodCoverOptions = useMemo(() => {
-    const merged = { ...TRUSS_ROD_COVER_OPTIONS }
+    const merged = mergeOptionsFromBuilderParts(TRUSS_ROD_COVER_OPTIONS, { partCategory: 'misc', typeMappings: ['trussRodCover'] })
     Object.keys(merged).forEach(key => {
       if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
     })
     return merged
-  }, [priceOverrides])
+  }, [mergeOptionsFromBuilderParts, priceOverrides])
 
   const mergedElectronicsTypeOptions = useMemo(() => {
-    const merged = { ...ELECTRONICS_TYPE_OPTIONS }
+    const merged = mergeOptionsFromBuilderParts(ELECTRONICS_TYPE_OPTIONS, { partCategory: 'misc', typeMappings: ['electronicsType'] })
     Object.keys(merged).forEach(key => {
       if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
     })
     return merged
-  }, [priceOverrides])
+  }, [mergeOptionsFromBuilderParts, priceOverrides])
 
   const mergedPickupConfigurationOptions = useMemo(() => {
-    const merged = { ...PICKUP_CONFIGURATION_OPTIONS }
+    const merged = mergeOptionsFromBuilderParts(PICKUP_CONFIGURATION_OPTIONS, { partCategory: 'misc', typeMappings: ['pickupConfiguration'] })
     Object.keys(merged).forEach(key => {
       if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
     })
     return merged
-  }, [priceOverrides])
+  }, [mergeOptionsFromBuilderParts, priceOverrides])
 
   const mergedBridgePickupModelOptions = useMemo(() => {
-    const merged = { ...PICKUP_MODEL_BRIDGE_OPTIONS }
+    const merged = mergeOptionsFromBuilderParts(PICKUP_MODEL_BRIDGE_OPTIONS, { partCategory: 'misc', typeMappings: ['bridgePickupModel'] })
     Object.keys(merged).forEach(key => {
       if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
     })
     return merged
-  }, [priceOverrides])
+  }, [mergeOptionsFromBuilderParts, priceOverrides])
 
   const mergedMiddlePickupModelOptions = useMemo(() => {
-    const merged = { ...PICKUP_MODEL_MIDDLE_OPTIONS }
+    const merged = mergeOptionsFromBuilderParts(PICKUP_MODEL_MIDDLE_OPTIONS, { partCategory: 'misc', typeMappings: ['middlePickupModel'] })
     Object.keys(merged).forEach(key => {
       if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
     })
     return merged
-  }, [priceOverrides])
+  }, [mergeOptionsFromBuilderParts, priceOverrides])
 
   const mergedNeckPickupModelOptions = useMemo(() => {
-    const merged = { ...PICKUP_MODEL_NECK_OPTIONS }
+    const merged = mergeOptionsFromBuilderParts(PICKUP_MODEL_NECK_OPTIONS, { partCategory: 'misc', typeMappings: ['neckPickupModel'] })
     Object.keys(merged).forEach(key => {
       if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
     })
     return merged
-  }, [priceOverrides])
+  }, [mergeOptionsFromBuilderParts, priceOverrides])
 
   const mergedPickupBobbinOptions = useMemo(() => {
-    const merged = { ...PICKUP_BOBBIN_OPTIONS }
+    const merged = mergeOptionsFromBuilderParts(PICKUP_BOBBIN_OPTIONS, { partCategory: 'misc', typeMappings: ['pickupBobbin'] })
     Object.keys(merged).forEach(key => {
       if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
     })
     return merged
-  }, [priceOverrides])
+  }, [mergeOptionsFromBuilderParts, priceOverrides])
 
   const mergedPickupPoleColorOptions = useMemo(() => {
-    const merged = { ...PICKUP_POLE_COLOR_OPTIONS }
+    const merged = mergeOptionsFromBuilderParts(PICKUP_POLE_COLOR_OPTIONS, { partCategory: 'misc', typeMappings: ['pickupPoleColor'] })
     Object.keys(merged).forEach(key => {
       if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
     })
     return merged
-  }, [priceOverrides])
+  }, [mergeOptionsFromBuilderParts, priceOverrides])
 
   const mergedControlsOptions = useMemo(() => {
-    const merged = { ...CONTROLS_OPTIONS }
+    const merged = mergeOptionsFromBuilderParts(CONTROLS_OPTIONS, { partCategory: 'misc', typeMappings: ['controls'] })
     Object.keys(merged).forEach(key => {
       if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
     })
     return merged
-  }, [priceOverrides])
+  }, [mergeOptionsFromBuilderParts, priceOverrides])
 
   const mergedSaddleOptions = useMemo(() => {
-    const merged = { ...SADDLE_OPTIONS }
+    const merged = mergeOptionsFromBuilderParts(SADDLE_OPTIONS, { partCategory: 'misc', typeMappings: ['saddle'] })
     Object.keys(merged).forEach(key => {
       if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
     })
     return merged
-  }, [priceOverrides])
+  }, [mergeOptionsFromBuilderParts, priceOverrides])
 
   const mergedNutOptions = useMemo(() => {
-    const merged = { ...NUT_OPTIONS }
+    const merged = mergeOptionsFromBuilderParts(NUT_OPTIONS, { partCategory: 'misc', typeMappings: ['nut'] })
     Object.keys(merged).forEach(key => {
       if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
     })
     return merged
-  }, [priceOverrides])
+  }, [mergeOptionsFromBuilderParts, priceOverrides])
 
   const mergedTuningOptions = useMemo(() => {
-    const merged = { ...TUNING_OPTIONS }
+    const merged = mergeOptionsFromBuilderParts(TUNING_OPTIONS, { partCategory: 'misc', typeMappings: ['tuning'] })
     Object.keys(merged).forEach(key => {
       if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
     })
     return merged
-  }, [priceOverrides])
+  }, [mergeOptionsFromBuilderParts, priceOverrides])
 
   const mergedStringBrandOptions = useMemo(() => {
-    const merged = { ...STRING_BRAND_OPTIONS }
+    const merged = mergeOptionsFromBuilderParts(STRING_BRAND_OPTIONS, { partCategory: 'misc', typeMappings: ['stringBrand'] })
     Object.keys(merged).forEach(key => {
       if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
     })
     return merged
-  }, [priceOverrides])
+  }, [mergeOptionsFromBuilderParts, priceOverrides])
 
   const mergedOutputJackOptions = useMemo(() => {
-    const merged = { ...OUTPUT_JACK_OPTIONS }
+    const merged = mergeOptionsFromBuilderParts(OUTPUT_JACK_OPTIONS, { partCategory: 'misc', typeMappings: ['outputJack'] })
     Object.keys(merged).forEach(key => {
       if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
     })
     return merged
-  }, [priceOverrides])
+  }, [mergeOptionsFromBuilderParts, priceOverrides])
 
   const mergedStrapButtonOptions = useMemo(() => {
-    const merged = { ...STRAP_BUTTON_OPTIONS }
+    const merged = mergeOptionsFromBuilderParts(STRAP_BUTTON_OPTIONS, { partCategory: 'misc', typeMappings: ['strapButtons'] })
     Object.keys(merged).forEach(key => {
       if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
     })
     return merged
-  }, [priceOverrides])
+  }, [mergeOptionsFromBuilderParts, priceOverrides])
 
   const mergedTunerButtonOptions = useMemo(() => {
-    const merged = { ...TUNER_BUTTON_OPTIONS }
+    const merged = mergeOptionsFromBuilderParts(TUNER_BUTTON_OPTIONS, { partCategory: 'misc', typeMappings: ['tunerButtons'] })
     Object.keys(merged).forEach(key => {
       if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
     })
     return merged
-  }, [priceOverrides])
+  }, [mergeOptionsFromBuilderParts, priceOverrides])
 
   const mergedElectronicsCavityCoverOptions = useMemo(() => {
-    const merged = { ...ELECTRONICS_CAVITY_COVER_OPTIONS }
+    const merged = mergeOptionsFromBuilderParts(ELECTRONICS_CAVITY_COVER_OPTIONS, { partCategory: 'misc', typeMappings: ['electronicsCavityCover'] })
     Object.keys(merged).forEach(key => {
       if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
     })
     return merged
-  }, [priceOverrides])
+  }, [mergeOptionsFromBuilderParts, priceOverrides])
 
   const mergedTremoloCoverOptions = useMemo(() => {
-    const merged = { ...TREMOLO_COVER_OPTIONS }
+    const merged = mergeOptionsFromBuilderParts(TREMOLO_COVER_OPTIONS, { partCategory: 'misc', typeMappings: ['tremoloCover'] })
     Object.keys(merged).forEach(key => {
       if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
     })
     return merged
-  }, [priceOverrides])
+  }, [mergeOptionsFromBuilderParts, priceOverrides])
 
   const getCategoryPrice = (cat) => priceOverrides[`cat:${cat}`]?.price
   const pickguardOptions = useMemo(
@@ -981,6 +1121,8 @@ export default function useGuitarConfig() {
       headstock: HEADSTOCK_OPTIONS[config.headstock]?.label ?? config.headstock,
       headstockWood: HEADSTOCK_WOOD_OPTIONS[config.headstockWood]?.label ?? config.headstockWood,
       inlays: INLAY_OPTIONS[config.inlays]?.label ?? config.inlays,
+      inlayShape: INLAY_SHAPE_OPTIONS[config.inlayShape]?.label ?? config.inlayShape,
+      inlayMaterial: INLAY_MATERIAL_OPTIONS[config.inlayMaterial]?.label ?? config.inlayMaterial,
       bridge: BRIDGE_OPTIONS[config.bridge]?.label ?? config.bridge,
       pickguard: PICKGUARD_OPTIONS_BY_BODY[config.body]?.[config.pickguard]?.label ?? config.pickguard,
       knobs: KNOB_OPTIONS_BY_BODY[config.body]?.[config.knobs]?.label ?? config.knobs,
@@ -1116,6 +1258,7 @@ export default function useGuitarConfig() {
     },
     [dynamicInlayList, mergedDynamicInlayOptions, mergedInlayOptions, config.body],
   )
+
   const bridgeOptions = useMemo(
     () =>
       Object.entries(mergedBridgeOptions).map(([value, option]) => ({
@@ -1338,12 +1481,33 @@ export default function useGuitarConfig() {
 
   const loadConfig = useCallback((raw) => {
     const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
-    setConfig(prev => ({
-      ...DEFAULT_CONFIG,
-      ...prev,
-      ...parsed,
-    }))
+    setConfig(prev => {
+      const merged = {
+        ...DEFAULT_CONFIG,
+        ...prev,
+        ...parsed,
+      }
+      const legacyInlay = parseLegacyInlay(merged.inlay || merged.inlays)
+      if (legacyInlay) {
+        merged.inlayShape = merged.inlayShape || legacyInlay.shape
+        merged.inlayMaterial = merged.inlayMaterial || legacyInlay.material
+      }
+      if (merged.inlayShape && merged.inlayMaterial) {
+        merged.inlay = buildLegacyInlayKey(merged.inlayShape, merged.inlayMaterial)
+      }
+      merged.trussRodCover = normalizeTrussRodCover(merged.trussRodCover)
+      merged.headstockShape = normalizeHeadstockShape(merged.headstockShape || merged.headstock)
+      merged.headstock = merged.headstockShape
+      return merged
+    })
   }, [])
+
+  useEffect(() => {
+    const shape = normalizeHeadstockShape(config.headstockShape || config.headstock)
+    if (config.headstockShape !== shape || config.headstock !== shape) {
+      setConfig(prev => ({ ...prev, headstockShape: shape, headstock: shape }))
+    }
+  }, [config.headstockShape, config.headstock])
 
   const pricingBreakdown = useMemo(() => ({
       // Old pricing keys (unchanged)
@@ -1356,6 +1520,8 @@ export default function useGuitarConfig() {
       headstock: mergedHeadstockOptions[config.headstock]?.price ?? HEADSTOCK_OPTIONS[config.headstock]?.price ?? 0,
       headstockWood: mergedHeadstockWoodOptions[config.headstockWood]?.price ?? HEADSTOCK_WOOD_OPTIONS[config.headstockWood]?.price ?? 0,
       inlays: mergedInlayOptions[config.inlays]?.price ?? INLAY_OPTIONS[config.inlays]?.price ?? 0,
+      inlayShape: mergedInlayShapeOptions[config.inlayShape]?.price ?? 0,
+      inlayMaterial: mergedInlayMaterialOptions[config.inlayMaterial]?.price ?? 0,
       bridge: mergedBridgeOptions[config.bridge]?.price ?? BRIDGE_OPTIONS[config.bridge]?.price ?? 0,
       pickguard: pickguardOptions.find(option => option.value === config.pickguard)?.price ?? 0,
       knobs: knobOptions.find(option => option.value === config.knobs)?.price ?? 0,
@@ -1444,6 +1610,8 @@ export default function useGuitarConfig() {
       headstockOptions,
       headstockWoodOptions,
       inlayOptions,
+      inlayShapeOptions,
+      inlayMaterialOptions,
       bridgeOptions,
       pickguardOptions,
       knobOptions,
