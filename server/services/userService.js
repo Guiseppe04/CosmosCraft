@@ -367,7 +367,7 @@ exports.reactivateAccount = async (userId) => {
 };
 
 exports.listUsers = async (filters = {}, limit = 10, skip = 0) => {
-  let queryStr = 'SELECT user_id, email, first_name, last_name, role, is_active FROM users WHERE 1=1';
+  let queryStr = 'SELECT user_id, email, first_name, last_name, role, is_active, created_at FROM users WHERE 1=1';
   const values = [];
   let idx = 1;
 
