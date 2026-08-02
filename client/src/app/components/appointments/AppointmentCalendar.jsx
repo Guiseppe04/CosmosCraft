@@ -445,53 +445,53 @@ const dateKey = day.id
                    const isUnavailableCell = isUnavailable
                    const isAvailableCell = isAvailable && !isUnavailable && !isHoliday && !isSunday && !isPast
 
-                   const cellClasses = isSelected
-                     ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)]/15 text-white shadow-lg shadow-[var(--gold-primary)]/10'
-                     : isHolidayCell
-                       ? 'border-[#758A93]/30 bg-[#758A93]/10 text-[#c9d2db] cursor-not-allowed'
-                       : isSundayClosed || isPastDate
-                         ? 'border-slate-500/35 bg-slate-700/30 text-slate-100 cursor-not-allowed'
-                         : isUnavailableCell
-                           ? 'border-amber-500/30 bg-amber-500/10 text-amber-200 cursor-pointer hover:border-amber-400 hover:bg-amber-500/20'
-                           : isAvailableCell
-                             ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200 cursor-pointer hover:border-emerald-400 hover:bg-emerald-500/20'
-                             : bookingCount
-                               ? 'border-red-500/10 bg-red-500/10 text-red-200 hover:border-red-400 hover:bg-red-500/15'
-                               : 'border-[var(--border)] bg-[var(--surface-dark)] text-white hover:border-[var(--gold-primary)] hover:bg-[var(--surface-elevated)]'
+                    const cellClasses = isSelected
+                      ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)]/15 text-white shadow-lg shadow-[var(--gold-primary)]/10'
+                      : isHolidayCell
+                        ? 'border-[#758A93]/30 bg-[#758A93]/10 text-[#c9d2db] cursor-not-allowed'
+                        : isSundayClosed || isPastDate
+                          ? 'border-slate-500/35 bg-slate-700/30 text-slate-100 cursor-not-allowed'
+                          : isUnavailableCell
+                            ? 'border-amber-500/30 bg-amber-500/10 text-amber-200 cursor-pointer hover:border-amber-400 hover:bg-amber-500/20'
+                            : bookingCount
+                              ? 'border-red-500/10 bg-red-500/10 text-red-200 hover:border-red-400 hover:bg-red-500/15'
+                              : isAvailableCell
+                                ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200 cursor-pointer hover:border-emerald-400 hover:bg-emerald-500/20'
+                                : 'border-[var(--border)] bg-[var(--surface-dark)] text-white hover:border-[var(--gold-primary)] hover:bg-[var(--surface-elevated)]'
 
-                   const badgeClasses = isHolidayCell
-                     ? 'bg-[#758A93]/15 text-[#c9d2db] border border-[#758A93]/20'
-                     : isSundayClosed || isPastDate
-                       ? 'bg-slate-600/35 text-slate-100 border border-slate-400/35'
-                       : isUnavailableCell
-                         ? 'bg-amber-500/15 text-amber-200 border border-amber-500/20'
-                         : isAvailableCell
-                           ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/20'
-                           : bookingCount
-                             ? 'bg-red-500/15 text-red-200 border border-red-500/20'
-                             : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/20'
+                    const badgeClasses = isHolidayCell
+                      ? 'bg-[#758A93]/15 text-[#c9d2db] border border-[#758A93]/20'
+                      : isSundayClosed || isPastDate
+                        ? 'bg-slate-600/35 text-slate-100 border border-slate-400/35'
+                        : isUnavailableCell
+                          ? 'bg-amber-500/15 text-amber-200 border border-amber-500/20'
+                          : bookingCount
+                            ? 'bg-red-500/15 text-red-200 border border-red-500/20'
+                            : isAvailableCell
+                              ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/20'
+                              : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/20'
 
-                   return (
-                     <button
-                       key={dateKey}
-                       type="button"
-                       onClick={() => handleDateSelect(dateKey, isUnavailableCell)}
-                       title={status}
-                       disabled={isSunday || isHoliday || (isPast && !isAdminMode && !isUnavailableCell)}
-                       className={`flex h-20 flex-col items-center justify-between rounded-3xl border px-3 py-3 text-sm transition-all ${cellClasses}`}
-                     >
-                       <div className="flex w-full items-center justify-between">
-                         <span className="text-lg font-semibold">{day.dayNumber}</span>
-                         {isPast && (
-                           <span className="rounded-full border border-slate-400/30 bg-slate-700/35 px-2 py-1 text-[10px] uppercase tracking-[0.2em] text-slate-200">
-                             Past
-                           </span>
-                         )}
-                       </div>
+                    return (
+                      <button
+                        key={dateKey}
+                        type="button"
+                        onClick={() => handleDateSelect(dateKey, isUnavailableCell)}
+                        title={status}
+                        disabled={isSunday || isHoliday || (isPast && !isAdminMode && !isUnavailableCell)}
+                        className={`flex h-20 flex-col items-center justify-between rounded-3xl border px-3 py-3 text-sm transition-all ${cellClasses}`}
+                      >
+                        <div className="flex w-full items-center justify-between">
+                          <span className="text-lg font-semibold">{day.dayNumber}</span>
+                          {isPast && (
+                            <span className="rounded-full border border-slate-400/30 bg-slate-700/35 px-2 py-1 text-[10px] uppercase tracking-[0.2em] text-slate-200">
+                              Past
+                            </span>
+                          )}
+                        </div>
 
-                       <span className={`inline-flex items-center gap-2 rounded-full px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.15em] ${badgeClasses}`}>
-                         {isUnavailableCell ? 'Unavailable' : isDisabled ? status : isAvailableCell ? 'Available' : bookingCount ? `${bookingCount} booked` : 'Available'}
-                       </span>
+                        <span className={`inline-flex items-center gap-2 rounded-full px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.15em] ${badgeClasses}`}>
+                          {isUnavailableCell ? 'Unavailable' : isDisabled ? status : bookingCount ? `${bookingCount} booked` : (isAvailableCell ? 'Available' : 'Available')}
+                        </span>
                     </button>
                   )
                 })
