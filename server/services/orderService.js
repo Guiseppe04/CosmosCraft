@@ -177,6 +177,7 @@ const getAddressSignature = (address = {}) => ([
   address.line1 ?? address.streetLine1 ?? address.street,
   address.line2 ?? address.streetLine2 ?? address.street2,
   address.city,
+  address.barangay ?? '',
   address.province ?? address.stateProvince,
   address.postal_code ?? address.postalZipCode ?? address.postalCode,
   normalizeCountryCode(address.country, ''),
@@ -550,7 +551,7 @@ exports.createOrder = async (orderData) => {
 
       // Reuse an existing saved address when the full normalized address matches.
       const existingAddr = await client.query(
-        `SELECT address_id, line1, line2, city, province, postal_code, country
+        `SELECT address_id, line1, line2, city, barangay, province, postal_code, country
          FROM addresses
          WHERE user_id = $1`,
         [userId]
@@ -562,9 +563,10 @@ exports.createOrder = async (orderData) => {
       if (matchedAddress) {
         shippingAddressId = matchedAddress.address_id
       } else {
+        const normalizedBillingBarangay = billingAddress.barangay || null
         const addressRes = await client.query(
-          `INSERT INTO addresses (user_id, label, line1, line2, city, province, postal_code, country)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          `INSERT INTO addresses (user_id, label, line1, line2, city, barangay, province, postal_code, country)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
            RETURNING address_id`,
           [
             userId,
@@ -572,6 +574,7 @@ exports.createOrder = async (orderData) => {
             billingAddress.street,
             normalizedBillingStreet2,
             billingAddress.city,
+            normalizedBillingBarangay,
             normalizedBillingProvince,
             normalizedBillingPostalCode,
             normalizedCountryCode

@@ -1059,6 +1059,7 @@ export function CheckoutPage() {
       street2: selectedAddress?.street_line2 || '',
       city: selectedAddress?.city || '',
       province: selectedAddress?.province || '',
+      barangay: selectedAddress?.barangay || '',
       postalCode: selectedAddress?.postal_code || '',
       country: selectedAddress?.country || 'PH'
     }
@@ -1130,6 +1131,7 @@ export function CheckoutPage() {
             street: finalAddress.street,
             street2: finalAddress.street2,
             city: finalAddress.city,
+            barangay: finalAddress.barangay,
             stateProvince: finalAddress.province,
             postalCode: finalAddress.postalCode,
             country: finalAddress.country,

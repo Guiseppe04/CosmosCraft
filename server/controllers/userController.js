@@ -18,6 +18,7 @@ exports.getCurrentUser = asyncHandler(async (req, res, next) => {
     street_line1: addr.line1,
     street_line2: addr.line2,
     city: addr.city,
+    barangay: addr.barangay || '',
     province: addr.province,
     postal_code: addr.postal_code,
     country: addr.country,

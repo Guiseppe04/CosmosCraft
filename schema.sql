@@ -152,6 +152,7 @@ CREATE TABLE addresses (
     line1 VARCHAR(150) NOT NULL,
     line2 VARCHAR(150),
     city VARCHAR(80) NOT NULL,
+    barangay VARCHAR(80),
     province VARCHAR(80) NOT NULL,
     postal_code VARCHAR(20) NOT NULL,
     country CHAR(2) NOT NULL,

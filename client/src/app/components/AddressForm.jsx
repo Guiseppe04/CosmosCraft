@@ -202,6 +202,7 @@ export function AddressForm({
       streetLine2: formData.streetLine2?.trim() || '',
       city: resolveCityName(),
       stateProvince: resolveProvinceName(),
+      barangay: formData.barangay?.trim() || '',
       postalZipCode: formData.postalZipCode.trim(),
       isDefault: Boolean(formData.isDefault),
     }

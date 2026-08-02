@@ -68,6 +68,16 @@ const addressFields = {
       'string.max': 'City must not exceed 50 characters',
       'any.required': 'City is required',
     }),
+  barangay: Joi.string()
+    .min(2)
+    .max(80)
+    .optional()
+    .allow('')
+    .trim()
+    .messages({
+      'string.min': 'Barangay must be at least 2 characters',
+      'string.max': 'Barangay must not exceed 80 characters',
+    }),
   stateProvince: Joi.string()
     .min(2)
     .max(50)
@@ -286,6 +296,11 @@ exports.addAddressSchema = Joi.object({
   streetLine1: addressFields.streetLine1,
   streetLine2: addressFields.streetLine2,
   city: addressFields.city,
+  barangay: addressFields.barangay.when('country', {
+    is: 'PH',
+    then: addressFields.barangay.required().messages({ 'any.required': 'Barangay is required' }),
+    otherwise: addressFields.barangay.optional().allow(''),
+  }),
   stateProvince: addressFields.stateProvince,
   postalZipCode: addressFields.postalZipCode,
   country: addressFields.country,
@@ -665,6 +680,18 @@ exports.createOrderSchema = Joi.object({
       'string.min': 'City must be at least 2 characters',
       'string.max': 'City must not exceed 50 characters',
       'any.required': 'City is required',
+    }),
+    barangay: Joi.string().min(2).max(80).optional().trim().when('country', {
+      is: 'PH',
+      then: Joi.string().min(2).max(80).required().trim().messages({
+        'any.required': 'Barangay is required',
+        'string.min': 'Barangay must be at least 2 characters',
+        'string.max': 'Barangay must not exceed 80 characters',
+      }),
+      otherwise: Joi.string().min(2).max(80).optional().allow('').trim().messages({
+        'string.min': 'Barangay must be at least 2 characters',
+        'string.max': 'Barangay must not exceed 80 characters',
+      }),
     }),
     stateProvince: Joi.string().min(2).max(50).required().trim().messages({
       'string.min': 'Province must be at least 2 characters',

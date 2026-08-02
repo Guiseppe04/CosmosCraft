@@ -11,6 +11,7 @@ const getAddressSignature = (address = {}) => ([
   address.line1 ?? address.streetLine1 ?? address.street,
   address.line2 ?? address.streetLine2 ?? address.street2,
   address.city,
+  address.barangay ?? '',
   address.province ?? address.stateProvince,
   address.postal_code ?? address.postalZipCode ?? address.postalCode,
   address.country,
@@ -93,16 +94,17 @@ exports.createEmailUser = async (userData) => {
 
     if (userData.address) {
       await client.query(
-        `INSERT INTO addresses (user_id, line1, line2, city, province, postal_code, country, is_default)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, true)`,
+        `INSERT INTO addresses (user_id, line1, line2, city, barangay, province, postal_code, country, is_default)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true)`,
         [
           user.user_id,
           userData.address.streetLine1,
           userData.address.streetLine2 || null,
           userData.address.city,
+          userData.address.barangay || null,
           userData.address.stateProvince,
           userData.address.postalZipCode,
-          userData.address.country
+          userData.address.country,
         ]
       );
     }
@@ -206,7 +208,7 @@ exports.addAddress = async (userId, addressData) => {
   try {
     await client.query('BEGIN');
     const existing = await client.query(
-      'SELECT address_id, line1, line2, city, province, postal_code, country, is_default FROM addresses WHERE user_id = $1',
+      'SELECT address_id, line1, line2, city, barangay, province, postal_code, country, is_default FROM addresses WHERE user_id = $1',
       [userId]
     );
     const duplicateAddress = existing.rows.find(
@@ -234,14 +236,15 @@ exports.addAddress = async (userId, addressData) => {
     }
 
     const res = await client.query(
-      `INSERT INTO addresses (user_id, label, line1, line2, city, province, postal_code, country, is_default)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+      `INSERT INTO addresses (user_id, label, line1, line2, city, barangay, province, postal_code, country, is_default)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
       [
         userId,
         addressData.label || null,
         addressData.streetLine1,
         addressData.streetLine2 || null,
         addressData.city,
+        addressData.barangay || null,
         addressData.stateProvince,
         addressData.postalZipCode,
         addressData.country,
@@ -272,7 +275,7 @@ exports.updateAddress = async (userId, addressId, updates) => {
     const values = [];
     let idx = 1;
     // Map frontend fields (e.g. streetLine1) to db columns if necessary
-    const map = { label: 'label', streetLine1: 'line1', streetLine2: 'line2', city: 'city', stateProvince: 'province', postalZipCode: 'postal_code', country: 'country', isDefault: 'is_default' };
+    const map = { label: 'label', streetLine1: 'line1', streetLine2: 'line2', city: 'city', barangay: 'barangay', stateProvince: 'province', postalZipCode: 'postal_code', country: 'country', isDefault: 'is_default' };
     
     for (const key in updates) {
       if (map[key]) {
