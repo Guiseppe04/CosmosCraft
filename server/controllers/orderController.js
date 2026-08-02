@@ -52,6 +52,7 @@ exports.createOrder = asyncHandler(async (req, res, next) => {
     notes,
     shippingMethod,
     paymentMethod,
+    shippingAddressId,
     billingAddress,
     termsAccepted,
     paymentPlan,
