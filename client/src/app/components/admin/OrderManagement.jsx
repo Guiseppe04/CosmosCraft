@@ -1295,7 +1295,7 @@ export function OrderManagement({ orders, onRefresh, user, pagination }) {
       }
       if (newStatus === 'out_for_delivery') {
         if (trackingInfo) {
-          updateData.rider_details = trackingInfo
+          updateData.rider_name = trackingInfo
         }
       }
       await adminApi.updateOrder(orderId, updateData)
