@@ -12,7 +12,6 @@ import {
   CheckCircle,
   ChevronLeft,
   ChevronRight,
-  Clock,
   Edit,
   Filter,
   Hand,
@@ -24,8 +23,6 @@ import {
   ShoppingBag,
   Wallet,
   X,
-  User,
-  Shield,
 } from 'lucide-react'
 import { Topbar } from '../components/admin/Topbar'
 import { OrderManagement } from '../components/admin/OrderManagement'
@@ -40,7 +37,11 @@ import { useAuth } from '../context/AuthContext'
 import { useDebounce } from '../hooks/useDebounce'
 import { useSmartPolling } from '../hooks/useSmartPolling'
 import { formatCurrency } from '../utils/formatCurrency'
+import { hasRole } from '../utils/roles'
 import { staffApi } from '../utils/staffApi'
+import { normalizeBuilderPart } from '../pages/admin/utils/partHelpers'
+import { InventoryTab } from './admin/tabs/InventoryTab'
+import { AdjustPartStockModal } from './admin/components/inventory/StockAdjustmentModals'
 
 function EmptyState({ icon: Icon, label, description }) {
   return (
@@ -81,13 +82,6 @@ function statusVariant(status) {
   return 'default'
 }
 
-function getInventoryState(stock, threshold = 10) {
-  if (stock === 0) return { label: 'Out of Stock', variant: 'danger' }
-  if (stock <= threshold) return { label: 'Critical', variant: 'warning' }
-  if (stock <= threshold * 2) return { label: 'Warning', variant: 'info' }
-  return { label: 'Healthy', variant: 'success' }
-}
-
 function resolveInventoryImage(item) {
   if (!item) return null
   if (item.primary_image) return item.primary_image
@@ -101,13 +95,6 @@ function resolveInventoryImage(item) {
     if (first?.url) return first.url
   }
   return null
-}
-
-function formatInventoryCategory(value) {
-  if (!value) return 'Accessories'
-  return String(value)
-    .replace(/_/g, ' ')
-    .replace(/\b\w/g, (char) => char.toUpperCase())
 }
 
 const ADJUSTMENT_REASONS = [
@@ -273,9 +260,10 @@ export function StaffDashboard() {
   const [refreshing, setRefreshing] = useState(false)
 
   const [inventorySubTab, setInventorySubTab] = useState('products')
-  const [inventoryStatusFilter, setInventoryStatusFilter] = useState('all')
-  const [inventorySort, setInventorySort] = useState('name')
+  const [productsInventoryFilter, setProductsInventoryFilter] = useState({ search: '', status: 'all', sort: 'name', page: 1 })
+  const [partsInventoryFilter, setPartsInventoryFilter] = useState({ search: '', status: 'all', category: 'all', sort: 'name', page: 1 })
   const [inventoryPage, setInventoryPage] = useState(1)
+  const INVENTORY_PAGE_SIZE = 10
 
   const [selectedAppointment, setSelectedAppointment] = useState(null)
   const [appointmentModalOpen, setAppointmentModalOpen] = useState(false)
@@ -296,7 +284,6 @@ export function StaffDashboard() {
     ['inventory', 'Inventory', Package],
     ['appointments', 'Appointments', Calendar],
     ['pos', 'POS', Wallet],
-    ['schedule', 'Schedule', Clock],
   ]
 
   const showToast = useCallback((message, type = 'success') => {
@@ -383,61 +370,167 @@ export function StaffDashboard() {
     }
   }, [appointmentPagination.limit, appointmentPagination.page, debouncedSearch, showToast])
 
-  useEffect(() => {
-    if (activeTab === 'overview') { fetchProjects(); fetchOrders(); fetchAppointments(); loadInventoryBundle() }
-    if (activeTab === 'projects') fetchProjects()
-    if (activeTab === 'orders') fetchOrders()
-    if (activeTab === 'inventory' || activeTab === 'pos') loadInventoryBundle()
-    if (activeTab === 'appointments') { fetchAppointments(); fetchServices(); fetchUnavailableDates() }
-    if (activeTab === 'schedule') { fetchAppointments(); fetchProjects() }
-  }, [activeTab, fetchAppointments, fetchOrders, fetchProjects, fetchServices, fetchUnavailableDates, loadInventoryBundle])
+   useEffect(() => {
+     if (activeTab === 'overview') { fetchProjects(); fetchOrders(); fetchAppointments(); loadInventoryBundle() }
+     if (activeTab === 'projects') fetchProjects()
+     if (activeTab === 'orders') fetchOrders()
+     if (activeTab === 'inventory' || activeTab === 'pos') loadInventoryBundle()
+     if (activeTab === 'appointments') { fetchAppointments(); fetchServices(); fetchUnavailableDates() }
+   }, [activeTab, fetchAppointments, fetchOrders, fetchProjects, fetchServices, fetchUnavailableDates, loadInventoryBundle])
 
-  useSmartPolling(useCallback(async () => {
-    if (activeTab === 'overview') { await Promise.all([fetchAppointments(), loadInventoryBundle()]); return }
-    if (activeTab === 'inventory' || activeTab === 'pos') { await loadInventoryBundle(); return }
-    if (activeTab === 'appointments' || activeTab === 'schedule') { await Promise.all([fetchAppointments(), fetchUnavailableDates()]) }
-  }, [activeTab, fetchAppointments, fetchUnavailableDates, loadInventoryBundle]), { interval: 10000, maxInterval: 60000, backoffFactor: 1.5, enabled: true })
+   useEffect(() => {
+     if (activeTab === 'inventory' || activeTab === 'pos') {
+       loadInventoryBundle()
+     }
+   }, [debouncedSearch, activeTab, loadInventoryBundle])
+
+   useSmartPolling(useCallback(async () => {
+     if (activeTab === 'overview') { await Promise.all([fetchAppointments(), loadInventoryBundle()]); return }
+     if (activeTab === 'inventory' || activeTab === 'pos') { await loadInventoryBundle(); return }
+     if (activeTab === 'appointments') { await Promise.all([fetchAppointments(), fetchUnavailableDates()]) }
+   }, [activeTab, fetchAppointments, fetchUnavailableDates, loadInventoryBundle]), { interval: 10000, maxInterval: 60000, backoffFactor: 1.5, enabled: true })
 
   const visibleInventory = useMemo(() => {
     const lookup = Object.fromEntries(products.map((item) => [item.product_id, item]))
     return (inventory.length ? inventory : products).map((item) => ({ ...(lookup[item.product_id] || {}), ...item, stock: Number(item.stock || 0), low_stock_threshold: Number(item.low_stock_threshold || 10), price: Number(item.price || lookup[item.product_id]?.price || 0) }))
   }, [inventory, products])
 
-  const visibleParts = useMemo(() => parts.map((item) => ({ ...item, stock: Number(item.stock ?? item.quantity ?? 0), low_stock_threshold: 10 })), [parts])
-  const inventoryRows = inventorySubTab === 'products' ? visibleInventory : visibleParts
-  const filteredInventory = useMemo(() => {
-    const rows = inventoryRows.filter((item) => {
-      const state = getInventoryState(Number(item.stock || 0), Number(item.low_stock_threshold || 10))
-      if (inventoryStatusFilter === 'all') return true
-      if (inventoryStatusFilter === 'healthy') return state.label === 'Healthy'
-      if (inventoryStatusFilter === 'warning') return state.label === 'Warning'
-      if (inventoryStatusFilter === 'critical') return state.label === 'Critical'
-      if (inventoryStatusFilter === 'out_of_stock') return state.label === 'Out of Stock'
-      return true
-    })
-    rows.sort((a, b) => inventorySort === 'stock_low' ? Number(a.stock || 0) - Number(b.stock || 0) : inventorySort === 'stock_high' ? Number(b.stock || 0) - Number(a.stock || 0) : inventorySort === 'sku' ? String(a.sku || a.type_mapping || '').localeCompare(String(b.sku || b.type_mapping || '')) : String(a.name || '').localeCompare(String(b.name || '')))
-    return rows
-  }, [inventoryRows, inventorySort, inventoryStatusFilter])
+  const visibleParts = useMemo(() => (parts || []).map((part) => normalizeBuilderPart(part)), [parts])
 
-  const pageSize = 10
-  const totalPages = Math.max(Math.ceil(filteredInventory.length / pageSize), 1)
-  const pagedInventory = filteredInventory.slice((inventoryPage - 1) * pageSize, inventoryPage * pageSize)
+  const inventoryIsProducts = inventorySubTab === 'products'
+  const inventoryCurrentFilter = inventoryIsProducts ? productsInventoryFilter : partsInventoryFilter
+  const inventoryPartCategoryOptions = useMemo(() => {
+    const presentCategories = new Set((visibleParts || []).map((part) => part.inventory_category).filter(Boolean))
+    return [
+      { value: 'body', label: 'Body' },
+      { value: 'neck', label: 'Neck' },
+      { value: 'pickups', label: 'Pickups' },
+      { value: 'hardware', label: 'Hardware' },
+      { value: 'electronics', label: 'Electronics' },
+      { value: 'accessories', label: 'Accessories' },
+    ].filter(({ value }) => presentCategories.has(value))
+  }, [visibleParts])
+
+  const filteredProductsInventory = useMemo(() => {
+    const prods = visibleInventory.map(p => ({ ...p, type: 'product', stock: p.stock, name: p.name, sku: p.sku, low_stock_threshold: p.low_stock_threshold, part_id: p.product_id }))
+    let result = [...prods]
+    const searchTerm = String(productsInventoryFilter.search || '').trim().toLowerCase()
+    if (searchTerm) {
+      result = result.filter((item) =>
+        String(item.name || '').toLowerCase().includes(searchTerm) ||
+        String(item.sku || '').toLowerCase().includes(searchTerm)
+      )
+    }
+    const statusFilter = productsInventoryFilter.status
+    if (statusFilter !== 'all') {
+      result = result.filter(item => {
+        const stock = Number(item.stock ?? 0)
+        const threshold = Number(item.low_stock_threshold ?? 10)
+        if (statusFilter === 'out_of_stock') return stock === 0
+        if (statusFilter === 'critical') return stock > 0 && stock <= threshold
+        if (statusFilter === 'warning') return stock > threshold && stock <= threshold * 2
+        if (statusFilter === 'healthy') return stock > threshold * 2
+        return true
+      })
+    }
+    result.sort((a, b) => {
+      if (productsInventoryFilter.sort === 'name') return (a.name || '').localeCompare(b.name || '')
+      if (productsInventoryFilter.sort === 'sku') return (a.sku || '').localeCompare(b.sku || '')
+      if (productsInventoryFilter.sort === 'stock_low') return Number(a.stock || 0) - Number(b.stock || 0)
+      if (productsInventoryFilter.sort === 'stock_high') return Number(b.stock || 0) - Number(a.stock || 0)
+      return 0
+    })
+    return result
+  }, [visibleInventory, productsInventoryFilter])
+
+  const paginatedProductsInventory = useMemo(() => {
+    const start = (inventoryPage - 1) * INVENTORY_PAGE_SIZE
+    return filteredProductsInventory.slice(start, start + INVENTORY_PAGE_SIZE)
+  }, [filteredProductsInventory, inventoryPage])
+
+  const filteredPartsInventory = useMemo(() => {
+    const pts = visibleParts.map((p) => ({
+      ...p,
+      type: 'part',
+      stock: Number(p.stock ?? p.quantity ?? 0),
+      name: p.name,
+      sku: p.type_mapping,
+      low_stock_threshold: 10,
+    }))
+    let result = [...pts]
+    const searchTerm = String(partsInventoryFilter.search || '').trim().toLowerCase()
+    if (searchTerm) {
+      result = result.filter((item) =>
+        String(item.name || '').toLowerCase().includes(searchTerm) ||
+        String(item.sku || '').toLowerCase().includes(searchTerm) ||
+        String(item.inventory_category || '').toLowerCase().includes(searchTerm)
+      )
+    }
+    const categoryFilter = partsInventoryFilter.category || 'all'
+    if (categoryFilter !== 'all') {
+      result = result.filter((item) => item.inventory_category === categoryFilter)
+    }
+    const statusFilter = partsInventoryFilter.status
+    if (statusFilter !== 'all') {
+      result = result.filter(item => {
+        const stock = Number(item.stock ?? 0)
+        const threshold = 10
+        if (statusFilter === 'out_of_stock') return stock === 0
+        if (statusFilter === 'critical') return stock > 0 && stock <= threshold
+        if (statusFilter === 'warning') return stock > threshold && stock <= threshold * 2
+        if (statusFilter === 'healthy') return stock > threshold * 2
+        return true
+      })
+    }
+    result.sort((a, b) => {
+      const categoryCompare = (a.inventory_category || '').localeCompare(b.inventory_category || '')
+      if (categoryCompare !== 0) return categoryCompare
+      if (partsInventoryFilter.sort === 'name') return (a.name || '').localeCompare(b.name || '')
+      if (partsInventoryFilter.sort === 'sku') return (a.sku || '').localeCompare(b.sku || '')
+      if (partsInventoryFilter.sort === 'stock_low') return Number(a.stock || 0) - Number(b.stock || 0)
+      if (partsInventoryFilter.sort === 'stock_high') return Number(b.stock || 0) - Number(a.stock || 0)
+      return 0
+    })
+    return result
+  }, [visibleParts, partsInventoryFilter])
+
+  const paginatedPartsInventory = useMemo(() => {
+    const start = (inventoryPage - 1) * INVENTORY_PAGE_SIZE
+    return filteredPartsInventory.slice(start, start + INVENTORY_PAGE_SIZE)
+  }, [filteredPartsInventory, inventoryPage])
+
+  const inventoryCurrentRows = inventoryIsProducts ? filteredProductsInventory : filteredPartsInventory
+  const inventoryTotalPages = Math.max(1, Math.ceil(inventoryCurrentRows.length / INVENTORY_PAGE_SIZE))
+  const inventoryCurrentPageRows = inventoryIsProducts ? paginatedProductsInventory : paginatedPartsInventory
+  const inventoryGroupedPartPageRows = useMemo(() => {
+    if (inventoryIsProducts) return []
+    let previousCategory = null
+    return inventoryCurrentPageRows.flatMap((item) => {
+      const category = item.inventory_category || 'accessories'
+      const rows = []
+      if (category !== previousCategory) {
+        rows.push({ type: 'group', category })
+        previousCategory = category
+      }
+      rows.push({ type: 'item', item })
+      return rows
+    })
+  }, [inventoryCurrentPageRows, inventoryIsProducts])
   const pendingAppointments = appointments.filter((item) => ['pending', 'approved', 'confirmed', 'ready_for_pickup'].includes(String(item.status || '').toLowerCase()))
   const todayAppointments = appointments.filter((item) => item.scheduled_at && new Date(item.scheduled_at).toDateString() === new Date().toDateString())
 
-  const refreshCurrentTab = useCallback(async () => {
-    setRefreshing(true)
-    try {
-      if (activeTab === 'overview') await Promise.all([fetchProjects(), fetchOrders(), fetchAppointments(), loadInventoryBundle()])
-      if (activeTab === 'projects') await fetchProjects()
-      if (activeTab === 'orders') await fetchOrders()
-      if (activeTab === 'inventory' || activeTab === 'pos') await loadInventoryBundle()
-      if (activeTab === 'appointments') await Promise.all([fetchAppointments(), fetchServices(), fetchUnavailableDates()])
-      if (activeTab === 'schedule') await Promise.all([fetchAppointments(), fetchProjects()])
-    } finally {
-      setRefreshing(false)
-    }
-  }, [activeTab, fetchAppointments, fetchOrders, fetchProjects, fetchServices, fetchUnavailableDates, loadInventoryBundle])
+   const refreshCurrentTab = useCallback(async () => {
+     setRefreshing(true)
+     try {
+       if (activeTab === 'overview') await Promise.all([fetchProjects(), fetchOrders(), fetchAppointments(), loadInventoryBundle()])
+       if (activeTab === 'projects') await fetchProjects()
+       if (activeTab === 'orders') await fetchOrders()
+       if (activeTab === 'inventory' || activeTab === 'pos') await loadInventoryBundle()
+       if (activeTab === 'appointments') await Promise.all([fetchAppointments(), fetchServices(), fetchUnavailableDates()])
+     } finally {
+       setRefreshing(false)
+     }
+   }, [activeTab, fetchAppointments, fetchOrders, fetchProjects, fetchServices, fetchUnavailableDates, loadInventoryBundle])
 
   const saveStockAdjust = useCallback(async () => {
     setIsSaving(true)
@@ -535,6 +628,46 @@ export function StaffDashboard() {
     }
   }, [closeStaffModal, fetchProjects, form, modal.data, showToast])
 
+  const isSuperAdmin = hasRole(user?.role, 'admin')
+
+  const openModal = (type, data = null) => {
+    if (type === 'inventory') {
+      setForm({ product_id: data?.product_id, quantity: '', change_type: '', reason: '', notes: '' })
+      setFormErrors({})
+      setModal({ open: true, type: 'inventory', data: { product_id: data?.product_id, name: data?.name, stock: data?.stock } })
+    } else if (type === 'part_inventory') {
+      setForm({ part_id: data?.part_id, quantity: '', change_type: '', reason: '', notes: '' })
+      setFormErrors({})
+      setModal({ open: true, type: 'part_inventory', data })
+    }
+  }
+
+  const savePartStockAdjust = useCallback(async (overrideForm = {}) => {
+    setIsSaving(true)
+    try {
+      const { part_id, change_type, quantity } = { ...form, ...overrideForm }
+      if (!part_id || !change_type || !quantity) {
+        showToast('Please fill all required fields', 'error'); return
+      }
+      const existingPart = visibleParts.find((part) => part.part_id === part_id)
+      const currentStock = Number(existingPart?.stock ?? existingPart?.quantity ?? form.current_stock ?? 0) || 0
+      const qty = Number(quantity)
+      let nextStock = currentStock
+      if (change_type === 'stock_in') nextStock = currentStock + qty
+      else if (change_type === 'stock_out') nextStock = currentStock - qty
+      else nextStock = qty
+      if (nextStock < 0) {
+        showToast('Stock cannot be negative', 'error')
+        return
+      }
+      await staffApi.updateBuilderPart(part_id, { stock: nextStock })
+      showToast('Guitar part stock adjusted!')
+      await loadInventoryBundle()
+      closeStaffModal()
+    } catch (e) { showToast(e.message, 'error') }
+    finally { setIsSaving(false) }
+  }, [form, loadInventoryBundle, showToast, visibleParts])
+
   const pageTitle = tabs.find(([id]) => id === activeTab)?.[1] || 'Staff Dashboard'
 
   return (
@@ -570,14 +703,27 @@ export function StaffDashboard() {
                 <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6"><p className="text-sm text-[var(--text-muted)]">Today&apos;s schedule</p><p className="mt-3 text-3xl font-bold text-white">{todayAppointments.length}</p></div>
                 <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6"><p className="text-sm text-[var(--text-muted)]">Low stock alerts</p><p className="mt-3 text-3xl font-bold text-white">{inventoryAlerts.length}</p></div>
               </div>
-              <div className="grid gap-6 xl:grid-cols-[1.2fr,0.8fr]">
-                <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6">
-                  <div className="mb-5 flex items-center justify-between"><h3 className="text-lg font-semibold text-white">Upcoming appointments</h3><button type="button" onClick={() => setActiveTab('appointments')} className="text-sm font-medium text-[var(--gold-primary)]">View all</button></div>
-                  {appointments.length === 0 ? <EmptyState icon={Calendar} label="No appointments queued" description="New bookings will appear here." /> : <div className="space-y-3">{appointments.slice(0, 5).map((item) => <button key={item.appointment_id} type="button" onClick={() => { setSelectedAppointment(item); setAppointmentModalOpen(true) }} className="flex w-full items-center justify-between rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)]/60 p-4 text-left"><div><p className="font-semibold text-white">{item.customer_name || item.user_name || 'Walk-in customer'}</p><p className="mt-1 text-sm text-[var(--text-muted)]">{item.service_name || (Array.isArray(item.services) ? item.services.join(', ') : 'Service appointment')}</p></div><StatusBadge label={item.status || 'pending'} variant={statusVariant(item.status)} /></button>)}</div>}
-                </div>
-                <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6"><h3 className="text-lg font-semibold text-white">Unread stock alerts</h3><div className="mt-4 space-y-3">{inventoryAlerts.length === 0 ? <p className="text-sm text-[var(--text-muted)]">No low-stock alerts right now.</p> : inventoryAlerts.slice(0, 5).map((alert) => <div key={alert.alert_id} className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4"><p className="font-semibold text-white">{alert.name}</p><p className="mt-1 text-sm text-[var(--text-muted)]">{alert.current_stock} left, threshold {alert.threshold}</p></div>)}</div></div>
-              </div>
-            </div>}
+               <div className="grid gap-6 xl:grid-cols-[1.2fr,0.8fr]">
+                 <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6">
+                   <div className="mb-5 flex items-center justify-between"><h3 className="text-lg font-semibold text-white">Upcoming appointments</h3><button type="button" onClick={() => setActiveTab('appointments')} className="text-sm font-medium text-[var(--gold-primary)]">View all</button></div>
+                   {appointments.length === 0 ? <EmptyState icon={Calendar} label="No appointments queued" description="New bookings will appear here." /> : <div className="space-y-3">{appointments.slice(0, 5).map((item) => <button key={item.appointment_id} type="button" onClick={() => { setSelectedAppointment(item); setAppointmentModalOpen(true) }} className="flex w-full items-center justify-between rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)]/60 p-4 text-left"><div><p className="font-semibold text-white">{item.customer_name || item.user_name || 'Walk-in customer'}</p><p className="mt-1 text-sm text-[var(--text-muted)]">{item.service_name || (Array.isArray(item.services) ? item.services.join(', ') : 'Service appointment')}</p></div><StatusBadge label={item.status || 'pending'} variant={statusVariant(item.status)} /></button>)}</div>}
+                 </div>
+                 <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6"><h3 className="text-lg font-semibold text-white">Unread stock alerts</h3><div className="mt-4 space-y-3">{inventoryAlerts.length === 0 ? <p className="text-sm text-[var(--text-muted)]">No low-stock alerts right now.</p> : inventoryAlerts.slice(0, 5).map((alert) => <div key={alert.alert_id} className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4"><p className="font-semibold text-white">{alert.name}</p><p className="mt-1 text-sm text-[var(--text-muted)]">{alert.current_stock} left, threshold {alert.threshold}</p></div>)}</div></div>
+               </div>
+               <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6">
+                 <h3 className="text-lg font-semibold text-white">Upcoming schedule</h3>
+                 <div className="mt-4 grid gap-6 lg:grid-cols-2">
+                   <div>
+                     <h4 className="text-sm font-semibold text-[var(--text-muted)] mb-3">Appointments</h4>
+                     {appointments.length === 0 ? <p className="text-sm text-[var(--text-muted)]">No upcoming appointments.</p> : <div className="space-y-3">{appointments.slice(0, 5).map((item) => <div key={item.appointment_id} className="flex items-center justify-between rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)]/60 p-4"><div><p className="font-semibold text-white">{item.customer_name || item.user_name || 'Service customer'}</p><p className="mt-1 text-sm text-[var(--text-muted)]">{item.scheduled_at ? new Date(item.scheduled_at).toLocaleString() : 'TBD'}</p></div><StatusBadge label={item.status || 'pending'} variant={statusVariant(item.status)} /></div>)}</div>}
+                   </div>
+                   <div>
+                     <h4 className="text-sm font-semibold text-[var(--text-muted)] mb-3">Project deadlines</h4>
+                     {projects.filter((item) => item.estimated_completion_date).length === 0 ? <p className="text-sm text-[var(--text-muted)]">No project deadlines available.</p> : <div className="space-y-3">{projects.filter((item) => item.estimated_completion_date).slice(0, 5).map((item) => <div key={item.project_id} className="flex items-center justify-between rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)]/60 p-4"><div><p className="font-semibold text-white">{item.name || item.title}</p><p className="mt-1 text-sm text-[var(--text-muted)]">Due {new Date(item.estimated_completion_date).toLocaleDateString()}</p></div><StatusBadge label={item.status || 'pending'} variant={statusVariant(item.status)} /></div>)}</div>}
+                   </div>
+                 </div>
+               </div>
+             </div>}
             {activeTab === 'projects' && (
               <motion.div key="projects" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
                 <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-6">
@@ -628,10 +774,13 @@ export function StaffDashboard() {
                               <h3 className="mt-2 truncate text-xl font-semibold text-white">
                                 {project.name || project.title || 'Untitled Project'}
                               </h3>
-                              <p className="mt-2 text-sm text-[var(--text-muted)]">
-                                Customer: <span className="text-white">{project.client_name || project.customer_name || 'Unassigned'}</span>
-                              </p>
-                            </div>
+                               <p className="mt-2 text-sm text-[var(--text-muted)]">
+                                 Customer: <span className="text-white">{project.client_name || project.customer_name || 'Unassigned'}</span>
+                               </p>
+                               <p className="mt-2 text-sm text-[var(--text-muted)]">
+                                 Claimed By: <span className="text-white">{project.claimed_first_name ? `${project.claimed_first_name} ${project.claimed_last_name}` : 'Unassigned'}</span>
+                               </p>
+                             </div>
                             <span className={`shrink-0 rounded-full border px-3 py-1 text-xs font-semibold capitalize ${statusClass}`}>
                               {status.replace(/_/g, ' ')}
                             </span>
@@ -721,23 +870,25 @@ export function StaffDashboard() {
               </motion.div>
             )}
             {activeTab === 'orders' && <OrderManagement orders={orders} onRefresh={fetchOrders} user={user} />}
-            {activeTab === 'inventory' && <div className="space-y-6">
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6"><p className="text-sm text-[var(--text-muted)]">Tracked products</p><p className="mt-3 text-3xl font-bold text-white">{inventoryStats?.total_products || visibleInventory.length}</p></div>
-                <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6"><p className="text-sm text-[var(--text-muted)]">Low stock</p><p className="mt-3 text-3xl font-bold text-white">{inventoryStats?.low_stock_count || inventoryAlerts.length}</p></div>
-                <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6"><p className="text-sm text-[var(--text-muted)]">Out of stock</p><p className="mt-3 text-3xl font-bold text-white">{inventoryStats?.out_of_stock_count || 0}</p></div>
-                <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6"><p className="text-sm text-[var(--text-muted)]">Inventory value</p><p className="mt-3 text-3xl font-bold text-white">{formatCurrency(Number(inventoryStats?.total_inventory_value || 0))}</p></div>
-              </div>
-              <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6">
-                <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                  <div className="flex flex-wrap gap-2"><button type="button" onClick={() => { setInventorySubTab('products'); setInventoryPage(1) }} className={`rounded-2xl px-4 py-2.5 text-sm font-semibold ${inventorySubTab === 'products' ? 'bg-[var(--gold-primary)] text-black' : 'border border-[var(--border)] text-[var(--text-muted)]'}`}>Products</button><button type="button" onClick={() => { setInventorySubTab('parts'); setInventoryPage(1) }} className={`rounded-2xl px-4 py-2.5 text-sm font-semibold ${inventorySubTab === 'parts' ? 'bg-[var(--gold-primary)] text-black' : 'border border-[var(--border)] text-[var(--text-muted)]'}`}>Builder Parts</button></div>
-                  <div className="flex items-center gap-2"><select value={inventoryStatusFilter} onChange={(e) => setInventoryStatusFilter(e.target.value)} className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-3 py-2 text-sm text-white"><option value="all">All</option><option value="healthy">Healthy</option><option value="warning">Warning</option><option value="critical">Critical</option><option value="out_of_stock">Out of Stock</option></select><select value={inventorySort} onChange={(e) => setInventorySort(e.target.value)} className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-3 py-2 text-sm text-white"><option value="name">Name</option><option value="sku">SKU / Mapping</option><option value="stock_low">Stock low-high</option><option value="stock_high">Stock high-low</option></select></div>
-                </div>
-                {loadingInventory ? 
-                <div className="py-16 text-center text-[var(--text-muted)]">Loading inventory...</div> : filteredInventory.length === 0 ? <EmptyState icon={Package} label="No inventory items found" description="Try another search or filter." /> : <div className="space-y-3">{pagedInventory.map((item) => { const state = getInventoryState(Number(item.stock || 0), Number(item.low_stock_threshold || 10)); return ( <div key={item.product_id || item.part_id} className="flex flex-col gap-4 rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)]/60 p-4 md:flex-row md:items-center md:justify-between" > <div> <p className="font-semibold text-white">{item.name}</p> <p className="mt-1 text-sm text-[var(--text-muted)]"> {inventorySubTab === 'products' ? item.sku || 'No SKU' : item.type_mapping || 'No mapping'} </p> </div> <div className="flex items-center gap-3"> <span className="font-mono text-white">{item.stock}</span> <StatusBadge label={state.label} variant={state.variant} /> <button type="button" onClick={() => { if (inventorySubTab === 'products') { setForm({ product_id: item.product_id, quantity: '', change_type: '', reason: '', notes: '' }); setModal({ open: true, type: 'inventory', data: { product_id: item.product_id, name: item.name, stock: item.stock } }); } else { setForm({ part_id: item.part_id, quantity: '', change_type: '', reason: '', notes: '' }); setModal({ open: true, type: 'inventory', data: { part_id: item.part_id, name: item.name, stock: item.stock } }); } setFormErrors({}); }} className="rounded-xl p-2 text-[var(--text-muted)] hover:bg-[var(--gold-primary)]/10 hover:text-[var(--gold-primary)]" > <Edit className="h-4 w-4" /> </button> </div> </div> ); })}</div>}
-                {filteredInventory.length > 0 && <div className="mt-6 flex items-center justify-between border-t border-[var(--border)] pt-4"><p className="text-sm text-[var(--text-muted)]">Showing {(inventoryPage - 1) * pageSize + 1}-{Math.min(inventoryPage * pageSize, filteredInventory.length)} of {filteredInventory.length}</p><div className="flex items-center gap-2"><button type="button" onClick={() => setInventoryPage((p) => Math.max(1, p - 1))} disabled={inventoryPage === 1} className="rounded-xl border border-[var(--border)] p-2 text-[var(--text-muted)] disabled:opacity-40"><ChevronLeft className="h-4 w-4" /></button><span className="text-sm text-white">{inventoryPage} / {totalPages}</span><button type="button" onClick={() => setInventoryPage((p) => Math.min(totalPages, p + 1))} disabled={inventoryPage >= totalPages} className="rounded-xl border border-[var(--border)] p-2 text-[var(--text-muted)] disabled:opacity-40"><ChevronRight className="h-4 w-4" /></button></div></div>}
-              </div>
-            </div>}
+            {activeTab === 'inventory' && <InventoryTab
+              inventoryIsProducts={inventoryIsProducts}
+              inventorySubTab={inventorySubTab}
+              setInventorySubTab={setInventorySubTab}
+              inventoryCurrentFilter={inventoryCurrentFilter}
+              inventoryPartCategoryOptions={inventoryPartCategoryOptions}
+              inventoryCurrentPageRows={inventoryCurrentPageRows}
+              inventoryGroupedPartPageRows={inventoryGroupedPartPageRows}
+              inventoryCurrentRows={inventoryCurrentRows}
+              inventoryTotalPages={inventoryTotalPages}
+              inventoryPage={inventoryPage}
+              setInventoryPage={setInventoryPage}
+              inventoryPageSize={INVENTORY_PAGE_SIZE}
+              setProductsInventoryFilter={setProductsInventoryFilter}
+              setPartsInventoryFilter={setPartsInventoryFilter}
+              resolveInventoryImage={resolveInventoryImage}
+              openModal={openModal}
+              isSuperAdmin={isSuperAdmin}
+            />}
             {activeTab === 'appointments' && <div className="space-y-6"><div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"><div><h3 className="text-lg font-semibold text-white">Appointment desk</h3><p className="text-sm text-[var(--text-muted)]">Staff uses the same appointment action model as admin now.</p></div><div className="flex flex-wrap gap-2"><button type="button" onClick={() => setUnavailableDatesOpen(true)} className="inline-flex items-center gap-2 rounded-2xl bg-[var(--surface-dark)] px-4 py-2.5 text-sm font-semibold text-white"><CalendarX className="h-4 w-4" />Mark unavailable</button><button type="button" onClick={() => { setAppointmentFormData(null); setSelectedCalendarDate(null); setAppointmentFormOpen(true) }} className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] px-4 py-2.5 text-sm font-semibold text-black"><Plus className="h-4 w-4" />New appointment</button></div></div><AppointmentCalendar appointments={appointments} unavailableDates={unavailableDates.map((entry) => entry?.date || entry).filter(Boolean)} isAdminMode onAppointmentClick={(item) => { setSelectedAppointment(item); setAppointmentModalOpen(true) }} onCreateAppointment={(_, date) => { setSelectedCalendarDate(date); setAppointmentFormData(null); setAppointmentFormOpen(true) }} /><div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6"><AppointmentList appointments={appointments} loading={loadingAppointments} onRefresh={fetchAppointments} onViewDetails={(item) => { setSelectedAppointment(item); setAppointmentModalOpen(true) }} onEdit={(item) => { setAppointmentFormData(item); setAppointmentFormOpen(true) }} onCreateNew={() => { setAppointmentFormData(null); setAppointmentFormOpen(true) }} pagination={appointmentPagination} onPageChange={(page) => setAppointmentPagination((p) => ({ ...p, page }))} selectedDate={selectedCalendarDate} /></div></div>}
             {activeTab === 'pos' && (
               <PosWorkspace
@@ -746,8 +897,7 @@ export function StaffDashboard() {
 
               />
             )}
-            {activeTab === 'schedule' && (appointments.length === 0 ? <EmptyState icon={Clock} label="No scheduled items" description="Appointments and project deadlines will appear here." /> : <div className="space-y-6"><div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6"><h3 className="text-lg font-semibold text-white">Upcoming schedule</h3><div className="mt-4 space-y-3">{appointments.map((item) => <div key={item.appointment_id} className="flex items-center justify-between rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)]/60 p-4"><div><p className="font-semibold text-white">{item.customer_name || item.user_name || 'Service customer'}</p><p className="mt-1 text-sm text-[var(--text-muted)]">{item.scheduled_at ? new Date(item.scheduled_at).toLocaleString() : 'TBD'}</p></div><StatusBadge label={item.status || 'pending'} variant={statusVariant(item.status)} /></div>)}</div></div><div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6"><h3 className="text-lg font-semibold text-white">Project deadlines</h3><div className="mt-4 space-y-3">{projects.filter((item) => item.estimated_completion_date).length === 0 ? <p className="text-sm text-[var(--text-muted)]">No project deadlines available.</p> : projects.filter((item) => item.estimated_completion_date).map((item) => <div key={item.project_id} className="flex items-center justify-between rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)]/60 p-4"><div><p className="font-semibold text-white">{item.name || item.title}</p><p className="mt-1 text-sm text-[var(--text-muted)]">Due {new Date(item.estimated_completion_date).toLocaleDateString()}</p></div><StatusBadge label={item.status || 'pending'} variant={statusVariant(item.status)} /></div>)}</div></div></div>)}
-          </main>
+           </main>
         </div>
       </div>
       <AnimatePresence>
@@ -759,18 +909,30 @@ export function StaffDashboard() {
             className="fixed inset-0 z-[150] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
             onClick={(e) => { if (e.target === e.currentTarget) closeStaffModal() }}
           >
-            {modal.type === 'inventory' && (
-              <AdjustStockModal
-                modal={modal}
-                form={form}
-                setForm={setForm}
-                errors={formErrors}
-                setErrors={setFormErrors}
-                onClose={closeStaffModal}
-                onSave={saveStockAdjust}
-                saving={isSaving}
-              />
-            )}
+             {modal.type === 'inventory' && (
+               <AdjustStockModal
+                 modal={modal}
+                 form={form}
+                 setForm={setForm}
+                 errors={formErrors}
+                 setErrors={setFormErrors}
+                 onClose={closeStaffModal}
+                 onSave={saveStockAdjust}
+                 saving={isSaving}
+               />
+             )}
+             {modal.type === 'part_inventory' && (
+               <AdjustPartStockModal
+                 modal={modal}
+                 form={form}
+                 setForm={setForm}
+                 formErrors={formErrors}
+                 setFormErrors={setFormErrors}
+                 closeModal={closeStaffModal}
+                 isSaving={isSaving}
+                 savePartStockAdjust={savePartStockAdjust}
+               />
+             )}
             {modal.type === 'project' && (
               <ProjectEditModal
                 form={form}
