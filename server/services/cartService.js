@@ -2,6 +2,14 @@ const { pool } = require('../config/database');
 const { AppError } = require('../middleware/errorHandler');
 const { generateOrderNumber, determineOrderTypePrefix } = require('../utils/orderNumber');
 
+const syncStockToBuilderParts = async (productId, delta) => {
+  if (!productId || delta === 0) return;
+  await pool.query(
+    'UPDATE guitar_builder_parts SET stock = stock + $1, updated_at = now() WHERE product_id = $2',
+    [delta, productId]
+  );
+};
+
 const TAX_RATE = 0;
 
 async function getOrCreateCart(userId) {
@@ -369,6 +377,7 @@ async function convertCartToOrder(userId, { shipping_address_id, notes, payment_
           'UPDATE inventory SET stock = stock - $1, updated_at = now() WHERE product_id = $2',
           [item.quantity, item.product.product_id]
         );
+        await syncStockToBuilderParts(item.product.product_id, -item.quantity);
       }
     }
 

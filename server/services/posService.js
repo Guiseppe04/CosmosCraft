@@ -1,5 +1,14 @@
 const { pool } = require('../config/database');
 const { AppError } = require('../middleware/errorHandler');
+
+const syncStockToBuilderParts = async (productId, delta) => {
+  if (!productId || delta === 0) return;
+  await pool.query(
+    'UPDATE guitar_builder_parts SET stock = stock + $1, updated_at = now() WHERE product_id = $2',
+    [delta, productId]
+  );
+};
+
 /**
  * POS SERVICE
  * Manages Point of Sale transactions for walk-in customers
@@ -155,6 +164,8 @@ exports.createSale = async (
             `UPDATE inventory SET stock = stock - $1, updated_at = now() WHERE product_id = $2`,
             [itemQuantity, item.product_id]
           );
+
+          await syncStockToBuilderParts(item.product_id, -itemQuantity);
 
           await client.query(
             `INSERT INTO inventory_logs (product_id, change_type, quantity, reference_type, reference_id, notes, created_by)
@@ -622,6 +633,8 @@ exports.checkoutSale = async (
         'UPDATE inventory SET stock = stock - $1, updated_at = now() WHERE product_id = $2',
         [item.quantity, item.product_id]
       );
+
+      await syncStockToBuilderParts(item.product_id, -item.quantity);
 
       // Create inventory log
       await client.query(

@@ -103,13 +103,8 @@ export default function CustomerProjectTracker({ projectId, projectName, project
   const requiredPartSummary = useMemo(() => {
     const configuredCount = requiredParts.filter((part) => part.source === 'configuration').length;
     const additionalCount = requiredParts.filter((part) => part.source === 'additional_parts').length;
-    const inStock = requiredParts.filter((part) => part.stock_status === 'in_stock').length;
-    const lowStock = requiredParts.filter((part) => part.stock_status === 'low_stock').length;
-    const outOfStock = requiredParts.filter((part) => part.stock_status === 'out_of_stock').length;
-    const unknownStock = requiredParts.filter((part) => part.stock_status === 'unknown').length;
-    const receivedCount = requiredParts.filter((part) => part.is_fully_received).length;
-    const pendingCount = requiredParts.filter((part) => !part.is_fully_received && (part.pending_quantity || part.quantity)).length;
-    return { configuredCount, additionalCount, inStock, lowStock, outOfStock, unknownStock, receivedCount, pendingCount };
+    const needsPurchase = requiredParts.filter((part) => part.needs_purchase).length;
+    return { configuredCount, additionalCount, needsPurchase };
   }, [requiredParts]);
   const isReadyForAssembly = requiredParts.length > 0 && requiredParts.every((part) => part.is_fully_received);
 
@@ -279,23 +274,8 @@ export default function CustomerProjectTracker({ projectId, projectName, project
               </div>
             </div>
             <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-300">
-                {requiredPartSummary.inStock} in stock
-              </span>
-              <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-semibold text-amber-300">
-                {requiredPartSummary.lowStock} low stock
-              </span>
-              <span className="rounded-full border border-red-500/30 bg-red-500/10 px-3 py-1 text-xs font-semibold text-red-300">
-                {requiredPartSummary.outOfStock} out of stock
-              </span>
-              <span className="rounded-full border border-slate-500/30 bg-slate-500/10 px-3 py-1 text-xs font-semibold text-slate-300">
-                {requiredPartSummary.unknownStock} unknown
-              </span>
-              <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-300">
-                {requiredPartSummary.receivedCount} received
-              </span>
-              <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-semibold text-amber-300">
-                {requiredPartSummary.pendingCount} pending
+              <span className="rounded-full border border-sky-500/30 bg-sky-500/10 px-3 py-1 text-xs font-semibold text-sky-300">
+                {requiredPartSummary.needsPurchase} needs purchase
               </span>
             </div>
             <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-4">
@@ -307,8 +287,8 @@ export default function CustomerProjectTracker({ projectId, projectName, project
                 <span className="text-xs text-[var(--text-muted)]">{requiredParts.length} total</span>
               </div>
               <div className="grid gap-3">
-                {requiredParts.slice(0, 6).map((part) => (
-                  <div key={`${part.category}-${part.name}-${part.source}-${part.product_id || 'anon'}`} className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] p-4">
+                {requiredParts.slice(0, 6).map((part, idx) => (
+                   <div key={`${part.part_key || `${part.category}-${part.name}-${part.source}-${part.product_id || 'anon'}`}-${idx}`} className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] p-4">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="text-sm font-semibold text-white truncate">{part.name}</p>
@@ -316,14 +296,14 @@ export default function CustomerProjectTracker({ projectId, projectName, project
                           {part.category || 'Other'} • {part.source === 'configuration' ? 'Configured' : 'Additional part'}
                         </p>
                       </div>
-                      <span className={`rounded-full px-2 py-1 text-[10px] font-semibold ${getStockBadgeStyle(part.stock_status)}`}>
-                        {part.stock_status?.replace('_', ' ') || 'unknown'}
-                      </span>
+                  <span className={`rounded-full px-2 py-1 text-[10px] font-semibold ${getStockBadgeStyle(part.stock_status)}`}>
+                    {part.stock_status === 'unknown' || !part.stock_status ? 'Not Linked' : part.stock_status.replace('_', ' ')}
+                  </span>
                     </div>
                     <div className="mt-3 grid gap-2 sm:grid-cols-3 text-[0.75rem] text-[var(--text-muted)]">
                       <span>Qty: {part.quantity}</span>
-                      <span>Stock: {part.stock === null || part.stock === undefined ? 'unknown' : part.stock}</span>
-                      <span>Price: {part.price ? formatCurrency(part.price) : '—'}</span>
+                      <span>Stock: {part.stock !== null && part.stock !== undefined ? part.stock : 'Not Linked'}</span>
+                      <span>Price: {part.price || part.price === 0 ? formatCurrency(part.price) : 'Not Linked'}</span>
                     </div>
                   </div>
                 ))}
