@@ -12,7 +12,6 @@ import {
   CheckCircle,
   ChevronLeft,
   ChevronRight,
-  Clock,
   Edit,
   Filter,
   Hand,
@@ -24,8 +23,6 @@ import {
   ShoppingBag,
   Wallet,
   X,
-  User,
-  Shield,
 } from 'lucide-react'
 import { Topbar } from '../components/admin/Topbar'
 import { OrderManagement } from '../components/admin/OrderManagement'
@@ -40,9 +37,35 @@ import { useAuth } from '../context/AuthContext'
 import { useDebounce } from '../hooks/useDebounce'
 import { useSmartPolling } from '../hooks/useSmartPolling'
 import { formatCurrency } from '../utils/formatCurrency'
+import { hasRole } from '../utils/roles'
 import { staffApi } from '../utils/staffApi'
-import { EmptyState } from './admin/components/shared/EmptyState'
-import { StatusBadge } from './admin/components/shared/StatusBadge'
+import { normalizeBuilderPart } from '../pages/admin/utils/partHelpers'
+import { InventoryTab } from './admin/tabs/InventoryTab'
+import { AdjustPartStockModal } from './admin/components/inventory/StockAdjustmentModals'
+
+function EmptyState({ icon: Icon, label, description }) {
+  return (
+    <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] py-16 text-center">
+      <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--gold-primary)]/10">
+        <Icon className="h-7 w-7 text-[var(--gold-primary)]" />
+      </div>
+      <p className="font-semibold text-white">{label}</p>
+      {description && <p className="mt-1 text-sm text-[var(--text-muted)]">{description}</p>}
+    </div>
+  )
+}
+
+function StatusBadge({ label, variant = 'default' }) {
+  const cls = {
+    default: 'border-gray-500/30 bg-gray-500/20 text-gray-300',
+    success: 'border-green-500/30 bg-green-500/20 text-green-300',
+    warning: 'border-amber-500/30 bg-amber-500/20 text-amber-300',
+    danger: 'border-red-500/30 bg-red-500/20 text-red-300',
+    info: 'border-blue-500/30 bg-blue-500/20 text-blue-300',
+    gold: 'border-[var(--gold-primary)]/30 bg-[var(--gold-primary)]/20 text-[var(--gold-primary)]',
+  }
+  return <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${cls[variant] || cls.default}`}>{label}</span>
+}
 
 function normalizeArray(payload, key) {
   if (Array.isArray(payload?.data)) return payload.data
@@ -59,13 +82,6 @@ function statusVariant(status) {
   return 'default'
 }
 
-function getInventoryState(stock, threshold = 10) {
-  if (stock === 0) return { label: 'Out of Stock', variant: 'danger' }
-  if (stock <= threshold) return { label: 'Critical', variant: 'warning' }
-  if (stock <= threshold * 2) return { label: 'Warning', variant: 'info' }
-  return { label: 'Healthy', variant: 'success' }
-}
-
 function resolveInventoryImage(item) {
   if (!item) return null
   if (item.primary_image) return item.primary_image
@@ -79,13 +95,6 @@ function resolveInventoryImage(item) {
     if (first?.url) return first.url
   }
   return null
-}
-
-function formatInventoryCategory(value) {
-  if (!value) return 'Accessories'
-  return String(value)
-    .replace(/_/g, ' ')
-    .replace(/\b\w/g, (char) => char.toUpperCase())
 }
 
 const ADJUSTMENT_REASONS = [
@@ -252,9 +261,10 @@ const [unavailableDates, setUnavailableDates] = useState([])
   const [refreshing, setRefreshing] = useState(false)
 
   const [inventorySubTab, setInventorySubTab] = useState('products')
-  const [inventoryStatusFilter, setInventoryStatusFilter] = useState('all')
-  const [inventorySort, setInventorySort] = useState('name')
+  const [productsInventoryFilter, setProductsInventoryFilter] = useState({ search: '', status: 'all', sort: 'name', page: 1 })
+  const [partsInventoryFilter, setPartsInventoryFilter] = useState({ search: '', status: 'all', category: 'all', sort: 'name', page: 1 })
   const [inventoryPage, setInventoryPage] = useState(1)
+  const INVENTORY_PAGE_SIZE = 10
 
   const [selectedAppointment, setSelectedAppointment] = useState(null)
   const [appointmentModalOpen, setAppointmentModalOpen] = useState(false)
@@ -275,7 +285,6 @@ const [unavailableDates, setUnavailableDates] = useState([])
     ['inventory', 'Inventory', Package],
     ['appointments', 'Appointments', Calendar],
     ['pos', 'POS', Wallet],
-    ['schedule', 'Schedule', Clock],
   ]
 
   const showToast = useCallback((message, type = 'success') => {
@@ -379,15 +388,15 @@ const fetchUnavailableDates = useCallback(async () => {
     if (activeTab === 'projects') fetchProjects()
     if (activeTab === 'orders') fetchOrders()
     if (activeTab === 'inventory' || activeTab === 'pos') loadInventoryBundle()
-    if (activeTab === 'appointments') { fetchAppointments(); fetchServices(); fetchUnavailableDates(); fetchAvailableDates() }
+    if (activeTab === 'appointments') { fetchAppointments(); fetchServices(); fetchUnavailableDates() }
     if (activeTab === 'schedule') { fetchAppointments(); fetchProjects() }
-  }, [activeTab, fetchAppointments, fetchOrders, fetchProjects, fetchServices, fetchUnavailableDates, fetchAvailableDates, loadInventoryBundle])
+  }, [activeTab, fetchAppointments, fetchOrders, fetchProjects, fetchServices, fetchUnavailableDates, loadInventoryBundle])
 
   useSmartPolling(useCallback(async () => {
-    if (activeTab === 'overview') { await Promise.all([fetchAppointments({ silent: true }), loadInventoryBundle()]); return }
+    if (activeTab === 'overview') { await Promise.all([fetchAppointments(), loadInventoryBundle()]); return }
     if (activeTab === 'inventory' || activeTab === 'pos') { await loadInventoryBundle(); return }
-    if (activeTab === 'appointments' || activeTab === 'schedule') { await Promise.all([fetchAppointments({ silent: true }), fetchUnavailableDates(), fetchAvailableDates()]) }
-  }, [activeTab, fetchAppointments, fetchUnavailableDates, fetchAvailableDates, loadInventoryBundle]), { interval: 10000, maxInterval: 60000, backoffFactor: 1.5, enabled: true })
+    if (activeTab === 'appointments' || activeTab === 'schedule') { await Promise.all([fetchAppointments(), fetchUnavailableDates()]) }
+  }, [activeTab, fetchAppointments, fetchUnavailableDates, loadInventoryBundle]), { interval: 10000, maxInterval: 60000, backoffFactor: 1.5, enabled: true })
 
   const visibleInventory = useMemo(() => {
     const lookup = Object.fromEntries(products.map((item) => [item.product_id, item]))
@@ -395,7 +404,6 @@ const fetchUnavailableDates = useCallback(async () => {
   }, [inventory, products])
 
   const visibleParts = useMemo(() => parts.map((item) => ({ ...item, stock: Number(item.stock ?? item.quantity ?? 0), low_stock_threshold: 10 })), [parts])
-  const normalizedUnavailableDates = useMemo(() => unavailableDates.map((entry) => entry?.date || entry).filter(Boolean), [unavailableDates])
   const inventoryRows = inventorySubTab === 'products' ? visibleInventory : visibleParts
   const filteredInventory = useMemo(() => {
     const rows = inventoryRows.filter((item) => {
@@ -411,9 +419,23 @@ const fetchUnavailableDates = useCallback(async () => {
     return rows
   }, [inventoryRows, inventorySort, inventoryStatusFilter])
 
-  const pageSize = 10
-  const totalPages = Math.max(Math.ceil(filteredInventory.length / pageSize), 1)
-  const pagedInventory = filteredInventory.slice((inventoryPage - 1) * pageSize, inventoryPage * pageSize)
+  const inventoryCurrentRows = inventoryIsProducts ? filteredProductsInventory : filteredPartsInventory
+  const inventoryTotalPages = Math.max(1, Math.ceil(inventoryCurrentRows.length / INVENTORY_PAGE_SIZE))
+  const inventoryCurrentPageRows = inventoryIsProducts ? paginatedProductsInventory : paginatedPartsInventory
+  const inventoryGroupedPartPageRows = useMemo(() => {
+    if (inventoryIsProducts) return []
+    let previousCategory = null
+    return inventoryCurrentPageRows.flatMap((item) => {
+      const category = item.inventory_category || 'accessories'
+      const rows = []
+      if (category !== previousCategory) {
+        rows.push({ type: 'group', category })
+        previousCategory = category
+      }
+      rows.push({ type: 'item', item })
+      return rows
+    })
+  }, [inventoryCurrentPageRows, inventoryIsProducts])
   const pendingAppointments = appointments.filter((item) => ['pending', 'approved', 'confirmed', 'ready_for_pickup'].includes(String(item.status || '').toLowerCase()))
   const todayAppointments = appointments.filter((item) => item.scheduled_at && new Date(item.scheduled_at).toDateString() === new Date().toDateString())
 
@@ -424,12 +446,12 @@ const fetchUnavailableDates = useCallback(async () => {
       if (activeTab === 'projects') await fetchProjects()
       if (activeTab === 'orders') await fetchOrders()
       if (activeTab === 'inventory' || activeTab === 'pos') await loadInventoryBundle()
-      if (activeTab === 'appointments') await Promise.all([fetchAppointments(), fetchServices(), fetchUnavailableDates(), fetchAvailableDates()])
+      if (activeTab === 'appointments') await Promise.all([fetchAppointments(), fetchServices(), fetchUnavailableDates()])
       if (activeTab === 'schedule') await Promise.all([fetchAppointments(), fetchProjects()])
     } finally {
       setRefreshing(false)
     }
-  }, [activeTab, fetchAppointments, fetchOrders, fetchProjects, fetchServices, fetchUnavailableDates, fetchAvailableDates, loadInventoryBundle])
+  }, [activeTab, fetchAppointments, fetchOrders, fetchProjects, fetchServices, fetchUnavailableDates, loadInventoryBundle])
 
   const saveStockAdjust = useCallback(async () => {
     setIsSaving(true)
@@ -527,6 +549,46 @@ const fetchUnavailableDates = useCallback(async () => {
     }
   }, [closeStaffModal, fetchProjects, form, modal.data, showToast])
 
+  const isSuperAdmin = hasRole(user?.role, 'admin')
+
+  const openModal = (type, data = null) => {
+    if (type === 'inventory') {
+      setForm({ product_id: data?.product_id, quantity: '', change_type: '', reason: '', notes: '' })
+      setFormErrors({})
+      setModal({ open: true, type: 'inventory', data: { product_id: data?.product_id, name: data?.name, stock: data?.stock } })
+    } else if (type === 'part_inventory') {
+      setForm({ part_id: data?.part_id, quantity: '', change_type: '', reason: '', notes: '' })
+      setFormErrors({})
+      setModal({ open: true, type: 'part_inventory', data })
+    }
+  }
+
+  const savePartStockAdjust = useCallback(async (overrideForm = {}) => {
+    setIsSaving(true)
+    try {
+      const { part_id, change_type, quantity } = { ...form, ...overrideForm }
+      if (!part_id || !change_type || !quantity) {
+        showToast('Please fill all required fields', 'error'); return
+      }
+      const existingPart = visibleParts.find((part) => part.part_id === part_id)
+      const currentStock = Number(existingPart?.stock ?? existingPart?.quantity ?? form.current_stock ?? 0) || 0
+      const qty = Number(quantity)
+      let nextStock = currentStock
+      if (change_type === 'stock_in') nextStock = currentStock + qty
+      else if (change_type === 'stock_out') nextStock = currentStock - qty
+      else nextStock = qty
+      if (nextStock < 0) {
+        showToast('Stock cannot be negative', 'error')
+        return
+      }
+      await staffApi.updateBuilderPart(part_id, { stock: nextStock })
+      showToast('Guitar part stock adjusted!')
+      await loadInventoryBundle()
+      closeStaffModal()
+    } catch (e) { showToast(e.message, 'error') }
+    finally { setIsSaving(false) }
+  }, [form, loadInventoryBundle, showToast, visibleParts])
+
   const pageTitle = tabs.find(([id]) => id === activeTab)?.[1] || 'Staff Dashboard'
 
   return (
@@ -562,14 +624,27 @@ const fetchUnavailableDates = useCallback(async () => {
                 <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6"><p className="text-sm text-[var(--text-muted)]">Today&apos;s schedule</p><p className="mt-3 text-3xl font-bold text-white">{todayAppointments.length}</p></div>
                 <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6"><p className="text-sm text-[var(--text-muted)]">Low stock alerts</p><p className="mt-3 text-3xl font-bold text-white">{inventoryAlerts.length}</p></div>
               </div>
-              <div className="grid gap-6 xl:grid-cols-[1.2fr,0.8fr]">
-                <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6">
-                  <div className="mb-5 flex items-center justify-between"><h3 className="text-lg font-semibold text-white">Upcoming appointments</h3><button type="button" onClick={() => setActiveTab('appointments')} className="text-sm font-medium text-[var(--gold-primary)]">View all</button></div>
-                  {appointments.length === 0 ? <EmptyState icon={Calendar} label="No appointments queued" description="New bookings will appear here." /> : <div className="space-y-3">{appointments.slice(0, 5).map((item) => <button key={item.appointment_id} type="button" onClick={() => { setSelectedAppointment(item); setAppointmentModalOpen(true) }} className="flex w-full items-center justify-between rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)]/60 p-4 text-left"><div><p className="font-semibold text-white">{item.customer_name || item.user_name || 'Walk-in customer'}</p><p className="mt-1 text-sm text-[var(--text-muted)]">{item.service_name || (Array.isArray(item.services) ? item.services.join(', ') : 'Service appointment')}</p></div><StatusBadge label={item.status || 'pending'} variant={statusVariant(item.status)} /></button>)}</div>}
-                </div>
-                <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6"><h3 className="text-lg font-semibold text-white">Unread stock alerts</h3><div className="mt-4 space-y-3">{inventoryAlerts.length === 0 ? <p className="text-sm text-[var(--text-muted)]">No low-stock alerts right now.</p> : inventoryAlerts.slice(0, 5).map((alert) => <div key={alert.alert_id} className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4"><p className="font-semibold text-white">{alert.name}</p><p className="mt-1 text-sm text-[var(--text-muted)]">{alert.current_stock} left, threshold {alert.threshold}</p></div>)}</div></div>
-              </div>
-            </div>}
+               <div className="grid gap-6 xl:grid-cols-[1.2fr,0.8fr]">
+                 <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6">
+                   <div className="mb-5 flex items-center justify-between"><h3 className="text-lg font-semibold text-white">Upcoming appointments</h3><button type="button" onClick={() => setActiveTab('appointments')} className="text-sm font-medium text-[var(--gold-primary)]">View all</button></div>
+                   {appointments.length === 0 ? <EmptyState icon={Calendar} label="No appointments queued" description="New bookings will appear here." /> : <div className="space-y-3">{appointments.slice(0, 5).map((item) => <button key={item.appointment_id} type="button" onClick={() => { setSelectedAppointment(item); setAppointmentModalOpen(true) }} className="flex w-full items-center justify-between rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)]/60 p-4 text-left"><div><p className="font-semibold text-white">{item.customer_name || item.user_name || 'Walk-in customer'}</p><p className="mt-1 text-sm text-[var(--text-muted)]">{item.service_name || (Array.isArray(item.services) ? item.services.join(', ') : 'Service appointment')}</p></div><StatusBadge label={item.status || 'pending'} variant={statusVariant(item.status)} /></button>)}</div>}
+                 </div>
+                 <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6"><h3 className="text-lg font-semibold text-white">Unread stock alerts</h3><div className="mt-4 space-y-3">{inventoryAlerts.length === 0 ? <p className="text-sm text-[var(--text-muted)]">No low-stock alerts right now.</p> : inventoryAlerts.slice(0, 5).map((alert) => <div key={alert.alert_id} className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4"><p className="font-semibold text-white">{alert.name}</p><p className="mt-1 text-sm text-[var(--text-muted)]">{alert.current_stock} left, threshold {alert.threshold}</p></div>)}</div></div>
+               </div>
+               <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6">
+                 <h3 className="text-lg font-semibold text-white">Upcoming schedule</h3>
+                 <div className="mt-4 grid gap-6 lg:grid-cols-2">
+                   <div>
+                     <h4 className="text-sm font-semibold text-[var(--text-muted)] mb-3">Appointments</h4>
+                     {appointments.length === 0 ? <p className="text-sm text-[var(--text-muted)]">No upcoming appointments.</p> : <div className="space-y-3">{appointments.slice(0, 5).map((item) => <div key={item.appointment_id} className="flex items-center justify-between rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)]/60 p-4"><div><p className="font-semibold text-white">{item.customer_name || item.user_name || 'Service customer'}</p><p className="mt-1 text-sm text-[var(--text-muted)]">{item.scheduled_at ? new Date(item.scheduled_at).toLocaleString() : 'TBD'}</p></div><StatusBadge label={item.status || 'pending'} variant={statusVariant(item.status)} /></div>)}</div>}
+                   </div>
+                   <div>
+                     <h4 className="text-sm font-semibold text-[var(--text-muted)] mb-3">Project deadlines</h4>
+                     {projects.filter((item) => item.estimated_completion_date).length === 0 ? <p className="text-sm text-[var(--text-muted)]">No project deadlines available.</p> : <div className="space-y-3">{projects.filter((item) => item.estimated_completion_date).slice(0, 5).map((item) => <div key={item.project_id} className="flex items-center justify-between rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)]/60 p-4"><div><p className="font-semibold text-white">{item.name || item.title}</p><p className="mt-1 text-sm text-[var(--text-muted)]">Due {new Date(item.estimated_completion_date).toLocaleDateString()}</p></div><StatusBadge label={item.status || 'pending'} variant={statusVariant(item.status)} /></div>)}</div>}
+                   </div>
+                 </div>
+               </div>
+             </div>}
             {activeTab === 'projects' && (
               <motion.div key="projects" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
                 <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-6">
@@ -620,10 +695,13 @@ const fetchUnavailableDates = useCallback(async () => {
                               <h3 className="mt-2 truncate text-xl font-semibold text-white">
                                 {project.name || project.title || 'Untitled Project'}
                               </h3>
-                              <p className="mt-2 text-sm text-[var(--text-muted)]">
-                                Customer: <span className="text-white">{project.client_name || project.customer_name || 'Unassigned'}</span>
-                              </p>
-                            </div>
+                               <p className="mt-2 text-sm text-[var(--text-muted)]">
+                                 Customer: <span className="text-white">{project.client_name || project.customer_name || 'Unassigned'}</span>
+                               </p>
+                               <p className="mt-2 text-sm text-[var(--text-muted)]">
+                                 Claimed By: <span className="text-white">{project.claimed_first_name ? `${project.claimed_first_name} ${project.claimed_last_name}` : 'Unassigned'}</span>
+                               </p>
+                             </div>
                             <span className={`shrink-0 rounded-full border px-3 py-1 text-xs font-semibold capitalize ${statusClass}`}>
                               {status.replace(/_/g, ' ')}
                             </span>
@@ -730,7 +808,7 @@ const fetchUnavailableDates = useCallback(async () => {
                 {filteredInventory.length > 0 && <div className="mt-6 flex items-center justify-between border-t border-[var(--border)] pt-4"><p className="text-sm text-[var(--text-muted)]">Showing {(inventoryPage - 1) * pageSize + 1}-{Math.min(inventoryPage * pageSize, filteredInventory.length)} of {filteredInventory.length}</p><div className="flex items-center gap-2"><button type="button" onClick={() => setInventoryPage((p) => Math.max(1, p - 1))} disabled={inventoryPage === 1} className="rounded-xl border border-[var(--border)] p-2 text-[var(--text-muted)] disabled:opacity-40"><ChevronLeft className="h-4 w-4" /></button><span className="text-sm text-white">{inventoryPage} / {totalPages}</span><button type="button" onClick={() => setInventoryPage((p) => Math.min(totalPages, p + 1))} disabled={inventoryPage >= totalPages} className="rounded-xl border border-[var(--border)] p-2 text-[var(--text-muted)] disabled:opacity-40"><ChevronRight className="h-4 w-4" /></button></div></div>}
               </div>
             </div>}
-            {activeTab === 'appointments' && <div className="space-y-6"><div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"><div><h3 className="text-lg font-semibold text-white">Appointment desk</h3><p className="text-sm text-[var(--text-muted)]">Staff uses the same appointment action model as admin now.</p></div><div className="flex flex-wrap gap-2"><button type="button" onClick={() => setUnavailableDatesOpen(true)} className="inline-flex items-center gap-2 rounded-2xl bg-[var(--surface-dark)] px-4 py-2.5 text-sm font-semibold text-white"><CalendarX className="h-4 w-4" />Mark unavailable</button><button type="button" onClick={() => { setAppointmentFormData(null); setSelectedCalendarDate(null); setAppointmentFormOpen(true) }} className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] px-4 py-2.5 text-sm font-semibold text-black"><Plus className="h-4 w-4" />New appointment</button></div></div><AppointmentCalendar appointments={appointments} unavailableDates={normalizedUnavailableDates} availableDates={availableDates} isAdminMode onAppointmentClick={(item) => { setSelectedAppointment(item); setAppointmentModalOpen(true) }} onCreateAppointment={(_, date) => { setSelectedCalendarDate(date); setAppointmentFormData(null); setAppointmentFormOpen(true) }} /><div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6"><AppointmentList appointments={appointments} loading={loadingAppointments} onRefresh={fetchAppointments} onViewDetails={(item) => { setSelectedAppointment(item); setAppointmentModalOpen(true) }} onEdit={(item) => { setAppointmentFormData(item); setAppointmentFormOpen(true) }} onCreateNew={() => { setAppointmentFormData(null); setAppointmentFormOpen(true) }} pagination={appointmentPagination} onPageChange={(page) => setAppointmentPagination((p) => ({ ...p, page }))} selectedDate={selectedCalendarDate} /></div></div>}
+            {activeTab === 'appointments' && <div className="space-y-6"><div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"><div><h3 className="text-lg font-semibold text-white">Appointment desk</h3><p className="text-sm text-[var(--text-muted)]">Staff uses the same appointment action model as admin now.</p></div><div className="flex flex-wrap gap-2"><button type="button" onClick={() => setUnavailableDatesOpen(true)} className="inline-flex items-center gap-2 rounded-2xl bg-[var(--surface-dark)] px-4 py-2.5 text-sm font-semibold text-white"><CalendarX className="h-4 w-4" />Mark unavailable</button><button type="button" onClick={() => { setAppointmentFormData(null); setSelectedCalendarDate(null); setAppointmentFormOpen(true) }} className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] px-4 py-2.5 text-sm font-semibold text-black"><Plus className="h-4 w-4" />New appointment</button></div></div><AppointmentCalendar appointments={appointments} unavailableDates={unavailableDates.map((entry) => entry?.date || entry).filter(Boolean)} isAdminMode onAppointmentClick={(item) => { setSelectedAppointment(item); setAppointmentModalOpen(true) }} onCreateAppointment={(_, date) => { setSelectedCalendarDate(date); setAppointmentFormData(null); setAppointmentFormOpen(true) }} /><div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6"><AppointmentList appointments={appointments} loading={loadingAppointments} onRefresh={fetchAppointments} onViewDetails={(item) => { setSelectedAppointment(item); setAppointmentModalOpen(true) }} onEdit={(item) => { setAppointmentFormData(item); setAppointmentFormOpen(true) }} onCreateNew={() => { setAppointmentFormData(null); setAppointmentFormOpen(true) }} pagination={appointmentPagination} onPageChange={(page) => setAppointmentPagination((p) => ({ ...p, page }))} selectedDate={selectedCalendarDate} /></div></div>}
             {activeTab === 'pos' && (
               <PosWorkspace
                 inventoryItems={visibleInventory}
@@ -738,8 +816,7 @@ const fetchUnavailableDates = useCallback(async () => {
 
               />
             )}
-            {activeTab === 'schedule' && (appointments.length === 0 ? <EmptyState icon={Clock} label="No scheduled items" description="Appointments and project deadlines will appear here." /> : <div className="space-y-6"><div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6"><h3 className="text-lg font-semibold text-white">Upcoming schedule</h3><div className="mt-4 space-y-3">{appointments.map((item) => <div key={item.appointment_id} className="flex items-center justify-between rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)]/60 p-4"><div><p className="font-semibold text-white">{item.customer_name || item.user_name || 'Service customer'}</p><p className="mt-1 text-sm text-[var(--text-muted)]">{item.scheduled_at ? new Date(item.scheduled_at).toLocaleString() : 'TBD'}</p></div><StatusBadge label={item.status || 'pending'} variant={statusVariant(item.status)} /></div>)}</div></div><div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6"><h3 className="text-lg font-semibold text-white">Project deadlines</h3><div className="mt-4 space-y-3">{projects.filter((item) => item.estimated_completion_date).length === 0 ? <p className="text-sm text-[var(--text-muted)]">No project deadlines available.</p> : projects.filter((item) => item.estimated_completion_date).map((item) => <div key={item.project_id} className="flex items-center justify-between rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)]/60 p-4"><div><p className="font-semibold text-white">{item.name || item.title}</p><p className="mt-1 text-sm text-[var(--text-muted)]">Due {new Date(item.estimated_completion_date).toLocaleDateString()}</p></div><StatusBadge label={item.status || 'pending'} variant={statusVariant(item.status)} /></div>)}</div></div></div>)}
-          </main>
+           </main>
         </div>
       </div>
       <AnimatePresence>
@@ -751,18 +828,30 @@ const fetchUnavailableDates = useCallback(async () => {
             className="fixed inset-0 z-[150] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
             onClick={(e) => { if (e.target === e.currentTarget) closeStaffModal() }}
           >
-            {modal.type === 'inventory' && (
-              <AdjustStockModal
-                modal={modal}
-                form={form}
-                setForm={setForm}
-                errors={formErrors}
-                setErrors={setFormErrors}
-                onClose={closeStaffModal}
-                onSave={saveStockAdjust}
-                saving={isSaving}
-              />
-            )}
+             {modal.type === 'inventory' && (
+               <AdjustStockModal
+                 modal={modal}
+                 form={form}
+                 setForm={setForm}
+                 errors={formErrors}
+                 setErrors={setFormErrors}
+                 onClose={closeStaffModal}
+                 onSave={saveStockAdjust}
+                 saving={isSaving}
+               />
+             )}
+             {modal.type === 'part_inventory' && (
+               <AdjustPartStockModal
+                 modal={modal}
+                 form={form}
+                 setForm={setForm}
+                 formErrors={formErrors}
+                 setFormErrors={setFormErrors}
+                 closeModal={closeStaffModal}
+                 isSaving={isSaving}
+                 savePartStockAdjust={savePartStockAdjust}
+               />
+             )}
             {modal.type === 'project' && (
               <ProjectEditModal
                 form={form}
