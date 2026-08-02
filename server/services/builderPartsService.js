@@ -1,3 +1,14 @@
+const syncStockToInventory = async (partId, delta) => {
+  if (!partId || delta === 0) return;
+  const partRes = await pool.query('SELECT product_id FROM guitar_builder_parts WHERE part_id = $1', [partId]);
+  const productId = partRes.rows[0]?.product_id;
+  if (!productId) return;
+  await pool.query(
+    `UPDATE inventory SET stock = stock + $1, updated_at = now() WHERE product_id = $2`,
+    [delta, productId]
+  );
+};
+
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
@@ -1247,6 +1258,10 @@ exports.createPart = async ({ name, description, guitar_type, part_category, fol
 };
 
 exports.updatePart = async (id, { name, description, guitar_type, part_category, folder_key, type_mapping, price, stock, image_url, metadata, is_active }) => {
+  const oldRes = await pool.query('SELECT stock, product_id FROM guitar_builder_parts WHERE part_id = $1', [id]);
+  const oldStock = Number(oldRes.rows[0]?.stock || 0);
+  const linkedProductId = oldRes.rows[0]?.product_id || null;
+
   const res = await pool.query(
     `UPDATE guitar_builder_parts SET
        name         = COALESCE($1, name),
@@ -1278,7 +1293,20 @@ exports.updatePart = async (id, { name, description, guitar_type, part_category,
       id,
     ]
   );
-  return res.rows[0] || null;
+  const updated = res.rows[0] || null;
+
+  if (updated && stock !== undefined && stock !== null && linkedProductId) {
+    const newStock = Number(stock);
+    const delta = newStock - oldStock;
+    if (delta !== 0) {
+      await pool.query(
+        `UPDATE inventory SET stock = stock + $1, updated_at = now() WHERE product_id = $2`,
+        [delta, linkedProductId]
+      );
+    }
+  }
+
+  return updated;
 };
 
 exports.deletePart = async (id) => {
