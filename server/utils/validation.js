@@ -229,6 +229,16 @@ exports.emailSignupSchema = Joi.object({
         'string.pattern.base': 'City can only contain letters, spaces, hyphens, and apostrophes',
         'any.required': 'City is required',
       }),
+    barangay: Joi.string()
+      .min(2)
+      .max(80)
+      .required()
+      .trim()
+      .messages({
+        'string.min': 'Barangay must be at least 2 characters',
+        'string.max': 'Barangay must not exceed 80 characters',
+        'any.required': 'Barangay is required',
+      }),
     stateProvince: Joi.string()
       .min(2)
       .max(50)
