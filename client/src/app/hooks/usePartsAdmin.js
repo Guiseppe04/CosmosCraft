@@ -4,7 +4,7 @@ import { updateIfChanged } from '../pages/admin/utils/slug'
 
 const DEFAULT_PART_QUERY = {
   page: 1,
-  pageSize: 100,
+  pageSize: 500,
   sortBy: 'created_at',
   sortDir: 'desc',
   guitar_type: '',
