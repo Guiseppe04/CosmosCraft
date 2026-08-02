@@ -3,10 +3,8 @@
  * Handles all HTTP requests to the backend
  */
 
-import { API } from '../utils/apiConfig'
-
 // Base API configuration
-const API_BASE_URL = `${API}/api`
+const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:5000') + '/api'
 
 /**
  * Generic fetch wrapper with error handling

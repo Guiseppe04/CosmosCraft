@@ -61,10 +61,8 @@ Run `schema.sql` against a fresh PostgreSQL database to create the full schema.
 - References `otp_codes`.
 
 ### `password_reset_tokens`
-- Tracks password reset flows with a SHA-256 hash of the reset token (never the raw token), expiration, and single-use consumption.
-- Unique `token_hash`.
-- `used_at` is set when the token is consumed; `expires_at` is 1 hour from creation.
-- Indexes: `user_id`, `expires_at`.
+- Tracks password reset flows with hashed new password, expiration, and usage.
+- Unique `(user_id, token)`.
 
 ### `notifications`
 - Notification feed per user.

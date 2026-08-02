@@ -11,7 +11,6 @@ const getAddressSignature = (address = {}) => ([
   address.line1 ?? address.streetLine1 ?? address.street,
   address.line2 ?? address.streetLine2 ?? address.street2,
   address.city,
-  address.barangay ?? '',
   address.province ?? address.stateProvince,
   address.postal_code ?? address.postalZipCode ?? address.postalCode,
   address.country,
@@ -94,17 +93,16 @@ exports.createEmailUser = async (userData) => {
 
     if (userData.address) {
       await client.query(
-        `INSERT INTO addresses (user_id, line1, line2, city, barangay, province, postal_code, country, is_default)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true)`,
+        `INSERT INTO addresses (user_id, line1, line2, city, province, postal_code, country, is_default)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, true)`,
         [
           user.user_id,
           userData.address.streetLine1,
           userData.address.streetLine2 || null,
           userData.address.city,
-          userData.address.barangay || null,
           userData.address.stateProvince,
           userData.address.postalZipCode,
-          userData.address.country,
+          userData.address.country
         ]
       );
     }
@@ -208,7 +206,7 @@ exports.addAddress = async (userId, addressData) => {
   try {
     await client.query('BEGIN');
     const existing = await client.query(
-      'SELECT address_id, line1, line2, city, barangay, province, postal_code, country, is_default FROM addresses WHERE user_id = $1',
+      'SELECT address_id, line1, line2, city, province, postal_code, country, is_default FROM addresses WHERE user_id = $1',
       [userId]
     );
     const duplicateAddress = existing.rows.find(
@@ -228,6 +226,10 @@ exports.addAddress = async (userId, addressData) => {
       return exports.getUserById(userId);
     }
 
+    if (existing.rows.length >= 2) {
+      throw new Error('Maximum 2 addresses allowed.');
+    }
+
     const isFirst = existing.rows.length === 0;
     const isDefault = isFirst || addressData.isDefault;
 
@@ -236,15 +238,14 @@ exports.addAddress = async (userId, addressData) => {
     }
 
     const res = await client.query(
-      `INSERT INTO addresses (user_id, label, line1, line2, city, barangay, province, postal_code, country, is_default)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
+      `INSERT INTO addresses (user_id, label, line1, line2, city, province, postal_code, country, is_default)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
       [
         userId,
         addressData.label || null,
         addressData.streetLine1,
         addressData.streetLine2 || null,
         addressData.city,
-        addressData.barangay || null,
         addressData.stateProvince,
         addressData.postalZipCode,
         addressData.country,
@@ -275,7 +276,7 @@ exports.updateAddress = async (userId, addressId, updates) => {
     const values = [];
     let idx = 1;
     // Map frontend fields (e.g. streetLine1) to db columns if necessary
-    const map = { label: 'label', streetLine1: 'line1', streetLine2: 'line2', city: 'city', barangay: 'barangay', stateProvince: 'province', postalZipCode: 'postal_code', country: 'country', isDefault: 'is_default' };
+    const map = { label: 'label', streetLine1: 'line1', streetLine2: 'line2', city: 'city', stateProvince: 'province', postalZipCode: 'postal_code', country: 'country', isDefault: 'is_default' };
     
     for (const key in updates) {
       if (map[key]) {
@@ -335,25 +336,77 @@ exports.setPassword = async (userId, newPassword) => {
   return { message: 'Password updated successfully' };
 };
 
-exports.updateUserPhone = async (userId, phone) => {
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    const result = await client.query(
-      'UPDATE users SET phone = $1, updated_at = now() WHERE user_id = $2 RETURNING *',
-      [phone || null, userId]
-    );
-    await client.query('COMMIT');
-    if (result.rows.length === 0) throw new Error('User not found');
-    const user = result.rows[0];
-    delete user.password_hash;
-    return user;
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
+const crypto = require('crypto');
+
+exports.createPasswordResetToken = async (userId, newPassword) => {
+  const isMatch = await exports.verifyPassword(userId, newPassword);
+  if (isMatch) throw new Error('New password must be different from current password');
+  
+  const existingRes = await pool.query(
+    'DELETE FROM password_reset_tokens WHERE user_id = $1 OR expires_at < now()',
+    [userId]
+  );
+  
+  const token = crypto.randomBytes(32).toString('hex');
+  const newPasswordHash = await bcrypt.hash(newPassword, 12);
+  const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+  
+  await pool.query(
+    `INSERT INTO password_reset_tokens (user_id, token, new_password_hash, expires_at)
+     VALUES ($1, $2, $3, $4)`,
+    [userId, token, newPasswordHash, expiresAt]
+  );
+  
+  return { token, expiresAt };
+};
+
+exports.verifyPasswordResetToken = async (userId, token) => {
+  const res = await pool.query(
+    `SELECT * FROM password_reset_tokens 
+     WHERE user_id = $1 AND token = $2 AND is_used = false AND expires_at > now()`,
+    [userId, token]
+  );
+  
+  if (res.rows.length === 0) {
+    throw new Error('Invalid or expired token');
   }
+  
+  const tokenRecord = res.rows[0];
+  
+  await pool.query(
+    'UPDATE password_reset_tokens SET is_used = true WHERE token_id = $1',
+    [tokenRecord.token_id]
+  );
+  
+  await pool.query(
+    'UPDATE users SET password_hash = $1, updated_at = now() WHERE user_id = $2',
+    [tokenRecord.new_password_hash, userId]
+  );
+  
+  await pool.query(
+    'DELETE FROM password_reset_tokens WHERE user_id = $1',
+    [userId]
+  );
+  
+  return { message: 'Password updated successfully' };
+};
+
+exports.requestPasswordChange = async (userId, oldPassword, newPassword) => {
+  const isMatch = await exports.verifyPassword(userId, oldPassword);
+  if (!isMatch) throw new Error('Current password is incorrect');
+  
+  if (newPassword.length < 8) {
+    throw new Error('Password must be at least 8 characters');
+  }
+  
+  if (newPassword.length < 8 || !/[A-Z]/.test(newPassword) || !/[0-9]/.test(newPassword)) {
+    throw new Error('Password must be at least 8 characters with uppercase and numbers');
+  }
+  
+  const isSameAsOld = await exports.verifyPassword(userId, newPassword);
+  if (isSameAsOld) throw new Error('New password must be different from current password');
+  
+  return exports.createPasswordResetToken(userId, newPassword);
 };
 
 exports.deactivateAccount = async (userId) => {
@@ -367,7 +420,7 @@ exports.reactivateAccount = async (userId) => {
 };
 
 exports.listUsers = async (filters = {}, limit = 10, skip = 0) => {
-  let queryStr = 'SELECT user_id, email, first_name, last_name, role, is_active, created_at FROM users WHERE 1=1';
+  let queryStr = 'SELECT user_id, email, first_name, last_name, role, is_active FROM users WHERE 1=1';
   const values = [];
   let idx = 1;
 

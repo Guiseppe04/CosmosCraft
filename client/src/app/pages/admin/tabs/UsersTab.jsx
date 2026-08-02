@@ -84,7 +84,7 @@ export function UsersTab({
                   className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-lg px-2 py-1 text-white text-xs focus:outline-none focus:ring-1 focus:ring-[var(--gold-primary)]"
                 >
                   {VALID_ROLES.map((r) => (
-                    <option key={r} value={r}>{r.replace('_', ' ').replace(/\b\w/g, (l) => l.toUpperCase())}</option>
+                    <option key={r} value={r}>{r.replace('_', ' ')}</option>
                   ))}
                 </select>
               ) : (
@@ -93,7 +93,7 @@ export function UsersTab({
                 </span>
               )}
             </td>
-            <td className="py-4 px-6"><StatusBadge variant={u.is_active ? 'active' : 'inactive'} value={u.is_active ? 'Active' : 'Inactive'} /></td>
+            <td className="py-4 px-6"><StatusBadge active={u.is_active} /></td>
             <td className="py-4 px-6 text-[var(--text-muted)] text-sm">{u.created_at ? new Date(u.created_at).toLocaleDateString() : '—'}</td>
             <td className="py-4 px-6">
               <button

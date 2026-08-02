@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState, useCallback } from 'react'
 import axios from 'axios'
-import { API } from '../utils/apiConfig'
 import {
   BASE_PRICE,
   BODY_FINISH_OPTIONS,
@@ -65,7 +64,7 @@ const phpFormatter = new Intl.NumberFormat('en-PH', {
   minimumFractionDigits: 0,
   maximumFractionDigits: 0,
 })
-const API_URL = API
+const API_URL = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_URL) ? import.meta.env.VITE_API_URL : ''
 
 export function formatPricePHP(price) {
   return phpFormatter.format(price)

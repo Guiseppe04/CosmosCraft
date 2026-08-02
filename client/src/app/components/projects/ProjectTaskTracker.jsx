@@ -2,7 +2,6 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { CheckCircle, Circle, ChevronDown, ChevronRight, Plus, Trash2, User, Clock, AlertCircle, Calendar, Truck, Store, ShieldCheck, Flag } from 'lucide-react';
 import { adminApi } from '../../utils/adminApi';
-import { staffApi } from '../../utils/staffApi';
 import { formatCurrency } from '../../utils/formatCurrency';
 import { useAuth } from '../../context/AuthContext';
 
@@ -114,11 +113,10 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
   const loadData = async () => {
     try {
       setLoading(true);
-      const projectApi = isAdmin ? adminApi : staffApi;
       const [hierarchyRes, requiredPartsRes, logsRes] = await Promise.all([
-        projectApi.getProjectHierarchy(projectId),
-        projectApi.getProjectRequiredParts(projectId),
-        projectApi.getProjectActivity(projectId),
+        adminApi.getProjectHierarchy(projectId),
+        adminApi.getProjectRequiredParts(projectId),
+        adminApi.getProjectActivity(projectId),
       ]);
       setHierarchy(hierarchyRes.data);
       setRequiredParts(Array.isArray(requiredPartsRes.data) ? requiredPartsRes.data : []);
@@ -272,7 +270,7 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
         return;
       }
       const newStatus = subtask.status === 'completed' ? 'pending' : 'completed';
-      await (isAdmin ? adminApi : staffApi).updateSubtask(subtask.subtask_id, { status: newStatus });
+      await adminApi.updateSubtask(subtask.subtask_id, { status: newStatus });
       loadData(); // Re-fetch to get new progress %
     } catch (err) {
       alert("Failed to update task: " + err.message);

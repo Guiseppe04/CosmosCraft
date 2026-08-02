@@ -17,7 +17,6 @@ import { OAuthSuccessPage } from './pages/OAuthSuccessPage.jsx'
 import { OAuthSignupPage } from './pages/OAuthSignupPage.jsx'
 import { FeedbackPage } from './pages/FeedbackPage.jsx'
 import { ResetPasswordPage } from './pages/ResetPasswordPage.jsx'
-import { ForgotPassword } from './pages/ForgotPassword.jsx'
 import CloudinaryAssetsPage from './pages/CloudinaryAssetsPage.jsx'
 import { ProtectedRoute } from './components/auth/ProtectedRoute.jsx'
 
@@ -44,7 +43,6 @@ export const router = createBrowserRouter([
       // Authentication routes
       { path: 'login', Component: LoginPage },
       { path: 'signup', Component: SignupPage },
-      { path: 'forgot-password', Component: ForgotPassword },
       { path: 'verify-otp', Component: OTPVerificationPage },
       { path: 'auth/success', Component: OAuthSuccessPage },
       { path: 'auth/signup', Component: OAuthSignupPage },

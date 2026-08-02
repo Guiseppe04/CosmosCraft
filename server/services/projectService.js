@@ -217,17 +217,11 @@ const buildPartKey = (part = {}) => {
     part?.name || 'unnamed',
     part?.customization_id || 'global',
     part?.product_id || 'none',
-  ];
-  if (part?.part_type) {
-    base.push(part.part_type);
-  }
-
-  return base
+  ]
     .filter(Boolean)
-    .join('::')
-    .toLowerCase()
-    .replace(/[^a-z0-9_]+/g, '-')
-    .replace(/(^-|-$)/g, '');
+    .join('::');
+
+  return base.toLowerCase().replace(/[^a-z0-9_]+/g, '-').replace(/(^-|-$)/g, '');
 };
 
 const buildRequiredPartsPayload = (customization = {}, linkedParts = []) => {
@@ -254,7 +248,6 @@ const buildRequiredPartsPayload = (customization = {}, linkedParts = []) => {
         category,
         name: String(value),
         customization_id: customizationId,
-        part_type: fieldName,
       }),
       is_received: false,
       received_quantity: 0,

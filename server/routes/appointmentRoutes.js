@@ -29,18 +29,6 @@ router.post('/', appointmentController.createAppointment);
  * Get all unavailable dates
  * Access: Any authenticated user
  */
-// ─── AVAILABLE DATES ──────────────────────────────────────────────
-
-/**
- * GET /api/appointments/available-dates
- * Get dates with available slots within a date range
- * Query params:
- *   - date_from (required) - ISO date string
- *   - date_to (required) - ISO date string
- * Access: Any authenticated user
- */
-router.get('/available-dates', appointmentController.getAvailableDates);
-
 router.get('/unavailable-dates', appointmentController.getUnavailableDates);
 
 /**

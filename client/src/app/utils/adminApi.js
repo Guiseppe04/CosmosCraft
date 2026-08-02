@@ -3,9 +3,7 @@
  * All functions use credentials: 'include' so the access token cookie is sent automatically.
  */
 
-import { API } from './apiConfig'
-
-const API_URL = API
+const API_URL = import.meta.env.VITE_API_URL
 
 const normalizeAppointmentStatus = (status) => {
   if (status === 'approved') return 'confirmed'
@@ -20,14 +18,7 @@ async function request(path, options = {}) {
     body: options.body ? JSON.stringify(options.body) : undefined,
   })
   const data = await res.json()
-  if (!res.ok) {
-    const error = new Error(data.message || 'Request failed')
-    // Preserve field-level validation errors so the UI can map them to inputs.
-    if (Array.isArray(data.errors) && data.errors.length > 0) {
-      error.fieldErrors = data.errors
-    }
-    throw error
-  }
+  if (!res.ok) throw new Error(data.message || 'Request failed')
   return data
 }
 
@@ -170,13 +161,6 @@ export const adminApi = {
   createService: (body) => request('/api/services', { method: 'POST', body }),
   updateService: (id, body) => request(`/api/services/${id}`, { method: 'PUT', body }),
   deleteService: (id) => request(`/api/services/${id}`, { method: 'DELETE' }),
-
-  // Available Dates
-  getAvailableDates: (dateFrom, dateTo) => {
-    if (!dateFrom || !dateTo) return Promise.resolve({ data: { available_dates: [] } })
-    const qs = new URLSearchParams({ date_from: dateFrom, date_to: dateTo }).toString()
-    return request(`/api/appointments/available-dates?${qs}`)
-  },
 
   // Unavailable Dates
   getUnavailableDates: () => request('/api/appointments/unavailable-dates'),

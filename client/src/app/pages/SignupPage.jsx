@@ -74,7 +74,6 @@ export function SignupPage() {
       streetLine1: '',
       streetLine2: '',
       city: '',
-      barangay: '',
       stateProvince: '',
       postalZipCode: '',
       country: 'PH',
@@ -159,7 +158,7 @@ export function SignupPage() {
       setPhBarangay('')
       setForm(prev => ({
         ...prev,
-        address: { ...prev.address, stateProvince: '', city: '', barangay: '' }
+        address: { ...prev.address, stateProvince: '', city: '' }
       }))
     }
   }, [form.address.country])
@@ -172,7 +171,7 @@ export function SignupPage() {
     setPhBarangay('')
     setForm(prev => ({
       ...prev,
-      address: { ...prev.address, stateProvince: name, city: '', barangay: '' }
+      address: { ...prev.address, stateProvince: name, city: '' }
     }))
   }
 
@@ -183,7 +182,7 @@ export function SignupPage() {
     setPhBarangay('')
     setForm(prev => ({
       ...prev,
-      address: { ...prev.address, stateProvince: name, city: '', barangay: '' }
+      address: { ...prev.address, stateProvince: name, city: '' }
     }))
   }
 
@@ -193,7 +192,7 @@ export function SignupPage() {
     setPhBarangay('')
     setForm(prev => ({
       ...prev,
-      address: { ...prev.address, city: name, barangay: '' }
+      address: { ...prev.address, city: name }
     }))
   }
 
@@ -283,7 +282,6 @@ export function SignupPage() {
           streetLine1: form.address.streetLine1.trim(),
           streetLine2: form.address.streetLine2.trim(),
           city: form.address.city.trim(),
-          barangay: form.address.barangay.trim(),
           stateProvince: form.address.stateProvince.trim(),
           postalZipCode: form.address.postalZipCode.trim(),
           country: form.address.country.trim(),
@@ -657,10 +655,6 @@ export function SignupPage() {
                       disabled={!phMunicipality}
                       onChange={e => {
                         setPhBarangay(e.target.value)
-                        setForm(prev => ({
-                          ...prev,
-                          address: { ...prev.address, barangay: e.target.value }
-                        }))
                         setErrors(prev => ({ ...prev, ['address.barangay']: '' }))
                       }}
                       ref={registerFieldRef('address.barangay')}

@@ -2,21 +2,12 @@ import { Link, useNavigate } from 'react-router'
 import { motion, AnimatePresence } from 'motion/react'
 import { useCart } from '../context/CartContext.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
-import { ArrowRight, ShoppingBag, AlertTriangle, Package, Zap, ShieldCheck, Truck } from 'lucide-react'
-import { useState } from 'react'
-import { SelectableCartItemRow } from '../components/cart/SelectableCartItemRow.jsx'
+import { Trash2, Plus, Minus, ArrowRight, ShoppingBag, AlertTriangle, Package, Zap, ShieldCheck, Truck } from 'lucide-react'
+import { forwardRef, useState } from 'react'
+import { getCustomBuildSummaryTree } from '../utils/customBuildSummary.js'
 
 export function CartPage() {
-  const {
-    cart,
-    removeFromCart,
-    updateQuantity,
-    getTotalPrice,
-    clearCart,
-    toggleItemSelection,
-    toggleSelectAllItems,
-    getSelectedItemIds,
-  } = useCart()
+  const { cart, removeFromCart, updateQuantity, getTotalPrice, clearCart } = useCart()
   const { isAuthenticated, openLogin } = useAuth()
   const navigate = useNavigate()
   const [removingItem, setRemovingItem] = useState(null)
@@ -79,9 +70,124 @@ export function CartPage() {
     )
   }
 
-  const selectedCartItemIds = getSelectedItemIds()
-  const selectedCount = selectedCartItemIds.length
-  const allItemsSelected = cart.length > 0 && cart.every(item => selectedCartItemIds.includes(String(item.id)))
+  const CartItemCard = forwardRef(function CartItemCard({ item, index }, ref) {
+    const isOutOfStock = item.stock === 0
+    const isLowStock = item.stock > 0 && item.stock <= 5
+    const isMaxQuantity = item.quantity >= item.stock
+    const customBuildSummaryTree = item.isCustomBuild ? getCustomBuildSummaryTree(item) : []
+
+    return (
+      <motion.div
+        ref={ref}
+        layout
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, x: -100 }}
+        transition={{ duration: 0.4, delay: index * 0.1 }}
+        className={`group relative bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-5 hover:shadow-[0_10px_30px_rgba(0,0,0,0.4)] hover:border-[var(--gold-primary)]/30 transition-all duration-300 ${isOutOfStock ? 'opacity-60' : ''}`}
+      >
+        <div className="flex items-center gap-5">
+          <div className="relative flex-shrink-0">
+            <img 
+              src={item.image} 
+              alt={item.name}
+              className="w-20 h-20 object-cover rounded-lg border border-[var(--border)]"
+            />
+            {isOutOfStock && (
+              <div className="absolute inset-0 bg-black/60 rounded-lg flex items-center justify-center">
+                <span className="text-xs font-bold text-red-400">Out of Stock</span>
+              </div>
+            )}
+          </div>
+
+          <div className="flex-grow min-w-0">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <h3 className="text-lg font-bold text-white truncate">{item.name}</h3>
+                {item.category && (
+                  <p className="text-sm text-[var(--text-muted)] mt-0.5">{item.category}</p>
+                )}
+              </div>
+              <button
+                onClick={() => handleRemoveItem(item.id)}
+                disabled={removingItem === item.id}
+                className="p-2 hover:bg-red-500/10 border border-transparent hover:border-red-500/30 rounded-lg transition-all duration-200 text-red-400 hover:text-red-300 opacity-0 group-hover:opacity-100 disabled:opacity-50"
+                aria-label="Remove item"
+              >
+                <Trash2 className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="mt-3 flex flex-wrap gap-2">
+              {item.metadata && Object.entries(item.metadata).map(([k, v]) => 
+                v && typeof v === 'string' ? (
+                  <span key={k} className="text-xs px-2.5 py-1 rounded-md bg-white/5 border border-[var(--border)] text-white/80 capitalize">
+                    {v}
+                  </span>
+                ) : null
+              ).filter(Boolean).slice(0, 4)}
+            </div>
+
+            {isLowStock && !isOutOfStock && (
+              <div className="mt-2 flex items-center gap-1.5 text-amber-400">
+                <AlertTriangle className="w-3.5 h-3.5" />
+                <span className="text-xs font-medium">Only {item.stock} left</span>
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1 bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl p-1">
+              <button
+                onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                disabled={item.quantity <= 1 || isOutOfStock}
+                className="p-2.5 hover:bg-[var(--surface-dark)] rounded-lg transition-all duration-200 hover:scale-110 active:scale-95 disabled:opacity-30 disabled:hover:scale-100 disabled:cursor-not-allowed"
+              >
+                <Minus className="w-4 h-4 text-[var(--text-muted)]" />
+              </button>
+              <span className="w-10 text-center font-bold text-white">{item.quantity}</span>
+              <button
+                onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                disabled={isMaxQuantity || isOutOfStock}
+                className="p-2.5 hover:bg-[var(--surface-dark)] rounded-lg transition-all duration-200 hover:scale-110 active:scale-95 disabled:opacity-30 disabled:hover:scale-100 disabled:cursor-not-allowed"
+              >
+                <Plus className="w-4 h-4 text-[var(--text-muted)]" />
+              </button>
+            </div>
+          </div>
+
+          <div className="w-28 text-right">
+            <p className="text-lg font-bold text-[var(--gold-primary)]">₱{(item.price * item.quantity).toLocaleString('en-PH')}</p>
+            {item.quantity > 1 && (
+              <p className="text-xs text-[var(--text-muted)]">₱{item.price.toLocaleString('en-PH')} each</p>
+            )}
+          </div>
+        </div>
+
+        {item.isCustomBuild && customBuildSummaryTree.length > 0 && (
+          <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]/60 p-4">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--gold-primary)]">
+              Build Tree
+            </p>
+            <div className="mt-3 space-y-3">
+              {customBuildSummaryTree.map((branch) => (
+                <div key={branch.label} className="pl-4">
+                  <p className="text-xs font-semibold text-white">{branch.label}</p>
+                  <div className="mt-2 space-y-1.5 pl-4">
+                    {branch.children.map((child) => (
+                      <p key={`${branch.label}-${child}`} className="text-xs text-[var(--text-muted)]">
+                        {child}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </motion.div>
+    )
+  })
 
   const CartSection = ({ title, icon: Icon, items }) => (
     <div className="space-y-4">
@@ -92,18 +198,8 @@ export function CartPage() {
       </div>
       <div className="space-y-3">
         <AnimatePresence mode="popLayout">
-          {items.map((item) => (
-            <SelectableCartItemRow
-              key={item.id}
-              item={item}
-              onUpdateQuantity={updateQuantity}
-              onRemove={handleRemoveItem}
-              isSelected={selectedCartItemIds.includes(String(item.id))}
-              onToggleSelect={toggleItemSelection}
-              selectionEnabled
-              showQuantityControls
-              showRemove
-            />
+          {items.map((item, idx) => (
+            <CartItemCard key={item.id} item={item} index={idx} />
           ))}
         </AnimatePresence>
       </div>
@@ -135,19 +231,6 @@ export function CartPage() {
             </button>
           </div>
         </motion.div>
-
-        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] px-4 py-3">
-          <div className="text-sm text-[var(--text-muted)]">
-            {selectedCount} of {cart.length} item{cart.length !== 1 ? 's' : ''} selected for checkout
-          </div>
-          <button
-            type="button"
-            onClick={toggleSelectAllItems}
-            className="text-sm font-semibold text-[var(--gold-primary)] hover:text-white transition-colors"
-          >
-            {allItemsSelected ? 'Clear Selection' : 'Select All'}
-          </button>
-        </div>
 
         {hasOutOfStock && (
           <motion.div
@@ -228,7 +311,20 @@ export function CartPage() {
                 Continue Shopping
               </Link>
 
-              
+              <div className="pt-4 border-t border-[var(--border)] space-y-2">
+                <div className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
+                  <ShieldCheck className="w-4 h-4 text-green-400" />
+                  <span>Secure Checkout</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
+                  <Package className="w-4 h-4 text-green-400" />
+                  <span>Cash on Delivery Available</span>
+                </div>
+                <div className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
+                  <Truck className="w-4 h-4 text-green-400" />
+                  <span>Fast Delivery (1–3 days)</span>
+                </div>
+              </div>
             </div>
           </motion.div>
         </div>

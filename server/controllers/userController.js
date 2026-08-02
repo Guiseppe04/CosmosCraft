@@ -1,7 +1,7 @@
 const { asyncHandler, AppError } = require('../middleware/errorHandler');
 const userService = require('../services/userService');
 const rbacService = require('../services/rbacService');
-const { addAddressSchema, updateAddressSchema, updateProfileSchema, updatePhoneSchema } = require('../utils/validation');
+const { addAddressSchema, updateAddressSchema, updateProfileSchema } = require('../utils/validation');
 const { hasRole } = require('../utils/roles');
 
 /**
@@ -18,7 +18,6 @@ exports.getCurrentUser = asyncHandler(async (req, res, next) => {
     street_line1: addr.line1,
     street_line2: addr.line2,
     city: addr.city,
-    barangay: addr.barangay || '',
     province: addr.province,
     postal_code: addr.postal_code,
     country: addr.country,
@@ -84,29 +83,7 @@ exports.updateProfile = asyncHandler(async (req, res, next) => {
 });
 
 /**
- * Update User Phone
- */
-exports.updateUserPhone = asyncHandler(async (req, res, next) => {
-  const { error, value } = updatePhoneSchema.validate(req.body, { abortEarly: false });
-  if (error) {
-    const errors = error.details.map((detail) => ({
-      field: detail.path.join('.'),
-      message: detail.message,
-    }));
-    throw new AppError('Validation failed', 400, errors);
-  }
-
-  const user = await userService.updateUserPhone(req.user.id, value.phone);
-
-  res.status(200).json({
-    status: 'success',
-    message: 'Phone number updated successfully',
-    data: { user },
-  });
-});
-
-/**
- * Add Address
+ * Add Address (max 2)
  */
 exports.addAddress = asyncHandler(async (req, res, next) => {
   // Validate input
@@ -330,3 +307,24 @@ exports.requestPasswordChange = asyncHandler(async (req, res, next) => {
   });
 });
 
+/**
+ * Verify Password Reset Token
+ */
+exports.verifyPasswordResetToken = asyncHandler(async (req, res, next) => {
+  const { token, userId } = req.body;
+
+  if (!token || !userId) {
+    throw new AppError('Token and user ID are required', 400);
+  }
+
+  try {
+    await userService.verifyPasswordResetToken(userId, token);
+  } catch (error) {
+    throw new AppError('Invalid or expired token', 400);
+  }
+
+  res.status(200).json({
+    status: 'success',
+    message: 'Password updated successfully',
+  });
+});

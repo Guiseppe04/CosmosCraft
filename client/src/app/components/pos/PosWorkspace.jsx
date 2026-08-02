@@ -315,9 +315,6 @@ export function PosWorkspace({
   const [selectedSale, setSelectedSale] = useState(null)
   const [loadingSaleDetails, setLoadingSaleDetails] = useState(false)
 
-  const prevSalesRef = useRef(null)
-  const prevSummaryRef = useRef(null)
-
   const visibleInventory = useMemo(
     () => inventoryItems
       .map((item) => ({
@@ -438,32 +435,20 @@ export function PosWorkspace({
     if (gcashScreenshotPreviewUrl) URL.revokeObjectURL(gcashScreenshotPreviewUrl)
   }, [gcashScreenshotPreviewUrl])
 
-  const loadRecentSales = useCallback(async (options = {}) => {
-    const { silent = false } = options
-    if (!silent) setLoadingRecent(true)
+  const loadRecentSales = useCallback(async () => {
+    setLoadingRecent(true)
     try {
       const [salesRes, summaryRes] = await Promise.all([
         posApi.listSales({ limit: 8 }),
         posApi.getDailySummary(),
       ])
-      const nextSales = normalizeSales(salesRes)
-      const nextSummary = summaryRes?.data || null
-      const salesChanged = JSON.stringify(prevSalesRef.current || []) !== JSON.stringify(nextSales)
-      const summaryChanged = JSON.stringify(prevSummaryRef.current || null) !== JSON.stringify(nextSummary)
-      if (salesChanged) {
-        prevSalesRef.current = nextSales
-        setRecentSales(nextSales)
-      }
-      if (summaryChanged) {
-        prevSummaryRef.current = nextSummary
-        setDailySummary(nextSummary)
-      }
-      return salesChanged || summaryChanged ? salesRes : null
+      setRecentSales(normalizeSales(salesRes))
+      setDailySummary(summaryRes?.data || null)
+      return salesRes
     } catch (error) {
-      if (!silent) showToast?.(error.message, 'error')
-      throw error
+      showToast?.(error.message, 'error')
     } finally {
-      if (!silent) setLoadingRecent(false)
+      setLoadingRecent(false)
     }
   }, [showToast])
 
@@ -480,10 +465,10 @@ export function PosWorkspace({
   }, [showToast])
 
   const lastSaleTimestampRef = useRef(null)
-  const latestSalesRef = useRef(null)
+  const prevSalesRef = useRef(null)
 
   const pollRecentSales = useCallback(async () => {
-    const result = await loadRecentSales({ silent: true })
+    const result = await loadRecentSales()
     if (result?.data?.length > 0) {
       const latestSale = result.data[0]
       const latestTimestamp = latestSale.created_at
@@ -494,7 +479,7 @@ export function PosWorkspace({
       } else if (!lastSaleTimestampRef.current) {
         lastSaleTimestampRef.current = latestTimestamp
       }
-      latestSalesRef.current = result.data
+      prevSalesRef.current = result.data
     }
     return result
   }, [loadRecentSales, showToast])

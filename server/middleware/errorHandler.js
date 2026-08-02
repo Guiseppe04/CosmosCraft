@@ -28,11 +28,8 @@ const errorHandler = (err, req, res, next) => {
 
   // Handle PostgreSQL required field (NOT NULL) violations
   if (err.code === '23502') {
-    // Prefer the driver-provided column name, then fall back to parsing the detail string.
-    const field =
-      err.column ||
-      err.detail?.match(/null value in column "(.*?)"/)?.[1] ||
-      'required field';
+    const fieldMatch = err.detail?.match(/null value in column "(.*?)"/);
+    const field = fieldMatch ? fieldMatch[1] : 'required field';
     return res.status(400).json({
       status: 'error',
       message: 'A required field is missing. Please provide all required information.',
@@ -76,13 +73,11 @@ const errorHandler = (err, req, res, next) => {
 
   // Handle custom application errors
   if (err.isApplicationError) {
-    const payload = {
+    return res.status(err.statusCode || 400).json({
       status: 'error',
       message: friendlyMessage || 'Something went wrong. Please try again later.',
       errors: err.errors || [],
-    };
-    if (err.code) payload.code = err.code;
-    return res.status(err.statusCode || 400).json(payload);
+    });
   }
 
   const statusCode = err.statusCode || 500;
@@ -109,12 +104,11 @@ const notFound = (req, res) => {
  * Custom application error class
  */
 class AppError extends Error {
-  constructor(message, statusCode = 400, errors = [], code = undefined) {
+  constructor(message, statusCode = 400, errors = []) {
     super(message);
     this.statusCode = statusCode;
     this.errors = errors;
     this.isApplicationError = true;
-    if (code) this.code = code;
   }
 }
 

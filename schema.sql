@@ -31,7 +31,7 @@ CREATE TYPE order_payment_status_enum AS ENUM (
     'rejected',           -- proof invalid / denied
     'failed'              -- payment attempt failed (optional fallback)
 );
-CREATE TYPE appointment_status_enum AS ENUM ('pending', 'confirmed', 'in_progress', 'ready_for_pickup', 'completed', 'cancelled', 'no_show');
+CREATE TYPE appointment_status_enum AS ENUM ('pending', 'confirmed', 'in_progress', 'ready_for_pickup', 'completed', 'cancelled');
 CREATE TYPE project_status_enum AS ENUM ('not_started', 'in_progress', 'on_hold', 'completed', 'cancelled');
 CREATE TYPE notification_type_enum AS ENUM ('order_update', 'appointment_reminder', 'system', 'promotional', 'low_stock', 'project_update');
 
@@ -152,7 +152,6 @@ CREATE TABLE addresses (
     line1 VARCHAR(150) NOT NULL,
     line2 VARCHAR(150),
     city VARCHAR(80) NOT NULL,
-    barangay VARCHAR(80),
     province VARCHAR(80) NOT NULL,
     postal_code VARCHAR(20) NOT NULL,
     country CHAR(2) NOT NULL,
@@ -600,7 +599,6 @@ CREATE INDEX idx_services_deleted_at ON services(deleted_at) WHERE deleted_at IS
 
 CREATE TABLE appointments (
     appointment_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    reference_code VARCHAR(20) UNIQUE,
     user_id UUID,
     appointment_type VARCHAR(50) NOT NULL DEFAULT 'service_in_shop',
     order_id UUID,
@@ -617,7 +615,6 @@ CREATE TABLE appointments (
     payment_method VARCHAR(50),
     payment_proof_url TEXT,
     notes TEXT,
-    reason TEXT,
     confirmation_notes TEXT,
     deleted_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -1169,15 +1166,18 @@ CREATE INDEX idx_otp_attempts_created_at ON otp_attempts(created_at DESC);
 CREATE TABLE password_reset_tokens (
     token_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL,
-    token_hash TEXT NOT NULL UNIQUE,
+    token VARCHAR(255) NOT NULL,
+    new_password_hash VARCHAR(255) NOT NULL,
     expires_at TIMESTAMPTZ NOT NULL,
-    used_at TIMESTAMPTZ,
+    is_used BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 
-    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    UNIQUE(user_id, token)
 );
 
 CREATE INDEX idx_password_reset_tokens_user_id ON password_reset_tokens(user_id);
+CREATE INDEX idx_password_reset_tokens_token ON password_reset_tokens(token);
 CREATE INDEX idx_password_reset_tokens_expires_at ON password_reset_tokens(expires_at);
 
 
