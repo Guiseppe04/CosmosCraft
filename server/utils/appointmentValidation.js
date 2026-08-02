@@ -380,7 +380,6 @@ const appointmentValidation = {
 
   rescheduleSchema: Joi.object({
     new_scheduled_at: Joi.date()
-      .iso()
       .required()
       .min('now')
       .messages({

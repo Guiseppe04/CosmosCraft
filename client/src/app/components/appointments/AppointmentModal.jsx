@@ -380,7 +380,10 @@ export default function AppointmentModal({
 
     setActionLoading(true)
     try {
-      const newScheduledAt = `${rescheduleDate}T${rescheduleTime}:00`
+      const parsedTime = parseTimeLabelTo24(rescheduleTime)
+      const newScheduledAt = parsedTime
+        ? `${rescheduleDate}T${String(parsedTime.hour).padStart(2, '0')}:${String(parsedTime.minute).padStart(2, '0')}:00`
+        : `${rescheduleDate}T${rescheduleTime}:00`
       await onReschedule?.(appointment.appointment_id, newScheduledAt)
       setShowRescheduleModal(false)
       setDateError('')
