@@ -886,10 +886,12 @@ export function AdminPage() {
     setIsSaving(true)
     try {
       if (modal.data?.category_id) {
-        await adminApi.updateCategory(modal.data.category_id, form)
+        const payload = { ...form, description: form.description ?? '' }
+        await adminApi.updateCategory(modal.data.category_id, payload)
         showToast('Category updated!')
       } else {
-        await adminApi.createCategory(form)
+        const payload = { ...form, description: form.description ?? '' }
+        await adminApi.createCategory(payload)
         showToast('Category created!')
       }
       fetchCategories(); closeModal()

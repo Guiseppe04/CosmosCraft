@@ -531,7 +531,7 @@ exports.createCategorySchema = Joi.object({
     }),
   description: Joi.string()
     .optional()
-    .allow('')
+    .allow('', null)
     .trim()
     .messages({
       'string.max': 'Description must not exceed 1000 characters',
@@ -551,7 +551,7 @@ exports.updateCategorySchema = Joi.object({
     }),
   description: Joi.string()
     .optional()
-    .allow('')
+    .allow('', null)
     .trim()
     .messages({
       'string.max': 'Description must not exceed 1000 characters',
