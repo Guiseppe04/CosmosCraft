@@ -788,7 +788,7 @@ exports.getAllOrders = async (params = {}) => {
 
   const limit = Math.min(Math.max(Number(page_size) || 10, 1), 100)
   const offset = (Math.max(Number(page) || 1, 1) - 1) * limit
-  const allowedSortColumns = ['created_at', 'order_number', 'total_amount', 'status', 'payment_status', 'customer_name']
+  const allowedSortColumns = ['created_at', 'order_number', 'total_amount', 'status', 'payment_status', 'customer_name', 'order_type', 'customization_name']
   const orderBy = allowedSortColumns.includes(sort_by) ? sort_by : 'created_at'
   const orderDir = sort_dir === 'asc' ? 'ASC' : 'DESC'
 
@@ -868,7 +868,11 @@ exports.getAllOrders = async (params = {}) => {
           ? `o.status ${orderDir}`
           : orderBy === 'payment_status'
             ? `o.payment_status ${orderDir}`
-            : `o.created_at ${orderDir}`
+            : orderBy === 'order_type'
+              ? `o.order_type ${orderDir}`
+              : orderBy === 'customization_name'
+                ? `c.name ${orderDir}`
+                : `o.created_at ${orderDir}`
 
   const dataQuery = `
     SELECT

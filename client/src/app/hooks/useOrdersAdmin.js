@@ -9,17 +9,21 @@ export function useOrdersAdmin({ debouncedSearch, showToast }) {
   const inFlightRequestRef = useRef(null)
   const latestRequestIdRef = useRef(0)
   const lastRequestedPageRef = useRef(1)
+  const lastQueryParamsRef = useRef({})
 
   useEffect(() => {
     ordersRef.current = orders
   }, [orders])
 
   const fetchOrders = useCallback(async (queryParams = {}) => {
+    const isDefaultCall = Object.keys(queryParams).length === 0
+    const baseQuery = isDefaultCall ? lastQueryParamsRef.current : queryParams
+
     const normalizedQuery = {
       search: debouncedSearch,
       include_items: true,
       page_size: 10,
-      ...queryParams,
+      ...baseQuery,
     }
 
     if (normalizedQuery.page == null) {
@@ -51,6 +55,7 @@ export function useOrdersAdmin({ debouncedSearch, showToast }) {
         setOrders(newData)
       }
       setOrdersPagination(res.pagination || { page: 1, pageSize: 10, total: 0, totalPages: 1 })
+      lastQueryParamsRef.current = { ...normalizedQuery }
     } catch (e) {
       if (latestRequestIdRef.current === requestId) {
         showToast(e.message, 'error')

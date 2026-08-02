@@ -1236,6 +1236,8 @@ export function OrderManagement({ orders, onRefresh, user, pagination }) {
     total: { sort_by: 'total_amount' },
     status: { sort_by: 'status' },
     payment_status: { sort_by: 'payment_status' },
+    order_type: { sort_by: 'order_type' },
+    customization: { sort_by: 'customization_name' },
   }
 
   const buildQuery = useCallback((pageNum = 1) => {
@@ -1362,6 +1364,8 @@ export function OrderManagement({ orders, onRefresh, user, pagination }) {
             <option value="total">Total</option>
             <option value="status">Status</option>
             <option value="payment_status">Payment Status</option>
+            <option value="order_type">Order Type</option>
+            <option value="customization">Customization</option>
           </select>
           <button
             type="button"
