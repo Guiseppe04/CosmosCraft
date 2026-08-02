@@ -1,5 +1,7 @@
 const crypto = require('crypto');
 const { pool } = require('../config/database');
+const rbacService = require('../services/rbacService');
+const { generateTokens } = require('../utils/generateTokens');
 
 /**
  * Middleware to ensure an OAuth authorization code is processed only once.
@@ -38,6 +40,23 @@ const clearAuthCookies = (res) => {
   res.clearCookie('refreshToken', { httpOnly: true, secure: true, sameSite: 'none' });
 };
 
+const setAuthCookies = async (res, userId) => {
+  const roleSummary = await rbacService.getUserRoleSummary(userId, false);
+  const { accessToken, refreshToken } = await generateTokens(userId, roleSummary.role);
+  const cookieOptions = {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'none',
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+  };
+  res.cookie('accessToken', accessToken, cookieOptions);
+  res.cookie('refreshToken', refreshToken, cookieOptions);
+};
+
+const redirectToSuccess = (res, userId, provider) => {
+  return res.redirect(`${getFrontendUrl()}/auth/success?userId=${encodeURIComponent(userId)}&provider=${provider}`);
+};
+
 const oauthSingleUseGuard = (provider) => {
   return async (req, res, next) => {
     try {
@@ -69,9 +88,15 @@ const oauthSingleUseGuard = (provider) => {
             if (row) {
               const duplicateUserId = row.oauth_user_id ?? (row.user_id != null ? String(row.user_id) : null);
               if (row.status === 'success' && duplicateUserId) {
-                // Another request completed successfully: redirect to success
-                const redirect = `${getFrontendUrl()}/auth/success?userId=${encodeURIComponent(duplicateUserId)}&provider=${provider}`;
-                return res.redirect(redirect);
+                // Another request completed successfully. Re-issue tokens and cookies
+                // because clearAuthCookies/res may have been called on this duplicate
+                // request, which would otherwise leave the user logged out.
+                try {
+                  await setAuthCookies(res, Number(duplicateUserId));
+                } catch (tokenErr) {
+                  console.error('[oauthGuard] Failed to re-issue tokens for duplicate OAuth code:', tokenErr);
+                }
+                return redirectToSuccess(res, duplicateUserId, provider);
               }
               if (row.status === 'failed') {
                 const payload = { status: 'error', code: 'AUTH_CODE_USED', message: row.error_message || 'Authorization code already used or processing failed. Please try signing in again.' };
