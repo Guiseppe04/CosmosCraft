@@ -975,12 +975,14 @@ export default function useGuitarConfig() {
   const getCategoryPrice = (cat) => priceOverrides[`cat:${cat}`]?.price
   const pickguardOptions = useMemo(
     () =>
-      Object.entries(PICKGUARD_OPTIONS_BY_BODY[config.body] ?? PICKGUARD_OPTIONS_BY_BODY.strat).map(([value, option]) => {
-        const specific = getOptionOverride('pickguard', value, config.body)
-        const catPrice = getCategoryPrice('pickguard')
-        const finalPrice = specific !== undefined ? specific : catPrice
-        return { value, ...(finalPrice !== undefined ? { ...option, price: finalPrice } : option), preview: option.src }
-      }),
+      Object.entries(PICKGUARD_OPTIONS_BY_BODY[config.body] ?? PICKGUARD_OPTIONS_BY_BODY.strat)
+        .filter(([value, option]) => value !== 'none' && option?.src)
+        .map(([value, option]) => {
+          const specific = getOptionOverride('pickguard', value, config.body)
+          const catPrice = getCategoryPrice('pickguard')
+          const finalPrice = specific !== undefined ? specific : catPrice
+          return { value, ...(finalPrice !== undefined ? { ...option, price: finalPrice } : option), preview: option.src }
+        }),
     [config.body, priceOverrides],
   )
   const knobOptions = useMemo(
@@ -1006,8 +1008,9 @@ export default function useGuitarConfig() {
 
   useEffect(() => {
     const pickguardKeys = Object.keys(PICKGUARD_OPTIONS_BY_BODY[config.body] ?? PICKGUARD_OPTIONS_BY_BODY.strat)
+      .filter(key => key !== 'none')
     const knobKeys = Object.keys(KNOB_OPTIONS_BY_BODY[config.body] ?? KNOB_OPTIONS_BY_BODY.strat)
-    const nextPickguard = pickguardKeys.includes(config.pickguard) ? config.pickguard : pickguardKeys[0]
+    const nextPickguard = pickguardKeys.includes(config.pickguard) ? config.pickguard : (pickguardKeys[0] ?? 'pearloid')
     const nextKnobs = knobKeys.includes(config.knobs) ? config.knobs : knobKeys[0]
 
     if (nextPickguard !== config.pickguard || nextKnobs !== config.knobs) {

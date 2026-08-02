@@ -25,9 +25,27 @@ const USE_CLOUDINARY = Boolean(CLOUD_NAME) && !import.meta.env.DEV
  */
 export function resolveAssetPath(subPath) {
   if (USE_CLOUDINARY) {
+    if (subPath.startsWith('dc_assets/') || subPath.startsWith('delos_assets/')) {
+      return `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/cosmoscraft_assets/${subPath}`
+    }
+    if (subPath.startsWith('delos/')) {
+      return `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/cosmoscraft_assets/electric_assets/delos_assets/models/${subPath}`
+    }
+    if (subPath.startsWith('dc/') || subPath.startsWith('rs/') || subPath.startsWith('solo/')) {
+      return `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/cosmoscraft_assets/electric_assets/dc_assets/models/${subPath}`
+    }
     return `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/cosmoscraft_assets/${subPath}`
   }
   // Local fallback - serve from public/builder/
+  if (subPath.startsWith('dc_assets/') || subPath.startsWith('delos_assets/')) {
+    return `/builder/${subPath}`
+  }
+  if (subPath.startsWith('delos/')) {
+    return `/builder/electric_assets/delos_assets/models/${subPath}`
+  }
+  if (subPath.startsWith('dc/') || subPath.startsWith('rs/') || subPath.startsWith('solo/')) {
+    return `/builder/electric_assets/dc_assets/models/${subPath}`
+  }
   return `/builder/${subPath}`
 }
 
@@ -50,9 +68,13 @@ export function getModelAssetPath(category, model) {
 
 /**
  * Resolve a shared asset path (from models/all-models/)
+ *
+ * Shared wood/finish layer assets are canonicalized under the DC collection
+ * so every guitar body uses the same all-models texture atlas and stays
+ * visually aligned with the DC reference preview.
  */
 export function resolveSharedAsset(category, model, assetType, ...subPaths) {
-  const base = getModelAssetPath(category, model)
+  const base = getModelAssetPath(category, 'dc')
   const path = [base, 'models', 'all-models', assetType, ...subPaths]
     .filter(Boolean)
     .join('/')

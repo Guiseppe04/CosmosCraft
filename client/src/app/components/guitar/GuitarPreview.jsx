@@ -91,12 +91,15 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
   
   const hardware = guitarBuilder.HARDWARE_OPTIONS[config.hardware] ?? guitarBuilder.HARDWARE_OPTIONS.chrome
   const neckStatic = guitarBuilder.NECK_OPTIONS[config.neck] ?? guitarBuilder.NECK_OPTIONS.maple
-  const neck = { ...neckStatic, src: resolveNeckWoodAsset('electric', config.body || 'dc', config.neck) || neckStatic.src }
+  const neckWoodKey = config.neckWood || config.neck || 'maple'
+  const neck = { ...neckStatic, src: resolveNeckWoodAsset('electric', config.body || 'dc', neckWoodKey) || neckStatic.src }
   const fretboardStatic = guitarBuilder.FRETBOARD_OPTIONS[config.fretboard] ?? guitarBuilder.FRETBOARD_OPTIONS.rosewood
-  const fretboard = { ...fretboardStatic, src: resolveFingerboardWoodAsset('electric', config.body || 'dc', config.fretboard) || fretboardStatic.src }
+  const fretboardWoodKey = config.fingerboardWood || config.fretboard || 'rosewood'
+  const fretboard = { ...fretboardStatic, src: resolveFingerboardWoodAsset('electric', config.body || 'dc', fretboardWoodKey) || fretboardStatic.src }
   const headstock = guitarBuilder.HEADSTOCK_OPTIONS[config.headstock] ?? guitarBuilder.HEADSTOCK_OPTIONS.gt6
-  const headstockWoodStatic = guitarBuilder.HEADSTOCK_WOOD_OPTIONS[config.headstockWood] ?? guitarBuilder.HEADSTOCK_WOOD_OPTIONS.rosewood
-  const headstockWood = { ...headstockWoodStatic, texture: resolveHeadstockWoodAsset('electric', config.body || 'dc', config.headstockWood) || headstockWoodStatic.texture }
+  const headstockWoodKey = config.headstockWood || 'plain-maple'
+  const headstockWoodStatic = guitarBuilder.HEADSTOCK_WOOD_OPTIONS[headstockWoodKey] ?? guitarBuilder.HEADSTOCK_WOOD_OPTIONS.rosewood
+  const headstockWood = { ...headstockWoodStatic, texture: resolveHeadstockWoodAsset('electric', config.body || 'dc', headstockWoodKey) || headstockWoodStatic.texture }
   const headstockTrussCover = resolveTrussCover('electric', config.body || 'dc', config.trussRodCover || 'black') || headstock.trussCover
   const inlaySrc = config.inlayShape || config.inlayMaterial
     ? resolveInlay(

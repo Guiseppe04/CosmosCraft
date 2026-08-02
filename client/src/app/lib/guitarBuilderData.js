@@ -13,13 +13,28 @@ export const cloudImage = (root, path) => {
 
 export const asset = (path) => {
   if (USE_CLOUDINARY) {
+    if (path.startsWith('dc_assets/') || path.startsWith('delos_assets/')) {
+      return `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/cosmoscraft_assets/electric_assets/${path}`
+    }
+    if (path.startsWith('delos/')) {
+      return `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/cosmoscraft_assets/electric_assets/delos_assets/models/${path}`
+    }
+    if (path.startsWith('dc/') || path.startsWith('rs/') || path.startsWith('solo/')) {
+      return `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/cosmoscraft_assets/electric_assets/dc_assets/models/${path}`
+    }
     return `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/cosmoscraft_assets/electric_assets/${path}`
   }
   // Local fallback - serve from public/builder/
-  // If path starts with a model prefix (dc_assets/, delos_assets/), use as-is
-  // Otherwise prepend dc_assets/models/ for shared all-models assets
+  // If path starts with a model prefix that already includes the `_assets` directory, use as-is.
   if (path.startsWith('dc_assets/') || path.startsWith('delos_assets/')) {
     return `/builder/electric_assets/${path}`
+  }
+  // Model-specific paths without _assets should map to their actual local model directories.
+  if (path.startsWith('delos/')) {
+    return `/builder/electric_assets/delos_assets/models/${path}`
+  }
+  if (path.startsWith('dc/') || path.startsWith('rs/') || path.startsWith('solo/')) {
+    return `/builder/electric_assets/dc_assets/models/${path}`
   }
   // Shared assets (all-models/...) live under dc_assets/models/
   return `/builder/electric_assets/dc_assets/models/${path}`
@@ -43,7 +58,6 @@ export const DEFAULT_CONFIG = {
   headstockWood: 'plain-maple',
   inlays: 'pearl',
   bridge: 'hipshotFixed',
-  pickguard: 'none',
   knobs: 'black',
   pickups: 'hss',
   hardware: 'chrome',
@@ -59,6 +73,7 @@ export const DEFAULT_CONFIG = {
   topCoat: 'clearGloss',
   burstFinish: 'none',
   neckConstruction: '1piece',
+  pickguard: 'pearloid',
   inlayShape: 'dots',
   inlayMaterial: 'pearl',
   inlay: 'idwhite-pearl',
@@ -254,25 +269,119 @@ export const NECK_OPTIONS = {
 }
 
 export const FRETBOARD_OPTIONS = {
-  maple: {
-    label: 'Maple',
-    note: 'Clean and bright',
-    src: asset('all-models/woods-colors/fingerboard-woods/maple.png'),
-    price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
+  birdseyeMaple: {
+    label: 'Birdseye Maple',
+    note: 'Figured maple with distinctive birdseye grain',
+    src: asset('all-models/woods-colors/fingerboard-woods/birdseye-maple.png'),
+    price: 100,
+    specs: { size: '', dimensions: '', material: '', notes: '' }
   },
-  rosewood: {
-    label: 'Rosewood',
-    note: 'Classic dark board',
-    src: asset('all-models/woods-colors/fingerboard-woods/rosewood.png'),
-    price: 60, specs: { size: '', dimensions: '', material: '', notes: '' }
+  bloodwood: {
+    label: 'Bloodwood',
+    note: 'Dense hardwood with rich red color',
+    src: asset('all-models/woods-colors/fingerboard-woods/bloodwood.png'),
+    price: 120,
+    specs: { size: '', dimensions: '', material: '', notes: '' }
   },
   ebony: {
     label: 'Ebony',
     note: 'Snappy premium board',
     src: asset('all-models/woods-colors/fingerboard-woods/ebony.png'),
-    price: 80, specs: { size: '', dimensions: '', material: '', notes: '' }
+    price: 80,
+    specs: { size: '', dimensions: '', material: '', notes: '' }
   },
-}
+  efb: {
+    label: 'EFB (Less Color Variation)',
+    note: 'Engineered ebony with consistent appearance',
+    src: asset('all-models/woods-colors/fingerboard-woods/efb.png'),
+    price: 90,
+    specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+  flamedMaple: {
+    label: 'Flamed Maple',
+    note: 'Premium maple with flame figuring',
+    src: asset('all-models/woods-colors/fingerboard-woods/flamed-maple.png'),
+    price: 110,
+    specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+  maple: {
+    label: 'Maple',
+    note: 'Clean and bright',
+    src: asset('all-models/woods-colors/fingerboard-woods/maple.png'),
+    price: 0,
+    specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+  paleMoonEbony: {
+    label: 'Pale Moon Ebony',
+    note: 'Exotic ebony with dramatic contrasting grain',
+    src: asset('all-models/woods-colors/fingerboard-woods/pale-moon-ebony.png'),
+    price: 140,
+    specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+  purpleHeart: {
+    label: 'Purple Heart',
+    note: 'Hardwood with natural purple hue',
+    src: asset('all-models/woods-colors/fingerboard-woods/purple-heart.png'),
+    price: 100,
+    specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+  richliteMapleValley: {
+    label: 'Richlite Maple Valley',
+    note: 'Durable composite fingerboard',
+    src: asset('all-models/woods-colors/fingerboard-woods/richlite-maple-valley.png'),
+    price: 130,
+    specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+  roastedBirdseye: {
+    label: 'Roasted Birdseye Maple',
+    note: 'Roasted birdseye maple with enhanced stability',
+    src: asset('all-models/woods-colors/fingerboard-woods/roasted-birdseye.png'),
+    price: 140,
+    specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+  roastedFlame: {
+    label: 'Roasted Flame Maple',
+    note: 'Roasted flame maple with rich figuring',
+    src: asset('all-models/woods-colors/fingerboard-woods/roasted-flame.png'),
+    price: 140,
+    specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+  roastedMaple: {
+    label: 'Roasted Maple',
+    note: 'Heat-treated maple for stability',
+    src: asset('all-models/woods-colors/fingerboard-woods/roasted-maple.png'),
+    price: 100,
+    specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+  rosewood: {
+    label: 'Rosewood',
+    note: 'Classic dark board',
+    src: asset('all-models/woods-colors/fingerboard-woods/rosewood.png'),
+    price: 60,
+    specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+  royalEbony: {
+    label: 'Royal Ebony',
+    note: 'Premium ebony with striking grain',
+    src: asset('all-models/woods-colors/fingerboard-woods/royal-ebony.png'),
+    price: 130,
+    specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+  zebrawood: {
+    label: 'Zebrawood',
+    note: 'Distinctive striped hardwood',
+    src: asset('all-models/woods-colors/fingerboard-woods/zebrawood.png'),
+    price: 110,
+    specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+  ziricote: {
+    label: 'Ziricote',
+    note: 'Exotic hardwood with dramatic grain',
+    src: asset('all-models/woods-colors/fingerboard-woods/ziricote.png'),
+    price: 140,
+    specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+};
 
 export const NECK_MASK = asset('all-models/necks/6-string/front/24-fret-front/standard/masks/mask.png')
 export const NECK_FRETS = {
@@ -361,7 +470,6 @@ export const BRIDGE_OPTIONS = {
 
 export const PICKGUARD_OPTIONS_BY_BODY = {
   strat: {
-    none: { label: 'None', note: 'No pickguard', src: null, price: 0, specs: { size: '', dimensions: '', material: '', notes: '' } },
     white: {
       label: 'White',
       note: 'Classic white guard',
@@ -369,7 +477,7 @@ export const PICKGUARD_OPTIONS_BY_BODY = {
       price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     pearloid: {
-      label: 'Pearloid',
+      label: 'White Pearl',
       note: 'Bright pearloid finish',
       src: asset('rs/bodies/front/pickguard/white-pearloid.png'),
       price: 20, specs: { size: '', dimensions: '', material: '', notes: '' }
@@ -388,7 +496,6 @@ export const PICKGUARD_OPTIONS_BY_BODY = {
     },
   },
   delos: {
-    none: { label: 'None', note: 'No pickguard', src: null, price: 0, specs: { size: '', dimensions: '', material: '', notes: '' } },
     white: {
       label: 'White',
       note: 'Clean white guard',
@@ -396,7 +503,7 @@ export const PICKGUARD_OPTIONS_BY_BODY = {
       price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     pearloid: {
-      label: 'Pearloid',
+      label: 'White Pearl',
       note: 'White pearloid guard',
       src: asset('delos/bodies/front/pickguard/white-pearloid.png'),
       price: 20, specs: { size: '', dimensions: '', material: '', notes: '' }
@@ -412,12 +519,6 @@ export const PICKGUARD_OPTIONS_BY_BODY = {
       note: 'Low-key satin finish',
       src: asset('delos/bodies/front/pickguard/satin-black.png'),
       price: 15, specs: { size: '', dimensions: '', material: '', notes: '' }
-    },
-    tortoise: {
-      label: 'Tortoise',
-      note: 'Red tortoise shell',
-      src: asset('delos/bodies/front/pickguard/red-tortoise.png'),
-      price: 25, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
   },
   solo: { none: { label: 'None', note: 'No pickguard', src: null, price: 0, specs: { size: '', dimensions: '', material: '', notes: '' } } },
