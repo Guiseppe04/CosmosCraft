@@ -1,10 +1,6 @@
 // API Configuration - Set VITE_API_URL in .env (uncomment appropriate value for dev or prod)
 
-// In production builds, prefer the production API URL. In development, use the dev URL.
-const isProd = typeof import.meta !== 'undefined' && import.meta.env?.PROD;
-const rawApiUrl = isProd
-  ? (import.meta.env.VITE_API_URL_PROD || import.meta.env.VITE_API_URL || '')
-  : (import.meta.env.VITE_API_URL || '');
+const rawApiUrl = typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_URL ? import.meta.env.VITE_API_URL : '';
 export const API = rawApiUrl ? rawApiUrl.replace(/\/+$/, '') : window.location.origin;
 
 export async function listBuilderAssets({ guitarType, group, subgroup, model } = {}) {

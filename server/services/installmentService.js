@@ -1,4 +1,5 @@
 const { pool } = require('../config/database');
+const { AppError } = require('../middleware/errorHandler');
 
 /**
  * Installment Service
@@ -33,10 +34,17 @@ const ensureInstallmentTable = async () => {
           status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'paid', 'overdue', 'cancelled')),
           paid_at TIMESTAMPTZ,
           payment_id UUID REFERENCES payments(payment_id) ON DELETE SET NULL,
+          paid_in_advance BOOLEAN NOT NULL DEFAULT FALSE,
           created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
           updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
           UNIQUE(project_id, installment_number)
         );
+      `);
+      // Backfill the paid_in_advance column on databases that were created before
+      // the column was added to the CREATE TABLE statement.
+      await pool.query(`
+        ALTER TABLE project_installment_schedules
+        ADD COLUMN IF NOT EXISTS paid_in_advance BOOLEAN NOT NULL DEFAULT FALSE
       `);
       ensureInstallmentTableReady = true;
     } catch (err) {
@@ -129,12 +137,70 @@ exports.createInstallmentSchedule = async (
 };
 
 /**
- * Mark an installment as paid (linked to a payment).
+ * Mark one or more installments as paid (linked to a payment).
+ * @param {string[]} scheduleIds - The installment schedule IDs
+ * @param {string} paymentId - The payment ID that covers these installments
+ * @param {boolean|null} [paidInAdvance=null] - When true/false, force the flag.
+ *   When null (default), the existing `paid_in_advance` value is preserved so
+ *   installments linked to an advance payment keep their flag on confirmation.
+ * @returns {Promise<Array>} Updated installment records
+ */
+exports.markInstallmentsPaid = async (scheduleIds, paymentId, paidInAdvance = null) => {
+  await ensureInstallmentTable();
+
+  if (!Array.isArray(scheduleIds) || scheduleIds.length === 0) {
+    throw new AppError('No installments selected', 400);
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const placeholders = scheduleIds.map((_, i) => `$${i + 3}`).join(', ');
+    const res = await client.query(
+      `UPDATE project_installment_schedules
+       SET status = 'paid',
+           paid_at = CURRENT_TIMESTAMP,
+           payment_id = $1,
+           paid_in_advance = COALESCE($2, paid_in_advance),
+           updated_at = CURRENT_TIMESTAMP
+       WHERE schedule_id IN (${placeholders})
+         AND status IN ('pending', 'overdue')
+       RETURNING *`,
+      [paymentId, paidInAdvance, ...scheduleIds]
+    );
+
+    if (res.rows.length === 0) {
+      throw new AppError('No matching unpaid installments found', 404);
+    }
+
+    await client.query('COMMIT');
+
+    // Auto-resume the project if it was held due to overdue installments
+    const projectId = res.rows[0].project_id;
+    await exports.checkAndAutoResumeProject(projectId);
+
+    return res.rows;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+};
+
+/**
+ * Mark a single installment as paid (linked to a payment).
+ * Preserved for backwards compatibility with the admin route.
  * @param {string} scheduleId - The installment schedule ID
  * @param {string} paymentId - The payment ID that covers this installment
+ * @param {object} [options]
+ * @param {boolean|null} [options.paidInAdvance=null] - When provided forces the
+ *   flag; when null (default) the existing value is preserved.
  * @returns {Promise<object>} Updated installment record
  */
-exports.markInstallmentPaid = async (scheduleId, paymentId) => {
+exports.markInstallmentPaid = async (scheduleId, paymentId, options = {}) => {
+  const { paidInAdvance = null } = options;
   await ensureInstallmentTable();
 
   const res = await pool.query(
@@ -142,14 +208,15 @@ exports.markInstallmentPaid = async (scheduleId, paymentId) => {
      SET status = 'paid',
          paid_at = CURRENT_TIMESTAMP,
          payment_id = $2,
+         paid_in_advance = COALESCE($3, paid_in_advance),
          updated_at = CURRENT_TIMESTAMP
      WHERE schedule_id = $1
      RETURNING *`,
-    [scheduleId, paymentId]
+    [scheduleId, paymentId, paidInAdvance]
   );
 
   if (res.rows.length === 0) {
-    throw new Error('Installment schedule not found');
+    throw new AppError('Installment schedule not found', 404);
   }
 
   const installment = res.rows[0];
@@ -521,9 +588,23 @@ exports.getInstallmentTrackingData = async (projectId, order) => {
     ? 'installment'
     : 'full_payment';
 
+  const summary = scheduleData.summary || {
+    total_amount: totalAmount,
+    monthly_payment: monthlyPaymentAmount,
+    remaining_balance: totalAmount,
+    total_months: tenureMonths,
+    remaining_months: tenureMonths,
+    next_due_date: null,
+    paid_amount: 0,
+    paid_count: 0,
+  };
+
   // Get payment history for installments
   const paymentHistory = [];
+  let pendingAdvancePayments = [];
+
   if (scheduleData.installments.length > 0) {
+    // Verified/paid payments linked to paid installments
     const paidInstallments = scheduleData.installments.filter((inst) => inst.status === 'paid');
     if (paidInstallments.length > 0) {
       const paymentIds = paidInstallments
@@ -542,18 +623,45 @@ exports.getInstallmentTrackingData = async (projectId, order) => {
         paymentHistory.push(...payRes.rows);
       }
     }
-  }
 
-  const summary = scheduleData.summary || {
-    total_amount: totalAmount,
-    monthly_payment: monthlyPaymentAmount,
-    remaining_balance: totalAmount,
-    total_months: tenureMonths,
-    remaining_months: tenureMonths,
-    next_due_date: null,
-    paid_amount: 0,
-    paid_count: 0,
-  };
+    // Pending advance payments: installments flagged paid_in_advance that have
+    // not yet been confirmed (status still pending/overdue, linked to a payment).
+    // These are surfaced to staff so they can view the proof and confirm.
+    const pendingAdvanceInstallments = scheduleData.installments.filter(
+      (inst) => inst.paid_in_advance && inst.payment_id && inst.status !== 'paid'
+    );
+    const pendingPaymentIds = pendingAdvanceInstallments
+      .map((inst) => inst.payment_id)
+      .filter(Boolean);
+
+    if (pendingPaymentIds.length > 0) {
+      const pendingRes = await pool.query(
+        `SELECT p.*, u.first_name AS verified_first, u.last_name AS verified_last
+         FROM payments p
+         LEFT JOIN users u ON u.user_id = p.verified_by
+         WHERE p.payment_id = ANY($1)
+         ORDER BY p.created_at ASC`,
+        [pendingPaymentIds]
+      );
+      pendingAdvancePayments = pendingRes.rows.map((payment) => ({
+        payment_id: payment.payment_id,
+        amount: Number(payment.amount),
+        method: payment.method,
+        status: payment.status,
+        reference_number: payment.reference_number,
+        proof_url: payment.proof_url,
+        created_at: payment.created_at,
+        installments: pendingAdvanceInstallments
+          .filter((inst) => inst.payment_id === payment.payment_id)
+          .map((inst) => ({
+            schedule_id: inst.schedule_id,
+            installment_number: inst.installment_number,
+            amount: Number(inst.amount),
+            due_date: inst.due_date,
+          })),
+      }));
+    }
+  }
 
   return {
     payment_plan: resolvedPaymentPlan,
@@ -565,6 +673,7 @@ exports.getInstallmentTrackingData = async (projectId, order) => {
     installments: scheduleData.installments,
     summary,
     payment_history: paymentHistory,
+    pending_advance_payments: pendingAdvancePayments,
   };
 };
 
@@ -632,6 +741,221 @@ exports.applyPaymentToInstallments = async (projectId, paymentId, amount) => {
     }
 
     return updatedInstallments;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+};
+
+/**
+ * Normalize a numeric amount to 2 decimal places.
+ */
+const normalizeAmount = (value) => Number(Number(value || 0).toFixed(2));
+
+/**
+ * Create an advance payment for one or more future installments of a project.
+ *
+ * Flow:
+ *  1. Resolve the project + its order (must be an installment plan).
+ *  2. Fetch the requested schedule rows and guard against duplicate payments
+ *     (reject any installment already paid or already linked to a payment).
+ *  3. Validate that the requested amount equals the sum of the selected
+ *     installments (prevents accidental over/under payment).
+ *  4. Create a payment record via paymentService.createPayment (status
+ *     'pending', awaiting verification). This reuses the existing
+ *     remaining-balance and active-submission validation, which also prevents
+ *     overlapping advance-payment submissions.
+ *  5. Link the selected installments to the new payment and flag them as
+ *     `paid_in_advance`. The installments are NOT marked 'paid' yet — they
+ *     remain pending until an admin confirms the payment (see
+ *     markInstallmentPaid). This lets staff "see proof / see payment to
+ *     confirm the customer sent the payment" before the schedule is updated.
+ *  6. Return the freshly computed schedule summary so callers can update the UI.
+ *
+ * @param {string} projectId
+ * @param {string[]} scheduleIds - Installment schedule IDs to pay in advance
+ * @param {object} paymentData - { user_id, role, method, amount, reference_number, proof_url, currency }
+ * @returns {Promise<{payment, installments, summary, payment_plan, payment_history}>}
+ */
+exports.createAdvancePayment = async (projectId, scheduleIds, paymentData) => {
+  await ensureInstallmentTable();
+
+  const paymentService = require('./paymentService');
+
+  const { user_id, role, method, amount, reference_number, proof_url, currency = 'PHP' } = paymentData;
+
+  // 1. Resolve project + order (and the owning customer for access control)
+  const projectRes = await pool.query(
+    `SELECT p.project_id, p.order_id, o.total_amount, o.payment_plan, o.user_id AS customer_id
+     FROM projects p
+     JOIN orders o ON o.order_id = p.order_id
+     WHERE p.project_id = $1 AND p.deleted_at IS NULL`,
+    [projectId]
+  );
+  if (projectRes.rows.length === 0) {
+    throw new AppError('Project not found', 404);
+  }
+  const project = projectRes.rows[0];
+
+  // Access control: customers may only pay their own projects
+  const isPrivileged = ['staff', 'admin', 'super_admin'].includes(role);
+  if (!isPrivileged && project.customer_id && project.customer_id !== user_id) {
+    throw new AppError('You do not have access to this project', 403);
+  }
+
+  // A project is on an installment plan when it actually has installment
+  // schedule records. We mirror projectService.getInstallmentSchedule here: it
+  // reports `payment_plan: 'installment'` exactly when such records exist. The
+  // orders.payment_plan column is NOT a reliable signal — it can be NULL or
+  // stale for legacy / custom-build projects even when schedules exist.
+  const scheduleCheck = await pool.query(
+    `SELECT 1 FROM project_installment_schedules
+      WHERE project_id = $1 AND status IN ('pending', 'overdue', 'paid')
+      LIMIT 1`,
+    [projectId]
+  );
+  if (scheduleCheck.rows.length === 0) {
+    throw new AppError('Advance payments are only available for installment plans', 400);
+  }
+
+  // 2. Fetch the selected installments
+  const instRes = await pool.query(
+    `SELECT * FROM project_installment_schedules
+     WHERE project_id = $1 AND schedule_id = ANY($2)
+     ORDER BY installment_number ASC`,
+    [projectId, scheduleIds]
+  );
+
+  if (instRes.rows.length === 0) {
+    throw new AppError('No valid installments selected', 400);
+  }
+
+  if (instRes.rows.length !== scheduleIds.length) {
+    throw new AppError('One or more selected installments do not belong to this project', 400);
+  }
+
+  // Prevent duplicate payments: reject installments already paid OR already
+  // linked to another (possibly pending) payment. This guards against re-selecting
+  // an installment that is already covered by a pending advance payment.
+  const alreadyCovered = instRes.rows.filter((i) => i.status === 'paid' || i.payment_id);
+  if (alreadyCovered.length > 0) {
+    throw new AppError('One or more selected installments are already covered by a payment', 400);
+  }
+
+  // 3. Validate the amount equals the sum of selected installments
+  const totalSelected = instRes.rows.reduce((sum, i) => sum + Number(i.amount), 0);
+  const requestedAmount = normalizeAmount(amount);
+  if (Math.abs(requestedAmount - totalSelected) > 0.01) {
+    throw new AppError(
+      `Payment amount must equal the total of selected installments (${totalSelected.toFixed(2)})`,
+      400
+    );
+  }
+
+  // 4. Create the payment record (reuses remaining-balance / active-submission checks)
+  const payment = await paymentService.createPayment({
+    order_id: project.order_id,
+    user_id,
+    method,
+    amount: requestedAmount,
+    currency,
+    reference_number,
+    proof_url,
+    // Advance payments are installment-scoped (validated above via schedule_ids +
+    // amount == sum(selected)), so they may coexist with an unrelated pending/
+    // for_verification order-level payment (e.g. an unverified down payment).
+    skipActiveSubmissionCheck: true,
+  });
+
+  // 5. Link the selected installments to this payment and flag them as paid in
+  //    advance. The installments are intentionally NOT marked 'paid' here — they
+  //    stay pending until an admin confirms the payment (markInstallmentPaid).
+  //    This gives staff the chance to view the proof and confirm receipt.
+  const scheduleIdsToPay = instRes.rows.map((i) => i.schedule_id);
+  await pool.query(
+    `UPDATE project_installment_schedules
+     SET payment_id = $1,
+         paid_in_advance = TRUE,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE project_id = $2 AND schedule_id = ANY($3)`,
+    [payment.payment_id, projectId, scheduleIdsToPay]
+  );
+
+  // 6. Reload schedule so counters / balance / next-due-date stay synchronised
+  const schedule = await exports.getInstallmentSchedule(projectId);
+
+  // Build a payment-history record so the customer sees the payment immediately
+  const paymentHistory = [
+    {
+      payment_id: payment.payment_id,
+      amount: Number(payment.amount),
+      method: payment.method,
+      status: payment.status,
+      reference_number: payment.reference_number,
+      proof_url: payment.proof_url,
+      created_at: payment.created_at,
+      installments_paid: scheduleIdsToPay,
+      paid_in_advance: true,
+    },
+  ];
+
+  return {
+    payment,
+    installments: schedule.installments,
+    summary: schedule.summary,
+    payment_plan: 'installment',
+    payment_history: paymentHistory,
+  };
+};
+
+/**
+ * Cancel (or reject) a pending advance payment.
+ *
+ * Used by an admin when the uploaded proof is invalid and the installments
+ * should NOT be treated as paid. This un-links the installments from the
+ * payment (returning them to a selectable, unpaid state) and cancels the
+ * payment record so it no longer blocks future submissions
+ * (paymentService.createPayment rejects overlapping pending submissions).
+ *
+ * Only installments flagged `paid_in_advance` and still pending are affected,
+ * so standard checkout/down-payment installments are left untouched.
+ *
+ * @param {string} paymentId - The advance payment record to cancel
+ * @param {string} [cancelledByUserId] - Admin user performing the cancellation
+ * @returns {Promise<object>} { payment, installments }
+ */
+exports.cancelAdvancePayment = async (paymentId, cancelledByUserId = null) => {
+  await ensureInstallmentTable();
+  const paymentService = require('./paymentService');
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Un-link installments covered by this advance payment (status unchanged).
+    const unlinkedRes = await client.query(
+      `UPDATE project_installment_schedules
+       SET payment_id = NULL,
+           paid_in_advance = FALSE,
+           paid_at = NULL,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE payment_id = $1
+         AND paid_in_advance = TRUE
+         AND status IN ('pending', 'overdue')
+       RETURNING project_id, schedule_id`,
+      [paymentId]
+    );
+
+    const unlinked = unlinkedRes.rows.map((r) => r.schedule_id);
+
+    // Cancel the pending payment so it no longer blocks new submissions.
+    const payment = await paymentService.cancelPayment(paymentId, cancelledByUserId);
+
+    await client.query('COMMIT');
+
+    return { payment, installments_unlinked: unlinked };
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;

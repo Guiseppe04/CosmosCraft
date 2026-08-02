@@ -1,5 +1,4 @@
 import { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react'
-import { API } from '../utils/apiConfig'
 
 /**
  * WebSocket Context for Real-time Messaging
@@ -8,17 +7,7 @@ import { API } from '../utils/apiConfig'
 
 const WebSocketContext = createContext(null)
 
-// Derive the WebSocket URL from the API base URL so it works in both dev and production.
-// If a dedicated VITE_WS_URL is configured, it takes precedence.
-const deriveWsUrl = () => {
-  if (import.meta.env.VITE_WS_URL) return import.meta.env.VITE_WS_URL
-  if (!API) return 'ws://localhost:5000/ws'
-  const url = new URL(API)
-  const protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
-  return `${protocol}//${url.host}/ws`
-}
-
-const WS_URL = deriveWsUrl()
+const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:5000/ws'
 
 /**
  * WebSocket Provider Component

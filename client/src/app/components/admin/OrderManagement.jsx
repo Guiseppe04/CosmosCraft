@@ -1076,25 +1076,13 @@ function PaymentVerificationPanel({ order, onVerify, user }) {
 function OrderStatusPanel({ order, onUpdate }) {
   const [selectedStatus, setSelectedStatus] = useState(order.status || 'pending')
   const [trackingInfo, setTrackingInfo] = useState('')
-  const [trackingError, setTrackingError] = useState('')
   const [isUpdating, setIsUpdating] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
   const currentStatus = order.status || 'pending'
   const allowedStatuses = ORDER_STATUS_TRANSITIONS[currentStatus] || []
-  const requiresTracking = selectedStatus === 'shipped' || selectedStatus === 'out_for_delivery'
-  const canSubmit = allowedStatuses.includes(selectedStatus) && (!requiresTracking || trackingInfo.trim())
-
-  useEffect(() => {
-    setTrackingInfo('')
-    setTrackingError('')
-  }, [selectedStatus])
+  const canSubmit = allowedStatuses.includes(selectedStatus)
 
   const handleUpdate = async () => {
-    if (requiresTracking && !trackingInfo.trim()) {
-      setTrackingError(`${selectedStatus === 'shipped' ? 'Tracking number' : 'Rider details'} is required`)
-      return
-    }
-    setTrackingError('')
     setIsUpdating(true)
     try {
       await onUpdate(order.order_id, selectedStatus, trackingInfo)
@@ -1103,6 +1091,8 @@ function OrderStatusPanel({ order, onUpdate }) {
       setShowConfirm(false)
     }
   }
+
+  const requiresTracking = selectedStatus === 'shipped' || selectedStatus === 'out_for_delivery'
 
   return (
     <div className="space-y-4">
@@ -1146,18 +1136,14 @@ function OrderStatusPanel({ order, onUpdate }) {
           <div className="mb-4">
             <p className="text-[var(--text-muted)] text-xs uppercase tracking-wider mb-2">
               {selectedStatus === 'shipped' ? 'Tracking Number' : 'Rider Details'}
-              <span className="text-red-400 ml-1">*</span>
             </p>
             <input
               type="text"
               value={trackingInfo}
-              onChange={(e) => { setTrackingInfo(e.target.value); setTrackingError('') }}
+              onChange={(e) => setTrackingInfo(e.target.value)}
               placeholder={selectedStatus === 'shipped' ? 'Enter tracking number' : 'Enter rider name & contact'}
-              className={`w-full px-4 py-3 bg-[var(--surface-dark)] border rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] ${trackingError ? 'border-red-500' : 'border-[var(--border)]'}`}
+              className="w-full px-4 py-3 bg-[var(--surface-dark)] border border-[var(--border)] rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
             />
-            {trackingError && (
-              <p className="text-red-400 text-xs mt-1">{trackingError}</p>
-            )}
           </div>
         )}
 
@@ -1173,9 +1159,9 @@ function OrderStatusPanel({ order, onUpdate }) {
               </button>
               <button
                 onClick={handleUpdate}
-                disabled={isUpdating || !canSubmit || (requiresTracking && !trackingInfo.trim())}
+                disabled={isUpdating || !canSubmit}
                 className={`flex-1 px-4 py-2 bg-[var(--gold-primary)] rounded-lg text-black text-sm font-medium hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all flex items-center justify-center gap-2 ${
-                  (isUpdating || !canSubmit || (requiresTracking && !trackingInfo.trim())) ? 'opacity-50 cursor-not-allowed' : ''
+                  (isUpdating || !canSubmit) ? 'opacity-50 cursor-not-allowed' : ''
                 }`}
               >
                 {isUpdating ? (
@@ -1285,7 +1271,7 @@ export function OrderManagement({ orders, onRefresh, user, pagination }) {
     try {
       await adminApi.updatePaymentStatus(orderId, newStatus, { reference_number: referenceNumber, notes, admin_name: user?.firstName ? `${user.firstName}${user.lastName ? ' ' + user.lastName : ''}` : user?.email, admin_email: user?.email })
       onRefresh(buildQuery(page))
-      setSelectedOrder(prev => prev ? { ...prev, payment_status: newStatus } : null)
+      setSelectedOrder(null)
     } catch (error) {
       console.error('Failed to update payment status:', error)
     } finally {
@@ -1314,12 +1300,11 @@ export function OrderManagement({ orders, onRefresh, user, pagination }) {
       }
       await adminApi.updateOrder(orderId, updateData)
       onRefresh(buildQuery(page))
-      setSelectedOrder(prev => prev ? { ...prev, status: newStatus, ...(newStatus === 'shipped' ? { tracking_number: trackingInfo } : {}), ...(newStatus === 'out_for_delivery' ? { rider_name: trackingInfo } : {}) } : null)
+      setSelectedOrder(null)
     } catch (error) {
       console.error('Failed to update order status:', error)
     } finally {
       setIsUpdatingOrder(false)
-      setShowConfirm(false)
     }
   }
 
@@ -1335,7 +1320,7 @@ export function OrderManagement({ orders, onRefresh, user, pagination }) {
         admin_email: user?.email
       })
       onRefresh(buildQuery(page))
-      setSelectedOrder(prev => prev ? { ...prev, payment_status: newStatus } : null)
+      setSelectedOrder(null)
     } catch (error) {
       console.error('Failed to verify payment:', error)
     } finally {

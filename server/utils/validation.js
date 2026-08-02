@@ -68,16 +68,6 @@ const addressFields = {
       'string.max': 'City must not exceed 50 characters',
       'any.required': 'City is required',
     }),
-  barangay: Joi.string()
-    .min(2)
-    .max(80)
-    .optional()
-    .allow('')
-    .trim()
-    .messages({
-      'string.min': 'Barangay must be at least 2 characters',
-      'string.max': 'Barangay must not exceed 80 characters',
-    }),
   stateProvince: Joi.string()
     .min(2)
     .max(50)
@@ -123,42 +113,6 @@ exports.oauthSignupSchema = Joi.object({
   middleName: nameFields.middleName,
   lastName: nameFields.lastName,
 }).unknown(true);
-
-// Reusable password rule — single source of truth shared by email signup
-// and password reset so the rules never drift apart.
-const passwordField = Joi.string()
-  .min(8)
-  .max(64)
-  .pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*[^A-Za-z0-9]).{8,64}$/)
-  .required()
-  .messages({
-    'string.min': 'Password must be at least 8 characters',
-    'string.max': 'Password must not exceed 64 characters',
-    'string.pattern.base': 'Password must include uppercase, lowercase, and special character',
-    'any.required': 'Password is required',
-  });
-
-// Forgot Password
-exports.forgotPasswordSchema = Joi.object({
-  email: Joi.string()
-    .email()
-    .required()
-    .lowercase()
-    .messages({
-      'string.email': 'Please provide a valid email address',
-      'any.required': 'Email is required',
-    }),
-});
-
-// Reset Password (POST /auth/reset-password)
-exports.resetPasswordSchema = Joi.object({
-  token: Joi.string()
-    .required()
-    .messages({
-      'any.required': 'Reset token is required',
-    }),
-  newPassword: passwordField,
-});
 
 // Email/Password Signup
 exports.emailSignupSchema = Joi.object({
@@ -229,16 +183,6 @@ exports.emailSignupSchema = Joi.object({
         'string.pattern.base': 'City can only contain letters, spaces, hyphens, and apostrophes',
         'any.required': 'City is required',
       }),
-    barangay: Joi.string()
-      .min(2)
-      .max(80)
-      .required()
-      .trim()
-      .messages({
-        'string.min': 'Barangay must be at least 2 characters',
-        'string.max': 'Barangay must not exceed 80 characters',
-        'any.required': 'Barangay is required',
-      }),
     stateProvince: Joi.string()
       .min(2)
       .max(50)
@@ -306,11 +250,6 @@ exports.addAddressSchema = Joi.object({
   streetLine1: addressFields.streetLine1,
   streetLine2: addressFields.streetLine2,
   city: addressFields.city,
-  barangay: addressFields.barangay.when('country', {
-    is: 'PH',
-    then: addressFields.barangay.required().messages({ 'any.required': 'Barangay is required' }),
-    otherwise: addressFields.barangay.optional().allow(''),
-  }),
   stateProvince: addressFields.stateProvince,
   postalZipCode: addressFields.postalZipCode,
   country: addressFields.country,
@@ -329,7 +268,6 @@ exports.updateAddressSchema = Joi.object({
   streetLine1: addressFields.streetLine1.optional(),
   streetLine2: addressFields.streetLine2,
   city: addressFields.city.optional(),
-  barangay: addressFields.barangay.optional(),
   stateProvince: addressFields.stateProvince.optional(),
   postalZipCode: addressFields.postalZipCode.optional(),
   country: addressFields.country.optional(),
@@ -354,17 +292,6 @@ exports.updateProfileSchema = Joi.object({
     .allow(null, '')
     .messages({
       'string.uri': 'Avatar URL must be a valid URI',
-    }),
-});
-
-// Update phone (PH mobile format: 09XXXXXXXXX or +639XXXXXXXXX)
-exports.updatePhoneSchema = Joi.object({
-  phone: Joi.string()
-    .pattern(/^(09\d{9}|\+639\d{9})$/)
-    .required()
-    .messages({
-      'string.pattern.base': 'Phone number must be 11 digits starting with 09 or in +63 format (e.g. +639123456789)',
-      'any.required': 'Phone number is required',
     }),
 });
 
@@ -552,7 +479,7 @@ exports.createCategorySchema = Joi.object({
     }),
   description: Joi.string()
     .optional()
-    .allow('', null)
+    .allow('')
     .trim()
     .messages({
       'string.max': 'Description must not exceed 1000 characters',
@@ -572,7 +499,7 @@ exports.updateCategorySchema = Joi.object({
     }),
   description: Joi.string()
     .optional()
-    .allow('', null)
+    .allow('')
     .trim()
     .messages({
       'string.max': 'Description must not exceed 1000 characters',
@@ -691,7 +618,6 @@ exports.createOrderSchema = Joi.object({
       'any.only': 'Payment method must be gcash or bank_transfer',
       'any.required': 'Payment method is required',
     }),
-  shippingAddressId: Joi.string().uuid().optional(),
   billingAddress: Joi.object({
     street: Joi.string().min(5).max(100).required().trim().messages({
       'string.min': 'Address street must be at least 5 characters',
@@ -702,18 +628,6 @@ exports.createOrderSchema = Joi.object({
       'string.min': 'City must be at least 2 characters',
       'string.max': 'City must not exceed 50 characters',
       'any.required': 'City is required',
-    }),
-    barangay: Joi.string().min(2).max(80).optional().trim().when('country', {
-      is: 'PH',
-      then: Joi.string().min(2).max(80).required().trim().messages({
-        'any.required': 'Barangay is required',
-        'string.min': 'Barangay must be at least 2 characters',
-        'string.max': 'Barangay must not exceed 80 characters',
-      }),
-      otherwise: Joi.string().min(2).max(80).optional().allow('').trim().messages({
-        'string.min': 'Barangay must be at least 2 characters',
-        'string.max': 'Barangay must not exceed 80 characters',
-      }),
     }),
     stateProvince: Joi.string().min(2).max(50).required().trim().messages({
       'string.min': 'Province must be at least 2 characters',
@@ -1129,3 +1043,27 @@ const listProjectsSchema = Joi.object({
 }).unknown(true);
 
 exports.listProjectsSchema = listProjectsSchema;
+
+const createAdvancePaymentSchema = Joi.object({
+  schedule_ids: Joi.array().items(Joi.string().uuid()).min(1).required()
+    .messages({
+      'array.min': 'At least one installment must be selected',
+      'any.required': 'Installment selection is required',
+      'array.includes': 'Each selected installment must be a valid UUID',
+    }),
+  payment_method: Joi.string().valid('gcash', 'bank_transfer', 'cash').required()
+    .messages({
+      'any.only': 'Payment method must be one of: gcash, bank_transfer, cash',
+      'any.required': 'Payment method is required',
+    }),
+  amount: Joi.number().positive().precision(2).required()
+    .messages({
+      'number.positive': 'Amount must be a positive number',
+      'any.required': 'Amount is required',
+    }),
+  currency: Joi.string().length(3).uppercase().default('PHP'),
+  reference_number: Joi.string().max(100).optional().allow(null, ''),
+  proof_url: Joi.string().optional().allow(null, ''),
+});
+
+exports.createAdvancePaymentSchema = createAdvancePaymentSchema;

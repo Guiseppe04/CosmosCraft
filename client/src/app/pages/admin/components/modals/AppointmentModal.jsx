@@ -21,12 +21,12 @@ export function AppointmentModal({ modal, form, setForm, formErrors, closeModal,
           <select value={form.status || 'pending'} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))} className={inputCls}>
             <option value="pending">Pending</option>
             <option value="confirmed">Confirmed</option>
+            <option value="in_progress">In Progress</option>
+            <option value="ready_for_pickup">Ready for Pickup</option>
             <option value="completed">Completed</option>
             <option value="cancelled">Cancelled</option>
-            <option value="no_show">No Show</option>
           </select>
         </div>
-        <FormField label="Reason" value={form.reason || ''} onChange={(v) => setForm((f) => ({ ...f, reason: v }))} placeholder="Reason for status change / cancellation..." />
         <FormField label="Notes" value={form.notes || ''} onChange={(v) => setForm((f) => ({ ...f, notes: v }))} textarea placeholder="Any special requirements or notes..." />
       </div>
       <ModalFooter onCancel={closeModal} onSave={saveAppointment} isSaving={isSaving} />

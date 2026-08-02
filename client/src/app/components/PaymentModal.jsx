@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
-import { API } from '../utils/apiConfig'
 
-const API_URL = API
+const API_URL = import.meta.env.VITE_API_URL
 const FALLBACK_QR = '/gcashqrcode.png'
 const FALLBACK_BANK = {
   bankName: 'BDO Unibank',

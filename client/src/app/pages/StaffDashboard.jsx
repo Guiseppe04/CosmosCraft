@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import {
   AlertCircle,
@@ -252,25 +252,12 @@ export function StaffDashboard() {
   const [services, setServices] = useState([])
   const [inventoryStats, setInventoryStats] = useState(null)
   const [inventoryAlerts, setInventoryAlerts] = useState([])
-const [unavailableDates, setUnavailableDates] = useState([])
-   const [availableDates, setAvailableDates] = useState([])
+  const [unavailableDates, setUnavailableDates] = useState([])
 
-   const [loadingInventory, setLoadingInventory] = useState(false)
+  const [loadingInventory, setLoadingInventory] = useState(false)
   const [loadingAppointments, setLoadingAppointments] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
-
-  const productsRef = useRef(products)
-  const partsRef = useRef(parts)
-  const inventoryRef = useRef(inventory)
-  const inventoryStatsRef = useRef(inventoryStats)
-  const inventoryAlertsRef = useRef(inventoryAlerts)
-
-  useEffect(() => { productsRef.current = products }, [products])
-  useEffect(() => { partsRef.current = parts }, [parts])
-  useEffect(() => { inventoryRef.current = inventory }, [inventory])
-  useEffect(() => { inventoryStatsRef.current = inventoryStats }, [inventoryStats])
-  useEffect(() => { inventoryAlertsRef.current = inventoryAlerts }, [inventoryAlerts])
 
   const [inventorySubTab, setInventorySubTab] = useState('products')
   const [productsInventoryFilter, setProductsInventoryFilter] = useState({ search: '', status: 'all', sort: 'name', page: 1 })
@@ -305,9 +292,8 @@ const [unavailableDates, setUnavailableDates] = useState([])
     showToast.timeoutId = window.setTimeout(() => setToast(null), 2600)
   }, [])
 
-  const loadInventoryBundle = useCallback(async (options = {}) => {
-    const { silent = false } = options
-    if (!silent) setLoadingInventory(true)
+  const loadInventoryBundle = useCallback(async () => {
+    setLoadingInventory(true)
     try {
       const [productsRes, partsRes, inventoryRes, summaryRes, alertsRes] = await Promise.all([
         staffApi.getProducts({ search: debouncedSearch, page: 1, pageSize: 200 }),
@@ -316,37 +302,15 @@ const [unavailableDates, setUnavailableDates] = useState([])
         staffApi.getInventorySummary(),
         staffApi.getLowStockAlerts({ limit: 8 }),
       ])
-      const nextProducts = normalizeArray(productsRes, 'products')
-      const nextParts = normalizeArray(partsRes, 'parts')
-      const nextInventory = normalizeArray(inventoryRes, 'products')
-      const nextStats = summaryRes.data || null
-      const nextAlerts = normalizeArray(alertsRes, 'alerts')
-
-      if (JSON.stringify(productsRef.current) !== JSON.stringify(nextProducts)) {
-        productsRef.current = nextProducts
-        setProducts(nextProducts)
-      }
-      if (JSON.stringify(partsRef.current) !== JSON.stringify(nextParts)) {
-        partsRef.current = nextParts
-        setParts(nextParts)
-      }
-      if (JSON.stringify(inventoryRef.current) !== JSON.stringify(nextInventory)) {
-        inventoryRef.current = nextInventory
-        setInventory(nextInventory)
-      }
-      if (JSON.stringify(inventoryStatsRef.current) !== JSON.stringify(nextStats)) {
-        inventoryStatsRef.current = nextStats
-        setInventoryStats(nextStats)
-      }
-      if (JSON.stringify(inventoryAlertsRef.current) !== JSON.stringify(nextAlerts)) {
-        inventoryAlertsRef.current = nextAlerts
-        setInventoryAlerts(nextAlerts)
-      }
+      setProducts(normalizeArray(productsRes, 'products'))
+      setParts(normalizeArray(partsRes, 'parts'))
+      setInventory(normalizeArray(inventoryRes, 'products'))
+      setInventoryStats(summaryRes.data || null)
+      setInventoryAlerts(normalizeArray(alertsRes, 'alerts'))
     } catch (error) {
-      if (!silent) showToast(error.message, 'error')
-      throw error
+      showToast(error.message, 'error')
     } finally {
-      if (!silent) setLoadingInventory(false)
+      setLoadingInventory(false)
     }
   }, [debouncedSearch, showToast])
 
@@ -377,28 +341,16 @@ const [unavailableDates, setUnavailableDates] = useState([])
     }
   }, [showToast])
 
-const fetchUnavailableDates = useCallback(async () => {
-     try {
-       const res = await staffApi.getUnavailableDates()
-       setUnavailableDates(res.data?.unavailable_dates || [])
-     } catch (error) {
-       showToast(error.message, 'error')
-     }
-   }, [showToast])
+  const fetchUnavailableDates = useCallback(async () => {
+    try {
+      const res = await staffApi.getUnavailableDates()
+      setUnavailableDates(res.data?.unavailable_dates || [])
+    } catch (error) {
+      showToast(error.message, 'error')
+    }
+  }, [showToast])
 
-   const fetchAvailableDates = useCallback(async () => {
-     try {
-       const today = new Date()
-       const dateFrom = today.toISOString().slice(0, 10)
-       const dateTo = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
-       const res = await staffApi.getAvailableDates(dateFrom, dateTo)
-       setAvailableDates(res.data?.available_dates || [])
-     } catch (error) {
-       console.error('Failed to fetch available dates:', error)
-     }
-   }, [])
-
-   const fetchAppointments = useCallback(async () => {
+  const fetchAppointments = useCallback(async () => {
     setLoadingAppointments(true)
     try {
       const res = await staffApi.getAppointments({
@@ -418,20 +370,25 @@ const fetchUnavailableDates = useCallback(async () => {
     }
   }, [appointmentPagination.limit, appointmentPagination.page, debouncedSearch, showToast])
 
-  useEffect(() => {
-    if (activeTab === 'overview') { fetchProjects(); fetchOrders(); fetchAppointments(); loadInventoryBundle() }
-    if (activeTab === 'projects') fetchProjects()
-    if (activeTab === 'orders') fetchOrders()
-    if (activeTab === 'inventory' || activeTab === 'pos') loadInventoryBundle()
-    if (activeTab === 'appointments') { fetchAppointments(); fetchServices(); fetchUnavailableDates() }
-    if (activeTab === 'schedule') { fetchAppointments(); fetchProjects() }
-  }, [activeTab, fetchAppointments, fetchOrders, fetchProjects, fetchServices, fetchUnavailableDates, loadInventoryBundle])
+   useEffect(() => {
+     if (activeTab === 'overview') { fetchProjects(); fetchOrders(); fetchAppointments(); loadInventoryBundle() }
+     if (activeTab === 'projects') fetchProjects()
+     if (activeTab === 'orders') fetchOrders()
+     if (activeTab === 'inventory' || activeTab === 'pos') loadInventoryBundle()
+     if (activeTab === 'appointments') { fetchAppointments(); fetchServices(); fetchUnavailableDates() }
+   }, [activeTab, fetchAppointments, fetchOrders, fetchProjects, fetchServices, fetchUnavailableDates, loadInventoryBundle])
 
-  useSmartPolling(useCallback(async () => {
-    if (activeTab === 'overview') { await Promise.all([fetchAppointments(), loadInventoryBundle()]); return }
-    if (activeTab === 'inventory' || activeTab === 'pos') { await loadInventoryBundle(); return }
-    if (activeTab === 'appointments' || activeTab === 'schedule') { await Promise.all([fetchAppointments(), fetchUnavailableDates()]) }
-  }, [activeTab, fetchAppointments, fetchUnavailableDates, loadInventoryBundle]), { interval: 10000, maxInterval: 60000, backoffFactor: 1.5, enabled: true })
+   useEffect(() => {
+     if (activeTab === 'inventory' || activeTab === 'pos') {
+       loadInventoryBundle()
+     }
+   }, [debouncedSearch, activeTab, loadInventoryBundle])
+
+   useSmartPolling(useCallback(async () => {
+     if (activeTab === 'overview') { await Promise.all([fetchAppointments(), loadInventoryBundle()]); return }
+     if (activeTab === 'inventory' || activeTab === 'pos') { await loadInventoryBundle(); return }
+     if (activeTab === 'appointments') { await Promise.all([fetchAppointments(), fetchUnavailableDates()]) }
+   }, [activeTab, fetchAppointments, fetchUnavailableDates, loadInventoryBundle]), { interval: 10000, maxInterval: 60000, backoffFactor: 1.5, enabled: true })
 
   const visibleInventory = useMemo(() => {
     const lookup = Object.fromEntries(products.map((item) => [item.product_id, item]))
@@ -562,19 +519,18 @@ const fetchUnavailableDates = useCallback(async () => {
   const pendingAppointments = appointments.filter((item) => ['pending', 'approved', 'confirmed', 'ready_for_pickup'].includes(String(item.status || '').toLowerCase()))
   const todayAppointments = appointments.filter((item) => item.scheduled_at && new Date(item.scheduled_at).toDateString() === new Date().toDateString())
 
-  const refreshCurrentTab = useCallback(async () => {
-    setRefreshing(true)
-    try {
-      if (activeTab === 'overview') await Promise.all([fetchProjects(), fetchOrders(), fetchAppointments(), loadInventoryBundle()])
-      if (activeTab === 'projects') await fetchProjects()
-      if (activeTab === 'orders') await fetchOrders()
-      if (activeTab === 'inventory' || activeTab === 'pos') await loadInventoryBundle()
-      if (activeTab === 'appointments') await Promise.all([fetchAppointments(), fetchServices(), fetchUnavailableDates()])
-      if (activeTab === 'schedule') await Promise.all([fetchAppointments(), fetchProjects()])
-    } finally {
-      setRefreshing(false)
-    }
-  }, [activeTab, fetchAppointments, fetchOrders, fetchProjects, fetchServices, fetchUnavailableDates, loadInventoryBundle])
+   const refreshCurrentTab = useCallback(async () => {
+     setRefreshing(true)
+     try {
+       if (activeTab === 'overview') await Promise.all([fetchProjects(), fetchOrders(), fetchAppointments(), loadInventoryBundle()])
+       if (activeTab === 'projects') await fetchProjects()
+       if (activeTab === 'orders') await fetchOrders()
+       if (activeTab === 'inventory' || activeTab === 'pos') await loadInventoryBundle()
+       if (activeTab === 'appointments') await Promise.all([fetchAppointments(), fetchServices(), fetchUnavailableDates()])
+     } finally {
+       setRefreshing(false)
+     }
+   }, [activeTab, fetchAppointments, fetchOrders, fetchProjects, fetchServices, fetchUnavailableDates, loadInventoryBundle])
 
   const saveStockAdjust = useCallback(async () => {
     setIsSaving(true)
@@ -1006,7 +962,7 @@ const fetchUnavailableDates = useCallback(async () => {
                 <ProjectTaskTracker
                   projectId={modal.data.project_id}
                   projectName={modal.data.name || modal.data.title}
-                  isAdmin={false}
+                  isAdmin
                   projectData={modal.data}
                 />
               </motion.div>

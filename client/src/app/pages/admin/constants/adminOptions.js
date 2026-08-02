@@ -46,6 +46,7 @@ export const APPOINTMENT_RULES = {
 export const SERVICE_RULES = {
   name: [required('Service Name')],
   price: [required('Base Price'), positive('Base Price')],
+  duration: [required('Duration'), positive('Duration')],
 }
 
 export const VALID_ROLES = ['customer', 'staff', 'admin', 'super_admin']

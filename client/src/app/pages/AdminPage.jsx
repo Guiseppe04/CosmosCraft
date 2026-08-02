@@ -224,7 +224,7 @@ export function AdminPage() {
   const { users, fetchUsers } = useUsersAdmin({ debouncedSearch, showToast })
   const { orders, ordersPagination, fetchOrders, setOrdersPagination } = useOrdersAdmin({ debouncedSearch, showToast })
   const { projects, projectsPagination, fetchProjects, setProjects, setProjectsPagination } = useProjectsAdmin({ debouncedSearch, showToast })
-  const { appointments, appointmentPagination, setAppointmentPagination, appointmentLoading, unavailableDates, availableDates, fetchAppointments, fetchUnavailableDates, fetchAvailableDates } = useAppointmentsAdmin({ debouncedSearch, showToast })
+  const { appointments, appointmentPagination, setAppointmentPagination, appointmentLoading, unavailableDates, fetchAppointments, fetchUnavailableDates } = useAppointmentsAdmin({ debouncedSearch, showToast })
   const { services, servicesLoading, servicesPagination, serviceQuery, setServiceQuery, setServices, setServicesPagination, fetchServices } = useServicesAdmin({ debouncedSearch, showToast })
   const { inventory, inventoryStats, salesReport, setInventory, setInventoryStats, setSalesReport, fetchInventory, fetchSalesReport } = useInventoryAdmin({ products, showToast })
 
@@ -323,8 +323,7 @@ export function AdminPage() {
   const visibleCategories = useMemo(() => flattenCategoryTreeForAdmin(categoryTree), [categoryTree])
   const visibleOrders = orders || []
   const visibleProjects = projects || []
-  const visibleAppointments = useMemo(() => appointments || [], [appointments])
-  const normalizedUnavailableDates = useMemo(() => unavailableDates.map((entry) => entry?.date || entry).filter(Boolean), [unavailableDates])
+  const visibleAppointments = appointments || []
   const visibleInventory = useMemo(() => {
     const source = (inventory && inventory.length > 0) ? inventory : (products || [])
     return source.map((item) => ({
@@ -685,7 +684,7 @@ export function AdminPage() {
       'users': fetchUsers,
       'orders': fetchOrders,
       'projects': fetchProjects,
-      'appointments': () => { fetchAppointments(); fetchServices(); fetchUnavailableDates(); fetchAvailableDates(); },
+      'appointments': () => { fetchAppointments(); fetchServices(); fetchUnavailableDates(); },
       'inventory': () => { fetchInventory(); fetchParts(); fetchProducts(); },
       'pos': () => { fetchInventory(); fetchProducts(); },
       'sales-report': fetchSalesReport,
@@ -856,18 +855,7 @@ export function AdminPage() {
         showToast('Product created!')
       }
       fetchProducts(); closeModal()
-    } catch (e) {
-      // Map field-level errors from the API to the form so they show inline.
-      if (Array.isArray(e.fieldErrors) && e.fieldErrors.length > 0) {
-        const mapped = {}
-        for (const fe of e.fieldErrors) {
-          if (fe?.field) mapped[fe.field] = fe.message || 'This field is required'
-        }
-        setFormErrors(mapped)
-      } else {
-        showToast(e.message, 'error')
-      }
-    }
+    } catch (e) { showToast(e.message, 'error') }
     finally { setIsSaving(false) }
   }
 
@@ -889,12 +877,10 @@ export function AdminPage() {
     setIsSaving(true)
     try {
       if (modal.data?.category_id) {
-        const payload = { ...form, description: form.description ?? '' }
-        await adminApi.updateCategory(modal.data.category_id, payload)
+        await adminApi.updateCategory(modal.data.category_id, form)
         showToast('Category updated!')
       } else {
-        const payload = { ...form, description: form.description ?? '' }
-        await adminApi.createCategory(payload)
+        await adminApi.createCategory(form)
         showToast('Category created!')
       }
       fetchCategories(); closeModal()
@@ -1336,7 +1322,7 @@ export function AdminPage() {
          name: form.name,
          description: form.description || '',
          price: Number(form.price),
-         duration_minutes: form.duration !== '' && form.duration != null ? Math.round(Number(form.duration) * 60) : null,
+         duration_minutes: Math.round(Number(form.duration) * 60),
        }
 
        // is_active only sent on update (create defaults to true in DB)
@@ -1476,7 +1462,6 @@ export function AdminPage() {
       Scheduled: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
       Cancelled: 'bg-red-500/20 text-red-400 border-red-500/30',
       cancelled: 'bg-red-500/20 text-red-400 border-red-500/30',
-      no_show: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
       'Low Stock': 'bg-orange-500/20 text-orange-400 border-orange-500/30',
       'Out of Stock': 'bg-red-500/20 text-red-400 border-red-500/30',
       processing: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
@@ -2274,22 +2259,21 @@ export function AdminPage() {
 
           {/* ── APPOINTMENTS ───────────────────────────────────────────────── */}
           {activeTab === 'appointments' && (
-<AppointmentsTab
-               visibleAppointments={visibleAppointments}
-               appointmentLoading={appointmentLoading}
-               appointmentPagination={appointmentPagination}
-               selectedCalendarDate={selectedCalendarDate}
-                unavailableDates={normalizedUnavailableDates}
-               availableDates={availableDates}
-               fetchAppointments={fetchAppointments}
-               setSelectedAppointment={setSelectedAppointment}
-               setAppointmentModalOpen={setAppointmentModalOpen}
-               setAppointmentFormData={setAppointmentFormData}
-               setAppointmentFormOpen={setAppointmentFormOpen}
-               setUnavailableDatesOpen={setUnavailableDatesOpen}
-               setAppointmentPagination={setAppointmentPagination}
-               isSuperAdmin={isSuperAdmin}
-             />
+            <AppointmentsTab
+              visibleAppointments={visibleAppointments}
+              appointmentLoading={appointmentLoading}
+              appointmentPagination={appointmentPagination}
+              selectedCalendarDate={selectedCalendarDate}
+              unavailableDates={unavailableDates.map((entry) => entry?.date || entry).filter(Boolean)}
+              fetchAppointments={fetchAppointments}
+              setSelectedAppointment={setSelectedAppointment}
+              setAppointmentModalOpen={setAppointmentModalOpen}
+              setAppointmentFormData={setAppointmentFormData}
+              setAppointmentFormOpen={setAppointmentFormOpen}
+              setUnavailableDatesOpen={setUnavailableDatesOpen}
+              setAppointmentPagination={setAppointmentPagination}
+              isSuperAdmin={isSuperAdmin}
+            />
           )}
 
           {/* ── INVENTORY ──────────────────────────────────────────────────── */}

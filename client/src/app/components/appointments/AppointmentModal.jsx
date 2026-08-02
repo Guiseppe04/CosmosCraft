@@ -1,6 +1,5 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
-import { API } from '../../utils/apiConfig'
 import {
   X, Calendar, Clock, User, Mail, Phone, FileText, CreditCard,
   CheckCircle, XCircle, AlertCircle, Loader2, ChevronDown,
@@ -11,91 +10,22 @@ import { format, parseISO } from 'date-fns'
 // Status configuration
 const STATUS_CONFIG = {
   pending: { label: 'Pending', color: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' },
+  approved: { label: 'Approved', color: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
   confirmed: { label: 'Confirmed', color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' },
-  cancelled: { label: 'Cancelled', color: 'bg-red-500/20 text-red-400 border-red-500/30' },
+  in_progress: { label: 'In Progress', color: 'bg-purple-500/20 text-purple-400 border-purple-500/30' },
+  ready_for_pickup: { label: 'Ready for Pickup', color: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30' },
   completed: { label: 'Completed', color: 'bg-green-500/20 text-green-400 border-green-500/30' },
-  no_show: { label: 'No Show', color: 'bg-orange-500/20 text-orange-400 border-orange-500/30' },
+  cancelled: { label: 'Cancelled', color: 'bg-red-500/20 text-red-400 border-red-500/30' },
 }
 
 const STATUS_OPTIONS = [
-  { value: 'pending', label: 'Pending', description: 'Awaiting approval or confirmation' },
-  { value: 'confirmed', label: 'Confirmed', description: 'Scheduled and locked in' },
-  { value: 'completed', label: 'Completed', description: 'Finished successfully' },
-  { value: 'cancelled', label: 'Cancelled', description: 'Terminated before occurrence' },
-  { value: 'no_show', label: 'No Show', description: 'Participant did not arrive' },
+  { value: 'pending', label: 'Pending' },
+  { value: 'confirmed', label: 'Confirmed' },
+  { value: 'in_progress', label: 'In Progress' },
+  { value: 'ready_for_pickup', label: 'Ready for Pickup' },
+  { value: 'completed', label: 'Completed' },
+  { value: 'cancelled', label: 'Cancelled' },
 ]
-
-const HOLIDAYS = [
-  '01-01',
-  '04-02',
-  '04-03',
-  '04-09',
-  '05-01',
-  '06-12',
-  '08-31',
-  '11-30',
-  '12-25',
-  '12-30',
-]
-
-const TIME_SLOTS = [
-  '9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM',
-  '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM',
-]
-
-function isHoliday(date) {
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return HOLIDAYS.includes(`${month}-${day}`)
-}
-
-function inferLeadTimeDays(service = {}) {
-  if (Number.isFinite(Number(service.lead_time_days))) {
-    return Number(service.lead_time_days)
-  }
-  const description = String(service.description || '').toLowerCase()
-  if (!description) return 0
-  if (description.includes('same day')) return 0
-  const dayRangeMatch = description.match(/(\d+)\s*-\s*(\d+)\s*days?/)
-  if (dayRangeMatch) return Number(dayRangeMatch[2]) || 0
-  const upToDayMatch = description.match(/up to\s*(\d+)\s*days?/)
-  if (upToDayMatch) return Number(upToDayMatch[1]) || 0
-  const singleDayMatch = description.match(/(\d+)\s*days?/)
-  if (singleDayMatch) return Number(singleDayMatch[1]) || 0
-  const weekRangeMatch = description.match(/(\d+)\s*-\s*(\d+)\s*\+?\s*weeks?/)
-  if (weekRangeMatch) return (Number(weekRangeMatch[2]) || 0) * 7
-  const singleWeekMatch = description.match(/(\d+)\s*\+?\s*weeks?/)
-  if (singleWeekMatch) return (Number(singleWeekMatch[1]) || 0) * 7
-  return 0
-}
-
-function formatLocalDateId(date) {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
-
-function parseTimeLabelTo24(timeLabel = '') {
-  const match = String(timeLabel).trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i)
-  if (!match) return null
-  let hour = Number(match[1])
-  const minute = Number(match[2])
-  const period = match[3].toUpperCase()
-  if (hour === 12) {
-    hour = period === 'AM' ? 0 : 12
-  } else if (period === 'PM') {
-    hour += 12
-  }
-  return { hour, minute }
-}
-
-function isPastTimeSlot(dateId, timeLabel) {
-  const parsed = parseTimeLabelTo24(timeLabel)
-  if (!parsed || !dateId) return false
-  const slotDate = new Date(`${dateId}T${String(parsed.hour).padStart(2, '0')}:${String(parsed.minute).padStart(2, '0')}:00`)
-  return slotDate < new Date()
-}
 
 // Image modal for viewing payment proof
 function ImageModal({ src, onClose }) {
@@ -173,172 +103,6 @@ export default function AppointmentModal({
   const [rescheduleTime, setRescheduleTime] = useState('')
   const [cancelReason, setCancelReason] = useState('')
   const [actionLoading, setActionLoading] = useState(false)
-  const [currentAppointment, setCurrentAppointment] = useState(appointment)
-  const [unavailableDates, setUnavailableDates] = useState(new Set())
-  const [availableSlots, setAvailableSlots] = useState(new Set())
-  const [slotsLoading, setSlotsLoading] = useState(false)
-  const [slotStatus, setSlotStatus] = useState('')
-  const [dateError, setDateError] = useState('')
-  const [timeError, setTimeError] = useState('')
-  const [servicesList, setServicesList] = useState([])
-
-  // Sync currentAppointment when appointment prop changes
-  useEffect(() => {
-    setCurrentAppointment(appointment)
-  }, [appointment])
-  useEffect(() => {
-    let isMounted = true
-
-    const loadUnavailableDates = async () => {
-      try {
-        const response = await fetch(`${API}/api/appointments/unavailable-dates`, {
-          credentials: 'include',
-        })
-        const payload = await response.json().catch(() => ({}))
-        if (!response.ok) return
-        const dates = Array.isArray(payload?.data?.unavailable_dates) ? payload.data.unavailable_dates : []
-        const nextSet = new Set(
-          dates
-            .map((entry) => String(entry?.date || '').slice(0, 10))
-            .filter(Boolean)
-        )
-        if (isMounted) setUnavailableDates(nextSet)
-      } catch { /* ignore */ }
-    }
-
-    const loadServices = async () => {
-      try {
-        const response = await fetch(`${API}/api/services?is_active=true&limit=100&sort=name&order=asc`, {
-          credentials: 'include',
-        })
-        const payload = await response.json().catch(() => ({}))
-        if (!response.ok) return
-        setServicesList(Array.isArray(payload.data) ? payload.data : [])
-      } catch { /* ignore */ }
-    }
-
-    loadUnavailableDates()
-    loadServices()
-    return () => { isMounted = false }
-  }, [])
-
-  const getFirstServiceId = useCallback(() => {
-    if (Array.isArray(appointment?.services) && appointment.services.length > 0) {
-      return String(appointment.services[0])
-    }
-    if (typeof appointment?.services === 'string') {
-      try {
-        const parsed = JSON.parse(appointment.services)
-        if (Array.isArray(parsed) && parsed.length > 0) return String(parsed[0])
-      } catch { /* ignore */ }
-    }
-    return null
-  }, [appointment])
-
-  const getSelectedService = useCallback(() => {
-    const serviceId = getFirstServiceId()
-    if (!serviceId) return null
-    return servicesList.find((s) => String(s.service_id) === serviceId) || null
-  }, [servicesList, getFirstServiceId])
-
-  // Fetch available slots when reschedule date changes
-  useEffect(() => {
-    let isMounted = true
-
-    if (!rescheduleDate) {
-      setAvailableSlots(new Set())
-      setSlotStatus('')
-      return
-    }
-
-    const serviceId = getFirstServiceId()
-    if (!serviceId) {
-      setAvailableSlots(new Set(TIME_SLOTS))
-      setSlotStatus('open')
-      return
-    }
-
-    setSlotsLoading(true)
-    const fetchSlots = async () => {
-      try {
-        const response = await fetch(
-          `${API}/api/appointments/services/${serviceId}/availability/slots?date=${rescheduleDate}&slot_duration=60`,
-          { credentials: 'include' }
-        )
-        const payload = await response.json().catch(() => ({}))
-        if (!response.ok) throw new Error(payload?.message || 'Failed to load slots')
-
-        const backendSlots = Array.isArray(payload?.data?.available_slots) ? payload.data.available_slots : []
-        const availabilityStatus = String(payload?.data?.availability_status || (backendSlots.length > 0 ? 'open' : '')).toLowerCase()
-        const nextSet = new Set(
-          backendSlots
-            .map((slot) => {
-              if (slot?.formatted_start) return String(slot.formatted_start).toUpperCase()
-              if (slot?.start) {
-                return new Date(slot.start).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }).toUpperCase()
-              }
-              return null
-            })
-            .filter(Boolean)
-        )
-
-        if (isMounted) {
-          setAvailableSlots(nextSet)
-          setSlotStatus(availabilityStatus)
-          if (rescheduleTime && (!nextSet.has(rescheduleTime.toUpperCase()) || isPastTimeSlot(rescheduleDate, rescheduleTime))) {
-            setRescheduleTime('')
-          }
-        }
-      } catch {
-        if (isMounted) {
-          setAvailableSlots(new Set(TIME_SLOTS))
-          setSlotStatus('')
-        }
-      } finally {
-        if (isMounted) setSlotsLoading(false)
-      }
-    }
-
-    fetchSlots()
-    return () => { isMounted = false }
-    }, [rescheduleDate, getFirstServiceId])
-
-  const validateRescheduleDate = useCallback((dateId) => {
-    if (!dateId) return 'Please select a date.'
-
-    const selectedDate = new Date(`${dateId}T00:00:00`)
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-
-    if (selectedDate < today) return 'Cannot reschedule to a past date.'
-
-    const dayOfWeek = selectedDate.getDay()
-    if (dayOfWeek === 0) return 'Sundays are closed. Please select a different day.'
-
-    if (isHoliday(selectedDate)) return 'Selected date is a holiday. Please choose another date.'
-
-    if (unavailableDates.has(dateId)) return 'Selected date is unavailable. Please choose another date.'
-
-    const service = getSelectedService()
-    if (service) {
-      const leadTimeDays = inferLeadTimeDays(service)
-      const minDate = new Date(today)
-      minDate.setDate(today.getDate() + leadTimeDays)
-      if (selectedDate < minDate) {
-        return `This service requires at least ${leadTimeDays} day${leadTimeDays > 1 ? 's' : ''} notice. Please select a date on or after ${format(minDate, 'MMMM d, yyyy')}.`
-      }
-    }
-
-    return ''
-  }, [unavailableDates, getSelectedService])
-
-  const canConfirmReschedule = useCallback(() => {
-    if (!rescheduleDate || !rescheduleTime) return false
-    if (dateError) return false
-    if (timeError) return false
-    if (slotsLoading) return false
-    return true
-  }, [rescheduleDate, rescheduleTime, dateError, timeError, slotsLoading])
 
   // Reset form state when appointment changes
   useEffect(() => {
@@ -346,8 +110,6 @@ export default function AppointmentModal({
       const scheduledAt = new Date(appointment.scheduled_at)
       setRescheduleDate(format(scheduledAt, 'yyyy-MM-dd'))
       setRescheduleTime(format(scheduledAt, 'HH:mm'))
-      setDateError('')
-      setTimeError('')
     }
   }, [appointment])
 
@@ -365,42 +127,11 @@ export default function AppointmentModal({
 
   const handleReschedule = async () => {
     if (!rescheduleDate || !rescheduleTime) return
-
-    const dateErr = validateRescheduleDate(rescheduleDate)
-    if (dateErr) {
-      setDateError(dateErr)
-      return
-    }
-
-    if (isPastTimeSlot(rescheduleDate, rescheduleTime)) {
-      setTimeError('This time slot has already passed.')
-      return
-    }
-
-    if (!availableSlots.has(rescheduleTime.toUpperCase())) {
-      setTimeError('Selected time slot is no longer available.')
-      return
-    }
-
     setActionLoading(true)
     try {
-      const parsedTime = parseTimeLabelTo24(rescheduleTime)
-      const localTimeString = parsedTime
-        ? `${rescheduleDate}T${String(parsedTime.hour).padStart(2, '0')}:${String(parsedTime.minute).padStart(2, '0')}:00`
-        : `${rescheduleDate}T${rescheduleTime}:00`
-      const newScheduledAt = new Date(localTimeString).toISOString()
+      const newScheduledAt = `${rescheduleDate}T${rescheduleTime}:00`
       await onReschedule?.(appointment.appointment_id, newScheduledAt)
-      setCurrentAppointment(prev => prev ? { ...prev, scheduled_at: newScheduledAt } : prev)
       setShowRescheduleModal(false)
-      setDateError('')
-      setTimeError('')
-    } catch (err) {
-      const message = err?.message || 'Failed to reschedule appointment'
-      if (message.includes('fully booked') || message.includes('unavailable') || message.includes('no longer available') || message.includes('Sunday') || message.includes('holiday')) {
-        setDateError(message)
-      } else {
-        setTimeError(message)
-      }
     } finally {
       setActionLoading(false)
     }
@@ -422,49 +153,11 @@ export default function AppointmentModal({
   }
 
   const getServicesDisplay = () => {
-    if (appointment.service_name) {
-      return String(appointment.service_name)
-    }
-
-    if (Array.isArray(appointment.service_names) && appointment.service_names.length > 0) {
-      return appointment.service_names
-        .map((name) => String(name).replace(/-/g, ' '))
-        .filter(Boolean)
-        .join(', ')
-    }
-
+    if (!appointment.services) return 'N/A'
     if (Array.isArray(appointment.services)) {
-      return appointment.services
-        .map((service) => {
-          if (typeof service === 'string') return service.replace(/-/g, ' ')
-          if (typeof service === 'number') return String(service)
-          if (service?.name) return String(service.name)
-          if (service?.service_name) return String(service.service_name)
-          return String(service || '')
-        })
-        .filter(Boolean)
-        .join(', ')
+      return appointment.services.map(s => s.replace(/-/g, ' ')).join(', ')
     }
-
-    if (typeof appointment.services === 'string') {
-      try {
-        const parsed = JSON.parse(appointment.services)
-        if (Array.isArray(parsed)) {
-          return parsed
-            .map((service) => {
-              if (typeof service === 'string') return service.replace(/-/g, ' ')
-              if (typeof service === 'number') return String(service)
-              if (service?.name) return String(service.name)
-              if (service?.service_name) return String(service.service_name)
-              return String(service || '')
-            })
-            .filter(Boolean)
-            .join(', ')
-        }
-      } catch (err) { /* fall back to raw */ }
-    }
-
-    return appointment.services || 'N/A'
+    return appointment.services
   }
 
   const getAppointmentGuitars = () => {
@@ -547,8 +240,8 @@ export default function AppointmentModal({
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-xl sm:text-2xl font-semibold text-white">Appointment Details</h2>
-              <p className="text-[var(--text-muted)] text-sm mt-1 font-mono">
-                Ref: {appointment.reference_code || appointment.appointment_id}
+              <p className="text-[var(--text-muted)] text-sm mt-1">
+                ID: {appointment.appointment_id?.slice(0, 8)}...
               </p>
             </div>
             <button
@@ -593,10 +286,7 @@ export default function AppointmentModal({
                             appointment.status === option.value ? 'bg-[var(--gold-primary)]/10 text-[var(--gold-primary)]' : 'text-white'
                           }`}
                         >
-                          <div className="font-semibold">{option.label}</div>
-                          {option.description && (
-                            <div className="text-xs text-[var(--text-muted)]">{option.description}</div>
-                          )}
+                          {option.label}
                         </button>
                       ))}
                     </motion.div>
@@ -616,12 +306,12 @@ export default function AppointmentModal({
                 </div>
                 <div>
                   <p className="text-xs uppercase tracking-wider text-[var(--text-muted)]">Date & Time</p>
-<p className="text-white font-semibold mt-1">
-                     {currentAppointment?.scheduled_at ? format(parseISO(currentAppointment.scheduled_at), 'MMMM d, yyyy h:mm a') : 'N/A'}
-                   </p>
+                  <p className="text-white font-semibold mt-1">
+                    {appointment.scheduled_at ? format(parseISO(appointment.scheduled_at), 'MMMM d, yyyy h:mm a') : 'N/A'}
+                  </p>
                 </div>
               </div>
-              {currentAppointment?.estimated_end_at && (
+              {appointment.estimated_end_at && (
                 <div className="flex items-start gap-3">
                   <div className="w-10 h-10 rounded-xl bg-[var(--gold-primary)]/20 flex items-center justify-center flex-shrink-0">
                     <Clock className="w-5 h-5 text-[var(--gold-primary)]" />
@@ -629,7 +319,7 @@ export default function AppointmentModal({
                   <div>
                     <p className="text-xs uppercase tracking-wider text-[var(--text-muted)]">End Time</p>
                     <p className="text-white font-semibold mt-1">
-                      {currentAppointment?.estimated_end_at ? format(parseISO(currentAppointment.estimated_end_at), 'h:mm a') : 'N/A'}
+                      {format(parseISO(appointment.estimated_end_at), 'h:mm a')}
                     </p>
                   </div>
                 </div>
@@ -687,7 +377,7 @@ export default function AppointmentModal({
 
           {/* Service Section */}
           <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-5">
-            <h3 className="text-lg font-semibold text-white mb-4">Requested Service</h3>
+            <h3 className="text-lg font-semibold text-white mb-4">Service</h3>
             <div className="flex items-start gap-3">
               <div className="w-10 h-10 rounded-xl bg-[var(--gold-primary)]/20 flex items-center justify-center flex-shrink-0">
                 <FileText className="w-5 h-5 text-[var(--gold-primary)]" />
@@ -717,7 +407,7 @@ export default function AppointmentModal({
                     </p>
                     <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
                       <p className="text-[var(--text-muted)]">
-                        Type: <span className="text-white">{guitar?.type ? guitar.type.charAt(0).toUpperCase() + guitar.type.slice(1) : 'N/A'}</span>
+                        Type: <span className="text-white capitalize">{guitar?.type || 'N/A'}</span>
                       </p>
                       <p className="text-[var(--text-muted)]">
                         Serial: <span className="text-white">{guitar?.serial || guitar?.serialNumber || 'N/A'}</span>
@@ -734,15 +424,7 @@ export default function AppointmentModal({
             )}
           </div>
 
-          {/* Reason Section */}
-          {appointment.reason && (
-            <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-5">
-              <h3 className="text-lg font-semibold text-white mb-4">Reason</h3>
-              <p className="text-[var(--text-muted)] whitespace-pre-wrap">{appointment.reason}</p>
-            </div>
-          )}
-
-          {/* Notes Section - customer-submitted only */}
+          {/* Notes Section */}
           {appointment.notes && (
             <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-5">
               <h3 className="text-lg font-semibold text-white mb-4">Notes</h3>
@@ -752,7 +434,6 @@ export default function AppointmentModal({
                   const textParts = []
                   const imageParts = []
                   
-                  const SYSTEM_NOTE_PREFIXES = ['Cancelled:', 'Status changed:', 'Rescheduled:', 'Cancelled on', 'Guitar ']
                   lines.forEach(line => {
                     const imageMatch = line.match(/(https?:\/\/[^\s]+(?:\.jpg|\.jpeg|\.png|\.gif|\.webp|\.bmp)[^\s]*)/i)
                     if (imageMatch) {
@@ -760,9 +441,6 @@ export default function AppointmentModal({
                       if (before) textParts.push(before)
                       imageParts.push(imageMatch[1])
                     } else {
-                      const trimmed = line.trim()
-                      const isSystemLine = SYSTEM_NOTE_PREFIXES.some((prefix) => trimmed.startsWith(prefix))
-                      if (isSystemLine || !trimmed) return
                       textParts.push(line)
                     }
                   })
@@ -853,122 +531,66 @@ export default function AppointmentModal({
         </div>
       </motion.div>
 
-       {/* Reschedule Modal */}
-       <AnimatePresence>
-         {showRescheduleModal && (
-           <motion.div
-             initial={{ opacity: 0 }}
-             animate={{ opacity: 1 }}
-             exit={{ opacity: 0 }}
-             className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
-             onClick={() => setShowRescheduleModal(false)}
-           >
-             <motion.div
-               initial={{ scale: 0.9, opacity: 0 }}
-               animate={{ scale: 1, opacity: 1 }}
-               exit={{ scale: 0.9, opacity: 0 }}
-               className="w-full max-w-md rounded-3xl border border-[var(--border)] bg-[var(--bg-primary)] p-6"
-               onClick={(e) => e.stopPropagation()}
-             >
-               <h3 className="text-xl font-semibold text-white mb-4">Reschedule Appointment</h3>
-               <div className="space-y-4">
-                 <div>
-                   <label className="block text-sm text-[var(--text-muted)] mb-2">Date</label>
-                   <input
-                     type="date"
-                     value={rescheduleDate}
-                     onChange={(e) => {
-                       const value = e.target.value
-                       setRescheduleDate(value)
-                       setRescheduleTime('')
-                       setDateError(validateRescheduleDate(value))
-                       setTimeError('')
-                     }}
-                     className={`w-full px-4 py-3 rounded-xl border bg-[var(--surface-dark)] text-white focus:outline-none ${
-                       dateError ? 'border-red-500/50 focus:border-red-500' : 'border-[var(--border)] focus:border-[var(--gold-primary)]'
-                     }`}
-                   />
-                   {dateError && (
-                     <p className="mt-1.5 text-xs text-red-400 flex items-center gap-1">
-                       <AlertCircle className="w-3 h-3" />
-                       {dateError}
-                     </p>
-                   )}
-                 </div>
-                 <div>
-                   <label className="block text-sm text-[var(--text-muted)] mb-2">Time</label>
-                   {slotsLoading ? (
-                     <div className="w-full px-4 py-3 rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] text-[var(--text-muted)] flex items-center gap-2">
-                       <Loader2 className="w-4 h-4 animate-spin" />
-                       Loading available slots...
-                     </div>
-                   ) : availableSlots.size === 0 && rescheduleDate ? (
-                     <div className="w-full px-4 py-3 rounded-xl border border-red-500/30 bg-red-500/10 text-red-400 text-sm">
-                       No available slots for this date. It may be fully booked or unavailable.
-                     </div>
-                   ) : (
-                     <select
-                       value={rescheduleTime}
-                       onChange={(e) => {
-                         const value = e.target.value
-                         setRescheduleTime(value)
-                         if (value && isPastTimeSlot(rescheduleDate, value)) {
-                           setTimeError('This time slot has already passed.')
-                         } else {
-                           setTimeError('')
-                         }
-                       }}
-                       className={`w-full px-4 py-3 rounded-xl border bg-[var(--surface-dark)] text-white focus:outline-none ${
-                         timeError ? 'border-red-500/50 focus:border-red-500' : 'border-[var(--border)] focus:border-[var(--gold-primary)]'
-                       }`}
-                     >
-                       <option value="">Select a time slot</option>
-                       {TIME_SLOTS.map((slot) => {
-                         const isAvailable = availableSlots.has(slot.toUpperCase())
-                         const isPast = isPastTimeSlot(rescheduleDate, slot)
-                         const isDisabled = !isAvailable || isPast
-                         return (
-                           <option
-                             key={slot}
-                                             value={slot}
-                                             disabled={isDisabled}
-                                           >
-                                             {slot} {isAvailable ? '' : '(Unavailable)'}
-                                           </option>
-                         )
-                       })}
-                     </select>
-                   )}
-                    {timeError && (
-                      <p className="mt-1.5 text-xs text-red-400 flex items-center gap-1">
-                        <AlertCircle className="w-3 h-3" />
-                        {timeError}
-                      </p>
-                    )}
-                 </div>
-               </div>
-               <div className="flex justify-end gap-3 mt-6">
-                 <button
-                   type="button"
-                   onClick={() => setShowRescheduleModal(false)}
-                   className="px-4 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] text-[var(--text-muted)] hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)] transition-colors"
-                 >
-                   Cancel
-                 </button>
-                 <button
-                   type="button"
-                   onClick={handleReschedule}
-                   disabled={actionLoading || !canConfirmReschedule()}
-                   className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[var(--gold-primary)] text-black font-medium hover:bg-[var(--gold-primary)]/90 transition-colors disabled:opacity-50"
-                 >
-                   {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                   Save Changes
-                 </button>
-               </div>
-             </motion.div>
-           </motion.div>
-         )}
-       </AnimatePresence>
+      {/* Reschedule Modal */}
+      <AnimatePresence>
+        {showRescheduleModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+            onClick={() => setShowRescheduleModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="w-full max-w-md rounded-3xl border border-[var(--border)] bg-[var(--bg-primary)] p-6"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="text-xl font-semibold text-white mb-4">Reschedule Appointment</h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm text-[var(--text-muted)] mb-2">Date</label>
+                  <input
+                    type="date"
+                    value={rescheduleDate}
+                    onChange={(e) => setRescheduleDate(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] text-white focus:border-[var(--gold-primary)] focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-[var(--text-muted)] mb-2">Time</label>
+                  <input
+                    type="time"
+                    value={rescheduleTime}
+                    onChange={(e) => setRescheduleTime(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] text-white focus:border-[var(--gold-primary)] focus:outline-none"
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end gap-3 mt-6">
+                <button
+                  type="button"
+                  onClick={() => setShowRescheduleModal(false)}
+                  className="px-4 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] text-[var(--text-muted)] hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)] transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleReschedule}
+                  disabled={actionLoading || !rescheduleDate || !rescheduleTime}
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[var(--gold-primary)] text-black font-medium hover:bg-[var(--gold-primary)]/90 transition-colors disabled:opacity-50"
+                >
+                  {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  Save Changes
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Cancel Modal */}
       <AnimatePresence>

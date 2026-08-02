@@ -15,7 +15,7 @@ const serviceCards = [
     image: '/assets/landing/480706588_1131061512149778_5794129601486897065_n.jpg',
   },
   {
-    title: 'Recondition',
+    title: 'Refinishing',
     text: 'Professional refinishing services to restore and elevate your instrument look.',
     image: '/assets/landing/499948200_1197883048800957_5172319103702371821_n.jpg',
   },

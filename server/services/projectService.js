@@ -217,17 +217,11 @@ const buildPartKey = (part = {}) => {
     part?.name || 'unnamed',
     part?.customization_id || 'global',
     part?.product_id || 'none',
-  ];
-  if (part?.part_type) {
-    base.push(part.part_type);
-  }
-
-  return base
+  ]
     .filter(Boolean)
-    .join('::')
-    .toLowerCase()
-    .replace(/[^a-z0-9_]+/g, '-')
-    .replace(/(^-|-$)/g, '');
+    .join('::');
+
+  return base.toLowerCase().replace(/[^a-z0-9_]+/g, '-').replace(/(^-|-$)/g, '');
 };
 
 const buildRequiredPartsPayload = (customization = {}, linkedParts = []) => {
@@ -254,7 +248,6 @@ const buildRequiredPartsPayload = (customization = {}, linkedParts = []) => {
         category,
         name: String(value),
         customization_id: customizationId,
-        part_type: fieldName,
       }),
       is_received: false,
       received_quantity: 0,
@@ -2839,10 +2832,16 @@ const ensureInstallmentTable = async () => {
           status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'paid', 'overdue', 'cancelled')),
           paid_at TIMESTAMPTZ,
           payment_id UUID REFERENCES payments(payment_id) ON DELETE SET NULL,
+          paid_in_advance BOOLEAN NOT NULL DEFAULT FALSE,
           created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
           updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
           UNIQUE(project_id, installment_number)
         );
+      `);
+      // Backfill the paid_in_advance column on databases created before the column existed.
+      await pool.query(`
+        ALTER TABLE project_installment_schedules
+        ADD COLUMN IF NOT EXISTS paid_in_advance BOOLEAN NOT NULL DEFAULT FALSE
       `);
       ensureInstallmentTableReady = true;
     } catch (err) {

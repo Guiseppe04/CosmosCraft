@@ -8,9 +8,10 @@ export function AppointmentStatusModal({ modal, form, setForm, closeModal, isSav
   const APPOINTMENT_STATUSES = [
     { value: 'pending', label: 'Pending' },
     { value: 'confirmed', label: 'Confirmed' },
+    { value: 'in_progress', label: 'In Progress' },
+    { value: 'ready_for_pickup', label: 'Ready for Pickup' },
     { value: 'completed', label: 'Completed' },
     { value: 'cancelled', label: 'Cancelled' },
-    { value: 'no_show', label: 'No Show' },
   ]
   const currentStatus = form.status || modal.data.status || 'pending'
 
