@@ -116,6 +116,7 @@ function AddressSelectionCard({ addresses, selectedAddressId, onSelectAddress, o
     const parts = [
       addr.street_line1,
       addr.street_line2,
+      addr.barangay,
       addr.city,
       addr.province,
       addr.postal_code
