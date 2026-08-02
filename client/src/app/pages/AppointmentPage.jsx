@@ -264,6 +264,8 @@ export function AppointmentPage() {
   const [slotsLoading, setSlotsLoading] = useState(false)
   const [slotAvailabilityStatus, setSlotAvailabilityStatus] = useState('')
   // Payment method selection
+  const { toast } = useToast()
+
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('')
   const PAYMENT_METHODS = [
     { value: 'cash', label: 'Cash', description: 'Pay with cash on the appointment date' },
@@ -272,6 +274,7 @@ export function AppointmentPage() {
   ]
   const [paymentProofFile, setPaymentProofFile] = useState(null)
   const [paymentProofPreviewUrl, setPaymentProofPreviewUrl] = useState('')
+  const [paymentValidationError, setPaymentValidationError] = useState('')
   
   // Dedicated notes field for additional information (landmarks, delivery instructions, special requests, etc.)
   const [additionalNotes, setAdditionalNotes] = useState('')
@@ -700,11 +703,11 @@ export function AppointmentPage() {
     event.target.value = ''
     if (!file) return
     if (!file.type.startsWith('image/')) {
-      alert('Please upload an image file.')
+      toast.error('Please upload an image file.')
       return
     }
     if (file.size > MAX_REFERENCE_IMAGE_BYTES) {
-      alert('Image size must be 10MB or less.')
+      toast.error('Image size must be 10MB or less.')
       return
     }
 
@@ -727,11 +730,11 @@ export function AppointmentPage() {
     event.target.value = ''
     if (!file) return
     if (!file.type.startsWith('image/')) {
-      alert('Please upload an image file for payment proof.')
+      toast.error('Please upload an image file for payment proof.')
       return
     }
     if (file.size > MAX_REFERENCE_IMAGE_BYTES) {
-      alert('Image size must be 10MB or less.')
+      toast.error('Image size must be 10MB or less.')
       return
     }
 
@@ -762,25 +765,27 @@ export function AppointmentPage() {
 
   // Compute the final notes to send to the API
   const computedNotes = useMemo(() => {
-    const parts = []
-    if (additionalNotes.trim()) {
-      parts.push(additionalNotes.trim())
-    }
-    if (serviceReferencePreviewUrl && serviceReferenceFile) {
-      parts.push(`Service reference image: ${serviceReferencePreviewUrl}`)
-    }
-    if (guitarReferencePreviewUrl && guitarReferenceFile) {
-      parts.push(`Guitar reference image: ${guitarReferencePreviewUrl}`)
-    }
-    return parts.length > 0 ? parts.join('\n') : null
-  }, [additionalNotes, serviceReferencePreviewUrl, serviceReferenceFile, guitarReferencePreviewUrl, guitarReferenceFile])
+    return additionalNotes.trim() || null
+  }, [additionalNotes])
 
   const handleSubmit = async () => {
     if (!isAuthenticated) {
       openLogin(() => navigate('/appointments', { replace: true }))
       return
     }
-    if (!canProceed()) return
+
+    if (!canProceed()) {
+      if (!selectedPaymentMethod) {
+        setPaymentValidationError('Please select a payment method.')
+      } else if ((selectedPaymentMethod === 'e_wallet' || selectedPaymentMethod === 'e_bank') && !paymentProofFile) {
+        setPaymentValidationError('Payment proof is required for the selected payment method.')
+      } else {
+        setPaymentValidationError('Please complete all required booking fields.')
+      }
+      return
+    }
+
+    setPaymentValidationError('')
     setIsSubmittingBooking(true)
     
     try {
@@ -793,7 +798,7 @@ export function AppointmentPage() {
         const oldTimeLabel = oldDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
         
         if (selectedDateId === oldDateId && selectedTime === oldTimeLabel) {
-          alert('Please select a different date or time than the original appointment schedule.')
+          toast.error('Please select a different date or time than the original appointment schedule.')
           setIsSubmittingBooking(false)
           return
         }
@@ -917,7 +922,7 @@ export function AppointmentPage() {
       console.error('Submission Error:', error);
       setShowBookingSuccess(false)
       setIsSubmittingBooking(false)
-      alert(`Failed to book appointment: ${error.message}`);
+      toast.error(`Failed to book appointment: ${error.message}`);
     }
   }
 
@@ -1499,7 +1504,7 @@ export function AppointmentPage() {
                        <button
                          key={method.value}
                          type="button"
-                         onClick={() => { setSelectedPaymentMethod(method.value); setPaymentProofFile(null); setPaymentProofPreviewUrl('') }}
+                         onClick={() => { setSelectedPaymentMethod(method.value); setPaymentProofFile(null); setPaymentProofPreviewUrl(''); setPaymentValidationError('') }}
                          className={`rounded-xl border-2 p-4 text-left transition-all ${
                            isSelected
                              ? 'border-[#d4af37] bg-[#d4af37]/10'
@@ -1548,22 +1553,13 @@ export function AppointmentPage() {
                      )}
                    </div>
                  )}
+                 {paymentValidationError && (
+                   <p className="mt-3 text-sm font-medium text-red-400">{paymentValidationError}</p>
+                 )}
                </div>
-
-               <div className="border-t border-[var(--border)] pt-4 flex justify-between items-center">
-                  <span className="text-sm font-bold text-[var(--text-muted)] uppercase">Estimated Total</span>
-                  <span className="text-2xl font-bold text-[#d4af37]">₱{totalPrice}</span>
-               </div>
-               
-               {referenceNumber && (
-                 <div className="bg-[#d4af37]/10 border border-[#d4af37]/30 rounded-lg p-3 text-center">
-                   <p className="text-xs text-[#d4af37]/80 uppercase tracking-wider mb-1">Temporary Reference Number</p>
-                   <p className="font-mono font-bold text-[#d4af37]">{referenceNumber}</p>
-                 </div>
-               )}
-            </div>
-          </motion.div>
-        )
+             </div>
+           </motion.div>
+         )
 
       default:
         return null
@@ -1573,16 +1569,6 @@ export function AppointmentPage() {
   return (
     <div className="min-h-screen pt-16 bg-[var(--bg-primary)]">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10">
-        
-        {/* Header Back Button */}
-        <button
-          onClick={() => navigate(-1)}
-          className="flex items-center gap-2 text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors mb-8 group"
-        >
-          <ChevronLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
-          <span className="font-medium text-sm">Back to Dashboard</span>
-        </button>
-
         <div className="grid xl:grid-cols-[280px_1fr] gap-6 lg:gap-8 xl:gap-12 min-h-[600px]">
           
           {/* LEFT SIDEBAR (STEPPER) */}
@@ -1684,7 +1670,7 @@ export function AppointmentPage() {
                ) : (
                  <button
                    onClick={handleSubmit}
-                   disabled={isSubmittingBooking}
+                   disabled={isSubmittingBooking || !canProceed()}
                    className="px-8 py-2.5 rounded-xl text-sm font-bold bg-[#d4af37] text-black hover:bg-[#ffe270] transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(212,175,55,0.3)] shadow-[#d4af37]/20 flex items-center gap-2"
                  >
                    {isSubmittingBooking ? (

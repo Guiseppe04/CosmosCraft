@@ -130,6 +130,8 @@ function formatAppointmentResponse(appointment) {
     customer_email: appointment.customer_email || null,
     customer_phone: appointment.customer_phone || null,
     services: parsedServices,
+    service_name: appointment.service_name || null,
+    service_names: appointment.service_names || null,
     location_id: appointment.location_id,
     guitar_details: parsedGuitarDetails,
     scheduled_at: appointment.scheduled_at,
@@ -207,9 +209,20 @@ exports.getAppointmentById = async (appointmentId) => {
        u.email AS user_email,
        u.first_name || ' ' || u.last_name AS user_name,
        u.phone AS user_phone,
+       s.service_name,
+       s.service_names,
        EXTRACT(EPOCH FROM (a.scheduled_at - now())) / 60 as time_until_appointment_minutes
      FROM appointments a
      LEFT JOIN users u ON a.user_id = u.user_id
+     LEFT JOIN LATERAL (
+       SELECT
+         string_agg(s.name, ', ') AS service_name,
+         jsonb_agg(s.name ORDER BY s.name) AS service_names
+       FROM services s
+       WHERE s.service_id IN (
+         SELECT (jsonb_array_elements_text(a.services))::int
+       )
+     ) s ON true
      WHERE a.appointment_id = $1`,
     [appointmentId]
   );
@@ -242,9 +255,20 @@ exports.listAppointments = async ({ user_id, appointment_type, status, date_from
        a.*,
        u.email AS user_email,
        u.first_name || ' ' || u.last_name AS user_name,
-       u.phone AS user_phone
+       u.phone AS user_phone,
+       s.service_name,
+       s.service_names
      FROM appointments a
      LEFT JOIN users u ON a.user_id = u.user_id
+     LEFT JOIN LATERAL (
+       SELECT
+         string_agg(s.name, ', ') AS service_name,
+         jsonb_agg(s.name ORDER BY s.name) AS service_names
+       FROM services s
+       WHERE s.service_id IN (
+         SELECT (jsonb_array_elements_text(a.services))::int
+       )
+     ) s ON true
      ${whereClause}
      ORDER BY a.${sortColumn} ${sortOrderUpper}
      LIMIT $${idx} OFFSET $${idx + 1}`,

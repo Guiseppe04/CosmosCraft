@@ -4,18 +4,32 @@ import { Calendar, Clock3, Mail, MapPin, Phone, UserCircle2, X } from 'lucide-re
 
 const EMPTY_LABEL = 'N/A'
 
-function parseServices(services) {
-  if (!services) return []
-  if (Array.isArray(services)) return services
+function parseServices(services, fallbackName) {
+  if (!services) {
+    return fallbackName ? [fallbackName] : []
+  }
+  if (Array.isArray(services)) {
+    const parsed = services.map((service) => {
+      if (typeof service === 'string') return service
+      if (typeof service === 'number') return String(service)
+      if (service?.name) return String(service.name)
+      if (service?.service_name) return String(service.service_name)
+      if (service?.label) return String(service.label)
+      return ''
+    }).filter(Boolean)
+
+    if (parsed.length > 0) return parsed
+    return fallbackName ? [fallbackName] : []
+  }
   if (typeof services === 'string') {
     try {
       const parsed = JSON.parse(services)
-      return Array.isArray(parsed) ? parsed : []
+      return Array.isArray(parsed) ? parseServices(parsed, fallbackName) : [services]
     } catch (_) {
       return [services]
     }
   }
-  return []
+  return fallbackName ? [fallbackName] : []
 }
 
 function getServiceLabel(service, index) {
@@ -38,7 +52,10 @@ function formatAmount(value) {
 }
 
 const AppointmentDetailsModal = ({ show, onClose, appointment, onEdit, onCancel, onComplete }) => {
-  const services = useMemo(() => parseServices(appointment?.services), [appointment?.services])
+  const services = useMemo(
+    () => parseServices(appointment?.services, appointment?.service_name),
+    [appointment?.services, appointment?.service_name]
+  )
 
   if (!show || !appointment) return null
 

@@ -853,7 +853,18 @@ export function AdminPage() {
         showToast('Product created!')
       }
       fetchProducts(); closeModal()
-    } catch (e) { showToast(e.message, 'error') }
+    } catch (e) {
+      // Map field-level errors from the API to the form so they show inline.
+      if (Array.isArray(e.fieldErrors) && e.fieldErrors.length > 0) {
+        const mapped = {}
+        for (const fe of e.fieldErrors) {
+          if (fe?.field) mapped[fe.field] = fe.message || 'This field is required'
+        }
+        setFormErrors(mapped)
+      } else {
+        showToast(e.message, 'error')
+      }
+    }
     finally { setIsSaving(false) }
   }
 

@@ -28,8 +28,11 @@ const errorHandler = (err, req, res, next) => {
 
   // Handle PostgreSQL required field (NOT NULL) violations
   if (err.code === '23502') {
-    const fieldMatch = err.detail?.match(/null value in column "(.*?)"/);
-    const field = fieldMatch ? fieldMatch[1] : 'required field';
+    // Prefer the driver-provided column name, then fall back to parsing the detail string.
+    const field =
+      err.column ||
+      err.detail?.match(/null value in column "(.*?)"/)?.[1] ||
+      'required field';
     return res.status(400).json({
       status: 'error',
       message: 'A required field is missing. Please provide all required information.',

@@ -96,6 +96,51 @@ function getCustomerName(appointment) {
   return appointment.user_name || appointment.customer_name || 'Guest'
 }
 
+function renderAppointmentServiceSummary(appointment) {
+  if (appointment.service_name) {
+    return String(appointment.service_name)
+  }
+
+  if (Array.isArray(appointment.service_names) && appointment.service_names.length > 0) {
+    return appointment.service_names.map((name) => String(name).replace(/-/g, ' ')).filter(Boolean).join(', ')
+  }
+
+  if (Array.isArray(appointment.services)) {
+    return appointment.services
+      .map((service) => {
+        if (typeof service === 'string') return service.replace(/-/g, ' ')
+        if (typeof service === 'number') return String(service)
+        if (service?.name) return String(service.name)
+        if (service?.service_name) return String(service.service_name)
+        return String(service || '')
+      })
+      .filter(Boolean)
+      .join(', ')
+  }
+
+  if (typeof appointment.services === 'string') {
+    try {
+      const parsed = JSON.parse(appointment.services)
+      if (Array.isArray(parsed)) {
+        return parsed
+          .map((service) => {
+            if (typeof service === 'string') return service.replace(/-/g, ' ')
+            if (typeof service === 'number') return String(service)
+            if (service?.name) return String(service.name)
+            if (service?.service_name) return String(service.service_name)
+            return String(service || '')
+          })
+          .filter(Boolean)
+          .join(', ')
+      }
+    } catch (err) {
+      // fall back to raw string
+    }
+  }
+
+  return appointment.services || 'N/A'
+}
+
 // Main AppointmentList component
 export default function AppointmentList({
   appointments = [],
@@ -291,9 +336,7 @@ export default function AppointmentList({
                     )}
                   </td>
                   <td className="px-4 py-3 capitalize text-[var(--gold-primary)]">
-                    {Array.isArray(apt.services)
-                      ? apt.services.map(s => s.replace(/-/g, ' ')).join(', ')
-                      : apt.services}
+                    {renderAppointmentServiceSummary(apt)}
                   </td>
                   <td className="px-4 py-3 text-white">
                     <div>{formatAppointmentDate(apt.scheduled_at)}</div>

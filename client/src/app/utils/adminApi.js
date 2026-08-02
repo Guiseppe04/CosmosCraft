@@ -18,7 +18,14 @@ async function request(path, options = {}) {
     body: options.body ? JSON.stringify(options.body) : undefined,
   })
   const data = await res.json()
-  if (!res.ok) throw new Error(data.message || 'Request failed')
+  if (!res.ok) {
+    const error = new Error(data.message || 'Request failed')
+    // Preserve field-level validation errors so the UI can map them to inputs.
+    if (Array.isArray(data.errors) && data.errors.length > 0) {
+      error.fieldErrors = data.errors
+    }
+    throw error
+  }
   return data
 }
 
