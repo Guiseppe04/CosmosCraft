@@ -41,30 +41,8 @@ import { useDebounce } from '../hooks/useDebounce'
 import { useSmartPolling } from '../hooks/useSmartPolling'
 import { formatCurrency } from '../utils/formatCurrency'
 import { staffApi } from '../utils/staffApi'
-
-function EmptyState({ icon: Icon, label, description }) {
-  return (
-    <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] py-16 text-center">
-      <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--gold-primary)]/10">
-        <Icon className="h-7 w-7 text-[var(--gold-primary)]" />
-      </div>
-      <p className="font-semibold text-white">{label}</p>
-      {description && <p className="mt-1 text-sm text-[var(--text-muted)]">{description}</p>}
-    </div>
-  )
-}
-
-function StatusBadge({ label, variant = 'default' }) {
-  const cls = {
-    default: 'border-gray-500/30 bg-gray-500/20 text-gray-300',
-    success: 'border-green-500/30 bg-green-500/20 text-green-300',
-    warning: 'border-amber-500/30 bg-amber-500/20 text-amber-300',
-    danger: 'border-red-500/30 bg-red-500/20 text-red-300',
-    info: 'border-blue-500/30 bg-blue-500/20 text-blue-300',
-    gold: 'border-[var(--gold-primary)]/30 bg-[var(--gold-primary)]/20 text-[var(--gold-primary)]',
-  }
-  return <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${cls[variant] || cls.default}`}>{label}</span>
-}
+import { EmptyState } from './admin/components/shared/EmptyState'
+import { StatusBadge } from './admin/components/shared/StatusBadge'
 
 function normalizeArray(payload, key) {
   if (Array.isArray(payload?.data)) return payload.data
@@ -800,7 +778,7 @@ export function StaffDashboard() {
                 <ProjectTaskTracker
                   projectId={modal.data.project_id}
                   projectName={modal.data.name || modal.data.title}
-                  isAdmin
+                  isAdmin={false}
                   projectData={modal.data}
                 />
               </motion.div>

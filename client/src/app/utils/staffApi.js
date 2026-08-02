@@ -39,9 +39,13 @@ export const staffApi = {
     const qs = new URLSearchParams(params).toString()
     return request(`/api/projects${qs ? `?${qs}` : ''}`)
   },
+  getProjectHierarchy: (id) => request(`/api/projects/${id}/hierarchy`),
+  getProjectRequiredParts: (id) => request(`/api/projects/${id}/required-parts`),
+  getProjectActivity: (id) => request(`/api/projects/${id}/activity`),
   updateProject: (id, body) => request(`/api/projects/${id}`, { method: 'PUT', body }),
   updateProjectStage: (id, body) => request(`/api/projects/${id}`, { method: 'PUT', body }),
   claimProject: (id) => request(`/api/projects/${id}/claim`, { method: 'POST' }),
+  updateSubtask: (id, body) => request(`/api/projects/subtasks/${id}`, { method: 'PATCH', body }),
 
   // Orders
   getOrders: (params = {}) => {
