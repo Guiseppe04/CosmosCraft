@@ -12,6 +12,7 @@ import {
 import { PaymentModal } from '../components/PaymentModal.jsx'
 import TermsAndConditionsModal from '../components/TermsAndConditionsModal.jsx'
 import { AddressForm } from '../components/AddressForm.jsx'
+import { SelectableCartItemRow } from '../components/cart/SelectableCartItemRow.jsx'
 import { API } from '../utils/apiConfig'
 import { getCustomBuildSummaryTree } from '../utils/customBuildSummary.js'
 import { Country, State } from 'country-state-city'
@@ -65,144 +66,42 @@ function CartItemCard({
   onToggleSelect,
 }) {
   const customBuildSummaryTree = isCustomBuild ? getCustomBuildSummaryTree(item) : []
-  const parsedStock = Number(item.stock)
-  const hasStockValue = Number.isFinite(parsedStock) && parsedStock >= 0
-  const itemStock = hasStockValue ? parsedStock : null
-  const atStockLimit = hasStockValue && item.quantity >= itemStock
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="group rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)]/50 p-4 transition-all duration-200 hover:border-[var(--gold-primary)]/30 hover:bg-[var(--surface-elevated)]"
-    >
-      <div className="flex items-center gap-4">
-      {selectionEnabled && (
-        <label className="flex-shrink-0 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={isSelected}
-            onChange={() => onToggleSelect(item.id)}
-            className="sr-only"
-          />
-          <div className={`flex h-5 w-5 items-center justify-center rounded border transition-colors ${
-            isSelected
-              ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)] text-[var(--text-dark)]'
-              : 'border-[var(--border)] bg-[var(--bg-primary)] text-transparent'
-          }`}>
-            <Check className="h-3.5 w-3.5" />
-          </div>
-        </label>
-      )}
-
-      <div className="w-20 h-20 rounded-lg bg-[var(--bg-primary)] border border-white/5 flex items-center justify-center overflow-hidden flex-shrink-0">
-        {item.image ? (
-          <img src={item.image} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-        ) : (
-          <Guitar className="w-8 h-8 text-[var(--gold-primary)]" />
-        )}
-      </div>
-
-      <div className="flex-1 min-w-0 flex items-center justify-between gap-4">
-        <div className="min-w-0 flex-1">
-          <h3 className="font-semibold text-[var(--text-light)] truncate">{item.name}</h3>
-          <div className="flex items-center gap-2 mt-1">
-            <p className="text-xs text-[var(--text-muted)] tracking-wide uppercase">{item.category}</p>
-            {isCustomBuild && (
-              <span className="px-2 py-0.5 text-xs font-medium bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] rounded-full">
-                Custom Build
-              </span>
-            )}
-          </div>
-        </div>
-
-        <div className="flex items-center gap-4 flex-shrink-0">
-            {!isCustomBuild && !isBuyNow && itemStock > 1 ? (
-              <div className="flex flex-col items-end gap-1">
-                <div className="flex items-center gap-2 bg-[var(--bg-primary)] border border-white/10 rounded-full px-3 py-1.5">
-                  <button
-                    onClick={() => onUpdateQuantity(item.id, Math.max(1, item.quantity - 1))}
-                    disabled={item.quantity <= 1}
-                    className="text-[var(--text-muted)] hover:text-white p-0.5 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                  >
-                    <Minus className="w-3 h-3" />
-                  </button>
-                  <span className="text-sm font-semibold w-5 text-center text-white">{item.quantity}</span>
-                  <button
-                    onClick={() => onUpdateQuantity(item.id, item.quantity + 1)}
-                    disabled={atStockLimit}
-                    className="text-[var(--text-muted)] hover:text-[var(--gold-primary)] p-0.5 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                  >
-                    <Plus className="w-3 h-3" />
-                  </button>
-                </div>
-                {itemStock > 0 && (
-                  <span className="text-[10px] text-[var(--text-muted)]">
-                    {itemStock - item.quantity >= 0 ? `${itemStock - item.quantity} left` : 'Max reached'}
-                  </span>
-                )}
-                {hasStockValue && (
-                  <span className="text-[10px] text-[var(--text-muted)]">Stock: {itemStock}</span>
-                )}
-              </div>
-            ) : !isCustomBuild && !isBuyNow ? (
-              <div className="flex flex-col items-end gap-1">
-                <div className="px-3 py-1.5 bg-[var(--bg-primary)]/50 rounded-full">
-                  <span className="text-sm text-[var(--text-muted)]">Qty: {item.quantity}</span>
-                </div>
-                {itemStock !== null && itemStock <= 1 && (
-                  <span className="text-[10px] text-amber-400">Last item</span>
-                )}
-                {hasStockValue && (
-                  <span className="text-[10px] text-[var(--text-muted)]">Stock: {itemStock}</span>
-                )}
-              </div>
-            ) : (
-              <div className="px-3 py-1.5 bg-[var(--bg-primary)]/50 rounded-full">
-                <span className="text-sm text-[var(--text-muted)]">Qty: 1</span>
-              </div>
-            )}
-
-            <div className="w-24 text-right">
-              <p className="font-bold text-white text-sm tracking-tight">
-                ₱{(item.price * item.quantity).toLocaleString('en-PH')}
-              </p>
-            </div>
-
-            {!isCustomBuild && !isBuyNow && (
-              <button
-                onClick={() => onRemove(item.id, item.quantity)}
-                className="p-2 text-[var(--text-muted)] hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
+    <div className="space-y-3">
+      <SelectableCartItemRow
+        item={item}
+        onUpdateQuantity={onUpdateQuantity}
+        onRemove={onRemove}
+        isSelected={isSelected}
+        onToggleSelect={onToggleSelect}
+        selectionEnabled={selectionEnabled}
+        showQuantityControls={!isCustomBuild && !isBuyNow}
+        showRemove={Boolean(onRemove)}
+      />
 
       {isCustomBuild && customBuildSummaryTree.length > 0 && (
-        <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]/60 p-4">
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]/60 p-4">
           <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--gold-primary)]">
             Build Tree
           </p>
-            <div className="mt-3 space-y-3">
-              {customBuildSummaryTree.map((branch) => (
-                <div key={branch.label} className="pl-4">
-                  <p className="text-xs font-semibold text-white">{branch.label}</p>
-                  <div className="mt-2 space-y-1.5 pl-4">
-                    {branch.children.map((child) => (
-                      <p key={`${branch.label}-${child}`} className="text-xs text-[var(--text-muted)]">
-                        {child}
-                      </p>
-                    ))}
-                  </div>
+          <div className="mt-3 space-y-3">
+            {customBuildSummaryTree.map((branch) => (
+              <div key={branch.label} className="pl-4">
+                <p className="text-xs font-semibold text-white">{branch.label}</p>
+                <div className="mt-2 space-y-1.5 pl-4">
+                  {branch.children.map((child) => (
+                    <p key={`${branch.label}-${child}`} className="text-xs text-[var(--text-muted)]">
+                      {child}
+                    </p>
+                  ))}
                 </div>
+              </div>
             ))}
           </div>
         </div>
       )}
-    </motion.div>
+    </div>
   )
 }
 
@@ -735,7 +634,17 @@ function AddAddressModal({ isOpen, onClose, onSave, isSaving }) {
 export function CheckoutPage() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { cart, removeFromCart, updateQuantity, clearCart } = useCart()
+  const {
+    cart,
+    removeFromCart,
+    updateQuantity,
+    clearCart,
+    selectedItemIds,
+    setSelectedItemIds,
+    toggleItemSelection,
+    toggleSelectAllItems,
+    getSelectedItemIds,
+  } = useCart()
   const { isAuthenticated, user, updateUser } = useAuth()
   
   const isCustomBuild = location.state?.isCustomBuild || false
@@ -762,7 +671,6 @@ export function CheckoutPage() {
   const [showTermsModal, setShowTermsModal] = useState(false)
   const [acceptedTerms, setAcceptedTerms] = useState(false)
   const [termsError, setTermsError] = useState('')
-  const [selectedItemIds, setSelectedItemIds] = useState(null)
   const [selectionError, setSelectionError] = useState(false)
   const [generatedCustomItemId] = useState(() => `custom-${Date.now()}`)
 
@@ -809,16 +717,18 @@ export function CheckoutPage() {
   const availableItemIds = baseCheckoutItems.map(item => String(item.id))
 
   useEffect(() => {
-    setSelectedItemIds((prev) => {
-      if (isCustomBuild || isBuyNow) return availableItemIds
-      if (prev === null) return availableItemIds
-      return prev.filter(id => availableItemIds.includes(id))
-    })
-  }, [isCustomBuild, isBuyNow, availableItemIds.join('|')])
+    if (isCustomBuild || isBuyNow) {
+      return
+    }
+
+    if (selectedItemIds === null) {
+      setSelectedItemIds(null)
+    }
+  }, [isCustomBuild, isBuyNow, selectedItemIds])
 
   const activeSelectedItemIds = isCustomBuild || isBuyNow
     ? availableItemIds
-    : (selectedItemIds ?? availableItemIds)
+    : getSelectedItemIds()
 
   const checkoutItems = baseCheckoutItems.filter(item => activeSelectedItemIds.includes(String(item.id)))
   const subtotal = checkoutItems.reduce((sum, item) => sum + ((Number(item.price) || 0) * (Number(item.quantity) || 0)), 0)
@@ -845,23 +755,12 @@ export function CheckoutPage() {
   }
 
   const handleToggleItemSelection = (itemId) => {
-    setSelectedItemIds((prev) => {
-      const next = new Set(prev ?? availableItemIds)
-      const normalizedItemId = String(itemId)
-
-      if (next.has(normalizedItemId)) {
-        next.delete(normalizedItemId)
-      } else {
-        next.add(normalizedItemId)
-      }
-
-      return Array.from(next)
-    })
+    toggleItemSelection(itemId)
     setSelectionError(false)
   }
 
   const handleToggleAllItems = () => {
-    setSelectedItemIds(allSelectableItemsSelected ? [] : availableItemIds)
+    toggleSelectAllItems()
     setSelectionError(false)
   }
 

@@ -12,6 +12,7 @@ import { AddressForm } from '../components/AddressForm.jsx'
 import { getAllProvinces, getMunicipalitiesByProvince, getBarangaysByMunicipality } from '@aivangogh/ph-address'
 import { Country } from 'country-state-city'
 import { ConfirmModal } from '../components/ui/ConfirmModal'
+import { SelectableCartItemRow } from '../components/cart/SelectableCartItemRow.jsx'
 
 const ALL_COUNTRIES = Country.getAllCountries()
 const PHILIPPINES = ALL_COUNTRIES.find(c => c.isoCode === 'PH')
@@ -149,7 +150,17 @@ export function DashboardPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const { logout, user, updateUser } = useAuth()
-  const { cart, addToCart, removeFromCart, updateQuantity, getTotalPrice, getCartCount } = useCart()
+  const {
+    cart,
+    addToCart,
+    removeFromCart,
+    updateQuantity,
+    getTotalPrice,
+    getCartCount,
+    toggleItemSelection,
+    toggleSelectAllItems,
+    getSelectedItemIds,
+  } = useCart()
   const initialSection = location.state?.section || 'profile'
   const VALID_SECTIONS = new Set(['profile', 'my-guitar', 'appointments', 'cart', 'purchases', 'addresses', 'password'])
   const [activeSection, setActiveSection] = useState(initialSection)
@@ -1680,6 +1691,9 @@ export function DashboardPage() {
   const renderCartContent = () => {
     const cartTotal = getTotalPrice()
     const cartCount = getCartCount()
+    const selectedCartItemIds = getSelectedItemIds()
+    const selectedCount = selectedCartItemIds.length
+    const allItemsSelected = cart.length > 0 && cart.every(item => selectedCartItemIds.includes(String(item.id)))
 
     return (
       <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-5 sm:p-8">
@@ -1690,6 +1704,15 @@ export function DashboardPage() {
               {cartCount > 0 ? `${cartCount} item${cartCount > 1 ? 's' : ''} in your cart` : 'Your cart is empty'}
             </p>
           </div>
+          {cart.length > 0 && (
+            <button
+              type="button"
+              onClick={toggleSelectAllItems}
+              className="text-sm font-medium text-[var(--gold-primary)] hover:text-white transition-colors"
+            >
+              {allItemsSelected ? 'Clear Selection' : 'Select All'}
+            </button>
+          )}
         </div>
 
         {cart.length === 0 ? (
@@ -1711,64 +1734,22 @@ export function DashboardPage() {
           </div>
         ) : (
           <div className="space-y-4">
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-3 text-sm text-[var(--text-muted)]">
+              {selectedCount} of {cart.length} item{cart.length !== 1 ? 's' : ''} selected for checkout
+            </div>
+
             {cart.map((item) => (
-              <motion.div
+              <SelectableCartItemRow
                 key={item.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="flex gap-4 p-4 bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl hover:border-[var(--gold-primary)]/30 transition-colors"
-              >
-                <div className="w-24 h-24 rounded-lg overflow-hidden flex-shrink-0 bg-[var(--surface-dark)]">
-                  <img
-                    src={item.image}
-                    alt={item.name}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="min-w-0">
-                      <h4 className="font-semibold text-white truncate">{item.name}</h4>
-                      <p className="text-xs text-[var(--text-muted)] mt-0.5">{item.category}</p>
-                      <p className="text-lg font-bold text-[var(--gold-primary)] mt-1">
-                        ₱{item.price.toLocaleString()}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => removeFromCart(item.id)}
-                      className="p-2 text-[var(--text-muted)] hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors flex-shrink-0"
-                      aria-label="Remove item"
-                    >
-                      <Trash2 className="w-5 h-5" />
-                    </button>
-                  </div>
-                  <div className="flex items-center gap-3 mt-3">
-                    <div className="flex items-center gap-2 bg-[var(--surface-dark)] rounded-lg border border-[var(--border)]">
-                      <button
-                        type="button"
-                        onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                        className="p-2 text-[var(--text-muted)] hover:text-white hover:bg-white/5 rounded-lg transition-colors"
-                        aria-label="Decrease quantity"
-                      >
-                        <Minus className="w-4 h-4" />
-                      </button>
-                      <span className="w-8 text-center text-white font-medium">{item.quantity}</span>
-                      <button
-                        type="button"
-                        onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                        className="p-2 text-[var(--text-muted)] hover:text-white hover:bg-white/5 rounded-lg transition-colors"
-                        aria-label="Increase quantity"
-                      >
-                        <Plus className="w-4 h-4" />
-                      </button>
-                    </div>
-                    <span className="text-sm text-[var(--text-muted)]">
-                      Subtotal: <span className="text-white font-medium">₱{(item.price * item.quantity).toLocaleString()}</span>
-                    </span>
-                  </div>
-                </div>
-              </motion.div>
+                item={item}
+                onUpdateQuantity={updateQuantity}
+                onRemove={removeFromCart}
+                isSelected={selectedCartItemIds.includes(String(item.id))}
+                onToggleSelect={toggleItemSelection}
+                selectionEnabled
+                showQuantityControls
+                showRemove
+              />
             ))}
 
             <div className="mt-6 pt-6 border-t border-[var(--border)]">
