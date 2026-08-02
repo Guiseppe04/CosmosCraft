@@ -416,6 +416,26 @@ const appointmentValidation = {
       }),
   }),
 
+  // ─── AVAILABLE DATES QUERY ──────────────────────────────────────────────
+
+  availableDatesSchema: Joi.object({
+    date_from: Joi.date()
+      .required()
+      .messages({
+        'any.required': 'date_from is required',
+        'date.base': 'Invalid date format for date_from',
+      }),
+
+    date_to: Joi.date()
+      .required()
+      .min(Joi.ref('date_from'))
+      .messages({
+        'any.required': 'date_to is required',
+        'date.base': 'Invalid date format for date_to',
+        'date.min': 'date_to must be after or equal to date_from',
+      }),
+  }),
+
   // ─── DATE RANGE QUERY ────────────────────────────────────────────────────
 
   dateRangeSchema: Joi.object({

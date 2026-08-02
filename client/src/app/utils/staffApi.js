@@ -82,6 +82,7 @@ export const staffApi = {
     request(`/api/appointments/services/${serviceId}/availability?scheduled_at=${scheduledAt}`),
   getUnavailableDates: () => request('/api/appointments/unavailable-dates'),
   getAvailableDates: (dateFrom, dateTo) => {
+    if (!dateFrom || !dateTo) return Promise.resolve({ data: { available_dates: [] } })
     const qs = new URLSearchParams({ date_from: dateFrom, date_to: dateTo }).toString()
     return request(`/api/appointments/available-dates?${qs}`)
   },

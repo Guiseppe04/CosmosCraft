@@ -173,6 +173,7 @@ export const adminApi = {
 
   // Available Dates
   getAvailableDates: (dateFrom, dateTo) => {
+    if (!dateFrom || !dateTo) return Promise.resolve({ data: { available_dates: [] } })
     const qs = new URLSearchParams({ date_from: dateFrom, date_to: dateTo }).toString()
     return request(`/api/appointments/available-dates?${qs}`)
   },

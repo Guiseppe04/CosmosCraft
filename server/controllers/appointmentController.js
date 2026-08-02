@@ -715,7 +715,7 @@ exports.getAvailableDates = async (req, res, next) => {
   try {
     const validated = validate(
       req.query,
-      appointmentValidation.dateRangeSchema
+      appointmentValidation.availableDatesSchema
     );
 
     const dates = await appointmentService.getAvailableDates(

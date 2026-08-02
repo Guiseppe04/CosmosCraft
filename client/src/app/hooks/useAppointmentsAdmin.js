@@ -74,7 +74,10 @@ export function useAppointmentsAdmin({ debouncedSearch, showToast }) {
 
   const fetchAvailableDates = useCallback(async (dateFrom, dateTo) => {
     try {
-      const res = await adminApi.getAvailableDates(dateFrom, dateTo)
+      const today = new Date()
+      const from = dateFrom || today.toISOString().slice(0, 10)
+      const to = dateTo || new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+      const res = await adminApi.getAvailableDates(from, to)
       const newData = res.data?.available_dates || []
       if (JSON.stringify(availableDatesRef.current) !== JSON.stringify(newData)) {
         availableDatesRef.current = newData
