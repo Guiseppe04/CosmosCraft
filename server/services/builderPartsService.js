@@ -666,6 +666,56 @@ const loadCustomizeCatalogModule = async (guitarType) => {
   return { normalizedType, source: config.source, module: importedModule };
 };
 
+const ELECTRIC_INVENTORY_CATEGORY_BY_GROUP = {
+  BODY_OPTIONS: 'body',
+  BODY_WOOD_OPTIONS: 'accessories',
+  BODY_FINISH_OPTIONS: 'accessories',
+  NECK_OPTIONS: 'neck',
+  FRETBOARD_OPTIONS: 'neck',
+  HEADSTOCK_OPTIONS: 'neck',
+  HEADSTOCK_WOOD_OPTIONS: 'accessories',
+  INLAY_OPTIONS: 'accessories',
+  BRIDGE_OPTIONS: 'hardware',
+  HARDWARE_OPTIONS: 'hardware',
+  PICKUP_OPTIONS: 'pickups',
+  DEXTERITY_OPTIONS: 'accessories',
+  STRING_COUNT_OPTIONS: 'accessories',
+  MULTISCALE_OPTIONS: 'accessories',
+  SCALE_LENGTH_OPTIONS: 'accessories',
+  CASE_OPTIONS: 'accessories',
+  BEVEL_OPTIONS: 'accessories',
+  TOP_WOOD_OPTIONS: 'accessories',
+  FINISH_TYPE_OPTIONS: 'accessories',
+  TOP_COAT_OPTIONS: 'accessories',
+  BURST_FINISH_OPTIONS: 'accessories',
+  NECK_CONSTRUCTION_OPTIONS: 'neck',
+  INLAY_SHAPE_OPTIONS: 'accessories',
+  INLAY_MATERIAL_OPTIONS: 'accessories',
+  FRET_OPTIONS: 'neck',
+  NECK_REAR_FINISH_OPTIONS: 'accessories',
+  HEADSTOCK_SHAPE_OPTIONS: 'neck',
+  TRUSS_ROD_COVER_OPTIONS: 'neck',
+  ELECTRONICS_TYPE_OPTIONS: 'electronics',
+  PICKUP_CONFIGURATION_OPTIONS: 'pickups',
+  PICKUP_MODEL_BRIDGE_OPTIONS: 'pickups',
+  PICKUP_MODEL_MIDDLE_OPTIONS: 'pickups',
+  PICKUP_MODEL_NECK_OPTIONS: 'pickups',
+  PICKUP_BOBBIN_OPTIONS: 'pickups',
+  PICKUP_POLE_COLOR_OPTIONS: 'pickups',
+  CONTROLS_OPTIONS: 'electronics',
+  SADDLE_OPTIONS: 'hardware',
+  NUT_OPTIONS: 'hardware',
+  TUNING_OPTIONS: 'accessories',
+  STRING_BRAND_OPTIONS: 'accessories',
+  OUTPUT_JACK_OPTIONS: 'hardware',
+  STRAP_BUTTON_OPTIONS: 'hardware',
+  TUNER_BUTTON_OPTIONS: 'hardware',
+  ELECTRONICS_CAVITY_COVER_OPTIONS: 'electronics',
+  TREMOLO_COVER_OPTIONS: 'hardware',
+  PICKGUARD_OPTIONS_BY_BODY: 'accessories',
+  KNOB_OPTIONS_BY_BODY: 'hardware',
+};
+
 const buildElectricCustomizeSeedPayloads = (catalogSource, module) => {
   const {
     BODY_OPTIONS,
@@ -688,7 +738,7 @@ const buildElectricCustomizeSeedPayloads = (catalogSource, module) => {
     .map(([optionKey]) => optionKey);
 
   const payloads = [];
-  const pushPayload = ({ name, description, typeMapping, partCategory, imageUrl, price, metadata }) => {
+  const pushPayload = ({ name, description, typeMapping, partCategory, imageUrl, price, metadata, inventoryCategory }) => {
     payloads.push({
       name,
       description,
@@ -704,6 +754,7 @@ const buildElectricCustomizeSeedPayloads = (catalogSource, module) => {
         seed_source: 'customize_catalog',
         source: catalogSource,
         import_category: 'electric_guitar',
+        ...(inventoryCategory ? { inventory_category: inventoryCategory } : {}),
       },
       is_active: true,
     });
@@ -720,6 +771,7 @@ const buildElectricCustomizeSeedPayloads = (catalogSource, module) => {
         partCategory: config.partCategory,
         imageUrl: pickOptionImage(option),
         price: option?.price || 0,
+        inventoryCategory: config.inventoryCategory || ELECTRIC_INVENTORY_CATEGORY_BY_GROUP[config.group],
         metadata: {
           group: config.group,
           option_key: optionKey,
@@ -742,6 +794,7 @@ const buildElectricCustomizeSeedPayloads = (catalogSource, module) => {
           partCategory: config.partCategory,
           imageUrl: pickOptionImage(option),
           price: option?.price || 0,
+          inventoryCategory: config.inventoryCategory || ELECTRIC_INVENTORY_CATEGORY_BY_GROUP[config.group],
           metadata: {
             group: config.group,
             variant: variantKey,
@@ -776,6 +829,8 @@ const buildElectricCustomizeSeedPayloads = (catalogSource, module) => {
   addFlatOptions(module.TOP_COAT_OPTIONS || {}, { label: 'Top Coat', typeMapping: 'topCoat', partCategory: 'misc', group: 'TOP_COAT_OPTIONS' });
   addFlatOptions(module.BURST_FINISH_OPTIONS || {}, { label: 'Burst Finish', typeMapping: 'burstFinish', partCategory: 'misc', group: 'BURST_FINISH_OPTIONS' });
   addFlatOptions(module.NECK_CONSTRUCTION_OPTIONS || {}, { label: 'Neck Construction', typeMapping: 'neckConstruction', partCategory: 'misc', group: 'NECK_CONSTRUCTION_OPTIONS' });
+  addFlatOptions(module.INLAY_SHAPE_OPTIONS || {}, { label: 'Inlay Shape', typeMapping: 'inlayShape', partCategory: 'misc', group: 'INLAY_SHAPE_OPTIONS' });
+  addFlatOptions(module.INLAY_MATERIAL_OPTIONS || {}, { label: 'Inlay Material', typeMapping: 'inlayMaterial', partCategory: 'misc', group: 'INLAY_MATERIAL_OPTIONS' });
   addFlatOptions(module.FRET_OPTIONS || {}, { label: 'Frets', typeMapping: 'frets', partCategory: 'misc', group: 'FRET_OPTIONS' });
   addFlatOptions(module.NECK_REAR_FINISH_OPTIONS || {}, { label: 'Neck Rear Finish', typeMapping: 'neckRearFinish', partCategory: 'misc', group: 'NECK_REAR_FINISH_OPTIONS' });
   addFlatOptions(module.HEADSTOCK_SHAPE_OPTIONS || {}, { label: 'Headstock Shape', typeMapping: 'headstockShape', partCategory: 'misc', group: 'HEADSTOCK_SHAPE_OPTIONS' });
@@ -1164,12 +1219,29 @@ exports.getPartById = async (id) => {
   return res.rows[0] || null;
 };
 
+const normalizePartField = (value, fallback) => {
+  const normalized = String(value ?? '').trim();
+  return normalized ? normalized : fallback;
+};
+
 exports.createPart = async ({ name, description, guitar_type, part_category, folder_key, type_mapping, price, stock, image_url, metadata, is_active }) => {
   const res = await pool.query(
     `INSERT INTO guitar_builder_parts (name, description, guitar_type, part_category, folder_key, type_mapping, price, stock, image_url, metadata, is_active)
-     VALUES ($1, $2, COALESCE($3, 'electric'), COALESCE($4, 'misc'), $5, $6, $7, $8, $9, $10, $11)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
      RETURNING *`,
-    [name, description || null, guitar_type || null, part_category || null, folder_key || null, type_mapping, price || 0, stock || 0, image_url || null, metadata || null, is_active ?? true]
+    [
+      name,
+      description || null,
+      normalizePartField(guitar_type, 'electric'),
+      normalizePartField(part_category, 'misc'),
+      folder_key || null,
+      type_mapping,
+      Number(price) || 0,
+      Number(stock) || 0,
+      image_url || null,
+      metadata || null,
+      is_active ?? true,
+    ]
   );
   return res.rows[0];
 };
@@ -1191,7 +1263,20 @@ exports.updatePart = async (id, { name, description, guitar_type, part_category,
        updated_at   = now()
      WHERE part_id = $12
      RETURNING *`,
-    [name, description, guitar_type, part_category, folder_key, type_mapping, price, stock, image_url, metadata, is_active, id]
+    [
+      name,
+      description,
+      guitar_type ? normalizePartField(guitar_type, 'electric') : null,
+      part_category ? normalizePartField(part_category, 'misc') : null,
+      folder_key,
+      type_mapping,
+      price,
+      stock,
+      image_url,
+      metadata,
+      is_active,
+      id,
+    ]
   );
   return res.rows[0] || null;
 };

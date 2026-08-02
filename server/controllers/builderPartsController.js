@@ -29,7 +29,6 @@ exports.createPart = async (req, res, next) => {
     const part = await builderPartsService.createPart(req.body);
     await auditService.logCreate(
       req.user?.user_id || null,
-      auditService.MODULES.CUSTOMIZATIONS,
       'guitar_builder_parts',
       part.part_id,
       part,
@@ -48,7 +47,6 @@ exports.updatePart = async (req, res, next) => {
     if (!part) throw new AppError('Part not found', 404);
     await auditService.logUpdate(
       req.user?.user_id || null,
-      auditService.MODULES.CUSTOMIZATIONS,
       'guitar_builder_parts',
       part.part_id,
       existing,
@@ -68,7 +66,6 @@ exports.deletePart = async (req, res, next) => {
     if (!part) throw new AppError('Part not found', 404);
     await auditService.logDelete(
       req.user?.user_id || null,
-      auditService.MODULES.CUSTOMIZATIONS,
       'guitar_builder_parts',
       part.part_id,
       existing,

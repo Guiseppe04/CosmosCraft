@@ -900,39 +900,39 @@ exports.updateSubtaskSchema = Joi.object({
   notes: Joi.string().max(500).optional().allow('').trim(),
 });
 
+const builderPartCommonFields = {
+  name: Joi.string().trim().min(2).max(150).optional().messages({
+    'string.min': 'Part name must be at least 2 characters',
+    'string.max': 'Part name must not exceed 150 characters',
+  }),
+  description: Joi.string().trim().max(2000).optional().allow('', null),
+  guitar_type: Joi.string().trim().min(3).max(50).optional().allow('', null),
+  part_category: Joi.string().trim().min(1).max(100).optional().allow('', null),
+  folder_key: Joi.string().trim().max(120).optional().allow('', null),
+  type_mapping: Joi.string().trim().min(1).max(100).optional(),
+  price: Joi.number().precision(2).min(0).optional(),
+  stock: Joi.number().integer().min(0).optional(),
+  image_url: Joi.string().max(2000).optional().allow('', null),
+  metadata: Joi.object().optional(),
+  is_active: Joi.boolean().optional(),
+};
+
 exports.createBuilderPartSchema = Joi.object({
-  name: Joi.string().trim().min(3).max(150).required().messages({
-    'string.min': 'Part name must be at least 3 characters',
+  ...builderPartCommonFields,
+  name: Joi.string().trim().min(2).max(150).required().messages({
+    'string.min': 'Part name must be at least 2 characters',
     'string.max': 'Part name must not exceed 150 characters',
     'any.required': 'Part name is required',
   }),
-  category_id: Joi.number().integer().min(1).required().messages({
-    'number.base': 'Category ID must be a number',
-    'any.required': 'Category ID is required',
+  type_mapping: Joi.string().trim().min(1).max(100).required().messages({
+    'any.required': 'Type mapping is required',
   }),
-  guitar_type: Joi.string().trim().min(3).max(50).required().messages({
-    'any.required': 'Guitar type is required',
-  }),
-  price: Joi.number().precision(2).min(0).required().messages({
-    'number.base': 'Price must be a number',
-    'number.min': 'Price must be at least 0',
-    'any.required': 'Price is required',
-  }),
+  price: Joi.number().precision(2).min(0).optional(),
   stock: Joi.number().integer().min(0).optional(),
-  low_stock_threshold: Joi.number().integer().min(0).optional(),
-  metadata: Joi.object().optional(),
-  is_active: Joi.boolean().optional(),
 });
 
 exports.updateBuilderPartSchema = Joi.object({
-  name: Joi.string().trim().min(3).max(150).optional(),
-  category_id: Joi.number().integer().min(1).optional(),
-  guitar_type: Joi.string().trim().min(3).max(50).optional(),
-  price: Joi.number().precision(2).min(0).optional(),
-  stock: Joi.number().integer().min(0).optional(),
-  low_stock_threshold: Joi.number().integer().min(0).optional(),
-  metadata: Joi.object().optional(),
-  is_active: Joi.boolean().optional(),
+  ...builderPartCommonFields,
 });
 
 exports.guitarTypeParamSchema = Joi.object({
