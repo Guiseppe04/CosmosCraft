@@ -319,6 +319,7 @@ exports.updateAddressSchema = Joi.object({
   streetLine1: addressFields.streetLine1.optional(),
   streetLine2: addressFields.streetLine2,
   city: addressFields.city.optional(),
+  barangay: addressFields.barangay.optional(),
   stateProvince: addressFields.stateProvince.optional(),
   postalZipCode: addressFields.postalZipCode.optional(),
   country: addressFields.country.optional(),
