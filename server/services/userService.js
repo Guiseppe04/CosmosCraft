@@ -335,6 +335,27 @@ exports.setPassword = async (userId, newPassword) => {
   return { message: 'Password updated successfully' };
 };
 
+exports.updateUserPhone = async (userId, phone) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await client.query(
+      'UPDATE users SET phone = $1, updated_at = now() WHERE user_id = $2 RETURNING *',
+      [phone || null, userId]
+    );
+    await client.query('COMMIT');
+    if (result.rows.length === 0) throw new Error('User not found');
+    const user = result.rows[0];
+    delete user.password_hash;
+    return user;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+};
+
 exports.deactivateAccount = async (userId) => {
   await pool.query('UPDATE users SET is_active = false, updated_at = now() WHERE user_id = $1', [userId]);
   return exports.getUserById(userId);

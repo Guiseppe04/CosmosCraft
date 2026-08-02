@@ -357,6 +357,17 @@ exports.updateProfileSchema = Joi.object({
     }),
 });
 
+// Update phone (PH mobile format: 09XXXXXXXXX or +639XXXXXXXXX)
+exports.updatePhoneSchema = Joi.object({
+  phone: Joi.string()
+    .pattern(/^(09\d{9}|\+639\d{9})$/)
+    .required()
+    .messages({
+      'string.pattern.base': 'Phone number must be 11 digits starting with 09 or in +63 format (e.g. +639123456789)',
+      'any.required': 'Phone number is required',
+    }),
+});
+
 // Change Password
 exports.changePasswordSchema = Joi.object({
   oldPassword: Joi.string()

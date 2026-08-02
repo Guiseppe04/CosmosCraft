@@ -222,7 +222,7 @@ function getMonthMatrix(year, month, maxLeadTimeDays, disabledDateSet = new Set(
 export function AppointmentPage() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { user, isAuthenticated, isLoadingUser, openLogin } = useAuth()
+  const { user, isAuthenticated, isLoadingUser, openLogin, updateUser } = useAuth()
   const today = new Date()
   const branch = useMemo(() => getAppointmentBranch(), [])
   const branches = useMemo(() => [branch], [branch])
@@ -247,6 +247,11 @@ export function AppointmentPage() {
   const [homeServiceOption, setHomeServiceOption] = useState('')
   const [homeServiceAddressId, setHomeServiceAddressId] = useState('')
   const [homeServiceContact, setHomeServiceContact] = useState(user?.phone || '')
+  const [showPhoneForm, setShowPhoneForm] = useState(false)
+  const [newPhone, setNewPhone] = useState('')
+  const [phoneError, setPhoneError] = useState('')
+  const [phoneSaving, setPhoneSaving] = useState(false)
+  const [contactError, setContactError] = useState('')
   const [availableServices, setAvailableServices] = useState([])
   const [servicesError, setServicesError] = useState('')
   const [servicesLoading, setServicesLoading] = useState(true)
@@ -574,7 +579,7 @@ export function AppointmentPage() {
     }
     if (currentStep === 4) {
       if (selectedAppointmentType === 'service_home') {
-        return Boolean(homeServiceAddressId && homeServiceContact.trim())
+        return Boolean(homeServiceAddressId && homeServiceContact.trim() && !contactError)
       }
       return !!selectedBranchId
     }
@@ -602,6 +607,7 @@ export function AppointmentPage() {
     if (currentStep === 4 && selectedAppointmentType === 'service_home') {
       if (!homeServiceAddressId) return 'Select your home service address.'
       if (!homeServiceContact.trim()) return 'Enter your contact number for home service.'
+      if (contactError) return contactError
     }
     return ''
   }
@@ -696,6 +702,45 @@ export function AppointmentPage() {
   const handlePrevStep = () => {
     if (currentStep > 1) {
       setCurrentStep(s => s - 1)
+    }
+  }
+
+  const PHONE_REGEX = /^(09\d{9}|\+639\d{9})$/
+
+  const handleSavePhone = async () => {
+    const trimmed = newPhone.trim()
+    if (!PHONE_REGEX.test(trimmed)) {
+      setPhoneError('Phone number must be 11 digits starting with 09 or in +63 format (e.g. +639123456789)')
+      return
+    }
+
+    setPhoneError('')
+    setPhoneSaving(true)
+
+    try {
+      const response = await fetch(`${API}/api/users/me/phone`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ phone: trimmed }),
+      })
+
+      const data = await response.json().catch(() => ({}))
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to save phone number')
+      }
+
+      const savedPhone = data.data?.user?.phone || trimmed
+      updateUser({ phone: savedPhone })
+      setHomeServiceContact(savedPhone)
+      setShowPhoneForm(false)
+      setNewPhone('')
+      toast.success('Phone number saved successfully')
+    } catch (error) {
+      toast.error(error.message || 'Failed to save phone number')
+    } finally {
+      setPhoneSaving(false)
     }
   }
 
@@ -1198,13 +1243,76 @@ export function AppointmentPage() {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-white mb-1.5">Contact Number <span className="text-red-400">*</span></label>
-                      <input
-                        type="text"
-                        value={homeServiceContact}
-                        onChange={(e) => setHomeServiceContact(e.target.value)}
-                        className="w-full px-4 py-3 bg-[var(--surface-dark)] text-[var(--text-light)] border border-[var(--border)] rounded-xl text-sm focus:outline-none focus:border-[#d4af37]"
-                        placeholder="e.g. 09123456789"
-                      />
+                      {!user?.phone && !showPhoneForm && (
+                        <div className="mb-2 rounded-xl border border-[#d4af37]/30 bg-[#d4af37]/5 p-3 flex items-center justify-between gap-3">
+                          <p className="text-sm text-[var(--text-muted)]">
+                            Add your phone number for home service delivery updates.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => setShowPhoneForm(true)}
+                            className="shrink-0 px-4 py-1.5 rounded-lg text-sm font-semibold bg-[#d4af37] text-black hover:bg-[#ffe270] transition-colors"
+                          >
+                            Add Phone Number
+                          </button>
+                        </div>
+                      )}
+                      {showPhoneForm && (
+                        <div className="mb-2 rounded-xl border border-[#d4af37]/30 bg-[#d4af37]/5 p-4 space-y-3">
+                          <p className="text-sm font-semibold text-[var(--text-light)]">Enter Phone Number</p>
+                          <input
+                            type="text"
+                            value={newPhone}
+                            onChange={(e) => {
+                              setNewPhone(e.target.value)
+                              setPhoneError('')
+                            }}
+                            className="w-full px-4 py-3 bg-[var(--surface-dark)] text-[var(--text-light)] border border-[var(--border)] rounded-xl text-sm focus:outline-none focus:border-[#d4af37]"
+                            placeholder="09XXXXXXXXX or +639XXXXXXXXX"
+                            maxLength={13}
+                          />
+                          {phoneError && (
+                            <p className="text-xs text-red-400">{phoneError}</p>
+                          )}
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={handleSavePhone}
+                              disabled={phoneSaving || !PHONE_REGEX.test(newPhone.trim())}
+                              className="px-4 py-2 rounded-lg text-sm font-semibold bg-[#d4af37] text-black hover:bg-[#ffe270] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              {phoneSaving ? 'Saving...' : 'Save'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => { setShowPhoneForm(false); setNewPhone(''); setPhoneError('') }}
+                              className="px-4 py-2 rounded-lg text-sm font-semibold text-[var(--text-muted)] bg-[var(--surface-dark)] border border-[var(--border)] hover:bg-[var(--surface-elevated)] transition-colors"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                      {user?.phone || showPhoneForm ? (
+                        <input
+                          type="text"
+                          value={homeServiceContact}
+                          onChange={(e) => {
+                            const val = e.target.value
+                            setHomeServiceContact(val)
+                            if (val && !PHONE_REGEX.test(val.trim())) {
+                              setContactError('Phone number must be 11 digits starting with 09 or in +63 format (e.g. +639123456789)')
+                            } else {
+                              setContactError('')
+                            }
+                          }}
+                          className="w-full px-4 py-3 bg-[var(--surface-dark)] text-[var(--text-light)] border border-[var(--border)] rounded-xl text-sm focus:outline-none focus:border-[#d4af37]"
+                          placeholder="+639XXXXXXXXX"
+                        />
+                      ) : null}
+                      {contactError && (
+                        <p className="text-xs text-red-400 mt-1">{contactError}</p>
+                      )}
                     </div>
                   </div>
                 )}

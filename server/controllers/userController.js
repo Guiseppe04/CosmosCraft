@@ -1,7 +1,7 @@
 const { asyncHandler, AppError } = require('../middleware/errorHandler');
 const userService = require('../services/userService');
 const rbacService = require('../services/rbacService');
-const { addAddressSchema, updateAddressSchema, updateProfileSchema } = require('../utils/validation');
+const { addAddressSchema, updateAddressSchema, updateProfileSchema, updatePhoneSchema } = require('../utils/validation');
 const { hasRole } = require('../utils/roles');
 
 /**
@@ -79,6 +79,28 @@ exports.updateProfile = asyncHandler(async (req, res, next) => {
   res.status(200).json({
     status: 'success',
     message: 'Profile updated successfully',
+    data: { user },
+  });
+});
+
+/**
+ * Update User Phone
+ */
+exports.updateUserPhone = asyncHandler(async (req, res, next) => {
+  const { error, value } = updatePhoneSchema.validate(req.body, { abortEarly: false });
+  if (error) {
+    const errors = error.details.map((detail) => ({
+      field: detail.path.join('.'),
+      message: detail.message,
+    }));
+    throw new AppError('Validation failed', 400, errors);
+  }
+
+  const user = await userService.updateUserPhone(req.user.id, value.phone);
+
+  res.status(200).json({
+    status: 'success',
+    message: 'Phone number updated successfully',
     data: { user },
   });
 });
