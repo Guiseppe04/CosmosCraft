@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'motion/react'
 import { API } from '../utils/apiConfig'
 import { uploadToCloudinary } from '../utils/cloudinary.js'
 import { useAuth } from '../context/AuthContext.jsx'
+import { useToast } from '../components/ui/Toast.jsx'
 import {
   Wrench,
   Paintbrush,
