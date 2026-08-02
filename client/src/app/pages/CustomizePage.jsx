@@ -1452,21 +1452,6 @@ export function CustomizePage() {
                     </div>
                   </div>
                   
-                  {/* Headstock */}
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Headstock</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.headstockOptions?.map((opt) => (
-                        <OptionButton
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.headstock === opt.value}
-                          onClick={() => updateConfig({ headstock: opt.value })}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                  
                   {/* Headstock Wood */}
                   <div>
                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Headstock Wood</h3>
@@ -1497,22 +1482,33 @@ export function CustomizePage() {
                     </div>
                   </div>
                   
-                   {/* Inlay */}
+                   {/* Inlay Shape */}
                    <div>
-                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Inlay</h3>
+                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Inlay Shape</h3>
                      <div className="grid grid-cols-2 gap-2">
-                       {options.inlayOptions?.map((opt) => (
-                         <VisualCard
+                       {options.inlayShapeOptions?.map((opt) => (
+                         <OptionButton
                            key={opt.value}
                            option={opt}
-                           isSelected={config.inlay === opt.value}
-                           onClick={() => updateConfig({ inlay: opt.value })}
-                           previewImage={opt.preview}
-                           imageHeight="h-14"
+                           isSelected={config.inlayShape === opt.value}
+                           onClick={() => updateConfig({ inlayShape: opt.value })}
                          />
-                        ))}
-                      </div>
-                    </div>
+                       ))}
+                     </div>
+                   </div>
+                   <div>
+                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Inlay Material</h3>
+                     <div className="grid grid-cols-2 gap-2">
+                       {options.inlayMaterialOptions?.map((opt) => (
+                         <OptionButton
+                           key={opt.value}
+                           option={opt}
+                           isSelected={config.inlayMaterial === opt.value}
+                           onClick={() => updateConfig({ inlayMaterial: opt.value })}
+                         />
+                       ))}
+                     </div>
+                   </div>
                   </div>
                 )}
                 

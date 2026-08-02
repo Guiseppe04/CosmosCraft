@@ -482,13 +482,28 @@ export const OPTION_FIELDS = [
   },
   {
     section: 'Neck',
-    key: 'inlay',
-    label: 'Inlay',
+    key: 'inlayShape',
+    label: 'Inlay Shape',
     type: 'image-select',
-    previewResolver: (category, model, value) => resolveInlay(category, model, value),
-    getOptions: (config, category, model) => {
-      return []
-    },
+    previewResolver: (category, model, value) => getButtonPreview(category, model, 'inlay-shape', value),
+    options: [
+      { value: 'dots', label: 'Dots', note: 'Classic dot inlays', price: 0 },
+      { value: 'diamonds', label: 'Diamonds', note: 'Diamond inlays', price: 30 },
+      { value: 'blocks', label: 'Blocks', note: 'Block inlays', price: 30 },
+    ],
+  },
+  {
+    section: 'Neck',
+    key: 'inlayMaterial',
+    label: 'Inlay Material',
+    type: 'image-select',
+    previewResolver: (category, model, value) => getButtonPreview(category, model, 'inlay-material', value),
+    options: [
+      { value: 'pearl', label: 'Pearl', note: 'White pearl material', price: 0 },
+      { value: 'abalone', label: 'Abalone', note: 'Shell-like abalone material', price: 35 },
+      { value: 'black', label: 'Black', note: 'Black onyx material', price: 0 },
+      { value: 'luminlay', label: 'Luminlay', note: 'Glow-in-the-dark material', price: 35 },
+    ],
   },
   {
     section: 'Neck',
@@ -538,11 +553,12 @@ export const OPTION_FIELDS = [
     previewResolver: (category, model, value) => getButtonPreview(category, model, 'truss-cover', value),
     options: [
       { value: 'black', label: 'Black', note: 'Black truss rod cover', price: 0 },
-      { value: 'cream', label: 'Cream', note: 'Cream cover', price: 10 },
+      { value: 'creme', label: 'Cream', note: 'Cream cover', price: 10 },
       { value: 'white', label: 'White', note: 'White cover', price: 10 },
-      { value: 'red-tortoiseshell', label: 'Red Tortoiseshell', note: 'Tortoiseshell cover', price: 15 },
-      { value: 'white-pearloid', label: 'White Pearloid', note: 'Pearloid cover', price: 15 },
+      { value: 'pearloid', label: 'Pearloid', note: 'Pearloid cover', price: 15 },
       { value: 'ebony', label: 'Ebony', note: 'Ebony cover', price: 20 },
+      { value: 'purpleheart', label: 'Purpleheart', note: 'Purpleheart cover', price: 25 },
+      { value: 'red-tortoise', label: 'Red Tortoise', note: 'Red tortoise cover', price: 15 },
     ],
   },
 

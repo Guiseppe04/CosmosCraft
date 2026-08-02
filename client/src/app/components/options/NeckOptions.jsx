@@ -57,14 +57,24 @@ export default function NeckOptions({
         selectedLabel={builder.HEADSTOCK_WOOD_OPTIONS[config.headstockWood]?.label ?? config.headstockWood}
       />
       <OptionGroup
-        title="Inlays"
+        title="Inlay Shape"
         description="Fretboard marker style"
-        value={config.inlays}
-        onChange={inlays => onChange({ inlays })}
-        options={options.inlayOptions}
-        isOpen={openKey === 'inlays'}
-        onToggle={() => setOpenKey(prev => (prev === 'inlays' ? null : 'inlays'))}
-        selectedLabel={builder.INLAY_OPTIONS[config.inlays]?.label ?? config.inlays}
+        value={config.inlayShape}
+        onChange={inlayShape => onChange({ inlayShape })}
+        options={options.inlayShapeOptions}
+        isOpen={openKey === 'inlayShape'}
+        onToggle={() => setOpenKey(prev => (prev === 'inlayShape' ? null : 'inlayShape'))}
+        selectedLabel={builder.INLAY_SHAPE_OPTIONS[config.inlayShape]?.label ?? config.inlayShape}
+      />
+      <OptionGroup
+        title="Inlay Material"
+        description="Fretboard marker material"
+        value={config.inlayMaterial}
+        onChange={inlayMaterial => onChange({ inlayMaterial })}
+        options={options.inlayMaterialOptions}
+        isOpen={openKey === 'inlayMaterial'}
+        onToggle={() => setOpenKey(prev => (prev === 'inlayMaterial' ? null : 'inlayMaterial'))}
+        selectedLabel={builder.INLAY_MATERIAL_OPTIONS[config.inlayMaterial]?.label ?? config.inlayMaterial}
       />
     </>
   )

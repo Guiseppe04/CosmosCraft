@@ -344,10 +344,15 @@ export async function buildStickerPlacementContext(stage, bodySrc) {
     protectedSources.push(source)
   }
 
-  const [bodyMask, ...protectedMasks] = await Promise.all([
+  const [bodyResult, ...protectedResults] = await Promise.allSettled([
     getImageData(bodySrc),
     ...protectedSources.map((src) => getImageData(src)),
   ])
+  if (bodyResult.status === 'rejected') throw bodyResult.reason
+  const bodyMask = bodyResult.value
+  const protectedMasks = protectedResults
+    .filter((result) => result.status === 'fulfilled')
+    .map((result) => result.value)
 
   const bodyBox = bodyMask ? getContainBox(stage.getBoundingClientRect().width, stage.getBoundingClientRect().height, bodyMask.width, bodyMask.height) : null
 

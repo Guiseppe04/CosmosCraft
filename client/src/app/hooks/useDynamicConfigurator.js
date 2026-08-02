@@ -74,9 +74,12 @@ export default function useDynamicConfigurator(baseConfig, updateConfig, resetCo
       mapped.fretboard = mapped.fingerboardWood
     }
 
-    // Map headstockShape -> headstock (existing field)
-    if (mapped.headstockShape && mapped.headstock !== mapped.headstockShape) {
-      mapped.headstock = mapped.headstockShape
+// Map headstock and headstockShape so legacy and new schema remain compatible
+  if (mapped.headstockShape && mapped.headstock !== mapped.headstockShape) {
+    mapped.headstock = mapped.headstockShape
+  }
+  if (mapped.headstock && !mapped.headstockShape) {
+    mapped.headstockShape = mapped.headstock
     }
 
     // Map finishColor -> bodyFinish
@@ -143,3 +146,4 @@ export default function useDynamicConfigurator(baseConfig, updateConfig, resetCo
     categories: CATEGORIES,
     availableModels: Object.keys(CATEGORIES[guitarCategory]?.models || {}),
   }
+}

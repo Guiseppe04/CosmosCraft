@@ -13,13 +13,28 @@ export const cloudImage = (root, path) => {
 
 export const asset = (path) => {
   if (USE_CLOUDINARY) {
+    if (path.startsWith('dc_assets/') || path.startsWith('delos_assets/')) {
+      return `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/cosmoscraft_assets/electric_assets/${path}`
+    }
+    if (path.startsWith('delos/')) {
+      return `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/cosmoscraft_assets/electric_assets/delos_assets/models/${path}`
+    }
+    if (path.startsWith('dc/') || path.startsWith('rs/') || path.startsWith('solo/')) {
+      return `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/cosmoscraft_assets/electric_assets/dc_assets/models/${path}`
+    }
     return `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/cosmoscraft_assets/electric_assets/${path}`
   }
   // Local fallback - serve from public/builder/
-  // If path starts with a model prefix (dc_assets/, delos_assets/), use as-is
-  // Otherwise prepend dc_assets/models/ for shared all-models assets
+  // If path starts with a model prefix that already includes the `_assets` directory, use as-is.
   if (path.startsWith('dc_assets/') || path.startsWith('delos_assets/')) {
     return `/builder/electric_assets/${path}`
+  }
+  // Model-specific paths without _assets should map to their actual local model directories.
+  if (path.startsWith('delos/')) {
+    return `/builder/electric_assets/delos_assets/models/${path}`
+  }
+  if (path.startsWith('dc/') || path.startsWith('rs/') || path.startsWith('solo/')) {
+    return `/builder/electric_assets/dc_assets/models/${path}`
   }
   // Shared assets (all-models/...) live under dc_assets/models/
   return `/builder/electric_assets/dc_assets/models/${path}`
@@ -40,10 +55,9 @@ export const DEFAULT_CONFIG = {
   bodyFinish: 'none',
   neck: 'maple',
   fretboard: 'rosewood',
-  headstockWood: 'rosewood',
+  headstockWood: 'plain-maple',
   inlays: 'pearl',
   bridge: 'hipshotFixed',
-  pickguard: 'none',
   knobs: 'black',
   pickups: 'hss',
   hardware: 'chrome',
@@ -59,11 +73,13 @@ export const DEFAULT_CONFIG = {
   topCoat: 'clearGloss',
   burstFinish: 'none',
   neckConstruction: '1piece',
+  pickguard: 'pearloid',
   inlayShape: 'dots',
   inlayMaterial: 'pearl',
+  inlay: 'idwhite-pearl',
   frets: 'stainlessRegular',
   neckRearFinish: 'none',
-  headstockShape: 'inlineGT',
+  headstockShape: 'gt6',
   trussRodCover: 'black',
   electronicsType: 'passive',
   pickupConfiguration: 'hss',
@@ -253,25 +269,119 @@ export const NECK_OPTIONS = {
 }
 
 export const FRETBOARD_OPTIONS = {
-  maple: {
-    label: 'Maple',
-    note: 'Clean and bright',
-    src: asset('all-models/woods-colors/fingerboard-woods/maple.png'),
-    price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
+  birdseyeMaple: {
+    label: 'Birdseye Maple',
+    note: 'Figured maple with distinctive birdseye grain',
+    src: asset('all-models/woods-colors/fingerboard-woods/birdseye-maple.png'),
+    price: 100,
+    specs: { size: '', dimensions: '', material: '', notes: '' }
   },
-  rosewood: {
-    label: 'Rosewood',
-    note: 'Classic dark board',
-    src: asset('all-models/woods-colors/fingerboard-woods/rosewood.png'),
-    price: 60, specs: { size: '', dimensions: '', material: '', notes: '' }
+  bloodwood: {
+    label: 'Bloodwood',
+    note: 'Dense hardwood with rich red color',
+    src: asset('all-models/woods-colors/fingerboard-woods/bloodwood.png'),
+    price: 120,
+    specs: { size: '', dimensions: '', material: '', notes: '' }
   },
   ebony: {
     label: 'Ebony',
     note: 'Snappy premium board',
     src: asset('all-models/woods-colors/fingerboard-woods/ebony.png'),
-    price: 80, specs: { size: '', dimensions: '', material: '', notes: '' }
+    price: 80,
+    specs: { size: '', dimensions: '', material: '', notes: '' }
   },
-}
+  efb: {
+    label: 'EFB (Less Color Variation)',
+    note: 'Engineered ebony with consistent appearance',
+    src: asset('all-models/woods-colors/fingerboard-woods/efb.png'),
+    price: 90,
+    specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+  flamedMaple: {
+    label: 'Flamed Maple',
+    note: 'Premium maple with flame figuring',
+    src: asset('all-models/woods-colors/fingerboard-woods/flamed-maple.png'),
+    price: 110,
+    specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+  maple: {
+    label: 'Maple',
+    note: 'Clean and bright',
+    src: asset('all-models/woods-colors/fingerboard-woods/maple.png'),
+    price: 0,
+    specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+  paleMoonEbony: {
+    label: 'Pale Moon Ebony',
+    note: 'Exotic ebony with dramatic contrasting grain',
+    src: asset('all-models/woods-colors/fingerboard-woods/pale-moon-ebony.png'),
+    price: 140,
+    specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+  purpleHeart: {
+    label: 'Purple Heart',
+    note: 'Hardwood with natural purple hue',
+    src: asset('all-models/woods-colors/fingerboard-woods/purple-heart.png'),
+    price: 100,
+    specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+  richliteMapleValley: {
+    label: 'Richlite Maple Valley',
+    note: 'Durable composite fingerboard',
+    src: asset('all-models/woods-colors/fingerboard-woods/richlite-maple-valley.png'),
+    price: 130,
+    specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+  roastedBirdseye: {
+    label: 'Roasted Birdseye Maple',
+    note: 'Roasted birdseye maple with enhanced stability',
+    src: asset('all-models/woods-colors/fingerboard-woods/roasted-birdseye.png'),
+    price: 140,
+    specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+  roastedFlame: {
+    label: 'Roasted Flame Maple',
+    note: 'Roasted flame maple with rich figuring',
+    src: asset('all-models/woods-colors/fingerboard-woods/roasted-flame.png'),
+    price: 140,
+    specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+  roastedMaple: {
+    label: 'Roasted Maple',
+    note: 'Heat-treated maple for stability',
+    src: asset('all-models/woods-colors/fingerboard-woods/roasted-maple.png'),
+    price: 100,
+    specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+  rosewood: {
+    label: 'Rosewood',
+    note: 'Classic dark board',
+    src: asset('all-models/woods-colors/fingerboard-woods/rosewood.png'),
+    price: 60,
+    specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+  royalEbony: {
+    label: 'Royal Ebony',
+    note: 'Premium ebony with striking grain',
+    src: asset('all-models/woods-colors/fingerboard-woods/royal-ebony.png'),
+    price: 130,
+    specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+  zebrawood: {
+    label: 'Zebrawood',
+    note: 'Distinctive striped hardwood',
+    src: asset('all-models/woods-colors/fingerboard-woods/zebrawood.png'),
+    price: 110,
+    specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+  ziricote: {
+    label: 'Ziricote',
+    note: 'Exotic hardwood with dramatic grain',
+    src: asset('all-models/woods-colors/fingerboard-woods/ziricote.png'),
+    price: 140,
+    specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+};
 
 export const NECK_MASK = asset('all-models/necks/6-string/front/24-fret-front/standard/masks/mask.png')
 export const NECK_FRETS = {
@@ -295,6 +405,12 @@ export const HEADSTOCK_WOOD_OPTIONS = {
     note: 'Dark premium wood',
     texture: asset('all-models/woods-colors/headstock-woods/ebony.png'),
     price: 20, specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+  'plain-maple': {
+    label: 'Plain Maple',
+    note: 'Light plain maple headstock',
+    texture: asset('all-models/woods-colors/headstock-woods/plain-maple.png'),
+    price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
 }
 
@@ -354,7 +470,6 @@ export const BRIDGE_OPTIONS = {
 
 export const PICKGUARD_OPTIONS_BY_BODY = {
   strat: {
-    none: { label: 'None', note: 'No pickguard', src: null, price: 0, specs: { size: '', dimensions: '', material: '', notes: '' } },
     white: {
       label: 'White',
       note: 'Classic white guard',
@@ -362,7 +477,7 @@ export const PICKGUARD_OPTIONS_BY_BODY = {
       price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     pearloid: {
-      label: 'Pearloid',
+      label: 'White Pearl',
       note: 'Bright pearloid finish',
       src: asset('rs/bodies/front/pickguard/white-pearloid.png'),
       price: 20, specs: { size: '', dimensions: '', material: '', notes: '' }
@@ -381,7 +496,6 @@ export const PICKGUARD_OPTIONS_BY_BODY = {
     },
   },
   delos: {
-    none: { label: 'None', note: 'No pickguard', src: null, price: 0, specs: { size: '', dimensions: '', material: '', notes: '' } },
     white: {
       label: 'White',
       note: 'Clean white guard',
@@ -389,7 +503,7 @@ export const PICKGUARD_OPTIONS_BY_BODY = {
       price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     pearloid: {
-      label: 'Pearloid',
+      label: 'White Pearl',
       note: 'White pearloid guard',
       src: asset('delos/bodies/front/pickguard/white-pearloid.png'),
       price: 20, specs: { size: '', dimensions: '', material: '', notes: '' }
@@ -405,12 +519,6 @@ export const PICKGUARD_OPTIONS_BY_BODY = {
       note: 'Low-key satin finish',
       src: asset('delos/bodies/front/pickguard/satin-black.png'),
       price: 15, specs: { size: '', dimensions: '', material: '', notes: '' }
-    },
-    tortoise: {
-      label: 'Tortoise',
-      note: 'Red tortoise shell',
-      src: asset('delos/bodies/front/pickguard/red-tortoise.png'),
-      price: 25, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
   },
   solo: { none: { label: 'None', note: 'No pickguard', src: null, price: 0, specs: { size: '', dimensions: '', material: '', notes: '' } } },
@@ -551,12 +659,97 @@ export const HEADSTOCK_OPTIONS = {
     mask: asset('all-models/headstocks/6/masks/gt6r/mask.png'),
     logo: asset('all-models/headstocks/6/logos/left-handed/gt6r/wl.png'),
     tuners: {
+      chrome: asset('all-models/headstocks/6/tuners/gt6r/chrome.png'),
       black: asset('all-models/headstocks/6/tuners/gt6r/black.png'),
-      white: asset('all-models/headstocks/6/tuners/gt6r/whitepearl-buttons.png'),
+      gold: asset('all-models/headstocks/6/tuners/gt6r/gold.png'),
     },
     strings: asset('all-models/headstocks/6/string-overlays/standard/gt6r.png'),
     trussCover: asset('all-models/headstocks/6/truss-cover/black.png'),
     price: 20, specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+  '6in': {
+    label: '6 Inline',
+    note: 'Standard 6 inline',
+    mask: asset('all-models/headstocks/6/masks/6in/mask.png'),
+    logo: null,
+    tuners: {
+      chrome: asset('all-models/headstocks/6/tuners/6in/chrome.png'),
+      black: asset('all-models/headstocks/6/tuners/6in/black.png'),
+      gold: asset('all-models/headstocks/6/tuners/6in/gold.png'),
+    },
+    strings: asset('all-models/headstocks/6/string-overlays/standard/6in.png'),
+    trussCover: asset('all-models/headstocks/6/truss-cover/black.png'),
+    price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+  '6inr': {
+    label: '6 Inline Reverse',
+    note: 'Reverse 6 inline',
+    mask: asset('all-models/headstocks/6/masks/6inr/mask.png'),
+    logo: null,
+    tuners: {
+      chrome: asset('all-models/headstocks/6/tuners/6inr/chrome.png'),
+      black: asset('all-models/headstocks/6/tuners/6inr/black.png'),
+      gold: asset('all-models/headstocks/6/tuners/6inr/gold.png'),
+    },
+    strings: asset('all-models/headstocks/6/string-overlays/standard/6inr.png'),
+    trussCover: asset('all-models/headstocks/6/truss-cover/black.png'),
+    price: 20, specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+  '6kr': {
+    label: '6 KR',
+    note: '6 KR headstock',
+    mask: asset('all-models/headstocks/6/masks/6kr/mask.png'),
+    logo: null,
+    tuners: {
+      chrome: asset('all-models/headstocks/6/tuners/6kr/chrome.png'),
+      black: asset('all-models/headstocks/6/tuners/6kr/black.png'),
+      gold: asset('all-models/headstocks/6/tuners/6kr/gold.png'),
+    },
+    strings: asset('all-models/headstocks/6/string-overlays/standard/6kr.png'),
+    trussCover: asset('all-models/headstocks/6/truss-cover/black.png'),
+    price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+  '624': {
+    label: '2×4',
+    note: '2×4 headstock',
+    mask: asset('all-models/headstocks/6/masks/624/mask.png'),
+    logo: null,
+    tuners: {
+      chrome: asset('all-models/headstocks/6/tuners/624/chrome.png'),
+      black: asset('all-models/headstocks/6/tuners/624/black.png'),
+      gold: asset('all-models/headstocks/6/tuners/624/gold.png'),
+    },
+    strings: asset('all-models/headstocks/6/string-overlays/standard/624.png'),
+    trussCover: asset('all-models/headstocks/6/truss-cover/black.png'),
+    price: 20, specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+  pth: {
+    label: 'Pointed',
+    note: 'Pointed headstock',
+    mask: asset('all-models/headstocks/6/masks/pth/mask.png'),
+    logo: null,
+    tuners: {
+      chrome: asset('all-models/headstocks/6/tuners/pth/chrome.png'),
+      black: asset('all-models/headstocks/6/tuners/pth/black.png'),
+      gold: asset('all-models/headstocks/6/tuners/pth/gold.png'),
+    },
+    strings: asset('all-models/headstocks/6/string-overlays/standard/pth.png'),
+    trussCover: asset('all-models/headstocks/6/truss-cover/black.png'),
+    price: 25, specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+  pthr: {
+    label: 'Pointed Reverse',
+    note: 'Reverse pointed',
+    mask: asset('all-models/headstocks/6/masks/pthr/mask.png'),
+    logo: null,
+    tuners: {
+      chrome: asset('all-models/headstocks/6/tuners/pthr/chrome.png'),
+      black: asset('all-models/headstocks/6/tuners/pthr/black.png'),
+      gold: asset('all-models/headstocks/6/tuners/pthr/gold.png'),
+    },
+    strings: asset('all-models/headstocks/6/string-overlays/standard/pthr.png'),
+    trussCover: asset('all-models/headstocks/6/truss-cover/black.png'),
+    price: 25, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
   h33: {
     label: 'H33',
@@ -578,7 +771,9 @@ export const HEADSTOCK_OPTIONS = {
     mask: asset('all-models/headstocks/6/masks/h33r/mask.png'),
     logo: asset('all-models/headstocks/6/logos/hr33/wl.png'),
     tuners: {
+      chrome: asset('all-models/headstocks/6/tuners/hr33/chrome.png'),
       black: asset('all-models/headstocks/6/tuners/hr33/black.png'),
+      gold: asset('all-models/headstocks/6/tuners/hr33/gold.png'),
     },
     strings: asset('all-models/headstocks/6/string-overlays/standard/hr33.png'),
     trussCover: asset('all-models/headstocks/6/truss-cover/black.png'),
@@ -971,21 +1166,26 @@ export const NECK_REAR_FINISH_OPTIONS = {
 }
 
 export const HEADSTOCK_SHAPE_OPTIONS = {
-  inlineGT: { label: 'Inline GT', note: 'Straight 6 inline', src: null, price: 0, specs: specs() },
-  '2x4': { label: '2×4', note: '2×4 headstock', src: null, price: 20, specs: specs() },
-  aero: { label: 'Aero Headstock', note: 'Aero headstock', src: null, price: 30, specs: specs() },
-  pointedStraight6Inline: { label: 'Pointed Straight 6 Inline', note: 'Pointed straight 6 inline', src: null, price: 25, specs: specs() },
-  reversedInlineGT: { label: 'Reversed Inline GT', note: 'Reverse inline GT', src: null, price: 25, specs: specs() },
-  reversedPointedStraight6Inline: { label: 'Reversed Pointed Straight 6 Inline', note: 'Reversed pointed straight 6 inline', src: null, price: 25, specs: specs() },
+  gt6: { label: 'GT6', note: 'Straight 6-in-line', src: null, price: 0, specs: specs() },
+  gt6r: { label: 'GT6R', note: 'Reverse 6-in-line', src: null, price: 20, specs: specs() },
+  '6in': { label: '6 Inline', note: 'Standard 6 inline', src: null, price: 0, specs: specs() },
+  '6inr': { label: '6 Inline Reverse', note: 'Reverse 6 inline', src: null, price: 20, specs: specs() },
+  '6kr': { label: '6 KR', note: '6 KR headstock', src: null, price: 0, specs: specs() },
+  '624': { label: '2×4', note: '2×4 headstock', src: null, price: 20, specs: specs() },
+  pth: { label: 'Pointed', note: 'Pointed headstock', src: null, price: 25, specs: specs() },
+  pthr: { label: 'Pointed Reverse', note: 'Reverse pointed', src: null, price: 25, specs: specs() },
+  h33: { label: 'H33', note: 'Classic inline', src: null, price: 45, specs: specs() },
+  h33r: { label: 'H33R', note: 'Reverse inline', src: null, price: 55, specs: specs() },
 }
 
 export const TRUSS_ROD_COVER_OPTIONS = {
   black: { label: 'Black', note: 'Black truss rod cover', src: null, price: 0, specs: specs() },
-  cream: { label: 'Cream', note: 'Cream truss rod cover', src: null, price: 10, specs: specs() },
+  creme: { label: 'Cream', note: 'Cream truss rod cover', src: null, price: 10, specs: specs() },
   white: { label: 'White', note: 'White truss rod cover', src: null, price: 10, specs: specs() },
-  redTortoiseshell: { label: 'Red Tortoiseshell', note: 'Red tortoiseshell cover', src: null, price: 15, specs: specs() },
-  whitePearloid: { label: 'White Pearloid', note: 'White pearloid cover', src: null, price: 15, specs: specs() },
+  'red-tortoise': { label: 'Red Tortoise', note: 'Red tortoise cover', src: null, price: 15, specs: specs() },
+  pearloid: { label: 'Pearloid', note: 'Pearloid truss rod cover', src: null, price: 15, specs: specs() },
   ebony: { label: 'Ebony', note: 'Ebony truss rod cover', src: null, price: 20, specs: specs() },
+  purpleheart: { label: 'Purpleheart', note: 'Purpleheart truss rod cover', src: null, price: 25, specs: specs() },
 }
 
 // --- Electronics ---
