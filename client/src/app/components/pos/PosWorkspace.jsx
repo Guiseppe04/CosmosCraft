@@ -315,6 +315,9 @@ export function PosWorkspace({
   const [selectedSale, setSelectedSale] = useState(null)
   const [loadingSaleDetails, setLoadingSaleDetails] = useState(false)
 
+  const prevSalesRef = useRef(null)
+  const prevSummaryRef = useRef(null)
+
   const visibleInventory = useMemo(
     () => inventoryItems
       .map((item) => ({
@@ -435,20 +438,32 @@ export function PosWorkspace({
     if (gcashScreenshotPreviewUrl) URL.revokeObjectURL(gcashScreenshotPreviewUrl)
   }, [gcashScreenshotPreviewUrl])
 
-  const loadRecentSales = useCallback(async () => {
-    setLoadingRecent(true)
+  const loadRecentSales = useCallback(async (options = {}) => {
+    const { silent = false } = options
+    if (!silent) setLoadingRecent(true)
     try {
       const [salesRes, summaryRes] = await Promise.all([
         posApi.listSales({ limit: 8 }),
         posApi.getDailySummary(),
       ])
-      setRecentSales(normalizeSales(salesRes))
-      setDailySummary(summaryRes?.data || null)
-      return salesRes
+      const nextSales = normalizeSales(salesRes)
+      const nextSummary = summaryRes?.data || null
+      const salesChanged = JSON.stringify(prevSalesRef.current || []) !== JSON.stringify(nextSales)
+      const summaryChanged = JSON.stringify(prevSummaryRef.current || null) !== JSON.stringify(nextSummary)
+      if (salesChanged) {
+        prevSalesRef.current = nextSales
+        setRecentSales(nextSales)
+      }
+      if (summaryChanged) {
+        prevSummaryRef.current = nextSummary
+        setDailySummary(nextSummary)
+      }
+      return salesChanged || summaryChanged ? salesRes : null
     } catch (error) {
-      showToast?.(error.message, 'error')
+      if (!silent) showToast?.(error.message, 'error')
+      throw error
     } finally {
-      setLoadingRecent(false)
+      if (!silent) setLoadingRecent(false)
     }
   }, [showToast])
 
@@ -468,7 +483,7 @@ export function PosWorkspace({
   const prevSalesRef = useRef(null)
 
   const pollRecentSales = useCallback(async () => {
-    const result = await loadRecentSales()
+    const result = await loadRecentSales({ silent: true })
     if (result?.data?.length > 0) {
       const latestSale = result.data[0]
       const latestTimestamp = latestSale.created_at

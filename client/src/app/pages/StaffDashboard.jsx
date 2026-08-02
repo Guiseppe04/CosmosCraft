@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import {
   AlertCircle,
@@ -251,6 +251,18 @@ const [unavailableDates, setUnavailableDates] = useState([])
   const [isSaving, setIsSaving] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
 
+  const productsRef = useRef(products)
+  const partsRef = useRef(parts)
+  const inventoryRef = useRef(inventory)
+  const inventoryStatsRef = useRef(inventoryStats)
+  const inventoryAlertsRef = useRef(inventoryAlerts)
+
+  useEffect(() => { productsRef.current = products }, [products])
+  useEffect(() => { partsRef.current = parts }, [parts])
+  useEffect(() => { inventoryRef.current = inventory }, [inventory])
+  useEffect(() => { inventoryStatsRef.current = inventoryStats }, [inventoryStats])
+  useEffect(() => { inventoryAlertsRef.current = inventoryAlerts }, [inventoryAlerts])
+
   const [inventorySubTab, setInventorySubTab] = useState('products')
   const [inventoryStatusFilter, setInventoryStatusFilter] = useState('all')
   const [inventorySort, setInventorySort] = useState('name')
@@ -284,8 +296,9 @@ const [unavailableDates, setUnavailableDates] = useState([])
     showToast.timeoutId = window.setTimeout(() => setToast(null), 2600)
   }, [])
 
-  const loadInventoryBundle = useCallback(async () => {
-    setLoadingInventory(true)
+  const loadInventoryBundle = useCallback(async (options = {}) => {
+    const { silent = false } = options
+    if (!silent) setLoadingInventory(true)
     try {
       const [productsRes, partsRes, inventoryRes, summaryRes, alertsRes] = await Promise.all([
         staffApi.getProducts({ search: debouncedSearch, page: 1, pageSize: 200 }),
@@ -294,15 +307,37 @@ const [unavailableDates, setUnavailableDates] = useState([])
         staffApi.getInventorySummary(),
         staffApi.getLowStockAlerts({ limit: 8 }),
       ])
-      setProducts(normalizeArray(productsRes, 'products'))
-      setParts(normalizeArray(partsRes, 'parts'))
-      setInventory(normalizeArray(inventoryRes, 'products'))
-      setInventoryStats(summaryRes.data || null)
-      setInventoryAlerts(normalizeArray(alertsRes, 'alerts'))
+      const nextProducts = normalizeArray(productsRes, 'products')
+      const nextParts = normalizeArray(partsRes, 'parts')
+      const nextInventory = normalizeArray(inventoryRes, 'products')
+      const nextStats = summaryRes.data || null
+      const nextAlerts = normalizeArray(alertsRes, 'alerts')
+
+      if (JSON.stringify(productsRef.current) !== JSON.stringify(nextProducts)) {
+        productsRef.current = nextProducts
+        setProducts(nextProducts)
+      }
+      if (JSON.stringify(partsRef.current) !== JSON.stringify(nextParts)) {
+        partsRef.current = nextParts
+        setParts(nextParts)
+      }
+      if (JSON.stringify(inventoryRef.current) !== JSON.stringify(nextInventory)) {
+        inventoryRef.current = nextInventory
+        setInventory(nextInventory)
+      }
+      if (JSON.stringify(inventoryStatsRef.current) !== JSON.stringify(nextStats)) {
+        inventoryStatsRef.current = nextStats
+        setInventoryStats(nextStats)
+      }
+      if (JSON.stringify(inventoryAlertsRef.current) !== JSON.stringify(nextAlerts)) {
+        inventoryAlertsRef.current = nextAlerts
+        setInventoryAlerts(nextAlerts)
+      }
     } catch (error) {
-      showToast(error.message, 'error')
+      if (!silent) showToast(error.message, 'error')
+      throw error
     } finally {
-      setLoadingInventory(false)
+      if (!silent) setLoadingInventory(false)
     }
   }, [debouncedSearch, showToast])
 
@@ -384,8 +419,8 @@ const fetchUnavailableDates = useCallback(async () => {
   }, [activeTab, fetchAppointments, fetchOrders, fetchProjects, fetchServices, fetchUnavailableDates, fetchAvailableDates, loadInventoryBundle])
 
   useSmartPolling(useCallback(async () => {
-    if (activeTab === 'overview') { await Promise.all([fetchAppointments({ silent: true }), loadInventoryBundle()]); return }
-    if (activeTab === 'inventory' || activeTab === 'pos') { await loadInventoryBundle(); return }
+    if (activeTab === 'overview') { await Promise.all([fetchAppointments({ silent: true }), loadInventoryBundle({ silent: true })]); return }
+    if (activeTab === 'inventory' || activeTab === 'pos') { await loadInventoryBundle({ silent: true }); return }
     if (activeTab === 'appointments' || activeTab === 'schedule') { await Promise.all([fetchAppointments({ silent: true }), fetchUnavailableDates(), fetchAvailableDates()]) }
   }, [activeTab, fetchAppointments, fetchUnavailableDates, fetchAvailableDates, loadInventoryBundle]), { interval: 10000, maxInterval: 60000, backoffFactor: 1.5, enabled: true })
 

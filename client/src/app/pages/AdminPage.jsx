@@ -735,24 +735,24 @@ export function AdminPage() {
      if (activeTab === 'services') fetchServices()
    }, [activeTab, fetchServices])
 
-   // ── Smart polling: active tab ────────────────────────────────────────────
-    const pollingFn = useCallback(async () => {
-      const map = {
-        'products': fetchProducts,
-        'guitar-parts': fetchParts,
-        'product-categories': fetchCategories,
-        'users': fetchUsers,
-        'orders': fetchOrders,
-        'projects': fetchProjects,
-        'services': fetchServices,
-        'appointments': () => fetchAppointments({ silent: true }),
-        'inventory': fetchInventory,
-        'pos': fetchInventory,
-        'sales-report': fetchSalesReport,
-        'dashboard': async () => { await fetchOrders(); await fetchProjects(); await fetchAppointments({ silent: true }) },
-      }
-      return map[activeTab]?.()
-    }, [activeTab, fetchProducts, fetchParts, fetchCategories, fetchUsers, fetchOrders, fetchProjects, fetchServices, fetchAppointments, fetchInventory, fetchSalesReport])
+    // ── Smart polling: active tab ────────────────────────────────────────────
+     const pollingFn = useCallback(async () => {
+       const map = {
+         'products': fetchProducts,
+         'guitar-parts': fetchParts,
+         'product-categories': fetchCategories,
+         'users': fetchUsers,
+         'orders': fetchOrders,
+         'projects': fetchProjects,
+         'services': fetchServices,
+         'appointments': () => fetchAppointments({ silent: true }),
+         'inventory': () => fetchInventory({ silent: true }),
+         'pos': () => fetchInventory({ silent: true }),
+         'sales-report': fetchSalesReport,
+         'dashboard': async () => { await fetchOrders(); await fetchProjects(); await fetchAppointments({ silent: true }) },
+       }
+       return map[activeTab]?.()
+     }, [activeTab, fetchProducts, fetchParts, fetchCategories, fetchUsers, fetchOrders, fetchProjects, fetchServices, fetchAppointments, fetchInventory, fetchSalesReport])
 
   const pollingEnabled = ['dashboard', 'orders', 'inventory', 'pos', 'projects', 'appointments'].includes(activeTab)
   useSmartPolling(pollingFn, { interval: 5000, maxInterval: 60000, backoffFactor: 1.5, enabled: pollingEnabled })
