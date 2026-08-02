@@ -1320,7 +1320,7 @@ export function AdminPage() {
          name: form.name,
          description: form.description || '',
          price: Number(form.price),
-         duration_minutes: Math.round(Number(form.duration) * 60),
+         duration_minutes: form.duration !== '' && form.duration != null ? Math.round(Number(form.duration) * 60) : null,
        }
 
        // is_active only sent on update (create defaults to true in DB)
