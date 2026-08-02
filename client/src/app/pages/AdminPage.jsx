@@ -144,6 +144,7 @@ export function AdminPage() {
   const debouncedSearch = useDebounce(searchQuery, 300)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [lastRefreshed, setLastRefreshed] = useState(null)
   const [toasts, setToasts] = useState([])
   const toastTimersRef = useRef(new Map())
   const [productViewMode, setProductViewMode] = useState('grid') // grid | table
@@ -688,7 +689,7 @@ export function AdminPage() {
       'inventory': () => { fetchInventory(); fetchParts(); fetchProducts(); },
       'pos': () => { fetchInventory(); fetchProducts(); },
       'sales-report': fetchSalesReport,
-      'dashboard': () => { fetchOrders(); fetchProjects(); fetchAppointments() },
+      'dashboard': () => { fetchOrders(); fetchProjects(); fetchAppointments(); fetchSalesReport() },
     }
     loaders[activeTab]?.()
   }, [activeTab]) // run only when switching tabs
@@ -749,7 +750,7 @@ export function AdminPage() {
          'inventory': () => fetchInventory({ silent: true }),
          'pos': () => fetchInventory({ silent: true }),
          'sales-report': fetchSalesReport,
-         'dashboard': async () => { await fetchOrders(); await fetchProjects(); await fetchAppointments({ silent: true }) },
+          'dashboard': async () => { await fetchOrders(); await fetchProjects(); await fetchAppointments({ silent: true }); await fetchSalesReport() },
        }
        return map[activeTab]?.()
      }, [activeTab, fetchProducts, fetchParts, fetchCategories, fetchUsers, fetchOrders, fetchProjects, fetchServices, fetchAppointments, fetchInventory, fetchSalesReport])
@@ -759,6 +760,7 @@ export function AdminPage() {
 
   const handleRefresh = () => {
     setIsLoading(true)
+    setLastRefreshed(Date.now())
     pollingFn()?.finally(() => setIsLoading(false))
   }
 
@@ -2109,6 +2111,7 @@ export function AdminPage() {
               handleRefresh={handleRefresh}
               isLoading={isLoading}
               setActiveTab={setActiveTab}
+              lastRefreshed={lastRefreshed}
             />
           )}
 
