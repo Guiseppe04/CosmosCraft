@@ -8,6 +8,7 @@ export function useOrdersAdmin({ debouncedSearch, showToast }) {
   const ordersRef = useRef(orders)
   const inFlightRequestRef = useRef(null)
   const latestRequestIdRef = useRef(0)
+  const lastRequestedPageRef = useRef(1)
 
   useEffect(() => {
     ordersRef.current = orders
@@ -19,6 +20,12 @@ export function useOrdersAdmin({ debouncedSearch, showToast }) {
       include_items: true,
       page_size: 10,
       ...queryParams,
+    }
+
+    if (normalizedQuery.page == null) {
+      normalizedQuery.page = lastRequestedPageRef.current
+    } else {
+      lastRequestedPageRef.current = normalizedQuery.page
     }
 
     const requestKey = JSON.stringify(normalizedQuery)
