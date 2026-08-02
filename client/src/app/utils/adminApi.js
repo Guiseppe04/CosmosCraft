@@ -3,7 +3,9 @@
  * All functions use credentials: 'include' so the access token cookie is sent automatically.
  */
 
-const API_URL = import.meta.env.VITE_API_URL
+import { API } from './apiConfig'
+
+const API_URL = API
 
 const normalizeAppointmentStatus = (status) => {
   if (status === 'approved') return 'confirmed'

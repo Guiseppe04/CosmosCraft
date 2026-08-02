@@ -29,7 +29,12 @@ const { pool } = require('../config/database');
 
 let oauthUserIdColumnExists;
 
-const getFrontendUrl = () => process.env.FRONTEND_URL || process.env.FRONTEND_URL_PROD || 'http://localhost:3000';
+const getFrontendUrl = () => {
+  if (process.env.NODE_ENV === 'production') {
+    return process.env.FRONTEND_URL_PROD || process.env.FRONTEND_URL || 'http://localhost:3000';
+  }
+  return process.env.FRONTEND_URL || process.env.FRONTEND_URL_PROD || 'http://localhost:3000';
+};
 
 const ensureOauthUserIdColumn = async () => {
   if (oauthUserIdColumnExists !== undefined) return oauthUserIdColumnExists;

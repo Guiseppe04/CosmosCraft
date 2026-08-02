@@ -16,11 +16,13 @@ const {
 } = require('../utils/validation');
 
 const getFrontendUrl = () => {
-  const prodUrl = process.env.FRONTEND_URL_PROD;
-  const devUrl = process.env.FRONTEND_URL;
-
-  if (prodUrl) return prodUrl;
-  if (devUrl) return devUrl;
+  if (process.env.NODE_ENV === 'production') {
+    if (process.env.FRONTEND_URL_PROD) return process.env.FRONTEND_URL_PROD;
+    if (process.env.FRONTEND_URL) return process.env.FRONTEND_URL;
+  } else {
+    if (process.env.FRONTEND_URL) return process.env.FRONTEND_URL;
+    if (process.env.FRONTEND_URL_PROD) return process.env.FRONTEND_URL_PROD;
+  }
   throw new Error('Frontend URL not configured.');
 };
 
