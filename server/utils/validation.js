@@ -654,6 +654,7 @@ exports.createOrderSchema = Joi.object({
       'any.only': 'Payment method must be gcash or bank_transfer',
       'any.required': 'Payment method is required',
     }),
+  shippingAddressId: Joi.string().uuid().optional(),
   billingAddress: Joi.object({
     street: Joi.string().min(5).max(100).required().trim().messages({
       'string.min': 'Address street must be at least 5 characters',

@@ -1125,6 +1125,7 @@ export function CheckoutPage() {
           shippingMethod,
           paymentMethod: mappedPaymentMethod,
           termsAccepted: acceptedTerms,
+          shippingAddressId: selectedAddressId,
           billingAddress: {
             street: finalAddress.street,
             street2: finalAddress.street2,

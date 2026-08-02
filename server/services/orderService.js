@@ -496,6 +496,7 @@ exports.createOrder = async (orderData) => {
       throw createValidationError('Address must include a valid 2-letter country code')
     }
 
+    const providedShippingAddressId = orderData.shippingAddressId || billingAddress?.shippingAddressId || null
     let shippingAddressId = null
 
     // Calculate totals
@@ -533,8 +534,16 @@ exports.createOrder = async (orderData) => {
     // Full payment: starts as 'processing' if payment method is cash, otherwise 'pending'
     const initialOrderStatus = isInstallment ? 'pending' : 'pending';
 
-    // Insert billing address into addresses table (check for existing first)
-    if (billingAddress.street && billingAddress.city) {
+    if (providedShippingAddressId) {
+      const allowedAddress = await client.query(
+        `SELECT address_id FROM addresses WHERE address_id = $1 AND user_id = $2`,
+        [providedShippingAddressId, userId]
+      )
+      if (allowedAddress.rows.length === 0) {
+        throw createValidationError('Selected shipping address is invalid or does not belong to the current user', 400)
+      }
+      shippingAddressId = providedShippingAddressId
+    } else if (billingAddress?.street && billingAddress?.city) {
       const normalizedBillingProvince = billingAddress.province || billingAddress.stateProvince || null
       const normalizedBillingPostalCode = billingAddress.postalCode || billingAddress.postalZipCode || null
       const normalizedBillingStreet2 = billingAddress.street2 || billingAddress.streetLine2 || null

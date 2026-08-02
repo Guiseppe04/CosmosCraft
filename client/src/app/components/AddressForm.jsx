@@ -171,6 +171,7 @@ export function AddressForm({
     if (isPhilippines) {
       if (!formData.province) nextErrors.province = 'Province is required'
       if (!formData.city) nextErrors.city = 'City is required'
+      if (!formData.barangay) nextErrors.barangay = 'Barangay is required'
     } else {
       if (!formData.stateProvince?.trim()) nextErrors.stateProvince = 'Province is required'
       if (!formData.city?.trim()) nextErrors.city = 'City is required'
@@ -319,7 +320,7 @@ export function AddressForm({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Barangay</label>
+            <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Barangay *</label>
             <select
               value={formData.barangay}
               onChange={(e) => handleChange('barangay', e.target.value)}
@@ -335,6 +336,7 @@ export function AddressForm({
                 </option>
               ))}
             </select>
+            {errors.barangay && <p className="text-xs text-red-400 mt-1.5">{errors.barangay}</p>}
           </div>
         </>
       ) : (
