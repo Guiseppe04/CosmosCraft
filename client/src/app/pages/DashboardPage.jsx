@@ -214,6 +214,7 @@ export function DashboardPage() {
   const [isResumingProject, setIsResumingProject] = useState(false)
 
   const [myAppointments, setMyAppointments] = useState([])
+  const [appointmentSort, setAppointmentSort] = useState('soonest')
   const [reschedulingAptId, setReschedulingAptId] = useState(null)
   const [rescheduleDate, setRescheduleDate] = useState('')
   const [rescheduleTime, setRescheduleTime] = useState('')
@@ -1087,10 +1088,23 @@ export function DashboardPage() {
           </div>
         ) : (
           <div className="max-h-[62vh] space-y-4 overflow-y-auto pr-2">
+            <div className="flex items-center justify-end mb-2">
+              <label className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
+                <span>Sort by:</span>
+                <select
+                  value={appointmentSort}
+                  onChange={(e) => setAppointmentSort(e.target.value)}
+                  className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
+                >
+                  <option value="soonest">Soonest first</option>
+                  <option value="latest">Latest first</option>
+                </select>
+              </label>
+            </div>
             {[...myAppointments].sort((a, b) => {
               const dateA = new Date(a.scheduled_at || a.date || a.created_at || 0)
               const dateB = new Date(b.scheduled_at || b.date || b.created_at || 0)
-              return dateB - dateA
+              return appointmentSort === 'soonest' ? dateA - dateB : dateB - dateA
             }).map(apt => {
               const apptDate = apt.scheduled_at || apt.date;
               
@@ -1103,14 +1117,32 @@ export function DashboardPage() {
               const contactNumber = getContactNumber(apt);
               const addressLabel = getAddressLabel(apt);
               const appointmentNotes = apt.notes || '';
+              const isCancelledApt = apt.status === 'cancelled';
+              let cancellationReason = '';
+              let displayNotes = appointmentNotes;
+
+              if (isCancelledApt) {
+                // Handle both customer cancellations ("Cancelled: ...") and
+                // admin/shop cancellations ("Status changed: ...")
+                const cancelMatch = appointmentNotes.match(/^\s*(?:Cancelled|Status changed):\s*(.*)$/im);
+                if (cancelMatch) {
+                  cancellationReason = cancelMatch[1].trim();
+                  // Strip "Cancelled by customer:" prefix so only the reason is shown
+                  cancellationReason = cancellationReason.replace(/^Cancelled by customer:\s*/i, '').trim();
+                  displayNotes = appointmentNotes.replace(/^\s*(?:Cancelled|Status changed):[^\n]*\n?/im, '').trim();
+                }
+              }
 
               return (
                 <div key={apt.appointment_id || apt.id} className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl p-5 hover:border-[var(--gold-primary)]/40 transition-colors">
                   <div className="flex justify-between items-start mb-4 gap-4">
                     <div>
                       <h3 className="font-bold text-white text-lg">Appointment</h3>
+                      {apt.reference_code && (
+                        <p className="text-xs font-mono text-[#d4af37] mt-0.5">{apt.reference_code}</p>
+                      )}
                       <p className="text-xs text-[var(--text-muted)] mt-1 capitalize">
-                        {Array.isArray(apt.services) ? apt.services.map(s => s.replace(/-/g, ' ')).join(', ') : (apt.service_name || 'Consultation')}
+                        {apt.service_name || (Array.isArray(apt.services) ? apt.services.map(s => s.replace(/-/g, ' ')).join(', ') : 'Consultation')}
                       </p>
                     </div>
                     <span className={`px-3 py-1 rounded-full text-xs font-semibold capitalize border ${
@@ -1161,12 +1193,12 @@ export function DashboardPage() {
                         <span className="block text-[var(--text-muted)] mb-0.5">Selected Guitar</span>
                         <span className="text-white">{selectedGuitar || '—'}</span>
                       </div>
-                      {appointmentNotes && (
+                      {displayNotes && (
                         <div className="sm:col-span-2 mt-1">
                           <span className="block text-[var(--text-muted)] mb-0.5">Notes</span>
                           <div className="space-y-2">
                             {(() => {
-                              const lines = appointmentNotes.split('\n')
+                              const lines = displayNotes.split('\n')
                               const textParts = []
                               const imageParts = []
                               
@@ -1174,10 +1206,13 @@ export function DashboardPage() {
                                 const imageMatch = line.match(/(https?:\/\/[^\s]+(?:\.jpg|\.jpeg|\.png|\.gif|\.webp|\.bmp)[^\s]*)/i)
                                 if (imageMatch) {
                                   const before = line.replace(imageMatch[0], '').trim()
-                                  if (before) textParts.push(before)
+                                  // Skip image reference labels like "Guitar reference image:" / "Service reference image:"
+                                  const isImageLabel = /^(?:guitar|service)\s+reference\s+image:?\s*$/i.test(before)
+                                  if (before && !isImageLabel) textParts.push(before)
                                   imageParts.push(imageMatch[1])
                                 } else {
-                                  textParts.push(line)
+                                  const trimmed = line.trim()
+                                  if (trimmed) textParts.push(trimmed)
                                 }
                               })
                               
@@ -1202,6 +1237,13 @@ export function DashboardPage() {
                               )
                             })()}
                           </div>
+                        </div>
+                      )}
+
+                      {isCancelledApt && cancellationReason && (
+                        <div className="sm:col-span-2 mt-3 pt-4 border-t border-[var(--border)]">
+                          <span className="block text-[var(--text-muted)] mb-0.5">Cancellation Reason</span>
+                          <span className="text-red-400 text-xs leading-relaxed">{cancellationReason}</span>
                         </div>
                       )}
 

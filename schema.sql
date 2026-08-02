@@ -600,6 +600,7 @@ CREATE INDEX idx_services_deleted_at ON services(deleted_at) WHERE deleted_at IS
 
 CREATE TABLE appointments (
     appointment_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    reference_code VARCHAR(20) UNIQUE,
     user_id UUID,
     appointment_type VARCHAR(50) NOT NULL DEFAULT 'service_in_shop',
     order_id UUID,

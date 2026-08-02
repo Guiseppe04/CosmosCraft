@@ -8,7 +8,35 @@ const { pool } = require('../config/database');
 const { AppError } = require('../middleware/errorHandler');
 
 const NON_BLOCKING_APPOINTMENT_STATUSES = ['cancelled', 'rejected'];
-const MAX_APPOINTMENTS_PER_DAY = 5;
+const MAX_APPOINTMENTS_PER_DAY = 10;
+
+/**
+ * Generate a sequential reference code for an appointment.
+ * Format: APT-{YYYYMMDD}-{0001}
+ * Sequence resets per scheduled_at date and includes ALL statuses
+ * so numbers are never reused, even for cancelled appointments.
+ */
+async function generateReferenceCode(client, scheduledAt) {
+  // Extract the date portion (YYYYMMDD) from scheduled_at
+  const date = new Date(scheduledAt);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const datePart = `${year}${month}${day}`;
+
+  // Count existing appointments for this date (include all statuses)
+  const countRes = await client.query(
+    `SELECT COUNT(*)::int AS count
+     FROM appointments
+     WHERE scheduled_at::date = ($1::timestamptz)::date`,
+    [scheduledAt]
+  );
+
+  const nextSequence = Number(countRes.rows?.[0]?.count || 0) + 1;
+  const paddedSequence = String(nextSequence).padStart(4, '0');
+
+  return `APT-${datePart}-${paddedSequence}`;
+}
 
 function normalizeGuitarDetails(guitarDetails = {}) {
   const source = (guitarDetails && typeof guitarDetails === 'object') ? guitarDetails : {};
@@ -120,6 +148,7 @@ function formatAppointmentResponse(appointment) {
 
   return {
     appointment_id: appointment.appointment_id,
+    reference_code: appointment.reference_code || null,
     user_id: appointment.user_id,
     user_email: appointment.user_email,
     user_name: appointment.user_name,
@@ -170,9 +199,12 @@ exports.createAppointment = async ({ appointment_type = 'service_in_shop', servi
 
     const normalizedGuitarDetails = normalizeGuitarDetails(guitar_details || {});
 
+    // Generate the sequential reference code for this appointment
+    const referenceCode = await generateReferenceCode(client, scheduled_at);
+
     const appointmentResult = await client.query(
-      `INSERT INTO appointments (user_id, appointment_type, order_id, services, location_id, guitar_details, scheduled_at, status, payment_method, payment_proof_url, notes, confirmation_notes, customer_name, customer_email, customer_phone, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', $8, $9, $10, $11, $12, $13, $14, now(), now())
+      `INSERT INTO appointments (user_id, appointment_type, order_id, services, location_id, guitar_details, scheduled_at, status, payment_method, payment_proof_url, notes, confirmation_notes, customer_name, customer_email, customer_phone, reference_code, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', $8, $9, $10, $11, $12, $13, $14, $15, now(), now())
        RETURNING *`,
       [
         user_id || null,
@@ -189,6 +221,7 @@ exports.createAppointment = async ({ appointment_type = 'service_in_shop', servi
         customerName,
         customerEmail,
         customerPhone,
+        referenceCode,
       ]
     );
 
