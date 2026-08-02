@@ -803,6 +803,7 @@ export function CheckoutPage() {
         streetLine2: addressData.streetLine2,
         city: city,
         stateProvince: stateProvince,
+        barangay: addressData.barangay || '',
         postalZipCode: addressData.postalZipCode,
         country: countryCode,
         isDefault: addressData.isDefault
@@ -845,8 +846,9 @@ export function CheckoutPage() {
             street_line2: addressData.streetLine2,
             city: city,
             province: stateProvince,
+            barangay: addressData.barangay || '',
             postal_code: addressData.postalZipCode,
-            country: countryName,
+            country: countryCode,
             label: addressData.label,
             is_default: addressData.isDefault
           }
@@ -1025,7 +1027,7 @@ export function CheckoutPage() {
           shippingMethod,
           paymentMethod: mappedPaymentMethod,
           termsAccepted: acceptedTerms,
-          shippingAddressId: selectedAddressId,
+          shippingAddressId: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(selectedAddressId) ? selectedAddressId : null,
           billingAddress: {
             street: finalAddress.street,
             street2: finalAddress.street2,
