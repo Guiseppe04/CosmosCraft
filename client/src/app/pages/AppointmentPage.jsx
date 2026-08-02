@@ -19,6 +19,7 @@ import {
   ImagePlus,
   X,
   FileText,
+  Loader2,
 } from 'lucide-react'
 
 const APPOINTMENT_BRANCH_STORAGE_KEY = 'cosmoscraft.appointment.branch'
@@ -1360,47 +1361,56 @@ export function AppointmentPage() {
                <p className="text-sm text-[var(--text-muted)]">Select an available date (Mon-Sat) and time. Sundays and official holidays are unavailable.</p>
              </div>
 
-            <div className="bg-theme-surface-deep border border-[var(--border)] rounded-2xl p-6 shadow-xl">
-              {/* Calendar header */}
-               <div className="flex items-center justify-between mb-6">
-                <span className="text-lg font-bold text-[var(--text-light)]">
-                  {new Date(currentYear, currentMonth, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
-                </span>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => {
-                      const prev = new Date(currentYear, currentMonth - 1, 1)
-                      setCurrentYear(prev.getFullYear())
-                      setCurrentMonth(prev.getMonth())
-                    }}
-                    className="p-2 rounded-lg bg-[var(--surface-dark)] text-[var(--text-muted)] hover:bg-[var(--surface-elevated)] hover:text-[var(--text-light)] transition-colors border border-[var(--border)]"
-                  >
-                    <ChevronLeft className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => {
-                      const next = new Date(currentYear, currentMonth + 1, 1)
-                      setCurrentYear(next.getFullYear())
-                      setCurrentMonth(next.getMonth())
-                    }}
-                    className="p-2 rounded-lg bg-[var(--surface-dark)] text-[var(--text-muted)] hover:bg-[var(--surface-elevated)] hover:text-[var(--text-light)] transition-colors border border-[var(--border)]"
-                  >
-                    <ChevronRight className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
+             <div className="bg-theme-surface-deep border border-[var(--border)] rounded-2xl p-6 shadow-xl relative">
+               {/* Calendar header */}
+                <div className="flex items-center justify-between mb-6">
+                 <span className="text-lg font-bold text-[var(--text-light)]">
+                   {new Date(currentYear, currentMonth, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
+                 </span>
+                 <div className="flex gap-2">
+                   <button
+                     onClick={() => {
+                       const prev = new Date(currentYear, currentMonth - 1, 1)
+                       setCurrentYear(prev.getFullYear())
+                       setCurrentMonth(prev.getMonth())
+                     }}
+                     className="p-2 rounded-lg bg-[var(--surface-dark)] text-[var(--text-muted)] hover:bg-[var(--surface-elevated)] hover:text-[var(--text-light)] transition-colors border border-[var(--border)]"
+                   >
+                     <ChevronLeft className="w-4 h-4" />
+                   </button>
+                   <button
+                     onClick={() => {
+                       const next = new Date(currentYear, currentMonth + 1, 1)
+                       setCurrentYear(next.getFullYear())
+                       setCurrentMonth(next.getMonth())
+                     }}
+                     className="p-2 rounded-lg bg-[var(--surface-dark)] text-[var(--text-muted)] hover:bg-[var(--surface-elevated)] hover:text-[var(--text-light)] transition-colors border border-[var(--border)]"
+                   >
+                     <ChevronRight className="w-4 h-4" />
+                   </button>
+                 </div>
+               </div>
 
-              {/* Calendar Grid */}
-              <div className="grid grid-cols-7 gap-1 sm:gap-2 text-xs sm:text-sm text-[var(--text-muted)] mb-3 font-medium">
-                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
-                  <span key={d} className="text-center pb-2">{d}</span>
-                ))}
-              </div>
+               {servicesLoading && (
+                 <div className="absolute inset-0 flex items-center justify-center bg-[var(--surface-dark)]/80 backdrop-blur-sm rounded-2xl z-10">
+                   <div className="flex flex-col items-center gap-3">
+                     <Loader2 className="w-8 h-8 animate-spin text-[#d4af37]" />
+                     <p className="text-sm text-[var(--text-muted)]">Loading calendar...</p>
+                   </div>
+                 </div>
+               )}
 
-              <div className="grid grid-cols-7 gap-1 sm:gap-2 mb-8">
-                {monthMatrix.map((week, wIdx) =>
-                  week.map((day, dIdx) => {
-                    if (!day.inCurrentMonth) return <div key={`empty-${wIdx}-${dIdx}`} className="h-9 sm:h-10" />
+               {/* Calendar Grid */}
+               <div className="grid grid-cols-7 gap-1 sm:gap-2 text-xs sm:text-sm text-[var(--text-muted)] mb-3 font-medium">
+                 {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
+                   <span key={d} className="text-center pb-2">{d}</span>
+                 ))}
+               </div>
+
+               <div className="grid grid-cols-7 gap-1 sm:gap-2 mb-8">
+                 {monthMatrix.map((week, wIdx) =>
+                   week.map((day, dIdx) => {
+                     if (!day.inCurrentMonth) return <div key={`empty-${wIdx}-${dIdx}`} className="h-9 sm:h-10" />
 
                     const isSelected = selectedDateId === day.id
                     const isUnavailable = !day.isAvailable
@@ -1451,7 +1461,7 @@ export function AppointmentPage() {
                   )}
                   {!slotsLoading && slotAvailabilityStatus === 'fully_booked' && (
                     <p className="mb-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-300">
-                      Fully Booked: This date already has the maximum of 5 appointments.
+                      Fully Booked: This date has reached the maximum of 5 appointments for the day.
                     </p>
                   )}
                   {!slotsLoading && slotAvailabilityStatus === 'unavailable' && (
