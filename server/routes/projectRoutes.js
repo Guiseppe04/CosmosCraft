@@ -25,10 +25,6 @@ router.use(authenticateToken);
 // Users can view hierarchy and update permitted subtasks
 router.get('/my', validate(listProjectsSchema, 'query'), ctrl.getMyProjects);
 router.get('/:id/hierarchy', validateParams(uuidParamSchema), ctrl.getProjectHierarchy);
-router.get('/:id/required-parts', validateParams(uuidParamSchema), ctrl.getProjectRequiredParts);
-router.post('/:id/required-parts/:partKey/receive', validateParams(projectPartReceiveParamsSchema), ctrl.receiveRequiredPart);
-router.patch('/:id/required-parts/:partKey/toggle-receive', validateParams(projectPartReceiveParamsSchema), ctrl.toggleRequiredPart);
-router.post('/:id/procurement-request', validateParams(uuidParamSchema), ctrl.requestProjectProcurement);
 router.post('/:id/cancel', validateParams(uuidParamSchema), ctrl.cancelProject);
 router.post('/:id/fulfillment', validateParams(uuidParamSchema), validate(submitFulfillmentSchema), ctrl.submitFulfillmentChoice);
 router.patch('/subtasks/:subtaskId', validateParams(namedUuidParamSchema('subtaskId')), validate(updateSubtaskSchema), ctrl.updateSubtask);
@@ -48,6 +44,11 @@ router.get('/:id/installments', validateParams(uuidParamSchema), ctrl.getInstall
 
 // === ADMIN ONLY ROUTES ===
 router.use(authorize('staff', 'admin', 'super_admin'));
+
+router.get('/:id/required-parts', validateParams(uuidParamSchema), ctrl.getProjectRequiredParts);
+router.post('/:id/required-parts/:partKey/receive', validateParams(projectPartReceiveParamsSchema), ctrl.receiveRequiredPart);
+router.patch('/:id/required-parts/:partKey/toggle-receive', validateParams(projectPartReceiveParamsSchema), ctrl.toggleRequiredPart);
+router.post('/:id/procurement-request', validateParams(uuidParamSchema), ctrl.requestProjectProcurement);
 
 router.get('/', validate(listProjectsSchema, 'query'), ctrl.getProjects);
 
