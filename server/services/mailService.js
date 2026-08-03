@@ -17,8 +17,7 @@ apiInstance.setApiKey(brevo.TransactionalEmailsApiApiKeys.apiKey, process.env.BR
 if (!process.env.BREVO_API_KEY) {
   console.warn('Mailer WARNING: BREVO_API_KEY is not set. Email sending will fail. Check Render environment variables.');
 }
- * Email Service - Send emails using Brevo API or SMTP fallback
- */
+
 
 const BREVO_API_KEY = process.env.BREVO_API_KEY;
 const BREVO_API_URL = 'https://api.brevo.com/v3/smtp/email';
@@ -131,32 +130,32 @@ const brevoGet = (url) => {
  */
 exports.sendMail = async (options) => {
   try {
-    if (BREVO_API_KEY) {
-      const payload = {
-        sender: { email: MAIL_FROM, name: MAIL_FROM_NAME },
-        to: [{ email: options.to }],
-        subject: options.subject,
-        htmlContent: options.html,
-        textContent: options.text,
-      };
-       const response = await brevoRequest(BREVO_API_URL, payload);
-       console.log('Email sent via Brevo:', response.messageId || response.id);
-       return response;
-     }
+    const email = new brevo.SendSmtpEmail();
+    email.sender = { name: MAIL_FROM_NAME, email: MAIL_FROM };
+    email.to = [{ email: options.to }];
+    email.subject = options.subject;
+    email.htmlContent = options.html;
+    email.textContent = options.text;
 
-    const mailOptions = {
-      from: MAIL_FROM,
-      to: options.to,
-      subject: options.subject,
-      html: options.html,
-      text: options.text,
-    };
-
-    const result = await transporter.sendMail(mailOptions);
-    console.log('Email sent:', result.messageId);
-    return result;
+    const maxAttempts = Number(process.env.MAIL_SEND_RETRIES) || 3;
+    let attempt = 0;
+    while (attempt < maxAttempts) {
+      try {
+        const result = await apiInstance.sendTransacEmail(email);
+        console.log('Email sent:', result.body.messageId);
+        return result;
+      } catch (err) {
+        attempt += 1;
+        console.error(`Email sending error (attempt ${attempt}):`, err && err.message ? err.message : err);
+        if (attempt >= maxAttempts) {
+          throw err;
+        }
+        // simple backoff
+        await new Promise((r) => setTimeout(r, attempt * 1000));
+      }
+    }
   } catch (error) {
-    console.error('Email sending error:', error.message);
+    console.error('Email sending error (final):', error);
     throw error;
   }
 };
