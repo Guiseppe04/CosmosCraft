@@ -1,11 +1,24 @@
+<<<<<<< HEAD
 const nodemailer = require('nodemailer');
 const https = require('https');
 const dns = require('dns');
 dns.setDefaultResultOrder('ipv4first');
 
 /**
- * Email Service - Send emails using Brevo API or SMTP fallback
+ * Email Service - Send emails using Brevo Transactional Email API
+ * Uses HTTPS-based API instead of SMTP to avoid connection timeouts on Render
  */
+
+const MAIL_FROM = process.env.MAIL_FROM || 'noreply@cosmos-craft.com';
+const MAIL_FROM_NAME = process.env.MAIL_FROM_NAME || 'CosmosCraft';
+
+const apiInstance = new brevo.TransactionalEmailsApi();
+apiInstance.setApiKey(brevo.TransactionalEmailsApiApiKeys.apiKey, process.env.BREVO_API_KEY);
+
+if (!process.env.BREVO_API_KEY) {
+  console.warn('Mailer WARNING: BREVO_API_KEY is not set. Email sending will fail. Check Render environment variables.');
+}
+
 
 const BREVO_API_KEY = process.env.BREVO_API_KEY;
 const BREVO_API_URL = 'https://api.brevo.com/v3/smtp/email';
@@ -24,6 +37,23 @@ if (!BREVO_API_KEY) {
       pass: process.env.MAIL_PASS,
     },
   });
+=======
+const brevo = require('@getbrevo/brevo');
+
+/**
+ * Email Service - Send emails using Brevo Transactional Email API
+ * Uses HTTPS-based API instead of SMTP to avoid connection timeouts on Render
+ */
+
+const MAIL_FROM = process.env.MAIL_FROM || 'noreply@cosmos-craft.com';
+const MAIL_FROM_NAME = process.env.MAIL_FROM_NAME || 'CosmosCraft';
+
+const apiInstance = new brevo.TransactionalEmailsApi();
+apiInstance.setApiKey(brevo.TransactionalEmailsApiApiKeys.apiKey, process.env.BREVO_API_KEY);
+
+if (!process.env.BREVO_API_KEY) {
+  console.warn('Mailer WARNING: BREVO_API_KEY is not set. Email sending will fail. Check Render environment variables.');
+>>>>>>> parent of 7cc1707 (Revert "Merge branch 'main' into Customization")
 }
 
 /**
@@ -114,10 +144,12 @@ const brevoGet = (url) => {
  * @param {string} options.subject - Email subject
  * @param {string} options.html - Email body (HTML)
  * @param {string} options.text - Email body (Plain text fallback)
- * @returns {Promise<Object>} Transporter response
+ * @returns {Promise<Object>} Brevo API response
+ * @returns {Promise<Object>} Brevo API response
  */
 exports.sendMail = async (options) => {
   try {
+<<<<<<< HEAD
     if (BREVO_API_KEY) {
       const payload = {
         sender: { email: MAIL_FROM, name: MAIL_FROM_NAME },
@@ -138,12 +170,38 @@ exports.sendMail = async (options) => {
       html: options.html,
       text: options.text,
     };
+=======
+    const email = new brevo.SendSmtpEmail();
+    email.sender = { name: MAIL_FROM_NAME, email: MAIL_FROM };
+    email.to = [{ email: options.to }];
+    email.subject = options.subject;
+    email.htmlContent = options.html;
+    email.textContent = options.text;
+>>>>>>> parent of 7cc1707 (Revert "Merge branch 'main' into Customization")
 
-    const result = await transporter.sendMail(mailOptions);
-    console.log('Email sent:', result.messageId);
-    return result;
+    const maxAttempts = Number(process.env.MAIL_SEND_RETRIES) || 3;
+    let attempt = 0;
+    while (attempt < maxAttempts) {
+      try {
+        const result = await apiInstance.sendTransacEmail(email);
+        console.log('Email sent:', result.body.messageId);
+        return result;
+      } catch (err) {
+        attempt += 1;
+        console.error(`Email sending error (attempt ${attempt}):`, err && err.message ? err.message : err);
+        if (attempt >= maxAttempts) {
+          throw err;
+        }
+        // simple backoff
+        await new Promise((r) => setTimeout(r, attempt * 1000));
+      }
+    }
   } catch (error) {
+<<<<<<< HEAD
     console.error('Email sending error:', error.message);
+=======
+    console.error('Email sending error (final):', error);
+>>>>>>> parent of 7cc1707 (Revert "Merge branch 'main' into Customization")
     throw error;
   }
 };
@@ -761,6 +819,7 @@ exports.sendOrderConfirmation = async (to, order) => {
 };
 
 /**
+<<<<<<< HEAD
  * Verify email service connection on startup
  */
 exports.verifyConnection = async () => {
@@ -772,6 +831,15 @@ exports.verifyConnection = async () => {
      }
 
     await transporter.verify();
+=======
+ * Verify Brevo API connection on startup
+ */
+exports.verifyConnection = async () => {
+  try {
+    const accountApi = new brevo.AccountApi();
+    accountApi.setApiKey(brevo.AccountApiApiKeys.apiKey, process.env.BREVO_API_KEY);
+    await accountApi.getAccount();
+>>>>>>> parent of 7cc1707 (Revert "Merge branch 'main' into Customization")
     console.log('Email service connected successfully');
     return true;
   } catch (error) {

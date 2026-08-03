@@ -213,7 +213,7 @@ function normalizeAmount(value) {
   return Number(Number(value || 0).toFixed(2));
 }
 
-async function createPayment({ order_id, user_id, method, amount, currency = 'PHP', reference_number, proof_url, skipActiveSubmissionCheck = false }) {
+async function createPayment({ order_id, user_id, method, amount, currency = 'PHP', reference_number, proof_url }) {
   const client = await pool.connect();
   
   try {
@@ -234,7 +234,7 @@ async function createPayment({ order_id, user_id, method, amount, currency = 'PH
       ['pending', 'for_verification'].includes(payment.status)
     );
 
-    if (!skipActiveSubmissionCheck && hasActiveSubmission) {
+    if (hasActiveSubmission) {
       throw new AppError('An active payment already exists for this order. Please complete or cancel the existing payment first.', 400);
     }
 

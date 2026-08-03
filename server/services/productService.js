@@ -174,11 +174,13 @@ exports.createProduct = async ({ name, description, price, brand, cost_price, ca
     await client.query('BEGIN');
     
     // Create product record
+    // NOTE: description and brand are NOT NULL with DEFAULT '' in the DB.
+    // Convert empty/undefined values to '' (not null) to avoid a NOT NULL violation.
     const productRes = await client.query(
       `INSERT INTO products (name, description, price, brand, category_id, is_active)
        VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
-      [name, description || null, price, brand || null, category_id || null, is_active ?? true]
+      [name, description ?? '', price, brand ?? '', category_id || null, is_active ?? true]
     );
     const product = productRes.rows[0];
     

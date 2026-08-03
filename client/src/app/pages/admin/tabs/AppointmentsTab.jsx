@@ -9,6 +9,7 @@ export function AppointmentsTab({
   appointmentPagination,
   selectedCalendarDate,
   unavailableDates,
+  availableDates,
   fetchAppointments,
   setSelectedAppointment,
   setAppointmentModalOpen,
@@ -43,6 +44,7 @@ export function AppointmentsTab({
           setAppointmentModalOpen(true)
         }}
         unavailableDates={unavailableDates}
+        availableDates={availableDates}
         isAdminMode
       />
 

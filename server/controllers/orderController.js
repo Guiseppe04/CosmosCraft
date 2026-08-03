@@ -8,23 +8,25 @@ exports.createOrder = asyncHandler(async (req, res, next) => {
     throw new AppError('You must be logged in to place an order', 401)
   }
 
-  const { items, notes, shippingMethod, paymentMethod, billingAddress, termsAccepted, paymentPlan, initialPaymentPercentage, installmentTenureMonths } = req.validatedData || req.body
+  const { items, notes, shippingMethod, paymentMethod, shippingAddressId, billingAddress, termsAccepted, paymentPlan, initialPaymentPercentage, installmentTenureMonths } = req.validatedData || req.body
 
   // Validate required fields
   if (!items || items.length === 0) {
     throw new AppError('No items in order', 400)
   }
 
-  if (!billingAddress) {
+  if (!shippingAddressId && !billingAddress) {
     throw new AppError('Shipping address is required', 400)
   }
 
-  if (!billingAddress.street || !billingAddress.street.trim()) {
-    throw new AppError('Address street is required', 400)
-  }
+  if (!shippingAddressId) {
+    if (!billingAddress.street || !billingAddress.street.trim()) {
+      throw new AppError('Address street is required', 400)
+    }
 
-  if (!billingAddress.city || !billingAddress.city.trim()) {
-    throw new AppError('City is required', 400)
+    if (!billingAddress.city || !billingAddress.city.trim()) {
+      throw new AppError('City is required', 400)
+    }
   }
 
   if (!paymentMethod) {
@@ -50,6 +52,7 @@ exports.createOrder = asyncHandler(async (req, res, next) => {
     notes,
     shippingMethod,
     paymentMethod,
+    shippingAddressId,
     billingAddress,
     termsAccepted,
     paymentPlan,
