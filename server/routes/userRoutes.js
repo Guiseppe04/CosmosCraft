@@ -1,6 +1,6 @@
 const express = require('express');
 const { authenticateToken, authorize } = require('../middleware/auth.js');
-const { validate, updateProfileSchema, addAddressSchema, updateAddressSchema, changePasswordSchema } = require('../utils/validation.js');
+const { validate, updateProfileSchema, addAddressSchema, updateAddressSchema, changePasswordSchema, updatePhoneSchema } = require('../utils/validation.js');
 const userController = require('../controllers/userController.js');
 
 const router = express.Router();
@@ -10,6 +10,7 @@ router.get('/me', authenticateToken, userController.getCurrentUser);
 router.get('/profile', authenticateToken, userController.getCurrentUser);
 router.put('/me', authenticateToken, validate(updateProfileSchema), userController.updateProfile);
 router.put('/profile', authenticateToken, validate(updateProfileSchema), userController.updateProfile);
+router.patch('/me/phone', authenticateToken, validate(updatePhoneSchema), userController.updateUserPhone);
 
 // Address management
 router.post('/me/addresses', authenticateToken, validate(addAddressSchema), userController.addAddress);
@@ -23,7 +24,6 @@ router.delete('/addresses/:addressId', authenticateToken, userController.removeA
 router.put('/me/password', authenticateToken, validate(changePasswordSchema), userController.requestPasswordChange);
 router.post('/me/change-password', authenticateToken, validate(changePasswordSchema), userController.requestPasswordChange);
 router.post('/change-password', authenticateToken, validate(changePasswordSchema), userController.requestPasswordChange);
-router.post('/verify-password-reset-token', userController.verifyPasswordResetToken);
 
 // Account management
 router.post('/me/deactivate', authenticateToken, userController.deactivateAccount);

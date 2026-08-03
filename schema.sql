@@ -31,7 +31,7 @@ CREATE TYPE order_payment_status_enum AS ENUM (
     'rejected',           -- proof invalid / denied
     'failed'              -- payment attempt failed (optional fallback)
 );
-CREATE TYPE appointment_status_enum AS ENUM ('pending', 'confirmed', 'in_progress', 'ready_for_pickup', 'completed', 'cancelled');
+CREATE TYPE appointment_status_enum AS ENUM ('pending', 'confirmed', 'in_progress', 'ready_for_pickup', 'completed', 'cancelled', 'no_show');
 CREATE TYPE project_status_enum AS ENUM ('not_started', 'in_progress', 'on_hold', 'completed', 'cancelled');
 CREATE TYPE notification_type_enum AS ENUM ('order_update', 'appointment_reminder', 'system', 'promotional', 'low_stock', 'project_update');
 
@@ -152,6 +152,7 @@ CREATE TABLE addresses (
     line1 VARCHAR(150) NOT NULL,
     line2 VARCHAR(150),
     city VARCHAR(80) NOT NULL,
+    barangay VARCHAR(80),
     province VARCHAR(80) NOT NULL,
     postal_code VARCHAR(20) NOT NULL,
     country CHAR(2) NOT NULL,
@@ -599,6 +600,7 @@ CREATE INDEX idx_services_deleted_at ON services(deleted_at) WHERE deleted_at IS
 
 CREATE TABLE appointments (
     appointment_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    reference_code VARCHAR(20) UNIQUE,
     user_id UUID,
     appointment_type VARCHAR(50) NOT NULL DEFAULT 'service_in_shop',
     order_id UUID,
@@ -615,6 +617,7 @@ CREATE TABLE appointments (
     payment_method VARCHAR(50),
     payment_proof_url TEXT,
     notes TEXT,
+    reason TEXT,
     confirmation_notes TEXT,
     deleted_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -994,7 +997,6 @@ CREATE TABLE project_installment_schedules (
     status VARCHAR(20) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'paid', 'overdue', 'cancelled')),
     paid_at TIMESTAMPTZ,
     payment_id UUID REFERENCES payments(payment_id) ON DELETE SET NULL,
-    paid_in_advance BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE(project_id, installment_number)
@@ -1003,7 +1005,6 @@ CREATE TABLE project_installment_schedules (
 CREATE INDEX IF NOT EXISTS idx_project_installment_schedules_project ON project_installment_schedules(project_id);
 CREATE INDEX IF NOT EXISTS idx_project_installment_schedules_status ON project_installment_schedules(status);
 CREATE INDEX IF NOT EXISTS idx_project_installment_schedules_due_date ON project_installment_schedules(due_date);
-CREATE INDEX IF NOT EXISTS idx_project_installment_schedules_paid_in_advance ON project_installment_schedules(paid_in_advance);
 
 
 -- =============================================
@@ -1166,18 +1167,15 @@ CREATE INDEX idx_otp_attempts_created_at ON otp_attempts(created_at DESC);
 CREATE TABLE password_reset_tokens (
     token_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL,
-    token VARCHAR(255) NOT NULL,
-    new_password_hash VARCHAR(255) NOT NULL,
+    token_hash TEXT NOT NULL UNIQUE,
     expires_at TIMESTAMPTZ NOT NULL,
-    is_used BOOLEAN NOT NULL DEFAULT FALSE,
+    used_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 
-    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
-    UNIQUE(user_id, token)
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
 );
 
 CREATE INDEX idx_password_reset_tokens_user_id ON password_reset_tokens(user_id);
-CREATE INDEX idx_password_reset_tokens_token ON password_reset_tokens(token);
 CREATE INDEX idx_password_reset_tokens_expires_at ON password_reset_tokens(expires_at);
 
 

@@ -4,6 +4,19 @@ const dns = require('dns');
 dns.setDefaultResultOrder('ipv4first');
 
 /**
+ * Email Service - Send emails using Brevo Transactional Email API
+ * Uses HTTPS-based API instead of SMTP to avoid connection timeouts on Render
+ */
+
+const MAIL_FROM = process.env.MAIL_FROM || 'noreply@cosmos-craft.com';
+const MAIL_FROM_NAME = process.env.MAIL_FROM_NAME || 'CosmosCraft';
+
+const apiInstance = new brevo.TransactionalEmailsApi();
+apiInstance.setApiKey(brevo.TransactionalEmailsApiApiKeys.apiKey, process.env.BREVO_API_KEY);
+
+if (!process.env.BREVO_API_KEY) {
+  console.warn('Mailer WARNING: BREVO_API_KEY is not set. Email sending will fail. Check Render environment variables.');
+}
  * Email Service - Send emails using Brevo API or SMTP fallback
  */
 
@@ -114,7 +127,7 @@ const brevoGet = (url) => {
  * @param {string} options.subject - Email subject
  * @param {string} options.html - Email body (HTML)
  * @param {string} options.text - Email body (Plain text fallback)
- * @returns {Promise<Object>} Transporter response
+ * @returns {Promise<Object>} Brevo API response
  */
 exports.sendMail = async (options) => {
   try {

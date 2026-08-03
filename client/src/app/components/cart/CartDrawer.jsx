@@ -2,12 +2,28 @@ import { AnimatePresence, motion } from 'motion/react'
 import { useNavigate } from 'react-router'
 import { useCart } from '../../context/CartContext.jsx'
 import { useAuth } from '../../context/AuthContext.jsx'
-import { Trash2, Plus, Minus } from 'lucide-react'
+import { Trash2 } from 'lucide-react'
+import { SelectableCartItemRow } from './SelectableCartItemRow.jsx'
 
 export function CartDrawer() {
-  const { cart, isOpen, setIsOpen, updateQuantity, removeFromCart, getTotalPrice } = useCart()
+  const {
+    cart,
+    isOpen,
+    setIsOpen,
+    updateQuantity,
+    removeFromCart,
+    getTotalPrice,
+    selectedItemIds,
+    toggleItemSelection,
+    toggleSelectAllItems,
+    getSelectedItemIds,
+  } = useCart()
   const { isAuthenticated, openLogin } = useAuth()
   const navigate = useNavigate()
+
+  const selectedCartItemIds = getSelectedItemIds()
+  const selectedCount = selectedCartItemIds.length
+  const allItemsSelected = cart.length > 0 && cart.every(item => selectedCartItemIds.includes(String(item.id)))
 
   const handleCheckout = () => {
     setIsOpen(false)
@@ -55,76 +71,34 @@ export function CartDrawer() {
                   <p className="text-xs text-[var(--text-muted)]">Add items to get started</p>
                 </div>
               ) : (
-                cart.map(item => {
-                  const stock = Number(item.stock)
-                  const hasStockValue = Number.isFinite(stock) && stock >= 0
-                  const atStockLimit = hasStockValue && item.quantity >= stock
-
-                  return (
-                  <motion.div
-                    key={item.id}
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: -20 }}
-                    className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl p-3 hover:border-[var(--gold-primary)]/50 transition-all"
-                  >
-                    <div className="flex gap-3">
-                      <div className="flex-shrink-0">
-                        <img
-                          src={item.image}
-                          alt={item.name}
-                          className="w-20 h-20 object-cover rounded-lg border border-[var(--border)]"
-                          onError={(e) => { e.target.src = '/assets/placeholder.jpg' }}
-                        />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-[var(--text-light)] truncate">{item.name}</p>
-                        <p className="text-xs text-[var(--text-muted)] mt-1">
-                          ₱{item.price.toLocaleString('en-PH')} each
-                        </p>
-                        <div className="flex items-center gap-2 mt-3">
-                          <button
-                            type="button"
-                            onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                            className="p-1.5 rounded-lg border border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-light)] hover:bg-[var(--bg-primary)] transition-colors"
-                          >
-                            <Minus className="w-3.5 h-3.5" />
-                          </button>
-                          <div className="px-2.5 py-1 bg-[var(--bg-primary)] rounded-lg border border-[var(--border)]">
-                            <span className="text-xs font-bold text-[var(--text-light)]">{item.quantity}</span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                            disabled={atStockLimit}
-                            className="p-1.5 rounded-lg border border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-light)] hover:bg-[var(--bg-primary)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                          >
-                            <Plus className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                        {hasStockValue && (
-                          <p className="mt-1 text-[10px] text-[var(--text-muted)]">Stock: {stock}</p>
-                        )}
-                      </div>
-                      <div className="text-right flex flex-col justify-between">
-                        <div>
-                          <p className="text-sm font-bold text-[var(--gold-primary)]">
-                            ₱{(item.price * item.quantity).toLocaleString('en-PH')}
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => removeFromCart(item.id)}
-                          className="mt-auto inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg hover:bg-red-500/10 text-xs font-medium text-red-500 hover:text-red-600 transition-colors"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          Remove
-                        </button>
-                      </div>
+                <>
+                  <div className="flex items-center justify-between rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] px-3 py-2">
+                    <div className="text-xs text-[var(--text-muted)]">
+                      {selectedCount} of {cart.length} item{cart.length !== 1 ? 's' : ''} selected
                     </div>
-                  </motion.div>
-                  )
-                })
+                    <button
+                      type="button"
+                      onClick={toggleSelectAllItems}
+                      className="text-xs font-semibold text-[var(--gold-primary)] hover:text-white transition-colors"
+                    >
+                      {allItemsSelected ? 'Clear Selection' : 'Select All'}
+                    </button>
+                  </div>
+
+                  {cart.map(item => (
+                    <SelectableCartItemRow
+                      key={item.id}
+                      item={item}
+                      onUpdateQuantity={updateQuantity}
+                      onRemove={removeFromCart}
+                      isSelected={selectedCartItemIds.includes(String(item.id))}
+                      onToggleSelect={toggleItemSelection}
+                      selectionEnabled
+                      showQuantityControls
+                      showRemove
+                    />
+                  ))}
+                </>
               )}
             </div>
 

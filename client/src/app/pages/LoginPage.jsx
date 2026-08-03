@@ -183,7 +183,10 @@ export function LoginPage() {
               />
               <span className="text-sm text-[var(--text-muted)]">Remember me</span>
             </label>
-            <Link to="#" className="text-sm text-[var(--gold-primary)] hover:text-[var(--gold-secondary)] font-medium transition-colors duration-200">
+            <Link
+              to={`/forgot-password${email ? `?email=${encodeURIComponent(email)}` : ''}`}
+              className="text-sm text-[var(--gold-primary)] hover:text-[var(--gold-secondary)] font-medium transition-colors duration-200"
+            >
               Forgot password?
             </Link>
           </div>
