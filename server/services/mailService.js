@@ -19,6 +19,20 @@ if (!process.env.BREVO_API_KEY) {
   console.warn('Mailer WARNING: BREVO_API_KEY is not set. Email sending will fail. Check Render environment variables.');
 }
 
+ * Email Service - Send emails using Brevo Transactional Email API
+ * Uses HTTPS-based API instead of SMTP to avoid connection timeouts on Render
+ */
+
+const MAIL_FROM = process.env.MAIL_FROM || 'noreply@cosmos-craft.com';
+const MAIL_FROM_NAME = process.env.MAIL_FROM_NAME || 'CosmosCraft';
+
+const apiInstance = new brevo.TransactionalEmailsApi();
+apiInstance.setApiKey(brevo.TransactionalEmailsApiApiKeys.apiKey, process.env.BREVO_API_KEY);
+
+if (!process.env.BREVO_API_KEY) {
+  console.warn('Mailer WARNING: BREVO_API_KEY is not set. Email sending will fail. Check Render environment variables.');
+}
+
 
 const BREVO_API_KEY = process.env.BREVO_API_KEY;
 const BREVO_API_URL = 'https://api.brevo.com/v3/smtp/email';
