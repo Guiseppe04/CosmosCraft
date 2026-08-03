@@ -225,6 +225,7 @@ export function AdminPage() {
   const { orders, ordersPagination, fetchOrders, setOrdersPagination } = useOrdersAdmin({ debouncedSearch, showToast })
   const { projects, projectsPagination, fetchProjects, setProjects, setProjectsPagination } = useProjectsAdmin({ debouncedSearch, showToast })
   const { appointments, appointmentPagination, setAppointmentPagination, appointmentLoading, unavailableDates, availableDates, fetchAppointments, fetchUnavailableDates, fetchAvailableDates } = useAppointmentsAdmin({ debouncedSearch, showToast })
+  const { appointments, appointmentPagination, setAppointmentPagination, appointmentLoading, unavailableDates, availableDates, fetchAppointments, fetchUnavailableDates, fetchAvailableDates } = useAppointmentsAdmin({ debouncedSearch, showToast })
   const { services, servicesLoading, servicesPagination, serviceQuery, setServiceQuery, setServices, setServicesPagination, fetchServices } = useServicesAdmin({ debouncedSearch, showToast })
   const { inventory, inventoryStats, salesReport, setInventory, setInventoryStats, setSalesReport, fetchInventory, fetchSalesReport } = useInventoryAdmin({ products, showToast })
 
