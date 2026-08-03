@@ -225,10 +225,6 @@ export function AdminPage() {
   const { orders, ordersPagination, fetchOrders, setOrdersPagination } = useOrdersAdmin({ debouncedSearch, showToast })
   const { projects, projectsPagination, fetchProjects, setProjects, setProjectsPagination } = useProjectsAdmin({ debouncedSearch, showToast })
   const { appointments, appointmentPagination, setAppointmentPagination, appointmentLoading, unavailableDates, availableDates, fetchAppointments, fetchUnavailableDates, fetchAvailableDates } = useAppointmentsAdmin({ debouncedSearch, showToast })
-<<<<<<< HEAD
-  const { appointments, appointmentPagination, setAppointmentPagination, appointmentLoading, unavailableDates, availableDates, fetchAppointments, fetchUnavailableDates, fetchAvailableDates } = useAppointmentsAdmin({ debouncedSearch, showToast })
-=======
->>>>>>> parent of 7cc1707 (Revert "Merge branch 'main' into Customization")
   const { services, servicesLoading, servicesPagination, serviceQuery, setServiceQuery, setServices, setServicesPagination, fetchServices } = useServicesAdmin({ debouncedSearch, showToast })
   const { inventory, inventoryStats, salesReport, setInventory, setInventoryStats, setSalesReport, fetchInventory, fetchSalesReport } = useInventoryAdmin({ products, showToast })
 
@@ -754,11 +750,7 @@ export function AdminPage() {
          'inventory': () => fetchInventory({ silent: true }),
          'pos': () => fetchInventory({ silent: true }),
          'sales-report': fetchSalesReport,
-<<<<<<< HEAD
           'dashboard': async () => { await fetchOrders(); await fetchProjects(); await fetchAppointments({ silent: true }); await fetchSalesReport() },
-=======
-         'dashboard': async () => { await fetchOrders(); await fetchProjects(); await fetchAppointments({ silent: true }) },
->>>>>>> parent of 7cc1707 (Revert "Merge branch 'main' into Customization")
        }
        return map[activeTab]?.()
      }, [activeTab, fetchProducts, fetchParts, fetchCategories, fetchUsers, fetchOrders, fetchProjects, fetchServices, fetchAppointments, fetchInventory, fetchSalesReport])

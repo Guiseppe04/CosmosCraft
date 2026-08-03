@@ -711,12 +711,7 @@ async function getSalesReport(filters = {}) {
           COALESCE(SUM(s.price), 0)::numeric AS revenue
        FROM appointments a
         JOIN services s ON s.service_id::text IN (
-<<<<<<< HEAD
-          SELECT json_array_elements_text(a.services::json)
-          WHERE a.services IS NOT NULL
-=======
           SELECT (jsonb_array_elements_text(a.services))::text
->>>>>>> parent of 7cc1707 (Revert "Merge branch 'main' into Customization")
         )
        WHERE a.status = 'completed'
          AND a.payment_method IS NOT NULL
