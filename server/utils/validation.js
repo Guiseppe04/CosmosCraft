@@ -263,7 +263,7 @@ exports.emailSignupSchema = Joi.object({
         'string.pattern.base': 'Postal code can only contain letters, numbers, spaces, and hyphens',
         'any.required': 'Postal code is required',
       }),
-    country: Joi.string()
+     country: Joi.string()
       .length(2)
       .required()
       .trim()
@@ -273,6 +273,20 @@ exports.emailSignupSchema = Joi.object({
         'string.length': 'Country code must be exactly 2 characters (ISO)',
         'string.pattern.base': 'Country must be a standard 2-letter ISO code (e.g. US, CA, PH)',
         'any.required': 'Country is required',
+      }),
+    addressLocationCityCode: Joi.string()
+      .pattern(/^\d{10}$/)
+      .required()
+      .messages({
+        'string.pattern.base': 'City PSGC code must be a 10-digit number',
+        'any.required': 'City PSGC code is required',
+      }),
+    stateAddressProvinceCode: Joi.string()
+      .pattern(/^\d{10}$/)
+      .optional()
+      .allow('')
+      .messages({
+        'string.pattern.base': 'Province PSGC code must be a 10-digit number',
       }),
   }).required(),
 });

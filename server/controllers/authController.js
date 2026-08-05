@@ -14,6 +14,7 @@ const {
   forgotPasswordSchema,
   resetPasswordSchema,
 } = require('../utils/validation');
+const { validateZipCode, getCityByCode } = require('../utils/phZipValidator');
 
 const getFrontendUrl = () => {
   if (process.env.NODE_ENV === 'production') {
@@ -131,6 +132,36 @@ exports.emailSignup = asyncHandler(async (req, res, next) => {
   if (error) {
     const errors = error.details.map((detail) => ({ field: detail.path.join('.'), message: detail.message }));
     throw new AppError('Validation failed', 400, errors);
+  }
+
+  // Backend ZIP Code validation (Philippines only)
+  if (value.address && value.address.country === 'PH') {
+    const cityCode = value.address.addressLocationCityCode;
+    const zipCode = value.address.postalZipCode;
+    const provinceCode = value.address.stateAddressProvinceCode;
+
+    // Verify Municipality/City belongs to the selected Province
+    if (provinceCode) {
+      const cityInfo = getCityByCode(cityCode);
+      if (cityInfo && cityInfo.provinceCode !== provinceCode) {
+        throw new AppError(
+          'Invalid address. The selected city does not belong to the selected province.',
+          422,
+          [{ field: 'address.stateProvince', message: 'The selected city does not belong to the selected province.' }],
+          'PROVINCE_MISMATCH'
+        );
+      }
+    }
+
+    const result = validateZipCode(cityCode, zipCode);
+    if (!result.valid) {
+      throw new AppError(
+        'Invalid ZIP Code. The ZIP code does not match the selected municipality/city.',
+        422,
+        [{ field: 'address.postalZipCode', message: 'Invalid ZIP Code. The ZIP code does not match the selected Municipality/City.' }],
+        'ZIP_VALIDATION_FAILED'
+      );
+    }
   }
 
   try {

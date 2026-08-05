@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router'
 import { motion } from 'motion/react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { API } from '../utils/apiConfig'
+import { useZipValidation } from '../hooks/useZipValidation'
 import { ArrowRight, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { getAllRegions, getProvincesByRegion, getMunicipalitiesByProvince, getBarangaysByMunicipality } from '@aivangogh/ph-address'
 
@@ -100,6 +101,19 @@ export function SignupPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
   const fieldRefs = useRef({})
+
+  // ZIP Code validation hook
+  const {
+    isValid: zipValid,
+    isLoading: zipLoading,
+    error: zipError,
+    validate: validateZip,
+  } = useZipValidation()
+
+  // Real-time ZIP validation when city or zip changes
+  useEffect(() => {
+    validateZip(phMunicipality, form.address.postalZipCode)
+  }, [phMunicipality, form.address.postalZipCode, validateZip])
 
   const registerFieldRef = (fieldKey) => (element) => {
     if (element) {
@@ -245,7 +259,11 @@ export function SignupPage() {
     if (!form.address.city.trim()) newErrors['address.city'] = 'City / Municipality is required.'
     if (!phBarangay) newErrors['address.barangay'] = 'Barangay is required.'
     if (!form.address.stateProvince.trim()) newErrors['address.stateProvince'] = 'Province is required.'
+    if (!phMunicipality) newErrors['address.city'] = 'Municipality is required.'
     if (!form.address.postalZipCode.trim()) newErrors['address.postalZipCode'] = 'Postal/Zip code is required.'
+    if (phMunicipality && form.address.postalZipCode.trim() && zipValid === false) {
+      newErrors['address.postalZipCode'] = zipError || 'The ZIP code entered is incorrect for the selected city. Please verify and try again.'
+    }
     if (!phRegion) newErrors['address.stateProvince'] = 'Region is required.'
     if (!phProvince) newErrors['address.stateProvince'] = 'Province is required.'
     if (!phMunicipality) newErrors['address.city'] = 'Municipality is required.'
@@ -263,8 +281,23 @@ export function SignupPage() {
   const handleSubmit = async e => {
     e.preventDefault()
     setSuccess('')
-    setErrors({})
-    if (!validate()) {
+     setErrors({})
+
+     // ZIP Code validation (await async validation before proceeding)
+     if (phMunicipality && form.address.postalZipCode.trim()) {
+       const zipResult = await validateZip(phMunicipality, form.address.postalZipCode.trim())
+       if (zipResult.valid === false) {
+         setErrors(prev => ({
+           ...prev,
+           'address.postalZipCode': zipResult.message || 'The ZIP code entered is incorrect for the selected city. Please verify and try again.',
+         }))
+         setTimeout(() => focusFirstInvalidField({ 'address.postalZipCode': true }), 0)
+         setIsLoading(false)
+         return
+       }
+     }
+
+     if (!validate()) {
       // Small delay then clear generic submit error if any, form handles shakes
       return
     }
@@ -287,6 +320,8 @@ export function SignupPage() {
           stateProvince: form.address.stateProvince.trim(),
           postalZipCode: form.address.postalZipCode.trim(),
           country: form.address.country.trim(),
+          addressLocationCityCode: phMunicipality || '',
+          stateAddressProvinceCode: phProvince || '',
         },
       }
 
@@ -396,7 +431,7 @@ export function SignupPage() {
           {errors.submit && (
             <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="mb-8 p-4 bg-red-500/10 border border-red-500/30 rounded-xl flex items-center gap-3 text-red-400">
               <AlertCircle className="w-5 h-5 flex-shrink-0" />
-              <p className="text-sm font-medium">{errors.submit}</p>
+              <p className="text-sm font-medium text-red-400">{errors.submit}</p>
             </motion.div>
           )}
 
@@ -699,17 +734,42 @@ export function SignupPage() {
                   />
                 </motion.div>
 
-                <motion.div animate={errors['address.postalZipCode'] ? shakeAnimation : {}}>
+                <motion.div animate={errors['address.postalZipCode'] || (zipValid === false && phMunicipality && form.address.postalZipCode.trim()) ? shakeAnimation : {}}>
                   <label className="block text-xs uppercase tracking-wider font-semibold text-[var(--text-muted)] mb-2">Postal / ZIP Code *</label>
-                  <input
-                    type="text"
-                    value={form.address.postalZipCode}
-                    ref={registerFieldRef('address.postalZipCode')}
-                    placeholder="e.g. 1000"
-                    onChange={e => updateAddressField('postalZipCode', e.target.value)}
-                    className={getInputStyles(errors['address.postalZipCode'])}
-                  />
-                  {errors['address.postalZipCode'] && <span className="text-xs text-red-400 mt-1.5 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{errors['address.postalZipCode']}</span>}
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={form.address.postalZipCode}
+                      ref={registerFieldRef('address.postalZipCode')}
+                      placeholder="e.g. 1000"
+                      onChange={e => updateAddressField('postalZipCode', e.target.value)}
+                      className={getInputStyles(errors['address.postalZipCode'] || (zipValid === false && phMunicipality && form.address.postalZipCode.trim())) + ' pr-10'}
+                    />
+                    {phMunicipality && form.address.postalZipCode.trim() && zipLoading && (
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 border-2 border-gray-400/30 border-t-[var(--gold-primary)] rounded-full animate-spin" />
+                    )}
+                    {phMunicipality && form.address.postalZipCode.trim() && zipValid === true && !zipLoading && (
+                      <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-green-400" />
+                    )}
+                  </div>
+                  {errors['address.postalZipCode'] && (
+                    <span className="text-xs text-red-400 mt-1.5 flex items-center gap-1">
+                      <AlertCircle className="w-3 h-3" />
+                      {errors['address.postalZipCode']}
+                    </span>
+                  )}
+                  {phMunicipality && form.address.postalZipCode.trim() && !zipLoading && zipValid === false && !errors['address.postalZipCode'] && (
+                    <span className="text-xs text-red-400 mt-1.5 flex items-center gap-1">
+                      <AlertCircle className="w-3 h-3" />
+                      {zipError || 'Invalid ZIP code for the selected city.'}
+                    </span>
+                  )}
+                  {phMunicipality && form.address.postalZipCode.trim() && !zipLoading && zipValid === true && !errors['address.postalZipCode'] && (
+                    <span className="text-xs text-green-400 mt-1.5 flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3" />
+                      Valid ZIP code for {form.address.city}
+                    </span>
+                  )}
                 </motion.div>
               </>
 
