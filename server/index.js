@@ -28,6 +28,7 @@ const builderPartsRoutes = require('./routes/builderPartsRoutes');
 const cloudinaryRoutes = require('./routes/cloudinaryRoutes');
 const paymentSettingsRoutes = require('./routes/paymentSettingsRoutes');
 const installmentRoutes = require('./routes/installmentRoutes');
+const addressRoutes = require('./routes/addressRoutes.js');
 const { errorHandler, notFound } = require('./middleware/errorHandler.js');
 const { createRateLimiter } = require('./middleware/rateLimitMiddleware.js');
 
@@ -38,7 +39,7 @@ const app = express();
 if (process.env.TRUST_PROXY) {
   app.set('trust proxy', process.env.TRUST_PROXY === 'true' ? true : process.env.TRUST_PROXY);
 } else if (process.env.NODE_ENV === 'production') {
-  app.set('trust proxy', true);
+  app.set('trust proxy', 1);
 }
 
 const generalLimiter = createRateLimiter({
@@ -64,9 +65,17 @@ const authLimiter = createRateLimiter({
 });
 
 app.use(generalLimiter);
+const allowedOrigins = ['http://localhost:5173', 'http://localhost:3000', process.env.FRONTEND_URL, process.env.FRONTEND_URL_PROD].filter(Boolean);
+
 app.use(
   cors({
-    origin: ['http://localhost:5173', 'http://localhost:3000', process.env.FRONTEND_URL].filter(Boolean),
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+      callback(new Error(`Origin ${origin} not allowed by CORS`));
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   })
@@ -108,6 +117,7 @@ app.use('/builder-parts', builderPartsRoutes);
 app.use('/api/cloudinary', cloudinaryRoutes);
 app.use('/api/payment-settings', paymentSettingsRoutes);
 app.use('/api/installments', installmentRoutes);
+app.use('/api/address', addressRoutes);
 // Legacy route alias kept for backwards-compat
 app.use('/user', userRoutes);
 
@@ -125,6 +135,19 @@ async function startServer() {
     console.log(`Backend Running`);
     console.log(`Port: ${PORT}`);
     console.log(`Environment: ${process.env.NODE_ENV}`);
+
+    // Log OAuth config (mask secrets) to verify env vars are injected correctly in production
+    console.log('--- OAuth Configuration ---');
+    console.log(`NODE_ENV: ${process.env.NODE_ENV}`);
+    console.log(`FRONTEND_URL: ${process.env.FRONTEND_URL || '(not set)'}`);
+    console.log(`FRONTEND_URL_PROD: ${process.env.FRONTEND_URL_PROD || '(not set)'}`);
+    console.log(`FACEBOOK_APP_ID: ${process.env.FACEBOOK_APP_ID ? '***' : '(not set)'}`);
+    console.log(`FACEBOOK_APP_SECRET: ${process.env.FACEBOOK_APP_SECRET ? '(set, masked)' : '(not set)'}`);
+    console.log(`FACEBOOK_CALLBACK_URL: ${process.env.FACEBOOK_CALLBACK_URL || '(not set)'}`);
+    console.log(`FACEBOOK_CALLBACK_URL_PROD: ${process.env.FACEBOOK_CALLBACK_URL_PROD || '(not set)'}`);
+    console.log(`GOOGLE_CLIENT_ID: ${process.env.GOOGLE_CLIENT_ID ? '***' : '(not set)'}`);
+    console.log(`GOOGLE_CALLBACK_URL: ${process.env.GOOGLE_CALLBACK_URL || '(not set)'}`);
+    console.log(`GOOGLE_CALLBACK_URL_PROD: ${process.env.GOOGLE_CALLBACK_URL_PROD || '(not set)'}`);
 
     // Verify email service connection
     await mailService.verifyConnection();

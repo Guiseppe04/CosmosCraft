@@ -17,7 +17,6 @@ const {
   updateSubtaskSchema,
   submitFulfillmentSchema,
   listProjectsSchema,
-  createAdvancePaymentSchema,
 } = require('../utils/validation');
 
 router.use(authenticateToken);
@@ -42,9 +41,6 @@ router.post('/:id/approve-cancel', validateParams(uuidParamSchema), ctrl.approve
 
 // Installment schedule
 router.get('/:id/installments', validateParams(uuidParamSchema), ctrl.getInstallmentSchedule);
-
-// Advance payment (customer-accessible: pay future installments ahead of their due date)
-router.post('/:id/advance-payment', validateParams(uuidParamSchema), validate(createAdvancePaymentSchema), ctrl.createAdvancePayment);
 
 // === ADMIN ONLY ROUTES ===
 router.use(authorize('staff', 'admin', 'super_admin'));

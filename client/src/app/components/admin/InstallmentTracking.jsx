@@ -52,9 +52,6 @@ export default function InstallmentTracking({ projectId, order, orderId }) {
   const [error, setError] = useState(null)
   const [showDetails, setShowDetails] = useState(false)
   const [resolvedProjectId, setResolvedProjectId] = useState(projectId)
-  const [imageToView, setImageToView] = useState(null)
-  const [confirmingId, setConfirmingId] = useState(null)
-  const [cancellingId, setCancellingId] = useState(null)
 
   const fetchTrackingData = useCallback(async () => {
     const targetOrderId = orderId || order?.order_id;
@@ -125,7 +122,6 @@ export default function InstallmentTracking({ projectId, order, orderId }) {
     installments = [],
     summary = {},
     payment_history = [],
-    pending_advance_payments = [],
   } = trackingData
 
   const {
@@ -146,31 +142,6 @@ export default function InstallmentTracking({ projectId, order, orderId }) {
   };
 
   const paymentStatus = getPaymentStatus();
-
-  const confirmAdvancePayment = async (paymentId, scheduleId) => {
-    setConfirmingId(paymentId);
-    try {
-      await adminApi.markInstallmentPaid(scheduleId, paymentId);
-      fetchTrackingData();
-    } catch (err) {
-      console.error('Failed to confirm advance payment:', err);
-    } finally {
-      setConfirmingId(null);
-    }
-  };
-
-  const cancelAdvancePayment = async (paymentId) => {
-    if (!confirm(`Reject and un-link advance payment ${paymentId.slice(0, 8)}?`)) return;
-    setCancellingId(paymentId);
-    try {
-      await adminApi.cancelAdvancePayment(paymentId);
-      fetchTrackingData();
-    } catch (err) {
-      console.error('Failed to cancel advance payment:', err);
-    } finally {
-      setCancellingId(null);
-    }
-  };
 
   return (
     <motion.div
@@ -302,11 +273,6 @@ export default function InstallmentTracking({ projectId, order, orderId }) {
                           <td className="p-3 text-right text-white font-medium">{formatCurrency(Number(inst.amount))}</td>
                           <td className="p-3 text-center">
                             <InstallmentStatusBadge status={displayStatus} />
-                            {inst.paid_in_advance && (
-                              <span className="ml-1.5 inline-flex items-center rounded-full bg-indigo-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-400">
-                                In Advance
-                              </span>
-                            )}
                           </td>
                           <td className="p-3 text-[var(--text-muted)] text-xs">
                             {inst.paid_at
@@ -356,116 +322,6 @@ export default function InstallmentTracking({ projectId, order, orderId }) {
               </div>
             ))}
           </div>
-         </div>
-       )}
-
-      {/* Pending Advance Payments (Awaiting Confirmation) */}
-      {pending_advance_payments.length > 0 && (
-        <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4">
-          <h4 className="text-white font-semibold text-sm mb-3 flex items-center gap-2">
-            <Clock className="w-4 h-4 text-amber-400" />
-            Advance Payments — Awaiting Confirmation
-            <span className="text-xs text-amber-400 bg-amber-500/20 px-2 py-0.5 rounded-full">
-              {pending_advance_payments.length} pending
-            </span>
-          </h4>
-          <div className="space-y-4">
-            {pending_advance_payments.map((payment) => {
-              const isConfirming = confirmingId === payment.payment_id;
-              const isCancelling = cancellingId === payment.payment_id;
-              return (
-                <div
-                  key={payment.payment_id}
-                  className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]/50 p-4"
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1 space-y-2">
-                      <p className="text-white font-medium">
-                        {formatCurrency(Number(payment.amount))} — {payment.method === 'bank_transfer' ? 'Bank Transfer' : payment.method === 'gcash' ? 'GCash' : payment.method}
-                      </p>
-                      {payment.reference_number && (
-                        <p className="text-[var(--text-muted)] text-xs">Ref: {payment.reference_number}</p>
-                      )}
-                      <p className="text-[var(--text-muted)] text-xs">
-                        Submitted: {payment.created_at ? new Date(payment.created_at).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' }) : '—'}
-                      </p>
-                      <p className="text-xs">
-                        Installments: {payment.installments.map((i) => `#${i.installment_number}`).join(', ')}
-                      </p>
-                    </div>
-
-                    {/* Proof thumbnail */}
-                    {payment.proof_url ? (
-                      <div
-                        className="relative flex-shrink-0 h-20 w-20 cursor-zoom-in rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] overflow-hidden"
-                        onClick={() => setImageToView(payment.proof_url)}
-                      >
-                        <img
-                          src={payment.proof_url}
-                          alt="Payment proof"
-                          className="h-full w-full object-cover"
-                        />
-                        <div className="absolute inset-0 bg-black/20 opacity-0 hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center text-[10px] text-white">
-                          Click to zoom
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex-shrink-0 h-20 w-20 rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] flex items-center justify-center text-[var(--text-muted)] text-xs">
-                        No proof
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Actions: confirm each installment */}
-                  <div className="mt-3 flex flex-wrap items-center gap-2">
-                    {payment.installments.map((inst) => {
-                      const isPaid = inst.schedule_id && installments.find((i) => i.schedule_id === inst.schedule_id)?.status === 'paid';
-                      return (
-                        <button
-                          key={inst.schedule_id}
-                          type="button"
-                          disabled={isConfirming || isCancelling || isPaid}
-                          onClick={() => confirmAdvancePayment(payment.payment_id, inst.schedule_id)}
-                          className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all ${
-                            isPaid
-                              ? 'cursor-default border-green-500/30 bg-green-500/10 text-green-400'
-                              : 'border-[var(--gold-primary)]/40 bg-[var(--gold-primary)]/10 text-[var(--gold-primary)] hover:bg-[var(--gold-primary)]/20 disabled:opacity-60'
-                          }`}
-                          title={isPaid ? 'Installment already confirmed' : `Confirm #${inst.installment_number}`}
-                        >
-                          {isConfirming ? 'Confirming…' : isPaid ? 'Confirmed' : `Confirm #${inst.installment_number}`}
-                        </button>
-                      );
-                    })}
-                    <button
-                      type="button"
-                      disabled={isConfirming || isCancelling}
-                      onClick={() => cancelAdvancePayment(payment.payment_id)}
-                      className="ml-auto rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-400 hover:bg-red-500/20 disabled:opacity-60"
-                      title="Reject this advance payment and un-link the installments"
-                    >
-                      {isCancelling ? 'Rejecting…' : 'Reject Payment'}
-                    </button>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Payment proof zoom modal */}
-      {imageToView && (
-        <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4"
-          onClick={() => setImageToView(null)}
-        >
-          <img
-            src={imageToView}
-            alt="Payment proof"
-            className="max-h-[90vh] max-w-[90vw] object-contain rounded-xl border border-[var(--border)]"
-            onClick={(e) => e.stopPropagation()}
-          />
         </div>
       )}
     </motion.div>

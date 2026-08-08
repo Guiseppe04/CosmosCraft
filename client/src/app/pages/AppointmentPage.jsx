@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'motion/react'
 import { API } from '../utils/apiConfig'
 import { uploadToCloudinary } from '../utils/cloudinary.js'
 import { useAuth } from '../context/AuthContext.jsx'
+import { useToast } from '../components/ui/Toast.jsx'
 import {
   Wrench,
   Paintbrush,
@@ -18,6 +19,7 @@ import {
   ImagePlus,
   X,
   FileText,
+  Loader2,
 } from 'lucide-react'
 
 const APPOINTMENT_BRANCH_STORAGE_KEY = 'cosmoscraft.appointment.branch'
@@ -221,7 +223,7 @@ function getMonthMatrix(year, month, maxLeadTimeDays, disabledDateSet = new Set(
 export function AppointmentPage() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { user, isAuthenticated, isLoadingUser, openLogin } = useAuth()
+  const { user, isAuthenticated, isLoadingUser, openLogin, updateUser } = useAuth()
   const today = new Date()
   const branch = useMemo(() => getAppointmentBranch(), [])
   const branches = useMemo(() => [branch], [branch])
@@ -246,6 +248,11 @@ export function AppointmentPage() {
   const [homeServiceOption, setHomeServiceOption] = useState('')
   const [homeServiceAddressId, setHomeServiceAddressId] = useState('')
   const [homeServiceContact, setHomeServiceContact] = useState(user?.phone || '')
+  const [showPhoneForm, setShowPhoneForm] = useState(false)
+  const [newPhone, setNewPhone] = useState('')
+  const [phoneError, setPhoneError] = useState('')
+  const [phoneSaving, setPhoneSaving] = useState(false)
+  const [contactError, setContactError] = useState('')
   const [availableServices, setAvailableServices] = useState([])
   const [servicesError, setServicesError] = useState('')
   const [servicesLoading, setServicesLoading] = useState(true)
@@ -264,6 +271,8 @@ export function AppointmentPage() {
   const [slotsLoading, setSlotsLoading] = useState(false)
   const [slotAvailabilityStatus, setSlotAvailabilityStatus] = useState('')
   // Payment method selection
+  const { toast } = useToast()
+
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('')
   const PAYMENT_METHODS = [
     { value: 'cash', label: 'Cash', description: 'Pay with cash on the appointment date' },
@@ -272,6 +281,7 @@ export function AppointmentPage() {
   ]
   const [paymentProofFile, setPaymentProofFile] = useState(null)
   const [paymentProofPreviewUrl, setPaymentProofPreviewUrl] = useState('')
+  const [paymentValidationError, setPaymentValidationError] = useState('')
   
   // Dedicated notes field for additional information (landmarks, delivery instructions, special requests, etc.)
   const [additionalNotes, setAdditionalNotes] = useState('')
@@ -570,7 +580,7 @@ export function AppointmentPage() {
     }
     if (currentStep === 4) {
       if (selectedAppointmentType === 'service_home') {
-        return Boolean(homeServiceAddressId && homeServiceContact.trim())
+        return Boolean(homeServiceAddressId && homeServiceContact.trim() && !contactError)
       }
       return !!selectedBranchId
     }
@@ -598,6 +608,7 @@ export function AppointmentPage() {
     if (currentStep === 4 && selectedAppointmentType === 'service_home') {
       if (!homeServiceAddressId) return 'Select your home service address.'
       if (!homeServiceContact.trim()) return 'Enter your contact number for home service.'
+      if (contactError) return contactError
     }
     return ''
   }
@@ -695,16 +706,55 @@ export function AppointmentPage() {
     }
   }
 
+  const PHONE_REGEX = /^(09\d{9}|\+639\d{9})$/
+
+  const handleSavePhone = async () => {
+    const trimmed = newPhone.trim()
+    if (!PHONE_REGEX.test(trimmed)) {
+      setPhoneError('Phone number must be 11 digits starting with 09 or in +63 format (e.g. +639123456789)')
+      return
+    }
+
+    setPhoneError('')
+    setPhoneSaving(true)
+
+    try {
+      const response = await fetch(`${API}/api/users/me/phone`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ phone: trimmed }),
+      })
+
+      const data = await response.json().catch(() => ({}))
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to save phone number')
+      }
+
+      const savedPhone = data.data?.user?.phone || trimmed
+      updateUser({ phone: savedPhone })
+      setHomeServiceContact(savedPhone)
+      setShowPhoneForm(false)
+      setNewPhone('')
+      toast.success('Phone number saved successfully')
+    } catch (error) {
+      toast.error(error.message || 'Failed to save phone number')
+    } finally {
+      setPhoneSaving(false)
+    }
+  }
+
   const handleReferenceImageChange = (target, event) => {
     const file = event.target.files?.[0]
     event.target.value = ''
     if (!file) return
     if (!file.type.startsWith('image/')) {
-      alert('Please upload an image file.')
+      toast.error('Please upload an image file.')
       return
     }
     if (file.size > MAX_REFERENCE_IMAGE_BYTES) {
-      alert('Image size must be 10MB or less.')
+      toast.error('Image size must be 10MB or less.')
       return
     }
 
@@ -727,11 +777,11 @@ export function AppointmentPage() {
     event.target.value = ''
     if (!file) return
     if (!file.type.startsWith('image/')) {
-      alert('Please upload an image file for payment proof.')
+      toast.error('Please upload an image file for payment proof.')
       return
     }
     if (file.size > MAX_REFERENCE_IMAGE_BYTES) {
-      alert('Image size must be 10MB or less.')
+      toast.error('Image size must be 10MB or less.')
       return
     }
 
@@ -762,25 +812,27 @@ export function AppointmentPage() {
 
   // Compute the final notes to send to the API
   const computedNotes = useMemo(() => {
-    const parts = []
-    if (additionalNotes.trim()) {
-      parts.push(additionalNotes.trim())
-    }
-    if (serviceReferencePreviewUrl && serviceReferenceFile) {
-      parts.push(`Service reference image: ${serviceReferencePreviewUrl}`)
-    }
-    if (guitarReferencePreviewUrl && guitarReferenceFile) {
-      parts.push(`Guitar reference image: ${guitarReferencePreviewUrl}`)
-    }
-    return parts.length > 0 ? parts.join('\n') : null
-  }, [additionalNotes, serviceReferencePreviewUrl, serviceReferenceFile, guitarReferencePreviewUrl, guitarReferenceFile])
+    return additionalNotes.trim() || null
+  }, [additionalNotes])
 
   const handleSubmit = async () => {
     if (!isAuthenticated) {
       openLogin(() => navigate('/appointments', { replace: true }))
       return
     }
-    if (!canProceed()) return
+
+    if (!canProceed()) {
+      if (!selectedPaymentMethod) {
+        setPaymentValidationError('Please select a payment method.')
+      } else if ((selectedPaymentMethod === 'e_wallet' || selectedPaymentMethod === 'e_bank') && !paymentProofFile) {
+        setPaymentValidationError('Payment proof is required for the selected payment method.')
+      } else {
+        setPaymentValidationError('Please complete all required booking fields.')
+      }
+      return
+    }
+
+    setPaymentValidationError('')
     setIsSubmittingBooking(true)
     
     try {
@@ -793,7 +845,7 @@ export function AppointmentPage() {
         const oldTimeLabel = oldDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
         
         if (selectedDateId === oldDateId && selectedTime === oldTimeLabel) {
-          alert('Please select a different date or time than the original appointment schedule.')
+          toast.error('Please select a different date or time than the original appointment schedule.')
           setIsSubmittingBooking(false)
           return
         }
@@ -917,7 +969,7 @@ export function AppointmentPage() {
       console.error('Submission Error:', error);
       setShowBookingSuccess(false)
       setIsSubmittingBooking(false)
-      alert(`Failed to book appointment: ${error.message}`);
+      toast.error(`Failed to book appointment: ${error.message}`);
     }
   }
 
@@ -1192,13 +1244,76 @@ export function AppointmentPage() {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-white mb-1.5">Contact Number <span className="text-red-400">*</span></label>
-                      <input
-                        type="text"
-                        value={homeServiceContact}
-                        onChange={(e) => setHomeServiceContact(e.target.value)}
-                        className="w-full px-4 py-3 bg-[var(--surface-dark)] text-[var(--text-light)] border border-[var(--border)] rounded-xl text-sm focus:outline-none focus:border-[#d4af37]"
-                        placeholder="e.g. 09123456789"
-                      />
+                      {!user?.phone && !showPhoneForm && (
+                        <div className="mb-2 rounded-xl border border-[#d4af37]/30 bg-[#d4af37]/5 p-3 flex items-center justify-between gap-3">
+                          <p className="text-sm text-[var(--text-muted)]">
+                            Add your phone number for home service delivery updates.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => setShowPhoneForm(true)}
+                            className="shrink-0 px-4 py-1.5 rounded-lg text-sm font-semibold bg-[#d4af37] text-black hover:bg-[#ffe270] transition-colors"
+                          >
+                            Add Phone Number
+                          </button>
+                        </div>
+                      )}
+                      {showPhoneForm && (
+                        <div className="mb-2 rounded-xl border border-[#d4af37]/30 bg-[#d4af37]/5 p-4 space-y-3">
+                          <p className="text-sm font-semibold text-[var(--text-light)]">Enter Phone Number</p>
+                          <input
+                            type="text"
+                            value={newPhone}
+                            onChange={(e) => {
+                              setNewPhone(e.target.value)
+                              setPhoneError('')
+                            }}
+                            className="w-full px-4 py-3 bg-[var(--surface-dark)] text-[var(--text-light)] border border-[var(--border)] rounded-xl text-sm focus:outline-none focus:border-[#d4af37]"
+                            placeholder="09XXXXXXXXX or +639XXXXXXXXX"
+                            maxLength={13}
+                          />
+                          {phoneError && (
+                            <p className="text-xs text-red-400">{phoneError}</p>
+                          )}
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={handleSavePhone}
+                              disabled={phoneSaving || !PHONE_REGEX.test(newPhone.trim())}
+                              className="px-4 py-2 rounded-lg text-sm font-semibold bg-[#d4af37] text-black hover:bg-[#ffe270] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              {phoneSaving ? 'Saving...' : 'Save'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => { setShowPhoneForm(false); setNewPhone(''); setPhoneError('') }}
+                              className="px-4 py-2 rounded-lg text-sm font-semibold text-[var(--text-muted)] bg-[var(--surface-dark)] border border-[var(--border)] hover:bg-[var(--surface-elevated)] transition-colors"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                      {user?.phone || showPhoneForm ? (
+                        <input
+                          type="text"
+                          value={homeServiceContact}
+                          onChange={(e) => {
+                            const val = e.target.value
+                            setHomeServiceContact(val)
+                            if (val && !PHONE_REGEX.test(val.trim())) {
+                              setContactError('Phone number must be 11 digits starting with 09 or in +63 format (e.g. +639123456789)')
+                            } else {
+                              setContactError('')
+                            }
+                          }}
+                          className="w-full px-4 py-3 bg-[var(--surface-dark)] text-[var(--text-light)] border border-[var(--border)] rounded-xl text-sm focus:outline-none focus:border-[#d4af37]"
+                          placeholder="+639XXXXXXXXX"
+                        />
+                      ) : null}
+                      {contactError && (
+                        <p className="text-xs text-red-400 mt-1">{contactError}</p>
+                      )}
                     </div>
                   </div>
                 )}
@@ -1246,47 +1361,56 @@ export function AppointmentPage() {
                <p className="text-sm text-[var(--text-muted)]">Select an available date (Mon-Sat) and time. Sundays and official holidays are unavailable.</p>
              </div>
 
-            <div className="bg-theme-surface-deep border border-[var(--border)] rounded-2xl p-6 shadow-xl">
-              {/* Calendar header */}
-               <div className="flex items-center justify-between mb-6">
-                <span className="text-lg font-bold text-[var(--text-light)]">
-                  {new Date(currentYear, currentMonth, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
-                </span>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => {
-                      const prev = new Date(currentYear, currentMonth - 1, 1)
-                      setCurrentYear(prev.getFullYear())
-                      setCurrentMonth(prev.getMonth())
-                    }}
-                    className="p-2 rounded-lg bg-[var(--surface-dark)] text-[var(--text-muted)] hover:bg-[var(--surface-elevated)] hover:text-[var(--text-light)] transition-colors border border-[var(--border)]"
-                  >
-                    <ChevronLeft className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => {
-                      const next = new Date(currentYear, currentMonth + 1, 1)
-                      setCurrentYear(next.getFullYear())
-                      setCurrentMonth(next.getMonth())
-                    }}
-                    className="p-2 rounded-lg bg-[var(--surface-dark)] text-[var(--text-muted)] hover:bg-[var(--surface-elevated)] hover:text-[var(--text-light)] transition-colors border border-[var(--border)]"
-                  >
-                    <ChevronRight className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
+             <div className="bg-theme-surface-deep border border-[var(--border)] rounded-2xl p-6 shadow-xl relative">
+               {/* Calendar header */}
+                <div className="flex items-center justify-between mb-6">
+                 <span className="text-lg font-bold text-[var(--text-light)]">
+                   {new Date(currentYear, currentMonth, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
+                 </span>
+                 <div className="flex gap-2">
+                   <button
+                     onClick={() => {
+                       const prev = new Date(currentYear, currentMonth - 1, 1)
+                       setCurrentYear(prev.getFullYear())
+                       setCurrentMonth(prev.getMonth())
+                     }}
+                     className="p-2 rounded-lg bg-[var(--surface-dark)] text-[var(--text-muted)] hover:bg-[var(--surface-elevated)] hover:text-[var(--text-light)] transition-colors border border-[var(--border)]"
+                   >
+                     <ChevronLeft className="w-4 h-4" />
+                   </button>
+                   <button
+                     onClick={() => {
+                       const next = new Date(currentYear, currentMonth + 1, 1)
+                       setCurrentYear(next.getFullYear())
+                       setCurrentMonth(next.getMonth())
+                     }}
+                     className="p-2 rounded-lg bg-[var(--surface-dark)] text-[var(--text-muted)] hover:bg-[var(--surface-elevated)] hover:text-[var(--text-light)] transition-colors border border-[var(--border)]"
+                   >
+                     <ChevronRight className="w-4 h-4" />
+                   </button>
+                 </div>
+               </div>
 
-              {/* Calendar Grid */}
-              <div className="grid grid-cols-7 gap-1 sm:gap-2 text-xs sm:text-sm text-[var(--text-muted)] mb-3 font-medium">
-                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
-                  <span key={d} className="text-center pb-2">{d}</span>
-                ))}
-              </div>
+               {servicesLoading && (
+                 <div className="absolute inset-0 flex items-center justify-center bg-[var(--surface-dark)]/80 backdrop-blur-sm rounded-2xl z-10">
+                   <div className="flex flex-col items-center gap-3">
+                     <Loader2 className="w-8 h-8 animate-spin text-[#d4af37]" />
+                     <p className="text-sm text-[var(--text-muted)]">Loading calendar...</p>
+                   </div>
+                 </div>
+               )}
 
-              <div className="grid grid-cols-7 gap-1 sm:gap-2 mb-8">
-                {monthMatrix.map((week, wIdx) =>
-                  week.map((day, dIdx) => {
-                    if (!day.inCurrentMonth) return <div key={`empty-${wIdx}-${dIdx}`} className="h-9 sm:h-10" />
+               {/* Calendar Grid */}
+               <div className="grid grid-cols-7 gap-1 sm:gap-2 text-xs sm:text-sm text-[var(--text-muted)] mb-3 font-medium">
+                 {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
+                   <span key={d} className="text-center pb-2">{d}</span>
+                 ))}
+               </div>
+
+               <div className="grid grid-cols-7 gap-1 sm:gap-2 mb-8">
+                 {monthMatrix.map((week, wIdx) =>
+                   week.map((day, dIdx) => {
+                     if (!day.inCurrentMonth) return <div key={`empty-${wIdx}-${dIdx}`} className="h-9 sm:h-10" />
 
                     const isSelected = selectedDateId === day.id
                     const isUnavailable = !day.isAvailable
@@ -1337,7 +1461,7 @@ export function AppointmentPage() {
                   )}
                   {!slotsLoading && slotAvailabilityStatus === 'fully_booked' && (
                     <p className="mb-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-300">
-                      Fully Booked: This date already has the maximum of 5 appointments.
+                      Fully Booked: This date has reached the maximum of 5 appointments for the day.
                     </p>
                   )}
                   {!slotsLoading && slotAvailabilityStatus === 'unavailable' && (
@@ -1499,7 +1623,7 @@ export function AppointmentPage() {
                        <button
                          key={method.value}
                          type="button"
-                         onClick={() => { setSelectedPaymentMethod(method.value); setPaymentProofFile(null); setPaymentProofPreviewUrl('') }}
+                         onClick={() => { setSelectedPaymentMethod(method.value); setPaymentProofFile(null); setPaymentProofPreviewUrl(''); setPaymentValidationError('') }}
                          className={`rounded-xl border-2 p-4 text-left transition-all ${
                            isSelected
                              ? 'border-[#d4af37] bg-[#d4af37]/10'
@@ -1548,22 +1672,13 @@ export function AppointmentPage() {
                      )}
                    </div>
                  )}
+                 {paymentValidationError && (
+                   <p className="mt-3 text-sm font-medium text-red-400">{paymentValidationError}</p>
+                 )}
                </div>
-
-               <div className="border-t border-[var(--border)] pt-4 flex justify-between items-center">
-                  <span className="text-sm font-bold text-[var(--text-muted)] uppercase">Estimated Total</span>
-                  <span className="text-2xl font-bold text-[#d4af37]">₱{totalPrice}</span>
-               </div>
-               
-               {referenceNumber && (
-                 <div className="bg-[#d4af37]/10 border border-[#d4af37]/30 rounded-lg p-3 text-center">
-                   <p className="text-xs text-[#d4af37]/80 uppercase tracking-wider mb-1">Temporary Reference Number</p>
-                   <p className="font-mono font-bold text-[#d4af37]">{referenceNumber}</p>
-                 </div>
-               )}
-            </div>
-          </motion.div>
-        )
+             </div>
+           </motion.div>
+         )
 
       default:
         return null
@@ -1573,16 +1688,6 @@ export function AppointmentPage() {
   return (
     <div className="min-h-screen pt-16 bg-[var(--bg-primary)]">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10">
-        
-        {/* Header Back Button */}
-        <button
-          onClick={() => navigate(-1)}
-          className="flex items-center gap-2 text-[var(--text-muted)] hover:text-[var(--text-light)] transition-colors mb-8 group"
-        >
-          <ChevronLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
-          <span className="font-medium text-sm">Back to Dashboard</span>
-        </button>
-
         <div className="grid xl:grid-cols-[280px_1fr] gap-6 lg:gap-8 xl:gap-12 min-h-[600px]">
           
           {/* LEFT SIDEBAR (STEPPER) */}
@@ -1684,7 +1789,7 @@ export function AppointmentPage() {
                ) : (
                  <button
                    onClick={handleSubmit}
-                   disabled={isSubmittingBooking}
+                   disabled={isSubmittingBooking || !canProceed()}
                    className="px-8 py-2.5 rounded-xl text-sm font-bold bg-[#d4af37] text-black hover:bg-[#ffe270] transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(212,175,55,0.3)] shadow-[#d4af37]/20 flex items-center gap-2"
                  >
                    {isSubmittingBooking ? (

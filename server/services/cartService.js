@@ -166,7 +166,7 @@ async function addItemToCart(userId, { product_id, customization_id, quantity = 
 
   const existingItemResult = await pool.query(
     `SELECT * FROM cart_items 
-     WHERE cart_id = $1 AND product_id = $2 AND customization_id = $3`,
+     WHERE cart_id = $1 AND product_id IS NOT DISTINCT FROM $2 AND customization_id IS NOT DISTINCT FROM $3`,
     [cart.cart_id, itemProductId, itemCustomizationId]
   );
 

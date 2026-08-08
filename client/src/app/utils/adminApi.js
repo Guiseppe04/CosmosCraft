@@ -3,7 +3,9 @@
  * All functions use credentials: 'include' so the access token cookie is sent automatically.
  */
 
-const API_URL = import.meta.env.VITE_API_URL
+import { API } from './apiConfig'
+
+const API_URL = API
 
 const normalizeAppointmentStatus = (status) => {
   if (status === 'approved') return 'confirmed'
@@ -18,7 +20,14 @@ async function request(path, options = {}) {
     body: options.body ? JSON.stringify(options.body) : undefined,
   })
   const data = await res.json()
-  if (!res.ok) throw new Error(data.message || 'Request failed')
+  if (!res.ok) {
+    const error = new Error(data.message || 'Request failed')
+    // Preserve field-level validation errors so the UI can map them to inputs.
+    if (Array.isArray(data.errors) && data.errors.length > 0) {
+      error.fieldErrors = data.errors
+    }
+    throw error
+  }
   return data
 }
 
@@ -175,6 +184,13 @@ export const adminApi = {
   updateService: (id, body) => request(`/api/services/${id}`, { method: 'PUT', body }),
   deleteService: (id) => request(`/api/services/${id}`, { method: 'DELETE' }),
 
+  // Available Dates
+  getAvailableDates: (dateFrom, dateTo) => {
+    if (!dateFrom || !dateTo) return Promise.resolve({ data: { available_dates: [] } })
+    const qs = new URLSearchParams({ date_from: dateFrom, date_to: dateTo }).toString()
+    return request(`/api/appointments/available-dates?${qs}`)
+  },
+
   // Unavailable Dates
   getUnavailableDates: () => request('/api/appointments/unavailable-dates'),
   setUnavailableDate: (date, reason) => request('/api/appointments/unavailable-dates', { method: 'POST', body: { date, reason } }),
@@ -239,14 +255,12 @@ export const adminApi = {
 
   // Installment Schedule
   getProjectInstallments: (projectId) => request(`/api/projects/${projectId}/installments`),
-  createAdvancePayment: (projectId, body) => request(`/api/projects/${projectId}/advance-payment`, { method: 'POST', body }),
 
   // Installment Tracking
   getProjectInstallmentTracking: (projectId) => request(`/api/installments/project/${projectId}`),
   getOrderInstallmentTracking: (orderId) => request(`/api/installments/project/by-order?orderId=${orderId}`),
   getOverdueInstallments: () => request('/api/installments/overdue'),
   markInstallmentPaid: (scheduleId, paymentId) => request(`/api/installments/${scheduleId}/pay`, { method: 'PATCH', body: { payment_id: paymentId } }),
-  cancelAdvancePayment: (paymentId) => request(`/api/installments/${paymentId}/advance-payment/cancel`, { method: 'PATCH' }),
   runOverdueCheck: () => request('/api/installments/check-overdue', { method: 'POST' }),
 
   // Default Workflow

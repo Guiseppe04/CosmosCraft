@@ -1,4 +1,6 @@
-const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:5000') + '/api';
+import { API } from '../utils/apiConfig';
+
+const API_BASE_URL = `${API}/api`;
 
 export const cloudinaryAssetsApi = {
   browse: async ({ folder = '', max = 60, cursor = null } = {}) => {

@@ -39,9 +39,13 @@ export const staffApi = {
     const qs = new URLSearchParams(params).toString()
     return request(`/api/projects${qs ? `?${qs}` : ''}`)
   },
+  getProjectHierarchy: (id) => request(`/api/projects/${id}/hierarchy`),
+  getProjectRequiredParts: (id) => request(`/api/projects/${id}/required-parts`),
+  getProjectActivity: (id) => request(`/api/projects/${id}/activity`),
   updateProject: (id, body) => request(`/api/projects/${id}`, { method: 'PUT', body }),
   updateProjectStage: (id, body) => request(`/api/projects/${id}`, { method: 'PUT', body }),
   claimProject: (id) => request(`/api/projects/${id}/claim`, { method: 'POST' }),
+  updateSubtask: (id, body) => request(`/api/projects/subtasks/${id}`, { method: 'PATCH', body }),
 
   // Orders
   getOrders: (params = {}) => {
@@ -82,6 +86,11 @@ export const staffApi = {
   checkAvailability: (serviceId, scheduledAt) =>
     request(`/api/appointments/services/${serviceId}/availability?scheduled_at=${scheduledAt}`),
   getUnavailableDates: () => request('/api/appointments/unavailable-dates'),
+  getAvailableDates: (dateFrom, dateTo) => {
+    if (!dateFrom || !dateTo) return Promise.resolve({ data: { available_dates: [] } })
+    const qs = new URLSearchParams({ date_from: dateFrom, date_to: dateTo }).toString()
+    return request(`/api/appointments/available-dates?${qs}`)
+  },
   addUnavailableDate: (data) => request('/api/appointments/unavailable-dates', { method: 'POST', body: data }),
   removeUnavailableDate: (id) => request(`/api/appointments/unavailable-dates/${id}`, { method: 'DELETE' }),
 

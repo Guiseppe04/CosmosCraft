@@ -6,6 +6,7 @@ import {
   CheckCircle, XCircle, Clock, AlertCircle, Loader2,
   FileText, Image as ImageIcon, ExternalLink, Save, User,
   History, DollarSign, Trash2, Check, X, Printer, Calendar,
+  ArrowUp, ArrowDown,
 } from 'lucide-react'
 import { formatCurrency } from '../../utils/formatCurrency'
 import { adminApi } from '../../utils/adminApi'
@@ -28,16 +29,6 @@ const ORDER_STATUS_LIFECYCLE = [
 ]
 
 const ORDER_STATUS_MAP = Object.fromEntries(ORDER_STATUS_LIFECYCLE.map(s => [s.value, s]))
-
-const ORDER_STATUS_TABS = [
-  { id: 'all', label: 'All', color: '#d4af37', bgColor: 'bg-[var(--gold-primary)]/20', textColor: 'text-[var(--gold-primary)]', borderColor: 'border-[var(--gold-primary)]/30' },
-  { id: 'pending', label: 'Pending', color: '#d4af37', bgColor: 'bg-[var(--gold-primary)]/20', textColor: 'text-[var(--gold-primary)]', borderColor: 'border-[var(--gold-primary)]/30' },
-  { id: 'processing', label: 'Processing', color: '#d4af37', bgColor: 'bg-[var(--gold-primary)]/20', textColor: 'text-[var(--gold-primary)]', borderColor: 'border-[var(--gold-primary)]/30' },
-  { id: 'shipped', label: 'Shipped', color: '#d4af37', bgColor: 'bg-[var(--gold-primary)]/20', textColor: 'text-[var(--gold-primary)]', borderColor: 'border-[var(--gold-primary)]/30' },
-  { id: 'out_for_delivery', label: 'Out for Delivery', color: '#d4af37', bgColor: 'bg-[var(--gold-primary)]/20', textColor: 'text-[var(--gold-primary)]', borderColor: 'border-[var(--gold-primary)]/30' },
-  { id: 'delivered', label: 'Delivered', color: '#d4af37', bgColor: 'bg-[var(--gold-primary)]/20', textColor: 'text-[var(--gold-primary)]', borderColor: 'border-[var(--gold-primary)]/30' },
-  { id: 'cancelled', label: 'Cancelled', color: '#d4af37', bgColor: 'bg-[var(--gold-primary)]/20', textColor: 'text-[var(--gold-primary)]', borderColor: 'border-[var(--gold-primary)]/30' },
-]
 
 const TIMELINE_STEPS = [
   { status: 'pending', label: 'Order Placed', desc: 'Order created, awaiting payment' },
@@ -1076,13 +1067,25 @@ function PaymentVerificationPanel({ order, onVerify, user }) {
 function OrderStatusPanel({ order, onUpdate }) {
   const [selectedStatus, setSelectedStatus] = useState(order.status || 'pending')
   const [trackingInfo, setTrackingInfo] = useState('')
+  const [trackingError, setTrackingError] = useState('')
   const [isUpdating, setIsUpdating] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
   const currentStatus = order.status || 'pending'
   const allowedStatuses = ORDER_STATUS_TRANSITIONS[currentStatus] || []
-  const canSubmit = allowedStatuses.includes(selectedStatus)
+  const requiresTracking = selectedStatus === 'shipped' || selectedStatus === 'out_for_delivery'
+  const canSubmit = allowedStatuses.includes(selectedStatus) && (!requiresTracking || trackingInfo.trim())
+
+  useEffect(() => {
+    setTrackingInfo('')
+    setTrackingError('')
+  }, [selectedStatus])
 
   const handleUpdate = async () => {
+    if (requiresTracking && !trackingInfo.trim()) {
+      setTrackingError(`${selectedStatus === 'shipped' ? 'Tracking number' : 'Rider details'} is required`)
+      return
+    }
+    setTrackingError('')
     setIsUpdating(true)
     try {
       await onUpdate(order.order_id, selectedStatus, trackingInfo)
@@ -1091,8 +1094,6 @@ function OrderStatusPanel({ order, onUpdate }) {
       setShowConfirm(false)
     }
   }
-
-  const requiresTracking = selectedStatus === 'shipped' || selectedStatus === 'out_for_delivery'
 
   return (
     <div className="space-y-4">
@@ -1136,14 +1137,18 @@ function OrderStatusPanel({ order, onUpdate }) {
           <div className="mb-4">
             <p className="text-[var(--text-muted)] text-xs uppercase tracking-wider mb-2">
               {selectedStatus === 'shipped' ? 'Tracking Number' : 'Rider Details'}
+              <span className="text-red-400 ml-1">*</span>
             </p>
             <input
               type="text"
               value={trackingInfo}
-              onChange={(e) => setTrackingInfo(e.target.value)}
+              onChange={(e) => { setTrackingInfo(e.target.value); setTrackingError('') }}
               placeholder={selectedStatus === 'shipped' ? 'Enter tracking number' : 'Enter rider name & contact'}
-              className="w-full px-4 py-3 bg-[var(--surface-dark)] border border-[var(--border)] rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
+              className={`w-full px-4 py-3 bg-[var(--surface-dark)] border rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] ${trackingError ? 'border-red-500' : 'border-[var(--border)]'}`}
             />
+            {trackingError && (
+              <p className="text-red-400 text-xs mt-1">{trackingError}</p>
+            )}
           </div>
         )}
 
@@ -1159,9 +1164,9 @@ function OrderStatusPanel({ order, onUpdate }) {
               </button>
               <button
                 onClick={handleUpdate}
-                disabled={isUpdating || !canSubmit}
+                disabled={isUpdating || !canSubmit || (requiresTracking && !trackingInfo.trim())}
                 className={`flex-1 px-4 py-2 bg-[var(--gold-primary)] rounded-lg text-black text-sm font-medium hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all flex items-center justify-center gap-2 ${
-                  (isUpdating || !canSubmit) ? 'opacity-50 cursor-not-allowed' : ''
+                  (isUpdating || !canSubmit || (requiresTracking && !trackingInfo.trim())) ? 'opacity-50 cursor-not-allowed' : ''
                 }`}
               >
                 {isUpdating ? (
@@ -1210,7 +1215,8 @@ export function OrderManagement({ orders, onRefresh, user, pagination }) {
   const [paymentMethodFilter, setPaymentMethodFilter] = useState('all')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
-  const [sortBy, setSortBy] = useState('newest')
+  const [sortField, setSortField] = useState('date')
+  const [sortDirection, setSortDirection] = useState('desc')
   const [page, setPage] = useState(1)
   const [selectedOrder, setSelectedOrder] = useState(null)
   const [selectedSection, setSelectedSection] = useState('details')
@@ -1220,18 +1226,32 @@ export function OrderManagement({ orders, onRefresh, user, pagination }) {
   const onRefreshRef = useRef(onRefresh)
   onRefreshRef.current = onRefresh
 
+  const paginationTotalPagesRef = useRef(pagination?.total_pages || 1)
+  useEffect(() => {
+    paginationTotalPagesRef.current = pagination?.total_pages || 1
+  }, [pagination?.total_pages])
+
+  const statusCounts = useMemo(() => {
+    const counts = { all: pagination?.total || 0 }
+    orders.forEach(order => {
+      const status = order.status || 'pending'
+      counts[status] = (counts[status] || 0) + 1
+    })
+    return counts
+  }, [orders, pagination?.total])
+
   const debouncedSearch = useDebounce(searchQuery, 300)
 
-  // Map UI sort values to API sort params
-  const sortMap = {
-    newest: { sort_by: 'created_at', sort_dir: 'desc' },
-    oldest: { sort_by: 'created_at', sort_dir: 'asc' },
-    order_number: { sort_by: 'order_number', sort_dir: 'asc' },
-    customer_name: { sort_by: 'customer_name', sort_dir: 'asc' },
-    highest: { sort_by: 'total_amount', sort_dir: 'desc' },
-    lowest: { sort_by: 'total_amount', sort_dir: 'asc' },
-    status: { sort_by: 'status', sort_dir: 'asc' },
-    payment_status: { sort_by: 'payment_status', sort_dir: 'asc' },
+  // Map UI sort field to API sort params
+  const SORT_FIELD_MAP = {
+    date: { sort_by: 'created_at' },
+    order_number: { sort_by: 'order_number' },
+    customer: { sort_by: 'customer_name' },
+    total: { sort_by: 'total_amount' },
+    status: { sort_by: 'status' },
+    payment_status: { sort_by: 'payment_status' },
+    order_type: { sort_by: 'order_type' },
+    customization: { sort_by: 'customization_name' },
   }
 
   const buildQuery = useCallback((pageNum = 1) => {
@@ -1246,23 +1266,24 @@ export function OrderManagement({ orders, onRefresh, user, pagination }) {
       include_items: true,
       page: pageNum,
       page_size: 10,
-      ...(sortMap[sortBy] || sortMap.newest),
+      ...(SORT_FIELD_MAP[sortField] || SORT_FIELD_MAP.date),
+      sort_dir: sortDirection,
     }
     Object.keys(params).forEach(k => params[k] === undefined && delete params[k])
     return params
-  }, [debouncedSearch, orderTypeFilter, statusFilter, paymentStatusFilter, paymentMethodFilter, dateFrom, dateTo, sortBy])
+  }, [debouncedSearch, orderTypeFilter, statusFilter, paymentStatusFilter, paymentMethodFilter, dateFrom, dateTo, sortField, sortDirection])
 
   const requestOrdersPage = useCallback((targetPage = 1) => {
-    const safePage = Math.max(1, Math.min(targetPage, Math.max(1, pagination?.total_pages || 1)))
+    const safePage = Math.max(1, Math.min(targetPage, Math.max(1, paginationTotalPagesRef.current)))
     setPage(safePage)
     const params = buildQuery(safePage)
     if (onRefreshRef.current) onRefreshRef.current(params)
-  }, [buildQuery, pagination?.total_pages])
+  }, [buildQuery])
 
   useEffect(() => {
     setPage(1)
     requestOrdersPage(1)
-  }, [debouncedSearch, orderTypeFilter, statusFilter, paymentStatusFilter, paymentMethodFilter, dateFrom, dateTo, sortBy, requestOrdersPage])
+  }, [debouncedSearch, orderTypeFilter, statusFilter, paymentStatusFilter, paymentMethodFilter, dateFrom, dateTo, sortField, sortDirection, requestOrdersPage])
 
   const totalPages = pagination?.total_pages || 1
 
@@ -1271,7 +1292,7 @@ export function OrderManagement({ orders, onRefresh, user, pagination }) {
     try {
       await adminApi.updatePaymentStatus(orderId, newStatus, { reference_number: referenceNumber, notes, admin_name: user?.firstName ? `${user.firstName}${user.lastName ? ' ' + user.lastName : ''}` : user?.email, admin_email: user?.email })
       onRefresh(buildQuery(page))
-      setSelectedOrder(null)
+      setSelectedOrder(prev => prev ? { ...prev, payment_status: newStatus } : null)
     } catch (error) {
       console.error('Failed to update payment status:', error)
     } finally {
@@ -1300,11 +1321,12 @@ export function OrderManagement({ orders, onRefresh, user, pagination }) {
       }
       await adminApi.updateOrder(orderId, updateData)
       onRefresh(buildQuery(page))
-      setSelectedOrder(null)
+      setSelectedOrder(prev => prev ? { ...prev, status: newStatus, ...(newStatus === 'shipped' ? { tracking_number: trackingInfo } : {}), ...(newStatus === 'out_for_delivery' ? { rider_name: trackingInfo } : {}) } : null)
     } catch (error) {
       console.error('Failed to update order status:', error)
     } finally {
       setIsUpdatingOrder(false)
+      setShowConfirm(false)
     }
   }
 
@@ -1320,7 +1342,7 @@ export function OrderManagement({ orders, onRefresh, user, pagination }) {
         admin_email: user?.email
       })
       onRefresh(buildQuery(page))
-      setSelectedOrder(null)
+      setSelectedOrder(prev => prev ? { ...prev, payment_status: newStatus } : null)
     } catch (error) {
       console.error('Failed to verify payment:', error)
     } finally {
@@ -1331,43 +1353,43 @@ export function OrderManagement({ orders, onRefresh, user, pagination }) {
   return (
     <motion.div key="order-management" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-4">
-        <div className="flex flex-wrap gap-2">
-          {ORDER_STATUS_TABS.map((tab) => {
-            const isActive = statusFilter === tab.id
-            const chipStyles = isActive
-              ? `${tab.bgColor} ${tab.textColor} border ${tab.borderColor}`
-              : 'bg-[var(--surface-dark)] text-[var(--text-muted)] hover:text-white'
-            const tabCount = tab.id === 'all'
-              ? pagination?.total || 0
-              : orders.filter(o => o.status === tab.id).length
-            return (
-              <button
-                key={tab.id}
-                onClick={() => { setStatusFilter(tab.id); setPage(1) }}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all border ${chipStyles}`}
-              >
-                {tab.label}
-                <span className="ml-2 text-xs opacity-70">({tabCount})</span>
-              </button>
-            )
-          })}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => { setSortField('date'); setSortDirection('desc') }}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all border ${
+              sortField === 'date' && sortDirection === 'desc'
+                ? 'bg-[var(--gold-primary)]/20 text-[var(--gold-primary)] border-[var(--gold-primary)]/30'
+                : 'bg-[var(--surface-dark)] text-[var(--text-muted)] hover:text-white'
+            }`}
+          >
+            Newest
+          </button>
         </div>
         <div className="flex items-center gap-2">
           <span className="text-[var(--text-muted)] text-sm">Sort:</span>
           <select
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value)}
+            value={sortField}
+            onChange={(e) => setSortField(e.target.value)}
             className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
           >
-            <option value="newest">Newest first</option>
-            <option value="oldest">Oldest first</option>
+            <option value="date">Date</option>
             <option value="order_number">Order Number</option>
-            <option value="customer_name">Customer Name</option>
-            <option value="highest">Highest value</option>
-            <option value="lowest">Lowest value</option>
-            <option value="status">Order Status</option>
+            <option value="customer">Customer</option>
+            <option value="total">Total</option>
+            <option value="status">Status</option>
             <option value="payment_status">Payment Status</option>
+            <option value="order_type">Order Type</option>
+            <option value="customization">Customization</option>
           </select>
+          <button
+            type="button"
+            onClick={() => setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')}
+            className="p-2 bg-[var(--surface-dark)] border border-[var(--border)] rounded-lg text-white hover:border-[var(--gold-primary)]/50 transition-colors"
+            title={sortDirection === 'asc' ? 'Ascending' : 'Descending'}
+          >
+            {sortDirection === 'asc' ? <ArrowUp className="w-4 h-4" /> : <ArrowDown className="w-4 h-4" />}
+          </button>
         </div>
       </div>
 
@@ -1393,6 +1415,19 @@ export function OrderManagement({ orders, onRefresh, user, pagination }) {
           <option value="product">Product Orders</option>
           <option value="customization">Custom Guitar Orders</option>
           <option value="service">Service Orders</option>
+        </select>
+        {/* Status */}
+        <select
+          value={statusFilter}
+          onChange={(e) => { setStatusFilter(e.target.value); setPage(1) }}
+          className="min-w-[150px] flex-1 bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] h-[42px]"
+        >
+          <option value="all">All statuses ({statusCounts.all || 0})</option>
+          {ORDER_STATUS_LIFECYCLE.map(status => (
+            <option key={status.value} value={status.value}>
+              {status.label} ({statusCounts[status.value] || 0})
+            </option>
+          ))}
         </select>
         {/* Payment Status */}
         <select

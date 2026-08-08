@@ -1,44 +1,167 @@
 const nodemailer = require('nodemailer');
+const https = require('https');
+const dns = require('dns');
+dns.setDefaultResultOrder('ipv4first');
 
 /**
- * Email Service - Send emails using Nodemailer
- * Supports both Gmail and custom SMTP configurations
+ * Email Service - Send emails using Brevo Transactional Email API
+ * Uses HTTPS-based API instead of SMTP to avoid connection timeouts on Render
  */
 
-const transporter = nodemailer.createTransport({
-  host: process.env.MAIL_HOST || 'smtp.gmail.com',
-  port: process.env.MAIL_PORT || 587,
-  secure: process.env.MAIL_SECURE === 'true' || false, // true for 465, false for other ports
-  auth: {
-    user: process.env.MAIL_USER,
-    pass: process.env.MAIL_PASS,
-  },
-});
+const BREVO_API_KEY = process.env.BREVO_API_KEY;
+const BREVO_API_URL = 'https://api.brevo.com/v3/smtp/email';
+const BREVO_ACCOUNT_URL = 'https://api.brevo.com/v3/account';
+const MAIL_FROM = process.env.MAIL_FROM || 'noreply@cosmos-craft.com';
+const MAIL_FROM_NAME = process.env.MAIL_FROM_NAME || 'CosmosCraft';
+
+if (!BREVO_API_KEY) {
+  console.warn('Mailer WARNING: BREVO_API_KEY is not set. Email sending will fail. Check Render environment variables.');
+}
+
+let transporter = null;
+if (!BREVO_API_KEY) {
+  transporter = nodemailer.createTransport({
+    host: process.env.MAIL_HOST || 'smtp.gmail.com',
+    port: process.env.MAIL_PORT || 587,
+    secure: process.env.MAIL_SECURE === 'true' || false,
+    auth: {
+      user: process.env.MAIL_USER,
+      pass: process.env.MAIL_PASS,
+    },
+  });
+}
 
 /**
- * Send a single email
+ * Make a POST request to the Brevo API
+ * @param {string} url - API endpoint
+ * @param {Object} body - Request body
+ * @returns {Promise<Object>} Response data
+ */
+const brevoRequest = (url, body) => {
+  return new Promise((resolve, reject) => {
+    const data = JSON.stringify(body);
+    const parsedUrl = new URL(url);
+    const options = {
+      hostname: parsedUrl.hostname,
+      path: parsedUrl.pathname,
+      method: 'POST',
+      headers: {
+        'api-key': BREVO_API_KEY,
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        'Content-Length': Buffer.byteLength(data),
+      },
+    };
+    const req = https.request(options, (res) => {
+      let responseData = '';
+      res.on('data', (chunk) => { responseData += chunk; });
+      res.on('end', () => {
+        try {
+          const parsed = JSON.parse(responseData);
+          if (res.statusCode >= 200 && res.statusCode < 300) {
+            resolve(parsed);
+          } else {
+            reject(new Error(parsed.message || `Brevo API error: ${res.statusCode}`));
+          }
+        } catch (e) {
+          reject(new Error(`Brevo API error: ${res.statusCode} - ${responseData}`));
+        }
+      });
+    });
+    req.on('error', reject);
+    req.write(data);
+    req.end();
+  });
+};
+
+/**
+ * Make a GET request to the Brevo API
+ * @param {string} url - API endpoint
+ * @returns {Promise<Object>} Response data
+ */
+const brevoGet = (url) => {
+  return new Promise((resolve, reject) => {
+    const parsedUrl = new URL(url);
+    const options = {
+      hostname: parsedUrl.hostname,
+      path: parsedUrl.pathname,
+      method: 'GET',
+      headers: {
+        'api-key': BREVO_API_KEY,
+        Accept: 'application/json',
+      },
+    };
+    const req = https.request(options, (res) => {
+      let responseData = '';
+      res.on('data', (chunk) => { responseData += chunk; });
+      res.on('end', () => {
+        try {
+          const parsed = JSON.parse(responseData);
+          if (res.statusCode >= 200 && res.statusCode < 300) {
+            resolve(parsed);
+          } else {
+            reject(new Error(parsed.message || `Brevo API error: ${res.statusCode}`));
+          }
+        } catch (e) {
+          reject(new Error(`Brevo API error: ${res.statusCode} - ${responseData}`));
+        }
+      });
+    });
+    req.on('error', reject);
+    req.end();
+  });
+};
+
+/**
+ * Send a single email via Brevo API or SMTP fallback
  * @param {Object} options - Email options
  * @param {string} options.to - Recipient email
  * @param {string} options.subject - Email subject
  * @param {string} options.html - Email body (HTML)
  * @param {string} options.text - Email body (Plain text fallback)
- * @returns {Promise<Object>} Transporter response
+ * @returns {Promise<Object>} Brevo API response
  */
 exports.sendMail = async (options) => {
   try {
-    const mailOptions = {
-      from: process.env.MAIL_FROM || process.env.MAIL_USER,
-      to: options.to,
-      subject: options.subject,
-      html: options.html,
-      text: options.text,
-    };
+    const maxAttempts = Number(process.env.MAIL_SEND_RETRIES) || 3;
+    let attempt = 0;
+    while (attempt < maxAttempts) {
+      try {
+        if (BREVO_API_KEY) {
+          const payload = {
+            sender: { email: MAIL_FROM, name: MAIL_FROM_NAME },
+            to: [{ email: options.to }],
+            subject: options.subject,
+            htmlContent: options.html,
+            textContent: options.text,
+          };
+          const response = await brevoRequest(BREVO_API_URL, payload);
+          console.log('Email sent via Brevo:', response.messageId || response.id);
+          return response;
+        }
 
-    const result = await transporter.sendMail(mailOptions);
-    console.log('Email sent:', result.messageId);
-    return result;
+        const mailOptions = {
+          from: MAIL_FROM,
+          to: options.to,
+          subject: options.subject,
+          html: options.html,
+          text: options.text,
+        };
+        const response = await transporter.sendMail(mailOptions);
+        console.log('Email sent via SMTP:', response.messageId);
+        return response;
+      } catch (err) {
+        attempt += 1;
+        console.error(`Email sending error (attempt ${attempt}):`, err && err.message ? err.message : err);
+        if (attempt >= maxAttempts) {
+          throw err;
+        }
+        // simple backoff
+        await new Promise((r) => setTimeout(r, attempt * 1000));
+      }
+    }
   } catch (error) {
-    console.error('Email sending error:', error);
+    console.error('Email sending error:', error.message);
     throw error;
   }
 };
@@ -89,8 +212,8 @@ exports.sendVerificationEmail = async (to, otp) => {
         </style>
       <!--<![endif]-->
 
-    
-    
+
+
     <style type="text/css">
       @media only screen and (min-width:480px) {
         .mj-column-per-100 { width:100% !important; max-width: 100%; }
@@ -100,10 +223,9 @@ exports.sendVerificationEmail = async (to, otp) => {
       .moz-text-html .mj-column-per-100 { width:100% !important; max-width: 100%; }
     </style>
     
+
     
-  
-    
-     
+      
     <style type="text/css">
 h1 { font-size: 32px; font-weight: 700; color: #fafafa; margin: 0 0 12px 0; }
       h2 { font-size: 24px; font-weight: 700; color: #fafafa; margin: 0 0 10px 0; }
@@ -135,10 +257,10 @@ h1 { font-size: 32px; font-weight: 700; color: #fafafa; margin: 0 0 12px 0; }
          aria-roledescription="email" style="background-color:#09090b;" role="article" lang="und" dir="auto"
       >
         
-      
+       
       <!--[if mso | IE]><table align="center" border="0" cellpadding="0" cellspacing="0" class="" role="presentation" style="width:600px;" width="600" ><tr><td style="line-height:0px;font-size:0px;mso-line-height-rule:exactly;"><![endif]-->
     
-      
+    
       <div  style="margin:0px auto;max-width:600px;">
         
         <table
@@ -150,7 +272,7 @@ h1 { font-size: 32px; font-weight: 700; color: #fafafa; margin: 0 0 12px 0; }
                  style="direction:ltr;font-size:0px;padding:32px 32px 24px 32px;text-align:center;"
               >
                 <!--[if mso | IE]><table role="presentation" border="0" cellpadding="0" cellspacing="0"><tr><td class="" style="vertical-align:top;width:536px;" ><![endif]-->
-            
+          
       <div
          class="mj-column-per-100 mj-outlook-group-fix" style="font-size:0px;text-align:left;direction:ltr;display:inline-block;vertical-align:top;width:100%;"
       >
@@ -177,7 +299,7 @@ h1 { font-size: 32px; font-weight: 700; color: #fafafa; margin: 0 0 12px 0; }
     
       </div>
     
-          <!--[if mso | IE]></td></tr></table><![endif]-->
+         <!--[if mso | IE]></td></tr></table><![endif]-->
               </td>
             </tr>
           </tbody>
@@ -185,10 +307,10 @@ h1 { font-size: 32px; font-weight: 700; color: #fafafa; margin: 0 0 12px 0; }
         
       </div>
     
-      
+     
       <!--[if mso | IE]></td></tr></table><table align="center" border="0" cellpadding="0" cellspacing="0" class="" role="presentation" style="width:600px;" width="600" bgcolor="#18181b" ><tr><td style="line-height:0px;font-size:0px;mso-line-height-rule:exactly;"><![endif]-->
     
-      
+    
       <div  style="background:#18181b;background-color:#18181b;margin:0px auto;max-width:600px;">
         
         <table
@@ -200,7 +322,7 @@ h1 { font-size: 32px; font-weight: 700; color: #fafafa; margin: 0 0 12px 0; }
                  style="direction:ltr;font-size:0px;padding:0 32px;text-align:center;"
               >
                 <!--[if mso | IE]><table role="presentation" border="0" cellpadding="0" cellspacing="0"><tr><td class="" style="vertical-align:top;width:536px;" ><![endif]-->
-            
+          
       <div
          class="mj-column-per-100 mj-outlook-group-fix" style="font-size:0px;text-align:left;direction:ltr;display:inline-block;vertical-align:top;width:100%;"
       >
@@ -228,7 +350,7 @@ h1 { font-size: 32px; font-weight: 700; color: #fafafa; margin: 0 0 12px 0; }
     
       </div>
     
-          <!--[if mso | IE]></td></tr></table><![endif]-->
+         <!--[if mso | IE]></td></tr></table><![endif]-->
               </td>
             </tr>
           </tbody>
@@ -236,10 +358,10 @@ h1 { font-size: 32px; font-weight: 700; color: #fafafa; margin: 0 0 12px 0; }
         
       </div>
     
-      
+     
       <!--[if mso | IE]></td></tr></table><table align="center" border="0" cellpadding="0" cellspacing="0" class="" role="presentation" style="width:600px;" width="600" bgcolor="#18181b" ><tr><td style="line-height:0px;font-size:0px;mso-line-height-rule:exactly;"><![endif]-->
     
-      
+    
       <div  style="background:#18181b;background-color:#18181b;margin:0px auto;max-width:600px;">
         
         <table
@@ -251,7 +373,7 @@ h1 { font-size: 32px; font-weight: 700; color: #fafafa; margin: 0 0 12px 0; }
                  style="direction:ltr;font-size:0px;padding:8px 32px;text-align:center;"
               >
                 <!--[if mso | IE]><table role="presentation" border="0" cellpadding="0" cellspacing="0"><tr><td class="" style="vertical-align:top;width:536px;" ><![endif]-->
-            
+          
       <div
          class="mj-column-per-100 mj-outlook-group-fix" style="font-size:0px;text-align:left;direction:ltr;display:inline-block;vertical-align:top;width:100%;"
       >
@@ -283,14 +405,14 @@ h1 { font-size: 32px; font-weight: 700; color: #fafafa; margin: 0 0 12px 0; }
         </tbody>
       </table>
     
-            </td>
-          </tr>
-        </tbody>
-      </table>
+             </td>
+           </tr>
+         </tbody>
+       </table>
     
-      </div>
+       </div>
     
-          <!--[if mso | IE]></td></tr></table><![endif]-->
+         <!--[if mso | IE]></td></tr></table><![endif]-->
               </td>
             </tr>
           </tbody>
@@ -298,10 +420,10 @@ h1 { font-size: 32px; font-weight: 700; color: #fafafa; margin: 0 0 12px 0; }
         
       </div>
     
-      
+     
       <!--[if mso | IE]></td></tr></table><table align="center" border="0" cellpadding="0" cellspacing="0" class="" role="presentation" style="width:600px;" width="600" bgcolor="#18181b" ><tr><td style="line-height:0px;font-size:0px;mso-line-height-rule:exactly;"><![endif]-->
     
-      
+    
       <div  style="background:#18181b;background-color:#18181b;margin:0px auto;max-width:600px;">
         
         <table
@@ -313,7 +435,7 @@ h1 { font-size: 32px; font-weight: 700; color: #fafafa; margin: 0 0 12px 0; }
                  style="direction:ltr;font-size:0px;padding:0 32px;text-align:center;"
               >
                 <!--[if mso | IE]><table role="presentation" border="0" cellpadding="0" cellspacing="0"><tr><td class="" style="vertical-align:top;width:536px;" ><![endif]-->
-            
+          
       <div
          class="mj-column-per-100 mj-outlook-group-fix" style="font-size:0px;text-align:left;direction:ltr;display:inline-block;vertical-align:top;width:100%;"
       >
@@ -338,9 +460,9 @@ h1 { font-size: 32px; font-weight: 700; color: #fafafa; margin: 0 0 12px 0; }
         </tbody>
       </table>
     
-      </div>
+       </div>
     
-          <!--[if mso | IE]></td></tr></table><![endif]-->
+         <!--[if mso | IE]></td></tr></table><![endif]-->
               </td>
             </tr>
           </tbody>
@@ -348,10 +470,10 @@ h1 { font-size: 32px; font-weight: 700; color: #fafafa; margin: 0 0 12px 0; }
         
       </div>
     
-      
+     
       <!--[if mso | IE]></td></tr></table><table align="center" border="0" cellpadding="0" cellspacing="0" class="" role="presentation" style="width:600px;" width="600" ><tr><td style="line-height:0px;font-size:0px;mso-line-height-rule:exactly;"><![endif]-->
     
-      
+    
       <div  style="margin:0px auto;max-width:600px;">
         
         <table
@@ -363,7 +485,7 @@ h1 { font-size: 32px; font-weight: 700; color: #fafafa; margin: 0 0 12px 0; }
                  style="direction:ltr;font-size:0px;padding:24px 32px 32px 32px;text-align:center;"
               >
                 <!--[if mso | IE]><table role="presentation" border="0" cellpadding="0" cellspacing="0"><tr><td class="" style="vertical-align:top;width:536px;" ><![endif]-->
-            
+          
       <div
          class="mj-column-per-100 mj-outlook-group-fix" style="font-size:0px;text-align:left;direction:ltr;display:inline-block;vertical-align:top;width:100%;"
       >
@@ -388,9 +510,9 @@ h1 { font-size: 32px; font-weight: 700; color: #fafafa; margin: 0 0 12px 0; }
         </tbody>
       </table>
     
-      </div>
+       </div>
     
-          <!--[if mso | IE]></td></tr></table><![endif]-->
+         <!--[if mso | IE]></td></tr></table><![endif]-->
               </td>
             </tr>
           </tbody>
@@ -657,10 +779,16 @@ exports.sendOrderConfirmation = async (to, order) => {
 };
 
 /**
- * Verify transporter connection on startup
+ * Verify email service connection on startup
  */
 exports.verifyConnection = async () => {
   try {
+    if (BREVO_API_KEY) {
+       const response = await brevoGet(BREVO_ACCOUNT_URL);
+       console.log('Email service connected via Brevo API:', response.email);
+       return true;
+     }
+
     await transporter.verify();
     console.log('Email service connected successfully');
     return true;

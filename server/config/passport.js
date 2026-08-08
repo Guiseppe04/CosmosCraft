@@ -18,7 +18,12 @@ const parseDisplayName = (displayName) => {
 
 const handleOAuthLogin = async (provider, profile, done) => {
   try {
-    const email = profile.emails[0].value;
+    console.log(`[OAuth:${provider}] Profile received:`, JSON.stringify(profile, null, 2));
+    const email = profile.emails?.[0]?.value;
+    if (!email) {
+      console.error(`[OAuth:${provider}] No email found in profile. profileFields may be misconfigured.`);
+      return done(new Error('No email address returned by provider. Please ensure the email permission is granted.'), null);
+    }
     const { firstName, middleName, lastName } = parseDisplayName(profile.displayName);
 
     let user = await userService.getUserByEmail(email);
@@ -59,7 +64,9 @@ passport.use(
     {
       clientID: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-      callbackURL: process.env.GOOGLE_CALLBACK_URL,
+      callbackURL: process.env.NODE_ENV === 'production'
+        ? (process.env.GOOGLE_CALLBACK_URL_PROD || process.env.GOOGLE_CALLBACK_URL)
+        : process.env.GOOGLE_CALLBACK_URL,
     },
     async (accessToken, refreshToken, profile, done) => handleOAuthLogin('google', profile, done)
   )
@@ -70,8 +77,10 @@ passport.use(
     {
       clientID: process.env.FACEBOOK_APP_ID,
       clientSecret: process.env.FACEBOOK_APP_SECRET,
-      callbackURL: process.env.FACEBOOK_CALLBACK_URL,
-      profileFields: ['id', 'displayName', 'emails'],
+      callbackURL: process.env.NODE_ENV === 'production'
+        ? (process.env.FACEBOOK_CALLBACK_URL_PROD || process.env.FACEBOOK_CALLBACK_URL)
+        : process.env.FACEBOOK_CALLBACK_URL,
+      profileFields: ['id', 'displayName', 'email', 'photos'],
     },
     async (accessToken, refreshToken, profile, done) => handleOAuthLogin('facebook', profile, done)
   )

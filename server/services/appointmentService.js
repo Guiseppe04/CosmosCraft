@@ -8,7 +8,54 @@ const { pool } = require('../config/database');
 const { AppError } = require('../middleware/errorHandler');
 
 const NON_BLOCKING_APPOINTMENT_STATUSES = ['cancelled', 'rejected'];
-const MAX_APPOINTMENTS_PER_DAY = 5;
+const MAX_APPOINTMENTS_PER_DAY = 10;
+
+const HOLIDAYS = [
+  '01-01',
+  '04-02',
+  '04-03',
+  '04-09',
+  '05-01',
+  '06-12',
+  '08-31',
+  '11-30',
+  '12-25',
+  '12-30',
+];
+
+function isHoliday(date) {
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return HOLIDAYS.includes(`${month}-${day}`);
+}
+
+/**
+ * Generate a sequential reference code for an appointment.
+ * Format: APT-{YYYYMMDD}-{0001}
+ * Sequence resets per scheduled_at date and includes ALL statuses
+ * so numbers are never reused, even for cancelled appointments.
+ */
+async function generateReferenceCode(client, scheduledAt) {
+  // Extract the date portion (YYYYMMDD) from scheduled_at
+  const date = new Date(scheduledAt);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const datePart = `${year}${month}${day}`;
+
+  // Count existing appointments for this date (include all statuses)
+  const countRes = await client.query(
+    `SELECT COUNT(*)::int AS count
+     FROM appointments
+     WHERE scheduled_at::date = ($1::timestamptz)::date`,
+    [scheduledAt]
+  );
+
+  const nextSequence = Number(countRes.rows?.[0]?.count || 0) + 1;
+  const paddedSequence = String(nextSequence).padStart(4, '0');
+
+  return `APT-${datePart}-${paddedSequence}`;
+}
 
 function normalizeGuitarDetails(guitarDetails = {}) {
   const source = (guitarDetails && typeof guitarDetails === 'object') ? guitarDetails : {};
@@ -44,42 +91,53 @@ function normalizeGuitarDetails(guitarDetails = {}) {
 }
 
 async function assertNoScheduleConflict(client, scheduledAt, excludeAppointmentId = null) {
-  const unavailableRes = await client.query(
-    `SELECT id FROM unavailable_dates WHERE date = ($1::timestamptz)::date LIMIT 1`,
-    [scheduledAt]
-  );
+   const scheduledDate = new Date(scheduledAt);
 
-  if (unavailableRes.rows.length > 0) {
-    throw new AppError('Selected appointment date is unavailable', 409);
-  }
+   const dayOfWeek = scheduledDate.getDay();
+   if (dayOfWeek === 0) {
+     throw new AppError('Selected appointment date is unavailable (Sunday closure)', 409);
+   }
 
-  const dayCount = await getActiveAppointmentCountForDate(client, scheduledAt, excludeAppointmentId);
-  if (dayCount >= MAX_APPOINTMENTS_PER_DAY) {
-    throw new AppError('Selected date is fully booked', 409);
-  }
+   if (isHoliday(scheduledDate)) {
+     throw new AppError('Selected appointment date is unavailable (holiday)', 409);
+   }
 
-  const params = [scheduledAt];
-  let query = `
-    SELECT appointment_id
-    FROM appointments
-    WHERE date_trunc('minute', scheduled_at) = date_trunc('minute', $1::timestamptz)
-      AND lower(status::text) NOT IN (${NON_BLOCKING_APPOINTMENT_STATUSES.map((_, index) => `$${index + 2}`).join(', ')})
-  `;
+   const unavailableRes = await client.query(
+     `SELECT id FROM unavailable_dates WHERE date = ($1::timestamptz)::date LIMIT 1`,
+     [scheduledAt]
+   );
 
-  params.push(...NON_BLOCKING_APPOINTMENT_STATUSES);
+   if (unavailableRes.rows.length > 0) {
+     throw new AppError('Selected appointment date is unavailable', 409);
+   }
 
-  if (excludeAppointmentId) {
-    params.push(excludeAppointmentId);
-    query += ` AND appointment_id <> $${params.length}`;
-  }
+   const dayCount = await getActiveAppointmentCountForDate(client, scheduledAt, excludeAppointmentId);
+   if (dayCount >= MAX_APPOINTMENTS_PER_DAY) {
+     throw new AppError('Selected date is fully booked', 409);
+   }
 
-  query += ' LIMIT 1';
+   const params = [scheduledAt];
+   let query = `
+     SELECT appointment_id
+     FROM appointments
+     WHERE date_trunc('minute', scheduled_at) = date_trunc('minute', $1::timestamptz)
+       AND lower(status::text) NOT IN (${NON_BLOCKING_APPOINTMENT_STATUSES.map((_, index) => `$${index + 2}`).join(', ')})
+   `;
 
-  const conflictRes = await client.query(query, params);
-  if (conflictRes.rows.length > 0) {
-    throw new AppError('Selected appointment schedule is no longer available', 409);
-  }
-}
+   params.push(...NON_BLOCKING_APPOINTMENT_STATUSES);
+
+   if (excludeAppointmentId) {
+     params.push(excludeAppointmentId);
+     query += ` AND appointment_id <> $${params.length}`;
+   }
+
+   query += ' LIMIT 1';
+
+   const conflictRes = await client.query(query, params);
+   if (conflictRes.rows.length > 0) {
+     throw new AppError('Selected appointment schedule is no longer available', 409);
+   }
+ }
 
 async function getActiveAppointmentCountForDate(db, date, excludeAppointmentId = null) {
   const startOfDay = new Date(date);
@@ -120,6 +178,7 @@ function formatAppointmentResponse(appointment) {
 
   return {
     appointment_id: appointment.appointment_id,
+    reference_code: appointment.reference_code || null,
     user_id: appointment.user_id,
     user_email: appointment.user_email,
     user_name: appointment.user_name,
@@ -130,6 +189,8 @@ function formatAppointmentResponse(appointment) {
     customer_email: appointment.customer_email || null,
     customer_phone: appointment.customer_phone || null,
     services: parsedServices,
+    service_name: appointment.service_name || null,
+    service_names: appointment.service_names || null,
     location_id: appointment.location_id,
     guitar_details: parsedGuitarDetails,
     scheduled_at: appointment.scheduled_at,
@@ -139,6 +200,7 @@ function formatAppointmentResponse(appointment) {
     payment_method: appointment.payment_method || null,
     payment_proof_url: appointment.payment_proof_url || null,
     notes: appointment.notes,
+    reason: appointment.reason || null,
     confirmation_notes: appointment.confirmation_notes || null,
     time_until_appointment_minutes: appointment.time_until_appointment_minutes || null,
     created_at: appointment.created_at,
@@ -168,9 +230,12 @@ exports.createAppointment = async ({ appointment_type = 'service_in_shop', servi
 
     const normalizedGuitarDetails = normalizeGuitarDetails(guitar_details || {});
 
+    // Generate the sequential reference code for this appointment
+    const referenceCode = await generateReferenceCode(client, scheduled_at);
+
     const appointmentResult = await client.query(
-      `INSERT INTO appointments (user_id, appointment_type, order_id, services, location_id, guitar_details, scheduled_at, status, payment_method, payment_proof_url, notes, confirmation_notes, customer_name, customer_email, customer_phone, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', $8, $9, $10, $11, $12, $13, $14, now(), now())
+      `INSERT INTO appointments (user_id, appointment_type, order_id, services, location_id, guitar_details, scheduled_at, status, payment_method, payment_proof_url, notes, confirmation_notes, customer_name, customer_email, customer_phone, reference_code, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', $8, $9, $10, $11, $12, $13, $14, $15, now(), now())
        RETURNING *`,
       [
         user_id || null,
@@ -187,6 +252,7 @@ exports.createAppointment = async ({ appointment_type = 'service_in_shop', servi
         customerName,
         customerEmail,
         customerPhone,
+        referenceCode,
       ]
     );
 
@@ -200,16 +266,41 @@ exports.createAppointment = async ({ appointment_type = 'service_in_shop', servi
   }
 };
 
+exports.autoMarkNoShows = async () => {
+  // Lazy sweep: transition confirmed appointments past 1 hour after scheduled_at to no_show.
+  // Admins can still manually override back to another status afterward.
+  const result = await pool.query(
+    `UPDATE appointments
+     SET status = 'no_show', updated_at = now()
+     WHERE status = 'confirmed'
+       AND scheduled_at < now() - interval '1 hour'
+     RETURNING appointment_id, reference_code`
+  );
+  return result.rows || [];
+};
+
 exports.getAppointmentById = async (appointmentId) => {
+  await this.autoMarkNoShows();
   const result = await pool.query(
     `SELECT 
        a.*,
        u.email AS user_email,
        u.first_name || ' ' || u.last_name AS user_name,
        u.phone AS user_phone,
+       s.service_name,
+       s.service_names,
        EXTRACT(EPOCH FROM (a.scheduled_at - now())) / 60 as time_until_appointment_minutes
      FROM appointments a
      LEFT JOIN users u ON a.user_id = u.user_id
+     LEFT JOIN LATERAL (
+       SELECT
+         string_agg(s.name, ', ') AS service_name,
+         jsonb_agg(s.name ORDER BY s.name) AS service_names
+       FROM services s
+       WHERE s.service_id IN (
+         SELECT (jsonb_array_elements_text(a.services))::int
+       )
+     ) s ON true
      WHERE a.appointment_id = $1`,
     [appointmentId]
   );
@@ -217,7 +308,8 @@ exports.getAppointmentById = async (appointmentId) => {
   return formatAppointmentResponse(result.rows[0]);
 };
 
-exports.listAppointments = async ({ user_id, appointment_type, status, date_from, date_to, search, payment_method, sort_by = 'scheduled_at', sort_order = 'asc', limit = 20, offset = 0 } = {}) => {
+exports.listAppointments = async ({ user_id, appointment_type, status, date_from, date_to, search, sort_by = 'scheduled_at', sort_order = 'asc', limit = 20, offset = 0 } = {}) => {
+  await this.autoMarkNoShows();
   let where = [];
   let params = [];
   let idx = 1;
@@ -229,7 +321,7 @@ exports.listAppointments = async ({ user_id, appointment_type, status, date_from
   if (date_to) { where.push(`a.scheduled_at <= $${idx++}`); params.push(date_to); }
   if (payment_method) { where.push(`a.payment_method = $${idx++}`); params.push(payment_method); }
   if (search) {
-    where.push(`(u.first_name ILIKE $${idx} OR u.last_name ILIKE $${idx} OR u.email ILIKE $${idx} OR a.notes ILIKE $${idx} OR CAST(a.appointment_id AS TEXT) ILIKE $${idx})`);
+    where.push(`(u.first_name ILIKE $${idx} OR u.last_name ILIKE $${idx} OR u.email ILIKE $${idx} OR a.notes ILIKE $${idx} OR a.reference_code ILIKE $${idx} OR CAST(a.appointment_id AS TEXT) ILIKE $${idx})`);
     params.push(`%${search}%`);
     idx++;
   }
@@ -243,9 +335,20 @@ exports.listAppointments = async ({ user_id, appointment_type, status, date_from
        a.*,
        u.email AS user_email,
        u.first_name || ' ' || u.last_name AS user_name,
-       u.phone AS user_phone
+       u.phone AS user_phone,
+       s.service_name,
+       s.service_names
      FROM appointments a
      LEFT JOIN users u ON a.user_id = u.user_id
+     LEFT JOIN LATERAL (
+       SELECT
+         string_agg(s.name, ', ') AS service_name,
+         jsonb_agg(s.name ORDER BY s.name) AS service_names
+       FROM services s
+       WHERE s.service_id IN (
+         SELECT (jsonb_array_elements_text(a.services))::int
+       )
+     ) s ON true
      ${whereClause}
      ORDER BY a.${sortColumn} ${sortOrderUpper}
      LIMIT $${idx} OFFSET $${idx + 1}`,
@@ -264,7 +367,7 @@ exports.getAppointmentsCount = async (filters = {}) => {
   if (filters.status) { where.push(`a.status = $${idx++}`); params.push(filters.status); }
   if (filters.payment_method) { where.push(`a.payment_method = $${idx++}`); params.push(filters.payment_method); }
   if (filters.search) {
-    where.push(`(u.first_name ILIKE $${idx} OR u.last_name ILIKE $${idx} OR u.email ILIKE $${idx} OR a.notes ILIKE $${idx} OR CAST(a.appointment_id AS TEXT) ILIKE $${idx})`);
+    where.push(`(u.first_name ILIKE $${idx} OR u.last_name ILIKE $${idx} OR u.email ILIKE $${idx} OR a.notes ILIKE $${idx} OR a.reference_code ILIKE $${idx} OR CAST(a.appointment_id AS TEXT) ILIKE $${idx})`);
     params.push(`%${filters.search}%`);
     idx++;
   }
@@ -301,7 +404,7 @@ exports.getUserUpcomingAppointments = async (userId) => {
 exports.getAppointmentsByDateRange = async (startDate, endDate, filters = {}) => this.listAppointments({ ...filters, date_from: startDate, date_to: endDate });
 
 exports.updateAppointment = async (appointmentId, updates) => {
-  const { scheduled_at, status, notes, confirmation_notes, appointment_type, services, location_id, guitar_details, payment_method } = updates;
+  const { scheduled_at, status, notes, reason, confirmation_notes, appointment_type, services, location_id, guitar_details, payment_method } = updates;
   const client = await pool.connect();
 
   try {
@@ -333,6 +436,10 @@ exports.updateAppointment = async (appointmentId, updates) => {
     if (notes !== undefined) {
       setClauses.push(`notes = $${idx++}`);
       params.push(notes || null);
+    }
+    if (reason !== undefined) {
+      setClauses.push(`reason = $${idx++}`);
+      params.push(reason || null);
     }
     if (confirmation_notes !== undefined) {
       setClauses.push(`confirmation_notes = $${idx++}`);
@@ -383,14 +490,26 @@ exports.updateAppointment = async (appointmentId, updates) => {
   }
 };
 
-exports.rescheduleAppointment = async (appointmentId, newScheduledAt, reason) => this.updateAppointment(appointmentId, { scheduled_at: newScheduledAt, notes: reason ? `Rescheduled: ${reason}` : 'Rescheduled' });
-exports.updateStatus = async (appointmentId, newStatus, reason) => this.updateAppointment(appointmentId, { status: newStatus, notes: reason ? `Status changed: ${reason}` : undefined });
+exports.rescheduleAppointment = async (appointmentId, newScheduledAt, reason) =>
+  this.updateAppointment(appointmentId, {
+    scheduled_at: newScheduledAt,
+    ...(reason !== undefined && reason !== null ? { reason } : {}),
+  });
+
+exports.updateStatus = async (appointmentId, newStatus, reason) =>
+  this.updateAppointment(appointmentId, {
+    status: newStatus,
+    ...(reason !== undefined && reason !== null ? { reason } : {}),
+  });
 
 exports.cancelAppointment = async (appointmentId, reason) => {
   const appointment = await this.getAppointmentById(appointmentId);
   if (!appointment) throw new AppError('Appointment not found', 404);
-  const cancelNote = reason ? `Cancelled: ${reason}` : `Cancelled on ${new Date().toISOString()}`;
-  await pool.query(`UPDATE appointments SET status = 'cancelled', notes = $1, updated_at = now() WHERE appointment_id = $2`, [cancelNote, appointmentId]);
+  const cancelReason = reason || `Cancelled on ${new Date().toISOString()}`;
+  await pool.query(
+    `UPDATE appointments SET status = 'cancelled', reason = $1, updated_at = now() WHERE appointment_id = $2`,
+    [cancelReason, appointmentId]
+  );
   return this.getAppointmentById(appointmentId);
 };
 
@@ -444,6 +563,27 @@ exports.getUnavailableDates = async () => {
      ORDER BY date ASC`
   );
   return result.rows;
+};
+
+exports.getAvailableDates = async (dateFrom, dateTo) => {
+  const result = await pool.query(
+    `SELECT d::date AS date
+     FROM generate_series($1::date, $2::date, '1 day'::interval) d
+     WHERE EXTRACT(DOW FROM d) != 0
+       AND NOT EXISTS (
+         SELECT 1 FROM unavailable_dates WHERE date = d::date
+       )
+       AND (
+         SELECT COUNT(*)
+         FROM appointments
+         WHERE scheduled_at >= d::date
+           AND scheduled_at < d::date + interval '1 day'
+           AND lower(status::text) NOT IN ('cancelled', 'rejected')
+       ) < $3
+     ORDER BY d::date ASC`,
+    [dateFrom, dateTo, MAX_APPOINTMENTS_PER_DAY]
+  );
+  return result.rows.map(row => row.date);
 };
 
 exports.addUnavailableDate = async (date, reason, userId) => {

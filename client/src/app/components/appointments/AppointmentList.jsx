@@ -18,6 +18,7 @@ const STATUS_CONFIG = {
   ready_for_pickup: { label: 'Ready for Pickup', color: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30', icon: CheckCircle },
   completed: { label: 'Completed', color: 'bg-green-500/20 text-green-400 border-green-500/30', icon: CheckCircle },
   cancelled: { label: 'Cancelled', color: 'bg-red-500/20 text-red-400 border-red-500/30', icon: XCircle },
+  no_show: { label: 'No Show', color: 'bg-orange-500/20 text-orange-400 border-orange-500/30', icon: XCircle },
 }
 
 const DATE_FILTERS = [
@@ -35,6 +36,7 @@ const STATUS_FILTERS = [
   { value: 'ready_for_pickup', label: 'Ready for Pickup' },
   { value: 'completed', label: 'Completed' },
   { value: 'cancelled', label: 'Cancelled' },
+  { value: 'no_show', label: 'No Show' },
 ]
 
 // Skeleton loader component
@@ -96,67 +98,138 @@ function getCustomerName(appointment) {
   return appointment.user_name || appointment.customer_name || 'Guest'
 }
 
+function renderAppointmentServiceSummary(appointment) {
+  if (appointment.service_name) {
+    return String(appointment.service_name)
+  }
+
+  if (Array.isArray(appointment.service_names) && appointment.service_names.length > 0) {
+    return appointment.service_names.map((name) => String(name).replace(/-/g, ' ')).filter(Boolean).join(', ')
+  }
+
+  if (Array.isArray(appointment.services)) {
+    return appointment.services
+      .map((service) => {
+        if (typeof service === 'string') return service.replace(/-/g, ' ')
+        if (typeof service === 'number') return String(service)
+        if (service?.name) return String(service.name)
+        if (service?.service_name) return String(service.service_name)
+        return String(service || '')
+      })
+      .filter(Boolean)
+      .join(', ')
+  }
+
+  if (typeof appointment.services === 'string') {
+    try {
+      const parsed = JSON.parse(appointment.services)
+      if (Array.isArray(parsed)) {
+        return parsed
+          .map((service) => {
+            if (typeof service === 'string') return service.replace(/-/g, ' ')
+            if (typeof service === 'number') return String(service)
+            if (service?.name) return String(service.name)
+            if (service?.service_name) return String(service.service_name)
+            return String(service || '')
+          })
+          .filter(Boolean)
+          .join(', ')
+      }
+    } catch (err) {
+      // fall back to raw string
+    }
+  }
+
+  return appointment.services || 'N/A'
+}
+
 // Main AppointmentList component
 export default function AppointmentList({
-  appointments = [],
-  loading = false,
-  onRefresh,
-  onViewDetails,
-  onEdit,
-  onCreateNew,
-  pagination = {},
-  onPageChange,
-  onFilterChange,
-  selectedDate = null,
-}) {
-  const [searchQuery, setSearchQuery] = useState('')
-  const [dateFilter, setDateFilter] = useState('all')
-  const [statusFilter, setStatusFilter] = useState('all')
-  const [viewMode, setViewMode] = useState('list') // 'list' or 'grid'
-  const [showFilters, setShowFilters] = useState(false)
-  const [selectedAppointment, setSelectedAppointment] = useState(null)
-  const [showDetailsModal, setShowDetailsModal] = useState(false)
+   appointments = [],
+   loading = false,
+   onRefresh,
+   onViewDetails,
+   onEdit,
+   onCreateNew,
+   pagination = {},
+   onPageChange,
+   onFilterChange,
+   selectedDate = null,
+ }) {
+   const [searchQuery, setSearchQuery] = useState('')
+   const [dateFilter, setDateFilter] = useState('all')
+   const [statusFilter, setStatusFilter] = useState('all')
+   const [viewMode, setViewMode] = useState('list') // 'list' or 'grid'
+   const [showFilters, setShowFilters] = useState(false)
+   const [selectedAppointment, setSelectedAppointment] = useState(null)
+   const [showDetailsModal, setShowDetailsModal] = useState(false)
+   const [sortBy, setSortBy] = useState('scheduled_at')
+   const [sortOrder, setSortOrder] = useState('asc')
 
-  // Filter appointments based on search and filters
-  const filteredAppointments = useMemo(() => {
-    let result = [...appointments]
+// Filter appointments based on search and filters
+   const filteredAppointments = useMemo(() => {
+     let result = [...appointments]
 
-    // Search filter
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase()
-      result = result.filter(apt =>
-        getCustomerName(apt).toLowerCase().includes(query) ||
-        apt.appointment_id?.toLowerCase().includes(query) ||
-        apt.notes?.toLowerCase().includes(query) ||
-        (apt.services && JSON.stringify(apt.services).toLowerCase().includes(query))
-      )
-    }
+     // Search filter
+     if (searchQuery) {
+       const query = searchQuery.toLowerCase()
+       result = result.filter(apt =>
+         getCustomerName(apt).toLowerCase().includes(query) ||
+         apt.appointment_id?.toLowerCase().includes(query) ||
+         apt.reference_code?.toLowerCase().includes(query) ||
+         apt.notes?.toLowerCase().includes(query) ||
+         (apt.services && JSON.stringify(apt.services).toLowerCase().includes(query))
+       )
+     }
 
-    // Date filter
-    if (dateFilter !== 'all') {
-      const now = new Date()
-      result = result.filter(apt => {
-        const aptDate = new Date(apt.scheduled_at)
-        switch (dateFilter) {
-          case 'today':
-            return isToday(aptDate)
-          case 'upcoming':
-            return isFuture(aptDate) && !isToday(aptDate)
-          case 'past':
-            return isPast(aptDate) && !isToday(aptDate)
-          default:
-            return true
-        }
-      })
-    }
+     // Date filter
+     if (dateFilter !== 'all') {
+       const now = new Date()
+       result = result.filter(apt => {
+         const aptDate = new Date(apt.scheduled_at)
+         switch (dateFilter) {
+           case 'today':
+             return isToday(aptDate)
+           case 'upcoming':
+             return isFuture(aptDate) && !isToday(aptDate)
+           case 'past':
+             return isPast(aptDate) && !isToday(aptDate)
+           default:
+             return true
+         }
+       })
+     }
 
-    // Status filter
-    if (statusFilter !== 'all') {
-      result = result.filter(apt => apt.status === statusFilter)
-    }
+     // Status filter
+     if (statusFilter !== 'all') {
+       result = result.filter(apt => apt.status === statusFilter)
+     }
 
-    return result
-  }, [appointments, searchQuery, dateFilter, statusFilter])
+     // Sort
+     result.sort((a, b) => {
+       let aVal, bVal
+       switch (sortBy) {
+         case 'status':
+           aVal = a.status || ''
+           bVal = b.status || ''
+           break
+         case 'created_at':
+           aVal = a.created_at || ''
+           bVal = b.created_at || ''
+           break
+         case 'scheduled_at':
+         default:
+           aVal = a.scheduled_at || ''
+           bVal = b.scheduled_at || ''
+           break
+       }
+       if (aVal < bVal) return sortOrder === 'asc' ? -1 : 1
+       if (aVal > bVal) return sortOrder === 'asc' ? 1 : -1
+       return 0
+     })
+
+     return result
+   }, [appointments, searchQuery, dateFilter, statusFilter, sortBy, sortOrder])
 
   // Handle filter changes
   const handleDateFilterChange = (value) => {
@@ -174,12 +247,21 @@ export default function AppointmentList({
     onFilterChange?.({ date: dateFilter, status: statusFilter, search: value })
   }
 
-  const clearFilters = () => {
-    setSearchQuery('')
-    setDateFilter('all')
-    setStatusFilter('all')
-    onFilterChange?.({ date: 'all', status: 'all', search: '' })
-  }
+const handleSortChange = (field) => {
+     if (sortBy === field) {
+       setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')
+     } else {
+       setSortBy(field)
+       setSortOrder('asc')
+     }
+   }
+
+   const clearFilters = () => {
+     setSearchQuery('')
+     setDateFilter('all')
+     setStatusFilter('all')
+     onFilterChange?.({ date: 'all', status: 'all', search: '' })
+   }
 
   const hasActiveFilters = searchQuery || dateFilter !== 'all' || statusFilter !== 'all'
 
@@ -236,22 +318,41 @@ export default function AppointmentList({
               `${filteredAppointments.length} appointment${filteredAppointments.length !== 1 ? 's' : ''} found`}
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={onRefresh}
-            className="p-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] text-[var(--text-muted)] hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)] transition-colors"
-            title="Refresh"
-          >
-            <RefreshCw className="w-4 h-4" />
-          </button>
-          <button
-            onClick={onCreateNew}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[var(--gold-primary)] text-black font-medium hover:bg-[var(--gold-primary)]/90 transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            <span>New Appointment</span>
-          </button>
-        </div>
+<div className="flex items-center gap-3">
+           <div className="flex items-center gap-2">
+             <select
+               value={sortBy}
+               onChange={(e) => setSortBy(e.target.value)}
+               className="rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] px-3 py-2 text-sm text-[var(--text-muted)] focus:border-[var(--gold-primary)] focus:outline-none"
+             >
+               <option value="scheduled_at">Date & Time</option>
+               <option value="status">Status</option>
+               <option value="created_at">Created</option>
+             </select>
+             <button
+               type="button"
+               onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
+               className="p-2 rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] text-[var(--text-muted)] hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)] transition-colors"
+               title={sortOrder === 'asc' ? 'Ascending' : 'Descending'}
+             >
+               {sortOrder === 'asc' ? '↑' : '↓'}
+             </button>
+           </div>
+           <button
+             onClick={onRefresh}
+             className="p-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] text-[var(--text-muted)] hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)] transition-colors"
+             title="Refresh"
+           >
+             <RefreshCw className="w-4 h-4" />
+           </button>
+           <button
+             onClick={onCreateNew}
+             className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[var(--gold-primary)] text-black font-medium hover:bg-[var(--gold-primary)]/90 transition-colors"
+           >
+             <Plus className="w-4 h-4" />
+             <span>New Appointment</span>
+           </button>
+         </div>
       </div>
 
       {/* Loading State */}
@@ -283,7 +384,9 @@ export default function AppointmentList({
                   className="border-b border-[var(--border)] hover:bg-[var(--bg-primary)]/40 transition-colors group cursor-pointer"
                   onClick={() => onViewDetails?.(apt)}
                 >
-                  <td className="px-4 py-3 whitespace-nowrap font-mono text-[var(--text-muted)]">{apt.appointment_id}</td>
+                  <td className="px-4 py-3 whitespace-nowrap font-mono text-[var(--text-muted)]">
+                    {apt.reference_code || apt.appointment_id}
+                  </td>
                   <td className="px-4 py-3">
                     <span className="font-semibold text-white">{getCustomerName(apt)}</span>
                     {apt.user_email && (
@@ -291,9 +394,7 @@ export default function AppointmentList({
                     )}
                   </td>
                   <td className="px-4 py-3 capitalize text-[var(--gold-primary)]">
-                    {Array.isArray(apt.services)
-                      ? apt.services.map(s => s.replace(/-/g, ' ')).join(', ')
-                      : apt.services}
+                    {renderAppointmentServiceSummary(apt)}
                   </td>
                   <td className="px-4 py-3 text-white">
                     <div>{formatAppointmentDate(apt.scheduled_at)}</div>

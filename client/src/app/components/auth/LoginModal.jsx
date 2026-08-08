@@ -152,6 +152,10 @@ export function LoginModal() {
                 </label>
                 <button
                   type="button"
+                  onClick={() => {
+                    closeLogin()
+                    navigate(`/forgot-password?email=${encodeURIComponent(email)}`)
+                  }}
                   className="text-[var(--gold-primary)] hover:text-[var(--gold-secondary)]"
                 >
                   Forgot password?

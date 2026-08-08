@@ -7,6 +7,7 @@
 const Joi = require('joi');
 
 const GUITAR_TYPE_VALUES = ['electric', 'bass', 'acoustic', 'ukulele'];
+const APPOINTMENT_STATUS_VALUES = ['pending', 'confirmed', 'in_progress', 'ready_for_pickup', 'completed', 'cancelled', 'no_show'];
 
 const guitarEntrySchema = Joi.object({
   brand: Joi.string().required(),
@@ -219,6 +220,12 @@ const appointmentValidation = {
       .allow('')
       .trim(),
 
+    reason: Joi.string()
+      .max(300)
+      .optional()
+      .allow('')
+      .trim(),
+
     confirmation_notes: Joi.string()
       .max(500)
       .optional()
@@ -243,7 +250,7 @@ const appointmentValidation = {
 
   statusUpdateSchema: Joi.object({
     status: Joi.string()
-      .valid('pending', 'confirmed', 'in_progress', 'completed', 'ready_for_pickup', 'cancelled')
+      .valid(...APPOINTMENT_STATUS_VALUES)
       .required()
       .messages({
         'any.required': 'Status is required',
@@ -266,11 +273,11 @@ const appointmentValidation = {
 
   updateStatusSchema: Joi.object({
     new_status: Joi.string()
-      .valid('pending', 'confirmed', 'in_progress', 'completed', 'ready_for_pickup', 'cancelled')
+      .valid(...APPOINTMENT_STATUS_VALUES)
       .optional(),
 
     status: Joi.string()
-      .valid('pending', 'confirmed', 'in_progress', 'completed', 'ready_for_pickup', 'cancelled')
+      .valid(...APPOINTMENT_STATUS_VALUES)
       .optional(),
 
     reason: Joi.string()
@@ -303,7 +310,7 @@ const appointmentValidation = {
     search: Joi.string().allow('').optional(),
 
     status: Joi.string()
-      .valid('pending', 'confirmed', 'in_progress', 'completed', 'ready_for_pickup', 'cancelled')
+      .valid(...APPOINTMENT_STATUS_VALUES)
       .optional(),
 
     user_id: Joi.string()
@@ -378,6 +385,32 @@ const appointmentValidation = {
       }),
   }),
 
+  // ─── RESCHEDULE APPOINTMENT ──────────────────────────────────────────
+
+  rescheduleSchema: Joi.object({
+    new_scheduled_at: Joi.date()
+      .required()
+      .min('now')
+      .messages({
+        'any.required': 'new_scheduled_at is required',
+        'date.base': 'Invalid date format. Use ISO8601 (YYYY-MM-DDTHH:mm:ssZ)',
+        'date.min': 'Cannot reschedule to the past',
+      }),
+
+    reason: Joi.string()
+      .max(300)
+      .optional()
+      .allow('')
+      .trim()
+      .messages({
+        'string.max': 'Reason cannot exceed 300 characters',
+      }),
+  })
+    .required()
+    .messages({
+      'object.base': 'Request body must be a valid object',
+    }),
+
   // ─── CANCEL APPOINTMENT ──────────────────────────────────────────────────
 
   cancelSchema: Joi.object({
@@ -388,6 +421,26 @@ const appointmentValidation = {
       .trim()
       .messages({
         'string.max': 'Reason cannot exceed 300 characters',
+      }),
+  }),
+
+  // ─── AVAILABLE DATES QUERY ──────────────────────────────────────────────
+
+  availableDatesSchema: Joi.object({
+    date_from: Joi.date()
+      .required()
+      .messages({
+        'any.required': 'date_from is required',
+        'date.base': 'Invalid date format for date_from',
+      }),
+
+    date_to: Joi.date()
+      .required()
+      .min(Joi.ref('date_from'))
+      .messages({
+        'any.required': 'date_to is required',
+        'date.base': 'Invalid date format for date_to',
+        'date.min': 'date_to must be after or equal to date_from',
       }),
   }),
 
@@ -417,7 +470,7 @@ const appointmentValidation = {
       .optional(),
 
     status: Joi.string()
-      .valid('pending', 'confirmed', 'in_progress', 'completed', 'ready_for_pickup', 'cancelled')
+      .valid(...APPOINTMENT_STATUS_VALUES)
       .optional(),
 
     payment_method: Joi.string()

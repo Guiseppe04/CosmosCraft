@@ -3,6 +3,7 @@ import { router } from './routes.jsx'
 import { CartProvider } from './context/CartContext.jsx'
 import { AuthProvider } from './context/AuthContext.jsx'
 import { ThemeProvider } from './context/ThemeContext.jsx'
+import ToastProvider from './components/ui/Toast.jsx'
 
 /**
  * Main App Component
@@ -13,7 +14,9 @@ export default function App() {
     <ThemeProvider>
       <AuthProvider>
         <CartProvider>
-          <RouterProvider router={router} />
+          <ToastProvider>
+            <RouterProvider router={router} />
+          </ToastProvider>
         </CartProvider>
       </AuthProvider>
     </ThemeProvider>
