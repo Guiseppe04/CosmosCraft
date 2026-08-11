@@ -1682,12 +1682,5 @@ exports.updateRefundStatus = async (refundRequestId, status, options = {}) => {
     updateValues
   );
 
-  if (status === 'refunded') {
-    await pool.query(
-      `UPDATE orders SET payment_status = 'refunded', updated_at = CURRENT_TIMESTAMP WHERE order_id = (SELECT order_id FROM refund_requests WHERE refund_request_id = $1)`,
-      [refundRequestId]
-    );
-  }
-
   return res.rows[0];
 }

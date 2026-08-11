@@ -1019,7 +1019,7 @@ export function DashboardPage() {
       if (activePurchaseTab === 'To Receive' && ['shipped', 'out_for_delivery'].includes(order.status)) return true;
       if (activePurchaseTab === 'Completed' && ['delivered', 'received', 'completed'].includes(order.status)) return true;
       if (activePurchaseTab === 'Cancelled' && order.status === 'cancelled') return true;
-      if (activePurchaseTab === 'Refund' && (order.payment_status === 'refunded' || order.status === 'refunded')) return true;
+      if (activePurchaseTab === 'Refund' && order.refund_request_status === 'refunded') return true;
       return false;
     });
 
