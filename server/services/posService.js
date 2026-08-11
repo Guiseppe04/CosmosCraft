@@ -42,7 +42,6 @@ exports.createSale = async (
   {
     customerName = null,
     customerPhone = null,
-    notes = null,
     subtotal = 0,
     taxAmount = 0,
     totalAmount = 0,
@@ -99,8 +98,8 @@ exports.createSale = async (
     const saleRes = await client.query(
       `INSERT INTO pos_sales (
         sale_number, staff_id, customer_name, customer_phone,
-        subtotal, tax_amount, total_amount,
-        payment_method, payment_status, status, reference_number, notes, completed_at
+        subtotal, discount_amount, tax_amount, total_amount,
+        payment_method, payment_status, status, reference_number, completed_at
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
       RETURNING 
         sale_id, sale_number, staff_id, customer_name, customer_phone,
@@ -112,13 +111,13 @@ exports.createSale = async (
         customerName,
         customerPhone,
         normalizedSubtotal,
+        0, // discount_amount
         normalizedTaxAmount,
         normalizedTotalAmount,
         normalizedPaymentMethod,
         paymentStatus,
         normalizedStatus,
         normalizedReferenceNumber,
-        notes,
         completedAt
       ]
     );
@@ -506,7 +505,7 @@ exports.removeItem = async (saleId, itemId) => {
 /**
  * Update sale payment method and customer info
  */
-exports.updateSaleInfo = async (saleId, { paymentMethod, customerName, customerPhone, notes } = {}) => {
+exports.updateSaleInfo = async (saleId, { paymentMethod, customerName, customerPhone } = {}) => {
   const updates = [];
   const values = [];
   let idx = 1;
@@ -530,11 +529,6 @@ exports.updateSaleInfo = async (saleId, { paymentMethod, customerName, customerP
     values.push(customerPhone);
     idx++;
   }
-  if (notes !== undefined) {
-    updates.push(`notes = $${idx}`);
-    values.push(notes);
-    idx++;
-  }
 
   if (updates.length === 0) {
     return exports.getSaleById(saleId);
@@ -546,7 +540,7 @@ exports.updateSaleInfo = async (saleId, { paymentMethod, customerName, customerP
   const res = await pool.query(
     `UPDATE pos_sales SET ${updates.join(', ')} 
      WHERE sale_id = $${idx} 
-     RETURNING sale_id, payment_method, customer_name, customer_phone, notes`,
+     RETURNING sale_id, payment_method, customer_name, customer_phone`,
     values
   );
 
@@ -562,7 +556,7 @@ exports.updateSaleInfo = async (saleId, { paymentMethod, customerName, customerP
 exports.checkoutSale = async (
   saleId,
   paymentMethod,
-  { referenceNumber = null, notes = null }
+  { referenceNumber = null }
 ) => {
   const normalizedPaymentMethod = String(paymentMethod || '').toLowerCase();
   if (!['cash', 'gcash'].includes(normalizedPaymentMethod)) {
@@ -656,16 +650,15 @@ exports.checkoutSale = async (
 
     // Create pos_payment record
     const paymentRes = await client.query(
-      `INSERT INTO pos_payments (sale_id, amount, payment_method, status, reference_number, notes)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO pos_payments (sale_id, amount, payment_method, status, reference_number)
+       VALUES ($1, $2, $3, $4, $5)
        RETURNING payment_id, sale_id, amount, payment_method, status, reference_number`,
       [
         saleId,
         sale.total_amount,
         normalizedPaymentMethod,
         normalizedPaymentMethod === 'cash' ? 'verified' : 'pending',
-        normalizedReferenceNumber,
-        notes
+        normalizedReferenceNumber
       ]
     );
 

@@ -25,6 +25,7 @@ const ORDER_STATUS_LIFECYCLE = [
   { value: 'shipped', label: 'Shipped', color: '#38bdf8', bgColor: 'bg-sky-500/20', textColor: 'text-sky-400', borderColor: 'border-sky-500/30' },
   { value: 'out_for_delivery', label: 'Out for Delivery', color: '#818cf8', bgColor: 'bg-indigo-500/20', textColor: 'text-indigo-400', borderColor: 'border-indigo-500/30' },
   { value: 'delivered', label: 'Delivered', color: '#22c55e', bgColor: 'bg-green-500/20', textColor: 'text-green-400', borderColor: 'border-green-500/30' },
+  { value: 'received', label: 'Received', color: '#34d399', bgColor: 'bg-emerald-500/20', textColor: 'text-emerald-400', borderColor: 'border-emerald-500/30' },
   { value: 'cancelled', label: 'Cancelled', color: '#f87171', bgColor: 'bg-red-500/20', textColor: 'text-red-400', borderColor: 'border-red-500/30' },
 ]
 
@@ -36,14 +37,16 @@ const TIMELINE_STEPS = [
   { status: 'shipped', label: 'Shipped', desc: 'Order shipped with tracking number' },
   { status: 'out_for_delivery', label: 'Out for Delivery', desc: 'Out for delivery with rider details' },
   { status: 'delivered', label: 'Delivered', desc: 'Successfully delivered to customer' },
+  { status: 'received', label: 'Received', desc: 'Customer confirmed receipt' },
 ]
 
 const ORDER_STATUS_TRANSITIONS = {
   pending: ['processing'],
   processing: ['shipped'],
-  shipped: ['out_for_delivery'],
-  out_for_delivery: ['delivered'],
-  delivered: [],
+  shipped: ['out_for_delivery', 'received'],
+  out_for_delivery: ['delivered', 'received'],
+  delivered: ['received'],
+  received: [],
   cancelled: [],
 }
 

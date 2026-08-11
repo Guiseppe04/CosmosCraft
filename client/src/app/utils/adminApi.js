@@ -117,6 +117,14 @@ export const adminApi = {
   updatePaymentStatus: (id, status, options = {}) => request(`/api/orders/${id}/payment-status`, { method: 'PUT', body: { status, ...options } }),
   cancelOrder: (id) => request(`/api/orders/${id}/cancel`, { method: 'POST' }),
   cancelMyOrder: (id, reason) => request(`/api/orders/${id}/cancel-my-order`, { method: 'POST', body: reason ? { reason } : {} }),
+  markAsReceived: (id) => request(`/api/orders/${id}/received`, { method: 'POST' }),
+  createRefundRequest: (id, body) => request(`/api/orders/${id}/refund-request`, { method: 'POST', body }),
+  getRefundRequests: (params = {}) => {
+    const qs = new URLSearchParams(params).toString()
+    return request(`/api/orders/refund-requests${qs ? '?' + qs : ''}`)
+  },
+  getRefundRequest: (id) => request(`/api/orders/refund-requests/${id}`),
+  updateRefundStatus: (id, status, options = {}) => request(`/api/orders/refund-requests/${id}/status`, { method: 'PUT', body: { status, ...options } }),
 
   // Projects
   getProjects: (params = {}) => {

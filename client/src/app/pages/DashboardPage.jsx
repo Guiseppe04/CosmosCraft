@@ -1,12 +1,13 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 import { motion, AnimatePresence } from 'motion/react'
-import { User, CreditCard, MapPin, Lock, Package, Calendar, ChevronRight, ChevronLeft, Search, Upload, Save, Wallet, ShoppingBag, ShoppingCart, Trash2, Minus, Plus, MessageSquare, Send, Guitar, Clock, Truck, CheckCircle, XCircle, Briefcase, Activity, Star, Loader2, Edit, AlertCircle, AlertTriangle, X, Banknote, Smartphone, Landmark, CreditCard as CreditCardIcon } from 'lucide-react'
+import { User, CreditCard, MapPin, Lock, Package, Calendar, ChevronRight, ChevronLeft, Search, Upload, Save, Wallet, ShoppingBag, ShoppingCart, Trash2, Minus, Plus, MessageSquare, Send, Guitar, Clock, Truck, CheckCircle, XCircle, Briefcase, Activity, Star, Loader2, Edit, AlertCircle, AlertTriangle, X, Banknote, Smartphone, Landmark, CreditCard as CreditCardIcon, Check, RefreshCw } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useCart } from '../context/CartContext.jsx'
 import { BASE_PRICE, BODY_OPTIONS, BODY_WOOD_OPTIONS, BODY_FINISH_OPTIONS, NECK_OPTIONS, FRETBOARD_OPTIONS, HEADSTOCK_OPTIONS, HEADSTOCK_WOOD_OPTIONS, INLAY_OPTIONS, BRIDGE_OPTIONS, PICKGUARD_OPTIONS_BY_BODY, KNOB_OPTIONS_BY_BODY, HARDWARE_OPTIONS, PICKUP_OPTIONS } from '../lib/guitarBuilderData.js'
 import { adminApi } from '../utils/adminApi.js'
 import { useDebounce } from '../hooks/useDebounce'
+import { uploadToCloudinary } from '../utils/cloudinary.js'
 import CustomerProjectTracker from '../components/projects/CustomerProjectTracker.jsx'
 import { AddressForm } from '../components/AddressForm.jsx'
 import { getAllProvinces, getMunicipalitiesByProvince, getBarangaysByMunicipality } from '@aivangogh/ph-address'
@@ -96,6 +97,31 @@ const formatStatus = (status) => {
   if (!status) return ''
   return status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
 }
+
+const REFUND_STATUS_CONFIG = {
+  pending: {
+    label: 'Refund Request Pending',
+    icon: Clock,
+    className: 'border-amber-500/30 text-amber-400',
+  },
+  approved: {
+    label: 'Refund Approved',
+    icon: CheckCircle,
+    className: 'border-green-500/30 text-green-400',
+  },
+  rejected: {
+    label: 'Refund Rejected',
+    icon: XCircle,
+    className: 'border-red-500/30 text-red-400',
+  },
+  refunded: {
+    label: 'Refunded',
+    icon: CheckCircle,
+    className: 'border-sky-500/30 text-sky-400',
+  },
+}
+
+const getRefundStatusConfig = (status) => REFUND_STATUS_CONFIG[status] || REFUND_STATUS_CONFIG.pending
 
 const parseProjectDescription = (description) => {
   const normalized = String(description || '').replace(/\s+/g, ' ').trim()
@@ -189,6 +215,16 @@ export function DashboardPage() {
   const [cancelOrderReason, setCancelOrderReason] = useState('')
   const [cancelOrderCustomReason, setCancelOrderCustomReason] = useState('')
   const [isCancellingOrder, setIsCancellingOrder] = useState(false)
+
+  // Received / Refund state
+  const [isRefundModalOpen, setIsRefundModalOpen] = useState(false)
+  const [refundTarget, setRefundTarget] = useState(null)
+  const [refundReason, setRefundReason] = useState('')
+  const [refundCustomerNotes, setRefundCustomerNotes] = useState('')
+  const [refundSelectedItems, setRefundSelectedItems] = useState([])
+  const [refundImages, setRefundImages] = useState([])
+  const [isSubmittingRefund, setIsSubmittingRefund] = useState(false)
+  const [isMarkingReceived, setIsMarkingReceived] = useState(false)
   const [isCancelProjectModalOpen, setIsCancelProjectModalOpen] = useState(false)
   const [cancelProjectTarget, setCancelProjectTarget] = useState(null)
   const [isCancellingProject, setIsCancellingProject] = useState(false)
@@ -412,6 +448,124 @@ export function DashboardPage() {
       setIsCancellingOrder(false)
     }
   };
+
+  const handleMarkAsReceived = async (order) => {
+    if (!order?.order_id) return
+    try {
+      setIsMarkingReceived(true)
+      await adminApi.markAsReceived(order.order_id)
+      setToastMessage('Order marked as received.')
+      fetchMyOrders()
+    } catch (err) {
+      setToastMessage(`Failed to mark as received: ${err.message}`)
+    } finally {
+      setIsMarkingReceived(false)
+    }
+  }
+
+  const openRefundModal = (order) => {
+    setRefundTarget(order)
+    setRefundReason('')
+    setRefundCustomerNotes('')
+    const selectableItems = (order.items || []).map(item => ({
+      order_item_id: item.order_item_id,
+      product_name: item.product_name || 'Product',
+      quantity: Number(item.quantity || 1),
+      unit_price: Number(item.unit_price || 0),
+      selected: false,
+      refundQuantity: Number(item.quantity || 1),
+    }))
+    setRefundSelectedItems(selectableItems)
+    setRefundImages([])
+    setIsRefundModalOpen(true)
+  }
+
+  const closeRefundModal = (force = false) => {
+    if (isSubmittingRefund && !force) return
+    setIsRefundModalOpen(false)
+    setRefundTarget(null)
+    setRefundReason('')
+    setRefundCustomerNotes('')
+    setRefundSelectedItems([])
+    setRefundImages([])
+  }
+
+  const toggleRefundItem = (index) => {
+    setRefundSelectedItems(prev => {
+      const next = [...prev]
+      next[index] = { ...next[index], selected: !next[index].selected }
+      return next
+    })
+  }
+
+  const updateRefundQuantity = (index, value) => {
+    const qty = Math.max(1, Math.min(Number(value) || 1, refundSelectedItems[index].quantity))
+    setRefundSelectedItems(prev => {
+      const next = [...prev]
+      next[index] = { ...next[index], refundQuantity: qty }
+      return next
+    })
+  }
+
+  const handleRefundImageUpload = async (e) => {
+    const files = Array.from(e.target.files || [])
+    if (!files.length) return
+    const maxSize = 5 * 1024 * 1024
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp']
+    for (const file of files) {
+      if (!allowedTypes.includes(file.type)) {
+        setToastMessage('Only JPG, PNG, and WebP images are allowed')
+        continue
+      }
+      if (file.size > maxSize) {
+        setToastMessage('Each image must be less than 5MB')
+        continue
+      }
+      try {
+        const url = await uploadToCloudinary(file, { folder: 'cosmoscraft_assets/refund_proofs' })
+        setRefundImages(prev => [...prev, url])
+      } catch (err) {
+        setToastMessage(`Failed to upload image: ${err.message}`)
+      }
+    }
+    e.target.value = ''
+  }
+
+  const removeRefundImage = (index) => {
+    setRefundImages(prev => prev.filter((_, i) => i !== index))
+  }
+
+  const handleSubmitRefund = async () => {
+    if (!refundTarget?.order_id) return
+    const selected = refundSelectedItems.filter(item => item.selected)
+    if (selected.length === 0) {
+      setToastMessage('Please select at least one item to refund')
+      return
+    }
+    if (!refundReason.trim()) {
+      setToastMessage('Please provide a refund reason')
+      return
+    }
+    try {
+      setIsSubmittingRefund(true)
+      await adminApi.createRefundRequest(refundTarget.order_id, {
+        reason: refundReason.trim(),
+        customerNotes: refundCustomerNotes.trim() || undefined,
+        items: selected.map(item => ({
+          order_item_id: item.order_item_id,
+          quantity: item.refundQuantity,
+        })),
+        images: refundImages,
+      })
+      setToastMessage('Refund request submitted successfully.')
+      closeRefundModal(true)
+      fetchMyOrders()
+    } catch (err) {
+      setToastMessage(`Failed to submit refund request: ${err.message}`)
+    } finally {
+      setIsSubmittingRefund(false)
+    }
+  }
 
   const openCancelProjectModal = (project) => {
     setCancelProjectTarget(project)
@@ -862,10 +1016,10 @@ export function DashboardPage() {
       if (activePurchaseTab === 'All') return true;
       if (activePurchaseTab === 'To Pay' && order.payment_status === 'pending') return true;
       if (activePurchaseTab === 'To Ship' && order.status === 'processing') return true;
-      if (activePurchaseTab === 'To Receive' && order.status === 'shipped') return true;
-      if (activePurchaseTab === 'Completed' && (order.status === 'delivered' || order.status === 'completed')) return true;
+      if (activePurchaseTab === 'To Receive' && ['shipped', 'out_for_delivery'].includes(order.status)) return true;
+      if (activePurchaseTab === 'Completed' && ['delivered', 'received', 'completed'].includes(order.status)) return true;
       if (activePurchaseTab === 'Cancelled' && order.status === 'cancelled') return true;
-      if (activePurchaseTab === 'Refund' && order.status === 'refunded') return true;
+      if (activePurchaseTab === 'Refund' && (order.payment_status === 'refunded' || order.status === 'refunded')) return true;
       return false;
     });
 
@@ -1007,7 +1161,44 @@ export function DashboardPage() {
                     </button>
                   </div>
                 )}
-                {(order.status === 'delivered' || order.status === 'completed') && (
+                {['shipped', 'out_for_delivery', 'delivered'].includes(order.status) && order.status !== 'received' && (
+                  <div className="mt-4 pt-4 border-t border-[var(--border)] flex justify-end gap-3">
+                    <button
+                      onClick={() => handleMarkAsReceived(order)}
+                      disabled={isMarkingReceived}
+                      className="px-4 py-2 border border-green-500/30 text-green-500 hover:bg-green-500/10 transition-colors rounded-lg text-sm font-semibold flex items-center gap-2 disabled:opacity-50"
+                    >
+                      {isMarkingReceived ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                      Received
+                    </button>
+                  </div>
+                )}
+                {(order.status === 'received' || order.status === 'delivered') && order.payment_status !== 'refunded' && !order.has_refund_request && (
+                  <div className="mt-4 pt-4 border-t border-[var(--border)] flex justify-end gap-3">
+                    <button
+                      onClick={() => openRefundModal(order)}
+                      className="px-4 py-2 border border-[var(--border)] text-white hover:bg-white/5 transition-colors rounded-lg text-sm font-semibold flex items-center gap-2"
+                    >
+                      <RefreshCw className="w-4 h-4 text-[var(--gold-primary)]" />
+                      Refund
+                    </button>
+                  </div>
+                )}
+                {(order.status === 'received' || order.status === 'delivered') && order.has_refund_request && (
+                  <div className="mt-4 pt-4 border-t border-[var(--border)] flex justify-end">
+                    {(() => {
+                      const refundConfig = getRefundStatusConfig(order.refund_request_status)
+                      const RefundIcon = refundConfig.icon
+                      return (
+                        <span className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-semibold ${refundConfig.className}`}>
+                          <RefundIcon className="w-4 h-4" />
+                          {refundConfig.label}
+                        </span>
+                      )
+                    })()}
+                  </div>
+                )}
+                {(order.status === 'received' || order.status === 'delivered' || order.status === 'completed') && (
                   <div className="mt-4 pt-4 border-t border-[var(--border)] flex justify-end gap-3">
                     <button
                       onClick={() => setRatingModalOrderId(order.order_id)}
@@ -2331,6 +2522,8 @@ export function DashboardPage() {
 
   const currentMenu = menuItems.find(item => item.id === activeSection)
 
+  const isToastError = toastMessage?.startsWith?.('Failed') || false
+
   return (
     <div className="min-h-screen bg-[var(--bg-primary)] pt-24 pb-12">
       <AnimatePresence>
@@ -2339,9 +2532,9 @@ export function DashboardPage() {
             initial={{ opacity: 0, y: -20, x: '-50%' }}
             animate={{ opacity: 1, y: 0, x: '-50%' }}
             exit={{ opacity: 0, y: -20, x: '-50%' }}
-            className="fixed top-24 left-1/2 z-[100] bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] px-6 py-3 rounded-xl font-bold shadow-[0_0_20px_rgba(212,175,55,0.4)] flex items-center gap-2"
+            className={`fixed top-24 left-1/2 z-[100] px-6 py-3 rounded-xl font-bold shadow-[0_0_20px_rgba(212,175,55,0.4)] flex items-center gap-2 ${isToastError ? 'bg-gradient-to-r from-red-500 to-red-600 text-white shadow-[0_0_20px_rgba(239,68,68,0.4)]' : 'bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)]'}`}
           >
-            <CheckCircle className="w-5 h-5" />
+            {isToastError ? <AlertCircle className="w-5 h-5" /> : <CheckCircle className="w-5 h-5" />}
             {toastMessage}
           </motion.div>
         )}
@@ -3350,6 +3543,107 @@ export function DashboardPage() {
                 Order This Build
               </button>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Refund Request Modal */}
+      {isRefundModalOpen && refundTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4 py-8">
+          <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6 w-full max-w-2xl max-h-full overflow-y-auto relative shadow-2xl">
+            <button type="button" onClick={() => closeRefundModal()} className="absolute top-4 right-4 text-[var(--text-muted)] hover:text-white transition-colors">
+              <X className="w-5 h-5" />
+            </button>
+            <h2 className="text-xl font-bold text-white mb-1">Request Refund</h2>
+            <p className="text-sm text-[var(--text-muted)] mb-6">Order #{refundTarget.order_number}</p>
+
+            <div className="space-y-5">
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-2">Select Items to Refund</label>
+                <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
+                  {(refundTarget.items || []).map((item, idx) => {
+                    const selectableIdx = refundSelectedItems.findIndex(ri => ri.order_item_id === item.order_item_id)
+                    if (selectableIdx === -1) return null
+                    const selectable = refundSelectedItems[selectableIdx]
+                    return (
+                      <div key={item.order_item_id || idx} className={`flex items-center justify-between gap-4 rounded-lg border px-4 py-3 ${selectable.selected ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)]/10' : 'border-[var(--border)] bg-[var(--bg-primary)]'}`}>
+                        <div className="flex items-center gap-3 min-w-0">
+                          <button type="button" onClick={() => toggleRefundItem(selectableIdx)} className={`w-5 h-5 rounded border flex items-center justify-center shrink-0 ${selectable.selected ? 'bg-[var(--gold-primary)] border-[var(--gold-primary)]' : 'border-[var(--border)]'}`}>
+                            {selectable.selected && <Check className="w-3 h-3 text-black" />}
+                          </button>
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-white truncate">{item.product_name || 'Product'}</p>
+                            <p className="text-xs text-[var(--text-muted)]">Qty: {selectable.quantity} • PHP {Number(item.unit_price || 0).toLocaleString('en-PH')}</p>
+                          </div>
+                        </div>
+                        {selectable.selected && (
+                          <div className="flex items-center gap-2">
+                            <button type="button" onClick={() => updateRefundQuantity(selectableIdx, selectable.refundQuantity - 1)} className="w-6 h-6 rounded border border-[var(--border)] flex items-center justify-center hover:bg-white/10"><Minus className="w-3 h-3 text-white" /></button>
+                            <span className="text-sm text-white w-6 text-center">{selectable.refundQuantity}</span>
+                            <button type="button" onClick={() => updateRefundQuantity(selectableIdx, selectable.refundQuantity + 1)} className="w-6 h-6 rounded border border-[var(--border)] flex items-center justify-center hover:bg-white/10"><Plus className="w-3 h-3 text-white" /></button>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-2">Reason for Refund</label>
+                <select
+                  value={refundReason}
+                  onChange={(e) => setRefundReason(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] text-sm text-white focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] mb-2"
+                >
+                  <option value="">Select a reason</option>
+                  <option value="damaged">Damaged / Defective item</option>
+                  <option value="wrong_item">Wrong item received</option>
+                  <option value="not_as_described">Not as described</option>
+                  <option value="no_longer_needed">No longer needed</option>
+                  <option value="better_price">Found better price elsewhere</option>
+                  <option value="other">Other</option>
+                </select>
+                <textarea
+                  value={refundCustomerNotes}
+                  onChange={(e) => setRefundCustomerNotes(e.target.value)}
+                  placeholder="Additional details (optional)..."
+                  rows={3}
+                  className="w-full px-4 py-3 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] text-sm text-white placeholder-[var(--text-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--gold-primary)] resize-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-2">Proof Photos (max 5)</label>
+                <div className="flex flex-wrap gap-3 mb-3">
+                  {refundImages.map((url, idx) => (
+                    <div key={idx} className="relative w-20 h-20 rounded-lg overflow-hidden border border-[var(--border)]">
+                      <img src={url} alt={`Proof ${idx + 1}`} className="w-full h-full object-cover" />
+                      <button type="button" onClick={() => removeRefundImage(idx)} className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-red-500 transition-colors">
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                  {refundImages.length < 5 && (
+                    <label className="w-20 h-20 rounded-lg border border-dashed border-[var(--border)] flex flex-col items-center justify-center cursor-pointer hover:border-[var(--gold-primary)] transition-colors">
+                      <Upload className="w-5 h-5 text-[var(--text-muted)]" />
+                      <span className="text-[10px] text-[var(--text-muted)] mt-1">Add</span>
+                      <input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={handleRefundImageUpload} className="hidden" />
+                    </label>
+                  )}
+                </div>
+                <p className="text-xs text-[var(--text-muted)]">JPG, PNG, or WebP. Max 5MB each.</p>
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button type="button" onClick={() => closeRefundModal()} disabled={isSubmittingRefund} className="flex-1 py-2.5 rounded-xl border border-[var(--border)] text-white hover:bg-white/5 transition-colors font-medium text-sm disabled:opacity-50">
+                  Cancel
+                </button>
+                <button type="button" onClick={handleSubmitRefund} disabled={isSubmittingRefund} className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-bold text-sm hover:shadow-[0_0_15px_rgba(212,175,55,0.4)] transition-all disabled:opacity-50">
+                  {isSubmittingRefund ? 'Submitting...' : 'Submit Refund Request'}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

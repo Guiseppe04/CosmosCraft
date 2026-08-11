@@ -136,18 +136,18 @@ async function startServer() {
     console.log(`Port: ${PORT}`);
     console.log(`Environment: ${process.env.NODE_ENV}`);
 
-    // Log OAuth config (mask secrets) to verify env vars are injected correctly in production
-    console.log('--- OAuth Configuration ---');
-    console.log(`NODE_ENV: ${process.env.NODE_ENV}`);
-    console.log(`FRONTEND_URL: ${process.env.FRONTEND_URL || '(not set)'}`);
-    console.log(`FRONTEND_URL_PROD: ${process.env.FRONTEND_URL_PROD || '(not set)'}`);
-    console.log(`FACEBOOK_APP_ID: ${process.env.FACEBOOK_APP_ID ? '***' : '(not set)'}`);
-    console.log(`FACEBOOK_APP_SECRET: ${process.env.FACEBOOK_APP_SECRET ? '(set, masked)' : '(not set)'}`);
-    console.log(`FACEBOOK_CALLBACK_URL: ${process.env.FACEBOOK_CALLBACK_URL || '(not set)'}`);
-    console.log(`FACEBOOK_CALLBACK_URL_PROD: ${process.env.FACEBOOK_CALLBACK_URL_PROD || '(not set)'}`);
-    console.log(`GOOGLE_CLIENT_ID: ${process.env.GOOGLE_CLIENT_ID ? '***' : '(not set)'}`);
-    console.log(`GOOGLE_CALLBACK_URL: ${process.env.GOOGLE_CALLBACK_URL || '(not set)'}`);
-    console.log(`GOOGLE_CALLBACK_URL_PROD: ${process.env.GOOGLE_CALLBACK_URL_PROD || '(not set)'}`);
+    // // Log OAuth config (mask secrets) to verify env vars are injected correctly in production
+    // console.log('--- OAuth Configuration ---');
+    // console.log(`NODE_ENV: ${process.env.NODE_ENV}`);
+    // console.log(`FRONTEND_URL: ${process.env.FRONTEND_URL || '(not set)'}`);
+    // console.log(`FRONTEND_URL_PROD: ${process.env.FRONTEND_URL_PROD || '(not set)'}`);
+    // console.log(`FACEBOOK_APP_ID: ${process.env.FACEBOOK_APP_ID ? '***' : '(not set)'}`);
+    // console.log(`FACEBOOK_APP_SECRET: ${process.env.FACEBOOK_APP_SECRET ? '(set, masked)' : '(not set)'}`);
+    // console.log(`FACEBOOK_CALLBACK_URL: ${process.env.FACEBOOK_CALLBACK_URL || '(not set)'}`);
+    // console.log(`FACEBOOK_CALLBACK_URL_PROD: ${process.env.FACEBOOK_CALLBACK_URL_PROD || '(not set)'}`);
+    // console.log(`GOOGLE_CLIENT_ID: ${process.env.GOOGLE_CLIENT_ID ? '***' : '(not set)'}`);
+    // console.log(`GOOGLE_CALLBACK_URL: ${process.env.GOOGLE_CALLBACK_URL || '(not set)'}`);
+    // console.log(`GOOGLE_CALLBACK_URL_PROD: ${process.env.GOOGLE_CALLBACK_URL_PROD || '(not set)'}`);
 
     // Verify email service connection
     await mailService.verifyConnection();

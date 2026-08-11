@@ -655,7 +655,7 @@ const createOrderParamSchema = Joi.object({
     }),
 }).unknown(true);
 
-const namedUuidParamSchema = (paramName) =>
+exports.namedUuidParamSchema = (paramName) =>
   Joi.object({
     [paramName]: Joi.string()
       .uuid()
@@ -667,10 +667,11 @@ const namedUuidParamSchema = (paramName) =>
   }).unknown(true);
 
 const paymentMethodEnum = ['gcash', 'bank_transfer', 'cash'];
-const orderStatusEnum = ['pending', 'processing', 'shipped', 'out_for_delivery', 'delivered', 'cancelled'];
+const orderStatusEnum = ['pending', 'processing', 'shipped', 'out_for_delivery', 'delivered', 'received', 'cancelled'];
 const orderPaymentStatusEnum = ['pending', 'proof_submitted', 'under_review', 'approved', 'rejected', 'failed'];
 const fulfillmentMethods = ['pickup_appointment', 'home_delivery', 'store_pickup', 'courier'];
 const notificationTypeEnum = ['order_update', 'appointment_reminder', 'system', 'promotional', 'low_stock'];
+const refundStatusEnum = ['pending', 'approved', 'rejected', 'refunded'];
 
 exports.createOrderSchema = Joi.object({
   items: Joi.array()
@@ -779,6 +780,58 @@ exports.cancelMyOrderSchema = Joi.object({
     'any.required': 'Cancellation reason is required',
   }),
 });
+
+exports.markAsReceivedSchema = Joi.object({});
+
+exports.createRefundRequestSchema = Joi.object({
+  reason: Joi.string().trim().min(3).max(500).required().messages({
+    'string.min': 'Refund reason must be at least 3 characters',
+    'string.max': 'Refund reason must not exceed 500 characters',
+    'any.required': 'Refund reason is required',
+  }),
+  customerNotes: Joi.string().trim().max(1000).optional().allow(''),
+  items: Joi.array()
+    .items(
+      Joi.object({
+        order_item_id: Joi.number().integer().required().messages({
+          'any.required': 'Order item ID is required',
+          'number.integer': 'Order item ID must be a valid integer',
+        }),
+        quantity: Joi.number().integer().min(1).required().messages({
+          'number.min': 'Quantity must be at least 1',
+          'any.required': 'Quantity is required',
+        }),
+      })
+    )
+    .min(1)
+    .required()
+    .messages({
+      'array.min': 'At least one item must be selected for refund',
+      'any.required': 'Items are required',
+    }),
+  images: Joi.array().items(Joi.string().uri()).max(5).optional().messages({
+    'array.max': 'Maximum 5 images are allowed',
+  }),
+});
+
+exports.updateRefundStatusSchema = Joi.object({
+  status: Joi.string().valid(...refundStatusEnum).required().messages({
+    'any.only': `Status must be one of: ${refundStatusEnum.join(', ')}`,
+    'any.required': 'Status is required',
+  }),
+  adminNotes: Joi.string().trim().max(1000).optional().allow('').allow(null),
+}).unknown(true);
+
+exports.listRefundRequestsSchema = Joi.object({
+  status: Joi.string().valid(...refundStatusEnum).optional(),
+  order_id: Joi.string().uuid().optional(),
+  user_id: Joi.string().uuid().optional(),
+  search: Joi.string().max(100).optional().allow('').trim(),
+  sort_by: Joi.string().valid('created_at', 'status', 'reason').optional(),
+  sort_dir: Joi.string().valid('asc', 'desc').optional(),
+  page: Joi.number().integer().min(1).optional(),
+  page_size: Joi.number().integer().min(1).max(100).optional(),
+}).unknown(true);
 
 exports.updatePaymentStatusSchema = Joi.object({
   status: Joi.string()
@@ -1080,6 +1133,7 @@ const listOrdersSchema = Joi.object({
     'shipped',
     'out_for_delivery',
     'delivered',
+    'received',
     'cancelled'
   ).optional(),
   payment_status: Joi.string().valid(
@@ -1110,7 +1164,6 @@ const listOrdersSchema = Joi.object({
 exports.listOrdersSchema = listOrdersSchema;
 exports.orderIdParamSchema = orderIdParamSchema;
 exports.uuidParamSchema = uuidParamSchema;
-exports.namedUuidParamSchema = namedUuidParamSchema;
 
 const listProjectsSchema = Joi.object({
   search: Joi.string().max(100).optional().allow('').trim(),

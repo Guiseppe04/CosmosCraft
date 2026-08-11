@@ -82,6 +82,12 @@ function statusVariant(status) {
   return 'default'
 }
 
+function formatStatusLabel(status) {
+  return String(status || '')
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase())
+}
+
 function resolveInventoryImage(item) {
   if (!item) return null
   if (item.primary_image) return item.primary_image
@@ -750,7 +756,7 @@ const fetchUnavailableDates = useCallback(async () => {
                <div className="grid gap-6 xl:grid-cols-[1.2fr,0.8fr]">
                  <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6">
                    <div className="mb-5 flex items-center justify-between"><h3 className="text-lg font-semibold text-white">Upcoming appointments</h3><button type="button" onClick={() => setActiveTab('appointments')} className="text-sm font-medium text-[var(--gold-primary)]">View all</button></div>
-                   {appointments.length === 0 ? <EmptyState icon={Calendar} label="No appointments queued" description="New bookings will appear here." /> : <div className="space-y-3">{appointments.slice(0, 5).map((item) => <button key={item.appointment_id} type="button" onClick={() => { setSelectedAppointment(item); setAppointmentModalOpen(true) }} className="flex w-full items-center justify-between rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)]/60 p-4 text-left"><div><p className="font-semibold text-white">{item.customer_name || item.user_name || 'Walk-in customer'}</p><p className="mt-1 text-sm text-[var(--text-muted)]">{item.service_name || (Array.isArray(item.services) ? item.services.join(', ') : 'Service appointment')}</p></div><StatusBadge label={item.status || 'pending'} variant={statusVariant(item.status)} /></button>)}</div>}
+                   {appointments.length === 0 ? <EmptyState icon={Calendar} label="No appointments queued" description="New bookings will appear here." /> : <div className="space-y-3">{appointments.slice(0, 5).map((item) => <button key={item.appointment_id} type="button" onClick={() => { setSelectedAppointment(item); setAppointmentModalOpen(true) }} className="flex w-full items-center justify-between rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)]/60 p-4 text-left"><div><p className="font-semibold text-white">{item.customer_name || item.user_name || ''}</p><p className="mt-1 text-sm text-[var(--text-muted)]">{item.service_name || (Array.isArray(item.services) ? item.services.join(', ') : 'Service appointment')}</p></div><StatusBadge label={formatStatusLabel(item.status || 'pending')} variant={statusVariant(item.status)} /></button>)}</div>}
                  </div>
                  <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6"><h3 className="text-lg font-semibold text-white">Unread stock alerts</h3><div className="mt-4 space-y-3">{inventoryAlerts.length === 0 ? <p className="text-sm text-[var(--text-muted)]">No low-stock alerts right now.</p> : inventoryAlerts.slice(0, 5).map((alert) => <div key={alert.alert_id} className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4"><p className="font-semibold text-white">{alert.name}</p><p className="mt-1 text-sm text-[var(--text-muted)]">{alert.current_stock} left, threshold {alert.threshold}</p></div>)}</div></div>
                </div>
@@ -826,7 +832,7 @@ const fetchUnavailableDates = useCallback(async () => {
                                </p>
                              </div>
                             <span className={`shrink-0 rounded-full border px-3 py-1 text-xs font-semibold capitalize ${statusClass}`}>
-                              {status.replace(/_/g, ' ')}
+                              {formatStatusLabel(status)}
                             </span>
                           </div>
 

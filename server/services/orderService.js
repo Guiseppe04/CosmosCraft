@@ -1,5 +1,5 @@
 const { pool } = require('../config/database')
-const { generateOrderNumber, determineOrderTypePrefix } = require('../utils/orderNumber')
+const { generateOrderNumber, generateRefundRequestNumber, determineOrderTypePrefix } = require('../utils/orderNumber')
 
 const syncStockToBuilderParts = async (productId, delta) => {
   if (!productId || delta === 0) return;
@@ -470,9 +470,10 @@ function isValidPaymentStatusTransition(currentStatus, newStatus) {
 const VALID_STATUS_TRANSITIONS = {
   'pending': ['processing'],
   'processing': ['shipped'],
-  'shipped': ['out_for_delivery'],
-  'out_for_delivery': ['delivered'],
-  'delivered': [],
+  'shipped': ['out_for_delivery', 'received'],
+  'out_for_delivery': ['delivered', 'received'],
+  'delivered': ['received'],
+  'received': [],
   'cancelled': []
 }
 
@@ -731,9 +732,26 @@ exports.getUserOrders = async (userId) => {
     return acc
   }, {})
 
+  const refundRes = await pool.query(
+    `SELECT DISTINCT ON (order_id)
+       order_id,
+       refund_request_id,
+       status,
+       created_at
+     FROM refund_requests
+     WHERE order_id = ANY($1) AND deleted_at IS NULL
+     ORDER BY order_id, created_at DESC`,
+    [orderIds]
+  )
+  const refundByOrder = refundRes.rows.reduce((acc, row) => {
+    acc[row.order_id] = row
+    return acc
+  }, {})
+
   return res.rows.map((order) => {
     const items = itemsByOrder[order.order_id] || []
     const payment = paymentsByOrder[order.order_id] || null
+    const refund = refundByOrder[order.order_id] || null
 
     return {
       ...order,
@@ -743,6 +761,10 @@ exports.getUserOrders = async (userId) => {
       customization_ids: items
         .map((item) => item.customization_id)
         .filter(Boolean),
+      has_refund_request: Boolean(refund),
+      refund_request_id: refund?.refund_request_id || null,
+      refund_request_status: refund?.status || null,
+      refund_requested_at: refund?.created_at || null,
     }
   })
 }
@@ -778,10 +800,25 @@ exports.getOrderById = async (orderId, userId) => {
     [orderId]
   )
 
+  // Get the most recent refund request for this order (live status)
+  const refundRes = await pool.query(
+    `SELECT refund_request_id, status, created_at
+     FROM refund_requests
+     WHERE order_id = $1 AND deleted_at IS NULL
+     ORDER BY created_at DESC
+     LIMIT 1`,
+    [orderId]
+  )
+  const refund = refundRes.rows[0] || null
+
   const order = res.rows[0]
   order.items = itemsRes.rows
   order.payment = paymentRes.rows[0] || null
   order.payment_method = resolveOrderPaymentMethod(order, order.payment)
+  order.has_refund_request = Boolean(refund)
+  order.refund_request_id = refund?.refund_request_id || null
+  order.refund_request_status = refund?.status || null
+  order.refund_requested_at = refund?.created_at || null
 
   return order
 }
@@ -973,7 +1010,7 @@ exports.getAllOrders = async (params = {}) => {
 }
 
 exports.updateOrder = async (orderId, updateData) => {
-  const { status, payment_status, notes, tracking_number, courier_name, shipped_at, out_for_delivery_at, delivered_at, rider_name, rider_contact } = updateData;
+  const { status, payment_status, notes, tracking_number, courier_name, shipped_at, out_for_delivery_at, delivered_at, received_at, rider_name, rider_contact } = updateData;
   
   if (status) {
     const currentRes = await pool.query(
@@ -1017,6 +1054,9 @@ exports.updateOrder = async (orderId, updateData) => {
   if (status === 'delivered' && !delivered_at) {
     updateData.delivered_at = new Date();
   }
+  if (status === 'received') {
+    updateData.received_at = updateData.received_at || new Date();
+  }
 
   const res = await pool.query(
     `UPDATE orders 
@@ -1028,11 +1068,12 @@ exports.updateOrder = async (orderId, updateData) => {
          shipped_at = COALESCE($6, shipped_at),
          out_for_delivery_at = COALESCE($7, out_for_delivery_at),
          delivered_at = COALESCE($8, delivered_at),
-         rider_name = COALESCE($9, rider_name),
-         rider_contact = COALESCE($10, rider_contact),
+         received_at = COALESCE($9, received_at),
+         rider_name = COALESCE($10, rider_name),
+         rider_contact = COALESCE($11, rider_contact),
          updated_at = CURRENT_TIMESTAMP
-     WHERE order_id = $11 RETURNING *`,
-    [status, payment_status, notes, tracking_number, courier_name, shipped_at, out_for_delivery_at, delivered_at, rider_name, rider_contact, orderId]
+     WHERE order_id = $12 RETURNING *`,
+    [status, payment_status, notes, tracking_number, courier_name, updateData.shipped_at, updateData.out_for_delivery_at, updateData.delivered_at, updateData.received_at, rider_name, rider_contact, orderId]
   );
   if (res.rows.length === 0) return null;
   return res.rows[0];
@@ -1342,5 +1383,311 @@ exports.cancelMyOrder = async (orderId, userId, reason) => {
      RETURNING *`,
     [orderId, userId, nextNotes]
   );
+  return res.rows[0];
+}
+
+exports.markAsReceived = async (orderId, userId) => {
+  const checkRes = await pool.query(
+    `SELECT status FROM orders WHERE order_id = $1 AND user_id = $2`,
+    [orderId, userId]
+  );
+  if (checkRes.rows.length === 0) {
+    throw new Error('Order not found');
+  }
+  const order = checkRes.rows[0];
+  const allowedStatuses = ['shipped', 'out_for_delivery', 'delivered', 'received'];
+  if (!allowedStatuses.includes(order.status)) {
+    throw new Error(`Order must be shipped, out for delivery, or delivered before marking as received. Current status: ${order.status}`);
+  }
+  if (order.status === 'received') {
+    return checkRes.rows[0];
+  }
+  const res = await pool.query(
+    `UPDATE orders SET status = 'received', received_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE order_id = $1 RETURNING *`,
+    [orderId]
+  );
+  return res.rows[0];
+}
+
+exports.createRefundRequest = async (data) => {
+  const { orderId, userId, reason, customerNotes, items, images } = data;
+
+  const orderRes = await pool.query(
+    `SELECT status, delivered_at, received_at FROM orders WHERE order_id = $1 AND user_id = $2`,
+    [orderId, userId]
+  );
+  if (orderRes.rows.length === 0) {
+    throw new Error('Order not found');
+  }
+  const order = orderRes.rows[0];
+  const eligibleStatuses = ['delivered', 'received'];
+  if (!eligibleStatuses.includes(order.status)) {
+    throw new Error(`Refund requests are only allowed for delivered or received orders. Current status: ${order.status}`);
+  }
+
+  const deliveryDate = order.received_at || order.delivered_at;
+  if (deliveryDate) {
+    const daysSinceDelivery = (Date.now() - new Date(deliveryDate).getTime()) / (1000 * 60 * 60 * 24);
+    if (daysSinceDelivery > 30) {
+      throw new Error('Refund requests can only be made within 30 days of delivery');
+    }
+  }
+
+  const existingRes = await pool.query(
+    `SELECT refund_request_id FROM refund_requests WHERE order_id = $1 AND status NOT IN ('rejected', 'refunded') AND deleted_at IS NULL LIMIT 1`,
+    [orderId]
+  );
+  if (existingRes.rows.length > 0) {
+    throw new Error('A refund request already exists for this order');
+  }
+
+  if (!items || items.length === 0) {
+    throw new Error('At least one item must be selected for refund');
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const requestNumber = await generateRefundRequestNumber(client, 'RF');
+
+    const refundRes = await client.query(
+      `INSERT INTO refund_requests (order_id, user_id, reason, customer_notes, request_number) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+      [orderId, userId, reason, customerNotes || null, requestNumber]
+    );
+    const refundRequest = refundRes.rows[0];
+
+    for (const item of items) {
+      if (!item.order_item_id) {
+        throw new Error('Invalid item selected for refund');
+      }
+      const itemRes = await client.query(
+        `SELECT oi.*, p.name as product_name FROM order_items oi LEFT JOIN products p ON oi.product_id = p.product_id WHERE oi.order_item_id = $1 AND oi.order_id = $2`,
+        [item.order_item_id, orderId]
+      );
+      if (itemRes.rows.length === 0) {
+        throw new Error('Order item not found');
+      }
+      const orderItem = itemRes.rows[0];
+      const refundQty = Math.min(Number(item.quantity || 1), Number(orderItem.quantity || 1));
+      const unitPrice = Number(orderItem.unit_price || 0);
+      const refundAmount = unitPrice * refundQty;
+
+      await client.query(
+        `INSERT INTO refund_request_items (refund_request_id, order_item_id, product_id, product_name, quantity, unit_price, refund_amount) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [refundRequest.refund_request_id, item.order_item_id, orderItem.product_id, orderItem.product_name || 'Product', refundQty, unitPrice, refundAmount]
+      );
+    }
+
+    if (images && images.length > 0) {
+      for (let i = 0; i < images.length; i++) {
+        await client.query(
+          `INSERT INTO refund_request_images (refund_request_id, image_url, sort_order) VALUES ($1, $2, $3)`,
+          [refundRequest.refund_request_id, images[i], i]
+        );
+      }
+    }
+
+    await client.query('COMMIT');
+    return refundRequest;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+exports.getRefundRequests = async (params = {}) => {
+  const {
+    status,
+    orderId,
+    userId,
+    search,
+    sort_by = 'created_at',
+    sort_dir = 'desc',
+    page = 1,
+    page_size = 10,
+  } = params;
+
+  const limit = Math.min(Math.max(Number(page_size) || 10, 1), 100);
+  const offset = (Math.max(Number(page) || 1, 1) - 1) * limit;
+  const allowedSortColumns = ['created_at', 'status', 'reason', 'refund_request_id', 'request_number'];
+  const orderBy = allowedSortColumns.includes(sort_by) ? sort_by : 'created_at';
+  const orderDir = sort_dir === 'asc' ? 'ASC' : 'DESC';
+
+  const where = [];
+  const queryParams = [];
+  let idx = 1;
+
+  if (status) {
+    where.push(`rr.status = $${idx++}`);
+    queryParams.push(status);
+  }
+  if (orderId) {
+    where.push(`rr.order_id = $${idx++}`);
+    queryParams.push(orderId);
+  }
+  if (userId) {
+    where.push(`rr.user_id = $${idx++}`);
+    queryParams.push(userId);
+  }
+
+  const whereClause = where.length ? `WHERE ${where.join(' AND ')} AND rr.deleted_at IS NULL` : 'WHERE rr.deleted_at IS NULL';
+
+  let searchClause = '';
+  if (search && String(search).trim()) {
+    const term = `%${String(search).trim().toLowerCase()}%`;
+    searchClause = `AND (rr.reason ILIKE $${idx++} OR rr.request_number ILIKE $${idx++} OR o.order_number ILIKE $${idx++} OR u.first_name ILIKE $${idx++} OR u.last_name ILIKE $${idx++})`;
+    for (let i = 0; i < 5; i++) {
+      queryParams.push(term);
+    }
+  }
+
+  const totalQuery = `
+    SELECT COUNT(*)::int AS total
+    FROM refund_requests rr
+    LEFT JOIN orders o ON rr.order_id = o.order_id
+    LEFT JOIN users u ON rr.user_id = u.user_id
+    ${whereClause}
+    ${searchClause}
+  `;
+  const totalResult = await pool.query(totalQuery, queryParams);
+  const total = totalResult.rows[0]?.total || 0;
+
+  const dataQuery = `
+    SELECT rr.*, o.order_number, u.first_name, u.last_name, u.email as customer_email
+    FROM refund_requests rr
+    LEFT JOIN orders o ON rr.order_id = o.order_id
+    LEFT JOIN users u ON rr.user_id = u.user_id
+    ${whereClause}
+    ${searchClause}
+    ORDER BY ${orderBy} ${orderDir}
+    LIMIT $${idx++} OFFSET $${idx++}
+  `;
+  const dataResult = await pool.query(dataQuery, [...queryParams, limit, offset]);
+
+  const refundRequestIds = dataResult.rows.map(r => r.refund_request_id);
+  let itemsByRequest = {};
+  let imagesByRequest = {};
+
+  if (refundRequestIds.length > 0) {
+    const itemsRes = await pool.query(
+      `SELECT * FROM refund_request_items WHERE refund_request_id = ANY($1) AND deleted_at IS NULL`,
+      [refundRequestIds]
+    );
+    itemsByRequest = itemsRes.rows.reduce((acc, item) => {
+      if (!acc[item.refund_request_id]) acc[item.refund_request_id] = [];
+      acc[item.refund_request_id].push(item);
+      return acc;
+    }, {});
+
+    const imagesRes = await pool.query(
+      `SELECT * FROM refund_request_images WHERE refund_request_id = ANY($1) AND deleted_at IS NULL ORDER BY sort_order`,
+      [refundRequestIds]
+    );
+    imagesByRequest = imagesRes.rows.reduce((acc, img) => {
+      if (!acc[img.refund_request_id]) acc[img.refund_request_id] = [];
+      acc[img.refund_request_id].push(img);
+      return acc;
+    }, {});
+  }
+
+  const requests = dataResult.rows.map(req => ({
+    ...req,
+    items: itemsByRequest[req.refund_request_id] || [],
+    images: imagesByRequest[req.refund_request_id] || [],
+  }));
+
+  return {
+    requests,
+    pagination: {
+      page,
+      page_size: limit,
+      total,
+      total_pages: Math.max(Math.ceil(total / limit), 1),
+    },
+  };
+}
+
+exports.getRefundRequestById = async (refundRequestId) => {
+  const res = await pool.query(
+    `SELECT rr.*, o.order_number, u.first_name, u.last_name, u.email as customer_email
+     FROM refund_requests rr
+     LEFT JOIN orders o ON rr.order_id = o.order_id
+     LEFT JOIN users u ON rr.user_id = u.user_id
+     WHERE rr.refund_request_id = $1 AND rr.deleted_at IS NULL`,
+    [refundRequestId]
+  );
+  if (res.rows.length === 0) return null;
+
+  const request = res.rows[0];
+  const itemsRes = await pool.query(
+    `SELECT * FROM refund_request_items WHERE refund_request_id = $1 AND deleted_at IS NULL`,
+    [refundRequestId]
+  );
+  const imagesRes = await pool.query(
+    `SELECT * FROM refund_request_images WHERE refund_request_id = $1 AND deleted_at IS NULL ORDER BY sort_order`,
+    [refundRequestId]
+  );
+
+  return {
+    ...request,
+    items: itemsRes.rows,
+    images: imagesRes.rows,
+  };
+}
+
+exports.updateRefundStatus = async (refundRequestId, status, options = {}) => {
+  const { adminUserId, adminNotes } = options;
+
+  const checkRes = await pool.query(
+    `SELECT status FROM refund_requests WHERE refund_request_id = $1 AND deleted_at IS NULL`,
+    [refundRequestId]
+  );
+  if (checkRes.rows.length === 0) {
+    throw new Error('Refund request not found');
+  }
+  const currentStatus = checkRes.rows[0].status;
+  const allowedTransitions = {
+    pending: ['approved', 'rejected', 'refunded'],
+    approved: ['refunded'],
+    rejected: [],
+    refunded: [],
+  };
+  if (!allowedTransitions[currentStatus]?.includes(status)) {
+    throw new Error(`Invalid refund status transition from '${currentStatus}' to '${status}'`);
+  }
+
+  const updateFields = ['status = $1', 'updated_at = CURRENT_TIMESTAMP'];
+  const updateValues = [status];
+  let paramIndex = 2;
+
+  if (adminUserId) {
+    updateFields.push(`reviewed_by = $${paramIndex++}`);
+    updateValues.push(adminUserId);
+    updateFields.push(`reviewed_at = CURRENT_TIMESTAMP`);
+  }
+  if (adminNotes) {
+    updateFields.push(`admin_notes = $${paramIndex++}`);
+    updateValues.push(adminNotes);
+  }
+  if (status === 'refunded') {
+    updateFields.push(`refunded_at = CURRENT_TIMESTAMP`);
+  }
+
+  updateValues.push(refundRequestId);
+  const res = await pool.query(
+    `UPDATE refund_requests SET ${updateFields.join(', ')} WHERE refund_request_id = $${paramIndex} RETURNING *`,
+    updateValues
+  );
+
+  if (status === 'refunded') {
+    await pool.query(
+      `UPDATE orders SET payment_status = 'refunded', updated_at = CURRENT_TIMESTAMP WHERE order_id = (SELECT order_id FROM refund_requests WHERE refund_request_id = $1)`,
+      [refundRequestId]
+    );
+  }
+
   return res.rows[0];
 }

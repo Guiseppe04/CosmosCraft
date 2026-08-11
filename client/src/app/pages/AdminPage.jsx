@@ -2267,13 +2267,13 @@ export function AdminPage() {
               fetchOrders={fetchOrders}
               user={user}
               pagination={ordersPagination}
+              showToast={showToast}
             />
           )}
 
-
-
           {/* ── APPOINTMENTS ───────────────────────────────────────────────── */}
           {activeTab === 'appointments' && (
+
 <AppointmentsTab
                visibleAppointments={visibleAppointments}
                appointmentLoading={appointmentLoading}
