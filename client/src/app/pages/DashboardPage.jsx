@@ -1,11 +1,12 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 import { motion, AnimatePresence } from 'motion/react'
-import { User, CreditCard, MapPin, Lock, Package, Calendar, ChevronRight, ChevronLeft, Search, Upload, Save, Wallet, ShoppingBag, ShoppingCart, Trash2, Minus, Plus, MessageSquare, Send, Guitar, Clock, Truck, CheckCircle, XCircle, Briefcase, Activity, Star, Loader2, Edit, AlertCircle, AlertTriangle, X, Banknote, Smartphone, Landmark, CreditCard as CreditCardIcon, Check, RefreshCw } from 'lucide-react'
+import { User, CreditCard, MapPin, Lock, Package, Calendar, ChevronRight, ChevronLeft, Search, Upload, Save, Wallet, ShoppingBag, ShoppingCart, Trash2, Minus, Plus, MessageSquare, Send, Guitar, Clock, Truck, CheckCircle, XCircle, Briefcase, Activity, Star, Loader2, Edit, AlertCircle, AlertTriangle, X, Banknote, Smartphone, Landmark, CreditCard as CreditCardIcon, Check, RefreshCw, Printer } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useCart } from '../context/CartContext.jsx'
 import { BASE_PRICE, BODY_OPTIONS, BODY_WOOD_OPTIONS, BODY_FINISH_OPTIONS, NECK_OPTIONS, FRETBOARD_OPTIONS, HEADSTOCK_OPTIONS, HEADSTOCK_WOOD_OPTIONS, INLAY_OPTIONS, BRIDGE_OPTIONS, PICKGUARD_OPTIONS_BY_BODY, KNOB_OPTIONS_BY_BODY, HARDWARE_OPTIONS, PICKUP_OPTIONS } from '../lib/guitarBuilderData.js'
 import { adminApi } from '../utils/adminApi.js'
+import { buildInvoiceHtml } from '../utils/invoiceBuilder.js'
 import { useDebounce } from '../hooks/useDebounce'
 import { uploadToCloudinary } from '../utils/cloudinary.js'
 import CustomerProjectTracker from '../components/projects/CustomerProjectTracker.jsx'
@@ -225,6 +226,7 @@ export function DashboardPage() {
   const [refundImages, setRefundImages] = useState([])
   const [isSubmittingRefund, setIsSubmittingRefund] = useState(false)
   const [isMarkingReceived, setIsMarkingReceived] = useState(false)
+  const [printingOrderId, setPrintingOrderId] = useState(null)
   const [isCancelProjectModalOpen, setIsCancelProjectModalOpen] = useState(false)
   const [cancelProjectTarget, setCancelProjectTarget] = useState(null)
   const [isCancellingProject, setIsCancellingProject] = useState(false)
@@ -325,6 +327,54 @@ export function DashboardPage() {
 
   const fetchMyOrders = () => {
     adminApi.getMyOrders().then(res => setMyOrders(res.data?.orders || [])).catch(console.error)
+  }
+
+  const printCustomerInvoice = async (order) => {
+    if (typeof window === 'undefined' || typeof document === 'undefined') return
+    setPrintingOrderId(order.order_id)
+    try {
+      const fullOrder = await adminApi.getOrder(order.order_id)
+      const receiptHtml = buildInvoiceHtml(fullOrder.data?.order || fullOrder.data || order)
+      const iframe = document.createElement('iframe')
+      iframe.setAttribute('aria-hidden', 'true')
+      iframe.style.position = 'fixed'
+      iframe.style.right = '0'
+      iframe.style.bottom = '0'
+      iframe.style.width = '0'
+      iframe.style.height = '0'
+      iframe.style.border = '0'
+
+      const cleanup = () => {
+        window.setTimeout(() => {
+          if (iframe.parentNode) iframe.parentNode.removeChild(iframe)
+        }, 250)
+      }
+
+      iframe.onload = () => {
+        const frameWindow = iframe.contentWindow
+        if (!frameWindow) { cleanup(); return }
+        const handleAfterPrint = () => {
+          frameWindow.removeEventListener('afterprint', handleAfterPrint)
+          cleanup()
+        }
+        frameWindow.addEventListener('afterprint', handleAfterPrint)
+        frameWindow.focus()
+        window.setTimeout(() => {
+          try { frameWindow.print() } catch { handleAfterPrint() }
+        }, 150)
+      }
+
+      document.body.appendChild(iframe)
+      const frameDocument = iframe.contentDocument || iframe.contentWindow?.document
+      if (!frameDocument) { cleanup(); return }
+      frameDocument.open()
+      frameDocument.write(receiptHtml)
+      frameDocument.close()
+    } catch (error) {
+      console.error('Failed to load order for invoice:', error)
+    } finally {
+      setPrintingOrderId(null)
+    }
   }
 
   const fetchMyProjects = () => {
@@ -1150,8 +1200,18 @@ export function DashboardPage() {
                      <span className="text-xl font-bold text-[var(--gold-primary)] block">â‚±{displayTotalAmount.toLocaleString('en-PH')}</span>
                      <span className="text-xl font-bold text-[var(--gold-primary)] block">₱{Number(order.total_amount || 0).toLocaleString('en-PH')}</span>
                    </div>
-                </div>
-                {order.status === 'pending' && (
+                 </div>
+                 <div className="mt-4 pt-4 border-t border-[var(--border)] flex justify-end">
+                   <button
+                     onClick={() => printCustomerInvoice(order)}
+                     disabled={printingOrderId === order.order_id}
+                     className="px-4 py-2 border border-[var(--gold-primary)]/40 text-[var(--gold-primary)] hover:bg-[var(--gold-primary)]/10 transition-colors rounded-lg text-sm font-semibold flex items-center gap-2 disabled:opacity-50"
+                   >
+                     {printingOrderId === order.order_id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Printer className="w-4 h-4" />}
+                     Print Invoice
+                   </button>
+                 </div>
+                 {order.status === 'pending' && (
                   <div className="mt-4 pt-4 border-t border-[var(--border)] flex justify-end">
                     <button
                       onClick={() => openCancelOrderModal(order)}
