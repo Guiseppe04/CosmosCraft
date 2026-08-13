@@ -57,7 +57,7 @@ exports.getProductsWithStock = async ({ search, category_id, low_stock_only } = 
 
   const res = await pool.query(
     `SELECT 
-      p.product_id, p.name, p.description, p.price,
+      p.product_id, p.name, p.description, p.price, p.sku, p.updated_at, p.category_id,
       i.cost_price, i.stock, i.low_stock_threshold, i.inventory_id,
       c.name AS category_name,
       (i.stock <= COALESCE(i.low_stock_threshold, 10)) AS is_low_stock,

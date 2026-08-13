@@ -237,8 +237,8 @@ export function AdminPage() {
   const [inventorySubTab, setInventorySubTab] = useState('products')
 
   // Inventory tab state - separate for products and parts
-  const [productsInventoryFilter, setProductsInventoryFilter] = useState({ search: '', status: 'all', sort: 'name', page: 1 })
-  const [partsInventoryFilter, setPartsInventoryFilter] = useState({ search: '', status: 'all', category: 'all', sort: 'name', page: 1 })
+  const [productsInventoryFilter, setProductsInventoryFilter] = useState({ search: '', status: 'all', category: '', sort: 'name_asc', page: 1 })
+  const [partsInventoryFilter, setPartsInventoryFilter] = useState({ search: '', status: 'all', category: 'all', sort: 'name_asc', page: 1 })
   const INVENTORY_SUB_TABS = [
     { id: 'products', label: 'Products', icon: Package },
     { id: 'guitar-parts', label: 'Guitar Parts', icon: Guitar },
@@ -267,7 +267,7 @@ export function AdminPage() {
   // Inventory tab state
   const [expandedInventoryIds, setExpandedInventoryIds] = useState(new Set())
   const [inventoryStatusFilter, setInventoryStatusFilter] = useState('all')
-  const [inventorySort, setInventorySort] = useState('name')
+  const [inventorySort, setInventorySort] = useState('name_asc')
   const [inventoryPage, setInventoryPage] = useState(1)
   const INVENTORY_PAGE_SIZE = 10
   const [optimisticStock, setOptimisticStock] = useState({})
@@ -430,10 +430,16 @@ export function AdminPage() {
       })
     }
     result.sort((a, b) => {
-      if (inventorySort === 'name') return (a.name || '').localeCompare(b.name || '')
-      if (inventorySort === 'sku') return (a.sku || '').localeCompare(b.sku || '')
-      if (inventorySort === 'stock_low') return Number(a.stock || 0) - Number(b.stock || 0)
-      if (inventorySort === 'stock_high') return Number(b.stock || 0) - Number(a.stock || 0)
+      if (inventorySort === 'name_asc') return (a.name || '').localeCompare(b.name || '')
+      if (inventorySort === 'name_desc') return (b.name || '').localeCompare(a.name || '')
+      if (inventorySort === 'category_asc') return (a.category_name || a.inventory_category || '').localeCompare(b.category_name || b.inventory_category || '')
+      if (inventorySort === 'category_desc') return (b.category_name || b.inventory_category || '').localeCompare(a.category_name || a.inventory_category || '')
+      if (inventorySort === 'date_modified_asc') return new Date(a.updated_at || 0) - new Date(b.updated_at || 0)
+      if (inventorySort === 'date_modified_desc') return new Date(b.updated_at || 0) - new Date(a.updated_at || 0)
+      if (inventorySort === 'sku_asc') return (a.sku || '').localeCompare(b.sku || '')
+      if (inventorySort === 'sku_desc') return (b.sku || '').localeCompare(a.sku || '')
+      if (inventorySort === 'stock_asc') return Number(a.stock || 0) - Number(b.stock || 0)
+      if (inventorySort === 'stock_desc') return Number(b.stock || 0) - Number(a.stock || 0)
       return 0
     })
     return result
@@ -462,11 +468,21 @@ export function AdminPage() {
         return true
       })
     }
+    const categoryFilter = productsInventoryFilter.category
+    if (categoryFilter) {
+      result = result.filter((item) => String(item.category_id) === String(categoryFilter))
+    }
     result.sort((a, b) => {
-      if (productsInventoryFilter.sort === 'name') return (a.name || '').localeCompare(b.name || '')
-      if (productsInventoryFilter.sort === 'sku') return (a.sku || '').localeCompare(b.sku || '')
-      if (productsInventoryFilter.sort === 'stock_low') return Number(a.stock || 0) - Number(b.stock || 0)
-      if (productsInventoryFilter.sort === 'stock_high') return Number(b.stock || 0) - Number(a.stock || 0)
+      if (productsInventoryFilter.sort === 'name_asc') return (a.name || '').localeCompare(b.name || '')
+      if (productsInventoryFilter.sort === 'name_desc') return (b.name || '').localeCompare(a.name || '')
+      if (productsInventoryFilter.sort === 'category_asc') return (a.category_name || '').localeCompare(b.category_name || '')
+      if (productsInventoryFilter.sort === 'category_desc') return (b.category_name || '').localeCompare(a.category_name || '')
+      if (productsInventoryFilter.sort === 'date_modified_asc') return new Date(a.updated_at || 0) - new Date(b.updated_at || 0)
+      if (productsInventoryFilter.sort === 'date_modified_desc') return new Date(b.updated_at || 0) - new Date(a.updated_at || 0)
+      if (productsInventoryFilter.sort === 'sku_asc') return (a.sku || '').localeCompare(b.sku || '')
+      if (productsInventoryFilter.sort === 'sku_desc') return (b.sku || '').localeCompare(a.sku || '')
+      if (productsInventoryFilter.sort === 'stock_asc') return Number(a.stock || 0) - Number(b.stock || 0)
+      if (productsInventoryFilter.sort === 'stock_desc') return Number(b.stock || 0) - Number(a.stock || 0)
       return 0
     })
     return result
@@ -517,10 +533,12 @@ export function AdminPage() {
         INVENTORY_PART_CATEGORY_LABELS[b.inventory_category] || ''
       )
       if (categoryCompare !== 0) return categoryCompare
-      if (partsInventoryFilter.sort === 'name') return (a.name || '').localeCompare(b.name || '')
-      if (partsInventoryFilter.sort === 'sku') return (a.sku || '').localeCompare(b.sku || '')
-      if (partsInventoryFilter.sort === 'stock_low') return Number(a.stock || 0) - Number(b.stock || 0)
-      if (partsInventoryFilter.sort === 'stock_high') return Number(b.stock || 0) - Number(a.stock || 0)
+      if (partsInventoryFilter.sort === 'name_asc') return (a.name || '').localeCompare(b.name || '')
+      if (partsInventoryFilter.sort === 'name_desc') return (b.name || '').localeCompare(a.name || '')
+      if (partsInventoryFilter.sort === 'sku_asc') return (a.sku || '').localeCompare(b.sku || '')
+      if (partsInventoryFilter.sort === 'sku_desc') return (b.sku || '').localeCompare(a.sku || '')
+      if (partsInventoryFilter.sort === 'stock_asc') return Number(a.stock || 0) - Number(b.stock || 0)
+      if (partsInventoryFilter.sort === 'stock_desc') return Number(b.stock || 0) - Number(a.stock || 0)
       return 0
     })
     return result
@@ -2312,6 +2330,7 @@ export function AdminPage() {
               resolveInventoryImage={resolveInventoryImage}
               openModal={openModal}
               isSuperAdmin={isSuperAdmin}
+              categoryTree={categoryTree}
             />
           )}
 

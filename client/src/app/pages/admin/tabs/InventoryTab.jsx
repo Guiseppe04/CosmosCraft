@@ -20,6 +20,7 @@ export function InventoryTab({
   resolveInventoryImage,
   openModal,
   isSuperAdmin,
+  categoryTree,
 }) {
   return (
     <motion.div key="inventory" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
@@ -64,7 +65,7 @@ export function InventoryTab({
           })}
         </div>
 
-        <div className={`mt-5 grid gap-3 ${inventoryIsProducts ? 'lg:grid-cols-[1.2fr_auto_auto]' : 'xl:grid-cols-[1.2fr_auto_auto_auto]'}`}>
+        <div className={`mt-5 grid gap-3 ${inventoryIsProducts ? 'lg:grid-cols-[1.2fr_auto_auto_auto]' : 'xl:grid-cols-[1.2fr_auto_auto_auto]'}`}>
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-muted)]" />
             <input
@@ -105,21 +106,40 @@ export function InventoryTab({
             </select>
           </div>
 
-          {!inventoryIsProducts && (
+          {(inventoryIsProducts ? categoryTree : inventoryPartCategoryOptions).length > 0 && (
             <select
-              value={inventoryCurrentFilter.category || 'all'}
+              value={inventoryIsProducts ? (inventoryCurrentFilter.category || '') : (inventoryCurrentFilter.category || 'all')}
               onChange={(e) => {
-                setPartsInventoryFilter((prev) => ({ ...prev, category: e.target.value }))
+                if (inventoryIsProducts) {
+                  setProductsInventoryFilter((prev) => ({ ...prev, category: e.target.value }))
+                } else {
+                  setPartsInventoryFilter((prev) => ({ ...prev, category: e.target.value }))
+                }
                 setInventoryPage(1)
               }}
               className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-white"
             >
-              <option value="all">All Categories</option>
-              {inventoryPartCategoryOptions.map((category) => (
-                <option key={category.value} value={category.value}>
-                  {category.label}
-                </option>
-              ))}
+              {inventoryIsProducts ? (
+                <option value="">All Categories</option>
+              ) : (
+                <option value="all">All Categories</option>
+              )}
+              {inventoryIsProducts
+                ? categoryTree.map((parent) => (
+                    <optgroup key={parent.category_id} label={parent.name}>
+                      <option value={parent.category_id}>{parent.name} (All)</option>
+                      {parent.children?.map((child) => (
+                        <option key={child.category_id} value={child.category_id}>
+                          {child.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  ))
+                : inventoryPartCategoryOptions.map((category) => (
+                    <option key={category.value} value={category.value}>
+                      {category.label}
+                    </option>
+                  ))}
             </select>
           )}
 
@@ -134,10 +154,29 @@ export function InventoryTab({
             }}
             className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-white"
           >
-            <option value="name">Sorted by Name</option>
-            <option value="sku">Sorted by SKU</option>
-            <option value="stock_high">Stock High-Low</option>
-            <option value="stock_low">Stock Low-High</option>
+            {inventoryIsProducts ? (
+              <>
+                <option value="name_asc">Name A-Z</option>
+                <option value="name_desc">Name Z-A</option>
+                <option value="category_asc">Category A-Z</option>
+                <option value="category_desc">Category Z-A</option>
+                <option value="date_modified_asc">Date Modified Oldest-Newest</option>
+                <option value="date_modified_desc">Date Modified Newest-Oldest</option>
+                <option value="sku_asc">SKU A-Z</option>
+                <option value="sku_desc">SKU Z-A</option>
+                <option value="stock_asc">Stock Low-High</option>
+                <option value="stock_desc">Stock High-Low</option>
+              </>
+            ) : (
+              <>
+                <option value="name_asc">Name A-Z</option>
+                <option value="name_desc">Name Z-A</option>
+                <option value="sku_asc">SKU A-Z</option>
+                <option value="sku_desc">SKU Z-A</option>
+                <option value="stock_asc">Stock Low-High</option>
+                <option value="stock_desc">Stock High-Low</option>
+              </>
+            )}
           </select>
         </div>
 

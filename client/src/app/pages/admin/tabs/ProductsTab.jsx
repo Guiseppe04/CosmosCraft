@@ -164,7 +164,7 @@ export function ProductsTab({
         <EmptyState icon={Package} label={searchQuery ? 'No products match your search/filters' : 'No products found'} action={() => openModal('product')} actionLabel="Add First Product" />
       ) : productViewMode === 'table' ? (
         <AdminTable
-          columns={['Image', 'Product', 'Brand', 'Price', 'Cost', 'Stock Status', 'Actions']}
+          columns={['Image', 'Product', 'SKU', 'Brand', 'Price', 'Cost', 'Stock Status', 'Actions']}
           rows={visibleProducts}
           renderRow={(p) => (
             <>
@@ -180,6 +180,7 @@ export function ProductsTab({
               <td className="py-4 px-6">
                 <p className="text-white font-semibold">{p.name}</p>
               </td>
+              <td className="py-4 px-6 text-[var(--text-muted)] font-mono text-sm">{p.sku || '—'}</td>
               <td className="py-4 px-6 text-[var(--text-muted)] font-semibold">{p.brand || '—'}</td>
               <td className="py-4 px-6 text-[var(--gold-primary)] font-bold">{formatCurrency(p.price)}</td>
               <td className="py-4 px-6 text-[var(--text-muted)] text-sm">{p.cost_price ? formatCurrency(p.cost_price) : '—'}</td>
@@ -231,12 +232,13 @@ export function ProductsTab({
                   </div>
                 </div>
                 <div className="p-5">
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="min-w-0 flex-1">
-                      <h3 className="text-white font-semibold text-lg truncate">{p.name}</h3>
-                      {p.brand && <p className="text-[var(--text-muted)] text-sm mt-1">Brand: <span className="text-white font-medium">{p.brand}</span></p>}
-                    </div>
-                  </div>
+                   <div className="flex items-start justify-between mb-3">
+                     <div className="min-w-0 flex-1">
+                       <h3 className="text-white font-semibold text-lg truncate">{p.name}</h3>
+                       {p.sku && <p className="text-[var(--text-muted)] text-xs font-mono mt-1">SKU: <span className="text-white">{p.sku}</span></p>}
+                       {p.brand && <p className="text-[var(--text-muted)] text-sm mt-1">Brand: <span className="text-white font-medium">{p.brand}</span></p>}
+                     </div>
+                   </div>
 
                   <div className="flex items-center justify-between mt-4 pt-4 border-t border-[var(--border)]">
                     <div className="flex flex-col gap-1">

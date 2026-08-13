@@ -440,6 +440,14 @@ exports.createProductSchema = Joi.object({
     .messages({
       'string.max': 'Brand must not exceed 100 characters',
     }),
+  sku: Joi.string()
+    .max(100)
+    .required()
+    .trim()
+    .messages({
+      'string.max': 'SKU must not exceed 100 characters',
+      'any.required': 'SKU is required',
+    }),
   category_id: Joi.number()
     .integer()
     .required()
@@ -513,6 +521,13 @@ exports.updateProductSchema = Joi.object({
     .trim()
     .messages({
       'string.max': 'Brand must not exceed 100 characters',
+    }),
+  sku: Joi.string()
+    .max(100)
+    .optional()
+    .trim()
+    .messages({
+      'string.max': 'SKU must not exceed 100 characters',
     }),
   category_id: Joi.number()
     .integer()

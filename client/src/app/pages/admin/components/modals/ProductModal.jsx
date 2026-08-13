@@ -201,6 +201,91 @@ export function ProductModal({
     }
   }, [form, closeModal])
 
+  const generateSku = useCallback(() => {
+    const rawBrand = String(form.brand || '').trim()
+    const rawName = String(form.name || '').trim()
+    const categoryId = form.category_id
+
+    let categoryName = ''
+    if (categoryId && categoryTree) {
+      const findCategoryName = (nodes) => {
+        for (const node of nodes) {
+          if (String(node.category_id) === String(categoryId)) return node.name
+          if (node.children && node.children.length) {
+            const found = findCategoryName(node.children)
+            if (found) return found
+          }
+        }
+        return null
+      }
+      categoryName = findCategoryName(categoryTree) || ''
+    }
+
+    const toCode = (text, max = 8) =>
+      text
+        .toUpperCase()
+        .replace(/[^A-Z0-9]+/g, '')
+        .slice(0, max)
+
+    const brandCode = toCode(rawBrand, 6)
+    const nameUpper = rawName.toUpperCase()
+
+    let prefix = ''
+
+    if (/PICKUP|PUP/.test(nameUpper)) prefix = 'PUP'
+    else if (/BRIDGE|BRG/.test(nameUpper)) prefix = 'BRG'
+    else if (/TUNER|TUNING/.test(nameUpper)) prefix = 'TUN'
+    else if (/\bNUT\b/.test(nameUpper)) prefix = 'NUT'
+    else if (/POTENTIOMETER|\bPOT\b/.test(nameUpper)) prefix = 'POT'
+    else if (/CAPACITOR|\bCAP\b/.test(nameUpper)) prefix = 'CAP'
+    else if (/SWITCH/.test(nameUpper)) prefix = 'SW'
+    else if (/KNOB/.test(nameUpper)) prefix = 'KNB'
+    else if (/JACK|OUTPUT/.test(nameUpper)) prefix = 'JCK'
+    else if (/STRAP/.test(nameUpper)) prefix = 'STR'
+    else if (/PICKGUARD/.test(nameUpper)) prefix = 'PG'
+    else if (/\bNECK\b/.test(nameUpper)) prefix = 'NCK'
+    else if (/\bBODY\b/.test(nameUpper)) prefix = 'BOD'
+    else if (/SCREW|HARDWARE/.test(nameUpper)) prefix = 'SCR'
+    else if (/STRINGS/.test(nameUpper)) prefix = 'STR'
+    else if (/CABLE/.test(nameUpper)) prefix = 'ACC'
+    else if (/CASE/.test(nameUpper)) prefix = 'ACC'
+    else if (categoryName.toLowerCase().includes('electric guitar')) prefix = 'GTR-E'
+    else if (categoryName.toLowerCase().includes('acoustic guitar')) prefix = 'GTR-A'
+    else if (categoryName.toLowerCase().includes('bass')) prefix = 'GTR-B'
+    else if (categoryName.toLowerCase().includes('ukulele')) prefix = 'UKU'
+    else if (categoryName.toLowerCase().includes('accessor')) prefix = 'ACC'
+    else if (categoryName.toLowerCase().includes('parts')) prefix = 'PRT'
+    else prefix = toCode(categoryName, 6) || 'PRD'
+
+    const specWords = rawName
+      .replace(/[^A-Z0-9\s]/gi, ' ')
+      .split(/\s+/)
+      .filter(w => w.length > 2 && !['THE', 'AND', 'FOR', 'WITH', 'FROM', 'PREMIUM', 'PROFESSIONAL', 'STANDARD', 'CLASSIC', 'DELUXE', 'ELECTRIC', 'ACOUSTIC', 'GUITAR', 'BASS', 'UKULELE', 'HUMBUCKER', 'SINGLE', 'COIL'].includes(w.toUpperCase()))
+      .slice(0, 2)
+      .map(w => toCode(w, 5))
+      .filter(Boolean)
+
+    const specCode = specWords.join('')
+
+    let sku = ''
+    if (brandCode) {
+      sku = `${prefix}-${brandCode}`
+      if (specCode && specCode !== brandCode) {
+        sku += `-${specCode}`
+      }
+    } else {
+      sku = `${prefix}-${toCode(rawName, 10)}`
+    }
+
+    if (!sku || sku === '-') {
+      setForm((f) => ({ ...f, sku: '' }))
+      return
+    }
+
+    const suffix = modal.data?.product_id ? '' : '-' + Date.now().toString().slice(-4)
+    setForm((f) => ({ ...f, sku: sku + suffix }))
+  }, [form.brand, form.name, form.category_id, categoryTree, modal.data?.product_id, setForm])
+
   const handleSaveAndAnother = useCallback(async () => {
     await validateAndSave(productRules, async () => {
       await saveProduct()
@@ -339,6 +424,33 @@ export function ProductModal({
                 {formErrors.name && (
                   <p className="mt-1 text-xs text-red-400" data-error="true" role="alert">{formErrors.name}</p>
                 )}
+              </div>
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className={`block text-xs font-semibold uppercase tracking-wider ${formErrors.sku ? 'text-red-400' : 'text-[var(--text-muted)]'}`}>
+                    SKU *
+                  </label>
+                  <button
+                    type="button"
+                    onClick={generateSku}
+                    className="inline-flex items-center gap-1 rounded-md border border-[var(--border)] px-2 py-1 text-[10px] font-semibold text-[var(--text-muted)] hover:text-[var(--gold-primary)] hover:border-[var(--gold-primary)] transition-colors"
+                    title="Auto-generate SKU"
+                  >
+                    <Sparkles className="h-3 w-3" />
+                    Auto
+                  </button>
+                </div>
+                <ClearableInput
+                  value={form.sku || ''}
+                  onChange={(e) => setForm((f) => ({ ...f, sku: e.target.value }))}
+                  placeholder="e.g. CC-STRAT-001"
+                  className={formErrors.sku ? fieldErr : fieldOk}
+                  error={formErrors.sku}
+                />
+                {formErrors.sku && (
+                  <p className="mt-1 text-xs text-red-400" data-error="true" role="alert">{formErrors.sku}</p>
+                )}
+                <p className="mt-1.5 text-xs text-[var(--text-muted)]">Unique Stock Keeping Unit for inventory tracking.</p>
               </div>
               <div>
                 <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">

@@ -202,6 +202,7 @@ CREATE TABLE products (
     description TEXT NOT NULL DEFAULT '',
     price NUMERIC(12, 2) NOT NULL CHECK (price >= 0),
     brand VARCHAR(100) NOT NULL DEFAULT '',
+    sku VARCHAR(100) NOT NULL UNIQUE,
     category_id INT NOT NULL,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     deleted_at TIMESTAMPTZ,
@@ -211,6 +212,7 @@ CREATE TABLE products (
     FOREIGN KEY (category_id) REFERENCES categories(category_id) ON DELETE RESTRICT
 );
 CREATE INDEX idx_products_brand ON products(brand);
+CREATE INDEX idx_products_sku ON products(sku);
 CREATE INDEX idx_products_category_id ON products(category_id);
 CREATE INDEX idx_products_is_active ON products(is_active);
 CREATE INDEX idx_products_deleted_at ON products(deleted_at) WHERE deleted_at IS NOT NULL;
