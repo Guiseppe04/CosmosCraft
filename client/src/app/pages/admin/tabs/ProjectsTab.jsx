@@ -1,11 +1,14 @@
 import { motion } from 'motion/react'
-import { Search, Settings, Briefcase, CheckCircle, Edit, Trash2, X } from 'lucide-react'
+import { Search, Settings, Briefcase, CheckCircle, Edit, Trash2, X, RotateCcw, Archive } from 'lucide-react'
 import { EmptyState } from '../components/shared/EmptyState'
 import DefaultWorkflowEditor from '../../../components/projects/DefaultWorkflowEditor'
+import { PaginationBar } from '../components/shared/PaginationBar'
 
 export function ProjectsTab({
   visibleProjects,
+  visibleArchivedProjects,
   projects,
+  archivedProjects,
   users,
   searchQuery,
   setSearchQuery,
@@ -29,10 +32,17 @@ export function ProjectsTab({
   setProjectCompletionFilter,
   setProjectPage,
   openModal,
-  isSuperAdmin,
+  isAdmin,
   showDefaultWorkflowEditor,
   setShowDefaultWorkflowEditor,
   deleteProject,
+  restoreProject,
+  projectArchiveTab,
+  setProjectArchiveTab,
+  archivedProjectsPagination,
+  setArchivedProjectsPagination,
+  projectsPagination,
+  PROJECTS_PAGE_SIZE,
   debouncedSearch,
 }) {
   return (
@@ -44,7 +54,7 @@ export function ProjectsTab({
             <p className="mt-1 text-sm text-[var(--text-muted)]">
               Open a project to manage milestones and subtasks for the build.
             </p>
-            {isSuperAdmin && (
+            {isAdmin && (
               <button
                 onClick={() => setShowDefaultWorkflowEditor(true)}
                 className="mt-3 inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] text-sm font-semibold text-white transition-all hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)]"
@@ -73,6 +83,32 @@ export function ProjectsTab({
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Archive Tab Switcher */}
+      <div className="flex gap-2 mb-4">
+        <button
+          onClick={() => setProjectArchiveTab('active')}
+          className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
+            projectArchiveTab === 'active'
+              ? 'bg-[var(--gold-primary)] text-black'
+              : 'border border-[var(--border)] text-white hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)]'
+          }`}
+        >
+          <Briefcase className="w-4 h-4" />
+          Active Projects
+        </button>
+        <button
+          onClick={() => setProjectArchiveTab('archived')}
+          className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
+            projectArchiveTab === 'archived'
+              ? 'bg-[var(--gold-primary)] text-black'
+              : 'border border-[var(--border)] text-white hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)]'
+          }`}
+        >
+          <Archive className="w-4 h-4" />
+          Archived Projects
+        </button>
       </div>
 
       {/* Search - full width row */}
@@ -223,120 +259,226 @@ export function ProjectsTab({
         </div>
       )}
 
-      {projects.length === 0 ? (
-        <EmptyState
-          icon={Briefcase}
-          label={debouncedSearch ? 'No projects match your search' : 'No projects found'}
-          action={isSuperAdmin ? () => openModal('project') : undefined}
-          actionLabel="Create Project"
-        />
+      {projectArchiveTab === 'active' ? (
+        projects.length === 0 ? (
+          <EmptyState
+            icon={Briefcase}
+            label={debouncedSearch ? 'No projects match your search' : 'No projects found'}
+            action={isAdmin ? () => openModal('project') : undefined}
+            actionLabel="Create Project"
+          />
+        ) : (
+          <div className="grid gap-6 xl:grid-cols-2">
+            {visibleProjects.map((project) => {
+              const status = String(project.status || 'not_started').toLowerCase()
+              const progress = Number.isFinite(Number(project.progress)) ? Math.max(0, Math.min(100, Number(project.progress))) : 0
+              const statusClass = {
+                not_started: 'bg-slate-500/10 text-slate-300 border-slate-500/30',
+                in_progress: 'bg-blue-500/10 text-blue-300 border-blue-500/30',
+                on_hold: 'bg-amber-500/10 text-amber-300 border-amber-500/30',
+                completed: 'bg-green-500/10 text-green-300 border-green-500/30',
+                cancelled: 'bg-red-500/10 text-red-300 border-red-500/30',
+              }[status] || 'bg-slate-500/10 text-slate-300 border-slate-500/30'
+
+              return (
+                <div key={project.project_id} className="rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-6 shadow-[0_18px_50px_rgba(0,0,0,0.12)]">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <p className="text-[var(--gold-primary)] text-xs font-semibold uppercase tracking-[0.25em]">
+                        {project.order_number || 'Project'}
+                      </p>
+                      <h3 className="mt-2 truncate text-xl font-semibold text-white">
+                        {project.name || project.title || 'Untitled Project'}
+                      </h3>
+                       <p className="mt-2 text-sm text-[var(--text-muted)]">
+                         Customer: <span className="text-white">{project.customer_name || 'Unassigned'}</span>
+                       </p>
+                       <p className="mt-2 text-sm text-[var(--text-muted)]">
+                         Claimed By: <span className="text-white">{project.claimed_first_name ? `${project.claimed_first_name} ${project.claimed_last_name}` : 'Unassigned'}</span>
+                       </p>
+                      {status === 'on_hold' && project.hold_reason && (
+                        <p className="mt-2 text-xs text-amber-300/80">
+                          Hold reason: <span className="font-medium">{project.hold_reason}</span>
+                        </p>
+                      )}
+                      {status === 'on_hold' && project.hold_requested_at && (
+                        <p className="mt-0.5 text-xs text-amber-300/50">
+                          {new Date(project.hold_requested_at).toLocaleDateString()}
+                        </p>
+                      )}
+                    </div>
+                    <span className={`shrink-0 rounded-full border px-3 py-1 text-xs font-semibold capitalize ${statusClass}`}>
+                      {status.replace(/_/g, ' ')}
+                    </span>
+                  </div>
+
+                  <div className="mt-5 rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] p-4">
+                    <div className="mb-2 flex items-center justify-between">
+                      <span className="text-sm text-[var(--text-muted)]">Progress</span>
+                      <span className="text-sm font-semibold text-white">{progress}%</span>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-[var(--surface-dark)]">
+                      <div
+                        className="h-full rounded-full bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)]"
+                        style={{ width: `${progress}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] p-4">
+                      <p className="text-xs uppercase tracking-[0.18em] text-[var(--text-muted)]">Estimated completion</p>
+                      <p className="mt-2 font-medium text-white">
+                        {project.estimated_completion_date ? new Date(project.estimated_completion_date).toLocaleDateString() : 'Not set'}
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] p-4">
+                      <p className="text-xs uppercase tracking-[0.18em] text-[var(--text-muted)]">Notes</p>
+                      <p className="mt-2 line-clamp-2 text-sm text-white">
+                        {project.description || project.notes || 'No project notes yet.'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-5 flex flex-wrap gap-3">
+                    <button
+                      type="button"
+                      onClick={() => openModal('project_tasks', project)}
+                      className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] px-4 py-2.5 text-sm font-semibold text-black transition-all hover:shadow-[0_0_20px_rgba(212,175,55,0.35)]"
+                    >
+                      <CheckCircle className="w-4 h-4" />
+                      Manage Tasks
+                    </button>
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => openModal('project', project)}
+                        className="inline-flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)]"
+                      >
+                        <Edit className="w-4 h-4" />
+                        Edit
+                      </button>
+                    )}
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => deleteProject(project.project_id, project.name || project.title || 'Project')}
+                        className="inline-flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-2.5 text-sm font-semibold text-red-300 transition-colors hover:bg-red-500/20"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        Archive
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )
       ) : (
-        <div className="grid gap-6 xl:grid-cols-2">
-          {visibleProjects.map((project) => {
-            const status = String(project.status || 'not_started').toLowerCase()
-            const progress = Number.isFinite(Number(project.progress)) ? Math.max(0, Math.min(100, Number(project.progress))) : 0
-            const statusClass = {
-              not_started: 'bg-slate-500/10 text-slate-300 border-slate-500/30',
-              in_progress: 'bg-blue-500/10 text-blue-300 border-blue-500/30',
-              on_hold: 'bg-amber-500/10 text-amber-300 border-amber-500/30',
-              completed: 'bg-green-500/10 text-green-300 border-green-500/30',
-              cancelled: 'bg-red-500/10 text-red-300 border-red-500/30',
-            }[status] || 'bg-slate-500/10 text-slate-300 border-slate-500/30'
+        archivedProjects.length === 0 ? (
+          <EmptyState
+            icon={Archive}
+            label={debouncedSearch ? 'No archived projects match your search' : 'No archived projects'}
+          />
+        ) : (
+          <div className="grid gap-6 xl:grid-cols-2">
+            {visibleArchivedProjects.map((project) => {
+              const status = String(project.status || 'not_started').toLowerCase()
+              const progress = Number.isFinite(Number(project.progress)) ? Math.max(0, Math.min(100, Number(project.progress))) : 0
+              const statusClass = {
+                not_started: 'bg-slate-500/10 text-slate-300 border-slate-500/30',
+                in_progress: 'bg-blue-500/10 text-blue-300 border-blue-500/30',
+                on_hold: 'bg-amber-500/10 text-amber-300 border-amber-500/30',
+                completed: 'bg-green-500/10 text-green-300 border-green-500/30',
+                cancelled: 'bg-red-500/10 text-red-300 border-red-500/30',
+              }[status] || 'bg-slate-500/10 text-slate-300 border-slate-500/30'
 
-            return (
-              <div key={project.project_id} className="rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-6 shadow-[0_18px_50px_rgba(0,0,0,0.12)]">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="min-w-0">
-                    <p className="text-[var(--gold-primary)] text-xs font-semibold uppercase tracking-[0.25em]">
-                      {project.order_number || 'Project'}
-                    </p>
-                    <h3 className="mt-2 truncate text-xl font-semibold text-white">
-                      {project.name || project.title || 'Untitled Project'}
-                    </h3>
-                     <p className="mt-2 text-sm text-[var(--text-muted)]">
-                       Customer: <span className="text-white">{project.customer_name || 'Unassigned'}</span>
-                     </p>
-                     <p className="mt-2 text-sm text-[var(--text-muted)]">
-                       Claimed By: <span className="text-white">{project.claimed_first_name ? `${project.claimed_first_name} ${project.claimed_last_name}` : 'Unassigned'}</span>
-                     </p>
-                    {status === 'on_hold' && project.hold_reason && (
-                      <p className="mt-2 text-xs text-amber-300/80">
-                        Hold reason: <span className="font-medium">{project.hold_reason}</span>
+              return (
+                <div key={project.project_id} className="rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-6 shadow-[0_18px_50px_rgba(0,0,0,0.12)]">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <p className="text-[var(--gold-primary)] text-xs font-semibold uppercase tracking-[0.25em]">
+                        {project.order_number || 'Project'}
                       </p>
-                    )}
-                    {status === 'on_hold' && project.hold_requested_at && (
-                      <p className="mt-0.5 text-xs text-amber-300/50">
-                        {new Date(project.hold_requested_at).toLocaleDateString()}
+                      <h3 className="mt-2 truncate text-xl font-semibold text-white">
+                        {project.name || project.title || 'Untitled Project'}
+                      </h3>
+                       <p className="mt-2 text-sm text-[var(--text-muted)]">
+                         Customer: <span className="text-white">{project.customer_name || 'Unassigned'}</span>
+                       </p>
+                       <p className="mt-2 text-sm text-[var(--text-muted)]">
+                         Claimed By: <span className="text-white">{project.claimed_first_name ? `${project.claimed_first_name} ${project.claimed_last_name}` : 'Unassigned'}</span>
+                       </p>
+                      {status === 'on_hold' && project.hold_reason && (
+                        <p className="mt-2 text-xs text-amber-300/80">
+                          Hold reason: <span className="font-medium">{project.hold_reason}</span>
+                        </p>
+                      )}
+                      {status === 'on_hold' && project.hold_requested_at && (
+                        <p className="mt-0.5 text-xs text-amber-300/50">
+                          {new Date(project.hold_requested_at).toLocaleDateString()}
+                        </p>
+                      )}
+                    </div>
+                    <span className={`shrink-0 rounded-full border px-3 py-1 text-xs font-semibold capitalize ${statusClass}`}>
+                      {status.replace(/_/g, ' ')}
+                    </span>
+                  </div>
+
+                  <div className="mt-5 rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] p-4">
+                    <div className="mb-2 flex items-center justify-between">
+                      <span className="text-sm text-[var(--text-muted)]">Progress</span>
+                      <span className="text-sm font-semibold text-white">{progress}%</span>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-[var(--surface-dark)]">
+                      <div
+                        className="h-full rounded-full bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)]"
+                        style={{ width: `${progress}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] p-4">
+                      <p className="text-xs uppercase tracking-[0.18em] text-[var(--text-muted)]">Estimated completion</p>
+                      <p className="mt-2 font-medium text-white">
+                        {project.estimated_completion_date ? new Date(project.estimated_completion_date).toLocaleDateString() : 'Not set'}
                       </p>
-                    )}
+                    </div>
+                    <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] p-4">
+                      <p className="text-xs uppercase tracking-[0.18em] text-[var(--text-muted)]">Notes</p>
+                      <p className="mt-2 line-clamp-2 text-sm text-white">
+                        {project.description || project.notes || 'No project notes yet.'}
+                      </p>
+                    </div>
                   </div>
-                  <span className={`shrink-0 rounded-full border px-3 py-1 text-xs font-semibold capitalize ${statusClass}`}>
-                    {status.replace(/_/g, ' ')}
-                  </span>
-                </div>
 
-                <div className="mt-5 rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] p-4">
-                  <div className="mb-2 flex items-center justify-between">
-                    <span className="text-sm text-[var(--text-muted)]">Progress</span>
-                    <span className="text-sm font-semibold text-white">{progress}%</span>
-                  </div>
-                  <div className="h-2 overflow-hidden rounded-full bg-[var(--surface-dark)]">
-                    <div
-                      className="h-full rounded-full bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)]"
-                      style={{ width: `${progress}%` }}
-                    />
-                  </div>
-                </div>
-
-                <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] p-4">
-                    <p className="text-xs uppercase tracking-[0.18em] text-[var(--text-muted)]">Estimated completion</p>
-                    <p className="mt-2 font-medium text-white">
-                      {project.estimated_completion_date ? new Date(project.estimated_completion_date).toLocaleDateString() : 'Not set'}
-                    </p>
-                  </div>
-                  <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] p-4">
-                    <p className="text-xs uppercase tracking-[0.18em] text-[var(--text-muted)]">Notes</p>
-                    <p className="mt-2 line-clamp-2 text-sm text-white">
-                      {project.description || project.notes || 'No project notes yet.'}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="mt-5 flex flex-wrap gap-3">
-                  <button
-                    type="button"
-                    onClick={() => openModal('project_tasks', project)}
-                    className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] px-4 py-2.5 text-sm font-semibold text-black transition-all hover:shadow-[0_0_20px_rgba(212,175,55,0.35)]"
-                  >
-                    <CheckCircle className="w-4 h-4" />
-                    Manage Tasks
-                  </button>
-                  {isSuperAdmin && (
+                  <div className="mt-5 flex flex-wrap gap-3">
                     <button
                       type="button"
-                      onClick={() => openModal('project', project)}
-                      className="inline-flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)]"
+                      onClick={() => openModal('project_tasks', project)}
+                      className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] px-4 py-2.5 text-sm font-semibold text-black transition-all hover:shadow-[0_0_20px_rgba(212,175,55,0.35)]"
                     >
-                      <Edit className="w-4 h-4" />
-                      Edit
+                      <CheckCircle className="w-4 h-4" />
+                      Manage Tasks
                     </button>
-                  )}
-                  {isSuperAdmin && (
-                    <button
-                      type="button"
-                      onClick={() => deleteProject(project.project_id, project.name || project.title || 'Project')}
-                      className="inline-flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-2.5 text-sm font-semibold text-red-300 transition-colors hover:bg-red-500/20"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                      Archive
-                    </button>
-                  )}
+                    {isAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => restoreProject(project.project_id, project.name || project.title || 'Project')}
+                        className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2.5 text-sm font-semibold text-emerald-300 transition-colors hover:bg-emerald-500/20"
+                      >
+                        <RotateCcw className="w-4 h-4" />
+                        Restore
+                      </button>
+                    )}
+                  </div>
                 </div>
-              </div>
-            )
-          })}
-        </div>
+              )
+            })}
+          </div>
+        )
       )}
     </motion.div>
   )

@@ -263,6 +263,9 @@ export function AdminPage() {
   const [projectSort, setProjectSort] = useState('updated')
   const [projectPage, setProjectPage] = useState(1)
   const PROJECTS_PAGE_SIZE = 10
+  const [projectArchiveTab, setProjectArchiveTab] = useState('active')
+  const [archivedProjects, setArchivedProjects] = useState([])
+  const [archivedProjectsPagination, setArchivedProjectsPagination] = useState({ page: 1, pageSize: 10, total: 0, totalPages: 1 })
 
   // Inventory tab state
   const [expandedInventoryIds, setExpandedInventoryIds] = useState(new Set())
@@ -323,6 +326,7 @@ export function AdminPage() {
   const visibleCategories = useMemo(() => flattenCategoryTreeForAdmin(categoryTree), [categoryTree])
   const visibleOrders = orders || []
   const visibleProjects = projects || []
+  const visibleArchivedProjects = archivedProjects || []
   const visibleAppointments = useMemo(() => appointments || [], [appointments])
   const normalizedUnavailableDates = useMemo(() => unavailableDates.map((entry) => entry?.date || entry).filter(Boolean), [unavailableDates])
   const visibleInventory = useMemo(() => {
@@ -740,6 +744,10 @@ export function AdminPage() {
 
     useEffect(() => {
       setProjectPage(1)
+    }, [projectStatusFilter, projectAssignedFilter, projectGuitarTypeFilter, projectDateFrom, projectDateTo, projectDueDateFrom, projectDueDateTo, projectCompletionFilter, projectSort, debouncedSearch])
+
+    useEffect(() => {
+      setArchivedProjectsPagination((prev) => ({ ...prev, page: 1 }))
     }, [projectStatusFilter, projectAssignedFilter, projectGuitarTypeFilter, projectDateFrom, projectDateTo, projectDueDateFrom, projectDueDateTo, projectCompletionFilter, projectSort, debouncedSearch])
 
   useEffect(() => {
@@ -1280,10 +1288,10 @@ export function AdminPage() {
   const deleteProject = (id, name) => {
     openConfirm({
       title: 'Archive Project',
-      description: 'Are you sure you want to delete this project?',
-      confirmLabel: 'Confirm Delete',
+      description: 'Are you sure you want to archive this project? It will be moved to the Archived Projects tab and can be restored at any time.',
+      confirmLabel: 'Confirm Archive',
       cancelLabel: 'Cancel',
-      variant: 'danger',
+      variant: 'warning',
       onConfirm: async () => {
         const existingProject = (projects || []).find((project) => project.project_id === id) || null
         const response = await adminApi.deleteProject(id)
@@ -1336,6 +1344,74 @@ export function AdminPage() {
       setProjectArchiveFeedback((prev) => ({ ...prev, busy: false }))
     }
   }
+
+  const restoreProject = async (id, name) => {
+    openConfirm({
+      title: 'Restore Project',
+      description: 'Are you sure you want to restore this project?',
+      confirmLabel: 'Restore',
+      cancelLabel: 'Cancel',
+      onConfirm: async () => {
+        try {
+          const response = await adminApi.restoreProject(id)
+          const restoredProject = response?.data
+          setArchivedProjects((prev) => prev.filter((project) => project.project_id !== id))
+          if (restoredProject) {
+            setProjects((prev) => {
+              const withoutRestored = prev.filter((project) => project.project_id !== restoredProject.project_id)
+              const next = [restoredProject, ...withoutRestored]
+              next.sort((left, right) => new Date(right.created_at || 0).getTime() - new Date(left.created_at || 0).getTime())
+              return next
+            })
+          }
+          showToast('Project restored successfully')
+        } catch (e) {
+          showToast(e.message || 'Failed to restore project', 'error')
+        }
+      },
+    })
+  }
+
+  const fetchArchivedProjects = useCallback(async (queryParams = {}) => {
+    try {
+      const res = await adminApi.getArchivedProjects({
+        ...(debouncedSearch ? { search: debouncedSearch } : {}),
+        include_tasks: true,
+        ...queryParams,
+      })
+      const newData = Array.isArray(res.data) ? res.data : res.data?.projects || []
+      setArchivedProjects(newData)
+      setArchivedProjectsPagination(res.pagination || { page: 1, pageSize: 10, total: 0, totalPages: 1 })
+    } catch (e) {
+      showToast(e.message, 'error')
+    }
+  }, [debouncedSearch, showToast])
+
+  const buildArchivedProjectQuery = useCallback((pageNum = 1) => {
+    const params = {
+      status: projectStatusFilter === 'all' ? undefined : projectStatusFilter,
+      assigned_to: projectAssignedFilter === 'all' ? undefined : projectAssignedFilter,
+      guitar_type: projectGuitarTypeFilter === 'all' ? undefined : projectGuitarTypeFilter,
+      date_from: projectDateFrom || undefined,
+      date_to: projectDateTo || undefined,
+      due_date_from: projectDueDateFrom || undefined,
+      due_date_to: projectDueDateTo || undefined,
+      completion_percentage: projectCompletionFilter !== 'all' ? projectCompletionFilter : undefined,
+      include_tasks: true,
+      page: pageNum,
+      page_size: PROJECTS_PAGE_SIZE,
+      sort_by: ({ updated: 'updated_at', created: 'created_at', name: 'project_name', customer: 'customer_name', progress: 'progress', due: 'estimated_completion_date', status: 'status' })[projectSort] || 'updated_at',
+      sort_dir: 'desc',
+    }
+    Object.keys(params).forEach(k => params[k] === undefined && delete params[k])
+    return params
+  }, [projectStatusFilter, projectAssignedFilter, projectGuitarTypeFilter, projectDateFrom, projectDateTo, projectDueDateFrom, projectDueDateTo, projectCompletionFilter, projectSort])
+
+  useEffect(() => {
+    if (activeTab === 'projects' && projectArchiveTab === 'archived') {
+      fetchArchivedProjects(buildArchivedProjectQuery(archivedProjectsPagination.page))
+    }
+  }, [activeTab, projectArchiveTab, archivedProjectsPagination.page, fetchArchivedProjects, buildArchivedProjectQuery, debouncedSearch]) // eslint-disable-line
 
   const assignProjectTeam = async (projectId, userIds) => {
     try {
@@ -1647,7 +1723,7 @@ export function AdminPage() {
             >
               <div className="mb-5">
                 <h3 className="text-xl font-bold text-white">Project Archived</h3>
-                <p className="mt-2 text-sm text-[var(--text-muted)]">You deleted this project.</p>
+                <p className="mt-2 text-sm text-[var(--text-muted)]">This project has been moved to the Archived Projects tab. You can restore it at any time.</p>
                 <p className="mt-1 text-xs text-[var(--text-muted)]/80">
                   {projectArchiveFeedback.projectName}
                 </p>
@@ -2198,7 +2274,9 @@ export function AdminPage() {
           {activeTab === 'projects' && (
             <ProjectsTab
               visibleProjects={visibleProjects}
+              visibleArchivedProjects={visibleArchivedProjects}
               projects={projects}
+              archivedProjects={archivedProjects}
               users={users}
               searchQuery={searchQuery}
               setSearchQuery={setSearchQuery}
@@ -2226,6 +2304,14 @@ export function AdminPage() {
               showDefaultWorkflowEditor={showDefaultWorkflowEditor}
               setShowDefaultWorkflowEditor={setShowDefaultWorkflowEditor}
               deleteProject={deleteProject}
+              restoreProject={restoreProject}
+              projectArchiveTab={projectArchiveTab}
+              setProjectArchiveTab={setProjectArchiveTab}
+              archivedProjectsPagination={archivedProjectsPagination}
+              setArchivedProjectsPagination={setArchivedProjectsPagination}
+              projectsPagination={projectsPagination}
+              PROJECTS_PAGE_SIZE={PROJECTS_PAGE_SIZE}
+              isAdmin={isSuperAdmin}
               debouncedSearch={debouncedSearch}
             />
           )}

@@ -48,6 +48,11 @@ exports.restoreProject = asyncHandler(async (req, res, next) => {
   res.json({ status: 'success', data: project });
 });
 
+exports.getArchivedProjects = asyncHandler(async (req, res, next) => {
+  const result = await projectService.getAllArchivedProjects(req.query);
+  res.json({ status: 'success', data: result.projects, pagination: result.pagination });
+});
+
 exports.assignTeam = asyncHandler(async (req, res, next) => {
   const { user_ids } = req.body;
   await projectService.assignTeam(req.params.id, user_ids);

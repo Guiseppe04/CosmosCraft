@@ -141,6 +141,10 @@ export const adminApi = {
   cancelMyProject: (id) => request(`/api/projects/${id}/cancel`, { method: 'POST' }),
   deleteProject: (id) => request(`/api/projects/${id}`, { method: 'DELETE' }),
   restoreProject: (id) => request(`/api/projects/${id}/restore`, { method: 'PATCH' }),
+  getArchivedProjects: (params = {}) => {
+    const qs = new URLSearchParams(params).toString()
+    return request(`/api/projects/archived${qs ? '?' + qs : ''}`)
+  },
   assignTeam: (id, userIds) => request(`/api/projects/${id}/team`, { method: 'PUT', body: { user_ids: userIds } }),
 
   // Appointments

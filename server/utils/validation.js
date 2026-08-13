@@ -635,13 +635,7 @@ const uuidParamSchema = Joi.object({
 }).unknown(true);
 
 const projectPartReceiveParamsSchema = Joi.object({
-  id: Joi.string()
-    .uuid()
-    .required()
-    .messages({
-      'string.guid': 'ID must be a valid UUID',
-      'any.required': 'ID is required',
-    }),
+  id: Joi.string().required().messages({ 'any.required': 'ID is required' }),
   partKey: Joi.string()
     .trim()
     .required()
