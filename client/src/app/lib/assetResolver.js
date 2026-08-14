@@ -343,8 +343,8 @@ export function resolveBackplateAsset(category, model, backplateKey) {
 /**
  * Resolve output jack assets
  */
-export function resolveOutputJackAsset(category, model, jackKey) {
-  return resolveModelAsset(category, model, 'back', 'output-jacks', `${jackKey}.png`)
+export function resolveOutputJackAsset(category, model, hardwareColor) {
+  return resolveModelAsset(category, model, 'back', 'output-jacks', `${hardwareColor}.png`)
 }
 
 /**
@@ -390,6 +390,14 @@ export function resolveBodyStrapButtonAsset(category, model, buttonKey) {
 }
 
 /**
+ * Get the button preview image for a given option type and value
+ */
+export function getButtonPreview(category, model, optionType, value) {
+  const buttonFileName = `${value}.png`
+  return resolveButtonAsset(category, model, optionType, buttonFileName)
+}
+
+/**
  * Resolve pickup assets
  */
 export function resolvePickupRoute(category, model, pickupType, colorKey, position) {
@@ -411,12 +419,70 @@ export function resolveBodySpecificAsset(category, model, assetType, fileName) {
   return resolveModelAsset(category, model, 'bodies', 'front', assetType, fileName)
 }
 
-/**
- * Get the button preview image for a given option type and value
- */
-export function getButtonPreview(category, model, optionType, value) {
-  const buttonFileName = `${value}.png`
-  return resolveButtonAsset(category, model, optionType, buttonFileName)
+const FRONT_TO_REAR_HEADSTOCK_MAP = {
+  h33r: 'headstock4',
+  h33: 'headstock2',
+  gt6r: 'headstock13',
+  gt6: 'headstock14',
+  '6inr': 'headstock5',
+  '624': 'headstock3',
+  '6in': 'headstock6',
+}
+
+export function getRearHeadstockShape(frontHeadstockShape) {
+  if (!frontHeadstockShape) return 'headstock14'
+  return FRONT_TO_REAR_HEADSTOCK_MAP[frontHeadstockShape] || frontHeadstockShape
+}
+
+export function resolveRearTuners(category, model, frontHeadstockShape, colorKey) {
+  const rearShape = getRearHeadstockShape(frontHeadstockShape)
+  return resolveSharedAsset(category, model, 'back', 'necks', '6-string', 'back', '6-string-neck-thru-back', rearShape, 'tuners', 'locking', `${colorKey}.png`)
+}
+
+export function resolveRearTunerButtons(category, model, frontHeadstockShape, buttonColor) {
+  const rearShape = getRearHeadstockShape(frontHeadstockShape)
+  return resolveSharedAsset(category, model, 'back', 'necks', '6-string', 'back', '6-string-neck-thru-back', rearShape, 'tuners', 'locking', `${buttonColor}-buttons`)
+}
+
+export function resolveFrontTunerButtons(category, model, frontHeadstockShape, buttonColor) {
+  return resolveSharedAsset(category, model, 'headstocks', '6', 'tuners', frontHeadstockShape, `${buttonColor}-buttons`)
+}
+
+export function resolveNeckBolts(category, model) {
+  return resolveModelAsset(category, model, 'back', 'neck bolts')
+}
+
+export function resolveTremoloCoverAsset(category, model, bridgeType, coverKey) {
+  if (bridgeType === 'hipshotTremolo') {
+    if (coverKey === 'black') return resolveModelAsset(category, model, 'back', 'backplates', 'trem-cover')
+    if (coverKey === 'ebony') return resolveModelAsset(category, model, 'back', 'backplates', 'ebony-trem-cover')
+  }
+  if (bridgeType === 'floydRoseTremolo') {
+    if (coverKey === 'black') return resolveModelAsset(category, model, 'back', 'backplates', 'floyd')
+    if (coverKey === 'ebony') return resolveModelAsset(category, model, 'back', 'backplates', 'floyd-ebony')
+    if (coverKey === 'rfm') return resolveModelAsset(category, model, 'back', 'backplates', 'floyd-rfm')
+  }
+  return null
+}
+
+export function resolveBackplateScrewsAsset(category, model) {
+  return resolveModelAsset(category, model, 'back', 'backplates', 'backplate-screws')
+}
+
+export function resolveElectronicsCavityCoverAsset(category, model, coverKey) {
+  return resolveModelAsset(category, model, 'back', 'backplates', `${coverKey}.png`)
+}
+
+export function resolveFrontStrapButtonAsset(category, model, buttonType, hardwareColor) {
+  return resolveModelAsset(category, model, 'bodies', 'front', 'strap buttons', buttonType, `${hardwareColor}.png`)
+}
+
+export function resolveBackStrapButtonColorAsset(category, model, buttonType, hardwareColor) {
+  return resolveModelAsset(category, model, 'back', 'strap buttons', buttonType, `${hardwareColor}.png`)
+}
+
+export function resolveFrontKnobAsset(category, model, knobKey) {
+  return resolveModelAsset(category, model, 'bodies', 'front', 'knobs', `${knobKey}.png`)
 }
 
 /**
@@ -501,4 +567,15 @@ export default {
   resolveBodyStrapButtonAsset,
   getButtonPreview,
   resolveOptionPreview,
+  resolveTremoloCoverAsset,
+  getRearHeadstockShape,
+  resolveRearTuners,
+  resolveRearTunerButtons,
+  resolveFrontTunerButtons,
+  resolveNeckBolts,
+  resolveBackplateScrewsAsset,
+  resolveElectronicsCavityCoverAsset,
+  resolveFrontStrapButtonAsset,
+  resolveBackStrapButtonColorAsset,
+  resolveFrontKnobAsset,
 }

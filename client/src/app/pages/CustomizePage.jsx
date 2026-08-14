@@ -1590,20 +1590,25 @@ export function CustomizePage() {
                     </div>
                   </div>
                   
-                  {/* Tuning */}
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Tuning</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.tuningOptions?.map((opt) => (
-                        <OptionButton
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.tuning === opt.value}
-                          onClick={() => updateConfig({ tuning: opt.value })}
-                        />
-                      ))}
-                    </div>
-                  </div>
+                   {/* Tuning */}
+                   <div>
+                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Tuning</h3>
+                     <div className="grid grid-cols-2 gap-2">
+                       {options.tuningOptions?.map((opt) => (
+                         <OptionButton
+                           key={opt.value}
+                           option={opt}
+                           isSelected={config.tuning === opt.value}
+                           onClick={() => updateConfig({ tuning: opt.value })}
+                         />
+                       ))}
+                     </div>
+                     {['cStandard', 'dropC', 'dropB'].includes(config.tuning) && (
+                       <p className="mt-2 text-[10px] text-white/40 leading-relaxed">
+                         Note: Lower tunings require thicker strings and may require truss rod adjustment. Setup service recommended.
+                       </p>
+                     )}
+                   </div>
                   
                   {/* String Brand */}
                   <div>
@@ -1680,20 +1685,21 @@ export function CustomizePage() {
                     </div>
                   </div>
                   
-                  {/* Tremolo Cover */}
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Tremolo Cover</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.tremoloCoverOptions?.map((opt) => (
-                        <OptionButton
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.tremoloCover === opt.value}
-                          onClick={() => updateConfig({ tremoloCover: opt.value })}
-                        />
-                      ))}
-                    </div>
-                  </div>
+                   {(config.bridge === 'hipshotTremolo' || config.bridge === 'floydRoseTremolo') && (
+                     <div>
+                       <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Tremolo Cover</h3>
+                       <div className="grid grid-cols-2 gap-2">
+                         {options.tremoloCoverOptions?.map((opt) => (
+                           <OptionButton
+                             key={opt.value}
+                             option={opt}
+                             isSelected={config.tremoloCover === opt.value}
+                             onClick={() => updateConfig({ tremoloCover: opt.value })}
+                           />
+                         ))}
+                       </div>
+                     </div>
+                   )}
                 </div>
               )}
               

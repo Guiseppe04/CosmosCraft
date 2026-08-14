@@ -59,7 +59,7 @@ export const DEFAULT_CONFIG = {
   headstockWood: 'plain-maple',
   inlays: 'pearl',
   bridge: 'hipshotFixed',
-  knobs: 'black',
+  knobs: 'chrome',
   pickups: 'hss',
   hardware: 'chrome',
   headstock: 'gt6',
@@ -94,11 +94,11 @@ export const DEFAULT_CONFIG = {
   nut: 'blackGraphTech',
   tuning: 'eStandard',
   stringBrand: 'elixir1046',
-  outputJack: 'none',
-  strapButtons: 'off',
+  outputJack: 'off',
+  strapButtons: 'none',
   tunerButtons: 'off',
-  electronicsCavityCover: 'none',
-  tremoloCover: 'none',
+  electronicsCavityCover: 'black',
+  tremoloCover: 'black',
 }
 
 export const GUITAR_TYPE_OPTIONS = [
@@ -390,8 +390,8 @@ export const NECK_FRETS = {
   gold: asset('all-models/necks/6-string/front/24-fret-front/standard/frets/gold.png'),
 }
 export const NECK_NUT = {
-  white: asset('all-models/necks/6-string/front/24-fret-front/standard/nut/black.png'),
-  black: asset('all-models/necks/6-string/front/24-fret-front/standard/nut/black.png'),
+  blackGraphTech: asset('all-models/necks/6-string/front/24-fret-front/standard/nut/black.png'),
+  ivoryGraphTech: asset('all-models/necks/6-string/front/24-fret-front/standard/nut/ivory.png'),
 }
 
 export const HEADSTOCK_WOOD_OPTIONS = {
@@ -580,35 +580,41 @@ export const KNOB_OPTIONS_BY_BODY = {
     },
   },
   dc: {
-    black: {
-      label: 'Black',
-      note: 'Standard black knobs',
-      src: asset('dc/bodies/front/knobs/black.png'),
-      price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
-    },
-    dtmv: {
-      label: 'Black DTMV',
-      note: 'Modern black DTMV',
-      src: asset('dc/bodies/front/knobs/black-dtmv.png'),
-      price: 15, specs: { size: '', dimensions: '', material: '', notes: '' }
-    },
-    dtc: {
-      label: 'Black DTC',
-      note: 'Modern black DTC',
-      src: asset('dc/bodies/front/knobs/black-dtc.png'),
-      price: 15, specs: { size: '', dimensions: '', material: '', notes: '' }
-    },
     plasticBlack: {
       label: 'Plastic Black',
       note: 'Plain black plastic',
       src: asset('dc/bodies/front/knobs/plasticblack.png'),
       price: 10, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
+    chrome: {
+      label: 'Chrome',
+      note: 'Shiny chrome finish',
+      src: asset('dc/bodies/front/knobs/chrome.png'),
+      price: 20, specs: { size: '', dimensions: '', material: '', notes: '' }
+    },
     plasticWhite: {
       label: 'Plastic White',
       note: 'Plain white plastic',
       src: asset('dc/bodies/front/knobs/plasticwhite.png'),
       price: 10, specs: { size: '', dimensions: '', material: '', notes: '' }
+    },
+    abaloneInlay: {
+      label: 'Abalone Inlay',
+      note: 'Premium abalone inlay',
+      src: asset('dc/bodies/front/knobs/abalone-inlay.png'),
+      price: 30, specs: { size: '', dimensions: '', material: '', notes: '' }
+    },
+    whitePearl: {
+      label: 'White Pearl',
+      note: 'White pearl inlay',
+      src: asset('dc/bodies/front/knobs/white-pearl-inlay.png'),
+      price: 20, specs: { size: '', dimensions: '', material: '', notes: '' }
+    },
+    tamarind: {
+      label: 'Tamarind',
+      note: 'Warm wood-look knobs',
+      src: asset('dc/bodies/front/knobs/tamarind.png'),
+      price: 15, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
   },
   delos: {
@@ -650,6 +656,11 @@ export const HEADSTOCK_OPTIONS = {
       black: asset('all-models/headstocks/6/tuners/gt6/black.png'),
       gold: asset('all-models/headstocks/6/tuners/gt6/gold.png'),
     },
+    rearTuners: {
+      chrome: asset('all-models/back/necks/6-string/back/6-string-neck-thru-back/headstock14/tuners/locking/chrome.png'),
+      black: asset('all-models/back/necks/6-string/back/6-string-neck-thru-back/headstock14/tuners/locking/black.png'),
+      gold: asset('all-models/back/necks/6-string/back/6-string-neck-thru-back/headstock14/tuners/locking/gold.png'),
+    },
     strings: asset('all-models/headstocks/6/string-overlays/standard/gt6.png'),
     trussCover: asset('all-models/headstocks/6/truss-cover/black.png'),
     price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
@@ -663,6 +674,11 @@ export const HEADSTOCK_OPTIONS = {
       chrome: asset('all-models/headstocks/6/tuners/gt6r/chrome.png'),
       black: asset('all-models/headstocks/6/tuners/gt6r/black.png'),
       gold: asset('all-models/headstocks/6/tuners/gt6r/gold.png'),
+    },
+    rearTuners: {
+      chrome: asset('all-models/back/necks/6-string/back/6-string-neck-thru-back/headstock13/tuners/locking/chrome.png'),
+      black: asset('all-models/back/necks/6-string/back/6-string-neck-thru-back/headstock13/tuners/locking/black.png'),
+      gold: asset('all-models/back/necks/6-string/back/6-string-neck-thru-back/headstock13/tuners/locking/gold.png'),
     },
     strings: asset('all-models/headstocks/6/string-overlays/standard/gt6r.png'),
     trussCover: asset('all-models/headstocks/6/truss-cover/black.png'),
@@ -678,6 +694,11 @@ export const HEADSTOCK_OPTIONS = {
       black: asset('all-models/headstocks/6/tuners/6in/black.png'),
       gold: asset('all-models/headstocks/6/tuners/6in/gold.png'),
     },
+    rearTuners: {
+      chrome: asset('all-models/back/necks/6-string/back/6-string-neck-thru-back/headstock6/tuners/locking/chrome.png'),
+      black: asset('all-models/back/necks/6-string/back/6-string-neck-thru-back/headstock6/tuners/locking/black.png'),
+      gold: asset('all-models/back/necks/6-string/back/6-string-neck-thru-back/headstock6/tuners/locking/gold.png'),
+    },
     strings: asset('all-models/headstocks/6/string-overlays/standard/6in.png'),
     trussCover: asset('all-models/headstocks/6/truss-cover/black.png'),
     price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
@@ -691,6 +712,11 @@ export const HEADSTOCK_OPTIONS = {
       chrome: asset('all-models/headstocks/6/tuners/6inr/chrome.png'),
       black: asset('all-models/headstocks/6/tuners/6inr/black.png'),
       gold: asset('all-models/headstocks/6/tuners/6inr/gold.png'),
+    },
+    rearTuners: {
+      chrome: asset('all-models/back/necks/6-string/back/6-string-neck-thru-back/headstock5/tuners/locking/chrome.png'),
+      black: asset('all-models/back/necks/6-string/back/6-string-neck-thru-back/headstock5/tuners/locking/black.png'),
+      gold: asset('all-models/back/necks/6-string/back/6-string-neck-thru-back/headstock5/tuners/locking/gold.png'),
     },
     strings: asset('all-models/headstocks/6/string-overlays/standard/6inr.png'),
     trussCover: asset('all-models/headstocks/6/truss-cover/black.png'),
@@ -706,6 +732,11 @@ export const HEADSTOCK_OPTIONS = {
       black: asset('all-models/headstocks/6/tuners/6kr/black.png'),
       gold: asset('all-models/headstocks/6/tuners/6kr/gold.png'),
     },
+    rearTuners: {
+      chrome: asset('all-models/back/necks/6-string/back/6-string-neck-thru-back/6kr/tuners/locking/chrome.png'),
+      black: asset('all-models/back/necks/6-string/back/6-string-neck-thru-back/6kr/tuners/locking/black.png'),
+      gold: asset('all-models/back/necks/6-string/back/6-string-neck-thru-back/6kr/tuners/locking/gold.png'),
+    },
     strings: asset('all-models/headstocks/6/string-overlays/standard/6kr.png'),
     trussCover: asset('all-models/headstocks/6/truss-cover/black.png'),
     price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
@@ -719,6 +750,11 @@ export const HEADSTOCK_OPTIONS = {
       chrome: asset('all-models/headstocks/6/tuners/624/chrome.png'),
       black: asset('all-models/headstocks/6/tuners/624/black.png'),
       gold: asset('all-models/headstocks/6/tuners/624/gold.png'),
+    },
+    rearTuners: {
+      chrome: asset('all-models/back/necks/6-string/back/6-string-neck-thru-back/headstock3/tuners/locking/chrome.png'),
+      black: asset('all-models/back/necks/6-string/back/6-string-neck-thru-back/headstock3/tuners/locking/black.png'),
+      gold: asset('all-models/back/necks/6-string/back/6-string-neck-thru-back/headstock3/tuners/locking/gold.png'),
     },
     strings: asset('all-models/headstocks/6/string-overlays/standard/624.png'),
     trussCover: asset('all-models/headstocks/6/truss-cover/black.png'),
@@ -734,6 +770,11 @@ export const HEADSTOCK_OPTIONS = {
       black: asset('all-models/headstocks/6/tuners/pth/black.png'),
       gold: asset('all-models/headstocks/6/tuners/pth/gold.png'),
     },
+    rearTuners: {
+      chrome: asset('all-models/back/necks/6-string/back/6-string-neck-thru-back/pth/tuners/locking/chrome.png'),
+      black: asset('all-models/back/necks/6-string/back/6-string-neck-thru-back/pth/tuners/locking/black.png'),
+      gold: asset('all-models/back/necks/6-string/back/6-string-neck-thru-back/pth/tuners/locking/gold.png'),
+    },
     strings: asset('all-models/headstocks/6/string-overlays/standard/pth.png'),
     trussCover: asset('all-models/headstocks/6/truss-cover/black.png'),
     price: 25, specs: { size: '', dimensions: '', material: '', notes: '' }
@@ -747,6 +788,11 @@ export const HEADSTOCK_OPTIONS = {
       chrome: asset('all-models/headstocks/6/tuners/pthr/chrome.png'),
       black: asset('all-models/headstocks/6/tuners/pthr/black.png'),
       gold: asset('all-models/headstocks/6/tuners/pthr/gold.png'),
+    },
+    rearTuners: {
+      chrome: asset('all-models/back/necks/6-string/back/6-string-neck-thru-back/pthr/tuners/locking/chrome.png'),
+      black: asset('all-models/back/necks/6-string/back/6-string-neck-thru-back/pthr/tuners/locking/black.png'),
+      gold: asset('all-models/back/necks/6-string/back/6-string-neck-thru-back/pthr/tuners/locking/gold.png'),
     },
     strings: asset('all-models/headstocks/6/string-overlays/standard/pthr.png'),
     trussCover: asset('all-models/headstocks/6/truss-cover/black.png'),
@@ -762,6 +808,11 @@ export const HEADSTOCK_OPTIONS = {
       black: asset('all-models/headstocks/6/tuners/h33/black.png'),
       gold: asset('all-models/headstocks/6/tuners/h33/gold.png'),
     },
+    rearTuners: {
+      chrome: asset('all-models/back/necks/6-string/back/6-string-neck-thru-back/headstock2/tuners/locking/chrome.png'),
+      black: asset('all-models/back/necks/6-string/back/6-string-neck-thru-back/headstock2/tuners/locking/black.png'),
+      gold: asset('all-models/back/necks/6-string/back/6-string-neck-thru-back/headstock2/tuners/locking/gold.png'),
+    },
     strings: asset('all-models/headstocks/6/string-overlays/standard/h33.png'),
     trussCover: asset('all-models/headstocks/6/truss-cover/black.png'),
     price: 45, specs: { size: '', dimensions: '', material: '', notes: '' }
@@ -775,6 +826,11 @@ export const HEADSTOCK_OPTIONS = {
       chrome: asset('all-models/headstocks/6/tuners/hr33/chrome.png'),
       black: asset('all-models/headstocks/6/tuners/hr33/black.png'),
       gold: asset('all-models/headstocks/6/tuners/hr33/gold.png'),
+    },
+    rearTuners: {
+      chrome: asset('all-models/back/necks/6-string/back/6-string-neck-thru-back/headstock4/tuners/locking/chrome.png'),
+      black: asset('all-models/back/necks/6-string/back/6-string-neck-thru-back/headstock4/tuners/locking/black.png'),
+      gold: asset('all-models/back/necks/6-string/back/6-string-neck-thru-back/headstock4/tuners/locking/gold.png'),
     },
     strings: asset('all-models/headstocks/6/string-overlays/standard/hr33.png'),
     trussCover: asset('all-models/headstocks/6/truss-cover/black.png'),
@@ -1266,34 +1322,38 @@ export const TUNING_OPTIONS = {
 }
 
 export const STRING_BRAND_OPTIONS = {
-  elixir1046: { label: 'Elixir 10-46', note: 'Elixir 10-46 strings', price: 0, specs: specs() },
-  elixir942: { label: 'Elixir 9-42 Super Light', note: 'Elixir 9-42 super light', price: 0, specs: specs() },
+  elixir1046: { label: 'Elixir 1046E', note: 'Elixir 1046E strings', price: 0, specs: specs() },
+  elixir942: { label: 'Elixir 942E Super Light Gauge Strings', note: 'Elixir 942E super light gauge strings', price: 0, specs: specs() },
 }
 
 export const OUTPUT_JACK_OPTIONS = {
-  none: { label: 'None', note: 'No output jack upgrade', price: 0, specs: specs() },
-  standard: { label: 'Standard Jack', note: 'Standard output jack', price: 0, specs: specs() },
-  gold: { label: 'Gold Jack', note: 'Gold output jack', price: 15, specs: specs() },
+  off: { label: 'Off', note: 'No output jack', price: 0, specs: specs() },
+  on: { label: 'On', note: 'Output jack installed', price: 0, specs: specs() },
 }
 
 export const STRAP_BUTTON_OPTIONS = {
-  off: { label: 'Off', note: 'No strap buttons', price: 0, specs: specs() },
-  on: { label: 'On', note: 'Strap buttons installed', price: 10, specs: specs() },
+  none: { label: 'None', note: 'No strap buttons', price: 0, specs: specs() },
+  standard: { label: 'Standard', note: 'Standard strap buttons', price: 0, specs: specs() },
+  straplocks: { label: 'Straplocks', note: 'Straplock system', price: 15, specs: specs() },
 }
 
 export const TUNER_BUTTON_OPTIONS = {
   off: { label: 'Off', note: 'No tuner buttons', price: 0, specs: specs() },
-  on: { label: 'On', note: 'Tuner buttons installed', price: 10, specs: specs() },
+  whitepearl: { label: 'White Pearl', note: 'White pearl tuner buttons', price: 0, specs: specs() },
+  black: { label: 'Black', note: 'Black tuner buttons', price: 0, specs: specs() },
 }
 
 export const ELECTRONICS_CAVITY_COVER_OPTIONS = {
   none: { label: 'None', note: 'No cavity cover', price: 0, specs: specs() },
-  standard: { label: 'Standard Cover', note: 'Standard electronics cavity cover', price: 10, specs: specs() },
+  black: { label: 'Black', note: 'Black electronics cavity cover', price: 0, specs: specs() },
+  ebony: { label: 'Ebony', note: 'Ebony electronics cavity cover', price: 10, specs: specs() },
 }
 
 export const TREMOLO_COVER_OPTIONS = {
   none: { label: 'None', note: 'No tremolo cover', price: 0, specs: specs() },
-  standard: { label: 'Standard Cover', note: 'Standard tremolo cover', price: 10, specs: specs() },
+  black: { label: 'Black', note: 'Black tremolo cover', price: 0, specs: specs() },
+  ebony: { label: 'Ebony', note: 'Ebony tremolo cover', price: 10, specs: specs() },
+  rfm: { label: 'RFM', note: 'RFM tremolo cover', price: 15, specs: specs() },
 }
 
 export function resolveVariant(source, colorKey) {

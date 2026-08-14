@@ -16,6 +16,19 @@ import {
   resolveHeadstockWoodAsset,
   resolveFingerboardWoodAsset,
   resolveTrussCover,
+  resolveTremoloCoverAsset,
+  resolveRearTuners,
+  resolveRearTunerButtons,
+  resolveFrontTunerButtons,
+  resolveNeckBolts,
+  resolveBackplateAsset,
+  resolveBackplateScrewsAsset,
+  resolveElectronicsCavityCoverAsset,
+  resolveFrontStrapButtonAsset,
+  resolveBackStrapButtonColorAsset,
+  resolveFrontKnobAsset,
+  resolveOutputJackAsset,
+  resolveNeckRearFinishAsset,
 } from '../../lib/assetResolver.js'
 
 const layerStyle = (src, extra = {}) => ({
@@ -122,6 +135,19 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
 
   const knobAsset = guitarBuilder.KNOB_OPTIONS_BY_BODY[config.body]?.[config.knobs]?.src ?? null
 
+  const rearTunersSrc = resolveRearTuners('electric', config.body || 'dc', config.headstock || 'gt6', colorKey)
+  const rearTunerButtonsSrc = resolveRearTunerButtons('electric', config.body || 'dc', config.headstock || 'gt6', config.tunerButtons || 'off')
+  const frontTunerButtonsSrc = resolveFrontTunerButtons('electric', config.body || 'dc', config.headstock || 'gt6', config.tunerButtons || 'off')
+  const neckBoltsSrc = config.body === 'delos' ? resolveNeckBolts('electric', 'delos') : null
+  const backplateSrc = config.electronicsCavityCover && config.electronicsCavityCover !== 'none' ? resolveElectronicsCavityCoverAsset('electric', config.body || 'dc', config.electronicsCavityCover) : null
+  const backplateScrewsSrc = backplateSrc ? resolveBackplateScrewsAsset('electric', config.body || 'dc') : null
+  const outputJackSrc = config.outputJack === 'on' ? resolveOutputJackAsset('electric', config.body || 'dc', colorKey) : null
+  const tremoloCoverSrc = (config.bridge === 'hipshotTremolo' || config.bridge === 'floydRoseTremolo') && config.tremoloCover && config.tremoloCover !== 'none' ? resolveTremoloCoverAsset('electric', config.body || 'dc', config.bridge, config.tremoloCover) : null
+  const rearNeckFinishSrc = config.neckRearFinish && config.neckRearFinish !== 'none' ? resolveRearNeckFinishAsset('electric', config.body || 'dc', config.neckRearFinish) : null
+  const frontStrapButtonSrc = config.strapButtons && config.strapButtons !== 'none' ? resolveFrontStrapButtonAsset('electric', config.body || 'dc', config.strapButtons, colorKey) : null
+  const rearStrapButtonSrc = config.strapButtons && config.strapButtons !== 'none' ? resolveBackStrapButtonColorAsset('electric', config.body || 'dc', config.strapButtons, colorKey) : null
+  const hardwareMetalKnobSrc = resolveFrontKnobAsset('electric', config.body || 'dc', colorKey)
+
   // Resolve top wood texture if selected
   const topWoodTexture = config.topWood && config.topWood !== 'none'
     ? resolveTopWoodAsset('electric', config.body || 'dc', config.topWood)
@@ -162,13 +188,16 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
     const bridgeSrc = resolveVariant(bridge.assets, colorKey)
     const strapSrc = resolveVariant(bodyAssets.strap, colorKey)
     const switchSrc = resolveVariant(bodyAssets.switch, colorKey)
+    const hardwareMetalKnobSrc = resolveFrontKnobAsset('electric', config.body || 'dc', config.knobs || 'chrome')
+    const frontStrapButtonSrc = resolveFrontStrapButtonAsset('electric', config.body || 'dc', config.body || 'dc', colorKey)
     return [
       { name: 'switch', src: switchSrc, className: 'opacity-90', protectedLayer: true, style: { zIndex: 130 } },
-      { name: 'strap-button', src: strapSrc, className: 'opacity-95', protectedLayer: true, style: { zIndex: 131 } },
+      { name: 'front-strap-button', src: frontStrapButtonSrc, className: 'opacity-95', protectedLayer: true, style: { zIndex: 131 } },
       { name: 'knobs', src: knobAsset, className: 'opacity-95', protectedLayer: true, style: { zIndex: 132 } },
-      { name: 'bridge', src: bridgeSrc, className: 'opacity-95', protectedLayer: true, style: { zIndex: 133 } },
+      { name: 'hardware-metal-knob', src: hardwareMetalKnobSrc, className: 'opacity-95', protectedLayer: true, style: { zIndex: 133 } },
+      { name: 'bridge', src: bridgeSrc, className: 'opacity-95', protectedLayer: true, style: { zIndex: 134 } },
     ].filter(layer => Boolean(layer.src))
-  }, [bodyAssets, bridge.assets, colorKey, knobAsset])
+  }, [bodyAssets, bridge.assets, colorKey, knobAsset, config.knobs, config.body])
 
   const overlayLayers = useMemo(() => {
     const layers = [
@@ -265,7 +294,7 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
       },
       { name: 'inlays', src: inlaySrc, className: 'opacity-95', protectedLayer: true, style: { zIndex: 102 } },
       { name: 'frets', src: NECK_FRETS[config.pickups === 'hh' ? 'gold' : 'stainless'], className: 'opacity-85', protectedLayer: true, style: { zIndex: 103 } },
-      { name: 'nut', src: NECK_NUT[hardware.color === 'black' ? 'black' : 'white'], className: 'opacity-90', protectedLayer: true, style: { zIndex: 104 } },
+      { name: 'nut', src: NECK_NUT[config.nut] || NECK_NUT.blackGraphTech, className: 'opacity-90', protectedLayer: true, style: { zIndex: 104 } },
       {
         name: 'headstock-wood',
         maskSrc: headstock.mask,
@@ -278,83 +307,81 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
       },
       { name: 'headstock-truss-cover', src: headstockTrussCover, className: 'opacity-95', protectedLayer: true, style: { zIndex: 106 } },
       { name: 'headstock-tuners', src: headstockTuners, className: 'opacity-95', protectedLayer: true, style: { zIndex: 107 } },
+      { name: 'headstock-front-tuner-buttons', src: frontTunerButtonsSrc, className: 'opacity-90', protectedLayer: true, style: { zIndex: 108 } },
     ].filter(Boolean)
-  }, [bodyFinish.texture, bodyFinish.color, bodyWood.texture, colorKey, config.body, config.pickups, config.topWood, config.finishType, config.finishColor, finishTypeColorAsset, topWoodTexture, fretboard.src, headstock, headstockWood.texture, headstockTrussCover, inlaySrc, neck.filter, neck.src, hardware.color, modelBodySrc, config.trussRodCover])
+  }, [bodyFinish.texture, bodyFinish.color, bodyWood.texture, colorKey, config.body, config.pickups, config.topWood, config.finishType, config.finishColor, finishTypeColorAsset, topWoodTexture, fretboard.src, headstock, headstockWood.texture, headstockTrussCover, inlaySrc, neck.filter, neck.src, hardware.color, modelBodySrc, config.trussRodCover, config.nut, config.tunerButtons, frontTunerButtonsSrc])
   
   const rearNeckLayers = useMemo(() => {
-    const headstockTuners = resolveVariant(headstock.tuners, colorKey)
+    const headstockTuners = rearTunersSrc
 
-    return [
-      {
-        name: 'body-wood',
-        maskSrc: modelBodySrc,
-        style: {
-          backgroundImage: `url(${bodyWood.texture})`,
-          opacity: 1,
-          mixBlendMode: 'normal',
-          zIndex: 1,
-        },
-      },
-      // Top wood on rear
-      topWoodTexture
-        ? {
-            name: 'body-top-wood',
-            maskSrc: modelBodySrc,
-            style: {
-              backgroundImage: `url(${topWoodTexture})`,
-              opacity: 0.8,
-              mixBlendMode: 'normal',
-              zIndex: 2,
-            },
-          }
-        : null,
-      // Finish on rear
-      finishTypeColorAsset
-        ? {
-            name: 'body-finish-type',
-            maskSrc: modelBodySrc,
-            style: {
-              backgroundImage: `url(${finishTypeColorAsset})`,
-              opacity: 1,
-              mixBlendMode: 'normal',
-              zIndex: 3,
-            },
-          }
-        : bodyFinish.texture
-        ? {
-            name: 'body-finish-texture',
-            maskSrc: modelBodySrc,
-            style: {
-              backgroundImage: `url(${bodyFinish.texture})`,
-              opacity: 1,
-              mixBlendMode: 'normal',
-              zIndex: 3,
-            },
-          }
-         : bodyFinish.color
+     return [
+       {
+         name: 'body-wood',
+         maskSrc: modelBodySrc,
+         style: {
+           backgroundImage: `url(${bodyWood.texture})`,
+           opacity: 1,
+           mixBlendMode: 'normal',
+           zIndex: 1,
+         },
+       },
+       topWoodTexture
          ? {
-             name: 'body-finish-color',
+             name: 'body-top-wood',
              maskSrc: modelBodySrc,
              style: {
-               backgroundColor: bodyFinish.color,
+               backgroundImage: `url(${topWoodTexture})`,
+               opacity: 0.8,
+               mixBlendMode: 'normal',
+               zIndex: 2,
+             },
+           }
+         : null,
+       finishTypeColorAsset
+         ? {
+             name: 'body-finish-type',
+             maskSrc: modelBodySrc,
+             style: {
+               backgroundImage: `url(${finishTypeColorAsset})`,
                opacity: 1,
                mixBlendMode: 'normal',
                zIndex: 3,
              },
            }
-         : null,
-        // Top coat on rear view (no mask - apply full rear overlay)
-        topCoatAsset
+         : bodyFinish.texture
+         ? {
+             name: 'body-finish-texture',
+             maskSrc: modelBodySrc,
+             style: {
+               backgroundImage: `url(${bodyFinish.texture})`,
+               opacity: 1,
+               mixBlendMode: 'normal',
+               zIndex: 3,
+             },
+           }
+          : bodyFinish.color
           ? {
-              name: 'body-top-coat',
+              name: 'body-finish-color',
+              maskSrc: modelBodySrc,
               style: {
-                backgroundImage: `url(${topCoatAsset})`,
+                backgroundColor: bodyFinish.color,
                 opacity: 1,
                 mixBlendMode: 'normal',
-                zIndex: 4,
+                zIndex: 3,
               },
             }
           : null,
+         topCoatAsset
+           ? {
+               name: 'body-top-coat',
+               style: {
+                 backgroundImage: `url(${topCoatAsset})`,
+                 opacity: 1,
+                 mixBlendMode: 'normal',
+                 zIndex: 4,
+               },
+             }
+           : null,
        {
          name: 'neck',
          maskSrc: NECK_MASK,
@@ -387,9 +414,17 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
          },
          protectedLayer: true,
        },
-       { name: 'headstock-tuners', src: headstockTuners, className: 'opacity-95', protectedLayer: true, style: { zIndex: 103 } },
+       { name: 'neck-bolts', src: neckBoltsSrc, className: 'opacity-90', protectedLayer: true, style: { zIndex: 104 } },
+       { name: 'rear-tuners', src: rearTunersSrc, className: 'opacity-95', protectedLayer: true, style: { zIndex: 105 } },
+       { name: 'rear-tuner-buttons', src: rearTunerButtonsSrc, className: 'opacity-90', protectedLayer: true, style: { zIndex: 106 } },
+       { name: 'backplate', src: backplateSrc, className: 'opacity-95', protectedLayer: true, style: { zIndex: 107 } },
+       { name: 'backplate-screws', src: backplateScrewsSrc, className: 'opacity-90', protectedLayer: true, style: { zIndex: 108 } },
+       tremoloCoverSrc ? { name: 'tremolo-cover', src: tremoloCoverSrc, className: 'opacity-95', protectedLayer: true, style: { zIndex: 109 } } : null,
+       outputJackSrc ? { name: 'output-jack', src: outputJackSrc, className: 'opacity-95', protectedLayer: true, style: { zIndex: 110 } } : null,
+       { name: 'rear-strap-button', src: rearStrapButtonSrc, className: 'opacity-95', protectedLayer: true, style: { zIndex: 111 } },
+       { name: 'rear-neck-finish', src: rearNeckFinishSrc, className: 'opacity-90', protectedLayer: true, style: { zIndex: 112 } },
      ].filter(Boolean)
-   }, [bodyFinish.texture, bodyFinish.color, bodyWood.texture, colorKey, config.topWood, config.finishType, config.finishColor, finishTypeColorAsset, topWoodTexture, fretboard.src, headstock, headstockWood.texture, modelBodySrc, neck.filter, neck.src, topCoatAsset])
+   }, [bodyFinish.texture, bodyFinish.color, bodyWood.texture, colorKey, config.topWood, config.finishType, config.finishColor, finishTypeColorAsset, topWoodTexture, fretboard.src, headstock, headstockWood.texture, modelBodySrc, neck.filter, neck.src, topCoatAsset, neckBoltsSrc, rearTunersSrc, rearTunerButtonsSrc, backplateSrc, backplateScrewsSrc, tremoloCoverSrc, outputJackSrc, rearNeckFinishSrc, rearStrapButtonSrc])
   
   const stringLayer = useMemo(() => {
     return headstock.strings ? { src: headstock.strings, className: 'opacity-95', style: { zIndex: 110 } } : null
@@ -494,12 +529,6 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
                       layerName={layer.name}
                       protectedLayer={layer.protectedLayer}
                     />
-                  ))}
-                  {resolveVariant(bodyAssets.strap, colorKey) && (
-                    <GuitarLayer src={resolveVariant(bodyAssets.strap, colorKey)} className="opacity-95" style={{ zIndex: 110 }} layerName="strap" protectedLayer />
-                  )}
-                  {overlayLayers.map((layer, index) => (
-                    <GuitarLayer key={`overlay-${index}`} src={layer.src} style={layer.style} layerName={`overlay-${index}`} />
                   ))}
                 </>
               )}
