@@ -13,9 +13,11 @@ import { EmptyState } from '../components/shared/EmptyState'
 
 const REFUND_STATUS_MAP = {
   pending: { label: 'Pending Review', color: '#f59e0b', bgColor: 'bg-amber-500/20', textColor: 'text-amber-400', borderColor: 'border-amber-500/30' },
+  'pending_payment_verification': { label: 'Awaiting Payment Verification', color: '#8b5cf6', bgColor: 'bg-violet-500/20', textColor: 'text-violet-400', borderColor: 'border-violet-500/30' },
   approved: { label: 'Approved', color: '#22c55e', bgColor: 'bg-green-500/20', textColor: 'text-green-400', borderColor: 'border-green-500/30' },
+  processing: { label: 'Processing', color: '#38bdf8', bgColor: 'bg-sky-500/20', textColor: 'text-sky-400', borderColor: 'border-sky-500/30' },
   rejected: { label: 'Rejected', color: '#f87171', bgColor: 'bg-red-500/20', textColor: 'text-red-400', borderColor: 'border-red-500/30' },
-  refunded: { label: 'Refunded', color: '#38bdf8', bgColor: 'bg-sky-500/20', textColor: 'text-sky-400', borderColor: 'border-sky-500/30' },
+  refunded: { label: 'Refunded', color: '#22c55e', bgColor: 'bg-green-500/20', textColor: 'text-green-400', borderColor: 'border-green-500/30' },
 }
 
 const REASON_LABELS = {
@@ -96,7 +98,14 @@ export function RefundRequestsTab({ showToast }) {
     if (!selectedRequest?.refund_request_id) return
     setUpdatingStatus(true)
     try {
-      const res = await adminApi.updateRefundStatus(selectedRequest.refund_request_id, newStatus, { adminNotes: adminNotes || undefined })
+      // Project-scoped refunds (custom build) use the project refund endpoint with
+      // the approved → processing → refunded chain. Order-scoped refunds keep the
+      // existing order endpoint so the delivered-item flow is unchanged.
+      if (selectedRequest.project_id) {
+        await adminApi.updateProjectRefundStatus(selectedRequest.refund_request_id, newStatus, { adminNotes: adminNotes || undefined })
+      } else {
+        await adminApi.updateRefundStatus(selectedRequest.refund_request_id, newStatus, { adminNotes: adminNotes || undefined })
+      }
       showToast?.(`Refund request ${newStatus} successfully.`)
       setSelectedRequest(null)
       setAdminNotes('')
@@ -108,8 +117,10 @@ export function RefundRequestsTab({ showToast }) {
     }
   }
 
-  const getRefundTotal = (items = []) => {
-    return items.reduce((sum, item) => sum + Number(item.refund_amount || 0), 0)
+  const getRefundTotal = (items = [], amount_requested) => {
+    const itemTotal = items.reduce((sum, item) => sum + Number(item.refund_amount || 0), 0)
+    if (itemTotal > 0) return itemTotal
+    return Number(amount_requested || 0)
   }
 
   const statusCounts = useMemo(() => {
@@ -154,6 +165,7 @@ export function RefundRequestsTab({ showToast }) {
               <option value="all">All Status</option>
               <option value="pending">Pending</option>
               <option value="approved">Approved</option>
+              <option value="processing">Processing</option>
               <option value="rejected">Rejected</option>
               <option value="refunded">Refunded</option>
             </select>
@@ -187,7 +199,7 @@ export function RefundRequestsTab({ showToast }) {
               <tbody>
                 {refundRequests.map((req) => {
                   const statusConfig = REFUND_STATUS_MAP[req.status] || REFUND_STATUS_MAP.pending
-                  const refundTotal = getRefundTotal(req.items)
+                  const refundTotal = getRefundTotal(req.items, req.amount_requested)
                   const displayReason = formatReason(req.reason)
                   return (
                     <tr key={req.refund_request_id} className="border-b border-[var(--border)]/50 hover:bg-white/[0.03] transition-colors duration-150">
@@ -316,7 +328,7 @@ export function RefundRequestsTab({ showToast }) {
                   </table>
                   <div className="px-4 py-3 border-t border-[var(--border)] flex justify-between items-center">
                     <span className="text-sm text-[var(--text-muted)]">Total Refund</span>
-                    <span className="text-lg font-bold text-[var(--gold-primary)]">{formatCurrency(getRefundTotal(selectedRequest.items))}</span>
+                    <span className="text-lg font-bold text-[var(--gold-primary)]">{formatCurrency(getRefundTotal(selectedRequest.items, selectedRequest.amount_requested))}</span>
                   </div>
                 </div>
               </div>
@@ -369,7 +381,29 @@ export function RefundRequestsTab({ showToast }) {
                 </div>
               )}
 
+              {selectedRequest.status === 'pending_payment_verification' && (
+                <div className="rounded-xl border border-violet-500/30 bg-violet-500/5 p-4">
+                  <p className="text-sm text-violet-300/90 leading-relaxed">
+                    <Clock className="w-4 h-4 inline-block mr-1.5 -mt-0.5" />
+                    Refund is pending payment verification. Verify or reject the associated payment first.
+                  </p>
+                </div>
+              )}
+
               {selectedRequest.status === 'approved' && (
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => handleUpdateStatus('processing')}
+                    disabled={updatingStatus}
+                    className="flex-1 py-2.5 rounded-xl bg-sky-500 text-white font-bold text-sm hover:bg-sky-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {updatingStatus ? <Loader2 className="w-4 h-4 animate-spin" /> : <Clock className="w-4 h-4" />}
+                    Mark Processing
+                  </button>
+                </div>
+              )}
+
+              {selectedRequest.status === 'processing' && (
                 <div className="flex gap-3">
                   <button
                     onClick={() => handleUpdateStatus('refunded')}

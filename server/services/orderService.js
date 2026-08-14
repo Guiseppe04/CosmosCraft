@@ -1,5 +1,6 @@
 const { pool } = require('../config/database')
 const { generateOrderNumber, generateRefundRequestNumber, determineOrderTypePrefix } = require('../utils/orderNumber')
+const projectRefundService = require('./projectRefundService')
 
 const syncStockToBuilderParts = async (productId, delta) => {
   if (!productId || delta === 0) return;
@@ -175,9 +176,9 @@ const resolveOrderPaymentMethod = (order = {}, payment = null) => {
   ).toLowerCase()
 
   if (!paymentMethod) return null
-  if (paymentMethod.includes('cash') || paymentMethod.includes('cod')) return 'cash'
   if (paymentMethod.includes('gcash')) return 'gcash'
   if (paymentMethod.includes('bank') || paymentMethod.includes('transfer')) return 'bank_transfer'
+  if (paymentMethod.includes('cash') || paymentMethod.includes('cod')) return 'cash'
   return paymentMethod
 }
 
@@ -794,9 +795,9 @@ exports.getOrderById = async (orderId, userId) => {
     [orderId]
   )
 
-  // Get payment information
+  // Get payment information (latest payment for this order)
   const paymentRes = await pool.query(
-    `SELECT * FROM payments WHERE order_id = $1`,
+    `SELECT * FROM payments WHERE order_id = $1 ORDER BY created_at DESC LIMIT 1`,
     [orderId]
   )
 
@@ -1089,156 +1090,261 @@ exports.updatePaymentStatus = async (orderId, status, options = {}) => {
     admin_user_id 
   } = options
 
-  // Get current order to check status transition
-  const orderRes = await pool.query(
-    `SELECT
-       o.payment_status,
-       o.status,
-       o.notes,
-       (
-         SELECT p.method::text
-         FROM payments p
-         WHERE p.order_id = o.order_id
-         ORDER BY p.created_at DESC
-         LIMIT 1
-       ) AS payment_method
-     FROM orders o
-     WHERE o.order_id = $1`,
-    [orderId]
-  )
-  
-  if (orderRes.rows.length === 0) return null
-  
-  const currentStatus = orderRes.rows[0].payment_status
-  const resolvedPaymentMethod = resolveOrderPaymentMethod(
-    { notes: orderRes.rows[0].notes, payment_method: orderRes.rows[0].payment_method },
-    null
-  )
-
-  if (resolvedPaymentMethod === 'cash') {
-    throw createValidationError('COD orders do not support manual payment verification updates')
-  }
-  
-  // Validate status transition
-  if (!isValidPaymentStatusTransition(currentStatus, status)) {
-    throw createValidationError(`Invalid payment status transition from '${currentStatus}' to '${status}'`)
-  }
-
-  // Build update query dynamically
-  const updateFields = ['payment_status = $1', 'updated_at = CURRENT_TIMESTAMP']
-  const updateValues = [status]
-  let paramIndex = 2
-
-  if (reference_number !== undefined) {
-    updateFields.push(`payment_reference_number = $${paramIndex++}`)
-    updateValues.push(reference_number)
-  }
-
-  if (status === 'approved' || status === 'rejected') {
-    updateFields.push(`reviewed_by = $${paramIndex++}`)
-    updateValues.push(admin_user_id || null)
-    updateFields.push(`reviewed_at = CURRENT_TIMESTAMP`)
-  }
-
-  if (status !== 'rejected') {
-    updateFields.push(`rejection_reason = NULL`)
-  }
-
-  if (status === 'rejected' && rejection_reason) {
-    updateFields.push(`rejection_reason = $${paramIndex++}`)
-    updateValues.push(rejection_reason)
-  }
-
-  if (admin_notes) {
-    updateFields.push(`admin_notes = $${paramIndex++}`)
-    updateValues.push(admin_notes)
-  }
-
-  updateValues.push(orderId)
-
-  const res = await pool.query(
-    `UPDATE orders SET ${updateFields.join(', ')} WHERE order_id = $${paramIndex} RETURNING *`,
-    updateValues
-  )
-
-  const order = res.rows[0]
-
-  // Log to consolidated audit_logs table
+  const client = await pool.connect()
   try {
-    const auditService = require('./auditService');
-    await auditService.logAction(
-      admin_user_id,
-      status === 'approved' ? 'VERIFY' : status === 'rejected' ? 'REJECT' : 'UPDATE',
-      'payment',
-      orderId,
-      {
-        previous_status: currentStatus,
-        new_status: status,
-        reference_number,
-        rejection_reason,
-        admin_notes,
-        admin_name,
-        admin_email
-      }
-    );
-  } catch (auditErr) {
-    console.warn('Audit log not available:', auditErr.message);
-  }
+    await client.query('BEGIN')
 
-  return order
+    // Get current order to check status transition
+    const orderRes = await client.query(
+      `SELECT
+         o.payment_status,
+         o.status,
+         o.notes,
+         (
+           SELECT p.method::text
+           FROM payments p
+           WHERE p.order_id = o.order_id
+           ORDER BY p.created_at DESC
+           LIMIT 1
+         ) AS payment_method
+       FROM orders o
+       WHERE o.order_id = $1`,
+      [orderId]
+    )
+    
+    if (orderRes.rows.length === 0) {
+      await client.query('ROLLBACK')
+      return null
+    }
+    
+    const currentStatus = orderRes.rows[0].payment_status
+    const resolvedPaymentMethod = resolveOrderPaymentMethod(
+      { notes: orderRes.rows[0].notes, payment_method: orderRes.rows[0].payment_method },
+      null
+    )
+
+    if (resolvedPaymentMethod === 'cash') {
+      await client.query('ROLLBACK')
+      throw createValidationError('COD orders do not support manual payment verification updates')
+    }
+    
+    // Validate status transition
+    if (!isValidPaymentStatusTransition(currentStatus, status)) {
+      await client.query('ROLLBACK')
+      throw createValidationError(`Invalid payment status transition from '${currentStatus}' to '${status}'`)
+    }
+
+    // Build update query dynamically
+    const updateFields = ['payment_status = $1', 'updated_at = CURRENT_TIMESTAMP']
+    const updateValues = [status]
+    let paramIndex = 2
+
+    if (reference_number !== undefined) {
+      updateFields.push(`payment_reference_number = $${paramIndex++}`)
+      updateValues.push(reference_number)
+    }
+
+    if (status === 'approved' || status === 'rejected') {
+      updateFields.push(`reviewed_by = $${paramIndex++}`)
+      updateValues.push(admin_user_id || null)
+      updateFields.push(`reviewed_at = CURRENT_TIMESTAMP`)
+    }
+
+    if (status !== 'rejected') {
+      updateFields.push(`rejection_reason = NULL`)
+    }
+
+    if (status === 'rejected' && rejection_reason) {
+      updateFields.push(`rejection_reason = $${paramIndex++}`)
+      updateValues.push(rejection_reason)
+    }
+
+    if (admin_notes) {
+      updateFields.push(`admin_notes = $${paramIndex++}`)
+      updateValues.push(admin_notes)
+    }
+
+    updateValues.push(orderId)
+
+    const res = await client.query(
+      `UPDATE orders SET ${updateFields.join(', ')} WHERE order_id = $${paramIndex} RETURNING *`,
+      updateValues
+    )
+
+    const order = res.rows[0]
+
+    // Sync the latest payment record to match the new order payment status
+    const paymentStatusMap = {
+      'approved': 'verified',
+      'rejected': 'rejected',
+      'pending': 'pending',
+      'proof_submitted': 'for_verification',
+      'under_review': 'for_verification',
+      'failed': 'cancelled',
+    }
+    const newPaymentStatus = paymentStatusMap[status] || status
+
+    const latestPaymentRes = await client.query(
+      `SELECT payment_id FROM payments WHERE order_id = $1 ORDER BY created_at DESC LIMIT 1`,
+      [orderId]
+    )
+    const latestPaymentId = latestPaymentRes.rows[0]?.payment_id || null
+
+    if (latestPaymentId) {
+      const paymentUpdateFields = ['status = $1', 'updated_at = CURRENT_TIMESTAMP']
+      const paymentUpdateValues = [newPaymentStatus]
+      let paymentParamIndex = 2
+
+      if (newPaymentStatus === 'verified') {
+        paymentUpdateFields.push(`verified_by = $${paymentParamIndex++}`)
+        paymentUpdateValues.push(admin_user_id || null)
+        paymentUpdateFields.push(`verified_at = CURRENT_TIMESTAMP`)
+      }
+
+      if (newPaymentStatus === 'rejected' && rejection_reason) {
+        paymentUpdateFields.push(`rejection_reason = $${paymentParamIndex++}`)
+        paymentUpdateValues.push(rejection_reason)
+      }
+
+      paymentUpdateFields.push(`metadata = COALESCE(metadata, '{}'::jsonb) || $${paymentParamIndex++}`)
+      paymentUpdateValues.push(JSON.stringify({ admin_notes: admin_notes || null, reference_number: reference_number || null }))
+
+      paymentUpdateValues.push(latestPaymentId)
+
+      await client.query(
+        `UPDATE payments SET ${paymentUpdateFields.join(', ')} WHERE payment_id = $${paymentParamIndex}`,
+        paymentUpdateValues
+      )
+    }
+
+    // Auto-transition any pending_payment_verification refunds for this order
+    if (status === 'approved' || status === 'rejected') {
+      await projectRefundService.transitionRefundStatusesForPayment(client, orderId, status === 'approved' ? 'verified' : 'rejected')
+    }
+
+    await client.query('COMMIT')
+
+    // Log to consolidated audit_logs table
+    try {
+      const auditService = require('./auditService');
+      await auditService.logAction(
+        admin_user_id,
+        status === 'approved' ? 'VERIFY' : status === 'rejected' ? 'REJECT' : 'UPDATE',
+        'payment',
+        orderId,
+        {
+          previous_status: currentStatus,
+          new_status: status,
+          reference_number,
+          rejection_reason,
+          admin_notes,
+          admin_name,
+          admin_email
+        }
+      );
+    } catch (auditErr) {
+      console.warn('Audit log not available:', auditErr.message);
+    }
+
+    return order
+  } catch (error) {
+    await client.query('ROLLBACK')
+    throw error
+  } finally {
+    client.release()
+  }
 }
 
 exports.approvePayment = async (orderId, options = {}) => {
   const { admin_name, admin_email, admin_user_id } = options
-  
-  // Get current status first
-  const currentRes = await pool.query(
-    'SELECT payment_status FROM orders WHERE order_id = $1',
-    [orderId]
-  )
-  
-  if (currentRes.rows.length === 0) return null
-  
-  const currentStatus = currentRes.rows[0].payment_status
-  
-  // Validate transition to approved
-  if (!isValidPaymentStatusTransition(currentStatus, 'approved')) {
-    throw createValidationError(`Cannot approve payment with current status: ${currentStatus}`)
-  }
-  
-  const res = await pool.query(
-    `UPDATE orders SET 
-      payment_status = 'approved', 
-      reviewed_by = $1, 
-      reviewed_at = CURRENT_TIMESTAMP,
-      rejection_reason = NULL,
-      updated_at = CURRENT_TIMESTAMP 
-    WHERE order_id = $2 RETURNING *`,
-    [admin_user_id || null, orderId]
-  )
-  
-  const order = res.rows[0]
-  
-  // Log to consolidated audit_logs table
+
+  const client = await pool.connect()
   try {
-    const auditService = require('./auditService');
-    await auditService.logAction(
-      admin_user_id || null,
-      'VERIFY',
-      'payment',
-      orderId,
-      {
-        previous_status: currentStatus,
-        new_status: 'approved',
-        admin_name,
-        admin_email
-      }
-    );
-  } catch (auditErr) {
-    console.warn('Audit log not available:', auditErr.message);
+    await client.query('BEGIN')
+
+    // Get current status first
+    const currentRes = await client.query(
+      'SELECT payment_status FROM orders WHERE order_id = $1',
+      [orderId]
+    )
+    
+    if (currentRes.rows.length === 0) {
+      await client.query('ROLLBACK')
+      return null
+    }
+    
+    const currentStatus = currentRes.rows[0].payment_status
+    
+    // Validate transition to approved
+    if (!isValidPaymentStatusTransition(currentStatus, 'approved')) {
+      await client.query('ROLLBACK')
+      throw createValidationError(`Cannot approve payment with current status: ${currentStatus}`)
+    }
+    
+    const res = await client.query(
+      `UPDATE orders SET 
+        payment_status = 'approved', 
+        reviewed_by = $1, 
+        reviewed_at = CURRENT_TIMESTAMP,
+        rejection_reason = NULL,
+        updated_at = CURRENT_TIMESTAMP 
+      WHERE order_id = $2 RETURNING *`,
+      [admin_user_id || null, orderId]
+    )
+    
+    const order = res.rows[0]
+
+    // Sync the latest payment record to verified
+    const latestPaymentRes = await client.query(
+      `SELECT payment_id FROM payments WHERE order_id = $1 ORDER BY created_at DESC LIMIT 1`,
+      [orderId]
+    )
+    const latestPaymentId = latestPaymentRes.rows[0]?.payment_id || null
+
+    if (latestPaymentId) {
+      await client.query(
+        `UPDATE payments SET
+          status = 'verified',
+          verified_by = $1,
+          verified_at = CURRENT_TIMESTAMP,
+          metadata = COALESCE(metadata, '{}'::jsonb) || $2,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE payment_id = $3`,
+        [admin_user_id || null, JSON.stringify({ admin_notes: null, reference_number: null }), latestPaymentId]
+      )
+    }
+
+    // Auto-transition any pending_payment_verification refunds for this order
+    await projectRefundService.transitionRefundStatusesForPayment(client, orderId, 'verified')
+
+    await client.query('COMMIT')
+
+    // Log to consolidated audit_logs table
+    try {
+      const auditService = require('./auditService');
+      await auditService.logAction(
+        admin_user_id || null,
+        'VERIFY',
+        'payment',
+        orderId,
+        {
+          previous_status: currentStatus,
+          new_status: 'approved',
+          admin_name,
+          admin_email
+        }
+      );
+    } catch (auditErr) {
+      console.warn('Audit log not available:', auditErr.message);
+    }
+    
+    return order
+  } catch (error) {
+    await client.query('ROLLBACK')
+    throw error
+  } finally {
+    client.release()
   }
-  
-  return order
 }
 
 exports.updateShipment = async (orderId, shipmentData) => {

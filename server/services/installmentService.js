@@ -130,35 +130,120 @@ exports.createInstallmentSchedule = async (
 
 /**
  * Mark an installment as paid (linked to a payment).
- * @param {string} scheduleId - The installment schedule ID
- * @param {string} paymentId - The payment ID that covers this installment
+ * @param {string|object} scheduleIdOrOptions - The installment schedule ID or options object
+ * @param {string} [scheduleIdOrOptions.scheduleId] - The installment schedule ID
+ * @param {string} [scheduleIdOrOptions.paymentId] - The payment ID that covers this installment
+ * @param {string} [scheduleIdOrOptions.referenceNumber] - Payment reference number
+ * @param {string} [scheduleIdOrOptions.method] - Payment method (gcash/bank_transfer)
+ * @param {string} [scheduleIdOrOptions.notes] - Admin notes
+ * @param {number} [scheduleIdOrOptions.amount] - Payment amount
+ * @param {string} [scheduleIdOrOptions.adminUserId] - Admin user ID doing the verification
+ * @param {string} [paymentId] - Backwards-compatible payment ID parameter
  * @returns {Promise<object>} Updated installment record
  */
-exports.markInstallmentPaid = async (scheduleId, paymentId) => {
+exports.markInstallmentPaid = async (scheduleIdOrOptions, paymentIdLegacy) => {
   await ensureInstallmentTable();
 
-  const res = await pool.query(
-    `UPDATE project_installment_schedules
-     SET status = 'paid',
-         paid_at = CURRENT_TIMESTAMP,
-         payment_id = $2,
-         updated_at = CURRENT_TIMESTAMP
-     WHERE schedule_id = $1
-     RETURNING *`,
-    [scheduleId, paymentId]
-  );
-
-  if (res.rows.length === 0) {
-    throw new Error('Installment schedule not found');
+  // Support both old signature (scheduleId, paymentId) and new options object
+  let scheduleId, paymentId, referenceNumber, method, notes, amount, adminUserId;
+  if (typeof scheduleIdOrOptions === 'object' && scheduleIdOrOptions !== null) {
+    ({ scheduleId, paymentId, referenceNumber, method, notes, amount, adminUserId } = scheduleIdOrOptions);
+  } else {
+    scheduleId = scheduleIdOrOptions;
+    paymentId = paymentIdLegacy || null;
   }
 
-  const installment = res.rows[0];
+  if (!scheduleId) throw new Error('Schedule ID is required');
 
-  // After marking paid, check if this project was on hold due to overdue installments
-  // and auto-resume if all overdue installments are now paid
-  await exports.checkAndAutoResumeProject(installment.project_id);
+  const client = await pool.connect();
+  let createdPayment = null;
+  try {
+    await client.query('BEGIN');
 
-  return installment;
+    // Get the installment to know its amount and project
+    const installmentRes = await client.query(
+      `SELECT pis.*, p.order_id, o.user_id
+       FROM project_installment_schedules pis
+       JOIN projects p ON p.project_id = pis.project_id
+       LEFT JOIN orders o ON o.order_id = p.order_id
+       WHERE pis.schedule_id = $1`,
+      [scheduleId]
+    );
+
+    if (installmentRes.rows.length === 0) {
+      throw new Error('Installment schedule not found');
+    }
+
+    const installment = installmentRes.rows[0];
+    const paymentAmount = Number(amount || installment.amount || 0);
+
+    // If no payment ID is provided, create a payment record first
+    if (!paymentId) {
+      const paymentMethod = ['gcash', 'bank_transfer', 'cash'].includes(method)
+        ? method
+        : 'gcash';
+      const paymentRes = await client.query(
+        `INSERT INTO payments (order_id, user_id, method, amount, currency, reference_number, status, verified_by, verified_at, metadata)
+         VALUES ($1, $2, $3, $4, 'PHP', $5, 'verified', $6, CURRENT_TIMESTAMP, $7)
+         RETURNING *`,
+        [
+          installment.order_id,
+          installment.user_id,
+          paymentMethod,
+          paymentAmount,
+          referenceNumber || `INST-${Date.now()}`,
+          adminUserId || null,
+          JSON.stringify({ admin_marked: true, notes: notes || null, source: 'installment_admin' })
+        ]
+      );
+      createdPayment = paymentRes.rows[0];
+      paymentId = createdPayment.payment_id;
+    }
+
+    // Mark installment as paid
+    const updateRes = await client.query(
+      `UPDATE project_installment_schedules
+       SET status = 'paid',
+           paid_at = CURRENT_TIMESTAMP,
+           payment_id = $2,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE schedule_id = $1
+       RETURNING *`,
+      [scheduleId, paymentId]
+    );
+
+    if (updateRes.rows.length === 0) {
+      throw new Error('Installment schedule not found');
+    }
+
+    // Also update the order payment_status to approved if it's pending
+    await client.query(
+      `UPDATE orders
+       SET payment_status = 'approved',
+           payment_reference_number = COALESCE($2, payment_reference_number),
+           reviewed_at = COALESCE(reviewed_at, CURRENT_TIMESTAMP),
+           updated_at = CURRENT_TIMESTAMP
+       WHERE order_id = $1
+         AND payment_status IN ('pending', 'proof_submitted', 'under_review')`,
+      [installment.order_id, referenceNumber || null]
+    );
+
+    await client.query('COMMIT');
+
+    const finalInstallment = updateRes.rows[0];
+    finalInstallment.payment = createdPayment || null;
+
+    // After marking paid, check if this project was on hold due to overdue installments
+    // and auto-resume if all overdue installments are now paid
+    await exports.checkAndAutoResumeProject(finalInstallment.project_id);
+
+    return finalInstallment;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 };
 
 /**

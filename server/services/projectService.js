@@ -2,6 +2,7 @@ const { pool } = require('../config/database');
 const { AppError } = require('../middleware/errorHandler');
 const defaultWorkflowService = require('./defaultWorkflowService');
 const inventoryService = require('./inventoryService');
+const { generateRefundRequestNumber } = require('../utils/orderNumber');
 let projectArchiveColumnsReadyPromise = null;
 
 const ensureProjectArchiveColumns = async () => {
@@ -82,6 +83,8 @@ const PROJECT_BASE_SELECT = `
     p.custom_build_id,
     o.user_id AS customer_id,
     o.order_number,
+    o.payment_plan AS order_payment_plan,
+    o.total_amount AS order_total_amount,
     a.line1 AS shipping_line1,
     a.line2 AS shipping_line2,
     a.city AS shipping_city,
@@ -98,12 +101,35 @@ const PROJECT_BASE_SELECT = `
     ) AS customer_name,
     claim_user.first_name AS claimed_first_name,
     claim_user.last_name AS claimed_last_name,
-    claim_user.role AS claimed_role
+    claim_user.role AS claimed_role,
+    refund_latest.refund_request_id,
+    refund_latest.refund_status,
+    refund_latest.refund_amount_requested,
+    refund_latest.refund_reason,
+    refund_latest.refund_requested_at,
+    refund_latest.refund_decided_at,
+    refund_latest.refund_decided_by,
+    refund_decider.first_name AS refund_decided_by_name
   FROM projects p
   JOIN orders o ON o.order_id = p.order_id
   LEFT JOIN addresses a ON a.address_id = o.shipping_address_id
   LEFT JOIN users u ON u.user_id = o.user_id
   LEFT JOIN users claim_user ON claim_user.user_id = p.claimed_by
+  LEFT JOIN LATERAL (
+    SELECT refund_request_id,
+           status AS refund_status,
+           amount_requested AS refund_amount_requested,
+           reason AS refund_reason,
+           created_at AS refund_requested_at,
+           reviewed_at AS refund_decided_at,
+           reviewed_by AS refund_decided_by
+    FROM refund_requests rr
+    WHERE rr.project_id = p.project_id
+      AND rr.deleted_at IS NULL
+    ORDER BY rr.created_at DESC
+    LIMIT 1
+  ) refund_latest ON TRUE
+  LEFT JOIN users refund_decider ON refund_decider.user_id = refund_latest.refund_decided_by
 `
 
 const LUZON_LOCATION_KEYWORDS = [
@@ -404,6 +430,119 @@ const applyProjectTaskTracking = async (db, project, { stats = null, persist = f
   };
 };
 
+/**
+ * Compute the latest fully-completed build stage (milestone) for a project.
+ * A milestone is fully completed only when ALL of its subtasks are completed.
+ * Returns { stage_title, completed_at } or { stage_title: null, completed_at: null }
+ * when no stage is complete yet.
+ */
+const getLastCompletedBuildStage = async (db, projectId) => {
+  const res = await db.query(
+    `SELECT m.title AS stage_title, MAX(s.completed_at) AS completed_at
+     FROM project_milestones m
+     LEFT JOIN project_subtasks s ON s.milestone_id = m.milestone_id
+     WHERE m.project_id = $1
+     GROUP BY m.milestone_id, m.title, m.order_index
+     HAVING COUNT(s.subtask_id) > 0
+        AND COUNT(CASE WHEN s.status = 'completed' THEN 1 END) = COUNT(s.subtask_id)
+     ORDER BY m.order_index ASC, MAX(s.completed_at) ASC
+     LIMIT 1`,
+    [projectId]
+  );
+  if (res.rows.length === 0) {
+    return { stage_title: null, completed_at: null };
+  }
+  return { stage_title: res.rows[0].stage_title, completed_at: res.rows[0].completed_at };
+};
+
+/**
+ * Persist the latest completed stage onto the project row so the snapshot
+ * survives status changes (including cancellation).
+ */
+const syncLastCompletedStage = async (db, projectId) => {
+  const { stage_title, completed_at } = await getLastCompletedBuildStage(db, projectId);
+  await db.query(
+    `UPDATE projects
+     SET last_completed_stage = $1,
+         last_completed_stage_at = $2,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE project_id = $3`,
+    [stage_title, completed_at, projectId]
+  );
+  return { stage_title, completed_at };
+};
+
+/**
+ * Freeze the current completed stage into the permanent cancellation columns.
+ * Called when an admin approves a cancellation.
+ */
+const snapshotCancelledStage = async (db, projectId) => {
+  const current = await db.query(
+    `SELECT last_completed_stage, last_completed_stage_at
+     FROM projects
+     WHERE project_id = $1`,
+    [projectId]
+  );
+  const row = current.rows[0] || {};
+  await db.query(
+    `UPDATE projects
+     SET cancelled_stage_snapshot = $1,
+         cancelled_stage_snapshot_at = $2,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE project_id = $3`,
+    [row.last_completed_stage || null, row.last_completed_stage_at || null, projectId]
+  );
+};
+
+/**
+ * Attach the latest refund request state to a batch of project rows so the
+ * project list/table, customer modal, and admin modal always show the same
+ * underlying refund data (no divergent copies).
+ */
+const attachRefundStateToProjects = async (projects) => {
+  if (!Array.isArray(projects) || projects.length === 0) return projects;
+
+  const projectIds = projects.map((p) => p.project_id);
+  const res = await pool.query(
+    `SELECT DISTINCT ON (rr.project_id)
+       rr.project_id,
+       rr.refund_request_id,
+       rr.status AS refund_status,
+       rr.amount_requested AS refund_amount_requested,
+       rr.reason AS refund_reason,
+       rr.created_at AS refund_requested_at,
+       rr.reviewed_at AS refund_decided_at,
+       rr.reviewed_by AS refund_decided_by,
+       u.first_name AS refund_decided_by_name
+     FROM refund_requests rr
+     LEFT JOIN users u ON u.user_id = rr.reviewed_by
+     WHERE rr.project_id = ANY($1::uuid[])
+       AND rr.deleted_at IS NULL
+     ORDER BY rr.project_id, rr.created_at DESC`,
+    [projectIds]
+  );
+
+  const refundByProject = res.rows.reduce((acc, row) => {
+    acc[row.project_id] = row;
+    return acc;
+  }, {});
+
+  return projects.map((project) => {
+    const refund = refundByProject[project.project_id] || {};
+    return {
+      ...project,
+      refund_request_id: refund.refund_request_id || null,
+      refund_status: refund.refund_status || null,
+      refund_amount_requested: refund.refund_amount_requested || null,
+      refund_reason: refund.refund_reason || null,
+      refund_requested_at: refund.refund_requested_at || null,
+      refund_decided_at: refund.refund_decided_at || null,
+      refund_decided_by: refund.refund_decided_by || null,
+      refund_decided_by_name: refund.refund_decided_by_name || null,
+    };
+  });
+};
+
 exports.getAllProjects = async (params = {}) => {
   await ensureProjectArchiveColumns();
 
@@ -657,8 +796,10 @@ exports.getAllProjects = async (params = {}) => {
     };
   });
 
+  const projectsWithRefund = await attachRefundStateToProjects(enrichedProjects);
+
   return {
-    projects: enrichedProjects,
+    projects: projectsWithRefund,
     pagination: {
       page,
       page_size: limit,
@@ -921,8 +1062,10 @@ exports.getAllArchivedProjects = async (params = {}) => {
     };
   });
 
+  const projectsWithRefund = await attachRefundStateToProjects(enrichedProjects);
+
   return {
-    projects: enrichedProjects,
+    projects: projectsWithRefund,
     pagination: {
       page,
       page_size: limit,
@@ -1074,9 +1217,12 @@ exports.cancelProject = async (projectId, userId, userRole) => {
     await client.query('BEGIN');
 
     const projectResult = await client.query(
-      `${PROJECT_BASE_SELECT}
+      `SELECT p.project_id, p.order_id, p.status, p.progress, o.user_id AS customer_id
+       FROM projects p
+       JOIN orders o ON o.order_id = p.order_id
        WHERE p.project_id = $1
-         AND p.deleted_at IS NULL`,
+         AND p.deleted_at IS NULL
+       FOR UPDATE`,
       [projectId]
     );
 
@@ -1103,6 +1249,11 @@ exports.cancelProject = async (projectId, userId, userRole) => {
       throw new AppError('Only projects below 80% progress can be cancelled', 400);
     }
 
+    const normalizedStatus = normalizeProjectStatus(project.status);
+    if (!isPrivileged && normalizedStatus !== 'not_started') {
+      throw new AppError('This project has already started. Please use the Current Build Claim flow to request cancellation.', 400);
+    }
+
     await client.query(
       `UPDATE projects
        SET status = 'cancelled',
@@ -1125,6 +1276,71 @@ exports.cancelProject = async (projectId, userId, userRole) => {
       previous_progress: tracking.progress,
       order_id: project.order_id,
     });
+
+    const paymentRes = await client.query(
+      `SELECT payment_id, amount, status FROM payments
+       WHERE order_id = $1 AND status NOT IN ('rejected', 'cancelled', 'refunded')
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [project.order_id]
+    );
+    const latestPayment = paymentRes.rows[0] || null;
+
+    if (latestPayment) {
+      const existingRefundRes = await client.query(
+        `SELECT refund_request_id, status FROM refund_requests
+         WHERE project_id = $1
+           AND status IN ('pending', 'approved', 'pending_payment_verification')
+           AND deleted_at IS NULL
+         LIMIT 1`,
+        [projectId]
+      );
+
+      if (existingRefundRes.rows.length === 0) {
+        let refundStatus = 'pending';
+        let amountRequested = Number(latestPayment.amount);
+
+        if (latestPayment.status === 'verified') {
+          refundStatus = 'pending';
+        } else if (['pending', 'for_verification'].includes(latestPayment.status)) {
+          refundStatus = 'pending_payment_verification';
+        } else {
+          amountRequested = 0;
+          refundStatus = null;
+        }
+
+        if (refundStatus && amountRequested > 0) {
+          const requestNumber = await generateRefundRequestNumber(client, 'RF');
+
+          await client.query(
+            `INSERT INTO refund_requests (
+               order_id, user_id, project_id, payment_id, reason, customer_notes,
+               amount_requested, build_stage_at_request, status, request_number
+             )
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+            [
+              project.order_id,
+              userId,
+              projectId,
+              latestPayment.payment_id,
+              'Automatic refund request from project cancellation',
+              null,
+              amountRequested,
+              null,
+              refundStatus,
+              requestNumber,
+            ]
+          );
+
+          await logActivity(client, projectId, userId, 'refund_requested', {
+            refund_request_reason: 'Automatic refund request from project cancellation',
+            amount_requested: amountRequested,
+            refund_status: refundStatus,
+            payment_status_at_cancel: latestPayment.status,
+          });
+        }
+      }
+    }
 
     await client.query('COMMIT');
 
@@ -2105,7 +2321,9 @@ const ensureProjectHoldCancelColumns = async () => {
           'cancel_requested', 'cancel_approved', 'cancel_rejected',
           'milestone_created', 'milestone_updated', 'milestone_deleted',
           'subtask_created', 'subtask_deleted', 'subtask_status_changed',
-          'fulfillment_updated'
+          'fulfillment_updated',
+          'refund_requested', 'refund_approved', 'refund_rejected',
+          'refund_processing', 'refund_refunded'
         ));
     `).catch(() => {});
     // Check if hold_reason column exists, if not add all hold/cancel columns
@@ -2268,6 +2486,10 @@ exports.updateSubtaskStatus = async (subtaskId, data, userId, userRole) => {
       const stats = await getProjectTaskStats(client, subtask.project_id);
       await applyProjectTaskTracking(client, projectData.rows[0], { stats, persist: true });
     }
+
+    // Sync the latest fully-completed build stage so the snapshot survives
+    // status changes (including cancellation).
+    await syncLastCompletedStage(client, subtask.project_id);
 
     if (status && status !== subtask.status) {
       await logActivity(client, subtask.project_id, userId, 'subtask_status_changed', { title: subtask.title, status });
@@ -3063,6 +3285,11 @@ exports.approveProjectCancel = async (projectId, userId, data = {}) => {
          WHERE order_id = $1 AND status <> 'cancelled'`,
         [project.order_id]
       );
+
+      // Freeze the latest completed build stage so the customer-entitled
+      // stage survives the status change to cancelled and is shown forever.
+      await syncLastCompletedStage(client, projectId);
+      await snapshotCancelledStage(client, projectId);
 
       await logActivity(client, projectId, userId, 'cancel_approved', {
         cancel_option: cancelOption,

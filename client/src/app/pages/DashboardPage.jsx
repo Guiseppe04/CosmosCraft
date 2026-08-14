@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 import { motion, AnimatePresence } from 'motion/react'
-import { User, CreditCard, MapPin, Lock, Package, Calendar, ChevronRight, ChevronLeft, Search, Upload, Save, Wallet, ShoppingBag, ShoppingCart, Trash2, Minus, Plus, MessageSquare, Send, Guitar, Clock, Truck, CheckCircle, XCircle, Briefcase, Activity, Star, Loader2, Edit, AlertCircle, AlertTriangle, X, Banknote, Smartphone, Landmark, CreditCard as CreditCardIcon, Check, RefreshCw, Printer } from 'lucide-react'
+import { User, CreditCard, MapPin, Lock, Package, Calendar, ChevronRight, ChevronLeft, Search, Upload, Save, Wallet, ShoppingBag, ShoppingCart, Trash2, Minus, Plus, MessageSquare, Send, Guitar, Clock, Truck, CheckCircle, XCircle, Briefcase, Activity, Star, Loader2, Edit, AlertCircle, AlertTriangle, X, Banknote, Smartphone, Landmark, CreditCard as CreditCardIcon, Check, RefreshCw, Printer, Info } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useCart } from '../context/CartContext.jsx'
 import { BASE_PRICE, BODY_OPTIONS, BODY_WOOD_OPTIONS, BODY_FINISH_OPTIONS, NECK_OPTIONS, FRETBOARD_OPTIONS, HEADSTOCK_OPTIONS, HEADSTOCK_WOOD_OPTIONS, INLAY_OPTIONS, BRIDGE_OPTIONS, PICKGUARD_OPTIONS_BY_BODY, KNOB_OPTIONS_BY_BODY, HARDWARE_OPTIONS, PICKUP_OPTIONS } from '../lib/guitarBuilderData.js'
@@ -9,6 +9,7 @@ import { adminApi } from '../utils/adminApi.js'
 import { buildInvoiceHtml } from '../utils/invoiceBuilder.js'
 import { useDebounce } from '../hooks/useDebounce'
 import { uploadToCloudinary } from '../utils/cloudinary.js'
+import { formatCurrency } from '../utils/formatCurrency.js'
 import CustomerProjectTracker from '../components/projects/CustomerProjectTracker.jsx'
 import { AddressForm } from '../components/AddressForm.jsx'
 import { getAllProvinces, getMunicipalitiesByProvince, getBarangaysByMunicipality } from '@aivangogh/ph-address'
@@ -229,6 +230,7 @@ export function DashboardPage() {
   const [printingOrderId, setPrintingOrderId] = useState(null)
   const [isCancelProjectModalOpen, setIsCancelProjectModalOpen] = useState(false)
   const [cancelProjectTarget, setCancelProjectTarget] = useState(null)
+  const [cancelProjectPayment, setCancelProjectPayment] = useState(null)
   const [isCancellingProject, setIsCancellingProject] = useState(false)
   const [cancelProjectConfirmed, setCancelProjectConfirmed] = useState(false)
 
@@ -441,25 +443,26 @@ export function DashboardPage() {
 
   const handleBuyAgain = async (orderId) => {
     try {
-      const res = await adminApi.getOrder(orderId);
-      const items = res.data.order.items;
+      const res = await adminApi.getOrder(orderId)
+      const items = res.data?.order?.items || res.data?.items || []
       if (items && items.length > 0) {
         items.forEach(item => {
           addToCart({
             id: item.product_id || item.product_sku || `prod-${Date.now()}`,
-            name: item.product_name || 'Item',
-            price: Number(item.unit_price),
-            category: 'Shop',
-            image: 'https://images.unsplash.com/photo-1564186763535-ebb21ef5277f?w=800&q=80',
-          }, item.quantity);
-        });
-        setToastMessage('Items added to cart!');
-        navigate('/cart');
+            name: item.product_name || item.name || 'Product',
+            price: Number(item.unit_price || item.price || 0),
+            quantity: item.quantity || 1,
+            image: item.image_url || item.image || null,
+          })
+        })
+        showToast('Items added to cart!')
+      } else {
+        showToast('No items available to reorder.', 'error')
       }
     } catch (err) {
-      alert("Failed to buy again: " + err.message);
+      showToast(`Failed to load order: ${err.message}`, 'error')
     }
-  };
+  }
 
   const openCancelOrderModal = (order) => {
     setCancelOrderTarget(order)
@@ -617,16 +620,28 @@ export function DashboardPage() {
     }
   }
 
-  const openCancelProjectModal = (project) => {
+  const openCancelProjectModal = async (project) => {
     setCancelProjectTarget(project)
     setCancelProjectConfirmed(false)
+    setCancelProjectPayment(null)
     setIsCancelProjectModalOpen(true)
+
+    if (project?.order_id) {
+      try {
+        const orderRes = await adminApi.getOrder(project.order_id)
+        const payment = orderRes?.data?.payment || orderRes?.data?.order?.payment || null
+        setCancelProjectPayment(payment)
+      } catch (err) {
+        console.error('Failed to load payment info for cancel modal:', err)
+      }
+    }
   }
 
   const closeCancelProjectModal = (force = false) => {
     if (isCancellingProject && !force) return
     setIsCancelProjectModalOpen(false)
     setCancelProjectTarget(null)
+    setCancelProjectPayment(null)
     setCancelProjectConfirmed(false)
   }
 
@@ -1638,7 +1653,7 @@ export function DashboardPage() {
         ) : (
           <div className="grid gap-6">
             {myProjects.map((project, index) => {
-              const customBuildId = project.custom_build_id || project.customBuildId;
+              const buildId = project.order_number || project.custom_build_id || project.customBuildId;
 
               // Clean project name - remove any ORD/order references from the stored title
               const cleanName = (project.name || project.title || 'Custom Build')
@@ -1651,11 +1666,9 @@ export function DashboardPage() {
                 <div className="flex justify-between items-center">
                   <div>
                     <h3 className="text-lg font-bold text-white">{cleanName}</h3>
-                    {customBuildId && (
-                      <p className="text-xs text-[var(--text-muted)] mt-1">
-                        Custom Build ID: {customBuildId}
-                      </p>
-                    )}
+                    <p className="text-xs text-[var(--text-muted)] mt-1">
+                      Build ID: {buildId || '—'}
+                    </p>
                     <p className="text-[var(--text-muted)] text-sm mt-2">
                       Estimated completion:{' '}
                       <span className="text-white font-medium">
@@ -1673,12 +1686,20 @@ export function DashboardPage() {
                     <>
                       {String(project.status || '').toLowerCase() !== 'on_hold' ? (
                         <>
-                          {project.progress < 80 && (
+                          {String(project.status || '').toLowerCase() === 'not_started' && (
                             <button
                               onClick={() => openCancelProjectModal(project)}
                               className="px-4 py-2 rounded-lg border border-red-500/30 text-red-500 hover:bg-red-500/10 transition-colors text-sm font-semibold"
                             >
                               Cancel Project
+                            </button>
+                          )}
+                          {String(project.status || '').toLowerCase() !== 'not_started' && (
+                            <button
+                              onClick={() => openCancelWithOptionsModal(project)}
+                              className="px-4 py-2 rounded-lg border border-amber-500/30 text-amber-500 hover:bg-amber-500/10 transition-colors text-sm font-semibold"
+                            >
+                              Request Cancellation
                             </button>
                           )}
                           {String(project.status || '').toLowerCase() !== 'not_started' && (
@@ -2665,13 +2686,87 @@ export function DashboardPage() {
               </div>
 
               <h3 id="confirm-modal-title" className="text-white text-xl font-bold mb-2">Cancel Project</h3>
-              
-              <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-5 mb-2">
+
+              <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-5 mb-4">
                 <p className="text-sm text-red-300/90 leading-relaxed">
                   <AlertCircle className="w-4 h-4 inline-block mr-1.5 -mt-0.5" />
                   <strong className="text-red-400">This action is permanent.</strong> Once cancelled, <strong className="text-white">"{cancelProjectTarget?.name || 'This project'}"</strong> will stop at its current build stage and cannot be resumed or reactivated. If you wish to continue this build in the future, you must place a new order. Cancellation may affect payments, production progress, and reserved materials.
                 </p>
               </div>
+
+              {cancelProjectTarget && (
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] p-4 mb-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">Project</span>
+                    <span className="text-xs text-[var(--text-muted)]">{cancelProjectTarget.custom_build_id || cancelProjectTarget.project_id?.slice(0, 8)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">Status</span>
+                    <span className="text-xs font-semibold text-white capitalize">{formatStatus(cancelProjectTarget.status)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">Progress</span>
+                    <span className="text-xs font-semibold text-white">{cancelProjectTarget.progress || 0}%</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">Payment Plan</span>
+                    <span className="text-xs font-semibold text-white capitalize">{cancelProjectTarget.order_payment_plan === 'installment' ? 'Installment / Down Payment' : 'Full Payment'}</span>
+                  </div>
+                  {cancelProjectPayment && (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">Payment Method</span>
+                        <span className="text-xs font-semibold text-white capitalize">{cancelProjectPayment.method?.replace(/_/g, ' ') || '—'}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">Amount Submitted</span>
+                        <span className="text-xs font-semibold text-[var(--gold-primary)]">{formatCurrency(cancelProjectPayment.amount)}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">Payment Status</span>
+                        <span className={`text-xs font-semibold capitalize ${
+                          cancelProjectPayment.status === 'verified' ? 'text-green-400' :
+                          cancelProjectPayment.status === 'for_verification' || cancelProjectPayment.status === 'pending' ? 'text-amber-400' :
+                          cancelProjectPayment.status === 'rejected' ? 'text-red-400' :
+                          'text-white'
+                        }`}>{formatStatus(cancelProjectPayment.status)}</span>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {cancelProjectTarget && String(cancelProjectTarget.status || '').toLowerCase() === 'not_started' && (
+                <div className="rounded-xl border border-blue-500/30 bg-blue-500/5 p-4 mb-4">
+                  <p className="text-sm text-blue-300/90 leading-relaxed">
+                    {cancelProjectPayment?.status === 'verified' ? (
+                      <>
+                        <CheckCircle className="w-4 h-4 inline-block mr-1.5 -mt-0.5" />
+                        Your payment has been verified. Your refund request will be submitted automatically and is now waiting for admin approval.
+                      </>
+                    ) : cancelProjectPayment?.status === 'for_verification' || cancelProjectPayment?.status === 'pending' ? (
+                      <>
+                        <Clock className="w-4 h-4 inline-block mr-1.5 -mt-0.5" />
+                        Cancellation submitted successfully. Your payment is still being verified by the admin. Once your payment is verified, your refund request can proceed.
+                      </>
+                    ) : (
+                      <>
+                        <Info className="w-4 h-4 inline-block mr-1.5 -mt-0.5" />
+                        Cancellation submitted successfully. No refund is available for this payment status.
+                      </>
+                    )}
+                  </p>
+                </div>
+              )}
+
+              {cancelProjectTarget && String(cancelProjectTarget.status || '').toLowerCase() !== 'not_started' && (
+                <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 mb-4">
+                  <p className="text-sm text-amber-300/90 leading-relaxed">
+                    <AlertCircle className="w-4 h-4 inline-block mr-1.5 -mt-0.5" />
+                    This project has already started. You will be redirected to the Current Build Claim flow to request cancellation with options.
+                  </p>
+                </div>
+              )}
 
               {/* Explicit Confirmation Checkbox */}
               <div className="mt-5 rounded-xl border border-red-500/30 bg-red-500/5 p-4">

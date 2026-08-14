@@ -1,6 +1,7 @@
 const { pool } = require('../config/database');
 const { AppError } = require('../middleware/errorHandler');
 const defaultWorkflowService = require('./defaultWorkflowService');
+const projectRefundService = require('./projectRefundService');
 
 exports.PAYMENT_METHODS = {
   GCASH: 'gcash',
@@ -388,6 +389,8 @@ async function verifyPayment(paymentId, verifiedByUserId, notes) {
 
     await ensureProjectForCustomBuildOrder(client, payment.order_id);
 
+    await projectRefundService.transitionRefundStatusesForPayment(client, payment.order_id, 'verified');
+
     await client.query('COMMIT');
     return result.rows[0];
   } catch (err) {
@@ -434,6 +437,8 @@ async function rejectPayment(paymentId, rejectedByUserId, reason, notes) {
       `UPDATE orders SET payment_status = $1, updated_at = $2 WHERE order_id = $3`,
       [ORDER_PAYMENT_STATUS.PENDING, new Date(), payment.order_id]
     );
+
+    await projectRefundService.transitionRefundStatusesForPayment(client, payment.order_id, 'rejected');
 
     await client.query('COMMIT');
     return result.rows[0];

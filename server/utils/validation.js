@@ -680,7 +680,7 @@ const orderStatusEnum = ['pending', 'processing', 'shipped', 'out_for_delivery',
 const orderPaymentStatusEnum = ['pending', 'proof_submitted', 'under_review', 'approved', 'rejected', 'failed'];
 const fulfillmentMethods = ['pickup_appointment', 'home_delivery', 'store_pickup', 'courier'];
 const notificationTypeEnum = ['order_update', 'appointment_reminder', 'system', 'promotional', 'low_stock'];
-const refundStatusEnum = ['pending', 'approved', 'rejected', 'refunded'];
+const refundStatusEnum = ['pending', 'approved', 'processing', 'rejected', 'refunded', 'pending_payment_verification'];
 
 exports.createOrderSchema = Joi.object({
   items: Joi.array()
@@ -822,6 +822,19 @@ exports.createRefundRequestSchema = Joi.object({
     'array.max': 'Maximum 5 images are allowed',
   }),
 });
+
+exports.createProjectRefundRequestSchema = Joi.object({
+  reason: Joi.string().trim().min(3).max(500).required().messages({
+    'string.min': 'Refund reason must be at least 3 characters',
+    'string.max': 'Refund reason must not exceed 500 characters',
+    'any.required': 'Refund reason is required',
+  }),
+  customerNotes: Joi.string().trim().max(1000).optional().allow(''),
+  amount_requested: Joi.number().precision(2).min(0.01).optional().messages({
+    'number.base': 'Refund amount must be a number',
+    'number.min': 'Refund amount must be greater than 0',
+  }),
+}).unknown(true);
 
 exports.updateRefundStatusSchema = Joi.object({
   status: Joi.string().valid(...refundStatusEnum).required().messages({

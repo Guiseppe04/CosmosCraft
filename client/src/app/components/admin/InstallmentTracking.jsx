@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { motion } from 'motion/react'
 import {
-  CreditCard, DollarSign, Calendar, CheckCircle, AlertCircle,
-  Clock, ChevronDown, ChevronUp, History, Loader2
+  DollarSign, Calendar, CheckCircle, AlertCircle,
+  ChevronDown, ChevronUp, History, Loader2, Check, X
 } from 'lucide-react'
 import { formatCurrency } from '../../utils/formatCurrency'
 import { adminApi } from '../../utils/adminApi'
@@ -46,12 +46,143 @@ function InstallmentProgressBar({ paidCount, totalCount, remainingBalance, total
   )
 }
 
+function MarkPaidModal({ installment, onClose, onConfirm, isSubmitting }) {
+  const [referenceNumber, setReferenceNumber] = useState('')
+  const [paymentMethod, setPaymentMethod] = useState('gcash')
+  const [notes, setNotes] = useState('')
+  const [error, setError] = useState('')
+
+  const handleConfirm = () => {
+    if (!referenceNumber.trim()) {
+      setError('Please enter a payment reference number.')
+      return
+    }
+    onConfirm({
+      reference_number: referenceNumber.trim(),
+      payment_method: paymentMethod,
+      notes: notes.trim(),
+    })
+  }
+
+  return (
+    <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="bg-[var(--surface-dark)] border border-[var(--gold-primary)]/30 rounded-2xl p-6 w-full max-w-md shadow-2xl">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-white font-bold flex items-center gap-2">
+            <CheckCircle className="w-5 h-5 text-green-400" />
+            Mark Installment as Paid
+          </h3>
+          <button onClick={onClose} className="p-1.5 hover:bg-white/10 rounded-lg transition-colors">
+            <X className="w-4 h-4 text-[var(--text-muted)]" />
+          </button>
+        </div>
+
+        <div className="space-y-4">
+          <div className="bg-[var(--bg-primary)]/50 rounded-xl p-4">
+            <div className="flex items-center justify-between text-sm mb-2">
+              <span className="text-[var(--text-muted)]">Installment #</span>
+              <span className="text-white font-mono font-semibold">{installment.installment_number}</span>
+            </div>
+            <div className="flex items-center justify-between text-sm mb-2">
+              <span className="text-[var(--text-muted)]">Due Date</span>
+              <span className="text-white">{new Date(installment.due_date).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' })}</span>
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-[var(--text-muted)]">Amount</span>
+              <span className="text-[var(--gold-primary)] font-bold">{formatCurrency(Number(installment.amount))}</span>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-1.5">
+              Payment Reference Number <span className="text-red-400">*</span>
+            </label>
+            <input
+              type="text"
+              value={referenceNumber}
+              onChange={(e) => { setReferenceNumber(e.target.value); setError('') }}
+              placeholder="e.g., GCash ref #123456789"
+              className="w-full px-4 py-3 bg-[var(--surface-dark)] border border-[var(--border)] rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
+            />
+            {error && <p className="text-red-400 text-xs mt-1">{error}</p>}
+          </div>
+
+          <div>
+            <label className="block text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-1.5">Payment Method</label>
+            <div className="grid grid-cols-2 gap-2">
+              {['gcash', 'bank_transfer'].map((method) => {
+                const isActive = paymentMethod === method
+                return (
+                  <button
+                    key={method}
+                    type="button"
+                    onClick={() => setPaymentMethod(method)}
+                    className={`p-3 rounded-xl border text-sm font-medium transition-all ${
+                      isActive
+                        ? 'bg-[var(--gold-primary)]/20 text-[var(--gold-primary)] border-[var(--gold-primary)]/40'
+                        : 'bg-[var(--bg-primary)] border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--gold-primary)]/50'
+                    }`}
+                  >
+                    {method === 'gcash' ? 'GCash' : 'Bank Transfer'}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-1.5">Admin Notes</label>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Optional notes about this payment"
+              rows={2}
+              className="w-full px-4 py-3 bg-[var(--surface-dark)] border border-[var(--border)] rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] resize-none"
+            />
+          </div>
+
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={isSubmitting}
+              className="flex-1 px-4 py-2.5 bg-[var(--surface-dark)] border border-[var(--border)] rounded-lg text-white text-sm hover:border-[var(--gold-primary)]/50 transition-all disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleConfirm}
+              disabled={isSubmitting}
+              className={`flex-1 px-4 py-2.5 bg-green-500 rounded-lg text-white text-sm font-medium hover:shadow-[0_0_20px_rgba(34,197,94,0.4)] transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed`}
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Check className="w-4 h-4" />
+                  Mark as Paid
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function InstallmentTracking({ projectId, order, orderId }) {
   const [trackingData, setTrackingData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [showDetails, setShowDetails] = useState(false)
-  const [resolvedProjectId, setResolvedProjectId] = useState(projectId)
+  const [markPaidInstallment, setMarkPaidInstallment] = useState(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [actionMessage, setActionMessage] = useState(null)
 
   const fetchTrackingData = useCallback(async () => {
     const targetOrderId = orderId || order?.order_id;
@@ -86,6 +217,29 @@ export default function InstallmentTracking({ projectId, order, orderId }) {
   useEffect(() => {
     fetchTrackingData()
   }, [fetchTrackingData])
+
+  const handleMarkPaid = async ({ reference_number, payment_method, notes }) => {
+    if (!markPaidInstallment?.schedule_id) return
+    setIsSubmitting(true)
+    setActionMessage(null)
+    try {
+      await adminApi.markInstallmentPaid(markPaidInstallment.schedule_id, {
+        reference_number,
+        method: payment_method,
+        notes,
+        amount: Number(markPaidInstallment.amount),
+      })
+      setMarkPaidInstallment(null)
+      setActionMessage({ type: 'success', text: `Installment #${markPaidInstallment.installment_number} marked as paid.` })
+      await fetchTrackingData()
+    } catch (err) {
+      console.error('Failed to mark installment as paid:', err)
+      setActionMessage({ type: 'error', text: err.message || 'Failed to mark installment as paid. Please try again.' })
+      setMarkPaidInstallment(null)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
 
   if (loading) {
     return (
@@ -128,9 +282,7 @@ export default function InstallmentTracking({ projectId, order, orderId }) {
     remaining_balance = total_contract_amount,
     paid_count = 0,
     total_months = tenure_months,
-    remaining_months = tenure_months,
     next_due_date = null,
-    last_updated = null,
   } = summary
 
   // Compute payment status
@@ -149,6 +301,20 @@ export default function InstallmentTracking({ projectId, order, orderId }) {
       animate={{ opacity: 1, y: 0 }}
       className="space-y-4"
     >
+      {/* Success/Error Message */}
+      {actionMessage && (
+        <div className={`rounded-xl p-4 text-sm flex items-center justify-between border ${
+          actionMessage.type === 'success'
+            ? 'bg-green-500/10 border-green-500/30 text-green-400'
+            : 'bg-red-500/10 border-red-500/30 text-red-400'
+        }`}>
+          <span>{actionMessage.text}</span>
+          <button onClick={() => setActionMessage(null)} className="ml-3 flex-shrink-0">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* Summary Card */}
       <div className="rounded-2xl border border-[var(--gold-primary)]/30 bg-gradient-to-br from-[var(--gold-primary)]/10 via-[var(--bg-primary)]/70 to-[var(--surface-dark)] p-5">
         <div className="flex items-center justify-between mb-4">
@@ -251,19 +417,21 @@ export default function InstallmentTracking({ projectId, order, orderId }) {
                     <th className="p-3 text-right text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold">Amount</th>
                     <th className="p-3 text-center text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold">Status</th>
                     <th className="p-3 text-left text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold">Paid At</th>
+                    <th className="p-3 text-center text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {installments.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="p-6 text-center text-[var(--text-muted)]">No installment records found.</td>
+                      <td colSpan={6} className="p-6 text-center text-[var(--text-muted)]">
+                        No installment records found. The installment schedule will be created once the initial payment is verified.
+                      </td>
                     </tr>
                   ) : (
                     installments.map((inst) => {
-                      const instConfig = INSTALLMENT_STATUS_CONFIG[inst.status] || INSTALLMENT_STATUS_CONFIG.pending
                       const isPastDue = inst.status === 'pending' && new Date(inst.due_date) < new Date()
-                      const effectiveStatus = isPastDue ? INSTALLMENT_STATUS_CONFIG.overdue : instConfig
                       const displayStatus = isPastDue ? 'overdue' : inst.status
+                      const canMarkPaid = inst.status === 'pending' || inst.status === 'overdue'
                       return (
                         <tr key={inst.schedule_id} className={`border-t border-[var(--border)]/30 ${inst.status === 'overdue' || isPastDue ? 'bg-red-500/5' : ''}`}>
                           <td className="p-3 text-white font-mono">{inst.installment_number}</td>
@@ -279,6 +447,20 @@ export default function InstallmentTracking({ projectId, order, orderId }) {
                               ? new Date(inst.paid_at).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' })
                               : '—'
                             }
+                          </td>
+                          <td className="p-3 text-center">
+                            {canMarkPaid ? (
+                              <button
+                                type="button"
+                                onClick={() => setMarkPaidInstallment(inst)}
+                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-green-500/20 text-green-400 border border-green-500/40 text-xs font-medium transition-all hover:bg-green-500/30 hover:shadow-[0_0_12px_rgba(34,197,94,0.3)]"
+                              >
+                                <CheckCircle className="w-3.5 h-3.5" />
+                                Mark Paid
+                              </button>
+                            ) : (
+                              <span className="text-[var(--text-muted)] text-xs">—</span>
+                            )}
                           </td>
                         </tr>
                       )
@@ -309,6 +491,7 @@ export default function InstallmentTracking({ projectId, order, orderId }) {
                   <p className="text-[var(--text-muted)] text-xs">
                     {payment.reference_number && <>Ref: {payment.reference_number} • </>}
                     {payment.verified_first ? `Verified by: ${payment.verified_first} ${payment.verified_last || ''}` : 'System verified'}
+                    {payment.method && <> • {String(payment.method).replace(/_/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase())}</>}
                   </p>
                 </div>
                 <p className="text-[var(--text-muted)] text-xs flex-shrink-0">
@@ -323,6 +506,16 @@ export default function InstallmentTracking({ projectId, order, orderId }) {
             ))}
           </div>
         </div>
+      )}
+
+      {/* Mark Paid Modal */}
+      {markPaidInstallment && (
+        <MarkPaidModal
+          installment={markPaidInstallment}
+          onClose={() => setMarkPaidInstallment(null)}
+          onConfirm={handleMarkPaid}
+          isSubmitting={isSubmitting}
+        />
       )}
     </motion.div>
   )

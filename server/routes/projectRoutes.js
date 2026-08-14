@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const ctrl = require('../controllers/projectController');
+const refundCtrl = require('../controllers/projectRefundController');
 const { authenticateToken, authorize } = require('../middleware/auth');
 const {
   validate,
@@ -16,6 +17,8 @@ const {
   updateSubtaskSchema,
   submitFulfillmentSchema,
   listProjectsSchema,
+  createProjectRefundRequestSchema,
+  updateRefundStatusSchema,
 } = require('../utils/validation');
 
 router.use(authenticateToken);
@@ -37,6 +40,11 @@ router.post('/:id/resume', ctrl.resumeProject);
 // Cancel with options (customer can request with cancel_option)
 router.post('/:id/request-cancel', ctrl.requestCancel);
 router.post('/:id/approve-cancel', ctrl.approveCancel);
+
+// Project Refunds (customer eligibility + request; admin status update)
+router.get('/:id/refund-eligibility', refundCtrl.getRefundEligibility);
+router.post('/:id/refund-request', validate(createProjectRefundRequestSchema), refundCtrl.createRefundRequest);
+router.put('/refunds/:refundId/status', authorize('staff', 'admin', 'super_admin'), validate(updateRefundStatusSchema), refundCtrl.updateRefundStatus);
 
 // Installment schedule
 router.get('/:id/installments', ctrl.getInstallmentSchedule);

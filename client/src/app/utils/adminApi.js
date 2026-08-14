@@ -252,6 +252,11 @@ export const adminApi = {
   requestProjectCancel: (projectId, body) => request(`/api/projects/${projectId}/request-cancel`, { method: 'POST', body }),
   approveProjectCancel: (projectId, body) => request(`/api/projects/${projectId}/approve-cancel`, { method: 'POST', body }),
 
+  // Project Refunds (customer eligibility + request; admin status update)
+  getProjectRefundEligibility: (projectId) => request(`/api/projects/${projectId}/refund-eligibility`),
+  requestProjectRefund: (projectId, body) => request(`/api/projects/${projectId}/refund-request`, { method: 'POST', body }),
+  updateProjectRefundStatus: (refundId, status, options = {}) => request(`/api/projects/refunds/${refundId}/status`, { method: 'PUT', body: { status, ...options } }),
+
   // Installment Schedule
   getProjectInstallments: (projectId) => request(`/api/projects/${projectId}/installments`),
 
@@ -259,7 +264,7 @@ export const adminApi = {
   getProjectInstallmentTracking: (projectId) => request(`/api/installments/project/${projectId}`),
   getOrderInstallmentTracking: (orderId) => request(`/api/installments/project/by-order?orderId=${orderId}`),
   getOverdueInstallments: () => request('/api/installments/overdue'),
-  markInstallmentPaid: (scheduleId, paymentId) => request(`/api/installments/${scheduleId}/pay`, { method: 'PATCH', body: { payment_id: paymentId } }),
+  markInstallmentPaid: (scheduleId, options = {}) => request(`/api/installments/${scheduleId}/pay`, { method: 'PATCH', body: options }),
   runOverdueCheck: () => request('/api/installments/check-overdue', { method: 'POST' }),
 
   // Default Workflow
