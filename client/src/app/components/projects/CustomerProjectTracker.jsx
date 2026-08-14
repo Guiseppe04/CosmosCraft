@@ -73,12 +73,17 @@ export default function CustomerProjectTracker({ projectId, projectName, project
   const [refundReason, setRefundReason] = useState('');
   const [refundSubmitting, setRefundSubmitting] = useState(false);
   const [refundMessage, setRefundMessage] = useState(null);
+  // Build claim state
+  const [buildClaim, setBuildClaim] = useState(null);
+  const [buildClaimLoading, setBuildClaimLoading] = useState(false);
+  const [markReceivedLoading, setMarkReceivedLoading] = useState(false);
 
   useEffect(() => {
     if (projectId) {
       loadData();
       loadInstallments();
       loadRefundEligibility();
+      loadBuildClaim();
     }
   }, [projectId]);
 
@@ -137,6 +142,33 @@ export default function CustomerProjectTracker({ projectId, projectName, project
       setRefundMessage({ type: 'error', text: err.message });
     } finally {
       setRefundSubmitting(false);
+    }
+  };
+
+  const loadBuildClaim = async () => {
+    if (!projectId) return;
+    try {
+      setBuildClaimLoading(true);
+      const res = await adminApi.getBuildClaim(projectId);
+      setBuildClaim(res?.data || null);
+    } catch (err) {
+      // No claim exists — this is normal for projects cancelled without progress
+      setBuildClaim(null);
+    } finally {
+      setBuildClaimLoading(false);
+    }
+  };
+
+  const handleMarkReceived = async () => {
+    if (!projectId) return;
+    try {
+      setMarkReceivedLoading(true);
+      await adminApi.markBuildClaimReceived(projectId);
+      await loadBuildClaim();
+    } catch (err) {
+      console.error('Failed to mark as received:', err);
+    } finally {
+      setMarkReceivedLoading(false);
     }
   };
 
@@ -400,6 +432,133 @@ export default function CustomerProjectTracker({ projectId, projectName, project
             {hierarchy.cancel_approved_at && (
               <p className="mt-1 text-xs text-red-300/60">
                 Cancelled on {formatDate(hierarchy.cancel_approved_at)}
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Current Build Claim Tracking */}
+        {buildClaim && String(hierarchy.status || '').toLowerCase() === 'cancelled' && (
+          <div className="mt-6 rounded-xl border border-amber-500/30 bg-amber-500/5 p-5">
+            <p className="text-xs uppercase tracking-[0.1em] text-amber-300/70">Current Build Claim</p>
+
+            {/* Claim status badge */}
+            <div className="mt-2 flex items-center gap-2">
+              <span className={`inline-flex items-center gap-2 px-3 py-1 rounded-full border text-sm font-semibold ${
+                buildClaim.claim_status === 'received' ? 'border-emerald-500/30 text-emerald-400' :
+                buildClaim.claim_status === 'delivered' || buildClaim.claim_status === 'picked_up' ? 'border-sky-500/30 text-sky-400' :
+                buildClaim.claim_status === 'out_for_delivery' || buildClaim.claim_status === 'courier_arranged' ? 'border-blue-500/30 text-blue-400' :
+                buildClaim.claim_status === 'ready_for_delivery' || buildClaim.claim_status === 'ready_for_pickup' ? 'border-cyan-500/30 text-cyan-400' :
+                'border-amber-500/30 text-amber-400'
+              }`}>
+                {formatStatus(buildClaim.claim_status)}
+              </span>
+              {buildClaim.claim_method && (
+                <span className="text-xs text-[var(--text-muted)] capitalize">
+                  via {buildClaim.claim_method === 'courier' ? 'Courier Delivery' : 'Pickup'}
+                </span>
+              )}
+            </div>
+
+            {/* Build state snapshot */}
+            {buildClaim.build_state_snapshot && Array.isArray(buildClaim.build_state_snapshot) && (
+              <div className="mt-4 space-y-1.5">
+                {buildClaim.build_state_snapshot.map((stage, idx) => (
+                  <div key={stage.milestone_id || idx} className="flex items-center gap-2">
+                    {stage.status === 'completed' ? (
+                      <CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    ) : stage.status === 'in_progress' ? (
+                      <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                    ) : (
+                      <div className="w-3.5 h-3.5 rounded-full border-2 border-[var(--border)] shrink-0" />
+                    )}
+                    <span className={`text-xs ${stage.status === 'completed' ? 'text-emerald-300' : stage.status === 'in_progress' ? 'text-amber-300' : 'text-[var(--text-muted)]'}`}>
+                      {stage.title}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Progress + amount */}
+            <div className="mt-3 pt-3 border-t border-amber-500/20 flex items-center justify-between text-xs">
+              <span className="text-[var(--text-muted)]">Progress at Cancellation</span>
+              <span className="text-white font-semibold">{buildClaim.progress_at_cancellation}%</span>
+            </div>
+            {Number(buildClaim.amount_paid) > 0 && (
+              <div className="flex items-center justify-between text-xs mt-1">
+                <span className="text-[var(--text-muted)]">Amount Paid</span>
+                <span className="text-[var(--gold-primary)] font-semibold">{formatCurrency(buildClaim.amount_paid)}</span>
+              </div>
+            )}
+
+            {/* Current state photos */}
+            {buildClaim.current_state_photos && buildClaim.current_state_photos.length > 0 && (
+              <div className="mt-3 pt-3 border-t border-amber-500/20">
+                <p className="text-xs text-[var(--text-muted)] mb-2">Current State Photos</p>
+                <div className="flex gap-2 flex-wrap">
+                  {buildClaim.current_state_photos.map((url, i) => (
+                    <img key={i} src={url} alt={`Build state ${i + 1}`} className="w-20 h-20 rounded-lg object-cover border border-[var(--border)]" />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Courier/delivery info */}
+            {buildClaim.claim_method === 'courier' && buildClaim.courier_service && (
+              <div className="mt-3 pt-3 border-t border-amber-500/20 space-y-1">
+                <div className="flex justify-between text-xs">
+                  <span className="text-[var(--text-muted)]">Courier</span>
+                  <span className="text-white">{buildClaim.courier_service}</span>
+                </div>
+                {buildClaim.courier_reference && (
+                  <div className="flex justify-between text-xs">
+                    <span className="text-[var(--text-muted)]">Reference</span>
+                    <span className="text-white font-mono">{buildClaim.courier_reference}</span>
+                  </div>
+                )}
+                {buildClaim.estimated_delivery_date && (
+                  <div className="flex justify-between text-xs">
+                    <span className="text-[var(--text-muted)]">Est. Delivery</span>
+                    <span className="text-white">{formatShortDate(buildClaim.estimated_delivery_date)}</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Pickup info */}
+            {buildClaim.claim_method === 'pickup' && buildClaim.pickup_location && (
+              <div className="mt-3 pt-3 border-t border-amber-500/20">
+                <div className="flex justify-between text-xs">
+                  <span className="text-[var(--text-muted)]">Pickup Location</span>
+                  <span className="text-white">{buildClaim.pickup_location}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Admin confirmation notes */}
+            {buildClaim.admin_confirmation_notes && (
+              <div className="mt-3 pt-3 border-t border-amber-500/20">
+                <p className="text-xs text-[var(--text-muted)] mb-1">Admin Notes</p>
+                <p className="text-sm text-white">{buildClaim.admin_confirmation_notes}</p>
+              </div>
+            )}
+
+            {/* Mark as Received button */}
+            {['delivered', 'picked_up'].includes(buildClaim.claim_status) && (
+              <button
+                onClick={handleMarkReceived}
+                disabled={markReceivedLoading}
+                className="mt-4 w-full inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-green-500 px-4 py-2.5 text-sm font-semibold text-white transition-all hover:shadow-[0_0_20px_rgba(16,185,129,0.35)] disabled:opacity-50"
+              >
+                {markReceivedLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                {markReceivedLoading ? 'Confirming...' : 'Confirm Guitar Received'}
+              </button>
+            )}
+
+            {buildClaim.claim_status === 'received' && buildClaim.received_at && (
+              <p className="mt-2 text-xs text-emerald-300/70">
+                Received on {formatDate(buildClaim.received_at)}
               </p>
             )}
           </div>

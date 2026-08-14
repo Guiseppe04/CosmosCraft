@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const ctrl = require('../controllers/projectController');
 const refundCtrl = require('../controllers/projectRefundController');
+const claimCtrl = require('../controllers/currentBuildClaimController');
 const { authenticateToken, authorize } = require('../middleware/auth');
 const {
   validate,
@@ -19,6 +20,10 @@ const {
   listProjectsSchema,
   createProjectRefundRequestSchema,
   updateRefundStatusSchema,
+  selectClaimMethodSchema,
+  confirmBuildStateSchema,
+  arrangeCourierSchema,
+  updateBuildClaimStatusSchema,
 } = require('../utils/validation');
 
 router.use(authenticateToken);
@@ -39,7 +44,16 @@ router.post('/:id/resume', ctrl.resumeProject);
 
 // Cancel with options (customer can request with cancel_option)
 router.post('/:id/request-cancel', ctrl.requestCancel);
-router.post('/:id/approve-cancel', ctrl.approveCancel);
+// Customer withdraws a pending cancellation request
+router.post('/:id/withdraw-cancel-request', ctrl.cancelCancelRequest);
+// Approve/reject a cancellation request — staff+ only (admin review)
+router.post('/:id/approve-cancel', authorize('staff', 'admin', 'super_admin'), ctrl.approveCancel);
+
+// Current Build Claim (customer-accessible routes)
+router.get('/:id/build-state-preview', claimCtrl.getBuildStatePreview);
+router.get('/:id/build-claim', claimCtrl.getBuildClaim);
+router.post('/:id/build-claim/select-method', validate(selectClaimMethodSchema), claimCtrl.selectClaimMethod);
+router.post('/:id/build-claim/mark-received', claimCtrl.markAsReceived);
 
 // Project Refunds (customer eligibility + request; admin status update)
 router.get('/:id/refund-eligibility', refundCtrl.getRefundEligibility);
@@ -89,5 +103,12 @@ router.post('/:id/claim', ctrl.claimProject);
 router.post('/:id/unclaim', ctrl.unclaimProject);
 router.post('/:id/reassign', ctrl.reassignProject);
 router.post('/:id/init-workflow', ctrl.initializeWorkflow);
+
+// Current Build Claim (admin-only routes)
+router.get('/build-claims', claimCtrl.getAllClaims);
+router.post('/:id/build-claim/confirm-build', validate(confirmBuildStateSchema), claimCtrl.confirmBuildState);
+router.post('/:id/build-claim/arrange-courier', validate(arrangeCourierSchema), claimCtrl.arrangeCourier);
+router.patch('/:id/build-claim/status', validate(updateBuildClaimStatusSchema), claimCtrl.updateClaimStatus);
+router.post('/:id/build-claim/mark-picked-up', claimCtrl.markAsPickedUp);
 
 module.exports = router;

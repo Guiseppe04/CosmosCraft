@@ -310,6 +310,11 @@ export function ProjectsTab({
                     <span className={`shrink-0 rounded-full border px-3 py-1 text-xs font-semibold capitalize ${statusClass}`}>
                       {status.replace(/_/g, ' ')}
                     </span>
+                    {project.cancel_requested_at && !project.cancel_approved_at && status !== 'cancelled' && (
+                      <span className="shrink-0 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-0.5 text-[10px] font-semibold text-amber-300">
+                        Cancellation Requested
+                      </span>
+                    )}
                   </div>
 
                   <div className="mt-5 rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] p-4">
@@ -424,6 +429,11 @@ export function ProjectsTab({
                     <span className={`shrink-0 rounded-full border px-3 py-1 text-xs font-semibold capitalize ${statusClass}`}>
                       {status.replace(/_/g, ' ')}
                     </span>
+                    {project.cancel_requested_at && !project.cancel_approved_at && status !== 'cancelled' && (
+                      <span className="shrink-0 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-0.5 text-[10px] font-semibold text-amber-300">
+                        Cancellation Requested
+                      </span>
+                    )}
                   </div>
 
                   <div className="mt-5 rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] p-4">

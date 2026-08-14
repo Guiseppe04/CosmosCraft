@@ -181,6 +181,201 @@ async function run() {
       assert.strictEqual(result.status, 'cancelled')
     }
 
+    // ─── 6. requestProjectCancel on a started project sets cancel options ──
+    {
+      let projectSelectCount = 0
+      mockPool({
+        queryFn: async (sql, params) => {
+          if (sql.trim().toLowerCase().startsWith('select') && sql.includes('FROM projects p') && sql.includes('deleted_at IS NULL') && sql.includes('project_id = $1')) {
+            projectSelectCount += 1
+            if (projectSelectCount === 1) {
+              return { rows: [{ project_id: 'proj-6', order_id: 'order-6', customer_id: 'user-6', status: 'in_progress', cancel_option: null, cancel_reason: null, cancel_requested_at: null }] }
+            }
+            return { rows: [{ project_id: 'proj-6', order_id: 'order-6', customer_id: 'user-6', status: 'in_progress', cancel_option: 'ship_unfinished', cancel_reason: 'Customer requested cancellation', cancel_requested_at: '2026-08-14T03:00:00Z' }] }
+          }
+          if (sql.includes('UPDATE projects') && sql.includes('cancel_option')) {
+            return { rows: [] }
+          }
+          if (sql.includes('INSERT INTO activity_logs')) {
+            return { rows: [{ id: 'log-6' }] }
+          }
+          return { rows: [] }
+        },
+      })
+      const result = await projectService.requestProjectCancel('proj-6', 'user-6', 'customer', { cancel_option: 'ship_unfinished', cancel_reason: 'Customer requested cancellation' })
+      assert.strictEqual(result.status, 'in_progress')
+      assert.strictEqual(result.cancel_option, 'ship_unfinished')
+    }
+
+    // ─── 7. requestProjectCancel rejects when already cancelled ──
+    {
+      mockPool({
+        queryFn: async (sql, params) => {
+          if (sql.includes('FROM projects p') && sql.includes('deleted_at IS NULL')) {
+            return { rows: [{ project_id: 'proj-7', order_id: 'order-7', customer_id: 'user-7', status: 'cancelled', cancel_option: null, cancel_reason: null, cancel_requested_at: null }] }
+          }
+          return { rows: [] }
+        },
+      })
+      let threw = false
+      try {
+        await projectService.requestProjectCancel('proj-7', 'user-7', 'customer', { cancel_option: 'ship_unfinished', cancel_reason: 'test' })
+      } catch (e) {
+        threw = true
+      }
+      assert.strictEqual(threw, true)
+    }
+
+    // ─── 8. approveProjectCancel with ship_unfinished sets cancelled + shipped ──
+    {
+      let projectSelectCount = 0
+      mockPool({
+        queryFn: async (sql, params) => {
+          if (sql.trim().toLowerCase().startsWith('select') && sql.includes('FROM projects p') && sql.includes('deleted_at IS NULL') && sql.includes('project_id = $1')) {
+            projectSelectCount += 1
+            if (projectSelectCount === 1) {
+              return { rows: [{ project_id: 'proj-8', order_id: 'order-8', customer_id: 'user-8', status: 'in_progress', cancel_option: 'ship_unfinished', cancel_reason: 'Customer requested cancellation', cancel_requested_at: '2026-08-14T03:00:00Z' }] }
+            }
+            return { rows: [{ project_id: 'proj-8', order_id: 'order-8', customer_id: 'user-8', status: 'cancelled', cancel_option: 'ship_unfinished', cancel_approved_by: 'admin-1', cancel_approved_at: '2026-08-14T03:01:00Z', fulfillment_status: 'shipped_unfinished' }] }
+          }
+          if (sql.includes('UPDATE projects') && sql.includes('cancel_approved_by')) {
+            return { rows: [] }
+          }
+          if (sql.includes('UPDATE orders') && sql.includes('status = \'cancelled\'')) {
+            return { rows: [] }
+          }
+          if (sql.includes('FROM project_milestones m')) {
+            return { rows: [] }
+          }
+          if (sql.includes('UPDATE projects') && sql.includes('last_completed_stage')) {
+            return { rows: [] }
+          }
+          if (sql.includes('SELECT last_completed_stage')) {
+            return { rows: [{ last_completed_stage: null, last_completed_stage_at: null }] }
+          }
+          if (sql.includes('UPDATE projects') && sql.includes('cancelled_stage_snapshot')) {
+            return { rows: [] }
+          }
+          if (sql.includes('current_build_claims')) {
+            return { rows: [] }
+          }
+          if (sql.includes('FROM project_subtasks ps') && sql.includes('project_milestones pm')) {
+            return { rows: [{ total: 0, completed: 0 }] }
+          }
+          if (sql.includes('FROM payments')) {
+            return { rows: [] }
+          }
+          if (sql.includes('INSERT INTO current_build_claims')) {
+            return { rows: [{ claim_id: 'claim-8' }] }
+          }
+          if (sql.includes('INSERT INTO activity_logs')) {
+            return { rows: [{ id: 'log-8' }] }
+          }
+          return { rows: [] }
+        },
+      })
+      const result = await projectService.approveProjectCancel('proj-8', 'admin-1', { action: 'approve' })
+      assert.strictEqual(result.status, 'cancelled')
+      assert.ok(result.cancel_approved_at)
+    }
+
+    // ─── 9. approveProjectCancel reject clears cancel request ──
+    {
+      let projectSelectCount = 0
+      mockPool({
+        queryFn: async (sql, params) => {
+          if (sql.trim().toLowerCase().startsWith('select') && sql.includes('FROM projects p') && sql.includes('deleted_at IS NULL') && sql.includes('project_id = $1')) {
+            projectSelectCount += 1
+            if (projectSelectCount === 1) {
+              return { rows: [{ project_id: 'proj-9', order_id: 'order-9', customer_id: 'user-9', status: 'in_progress', cancel_option: 'pickup_unfinished', cancel_reason: 'Wrong option', cancel_requested_at: '2026-08-14T03:00:00Z' }] }
+            }
+            return { rows: [{ project_id: 'proj-9', order_id: 'order-9', customer_id: 'user-9', status: 'in_progress', cancel_option: null, cancel_reason: null, cancel_requested_at: null }] }
+          }
+          if (sql.includes('UPDATE projects') && sql.includes('cancel_option = NULL')) {
+            return { rows: [] }
+          }
+          if (sql.includes('INSERT INTO activity_logs')) {
+            return { rows: [{ id: 'log-9' }] }
+          }
+          return { rows: [] }
+        },
+      })
+      const result = await projectService.approveProjectCancel('proj-9', 'admin-1', { action: 'reject', rejection_reason: 'Customer chose wrong option' })
+      assert.strictEqual(result.status, 'in_progress')
+      assert.strictEqual(result.cancel_option, null)
+    }
+
+    // ─── 10. approveProjectCancel throws when no request exists ──
+    {
+      mockPool({
+        queryFn: async (sql, params) => {
+          if (sql.includes('FROM projects p') && sql.includes('deleted_at IS NULL')) {
+            return { rows: [{ project_id: 'proj-10', order_id: 'order-10', customer_id: 'user-10', status: 'in_progress', cancel_option: null, cancel_reason: null, cancel_requested_at: null }] }
+          }
+          return { rows: [] }
+        },
+      })
+      let threw = false
+      try {
+        await projectService.approveProjectCancel('proj-10', 'admin-1', { action: 'approve' })
+      } catch (e) {
+        threw = true
+      }
+      assert.strictEqual(threw, true)
+    }
+
+    // ─── 11. cancelProjectCancelRequest withdraws a pending cancellation request ──
+    {
+      let projectSelectCount = 0
+      mockPool({
+        queryFn: async (sql, params) => {
+          if (sql.trim().toLowerCase().startsWith('select') && sql.includes('FROM projects p') && sql.includes('deleted_at IS NULL') && sql.includes('project_id = $1')) {
+            projectSelectCount += 1
+            if (projectSelectCount === 1) {
+              return { rows: [{ project_id: 'proj-11', order_id: 'order-11', customer_id: 'user-11', status: 'in_progress', cancel_option: 'ship_unfinished', cancel_reason: 'Need to withdraw', cancel_requested_at: '2026-08-14T03:00:00Z', cancel_approved_at: null }] }
+            }
+            return { rows: [{ project_id: 'proj-11', order_id: 'order-11', customer_id: 'user-11', status: 'in_progress', cancel_option: null, cancel_reason: null, cancel_requested_at: null, cancel_approved_at: null }] }
+          }
+          if (sql.includes('UPDATE projects') && sql.includes('cancel_option = NULL')) {
+            return { rows: [] }
+          }
+          if (sql.includes('INSERT INTO activity_logs')) {
+            return { rows: [{ id: 'log-11' }] }
+          }
+          if (sql.includes('FROM project_subtasks ps') && sql.includes('project_milestones pm')) {
+            return { rows: [{ total: 0, completed: 0 }] }
+          }
+          if (sql.includes('current_build_claims')) {
+            return { rows: [] }
+          }
+          return { rows: [] }
+        },
+      })
+      const result = await projectService.cancelProjectCancelRequest('proj-11', 'user-11', 'customer')
+      assert.strictEqual(result.status, 'in_progress')
+      assert.strictEqual(result.cancel_option, null)
+      assert.strictEqual(result.cancel_requested_at, null)
+    }
+
+    // ─── 12. cancelProjectCancelRequest throws when no pending request ──
+    {
+      mockPool({
+        queryFn: async (sql, params) => {
+          if (sql.includes('FROM projects p') && sql.includes('deleted_at IS NULL')) {
+            return { rows: [{ project_id: 'proj-12', order_id: 'order-12', customer_id: 'user-12', status: 'in_progress', cancel_option: null, cancel_reason: null, cancel_requested_at: null, cancel_approved_at: null }] }
+          }
+          return { rows: [] }
+        },
+      })
+      let threw = false
+      try {
+        await projectService.cancelProjectCancelRequest('proj-12', 'user-12', 'customer')
+      } catch (e) {
+        threw = true
+      }
+      assert.strictEqual(threw, true)
+    }
+
     console.log('project cancel tests passed')
   } finally {
     resetPool()

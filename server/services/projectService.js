@@ -3,6 +3,13 @@ const { AppError } = require('../middleware/errorHandler');
 const defaultWorkflowService = require('./defaultWorkflowService');
 const inventoryService = require('./inventoryService');
 const { generateRefundRequestNumber } = require('../utils/orderNumber');
+let currentBuildClaimService = null;
+const getClaimService = () => {
+  if (!currentBuildClaimService) {
+    currentBuildClaimService = require('./currentBuildClaimService');
+  }
+  return currentBuildClaimService;
+};
 let projectArchiveColumnsReadyPromise = null;
 
 const ensureProjectArchiveColumns = async () => {
@@ -1095,7 +1102,8 @@ exports.getProjectById = async (projectId) => {
   );
   if (result.rows.length === 0) return null;
   const trackedProject = await applyProjectTaskTracking(pool, result.rows[0], { persist: true });
-  return attachFulfillmentDetails(trackedProject);
+  const withFulfillment = attachFulfillmentDetails(trackedProject);
+  return getClaimService().attachClaimToProject(withFulfillment);
 };
 
 exports.getMyProjects = async (userId, params = {}) => {
@@ -1253,6 +1261,7 @@ exports.cancelProject = async (projectId, userId, userRole) => {
     if (!isPrivileged && normalizedStatus !== 'not_started') {
       throw new AppError('This project has already started. Please use the Current Build Claim flow to request cancellation.', 400);
     }
+    const hasBuildProgress = tracking.progress > 0 || stats.completed > 0;
 
     await client.query(
       `UPDATE projects
@@ -1275,69 +1284,88 @@ exports.cancelProject = async (projectId, userId, userRole) => {
       previous_status: tracking.status,
       previous_progress: tracking.progress,
       order_id: project.order_id,
+      has_build_progress: hasBuildProgress,
     });
 
-    const paymentRes = await client.query(
-      `SELECT payment_id, amount, status FROM payments
-       WHERE order_id = $1 AND status NOT IN ('rejected', 'cancelled', 'refunded')
-       ORDER BY created_at DESC
-       LIMIT 1`,
-      [project.order_id]
-    );
-    const latestPayment = paymentRes.rows[0] || null;
+    if (hasBuildProgress) {
+      // Build has started — create a current build claim instead of a refund.
+      // The down payment was used to purchase parts and is not refundable.
+      // Customer receives the guitar in its current state.
+      try {
+        await getClaimService().createClaimForCancelledProject(
+          client, projectId, project.customer_id, project.order_id
+        );
+      } catch (claimErr) {
+        console.warn('Failed to create build claim during cancellation:', claimErr.message);
+      }
 
-    if (latestPayment) {
-      const existingRefundRes = await client.query(
-        `SELECT refund_request_id, status FROM refund_requests
-         WHERE project_id = $1
-           AND status IN ('pending', 'approved', 'pending_payment_verification')
-           AND deleted_at IS NULL
+      // Snapshot the completed build stage
+      await syncLastCompletedStage(client, projectId);
+      await snapshotCancelledStage(client, projectId);
+    } else {
+      // No build progress — auto-create refund request (existing behavior)
+      const paymentRes = await client.query(
+        `SELECT payment_id, amount, status FROM payments
+         WHERE order_id = $1 AND status NOT IN ('rejected', 'cancelled', 'refunded')
+         ORDER BY created_at DESC
          LIMIT 1`,
-        [projectId]
+        [project.order_id]
       );
+      const latestPayment = paymentRes.rows[0] || null;
 
-      if (existingRefundRes.rows.length === 0) {
-        let refundStatus = 'pending';
-        let amountRequested = Number(latestPayment.amount);
+      if (latestPayment) {
+        const existingRefundRes = await client.query(
+          `SELECT refund_request_id, status FROM refund_requests
+           WHERE project_id = $1
+             AND status IN ('pending', 'approved', 'pending_payment_verification')
+             AND deleted_at IS NULL
+           LIMIT 1`,
+          [projectId]
+        );
 
-        if (latestPayment.status === 'verified') {
-          refundStatus = 'pending';
-        } else if (['pending', 'for_verification'].includes(latestPayment.status)) {
-          refundStatus = 'pending_payment_verification';
-        } else {
-          amountRequested = 0;
-          refundStatus = null;
-        }
+        if (existingRefundRes.rows.length === 0) {
+          let refundStatus = 'pending';
+          let amountRequested = Number(latestPayment.amount);
 
-        if (refundStatus && amountRequested > 0) {
-          const requestNumber = await generateRefundRequestNumber(client, 'RF');
+          if (latestPayment.status === 'verified') {
+            refundStatus = 'pending';
+          } else if (['pending', 'for_verification'].includes(latestPayment.status)) {
+            refundStatus = 'pending_payment_verification';
+          } else {
+            amountRequested = 0;
+            refundStatus = null;
+          }
 
-          await client.query(
-            `INSERT INTO refund_requests (
-               order_id, user_id, project_id, payment_id, reason, customer_notes,
-               amount_requested, build_stage_at_request, status, request_number
-             )
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-            [
-              project.order_id,
-              userId,
-              projectId,
-              latestPayment.payment_id,
-              'Automatic refund request from project cancellation',
-              null,
-              amountRequested,
-              null,
-              refundStatus,
-              requestNumber,
-            ]
-          );
+          if (refundStatus && amountRequested > 0) {
+            const requestNumber = await generateRefundRequestNumber(client, 'RF');
 
-          await logActivity(client, projectId, userId, 'refund_requested', {
-            refund_request_reason: 'Automatic refund request from project cancellation',
-            amount_requested: amountRequested,
-            refund_status: refundStatus,
-            payment_status_at_cancel: latestPayment.status,
-          });
+            await client.query(
+              `INSERT INTO refund_requests (
+                 order_id, user_id, project_id, payment_id, reason, customer_notes,
+                 amount_requested, build_stage_at_request, status, request_number
+               )
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+              [
+                project.order_id,
+                userId,
+                projectId,
+                latestPayment.payment_id,
+                'Automatic refund request from project cancellation',
+                null,
+                amountRequested,
+                null,
+                refundStatus,
+                requestNumber,
+              ]
+            );
+
+            await logActivity(client, projectId, userId, 'refund_requested', {
+              refund_request_reason: 'Automatic refund request from project cancellation',
+              amount_requested: amountRequested,
+              refund_status: refundStatus,
+              payment_status_at_cancel: latestPayment.status,
+            });
+          }
         }
       }
     }
@@ -2045,7 +2073,8 @@ exports.getProjectHierarchy = async (projectId) => {
         persist: true,
       }
     );
-    return attachFulfillmentDetails(trackedProject, pickupAppointment);
+    const withFulfillment = attachFulfillmentDetails(trackedProject, pickupAppointment);
+    return getClaimService().attachClaimToProject(withFulfillment);
   } finally {
     client.release();
   }
@@ -3291,12 +3320,73 @@ exports.approveProjectCancel = async (projectId, userId, data = {}) => {
       await syncLastCompletedStage(client, projectId);
       await snapshotCancelledStage(client, projectId);
 
+      // Create current build claim for the cancelled project
+      try {
+        await getClaimService().createClaimForCancelledProject(
+          client, projectId, project.customer_id, project.order_id
+        );
+      } catch (claimErr) {
+        console.warn('Failed to create build claim during cancel approval:', claimErr.message);
+      }
+
       await logActivity(client, projectId, userId, 'cancel_approved', {
         cancel_option: cancelOption,
         cancel_reason: project.cancel_reason,
         fulfillment_status: fulfillmentStatus,
       });
     }
+
+    await client.query('COMMIT');
+
+    const updated = await exports.getProjectById(projectId);
+    return updated;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+};
+
+/**
+ * Customer cancels (withdraws) a pending cancellation request.
+ */
+exports.cancelProjectCancelRequest = async (projectId, userId, userRole) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const pRes = await client.query(
+      `${PROJECT_BASE_SELECT} WHERE p.project_id = $1 AND p.deleted_at IS NULL`,
+      [projectId]
+    );
+    if (pRes.rows.length === 0) throw new AppError('Project not found', 404);
+    const project = pRes.rows[0];
+
+    const isPrivileged = ['staff', 'admin', 'super_admin'].includes(userRole);
+    if (!isPrivileged && project.customer_id !== userId) {
+      throw new AppError('You do not have access to this project', 403);
+    }
+
+    if (!project.cancel_requested_at || project.cancel_approved_at) {
+      throw new AppError('No pending cancellation request to withdraw', 400);
+    }
+
+    await client.query(
+      `UPDATE projects
+       SET cancel_option = NULL,
+           cancel_reason = NULL,
+           cancel_requested_at = NULL,
+           cancel_approved_by = NULL,
+           cancel_approved_at = NULL,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE project_id = $1`,
+      [projectId]
+    );
+
+    await logActivity(client, projectId, userId, 'cancel_request_withdrawn', {
+      previous_cancel_option: project.cancel_option,
+    });
 
     await client.query('COMMIT');
 

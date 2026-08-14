@@ -60,7 +60,7 @@ exports.getProjectRefundEligibility = async (projectId, userId, userRole) => {
   const progress = await hasBuildProgress(pool, projectId);
   if (progress) {
     eligible = false;
-    reasons.push('Build has already started. The completed build stage is what you receive instead of a refund.');
+    reasons.push('Build has already started. Your down payment was used to purchase parts and materials, which are not refundable. You will receive the guitar in its current build state through the Current Build Claim process.');
   }
 
   // 2c. Verified payments exist for this order.

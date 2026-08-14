@@ -205,6 +205,11 @@ exports.approveCancel = asyncHandler(async (req, res, next) => {
   res.json({ status: 'success', data: result, message: 'Cancellation request processed' });
 });
 
+exports.cancelCancelRequest = asyncHandler(async (req, res, next) => {
+  const result = await projectService.cancelProjectCancelRequest(req.params.id, req.user.id, req.user.role);
+  res.json({ status: 'success', data: result, message: 'Cancellation request withdrawn' });
+});
+
 // --- INSTALLMENT SCHEDULE ---
 exports.getInstallmentSchedule = asyncHandler(async (req, res, next) => {
   const result = await projectService.getInstallmentSchedule(req.params.id, req.user.id, req.user.role);

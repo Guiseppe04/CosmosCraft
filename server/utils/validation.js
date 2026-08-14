@@ -1218,3 +1218,55 @@ const listProjectsSchema = Joi.object({
 }).unknown(true);
 
 exports.listProjectsSchema = listProjectsSchema;
+
+// ============================================================================
+// CURRENT BUILD CLAIM SCHEMAS
+// ============================================================================
+
+const claimMethodEnum = ['courier', 'pickup'];
+const claimStatusEnum = [
+  'not_required', 'pending_customer_selection', 'pending_admin_confirmation',
+  'ready_for_delivery', 'courier_arranged', 'out_for_delivery',
+  'ready_for_pickup', 'picked_up', 'delivered', 'received',
+];
+
+exports.selectClaimMethodSchema = Joi.object({
+  method: Joi.string().valid(...claimMethodEnum).required().messages({
+    'any.only': `Claim method must be one of: ${claimMethodEnum.join(', ')}`,
+    'any.required': 'Claim method is required',
+  }),
+  delivery_address: Joi.object({
+    line1: Joi.string().max(200).optional().allow(''),
+    line2: Joi.string().max(200).optional().allow(''),
+    city: Joi.string().max(100).optional().allow(''),
+    province: Joi.string().max(100).optional().allow(''),
+    postal_code: Joi.string().max(20).optional().allow(''),
+    country: Joi.string().max(50).optional().allow(''),
+  }).optional(),
+  recipient_name: Joi.string().max(200).optional().trim(),
+  recipient_contact: Joi.string().max(50).optional().trim(),
+  delivery_instructions: Joi.string().max(500).optional().allow('').trim(),
+  pickup_schedule: Joi.string().isoDate().optional(),
+  pickup_contact: Joi.string().max(200).optional().trim(),
+}).unknown(true);
+
+exports.confirmBuildStateSchema = Joi.object({
+  notes: Joi.string().max(1000).optional().allow('').trim(),
+  photos: Joi.array().items(Joi.string().uri().max(500)).optional(),
+  pickup_location: Joi.string().max(500).optional().allow('').trim(),
+  pickup_instructions: Joi.string().max(500).optional().allow('').trim(),
+}).unknown(true);
+
+exports.arrangeCourierSchema = Joi.object({
+  courier_service: Joi.string().max(100).optional().trim(),
+  courier_reference: Joi.string().max(100).optional().trim(),
+  delivery_fee: Joi.number().precision(2).min(0).optional(),
+  estimated_delivery_date: Joi.string().isoDate().optional(),
+}).unknown(true);
+
+exports.updateBuildClaimStatusSchema = Joi.object({
+  status: Joi.string().valid(...claimStatusEnum).required().messages({
+    'any.only': `Status must be one of: ${claimStatusEnum.join(', ')}`,
+    'any.required': 'Status is required',
+  }),
+}).unknown(true);

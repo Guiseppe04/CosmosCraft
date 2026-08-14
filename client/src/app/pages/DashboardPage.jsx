@@ -233,6 +233,13 @@ export function DashboardPage() {
   const [cancelProjectPayment, setCancelProjectPayment] = useState(null)
   const [isCancellingProject, setIsCancellingProject] = useState(false)
   const [cancelProjectConfirmed, setCancelProjectConfirmed] = useState(false)
+  // Build state preview for claim flow
+  const [cancelBuildPreview, setCancelBuildPreview] = useState(null)
+  const [cancelBuildPreviewLoading, setCancelBuildPreviewLoading] = useState(false)
+  const [cancelClaimMethod, setCancelClaimMethod] = useState('pickup')
+  const [cancelClaimRecipientName, setCancelClaimRecipientName] = useState('')
+  const [cancelClaimRecipientContact, setCancelClaimRecipientContact] = useState('')
+  const [cancelClaimDeliveryInstructions, setCancelClaimDeliveryInstructions] = useState('')
 
   // Hold / Cancel with options state
   const [isHoldProjectModalOpen, setIsHoldProjectModalOpen] = useState(false)
@@ -246,6 +253,8 @@ export function DashboardPage() {
   const [cancelWithOptionsTarget, setCancelWithOptionsTarget] = useState(null)
   const [cancelOption, setCancelOption] = useState('ship_unfinished')
   const [cancelWithOptionsReason, setCancelWithOptionsReason] = useState('')
+  const [cancelWithOptionsConfirmed, setCancelWithOptionsConfirmed] = useState(false)
+  const [isWithdrawingCancelRequest, setIsWithdrawingCancelRequest] = useState(false)
   const [isCancellingWithOptions, setIsCancellingWithOptions] = useState(false)
 
   // Resume / Continue Build state
@@ -624,6 +633,11 @@ export function DashboardPage() {
     setCancelProjectTarget(project)
     setCancelProjectConfirmed(false)
     setCancelProjectPayment(null)
+    setCancelBuildPreview(null)
+    setCancelClaimMethod('pickup')
+    setCancelClaimRecipientName('')
+    setCancelClaimRecipientContact('')
+    setCancelClaimDeliveryInstructions('')
     setIsCancelProjectModalOpen(true)
 
     if (project?.order_id) {
@@ -635,6 +649,19 @@ export function DashboardPage() {
         console.error('Failed to load payment info for cancel modal:', err)
       }
     }
+
+    // Fetch build state preview if project has started
+    if (project?.project_id && project?.status !== 'not_started') {
+      setCancelBuildPreviewLoading(true)
+      try {
+        const res = await adminApi.getBuildStatePreview(project.project_id)
+        setCancelBuildPreview(res?.data || null)
+      } catch (err) {
+        console.error('Failed to load build state preview:', err)
+      } finally {
+        setCancelBuildPreviewLoading(false)
+      }
+    }
   }
 
   const closeCancelProjectModal = (force = false) => {
@@ -643,6 +670,12 @@ export function DashboardPage() {
     setCancelProjectTarget(null)
     setCancelProjectPayment(null)
     setCancelProjectConfirmed(false)
+    setCancelBuildPreview(null)
+    setCancelBuildPreviewLoading(false)
+    setCancelClaimMethod('pickup')
+    setCancelClaimRecipientName('')
+    setCancelClaimRecipientContact('')
+    setCancelClaimDeliveryInstructions('')
   }
 
   const handleCancelProject = async () => {
@@ -651,7 +684,27 @@ export function DashboardPage() {
     try {
       setIsCancellingProject(true)
       await adminApi.cancelMyProject(cancelProjectTarget.project_id)
-      setToastMessage('Project has been cancelled.');
+
+      // If build has progress, submit claim method selection
+      const hasBuildProgress = cancelBuildPreview?.has_progress
+      if (hasBuildProgress) {
+        try {
+          const claimPayload = { method: cancelClaimMethod }
+          if (cancelClaimMethod === 'courier') {
+            if (cancelClaimRecipientName) claimPayload.recipient_name = cancelClaimRecipientName
+            if (cancelClaimRecipientContact) claimPayload.recipient_contact = cancelClaimRecipientContact
+            if (cancelClaimDeliveryInstructions) claimPayload.delivery_instructions = cancelClaimDeliveryInstructions
+          }
+          await adminApi.selectBuildClaimMethod(cancelProjectTarget.project_id, claimPayload)
+        } catch (claimErr) {
+          console.warn('Failed to submit claim method (claim was still created):', claimErr.message)
+        }
+      }
+
+      setToastMessage(hasBuildProgress
+        ? 'Project cancelled. A build claim has been created for your guitar.'
+        : 'Project has been cancelled.'
+      )
       fetchMyProjects();
       fetchMyOrders();
       fetchMyCustomizations();
@@ -742,6 +795,7 @@ export function DashboardPage() {
     setCancelWithOptionsTarget(project)
     setCancelOption('ship_unfinished')
     setCancelWithOptionsReason('')
+    setCancelWithOptionsConfirmed(false)
     setIsCancelWithOptionsModalOpen(true)
   }
 
@@ -751,10 +805,11 @@ export function DashboardPage() {
     setCancelWithOptionsTarget(null)
     setCancelOption('ship_unfinished')
     setCancelWithOptionsReason('')
+    setCancelWithOptionsConfirmed(false)
   }
 
   const handleCancelWithOptions = async () => {
-    if (!cancelWithOptionsTarget?.project_id || !cancelWithOptionsReason.trim()) return
+    if (!cancelWithOptionsTarget?.project_id || !cancelWithOptionsReason.trim() || !cancelWithOptionsConfirmed) return
 
     try {
       setIsCancellingWithOptions(true)
@@ -769,6 +824,22 @@ export function DashboardPage() {
       setToastMessage(`Failed to request cancellation: ${err.message}`);
     } finally {
       setIsCancellingWithOptions(false)
+    }
+  }
+
+  const handleWithdrawCancelRequest = async () => {
+    if (!cancelWithOptionsTarget?.project_id) return
+
+    try {
+      setIsWithdrawingCancelRequest(true)
+      await adminApi.cancelProjectCancelRequest(cancelWithOptionsTarget.project_id)
+      setToastMessage('Cancellation request withdrawn.');
+      fetchMyProjects();
+      closeCancelWithOptionsModal(true)
+    } catch (err) {
+      setToastMessage(`Failed to withdraw cancellation request: ${err.message}`);
+    } finally {
+      setIsWithdrawingCancelRequest(false)
     }
   }
 
@@ -1694,12 +1765,21 @@ export function DashboardPage() {
                               Cancel Project
                             </button>
                           )}
-                          {String(project.status || '').toLowerCase() !== 'not_started' && (
+                          {String(project.status || '').toLowerCase() !== 'not_started' && !project.cancel_requested_at && (
                             <button
                               onClick={() => openCancelWithOptionsModal(project)}
                               className="px-4 py-2 rounded-lg border border-amber-500/30 text-amber-500 hover:bg-amber-500/10 transition-colors text-sm font-semibold"
                             >
                               Request Cancellation
+                            </button>
+                          )}
+                          {String(project.status || '').toLowerCase() !== 'not_started' && project.cancel_requested_at && !project.cancel_approved_at && (
+                            <button
+                              onClick={() => openCancelWithOptionsModal(project)}
+                              className="px-4 py-2 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 transition-colors text-sm font-semibold flex items-center gap-1.5"
+                            >
+                              <Clock className="w-3.5 h-3.5" />
+                              Cancellation Pending
                             </button>
                           )}
                           {String(project.status || '').toLowerCase() !== 'not_started' && (
@@ -2759,13 +2839,123 @@ export function DashboardPage() {
                 </div>
               )}
 
+              {/* Build State Preview — shown when project has started */}
               {cancelProjectTarget && String(cancelProjectTarget.status || '').toLowerCase() !== 'not_started' && (
-                <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 mb-4">
-                  <p className="text-sm text-amber-300/90 leading-relaxed">
-                    <AlertCircle className="w-4 h-4 inline-block mr-1.5 -mt-0.5" />
-                    This project has already started. You will be redirected to the Current Build Claim flow to request cancellation with options.
-                  </p>
-                </div>
+                <>
+                  {cancelBuildPreviewLoading ? (
+                    <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-6 mb-4 flex items-center justify-center gap-3">
+                      <Loader2 className="w-5 h-5 animate-spin text-amber-400" />
+                      <span className="text-sm text-amber-300/90">Loading build state...</span>
+                    </div>
+                  ) : cancelBuildPreview?.has_progress ? (
+                    <div className="space-y-4 mb-4">
+                      {/* Build state explanation */}
+                      <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
+                        <p className="text-sm text-amber-300/90 leading-relaxed">
+                          <AlertCircle className="w-4 h-4 inline-block mr-1.5 -mt-0.5" />
+                          This project has already started. Your down payment was used to purchase parts and materials. <strong className="text-amber-400">You will receive the guitar in its current build state</strong> instead of a refund.
+                        </p>
+                      </div>
+
+                      {/* Milestone breakdown */}
+                      <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] p-4">
+                        <p className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)] mb-3">Current Build State — {cancelBuildPreview.progress}% Complete</p>
+                        <div className="space-y-2">
+                          {(cancelBuildPreview.stages || []).map((stage, idx) => (
+                            <div key={stage.milestone_id || idx} className="flex items-center gap-2.5">
+                              {stage.status === 'completed' ? (
+                                <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+                              ) : stage.status === 'in_progress' ? (
+                                <Clock className="w-4 h-4 text-amber-400 shrink-0" />
+                              ) : (
+                                <div className="w-4 h-4 rounded-full border-2 border-[var(--border)] shrink-0" />
+                              )}
+                              <span className={`text-sm ${stage.status === 'completed' ? 'text-emerald-300' : stage.status === 'in_progress' ? 'text-amber-300' : 'text-[var(--text-muted)]'}`}>
+                                {stage.title}
+                              </span>
+                              {stage.total_subtasks > 0 && (
+                                <span className="text-xs text-[var(--text-muted)] ml-auto">{stage.completed_subtasks}/{stage.total_subtasks}</span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                        {cancelBuildPreview.amount_paid > 0 && (
+                          <div className="mt-3 pt-3 border-t border-[var(--border)] flex items-center justify-between">
+                            <span className="text-xs text-[var(--text-muted)]">Amount Paid</span>
+                            <span className="text-xs font-semibold text-[var(--gold-primary)]">{formatCurrency(cancelBuildPreview.amount_paid)}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Claim method selection */}
+                      <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] p-4">
+                        <p className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)] mb-3">How would you like to receive your guitar?</p>
+                        <div className="grid gap-2">
+                          {[
+                            { value: 'pickup', label: 'Pick Up at Shop', desc: 'Visit our shop to collect your guitar' },
+                            { value: 'courier', label: 'Courier Delivery', desc: 'We\'ll arrange delivery to your address' },
+                          ].map(opt => (
+                            <label
+                              key={opt.value}
+                              className={`flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3 transition-colors ${
+                                cancelClaimMethod === opt.value
+                                  ? 'border-amber-500/50 bg-amber-500/10'
+                                  : 'border-[var(--border)] hover:border-amber-500/30'
+                              }`}
+                            >
+                              <input
+                                type="radio"
+                                name="claim-method"
+                                value={opt.value}
+                                checked={cancelClaimMethod === opt.value}
+                                onChange={() => setCancelClaimMethod(opt.value)}
+                                className="mt-1 h-4 w-4 accent-amber-500"
+                              />
+                              <div>
+                                <span className="text-sm text-white font-medium block">{opt.label}</span>
+                                <span className="text-xs text-[var(--text-muted)] mt-0.5 block">{opt.desc}</span>
+                              </div>
+                            </label>
+                          ))}
+                        </div>
+
+                        {/* Courier details */}
+                        {cancelClaimMethod === 'courier' && (
+                          <div className="mt-3 space-y-2">
+                            <input
+                              type="text"
+                              value={cancelClaimRecipientName}
+                              onChange={(e) => setCancelClaimRecipientName(e.target.value)}
+                              placeholder="Recipient name"
+                              className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] px-3 py-2 text-sm text-white placeholder:text-[var(--text-muted)] focus:border-amber-500/50 focus:outline-none"
+                            />
+                            <input
+                              type="text"
+                              value={cancelClaimRecipientContact}
+                              onChange={(e) => setCancelClaimRecipientContact(e.target.value)}
+                              placeholder="Contact number"
+                              className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] px-3 py-2 text-sm text-white placeholder:text-[var(--text-muted)] focus:border-amber-500/50 focus:outline-none"
+                            />
+                            <textarea
+                              value={cancelClaimDeliveryInstructions}
+                              onChange={(e) => setCancelClaimDeliveryInstructions(e.target.value)}
+                              placeholder="Delivery instructions (optional)"
+                              rows={2}
+                              className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] px-3 py-2 text-sm text-white placeholder:text-[var(--text-muted)] focus:border-amber-500/50 focus:outline-none resize-none"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 mb-4">
+                      <p className="text-sm text-amber-300/90 leading-relaxed">
+                        <AlertCircle className="w-4 h-4 inline-block mr-1.5 -mt-0.5" />
+                        This project has already started but no build progress has been recorded yet. Please contact support for assistance.
+                      </p>
+                    </div>
+                  )}
+                </>
               )}
 
               {/* Explicit Confirmation Checkbox */}
@@ -2778,7 +2968,10 @@ export function DashboardPage() {
                     className="mt-0.5 h-5 w-5 accent-red-500 rounded"
                   />
                   <span className="text-sm text-white font-medium">
-                    I understand that this action is permanent and cannot be undone. I want to cancel this project.
+                    {cancelBuildPreview?.has_progress
+                      ? 'I understand that my down payment is non-refundable and I will receive the guitar in its current unfinished state. I want to cancel this project.'
+                      : 'I understand that this action is permanent and cannot be undone. I want to cancel this project.'
+                    }
                   </span>
                 </label>
               </div>
@@ -2803,6 +2996,204 @@ export function DashboardPage() {
                 </button>
               </div>
             </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Request Cancellation Modal (Current Build Claim request flow) */}
+      <AnimatePresence>
+        {isCancelWithOptionsModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[300] bg-black/70 backdrop-blur-sm p-4 flex items-center justify-center"
+            onClick={(event) => {
+              if (event.target === event.currentTarget) closeCancelWithOptionsModal()
+            }}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 16, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 16, scale: 0.96 }}
+              className="relative w-full max-w-lg rounded-3xl border border-amber-500/30 bg-[var(--surface-dark)] p-6 sm:p-7 shadow-2xl"
+            >
+              <button
+                type="button"
+                onClick={closeCancelWithOptionsModal}
+                disabled={isCancellingWithOptions}
+                className="absolute right-4 top-4 rounded-lg p-2 text-[var(--text-muted)] hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
+                aria-label="Close request cancellation modal"
+              >
+                <X className="h-4 w-4" />
+              </button>
+
+              <div className="w-14 h-14 rounded-2xl bg-amber-500/15 flex items-center justify-center mb-5">
+                <AlertTriangle className="w-7 h-7 text-amber-400" />
+              </div>
+
+               <h3 className="text-white text-xl font-bold mb-1">Request Cancellation</h3>
+               <p className="text-sm text-[var(--text-muted)] mb-5">
+                 {cancelWithOptionsTarget?.name
+                   ? `Request cancellation for ${cancelWithOptionsTarget.name}. An admin will review your request and process the cancellation with your chosen option.`
+                   : 'An admin will review your cancellation request and process it with your chosen option.'}
+               </p>
+
+               {cancelWithOptionsTarget?.cancel_requested_at && !cancelWithOptionsTarget?.cancel_approved_at ? (
+                 <div className="space-y-5">
+                   <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 flex items-start gap-3">
+                     <Clock className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+                     <div>
+                       <p className="text-sm font-semibold text-amber-300">Cancellation Request Pending</p>
+                       <p className="mt-1 text-xs text-amber-300/70">Your cancellation request is awaiting admin review. You can withdraw it below if you change your mind.</p>
+                     </div>
+                   </div>
+
+                   {cancelWithOptionsTarget?.cancel_reason && (
+                     <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] p-4">
+                       <p className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)] mb-1">Your Reason</p>
+                       <p className="text-sm text-white break-words">{cancelWithOptionsTarget.cancel_reason}</p>
+                     </div>
+                   )}
+
+                   <div className="mt-6 flex gap-3">
+                     <button
+                       type="button"
+                       onClick={closeCancelWithOptionsModal}
+                       disabled={isWithdrawingCancelRequest}
+                       className="flex-1 rounded-xl border border-[var(--border)] bg-white/5 py-3 text-sm font-semibold text-white hover:bg-white/10 transition-colors disabled:opacity-50"
+                     >
+                       Close
+                     </button>
+                     <button
+                       type="button"
+                       onClick={handleWithdrawCancelRequest}
+                       disabled={isWithdrawingCancelRequest}
+                       className="flex-1 rounded-xl border border-amber-500/30 bg-amber-500/10 py-3 text-sm font-semibold text-amber-300 hover:bg-amber-500/20 transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                     >
+                       {isWithdrawingCancelRequest && <Loader2 className="h-4 w-4 animate-spin" />}
+                       {isWithdrawingCancelRequest ? 'Withdrawing...' : 'Withdraw Request'}
+                     </button>
+                   </div>
+                 </div>
+               ) : (
+                 <div className="space-y-5">
+
+              {cancelWithOptionsTarget && (
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] p-4 mb-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">Project</span>
+                    <span className="text-xs text-[var(--text-muted)]">{cancelWithOptionsTarget.custom_build_id || cancelWithOptionsTarget.project_id?.slice(0, 8)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">Status</span>
+                    <span className="text-xs font-semibold text-white capitalize">{formatStatus(cancelWithOptionsTarget.status)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">Progress</span>
+                    <span className="text-xs font-semibold text-white">{cancelWithOptionsTarget.progress || 0}%</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">Payment Plan</span>
+                    <span className="text-xs font-semibold text-white capitalize">{cancelWithOptionsTarget.order_payment_plan === 'installment' ? 'Installment / Down Payment' : 'Full Payment'}</span>
+                  </div>
+                </div>
+              )}
+
+              <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 mb-4">
+                <p className="text-sm text-amber-300 leading-relaxed">
+                  <AlertCircle className="w-4 h-4 inline-block mr-1.5 -mt-0.5" />
+                  Your build has already started. Your down payment was used to purchase parts and materials, which are not refundable. <strong className="text-amber-400">You will receive the guitar in its current unfinished state</strong> instead of a refund. Select how you would like to receive your guitar below, then submit the request for admin review.
+                </p>
+              </div>
+
+              <div className="space-y-4 mb-4">
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)] mb-2">
+                    Cancellation Option <span className="text-red-400">*</span>
+                  </label>
+                  <div className="grid gap-2">
+                    {[
+                      { value: 'ship_unfinished', label: 'Ship Unfinished Guitar', desc: "We'll ship your guitar in its current build state to your address." },
+                      { value: 'pickup_unfinished', label: 'Pick Up Unfinished Guitar', desc: 'Collect your guitar in its current build state from the shop.' },
+                    ].map((opt) => (
+                      <label
+                        key={opt.value}
+                        className={`flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3 transition-colors ${
+                          cancelOption === opt.value
+                            ? 'border-amber-500/50 bg-amber-500/10'
+                            : 'border-[var(--border)] hover:border-amber-500/30'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="cancel-option"
+                          value={opt.value}
+                          checked={cancelOption === opt.value}
+                          onChange={() => setCancelOption(opt.value)}
+                          className="mt-1 h-4 w-4 accent-amber-500"
+                        />
+                        <div>
+                          <span className="text-sm text-white font-medium block">{opt.label}</span>
+                          <span className="text-xs text-[var(--text-muted)] mt-0.5 block">{opt.desc}</span>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)] mb-2">
+                    Reason for Cancellation <span className="text-red-400">*</span>
+                  </label>
+                  <textarea
+                    value={cancelWithOptionsReason}
+                    onChange={(e) => setCancelWithOptionsReason(e.target.value)}
+                    placeholder="Please explain why you want to cancel this build..."
+                    maxLength={500}
+                    rows={3}
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-3 text-sm text-white placeholder:text-[var(--text-muted)] focus:border-amber-500/50 focus:outline-none resize-none"
+                  />
+                  <p className="mt-1 text-right text-xs text-[var(--text-muted)]">{cancelWithOptionsReason.length}/500</p>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 mb-4">
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={cancelWithOptionsConfirmed}
+                    onChange={(e) => setCancelWithOptionsConfirmed(e.target.checked)}
+                    className="mt-0.5 h-5 w-5 accent-amber-500 rounded"
+                  />
+                  <span className="text-sm text-white font-medium">
+                    I understand that my down payment is non-refundable and I will receive the guitar in its current unfinished state. I want to request cancellation.
+                  </span>
+                </label>
+              </div>
+
+              <div className="mt-6 flex gap-3">
+                 <button
+                   type="button"
+                   onClick={closeCancelWithOptionsModal}
+                   disabled={isCancellingWithOptions}
+                   className="flex-1 rounded-xl border border-[var(--border)] bg-white/5 py-3 text-sm font-semibold text-white hover:bg-white/10 transition-colors disabled:opacity-50"
+                 >
+                   Cancel
+                 </button>
+                 <button
+                   type="button"
+                   onClick={handleCancelWithOptions}
+                   disabled={!cancelWithOptionsReason.trim() || !cancelWithOptionsConfirmed || isCancellingWithOptions}
+                   className="flex-1 rounded-xl bg-amber-500 py-3 text-sm font-bold text-black hover:bg-amber-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                 >
+                   {isCancellingWithOptions && <Loader2 className="h-4 w-4 animate-spin" />}
+                   {isCancellingWithOptions ? 'Requesting...' : 'Submit Cancellation Request'}
+                 </button>
+               </div>
+                  </div>
+                )}
+              </motion.div>
           </motion.div>
         )}
       </AnimatePresence>

@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { CheckCircle, Circle, ChevronDown, ChevronRight, Plus, Trash2, User, Clock, AlertCircle, Calendar, Truck, Store, ShieldCheck, Flag } from 'lucide-react';
+import { CheckCircle, Circle, ChevronDown, ChevronRight, Plus, Trash2, User, Clock, AlertCircle, Calendar, Truck, Store, ShieldCheck, Flag, Loader2 } from 'lucide-react';
 import { adminApi } from '../../utils/adminApi';
 import { staffApi } from '../../utils/staffApi';
 import { formatCurrency } from '../../utils/formatCurrency';
 import { useAuth } from '../../context/AuthContext';
+import BuildClaimManager from './BuildClaimManager';
 
 const formatStatusLabel = (status) => String(status || '')
   .replace(/_/g, ' ')
@@ -105,6 +106,11 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
   const [isEditingCompletion, setIsEditingCompletion] = useState(false);
   const [editCompletionValue, setEditCompletionValue] = useState('');
 
+  // Cancellation request review (admin only)
+  const [cancelReviewLoading, setCancelReviewLoading] = useState(false);
+  const [cancelReviewFeedback, setCancelReviewFeedback] = useState(null);
+  const [cancelRejectReason, setCancelRejectReason] = useState('');
+
   useEffect(() => {
     if (projectId) {
       loadData();
@@ -135,6 +141,41 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
       setError(err.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // ─── Cancellation Request Review (admin) ──────────────────────────────────
+  const pendingCancelRequest = hierarchy?.cancel_requested_at && !hierarchy?.cancel_approved_at;
+
+  const handleApproveCancelRequest = async () => {
+    try {
+      setCancelReviewLoading(true);
+      await adminApi.approveProjectCancel(projectId, { action: 'approve' });
+      setCancelReviewFeedback({ type: 'success', message: 'Cancellation approved. A build claim has been created.' });
+      setCancelRejectReason('');
+      await loadData();
+    } catch (e) {
+      setCancelReviewFeedback({ type: 'error', message: e.message });
+    } finally {
+      setCancelReviewLoading(false);
+    }
+  };
+
+  const handleRejectCancelRequest = async () => {
+    if (!cancelRejectReason.trim()) {
+      setCancelReviewFeedback({ type: 'error', message: 'Please provide a reason for rejecting.' });
+      return;
+    }
+    try {
+      setCancelReviewLoading(true);
+      await adminApi.approveProjectCancel(projectId, { action: 'reject', rejection_reason: cancelRejectReason });
+      setCancelReviewFeedback({ type: 'success', message: 'Cancellation request rejected. The project remains active.' });
+      setCancelRejectReason('');
+      await loadData();
+    } catch (e) {
+      setCancelReviewFeedback({ type: 'error', message: e.message });
+    } finally {
+      setCancelReviewLoading(false);
     }
   };
 
@@ -763,6 +804,74 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
               )}
             </div>
           </div>
+        )}
+
+        {/* Cancellation Request Review — admin only, for projects with a pending request */}
+        {isAdmin && pendingCancelRequest && (
+          <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-5 mb-4">
+            <div className="flex items-start gap-3 mb-3">
+              <AlertCircle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+              <div>
+                <h4 className="text-amber-300 font-semibold">Cancellation Request</h4>
+                <p className="mt-1 text-xs text-amber-300/70">A customer has requested to cancel a build that has already started. Review the request and approve or reject it below.</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-xs mt-3">
+              <div className="flex"><span className="text-[var(--text-muted)]">Requested</span><span className="text-white ml-auto">{formatDisplayDate(hierarchy.cancel_requested_at) || '—'}</span></div>
+              <div className="flex"><span className="text-[var(--text-muted)]">Option</span><span className="text-white ml-auto capitalize">{String(hierarchy.cancel_option || '—').replace(/_/g, ' ')}</span></div>
+              <div className="flex"><span className="text-[var(--text-muted)]">Progress</span><span className="text-white ml-auto">{hierarchy.progress || 0}%</span></div>
+              <div className="flex"><span className="text-[var(--text-muted)]">Status</span><span className="text-white ml-auto capitalize">{formatStatusLabel(hierarchy.status)}</span></div>
+            </div>
+            {hierarchy.cancel_reason && (
+              <div className="mt-3">
+                <p className="text-xs uppercase tracking-[0.1em] text-[var(--text-muted)]">Reason</p>
+                <p className="mt-1 text-sm text-white break-words">{hierarchy.cancel_reason}</p>
+              </div>
+            )}
+
+            {cancelReviewFeedback && (
+              <p className={`mt-3 text-xs font-medium ${cancelReviewFeedback.type === 'error' ? 'text-red-400' : 'text-emerald-300'}`}>{cancelReviewFeedback.message}</p>
+            )}
+
+            <div className="mt-4">
+              <label className="block text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)] mb-1.5">Reject Reason</label>
+              <textarea
+                value={cancelRejectReason}
+                onChange={(e) => setCancelRejectReason(e.target.value)}
+                placeholder="Why is this cancellation request being rejected?"
+                maxLength={300}
+                rows={2}
+                className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] px-3 py-2 text-sm text-white placeholder:text-[var(--text-muted)] focus:border-amber-500/50 focus:outline-none resize-none"
+              />
+            </div>
+
+            <div className="mt-4 flex gap-3">
+              <button
+                type="button"
+                onClick={handleApproveCancelRequest}
+                disabled={cancelReviewLoading}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-amber-500 px-4 py-2.5 text-sm font-bold text-black hover:bg-amber-600 transition-colors disabled:opacity-60 flex-1"
+              >
+                {cancelReviewLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                Approve &amp; Create Claim
+              </button>
+              <button
+                type="button"
+                onClick={handleRejectCancelRequest}
+                disabled={cancelReviewLoading || !cancelRejectReason.trim()}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-sm font-semibold text-amber-300 hover:bg-amber-500/20 transition-colors disabled:opacity-50 flex-1"
+              >
+                Reject
+              </button>
+            </div>
+            <p className="mt-2 text-[11px] text-[var(--text-muted)]">Approving cancels the build and creates a build claim the customer will receive in its current state. The customer requested: "{String(hierarchy.cancel_option || 'pickup').replace(/_/g, ' ')}".</p>
+          </div>
+        )}
+
+        {/* Build Claim Manager — admin only, for cancelled projects */}
+        {isAdmin && String(hierarchy.status || '').toLowerCase() === 'cancelled' && (
+          <BuildClaimManager projectId={projectId} projectData={projectData} />
         )}
 
         {!isAdmin && hierarchy.progress === 100 && (
