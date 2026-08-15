@@ -56,7 +56,7 @@ import {
   TREMOLO_COVER_OPTIONS,
 } from '../lib/guitarBuilderData.js'
 
-import { resolveTopWoodAsset, resolveFinishAsset, resolveTopCoatAsset, resolveNeckWoodAsset, resolveHeadstockWoodAsset, resolveFingerboardWoodAsset, resolveInlay, resolveNeckRearFinishAsset, resolveBackNeckAsset, resolveBackplateAsset, resolveOutputJackAsset, resolveTremoloCoverAsset, resolveRearTuners, resolveRearTunerButtons, resolveFrontTunerButtons, resolveNeckBolts, resolveBackplateScrewsAsset, resolveElectronicsCavityCoverAsset, resolveFrontStrapButtonAsset, resolveBackStrapButtonColorAsset, resolveFrontKnobAsset } from '../lib/assetResolver.js'
+import { resolveTopWoodAsset, resolveFinishAsset, resolveTopCoatAsset, resolveNeckWoodAsset, resolveHeadstockWoodAsset, resolveFingerboardWoodAsset, resolveInlay, resolveNeckRearFinishAsset, resolveBackNeckAsset, resolveBackplateAsset, resolveOutputJackAsset, resolveKnobAsset, resolveSwitchAsset } from '../lib/assetResolver.js'
 import { listBuilderAssets } from '../utils/apiConfig.js'
 
 const phpFormatter = new Intl.NumberFormat('en-PH', {
@@ -973,14 +973,6 @@ export default function useGuitarConfig() {
     return merged
   }, [mergeOptionsFromBuilderParts, priceOverrides])
 
-  const mergedBackplateOptions = useMemo(() => {
-    const merged = mergeOptionsFromBuilderParts({}, { partCategory: 'misc', typeMappings: ['backplate'] })
-    Object.keys(merged).forEach(key => {
-      if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
-    })
-    return merged
-  }, [mergeOptionsFromBuilderParts, priceOverrides])
-
   const getCategoryPrice = (cat) => priceOverrides[`cat:${cat}`]?.price
   const pickguardOptions = useMemo(
     () =>
@@ -1119,7 +1111,7 @@ export default function useGuitarConfig() {
     mergedPickupBobbinOptions, mergedPickupPoleColorOptions, mergedControlsOptions,
     mergedSaddleOptions, mergedNutOptions, mergedTuningOptions,
     mergedStringBrandOptions, mergedOutputJackOptions, mergedStrapButtonOptions,
-    mergedTunerButtonOptions, mergedElectronicsCavityCoverOptions, mergedTremoloCoverOptions, mergedBackplateOptions,
+    mergedTunerButtonOptions, mergedElectronicsCavityCoverOptions, mergedTremoloCoverOptions,
   ])
 
   const summary = useMemo(
@@ -1484,16 +1476,9 @@ export default function useGuitarConfig() {
     () => Object.entries(mergedElectronicsCavityCoverOptions).map(([value, option]) => ({ value, ...option })),
     [mergedElectronicsCavityCoverOptions],
   )
-  const tremoloCoverOptionList = useMemo(() => {
-    const isTremoloBridge = config.bridge === 'hipshotTremolo' || config.bridge === 'floydRoseTremolo'
-    return Object.entries(mergedTremoloCoverOptions)
-      .filter(([value]) => isTremoloBridge || value === 'none')
-      .map(([value, option]) => ({ value, ...option }))
-  }, [mergedTremoloCoverOptions, config.bridge])
-
-  const backplateOptionList = useMemo(
-    () => Object.entries(mergedBackplateOptions).map(([value, option]) => ({ value, ...option })),
-    [mergedBackplateOptions],
+  const tremoloCoverOptionList = useMemo(
+    () => Object.entries(mergedTremoloCoverOptions).map(([value, option]) => ({ value, ...option })),
+    [mergedTremoloCoverOptions],
   )
 
   const exportConfig = useCallback(() => JSON.stringify(config, null, 2), [config])
@@ -1517,11 +1502,6 @@ export default function useGuitarConfig() {
       merged.trussRodCover = normalizeTrussRodCover(merged.trussRodCover)
       merged.headstockShape = normalizeHeadstockShape(merged.headstockShape || merged.headstock)
       merged.headstock = merged.headstockShape
-      if (merged.electronicsCavityCover === 'standard') merged.electronicsCavityCover = 'black'
-      if (merged.tunerButtons === 'on') merged.tunerButtons = 'whitepearl'
-      if (merged.strapButtons === 'on') merged.strapButtons = 'standard'
-      if (merged.outputJack === 'standard' || merged.outputJack === 'gold') merged.outputJack = 'on'
-      if (merged.knobs === 'black' || merged.knobs === 'dtmv' || merged.knobs === 'dtc') merged.knobs = 'chrome'
       return merged
     })
   }, [])
@@ -1532,13 +1512,6 @@ export default function useGuitarConfig() {
       setConfig(prev => ({ ...prev, headstockShape: shape, headstock: shape }))
     }
   }, [config.headstockShape, config.headstock])
-
-  useEffect(() => {
-    const isTremoloBridge = config.bridge === 'hipshotTremolo' || config.bridge === 'floydRoseTremolo'
-    if (!isTremoloBridge && config.tremoloCover !== 'none') {
-      setConfig(prev => ({ ...prev, tremoloCover: 'none' }))
-    }
-  }, [config.bridge, config.tremoloCover])
 
   const pricingBreakdown = useMemo(() => ({
       // Old pricing keys (unchanged)
@@ -1592,7 +1565,6 @@ export default function useGuitarConfig() {
       tunerButtons: mergedTunerButtonOptions[config.tunerButtons]?.price ?? 0,
       electronicsCavityCover: mergedElectronicsCavityCoverOptions[config.electronicsCavityCover]?.price ?? 0,
       tremoloCover: mergedTremoloCoverOptions[config.tremoloCover]?.price ?? 0,
-      backplate: mergedBackplateOptions['backplate']?.price ?? 0,
   }), [
     config, dynamicBasePrice,
     mergedBodyOptions, mergedBodyWoodOptions, mergedBodyFinishOptions,
@@ -1612,7 +1584,7 @@ export default function useGuitarConfig() {
     mergedPickupBobbinOptions, mergedPickupPoleColorOptions, mergedControlsOptions,
     mergedSaddleOptions, mergedNutOptions, mergedTuningOptions,
     mergedStringBrandOptions, mergedOutputJackOptions, mergedStrapButtonOptions,
-    mergedTunerButtonOptions, mergedElectronicsCavityCoverOptions, mergedTremoloCoverOptions, mergedBackplateOptions,
+    mergedTunerButtonOptions, mergedElectronicsCavityCoverOptions, mergedTremoloCoverOptions,
   ])
 
   const refreshPrices = useCallback(() => {
@@ -1688,7 +1660,6 @@ export default function useGuitarConfig() {
       tunerButtonOptions: tunerButtonOptionList,
       electronicsCavityCoverOptions: electronicsCavityCoverOptionList,
       tremoloCoverOptions: tremoloCoverOptionList,
-      backplateOptions: backplateOptionList,
     },
   }
 }
