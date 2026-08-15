@@ -1043,7 +1043,19 @@ export default function useGuitarConfig() {
         knobs: nextKnobs,
       }))
     }
-  }, [config.body, config.knobs, config.pickguard])
+   }, [config.body, config.knobs, config.pickguard])
+
+  useEffect(() => {
+    const coverOptions = TREMOLO_COVER_OPTIONS_BY_BRIDGE[config.bridge]
+    if (coverOptions) {
+      const validKeys = Object.keys(coverOptions)
+      if (!config.tremoloCover || !validKeys.includes(config.tremoloCover)) {
+        setConfig(prev => ({ ...prev, tremoloCover: validKeys.includes('black') ? 'black' : validKeys[0] }))
+      }
+    } else if (config.tremoloCover) {
+      setConfig(prev => ({ ...prev, tremoloCover: null }))
+    }
+  }, [config.bridge, config.tremoloCover, TREMOLO_COVER_OPTIONS_BY_BRIDGE])
 
   const updateConfig = useCallback((patch) => {
     setConfig(prev => ({ ...prev, ...patch }))
