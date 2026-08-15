@@ -64,19 +64,7 @@ export function CartProvider({ children }) {
           quantity: item.quantity,
           type: 'product'
         }))
-
-        const mergedCart = []
-        const cartMap = new Map()
-        for (const item of mappedCart) {
-          if (cartMap.has(item.id)) {
-            const existing = cartMap.get(item.id)
-            existing.quantity = existing.quantity + item.quantity
-          } else {
-            cartMap.set(item.id, item)
-            mergedCart.push(item)
-          }
-        }
-        setCart(mergedCart)
+        setCart(mappedCart)
       } else {
         setCart([])
       }
