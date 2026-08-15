@@ -59,7 +59,7 @@ export const DEFAULT_CONFIG = {
   headstockWood: 'plain-maple',
   inlays: 'pearl',
   bridge: 'hipshotFixed',
-  knobs: 'black',
+   knobs: 'plasticBlack',
   pickups: 'hss',
   hardware: 'chrome',
   headstock: 'gt6',
@@ -94,11 +94,11 @@ export const DEFAULT_CONFIG = {
   nut: 'blackGraphTech',
   tuning: 'eStandard',
   stringBrand: 'elixir1046',
-  outputJack: 'none',
-  strapButtons: 'off',
-  tunerButtons: 'off',
-  electronicsCavityCover: 'none',
-  tremoloCover: 'none',
+   outputJack: 'off',
+   strapButtons: 'none',
+    tunerButtons: 'none',
+   electronicsCavityCover: 'black',
+   tremoloCover: null,
 }
 
 export const GUITAR_TYPE_OPTIONS = [
@@ -390,8 +390,8 @@ export const NECK_FRETS = {
   gold: asset('all-models/necks/6-string/front/24-fret-front/standard/frets/gold.png'),
 }
 export const NECK_NUT = {
-  white: asset('all-models/necks/6-string/front/24-fret-front/standard/nut/black.png'),
   black: asset('all-models/necks/6-string/front/24-fret-front/standard/nut/black.png'),
+  white: asset('all-models/necks/6-string/front/24-fret-front/standard/nut/white.png'),
 }
 
 export const HEADSTOCK_WOOD_OPTIONS = {
@@ -723,34 +723,6 @@ export const HEADSTOCK_OPTIONS = {
     strings: asset('all-models/headstocks/6/string-overlays/standard/624.png'),
     trussCover: asset('all-models/headstocks/6/truss-cover/black.png'),
     price: 20, specs: { size: '', dimensions: '', material: '', notes: '' }
-  },
-  pth: {
-    label: 'Pointed',
-    note: 'Pointed headstock',
-    mask: asset('all-models/headstocks/6/masks/pth/mask.png'),
-    logo: null,
-    tuners: {
-      chrome: asset('all-models/headstocks/6/tuners/pth/chrome.png'),
-      black: asset('all-models/headstocks/6/tuners/pth/black.png'),
-      gold: asset('all-models/headstocks/6/tuners/pth/gold.png'),
-    },
-    strings: asset('all-models/headstocks/6/string-overlays/standard/pth.png'),
-    trussCover: asset('all-models/headstocks/6/truss-cover/black.png'),
-    price: 25, specs: { size: '', dimensions: '', material: '', notes: '' }
-  },
-  pthr: {
-    label: 'Pointed Reverse',
-    note: 'Reverse pointed',
-    mask: asset('all-models/headstocks/6/masks/pthr/mask.png'),
-    logo: null,
-    tuners: {
-      chrome: asset('all-models/headstocks/6/tuners/pthr/chrome.png'),
-      black: asset('all-models/headstocks/6/tuners/pthr/black.png'),
-      gold: asset('all-models/headstocks/6/tuners/pthr/gold.png'),
-    },
-    strings: asset('all-models/headstocks/6/string-overlays/standard/pthr.png'),
-    trussCover: asset('all-models/headstocks/6/truss-cover/black.png'),
-    price: 25, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
   h33: {
     label: 'H33',
@@ -1173,8 +1145,6 @@ export const HEADSTOCK_SHAPE_OPTIONS = {
   '6inr': { label: '6 Inline Reverse', note: 'Reverse 6 inline', src: null, price: 20, specs: specs() },
   '6kr': { label: '6 KR', note: '6 KR headstock', src: null, price: 0, specs: specs() },
   '624': { label: '2×4', note: '2×4 headstock', src: null, price: 20, specs: specs() },
-  pth: { label: 'Pointed', note: 'Pointed headstock', src: null, price: 25, specs: specs() },
-  pthr: { label: 'Pointed Reverse', note: 'Reverse pointed', src: null, price: 25, specs: specs() },
   h33: { label: 'H33', note: 'Classic inline', src: null, price: 45, specs: specs() },
   h33r: { label: 'H33R', note: 'Reverse inline', src: null, price: 55, specs: specs() },
 }
@@ -1253,47 +1223,69 @@ export const SADDLE_OPTIONS = {
 }
 
 export const NUT_OPTIONS = {
-  blackGraphTech: { label: 'Black Graph Tech TUSQ', note: 'Black Graph Tech TUSQ nut', price: 25, specs: specs() },
-  ivoryGraphTech: { label: 'Ivory Graph Tech TUSQ', note: 'Ivory Graph Tech TUSQ nut', price: 25, specs: specs() },
+  blackGraphTech: { label: 'Black Graph Tech TUSQ Nut', note: 'Black TUSQ nut', assetKey: 'black', price: 25, specs: { size: '', dimensions: '', material: '', notes: '' } },
+  ivoryGraphTech: { label: 'Ivory Graph Tech TUSQ Nut', note: 'Ivory TUSQ nut', assetKey: 'white', price: 25, specs: { size: '', dimensions: '', material: '', notes: '' } },
 }
 
 export const TUNING_OPTIONS = {
-  eStandard: { label: 'E Standard (10-46)', note: 'E standard tuning', price: 0, specs: specs() },
-  dStandard: { label: 'D Standard (10-46)', note: 'D standard tuning', price: 0, specs: specs() },
-  cStandard: { label: 'C Standard (11-56)', note: 'C standard tuning', price: 0, specs: specs() },
-  dropC: { label: 'Drop C (10-52)', note: 'Drop C tuning', price: 0, specs: specs() },
-  dropB: { label: 'Drop B (11-56)', note: 'Drop B tuning', price: 0, specs: specs() },
+  eStandard: { label: 'E Standard (10-46)', note: 'Standard tuning gauge', price: 0, specs: specs() },
+  dStandard: { label: 'D Standard (10-46)', note: 'Down a step', price: 0, specs: specs() },
+  cStandard: { label: 'C Standard (11-56)', note: 'Requires custom nut filing', price: 0, specs: specs() },
+  dropC: { label: 'Drop C (10-52)', note: 'Requires custom nut filing', price: 0, specs: specs() },
+  dropB: { label: 'Drop B (11-56)', note: 'Requires custom nut filing', price: 0, specs: specs() },
 }
+export const TUNING_DISCLAIMER =
+  'Alternative tunings requiring string gauges other than 10-46 necessitate custom ' +
+  'nut filing. Should cancellation or return occur, a $200 restocking and setup fee ' +
+  'will apply to cover nut replacement, restringing, and complete instrument setup ' +
+  'to restore standard tuning specifications.'
 
 export const STRING_BRAND_OPTIONS = {
-  elixir1046: { label: 'Elixir 10-46', note: 'Elixir 10-46 strings', price: 0, specs: specs() },
-  elixir942: { label: 'Elixir 9-42 Super Light', note: 'Elixir 9-42 super light', price: 0, specs: specs() },
+  elixir1046: { label: 'Elixir 1046E', note: 'Standard gauge', price: 0, specs: { size: '', dimensions: '', material: '', notes: '' } },
+  elixir942: { label: 'Elixir 942E Super Light Gauge Strings', note: 'Super light gauge', price: 0, specs: { size: '', dimensions: '', material: '', notes: '' } },
+}
+
+export const KNOB_STYLE_OPTIONS = {
+  plasticBlack: { label: 'Black Plastic', fileKey: 'plasticblack', price: 0, specs: specs() },
+  chrome: { label: 'Chrome', fileKey: 'chrome', price: 15, specs: specs() },
+  plasticWhite: { label: 'White Plastic', fileKey: 'plasticwhite', price: 0, specs: specs() },
+  abaloneInlay: { label: 'Metal Knobs w/ Abalone Inlays', fileKey: 'abalone-inlay', price: 30, specs: specs() },
+  whitePearlInlay: { label: 'Metal Knobs w/ White Pearl Inlays', fileKey: 'white-pearl', price: 25, specs: specs() },
+  tamarind: { label: 'Tamarind Wood', fileKey: 'tamarind', price: 20, specs: specs() },
 }
 
 export const OUTPUT_JACK_OPTIONS = {
-  none: { label: 'None', note: 'No output jack upgrade', price: 0, specs: specs() },
-  standard: { label: 'Standard Jack', note: 'Standard output jack', price: 0, specs: specs() },
-  gold: { label: 'Gold Jack', note: 'Gold output jack', price: 15, specs: specs() },
+  off: { label: 'Off', note: 'No output jack shown', price: 0, specs: specs() },
+  on: { label: 'On', note: 'Output jack installed, matches hardware color', price: 0, specs: specs() },
 }
 
 export const STRAP_BUTTON_OPTIONS = {
-  off: { label: 'Off', note: 'No strap buttons', price: 0, specs: specs() },
-  on: { label: 'On', note: 'Strap buttons installed', price: 10, specs: specs() },
+  none: { label: 'None', note: 'No strap buttons', styleFolder: null, price: 0, specs: specs() },
+  standard: { label: 'Standard', note: 'Standard strap buttons', styleFolder: 'standard', price: 10, specs: specs() },
+  dunlopStraplocks: { label: 'Dunlop Straplocks', note: 'Locking strap buttons', styleFolder: 'straplocks', price: 25, specs: specs() },
 }
 
 export const TUNER_BUTTON_OPTIONS = {
-  off: { label: 'Off', note: 'No tuner buttons', price: 0, specs: specs() },
-  on: { label: 'On', note: 'Tuner buttons installed', price: 10, specs: specs() },
+  none: { label: 'None', note: 'No tuner button style overlay', styleKey: null, price: 0, specs: specs() },
+  whitePearloid: { label: 'White Pearloid', note: 'Pearloid tuner buttons', styleKey: 'whitepearl', price: 15, specs: specs() },
+  black: { label: 'Black', note: 'Black tuner buttons', styleKey: 'black', price: 0, specs: specs() },
 }
 
 export const ELECTRONICS_CAVITY_COVER_OPTIONS = {
-  none: { label: 'None', note: 'No cavity cover', price: 0, specs: specs() },
-  standard: { label: 'Standard Cover', note: 'Standard electronics cavity cover', price: 10, specs: specs() },
+  black: { label: 'Black', note: 'Black electronics cavity cover', fileKey: 'black', price: 0, specs: specs() },
+  ebony: { label: 'Ebony', note: 'Ebony electronics cavity cover', fileKey: 'ebony', price: 15, specs: specs() },
 }
 
-export const TREMOLO_COVER_OPTIONS = {
-  none: { label: 'None', note: 'No tremolo cover', price: 0, specs: specs() },
-  standard: { label: 'Standard Cover', note: 'Standard tremolo cover', price: 10, specs: specs() },
+export const TREMOLO_COVER_OPTIONS_BY_BRIDGE = {
+  hipshotTremolo: {
+     ebony: { label: 'Ebony', note: 'Ebony tremolo cover', fileKey: 'ebony-trem-cover', price: 15, specs: specs() },
+    black: { label: 'Black', note: 'Black tremolo cover', fileKey: 'trem-cover', price: 0, specs: specs() },
+  },
+  floydRoseTremolo: {
+    black: { label: 'Black', note: 'Black Floyd Rose cover', fileKey: 'floyd', price: 0, specs: specs() },
+    ebony: { label: 'Ebony', note: 'Ebony Floyd Rose cover', fileKey: 'floyd-ebony', price: 15, specs: specs() },
+    roastedFlameMaple: { label: 'Roasted Flame Maple', note: 'Roasted flame maple cover', fileKey: 'floyd-rfm', price: 25, specs: specs() },
+  },
 }
 
 export function resolveVariant(source, colorKey) {
@@ -1354,12 +1346,14 @@ export const guitarBuilder = {
   PICKUP_POLE_COLOR_OPTIONS,
   CONTROLS_OPTIONS,
   SADDLE_OPTIONS,
-  NUT_OPTIONS,
-  TUNING_OPTIONS,
-  STRING_BRAND_OPTIONS,
-  OUTPUT_JACK_OPTIONS,
-  STRAP_BUTTON_OPTIONS,
-  TUNER_BUTTON_OPTIONS,
-  ELECTRONICS_CAVITY_COVER_OPTIONS,
-  TREMOLO_COVER_OPTIONS,
+   NUT_OPTIONS,
+   TUNING_OPTIONS,
+   TUNING_DISCLAIMER,
+   STRING_BRAND_OPTIONS,
+   OUTPUT_JACK_OPTIONS,
+   STRAP_BUTTON_OPTIONS,
+   TUNER_BUTTON_OPTIONS,
+   ELECTRONICS_CAVITY_COVER_OPTIONS,
+   KNOB_STYLE_OPTIONS,
+   TREMOLO_COVER_OPTIONS_BY_BRIDGE,
 }

@@ -16,8 +16,9 @@ import {
   INLAY_OPTIONS,
   INLAY_SHAPE_OPTIONS,
   INLAY_MATERIAL_OPTIONS,
-  KNOB_OPTIONS_BY_BODY,
-  PICKGUARD_OPTIONS_BY_BODY,
+   KNOB_OPTIONS_BY_BODY,
+   KNOB_STYLE_OPTIONS,
+   PICKGUARD_OPTIONS_BY_BODY,
   PICKUP_OPTIONS,
   GUITAR_TYPE_OPTIONS,
   guitarBuilder,
@@ -46,17 +47,18 @@ import {
   PICKUP_POLE_COLOR_OPTIONS,
   CONTROLS_OPTIONS,
   SADDLE_OPTIONS,
-  NUT_OPTIONS,
-  TUNING_OPTIONS,
-  STRING_BRAND_OPTIONS,
+   NUT_OPTIONS,
+   TUNING_OPTIONS,
+   TUNING_DISCLAIMER,
+   STRING_BRAND_OPTIONS,
   OUTPUT_JACK_OPTIONS,
   STRAP_BUTTON_OPTIONS,
   TUNER_BUTTON_OPTIONS,
-  ELECTRONICS_CAVITY_COVER_OPTIONS,
-  TREMOLO_COVER_OPTIONS,
+   ELECTRONICS_CAVITY_COVER_OPTIONS,
+   TREMOLO_COVER_OPTIONS_BY_BRIDGE,
 } from '../lib/guitarBuilderData.js'
 
-import { resolveTopWoodAsset, resolveFinishAsset, resolveTopCoatAsset, resolveNeckWoodAsset, resolveHeadstockWoodAsset, resolveFingerboardWoodAsset, resolveInlay, resolveNeckRearFinishAsset, resolveBackNeckAsset, resolveBackplateAsset, resolveOutputJackAsset, resolveKnobAsset, resolveSwitchAsset } from '../lib/assetResolver.js'
+import { resolveTopWoodAsset, resolveFinishAsset, resolveTopCoatAsset, resolveNeckWoodAsset, resolveHeadstockWoodAsset, resolveFingerboardWoodAsset, resolveInlay, resolveNeckRearFinishAsset, resolveBackNeckAsset, resolveBackplateAsset, resolveOutputJackAsset, resolveKnobAsset, resolveKnobStyleOverlay, resolveSwitchAsset } from '../lib/assetResolver.js'
 import { listBuilderAssets } from '../utils/apiConfig.js'
 
 const phpFormatter = new Intl.NumberFormat('en-PH', {
@@ -158,18 +160,13 @@ export default function useGuitarConfig() {
       '6in': '6in',
       '6inr': '6inr',
       '6kr': '6kr',
-      '624': '624',
-      '2x4': '624',
-      pth: 'pth',
-      pthr: 'pthr',
-      pointed: 'pth',
-      'pointed-reverse': 'pthr',
-    }
-    if (map[s]) return map[s]
-    // tolerant fallbacks
-    if (s.includes('point')) return s.includes('reverse') ? 'pthr' : 'pth'
-    if (s.includes('gt6')) return s.includes('r') ? 'gt6r' : 'gt6'
-    return s
+       '624': '624',
+       '2x4': '624',
+     }
+     if (map[s]) return map[s]
+     // tolerant fallbacks
+     if (s.includes('gt6')) return s.includes('r') ? 'gt6r' : 'gt6'
+     return s
   }
 
   const [dynamicBackplateList, setDynamicBackplateList] = useState([])
@@ -524,6 +521,8 @@ export default function useGuitarConfig() {
         merged[key] = { ...merged[key], price: priceOverrides[key].price }
       }
     })
+    delete merged.pth
+    delete merged.pthr
     return merged
   }, [mergeOptionsFromBuilderParts, priceOverrides])
 
@@ -826,6 +825,8 @@ export default function useGuitarConfig() {
     Object.keys(merged).forEach(key => {
       if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
     })
+    delete merged.pth
+    delete merged.pthr
     return merged
   }, [mergeOptionsFromBuilderParts, priceOverrides])
 
@@ -965,13 +966,15 @@ export default function useGuitarConfig() {
     return merged
   }, [mergeOptionsFromBuilderParts, priceOverrides])
 
-  const mergedTremoloCoverOptions = useMemo(() => {
-    const merged = mergeOptionsFromBuilderParts(TREMOLO_COVER_OPTIONS, { partCategory: 'misc', typeMappings: ['tremoloCover'] })
+  const tremoloCoverOptions = useMemo(() => {
+    const byBridge = TREMOLO_COVER_OPTIONS_BY_BRIDGE[config.bridge]
+    if (!byBridge) return {}
+    const merged = { ...byBridge }
     Object.keys(merged).forEach(key => {
-      if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
+      if (priceOverrides[key]?.price !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
     })
     return merged
-  }, [mergeOptionsFromBuilderParts, priceOverrides])
+  }, [config.bridge, TREMOLO_COVER_OPTIONS_BY_BRIDGE, priceOverrides])
 
   const getCategoryPrice = (cat) => priceOverrides[`cat:${cat}`]?.price
   const pickguardOptions = useMemo(
@@ -987,14 +990,31 @@ export default function useGuitarConfig() {
     [config.body, priceOverrides],
   )
   const knobOptions = useMemo(
-    () =>
-      Object.entries(KNOB_OPTIONS_BY_BODY[config.body] ?? KNOB_OPTIONS_BY_BODY.strat).map(([value, option]) => {
+    () => {
+      if (config.body === 'dc') {
+        return Object.entries(KNOB_STYLE_OPTIONS).map(([value, option]) => ({
+          value,
+          ...option,
+          preview: option.fileKey ? resolveKnobAsset('electric', 'dc', option.fileKey) : null,
+        }))
+      }
+      return Object.entries(KNOB_OPTIONS_BY_BODY[config.body] ?? KNOB_OPTIONS_BY_BODY.strat).map(([value, option]) => {
         const specific = getOptionOverride('hardware', value, config.body) ?? getOptionOverride('knobs', value, config.body)
         const catPrice = getCategoryPrice('knobs')
         const finalPrice = specific !== undefined ? specific : catPrice
         return { value, ...(finalPrice !== undefined ? { ...option, price: finalPrice } : option), preview: option.src }
-      }),
-    [config.body, priceOverrides],
+      })
+    },
+    [config.body, KNOB_STYLE_OPTIONS, priceOverrides],
+  )
+  const knobStyleOptionList = useMemo(
+    () =>
+      Object.entries(KNOB_STYLE_OPTIONS).map(([value, option]) => ({
+        value,
+        ...option,
+        preview: option.fileKey ? resolveKnobStyleOverlay('electric', 'dc', option.fileKey) : null,
+      })),
+    [KNOB_STYLE_OPTIONS],
   )
 
   useEffect(() => {
@@ -1010,9 +1030,11 @@ export default function useGuitarConfig() {
   useEffect(() => {
     const pickguardKeys = Object.keys(PICKGUARD_OPTIONS_BY_BODY[config.body] ?? PICKGUARD_OPTIONS_BY_BODY.strat)
       .filter(key => key !== 'none')
-    const knobKeys = Object.keys(KNOB_OPTIONS_BY_BODY[config.body] ?? KNOB_OPTIONS_BY_BODY.strat)
+    const knobKeys = config.body === 'dc'
+      ? Object.keys(KNOB_STYLE_OPTIONS)
+      : Object.keys(KNOB_OPTIONS_BY_BODY[config.body] ?? KNOB_OPTIONS_BY_BODY.strat)
     const nextPickguard = pickguardKeys.includes(config.pickguard) ? config.pickguard : (pickguardKeys[0] ?? 'pearloid')
-    const nextKnobs = knobKeys.includes(config.knobs) ? config.knobs : knobKeys[0]
+    const nextKnobs = knobKeys.includes(config.knobs) ? config.knobs : (knobKeys[0] ?? 'plasticBlack')
 
     if (nextPickguard !== config.pickguard || nextKnobs !== config.knobs) {
       setConfig(prev => ({
@@ -1090,7 +1112,7 @@ export default function useGuitarConfig() {
       (mergedStrapButtonOptions[config.strapButtons]?.price ?? 0) +
       (mergedTunerButtonOptions[config.tunerButtons]?.price ?? 0) +
       (mergedElectronicsCavityCoverOptions[config.electronicsCavityCover]?.price ?? 0) +
-      (mergedTremoloCoverOptions[config.tremoloCover]?.price ?? 0)
+      (tremoloCoverOptions[config.tremoloCover]?.price ?? 0)
     )
   }, [
     config, dynamicBasePrice,
@@ -1111,8 +1133,8 @@ export default function useGuitarConfig() {
     mergedPickupBobbinOptions, mergedPickupPoleColorOptions, mergedControlsOptions,
     mergedSaddleOptions, mergedNutOptions, mergedTuningOptions,
     mergedStringBrandOptions, mergedOutputJackOptions, mergedStrapButtonOptions,
-    mergedTunerButtonOptions, mergedElectronicsCavityCoverOptions, mergedTremoloCoverOptions,
-  ])
+     mergedTunerButtonOptions, mergedElectronicsCavityCoverOptions, tremoloCoverOptions,
+   ])
 
   const summary = useMemo(
     () => ({
@@ -1129,7 +1151,7 @@ export default function useGuitarConfig() {
       inlayMaterial: INLAY_MATERIAL_OPTIONS[config.inlayMaterial]?.label ?? config.inlayMaterial,
       bridge: BRIDGE_OPTIONS[config.bridge]?.label ?? config.bridge,
       pickguard: PICKGUARD_OPTIONS_BY_BODY[config.body]?.[config.pickguard]?.label ?? config.pickguard,
-      knobs: KNOB_OPTIONS_BY_BODY[config.body]?.[config.knobs]?.label ?? config.knobs,
+      knobs: config.body === 'dc' ? (KNOB_STYLE_OPTIONS[config.knobs]?.label ?? config.knobs) : (KNOB_OPTIONS_BY_BODY[config.body]?.[config.knobs]?.label ?? config.knobs),
       hardware: HARDWARE_OPTIONS[config.hardware]?.label ?? config.hardware,
       pickups: PICKUP_OPTIONS[config.pickups]?.label ?? config.pickups,
       // New summary fields
@@ -1165,7 +1187,7 @@ export default function useGuitarConfig() {
       strapButtons: STRAP_BUTTON_OPTIONS[config.strapButtons]?.label ?? config.strapButtons,
       tunerButtons: TUNER_BUTTON_OPTIONS[config.tunerButtons]?.label ?? config.tunerButtons,
       electronicsCavityCover: ELECTRONICS_CAVITY_COVER_OPTIONS[config.electronicsCavityCover]?.label ?? config.electronicsCavityCover,
-      tremoloCover: TREMOLO_COVER_OPTIONS[config.tremoloCover]?.label ?? config.tremoloCover,
+      tremoloCover: TREMOLO_COVER_OPTIONS_BY_BRIDGE[config.bridge]?.[config.tremoloCover]?.label ?? config.tremoloCover,
     }),
     [config],
   )
@@ -1477,8 +1499,8 @@ export default function useGuitarConfig() {
     [mergedElectronicsCavityCoverOptions],
   )
   const tremoloCoverOptionList = useMemo(
-    () => Object.entries(mergedTremoloCoverOptions).map(([value, option]) => ({ value, ...option })),
-    [mergedTremoloCoverOptions],
+    () => Object.entries(tremoloCoverOptions).map(([value, option]) => ({ value, ...option })),
+    [tremoloCoverOptions],
   )
 
   const exportConfig = useCallback(() => JSON.stringify(config, null, 2), [config])
@@ -1564,28 +1586,28 @@ export default function useGuitarConfig() {
       strapButtons: mergedStrapButtonOptions[config.strapButtons]?.price ?? 0,
       tunerButtons: mergedTunerButtonOptions[config.tunerButtons]?.price ?? 0,
       electronicsCavityCover: mergedElectronicsCavityCoverOptions[config.electronicsCavityCover]?.price ?? 0,
-      tremoloCover: mergedTremoloCoverOptions[config.tremoloCover]?.price ?? 0,
-  }), [
-    config, dynamicBasePrice,
-    mergedBodyOptions, mergedBodyWoodOptions, mergedBodyFinishOptions,
-    mergedNeckOptions, mergedFretboardOptions, mergedHeadstockOptions,
-    mergedHeadstockWoodOptions, mergedInlayOptions, mergedBridgeOptions,
-    pickguardOptions, knobOptions, mergedHardwareOptions, mergedPickupOptions,
-    // New deps
-    mergedDexterityOptions, mergedStringCountOptions, mergedMultiscaleOptions,
-    mergedScaleLengthOptions, mergedCaseOptions, mergedBevelOptions,
-    mergedTopWoodOptions, mergedFinishTypeOptions, mergedTopCoatOptions,
-    mergedBurstFinishOptions, mergedNeckConstructionOptions, mergedDynamicInlayOptions,
-    mergedDynamicNeckWoodOptions, mergedDynamicHeadstockWoodOptions, mergedDynamicFingerboardWoodOptions,
-    mergedFretOptions, mergedNeckRearFinishOptions,
-    mergedHeadstockShapeOptions, mergedTrussRodCoverOptions, mergedElectronicsTypeOptions,
-    mergedPickupConfigurationOptions, mergedBridgePickupModelOptions,
-    mergedMiddlePickupModelOptions, mergedNeckPickupModelOptions,
-    mergedPickupBobbinOptions, mergedPickupPoleColorOptions, mergedControlsOptions,
-    mergedSaddleOptions, mergedNutOptions, mergedTuningOptions,
-    mergedStringBrandOptions, mergedOutputJackOptions, mergedStrapButtonOptions,
-    mergedTunerButtonOptions, mergedElectronicsCavityCoverOptions, mergedTremoloCoverOptions,
-  ])
+      tremoloCover: tremoloCoverOptions[config.tremoloCover]?.price ?? 0,
+   }), [
+     config, dynamicBasePrice,
+     mergedBodyOptions, mergedBodyWoodOptions, mergedBodyFinishOptions,
+     mergedNeckOptions, mergedFretboardOptions, mergedHeadstockOptions,
+     mergedHeadstockWoodOptions, mergedInlayOptions, mergedBridgeOptions,
+     pickguardOptions, knobOptions, mergedHardwareOptions, mergedPickupOptions,
+     // New deps
+     mergedDexterityOptions, mergedStringCountOptions, mergedMultiscaleOptions,
+     mergedScaleLengthOptions, mergedCaseOptions, mergedBevelOptions,
+     mergedTopWoodOptions, mergedFinishTypeOptions, mergedTopCoatOptions,
+     mergedBurstFinishOptions, mergedNeckConstructionOptions, mergedDynamicInlayOptions,
+     mergedDynamicNeckWoodOptions, mergedDynamicHeadstockWoodOptions, mergedDynamicFingerboardWoodOptions,
+     mergedFretOptions, mergedNeckRearFinishOptions,
+     mergedHeadstockShapeOptions, mergedTrussRodCoverOptions, mergedElectronicsTypeOptions,
+     mergedPickupConfigurationOptions, mergedBridgePickupModelOptions,
+     mergedMiddlePickupModelOptions, mergedNeckPickupModelOptions,
+     mergedPickupBobbinOptions, mergedPickupPoleColorOptions, mergedControlsOptions,
+     mergedSaddleOptions, mergedNutOptions, mergedTuningOptions,
+     mergedStringBrandOptions, mergedOutputJackOptions, mergedStrapButtonOptions,
+     mergedTunerButtonOptions, mergedElectronicsCavityCoverOptions, tremoloCoverOptions,
+   ])
 
   const refreshPrices = useCallback(() => {
     fetchBuilderParts()
@@ -1619,6 +1641,7 @@ export default function useGuitarConfig() {
       bridgeOptions,
       pickguardOptions,
       knobOptions,
+      knobStyleOptionList,
       pickupOptions,
       hardwareOptions,
       basePrice: dynamicBasePrice,
@@ -1657,9 +1680,10 @@ export default function useGuitarConfig() {
       stringBrandOptions: stringBrandOptionList,
       outputJackOptions: outputJackOptionList,
       strapButtonOptions: strapButtonOptionList,
-      tunerButtonOptions: tunerButtonOptionList,
-      electronicsCavityCoverOptions: electronicsCavityCoverOptionList,
-      tremoloCoverOptions: tremoloCoverOptionList,
-    },
-  }
-}
+       tunerButtonOptions: tunerButtonOptionList,
+     electronicsCavityCoverOptions: electronicsCavityCoverOptionList,
+       tremoloCoverOptions: tremoloCoverOptionList,
+       tuningDisclaimer: TUNING_DISCLAIMER,
+     },
+   }
+ }

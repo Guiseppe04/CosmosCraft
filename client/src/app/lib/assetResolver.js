@@ -369,6 +369,94 @@ export function resolveKnobAsset(category, model, knobKey) {
 }
 
 /**
+ * Knobs are TWO composited layers, not one flat image per style+color
+ * (same pattern as the pickup route/body/poles stack elsewhere in this file):
+ *   - hardware base layer (bottom): color of the knob base/screw showing through
+ *   - knob style layer (top): the style cap/overlay, colorless/transparent PNG
+ *
+ * NOTE: The `hardware/` subfolder does not yet exist on disk for DC — the
+ * existing DC knob assets are flat (`knobs/{knobKey}.png`) with the hardware
+ * color already baked in. `resolveKnobHardwareBase` is provided for forward
+ * compatibility; GuitarPreview currently relies on the style overlay alone.
+ */
+export function resolveKnobHardwareBase(category, model, hardwareColor) {
+  return resolveModelAsset(category, model, 'bodies', 'front', 'knobs', 'hardware', `${hardwareColor}.png`)
+}
+export function resolveKnobStyleOverlay(category, model, knobKey) {
+  return resolveModelAsset(category, model, 'bodies', 'front', 'knobs', `${knobKey}.png`)
+}
+
+/**
+ * Resolve a tremolo cover, which depends on bridge type (hipshot vs floyd).
+ * Path: models/{model}/back/backplates/{coverFileKey}.png
+ * coverFileKey is passed in fully resolved (e.g. 'ebony-trem-cover', 'floyd-rfm')
+ * since the filename doesn't follow a clean {bridge}-{color} pattern.
+ */
+export function resolveTremoloCoverAsset(category, model, coverFileKey) {
+  return resolveModelAsset(category, model, 'back', 'backplates', `${coverFileKey}.png`)
+}
+
+/**
+ * Resolve strap button assets (front + back), keyed by style and hardware color.
+ */
+export function resolveStrapButtonBack(category, model, styleFolder, hardwareColor) {
+  return resolveModelAsset(category, model, 'back', 'strap buttons', styleFolder, `${hardwareColor}.png`)
+}
+export function resolveStrapButtonFront(category, model, styleFolder, hardwareColor) {
+  return resolveModelAsset(category, model, 'bodies', 'front', 'strap buttons', styleFolder, `${hardwareColor}.png`)
+}
+
+/**
+ * Resolve tuner button style overlay (White Pearloid / Black), keyed by headstock shape.
+ * Path: all-models/headstocks/6/tuners/{headstockShape}/{styleKey}-buttons.png
+ */
+export function resolveTunerButtonStyle(category, model, headstockShape, styleKey) {
+  return resolveSharedAsset(category, model, 'headstocks', '6', 'tuners', headstockShape, `${styleKey}-buttons.png`)
+}
+
+const FRONT_TO_REAR_HEADSTOCK_MAP = {
+  h33:  'headstock2',
+  h33r: 'headstock4',
+  gt6:  'headstock14',
+  gt6r: 'headstock13',
+  '6inr': 'headstock5',
+  '624': 'headstock3',
+  '6in': 'headstock6',
+  '6kr': '6kr',
+}
+
+export function resolveRearTunerAsset(category, model, frontHeadstockShape, hardwareColor) {
+  const rearShape = FRONT_TO_REAR_HEADSTOCK_MAP[frontHeadstockShape]
+  if (!rearShape) return null
+  return resolveSharedAsset(category, model, 'back', 'necks', '6-string', 'back', '6-string-neck-thru-back', rearShape, 'tuners', 'locking', `${hardwareColor}.png`)
+}
+
+export function resolveRearHeadstockMask(category, model, frontHeadstockShape) {
+  const rearShape = FRONT_TO_REAR_HEADSTOCK_MAP[frontHeadstockShape]
+  if (!rearShape) return null
+  return resolveSharedAsset(category, model, 'back', 'necks', '6-string', 'back', '6-string-neck-thru-back', rearShape, 'mask.png')
+}
+
+export function resolveRearBodyMask(category, model) {
+  return resolveModelAsset(category, model, 'back', 'masks', 'bodymask.png')
+}
+
+/**
+ * Resolve output jack asset by hardware color (spec keys it by hardware color, not a jack "type").
+ */
+export function resolveOutputJackByColor(category, model, hardwareColor) {
+  return resolveModelAsset(category, model, 'back', 'output-jacks', `${hardwareColor}.png`)
+}
+
+/**
+ * Electronics cavity cover backplate screws overlay — always included alongside
+ * whichever cover color is selected.
+ */
+export function resolveBackplateScrews(category, model) {
+  return resolveModelAsset(category, model, 'back', 'backplates', 'backplate-screws.png')
+}
+
+/**
  * Resolve front body switch assets
  */
 export function resolveSwitchAsset(category, model, switchKey) {
@@ -492,13 +580,24 @@ export default {
   resolveNeckRearFinishAsset,
   resolveBackNeckAsset,
   resolveBackplateAsset,
-  resolveOutputJackAsset,
-  resolveBackStrapButtonAsset,
-  resolveStringFerrulesAsset,
-  resolveKnobAsset,
-  resolveSwitchAsset,
-  resolveBodyFrontMaskAsset,
-  resolveBodyStrapButtonAsset,
+   resolveOutputJackAsset,
+   resolveOutputJackByColor,
+   resolveBackStrapButtonAsset,
+   resolveStringFerrulesAsset,
+   resolveKnobAsset,
+   resolveKnobHardwareBase,
+   resolveKnobStyleOverlay,
+   resolveSwitchAsset,
+   resolveBodyFrontMaskAsset,
+   resolveBodyStrapButtonAsset,
+   resolveStrapButtonBack,
+   resolveStrapButtonFront,
+    resolveTunerButtonStyle,
+    resolveRearTunerAsset,
+    resolveRearHeadstockMask,
+    resolveRearBodyMask,
+   resolveBackplateScrews,
+   resolveTremoloCoverAsset,
   getButtonPreview,
   resolveOptionPreview,
 }

@@ -161,8 +161,7 @@ function DynamicOptionField({ field, config, onUpdate, category, model }) {
     return resolveOptionPreview(category, model, field.key, optionValue)
   }
 
-  // Image-select: Show thumbnails
-  if (field.type === 'image-select') {
+      if (field.type === 'image-select') {
     return (
       <div className="space-y-2">
         <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40">
@@ -184,6 +183,9 @@ function DynamicOptionField({ field, config, onUpdate, category, model }) {
             )
           })}
         </div>
+        {field.disclaimer && (
+          <p className="text-[10px] leading-relaxed text-white/40 italic">{field.disclaimer}</p>
+        )}
       </div>
     )
   }
@@ -194,17 +196,20 @@ function DynamicOptionField({ field, config, onUpdate, category, model }) {
       <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40">
         {field.label}
       </h3>
-      <div className="grid grid-cols-2 gap-2">
-        {options.map((option) => (
-          <TextOptionButton
-            key={option.value}
-            option={option}
-            isSelected={currentValue === option.value}
-            onClick={() => onUpdate({ [field.key]: option.value })}
-          />
-        ))}
-      </div>
-    </div>
+       <div className="grid grid-cols-2 gap-2">
+         {options.map((option) => (
+           <TextOptionButton
+             key={option.value}
+             option={option}
+             isSelected={currentValue === option.value}
+             onClick={() => onUpdate({ [field.key]: option.value })}
+           />
+         ))}
+       </div>
+       {field.disclaimer && (
+         <p className="text-[10px] leading-relaxed text-white/40 italic">{field.disclaimer}</p>
+       )}
+     </div>
   )
 }
 

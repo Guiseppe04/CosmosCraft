@@ -58,8 +58,8 @@ import {
   OUTPUT_JACK_OPTIONS,
   STRAP_BUTTON_OPTIONS,
   TUNER_BUTTON_OPTIONS,
-  ELECTRONICS_CAVITY_COVER_OPTIONS,
-  TREMOLO_COVER_OPTIONS,
+   ELECTRONICS_CAVITY_COVER_OPTIONS,
+   TREMOLO_COVER_OPTIONS_BY_BRIDGE,
 } from './guitarBuilderData.js'
 
 // Keep catalog logic optional: core rendering uses static `bassAsset(...)` paths
@@ -1575,8 +1575,8 @@ export const bassBuilder = {
   OUTPUT_JACK_OPTIONS,
   STRAP_BUTTON_OPTIONS,
   TUNER_BUTTON_OPTIONS,
-  ELECTRONICS_CAVITY_COVER_OPTIONS,
-  TREMOLO_COVER_OPTIONS,
+   ELECTRONICS_CAVITY_COVER_OPTIONS,
+   TREMOLO_COVER_OPTIONS_BY_BRIDGE,
   resolveCatalogAsset: resolveBassCatalogAsset,
   resolveCatalogVariant: resolveBassCatalogVariant,
   resolveSharedAsset: resolveSharedBassAsset,

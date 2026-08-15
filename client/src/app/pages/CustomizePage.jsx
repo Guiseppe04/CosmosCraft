@@ -768,8 +768,9 @@ export function CustomizePage() {
   // Get knob options for current body
   const knobOptions = useMemo(() => {
     if (!options.knobOptions) return []
+    if (config.body === 'dc' && options.knobStyleOptionList) return options.knobStyleOptionList
     return options.knobOptions
-  }, [options.knobOptions, config.body])
+  }, [options.knobOptions, options.knobStyleOptionList, config.body])
 
   const [toastMessage, setToastMessage] = useState(null)
 
@@ -1590,20 +1591,23 @@ export function CustomizePage() {
                     </div>
                   </div>
                   
-                  {/* Tuning */}
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Tuning</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.tuningOptions?.map((opt) => (
-                        <OptionButton
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.tuning === opt.value}
-                          onClick={() => updateConfig({ tuning: opt.value })}
-                        />
-                      ))}
-                    </div>
-                  </div>
+                   {/* Tuning */}
+                   <div>
+                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Tuning</h3>
+                     <div className="grid grid-cols-2 gap-2">
+                       {options.tuningOptions?.map((opt) => (
+                         <OptionButton
+                           key={opt.value}
+                           option={opt}
+                           isSelected={config.tuning === opt.value}
+                           onClick={() => updateConfig({ tuning: opt.value })}
+                         />
+                       ))}
+                     </div>
+                     {options.tuningDisclaimer && (
+                       <p className="mt-2 text-[10px] leading-relaxed text-white/40 italic">{options.tuningDisclaimer}</p>
+                     )}
+                   </div>
                   
                   {/* String Brand */}
                   <div>
@@ -1680,20 +1684,22 @@ export function CustomizePage() {
                     </div>
                   </div>
                   
-                  {/* Tremolo Cover */}
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Tremolo Cover</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.tremoloCoverOptions?.map((opt) => (
-                        <OptionButton
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.tremoloCover === opt.value}
-                          onClick={() => updateConfig({ tremoloCover: opt.value })}
-                        />
-                      ))}
-                    </div>
-                  </div>
+                   {/* Tremolo Cover - only for bridges with a tremolo */}
+                   {(config.bridge === 'hipshotTremolo' || config.bridge === 'floydRoseTremolo') && (
+                   <div>
+                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Tremolo Cover</h3>
+                     <div className="grid grid-cols-2 gap-2">
+                       {options.tremoloCoverOptions?.map((opt) => (
+                         <OptionButton
+                           key={opt.value}
+                           option={opt}
+                           isSelected={config.tremoloCover === opt.value}
+                           onClick={() => updateConfig({ tremoloCover: opt.value })}
+                         />
+                       ))}
+                     </div>
+                   </div>
+                   )}
                 </div>
               )}
               
