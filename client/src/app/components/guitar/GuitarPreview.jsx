@@ -477,14 +477,7 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
         {/* Guitar display area */}
         <div className="relative overflow-hidden rounded-xl">
           {/* Background gradient for depth */}
-          <div className="absolute inset-0 bg-gradient-to-b from-[#1a1a1a] via-[#0f0f0f] to-[#0a0a0a]" />
-          
-          {/* Spotlight effect from top */}
-          <div className="absolute inset-0 overflow-hidden pointer-events-none">
-            <div className="absolute -top-20 left-1/2 -translate-x-1/2 w-[500px] h-[500px] bg-gradient-radial from-white/10 via-transparent to-transparent opacity-40" />
-            <div className="absolute top-0 left-1/4 w-[300px] h-[300px] bg-gradient-radial from-[#d4af37]/5 via-transparent to-transparent opacity-50" />
-            <div className="absolute top-0 right-1/4 w-[300px] h-[300px] bg-gradient-radial from-white/5 via-transparent to-transparent opacity-30" />
-          </div>
+
           
           {/* Guitar image */}
           <div className="relative flex items-center justify-center py-8">
