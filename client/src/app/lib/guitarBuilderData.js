@@ -83,19 +83,22 @@ export const DEFAULT_CONFIG = {
   headstockShape: 'gt6',
   trussRodCover: 'black',
   electronicsType: 'passive',
-  pickupConfiguration: 'hss',
-  bridgePickupModel: 'beryllium',
+   pickupConfiguration: 'hh',
+  bridgePickupModel: 'vantium',
   middlePickupModel: 'none',
-  neckPickupModel: 'beryllium',
-  pickupBobbin: 'standard',
-  pickupPoleColor: 'black',
+  neckPickupModel: 'vantium',
+  pickupColor: 'bobbins',
+  pickupColorVariant: 'black',
+  pickupPaintedColor: '#000000',
+  pickupWoodType: 'black',
+  pickupPoleColor: 'chrome',
   controls: 'standard',
   saddle: 'chrome',
   nut: 'blackGraphTech',
   tuning: 'eStandard',
   stringBrand: 'elixir1046',
    outputJack: 'off',
-   strapButtons: 'none',
+   strapButtons: 'standard',
     tunerButtons: 'none',
    electronicsCavityCover: 'black',
    tremoloCover: null,
@@ -779,25 +782,15 @@ export const HARDWARE_OPTIONS = {
 }
 
 export const PICKUP_OPTIONS = {
-  sss: {
-    label: 'SSS',
-    note: 'Three single coils',
-    price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
-  },
-  hss: {
-    label: 'HSS',
-    note: 'Bridge humbucker, singles',
-    price: 110, specs: { size: '', dimensions: '', material: '', notes: '' }
-  },
   hh: {
     label: 'HH',
     note: 'Dual humbuckers',
     price: 135, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
-  p90: {
-    label: 'P90',
-    note: 'P90 bridge and neck set',
-    price: 125, specs: { size: '', dimensions: '', material: '', notes: '' }
+  hss: {
+    label: 'HSS',
+    note: 'Bridge humbucker, two singles',
+    price: 110, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
   fluence: {
     label: 'Fluence',
@@ -1167,9 +1160,7 @@ export const ELECTRONICS_TYPE_OPTIONS = {
 
 export const PICKUP_CONFIGURATION_OPTIONS = {
   hh: { label: 'Two Humbuckers (HH)', note: 'Dual humbuckers', price: 135, specs: specs() },
-  hss: { label: 'Humbucker - Single - Single (HSS)', note: 'Bridge humbucker, two singles', price: 110, specs: specs() },
-  sss: { label: 'Three Single Coils (SSS)', note: 'Three single coils', price: 0, specs: specs() },
-  p90p90: { label: 'Two P90s (P90-P90)', note: 'Dual P90 set', price: 125, specs: specs() },
+  hss: { label: 'Humbucker - Single - Humbucker (H-S-H)', note: 'Bridge humbucker, middle single, neck humbucker', price: 110, specs: specs() },
 }
 
 export const PICKUP_MODEL_BRIDGE_OPTIONS = {
@@ -1207,6 +1198,13 @@ export const PICKUP_POLE_COLOR_OPTIONS = {
   black: { label: 'Black', note: 'Black pole pieces', src: null, price: 0, specs: specs() },
   chrome: { label: 'Chrome', note: 'Chrome pole pieces', src: null, price: 10, specs: specs() },
   gold: { label: 'Gold', note: 'Gold pole pieces', src: null, price: 10, specs: specs() },
+}
+
+export const PICKUP_COLOR_OPTIONS = {
+  bobbins: { label: 'Bobbin Colors', note: 'Open coil bobbins', price: 0, specs: specs() },
+  painted: { label: 'Painted Bobbins (RGB)', note: 'Custom RGB painted bobbins', price: 10, specs: specs() },
+  wooden: { label: 'Wooden Bobbins', note: 'Wood grain bobbins', price: 15, specs: specs() },
+  covers: { label: 'Covers', note: 'Covered pickup style', price: 10, specs: specs() },
 }
 
 export const CONTROLS_OPTIONS = {
@@ -1260,7 +1258,6 @@ export const OUTPUT_JACK_OPTIONS = {
 }
 
 export const STRAP_BUTTON_OPTIONS = {
-  none: { label: 'None', note: 'No strap buttons', styleFolder: null, price: 0, specs: specs() },
   standard: { label: 'Standard', note: 'Standard strap buttons', styleFolder: 'standard', price: 10, specs: specs() },
   dunlopStraplocks: { label: 'Dunlop Straplocks', note: 'Locking strap buttons', styleFolder: 'straplocks', price: 25, specs: specs() },
 }
@@ -1339,10 +1336,10 @@ export const guitarBuilder = {
   TRUSS_ROD_COVER_OPTIONS,
   ELECTRONICS_TYPE_OPTIONS,
   PICKUP_CONFIGURATION_OPTIONS,
-  PICKUP_MODEL_BRIDGE_OPTIONS,
+   PICKUP_MODEL_BRIDGE_OPTIONS,
   PICKUP_MODEL_MIDDLE_OPTIONS,
   PICKUP_MODEL_NECK_OPTIONS,
-  PICKUP_BOBBIN_OPTIONS,
+  PICKUP_COLOR_OPTIONS,
   PICKUP_POLE_COLOR_OPTIONS,
   CONTROLS_OPTIONS,
   SADDLE_OPTIONS,

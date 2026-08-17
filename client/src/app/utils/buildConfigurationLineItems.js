@@ -38,7 +38,7 @@ export const GUITAR_CONFIGURATION_ITEMS = [
   { key: 'bridgePickupModel', category: 'Bridge Pickup', summaryKey: 'bridgePickupModel' },
   { key: 'middlePickupModel', category: 'Middle Pickup', summaryKey: 'middlePickupModel' },
   { key: 'neckPickupModel', category: 'Neck Pickup', summaryKey: 'neckPickupModel' },
-  { key: 'pickupBobbin', category: 'Pickup Bobbin', summaryKey: 'pickupBobbin' },
+  { key: 'pickupColor', category: 'Pickup Color', summaryKey: 'pickupColor' },
   { key: 'pickupPoleColor', category: 'Pole Piece Color', summaryKey: 'pickupPoleColor' },
   { key: 'controls', category: 'Controls', summaryKey: 'controls' },
   // New Hardware options

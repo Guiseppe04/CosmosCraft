@@ -393,6 +393,9 @@ export function resolveKnobStyleOverlay(category, model, knobKey) {
  * since the filename doesn't follow a clean {bridge}-{color} pattern.
  */
 export function resolveTremoloCoverAsset(category, model, coverFileKey) {
+  if (coverFileKey === 'ebony-trem-cover' && USE_CLOUDINARY) {
+    return `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/ebony-trem-cover_m4apux.png`
+  }
   return resolveModelAsset(category, model, 'back', 'backplates', `${coverFileKey}.png`)
 }
 
@@ -481,6 +484,9 @@ export function resolveBodyStrapButtonAsset(category, model, buttonKey) {
  * Resolve pickup assets
  */
 export function resolvePickupRoute(category, model, pickupType, colorKey, position) {
+  if (pickupType === 'humbucker') {
+    return resolveSharedAsset(category, model, 'pickups', '6-string', '24-frets', 'standard', 'pickup-routes', pickupType, `${position}.png`)
+  }
   return resolveSharedAsset(category, model, 'pickups', '6-string', '24-frets', 'standard', 'pickup-routes', pickupType, `${colorKey}-${position}.png`)
 }
 
@@ -490,6 +496,34 @@ export function resolvePickupBody(category, model, pickupType, colorKey, positio
 
 export function resolvePickupPoles(category, model, pickupType, colorKey, position) {
   return resolveSharedAsset(category, model, 'pickups', '6-string', '24-frets', 'standard', 'pole-pieces', pickupType, `${colorKey}-${position}.png`)
+}
+
+export function resolvePickupBobbinColor(category, model, colorKey, position) {
+  return resolveSharedAsset(category, model, 'pickups', '6-string', '24-frets', 'standard', 'pickup-bodies', 'open', 'bobbins', `${colorKey}-${position}.png`)
+}
+
+export function resolvePickupBobbinMask(category, model, position) {
+  const maskMap = {
+    neck: 'coil-masks-neck',
+    middle: 'coil-masks-middle-single',
+    bridge: 'coil-masks-bridge',
+    'middle-single': 'coil-masks-middle-single-route',
+  }
+  const mask = maskMap[position] || `coil-masks-${position}`
+  return resolveSharedAsset(category, model, 'pickups', '6-string', '24-frets', 'standard', 'pickup-bodies', mask + '.png')
+}
+
+export function resolveFluenceMask(category, model, position) {
+  const maskMap = {
+    bridge: 'fluence-bridge-mask',
+    neck: 'fluence-neck-mask',
+  }
+  const mask = maskMap[position] || `${position}-mask`
+  return resolveSharedAsset(category, model, 'pickups', '6-string', '24-frets', 'standard', 'pickup-bodies', 'covered', `${mask}.png`)
+}
+
+export function resolveSingleCoilBody(category, model, colorKey, position) {
+  return resolveSharedAsset(category, model, 'pickups', '6-string', '24-frets', 'standard', 'pickup-bodies', 'singlecoil', `${colorKey}-${position}.png`)
 }
 
 /**
@@ -533,6 +567,7 @@ export function resolveOptionPreview(category, model, optionKey, value) {
     inlayMaterial: () => getButtonPreview(category, model, 'inlay-material', value),
     pickupColor: () => getButtonPreview(category, model, 'pickup-color', value),
     pickupBobbin: () => getButtonPreview(category, model, 'pickup', value),
+    pickupColor: () => getButtonPreview(category, model, 'pickup-color', value),
     polePieces: () => getButtonPreview(category, model, 'pole-pieces', value),
     topCoat: () => getButtonPreview(category, model, 'top-coat', value),
     trussRodCover: () => getButtonPreview(category, model, 'truss-cover', value),
@@ -573,10 +608,14 @@ export default {
   resolveFrets,
   resolveNut,
   resolveInlay,
-  resolvePickupRoute,
-  resolvePickupBody,
-  resolvePickupPoles,
-  resolveBodySpecificAsset,
+   resolvePickupRoute,
+   resolvePickupBody,
+   resolvePickupPoles,
+   resolvePickupBobbinColor,
+   resolvePickupBobbinMask,
+   resolveFluenceMask,
+   resolveSingleCoilBody,
+   resolveBodySpecificAsset,
   resolveNeckRearFinishAsset,
   resolveBackNeckAsset,
   resolveBackplateAsset,

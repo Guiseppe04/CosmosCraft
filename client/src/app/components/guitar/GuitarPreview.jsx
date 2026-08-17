@@ -28,6 +28,13 @@ import {
   resolveOutputJackByColor,
   resolveBackplateAsset,
   resolveBackplateScrews,
+  resolvePickupRoute,
+  resolvePickupBody,
+  resolvePickupPoles,
+  resolvePickupBobbinColor,
+  resolvePickupBobbinMask,
+  resolveFluenceMask,
+  resolveSingleCoilBody,
 } from '../../lib/assetResolver.js'
 
 const layerStyle = (src, extra = {}) => ({
@@ -210,20 +217,147 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
     : null
 
   const pickupLayers = useMemo(() => {
-    const layout = config.pickups
-    const route = guitarBuilder.PUPPY
-    const add = (set, slot) => [
-      { name: `${slot}-pickup-route`, src: set.route?.[colorKey]?.[slot], className: 'opacity-90', protectedLayer: true, style: { zIndex: 120 } },
-      { name: `${slot}-pickup-body`, src: set.body?.[colorKey]?.[slot], className: 'opacity-90', protectedLayer: true, style: { zIndex: 121 } },
-      { name: `${slot}-pickup-poles`, src: set.poles?.[colorKey]?.[slot], className: 'opacity-95', protectedLayer: true, style: { zIndex: 122 } },
-    ]
+    const pickupConfig = config.pickupConfiguration || 'hh'
+    const isActive = config.electronicsType === 'active'
+    const pickupColorType = config.pickupColor || 'bobbins'
+    const pickupColorVariant = config.pickupColorVariant || 'black'
+    const paintedColor = config.pickupPaintedColor || '#000000'
+    const woodType = config.pickupWoodType || 'black'
+    const poleColor = config.pickupPoleColor || 'chrome'
+    const bridgeModel = config.bridgePickupModel || 'vantium'
+    const middleModel = config.middlePickupModel || 'none'
+    const neckModel = config.neckPickupModel || 'vantium'
 
-    if (layout === 'sss') return [...add(route.single, 'bridge'), ...add(route.single, 'middle'), ...add(route.single, 'neck')]
-    if (layout === 'hh') return [...add(route.humbucker, 'bridge'), ...add(route.humbucker, 'neck')]
-    if (layout === 'p90') return [...add(route.p90, 'bridge'), ...add(route.p90, 'neck')]
-    if (layout === 'fluence') return [...add(route.fluence, 'bridge'), ...add(route.fluence, 'neck')]
-    return [...add(route.humbucker, 'bridge'), ...add(route.single, 'middle'), ...add(route.single, 'neck')]
-  }, [colorKey, config.pickups])
+    const isHSS = pickupConfig === 'hss'
+    const isHH = pickupConfig === 'hh'
+
+    const positions = []
+    if (isHH || isActive) {
+      positions.push({ slot: 'bridge', type: 'humbucker', model: bridgeModel })
+      if (neckModel !== 'delete') {
+        positions.push({ slot: 'neck', type: 'humbucker', model: neckModel })
+      }
+    }
+    if (isHSS) {
+      positions.push({ slot: 'bridge', type: 'humbucker', model: bridgeModel })
+      positions.push({ slot: 'middle', type: 'singlecoil', model: middleModel })
+      if (neckModel !== 'delete') {
+        positions.push({ slot: 'neck', type: 'humbucker', model: neckModel })
+      }
+    }
+
+    const getRouteSrc = (type, slot) => {
+      if (type === 'singlecoil') {
+        return resolvePickupRoute('electric', config.body || 'dc', 'singlecoil', 'black', slot)
+      }
+      return resolvePickupRoute('electric', config.body || 'dc', 'humbucker', 'black', slot)
+    }
+
+    const getBodySrc = (type, slot) => {
+      if (pickupColorType === 'covers') {
+        const coverColor = pickupColorVariant === 'chrome' ? 'chrome' : pickupColorVariant === 'gold' ? 'gold' : 'black'
+        return resolvePickupBody('electric', config.body || 'dc', 'covered', coverColor, slot)
+      }
+      if (type === 'singlecoil') {
+        const scColor = ['white', 'cream', 'racing-green'].includes(pickupColorVariant) ? pickupColorVariant : 'black'
+        return resolveSingleCoilBody('electric', config.body || 'dc', scColor, slot)
+      }
+      return null
+    }
+
+    const getBodyMask = (type, slot) => {
+      if (pickupColorType === 'bobbins' || pickupColorType === 'painted' || pickupColorType === 'wooden') {
+        if (type === 'singlecoil') {
+          return resolvePickupBobbinMask('electric', config.body || 'dc', 'middle-single')
+        }
+        return resolvePickupBobbinMask('electric', config.body || 'dc', slot)
+      }
+      return null
+    }
+
+    const getBodyStyle = (type, slot) => {
+      if (pickupColorType === 'painted') {
+        return { backgroundColor: paintedColor }
+      }
+      if (pickupColorType === 'wooden') {
+        const woodTexture = resolveBodyWoodAsset('electric', config.body || 'dc', woodType)
+        return { backgroundImage: `url(${woodTexture})` }
+      }
+      return {}
+    }
+
+    const getPolesSrc = (type, slot) => {
+      const poleType = type === 'singlecoil' ? 'singlecoil' : 'humbucker'
+      const coverType = pickupColorType === 'covers' ? 'covered' : 'open'
+      let poleColorKey = poleColor
+      if (poleColor === 'gold' && poleType === 'singlecoil') {
+        poleColorKey = 'chrome'
+      }
+      if (type === 'singlecoil') {
+        const scPoleMap = {
+          black: 'black',
+          white: 'white',
+          cream: 'creme',
+          'racing-green': 'green',
+          'white-black': 'black',
+          'black-cream': 'black',
+          'racing-green-black': 'black',
+        }
+        const scColor = scPoleMap[pickupColorVariant] || 'black'
+        return resolvePickupPoles('electric', config.body || 'dc', 'singlecoil', scColor, slot)
+      }
+      return resolvePickupPoles('electric', config.body || 'dc', poleType, coverType, `${poleColorKey}-${slot}`)
+    }
+
+    const layers = []
+    for (const pos of positions) {
+      const routeSrc = getRouteSrc(pos.type, pos.slot)
+      const bodySrc = getBodySrc(pos.type, pos.slot)
+      const bodyMask = getBodyMask(pos.type, pos.slot)
+      const bodyStyle = getBodyStyle(pos.type, pos.slot)
+      const polesSrc = getPolesSrc(pos.type, pos.slot)
+
+      if (routeSrc) {
+        layers.push({
+          name: `${pos.slot}-pickup-route`,
+          src: routeSrc,
+          className: 'opacity-90',
+          protectedLayer: true,
+          style: { zIndex: 120 },
+        })
+      }
+
+      if (bodySrc) {
+        layers.push({
+          name: `${pos.slot}-pickup-body`,
+          src: bodySrc,
+          className: 'opacity-90',
+          protectedLayer: true,
+          style: { zIndex: 121 },
+        })
+      } else if (bodyMask) {
+        layers.push({
+          name: `${pos.slot}-pickup-body`,
+          maskSrc: bodyMask,
+          className: 'opacity-90',
+          protectedLayer: true,
+          style: { zIndex: 121, ...bodyStyle },
+        })
+      }
+
+      if (polesSrc) {
+        layers.push({
+          name: `${pos.slot}-pickup-poles`,
+          src: polesSrc,
+          className: 'opacity-95',
+          protectedLayer: true,
+          style: { zIndex: 122 },
+        })
+      }
+    }
+
+    return layers
+  }, [config.pickupConfiguration, config.electronicsType, config.pickupColor, config.pickupColorVariant, config.pickupPaintedColor, config.pickupWoodType, config.pickupPoleColor, config.bridgePickupModel, config.middlePickupModel, config.neckPickupModel, config.body, colorKey])
 
    const hardwareLayers = useMemo(() => {
     const bridgeSrc = resolveVariant(bridge.assets, colorKey)
@@ -563,9 +697,6 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
                        protectedLayer={layer.protectedLayer}
                      />
                    ))}
-                   {strapBack && (
-                     <GuitarLayer src={strapBack} className="opacity-95" style={{ zIndex: 110 }} layerName="strap-button-rear" protectedLayer />
-                   )}
                     {outputJackAsset && (
                       <GuitarLayer src={outputJackAsset} className="opacity-95" style={{ zIndex: 55, transform: 'scaleX(-1)' }} layerName="output-jack" protectedLayer />
                     )}
@@ -578,9 +709,12 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
                     {cavityScrewsAsset && (
                       <GuitarLayer maskSrc={rearBodyMask} style={{ backgroundImage: `url(${cavityScrewsAsset})`, zIndex: 136, backgroundRepeat: 'no-repeat', backgroundPosition: 'center', backgroundSize: 'contain', transform: 'scaleX(-1)' }} layerName="cavity-screws" protectedLayer />
                     )}
-                   {overlayLayers.map((layer, index) => (
-                     <GuitarLayer key={`overlay-${index}`} src={layer.src} style={layer.style} layerName={`overlay-${index}`} />
-                   ))}
+                    {overlayLayers.map((layer, index) => (
+                      <GuitarLayer key={`overlay-${index}`} src={layer.src} style={layer.style} layerName={`overlay-${index}`} />
+                    ))}
+                    {strapBack && (
+                      <GuitarLayer src={strapBack} className="opacity-100" style={{ zIndex: 203, transform: 'scaleX(-1)' }} layerName="strap-button-rear" protectedLayer />
+                    )}
                 </>
               )}
             </div>

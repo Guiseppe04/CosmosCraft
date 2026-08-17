@@ -90,7 +90,7 @@ export const BUILDER_CATEGORY_MAP = {
   body: ['body', 'bodyWood', 'bodyFinish', 'pickguard'],
   neck: ['neck', 'fretboard', 'headstock', 'headstockShape', 'headstockWood', 'inlays', 'inlayShape', 'inlayMaterial', 'neckConstruction', 'frets', 'trussRodCover', 'neckRearFinish'],
   hardware: ['hardware', 'bridge', 'knobs', 'saddle', 'nut', 'outputJack', 'strapButtons', 'tunerButtons', 'tremoloCover'],
-  electronics: ['pickups', 'pickupConfiguration', 'pickupBobbin', 'pickupPoleColor', 'bridgePickupModel', 'middlePickupModel', 'neckPickupModel', 'electronicsType', 'controls', 'electronicsCavityCover'],
+  electronics: ['pickups', 'pickupConfiguration', 'pickupColor', 'pickupColorVariant', 'pickupPaintedColor', 'pickupWoodType', 'pickupPoleColor', 'bridgePickupModel', 'middlePickupModel', 'neckPickupModel', 'electronicsType', 'controls', 'electronicsCavityCover'],
 }
 
 export const SLOT_TO_PART_CATEGORY = {
@@ -122,7 +122,10 @@ export const SLOT_TO_PART_CATEGORY = {
   tremoloCover: 'hardware',
   pickups: 'pickups',
   pickupConfiguration: 'pickups',
-  pickupBobbin: 'pickups',
+  pickupColor: 'pickups',
+  pickupColorVariant: 'pickups',
+  pickupPaintedColor: 'pickups',
+  pickupWoodType: 'pickups',
   pickupPoleColor: 'pickups',
   bridgePickupModel: 'pickups',
   middlePickupModel: 'pickups',

@@ -190,6 +190,29 @@ function DynamicOptionField({ field, config, onUpdate, category, model }) {
     )
   }
 
+  // Color input
+  if (field.type === 'color') {
+    return (
+      <div className="space-y-2">
+        <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40">
+          {field.label}
+        </h3>
+        <div className="flex items-center gap-3">
+          <input
+            type="color"
+            value={currentValue || '#000000'}
+            onChange={(e) => onUpdate({ [field.key]: e.target.value })}
+            className="h-10 w-16 cursor-pointer rounded-lg border border-[var(--border)] bg-transparent"
+          />
+          <span className="text-sm text-[var(--text-muted)]">{currentValue || '#000000'}</span>
+        </div>
+        {field.disclaimer && (
+          <p className="text-[10px] leading-relaxed text-white/40 italic">{field.disclaimer}</p>
+        )}
+      </div>
+    )
+  }
+
   // Select/Text: Show text buttons in a grid
   return (
     <div className="space-y-2">

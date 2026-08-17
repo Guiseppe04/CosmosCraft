@@ -43,7 +43,7 @@ import {
   PICKUP_MODEL_BRIDGE_OPTIONS,
   PICKUP_MODEL_MIDDLE_OPTIONS,
   PICKUP_MODEL_NECK_OPTIONS,
-  PICKUP_BOBBIN_OPTIONS,
+  PICKUP_COLOR_OPTIONS,
   PICKUP_POLE_COLOR_OPTIONS,
   CONTROLS_OPTIONS,
   SADDLE_OPTIONS,
@@ -878,8 +878,8 @@ export default function useGuitarConfig() {
     return merged
   }, [mergeOptionsFromBuilderParts, priceOverrides])
 
-  const mergedPickupBobbinOptions = useMemo(() => {
-    const merged = mergeOptionsFromBuilderParts(PICKUP_BOBBIN_OPTIONS, { partCategory: 'misc', typeMappings: ['pickupBobbin'] })
+  const mergedPickupColorOptions = useMemo(() => {
+    const merged = mergeOptionsFromBuilderParts(PICKUP_COLOR_OPTIONS, { partCategory: 'misc', typeMappings: ['pickupColor'] })
     Object.keys(merged).forEach(key => {
       if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
     })
@@ -1112,7 +1112,7 @@ export default function useGuitarConfig() {
       (mergedBridgePickupModelOptions[config.bridgePickupModel]?.price ?? 0) +
       (mergedMiddlePickupModelOptions[config.middlePickupModel]?.price ?? 0) +
       (mergedNeckPickupModelOptions[config.neckPickupModel]?.price ?? 0) +
-      (mergedPickupBobbinOptions[config.pickupBobbin]?.price ?? 0) +
+      (mergedPickupColorOptions[config.pickupColor]?.price ?? 0) +
       (mergedPickupPoleColorOptions[config.pickupPoleColor]?.price ?? 0) +
       (mergedControlsOptions[config.controls]?.price ?? 0) +
       // Hardware new options
@@ -1140,9 +1140,9 @@ export default function useGuitarConfig() {
      mergedDynamicNeckWoodOptions, mergedDynamicHeadstockWoodOptions, mergedDynamicFingerboardWoodOptions,
      mergedFretOptions, mergedNeckRearFinishOptions,
     mergedHeadstockShapeOptions, mergedTrussRodCoverOptions, mergedElectronicsTypeOptions,
-    mergedPickupConfigurationOptions, mergedBridgePickupModelOptions,
-    mergedMiddlePickupModelOptions, mergedNeckPickupModelOptions,
-    mergedPickupBobbinOptions, mergedPickupPoleColorOptions, mergedControlsOptions,
+      mergedPickupConfigurationOptions, mergedBridgePickupModelOptions,
+      mergedMiddlePickupModelOptions, mergedNeckPickupModelOptions,
+      mergedPickupColorOptions, mergedPickupPoleColorOptions, mergedControlsOptions,
     mergedSaddleOptions, mergedNutOptions, mergedTuningOptions,
     mergedStringBrandOptions, mergedOutputJackOptions, mergedStrapButtonOptions,
      mergedTunerButtonOptions, mergedElectronicsCavityCoverOptions, tremoloCoverOptions,
@@ -1188,7 +1188,7 @@ export default function useGuitarConfig() {
       bridgePickupModel: PICKUP_MODEL_BRIDGE_OPTIONS[config.bridgePickupModel]?.label ?? config.bridgePickupModel,
       middlePickupModel: PICKUP_MODEL_MIDDLE_OPTIONS[config.middlePickupModel]?.label ?? config.middlePickupModel,
       neckPickupModel: PICKUP_MODEL_NECK_OPTIONS[config.neckPickupModel]?.label ?? config.neckPickupModel,
-      pickupBobbin: PICKUP_BOBBIN_OPTIONS[config.pickupBobbin]?.label ?? config.pickupBobbin,
+      pickupColor: PICKUP_COLOR_OPTIONS[config.pickupColor]?.label ?? config.pickupColor,
       pickupPoleColor: PICKUP_POLE_COLOR_OPTIONS[config.pickupPoleColor]?.label ?? config.pickupPoleColor,
       controls: CONTROLS_OPTIONS[config.controls]?.label ?? config.controls,
       saddle: SADDLE_OPTIONS[config.saddle]?.label ?? config.saddle,
@@ -1466,10 +1466,32 @@ export default function useGuitarConfig() {
     () => Object.entries(mergedNeckPickupModelOptions).map(([value, option]) => ({ value, ...option })),
     [mergedNeckPickupModelOptions],
   )
-  const pickupBobbinOptionList = useMemo(
-    () => Object.entries(mergedPickupBobbinOptions).map(([value, option]) => ({ value, ...option })),
-    [mergedPickupBobbinOptions],
+  const pickupColorOptionList = useMemo(
+    () => Object.entries(mergedPickupColorOptions).map(([value, option]) => ({ value, ...option })),
+    [mergedPickupColorOptions],
   )
+  const pickupColorVariantOptionList = useMemo(() => {
+    const type = config.pickupColor || 'bobbins'
+    if (type === 'bobbins' || type === 'covers') {
+      const variantOptions = type === 'bobbins'
+        ? [
+            { value: 'black', label: 'Black', note: 'Black bobbins', price: 0 },
+            { value: 'white', label: 'White', note: 'White bobbins', price: 0 },
+            { value: 'cream', label: 'Cream', note: 'Cream bobbins', price: 0 },
+            { value: 'racing-green', label: 'Racing Green', note: 'Racing green bobbins', price: 0 },
+            { value: 'white-black', label: 'White & Black', note: 'White and black bobbins', price: 0 },
+            { value: 'black-cream', label: 'Black & Cream', note: 'Black and cream bobbins', price: 0 },
+            { value: 'racing-green-black', label: 'Racing Green & Black', note: 'Racing green and black bobbins', price: 0 },
+          ]
+        : [
+            { value: 'black', label: 'Black', note: 'Black covers', price: 0 },
+            { value: 'chrome', label: 'Chrome', note: 'Chrome covers', price: 10 },
+            { value: 'gold', label: 'Gold', note: 'Gold covers', price: 15 },
+          ]
+      return variantOptions
+    }
+    return []
+  }, [config.pickupColor])
   const pickupPoleColorOptionList = useMemo(
     () => Object.entries(mergedPickupPoleColorOptions).map(([value, option]) => ({ value, ...option })),
     [mergedPickupPoleColorOptions],
@@ -1547,6 +1569,61 @@ export default function useGuitarConfig() {
     }
   }, [config.headstockShape, config.headstock])
 
+  useEffect(() => {
+    const patch = {}
+    if (config.pickupBobbin && !config.pickupColor) {
+      patch.pickupColor = 'bobbins'
+      patch.pickupColorVariant = config.pickupBobbin === 'open' ? 'black' : config.pickupBobbin === 'standard' ? 'black' : config.pickupBobbin === 'singlecoil' ? 'black' : 'black'
+    }
+    if (config.pickupColor && typeof config.pickupColor === 'string') {
+      const legacyPickupColorMap = {
+        coveredBlack: { type: 'covers', variant: 'black' },
+        coveredGold: { type: 'covers', variant: 'gold' },
+        openBlack: { type: 'bobbins', variant: 'black' },
+        openCream: { type: 'bobbins', variant: 'cream' },
+        openWhite: { type: 'bobbins', variant: 'white' },
+        chrome: { type: 'covers', variant: 'chrome' },
+        gold: { type: 'covers', variant: 'gold' },
+        ferrariRed: { type: 'bobbins', variant: 'black' },
+        hotPink: { type: 'bobbins', variant: 'black' },
+        acidGreen: { type: 'bobbins', variant: 'black' },
+        skyBlue: { type: 'bobbins', variant: 'black' },
+        seafoamGreen: { type: 'bobbins', variant: 'black' },
+      }
+      const mapped = legacyPickupColorMap[config.pickupColor]
+      if (mapped) {
+        patch.pickupColor = mapped.type
+        patch.pickupColorVariant = mapped.variant
+      } else if (config.pickupColor.includes('-')) {
+        const parts = config.pickupColor.split('-')
+        const type = parts[0]
+        const variant = parts.slice(1).join('-')
+        if (type === 'covered') {
+          patch.pickupColor = 'covers'
+          patch.pickupColorVariant = variant
+        } else if (type === 'open') {
+          patch.pickupColor = 'bobbins'
+          patch.pickupColorVariant = variant
+        }
+      }
+    }
+    if (Object.keys(patch).length > 0) {
+      setConfig(prev => ({ ...prev, ...patch }))
+    }
+  }, [config.pickupBobbin, config.pickupColor])
+
+  useEffect(() => {
+    const patch = {}
+    if (config.electronicsType === 'active') {
+      if (config.bridgePickupModel !== 'fluence') patch.bridgePickupModel = 'fluence'
+      if (config.neckPickupModel !== 'fluence') patch.neckPickupModel = 'fluence'
+      if (config.pickupColor !== 'painted') patch.pickupColor = 'painted'
+    }
+    if (Object.keys(patch).length > 0) {
+      setConfig(prev => ({ ...prev, ...patch }))
+    }
+  }, [config.electronicsType, config.bridgePickupModel, config.neckPickupModel, config.pickupColor])
+
   const pricingBreakdown = useMemo(() => ({
       // Old pricing keys (unchanged)
       base: dynamicBasePrice,
@@ -1587,7 +1664,7 @@ export default function useGuitarConfig() {
       bridgePickupModel: mergedBridgePickupModelOptions[config.bridgePickupModel]?.price ?? 0,
       middlePickupModel: mergedMiddlePickupModelOptions[config.middlePickupModel]?.price ?? 0,
       neckPickupModel: mergedNeckPickupModelOptions[config.neckPickupModel]?.price ?? 0,
-      pickupBobbin: mergedPickupBobbinOptions[config.pickupBobbin]?.price ?? 0,
+      pickupColor: mergedPickupColorOptions[config.pickupColor]?.price ?? 0,
       pickupPoleColor: mergedPickupPoleColorOptions[config.pickupPoleColor]?.price ?? 0,
       controls: mergedControlsOptions[config.controls]?.price ?? 0,
       saddle: mergedSaddleOptions[config.saddle]?.price ?? 0,
@@ -1613,9 +1690,9 @@ export default function useGuitarConfig() {
      mergedDynamicNeckWoodOptions, mergedDynamicHeadstockWoodOptions, mergedDynamicFingerboardWoodOptions,
      mergedFretOptions, mergedNeckRearFinishOptions,
      mergedHeadstockShapeOptions, mergedTrussRodCoverOptions, mergedElectronicsTypeOptions,
-     mergedPickupConfigurationOptions, mergedBridgePickupModelOptions,
-     mergedMiddlePickupModelOptions, mergedNeckPickupModelOptions,
-     mergedPickupBobbinOptions, mergedPickupPoleColorOptions, mergedControlsOptions,
+      mergedPickupConfigurationOptions, mergedBridgePickupModelOptions,
+      mergedMiddlePickupModelOptions, mergedNeckPickupModelOptions,
+      mergedPickupColorOptions, mergedPickupPoleColorOptions, mergedControlsOptions,
      mergedSaddleOptions, mergedNutOptions, mergedTuningOptions,
      mergedStringBrandOptions, mergedOutputJackOptions, mergedStrapButtonOptions,
      mergedTunerButtonOptions, mergedElectronicsCavityCoverOptions, tremoloCoverOptions,
@@ -1683,7 +1760,14 @@ export default function useGuitarConfig() {
       bridgePickupModelOptions: bridgePickupModelOptionList,
       middlePickupModelOptions: middlePickupModelOptionList,
       neckPickupModelOptions: neckPickupModelOptionList,
-      pickupBobbinOptions: pickupBobbinOptionList,
+      pickupColorOptions: pickupColorOptionList,
+      pickupColorVariantOptions: pickupColorVariantOptionList,
+      pickupWoodTypeOptions: [
+        { value: 'black', label: 'Black', note: 'Dark wood grain', price: 0 },
+        { value: 'white', label: 'White', note: 'Light wood grain', price: 0 },
+        { value: 'cream', label: 'Cream', note: 'Cream wood grain', price: 0 },
+        { value: 'racing-green', label: 'Racing Green', note: 'Green wood grain', price: 0 },
+      ],
       pickupPoleColorOptions: pickupPoleColorOptionList,
       controlsOptions: controlsOptionList,
       saddleOptions: saddleOptionList,
