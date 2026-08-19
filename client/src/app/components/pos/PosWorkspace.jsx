@@ -1,11 +1,8 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react'
-import { Package, Search, X, Printer, Download, ArrowUpDown, Grid3X3, List, Plus, ImagePlus } from 'lucide-react'
+import { Package, Search, X, Printer, Download, ArrowUpDown, Grid3X3, List, Plus } from 'lucide-react'
 import { posApi } from '../../utils/posApi'
 import { formatCurrency } from '../../utils/formatCurrency'
 import { useSmartPolling } from '../../hooks/useSmartPolling'
-import { uploadToCloudinary } from '../../utils/cloudinary.js'
-
-const MAX_GCASH_SCREENSHOT_BYTES = 10 * 1024 * 1024
 
 function EmptyState({ icon: Icon, label, description }) {
   return (
@@ -49,9 +46,9 @@ function escapeHtml(value) {
 }
 
 function formatDateTime(value) {
-  if (!value) return 'N/A'
+  if (!value) return ''
   const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return 'N/A'
+  if (Number.isNaN(date.getTime())) return ''
   return date.toLocaleString('en-PH', {
     year: 'numeric',
     month: 'short',
@@ -61,14 +58,30 @@ function formatDateTime(value) {
   })
 }
 
+function formatStatusLabel(status) {
+  const labels = {
+    pending: 'Pending',
+    completed: 'Completed',
+    cancelled: 'Cancelled',
+    canceled: 'Cancelled',
+    refunded: 'Refunded',
+    refund_requested: 'Refund Requested',
+    failed: 'Failed',
+    processing: 'Processing',
+    paid: 'Paid',
+    void: 'Void',
+    voided: 'Voided',
+  }
+  return labels[String(status || '').toLowerCase()] || String(status || 'pending').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
 function buildPosReceiptHtml(sale) {
   const createdAt = formatDateTime(sale?.created_at)
-  const saleNumber = escapeHtml(sale?.sale_number || 'N/A')
-  const customerName = escapeHtml(sale?.customer_name || 'Walk-in customer')
-  const customerPhone = escapeHtml(sale?.customer_phone || 'N/A')
-  const paymentMethod = escapeHtml(String(sale?.payment_method || 'cash').replace(/_/g, ' '))
-  const referenceNumber = escapeHtml(sale?.reference_number || 'N/A')
-  const notes = escapeHtml(sale?.notes || '')
+  const saleNumber = escapeHtml(sale?.sale_number || '')
+  const customerName = escapeHtml(sale?.customer_name || '')
+  const customerPhone = escapeHtml(sale?.customer_phone || '')
+  const paymentMethod = escapeHtml(String(sale?.payment_method || 'cash').replace(/_/g, ' ')).replace(/\b\w/g, (c) => c.toUpperCase())
+  const referenceNumber = escapeHtml(sale?.reference_number || '')
   const subtotal = Number(sale?.subtotal || 0)
   const taxAmount = Number(sale?.tax_amount || sale?.taxAmount || 0)
   const totalAmount = Number(sale?.total_amount || sale?.totalAmount || subtotal + taxAmount)
@@ -79,17 +92,28 @@ function buildPosReceiptHtml(sale) {
     ? (cashReceived != null ? Math.max(0, cashReceived - totalAmount) : null)
     : Number(rawChange)
   const isCashPayment = String(sale?.payment_method || 'cash').toLowerCase() === 'cash'
+  const isGcashPayment = String(sale?.payment_method || 'cash').toLowerCase() === 'gcash'
   const items = Array.isArray(sale?.items) ? sale.items : []
 
+  const formatItemName = (value) => {
+    const escaped = escapeHtml(value || 'Item')
+    const words = escaped.split(' ')
+    const lines = []
+    for (let i = 0; i < words.length; i += 2) {
+      lines.push(words.slice(i, i + 2).join(' '))
+    }
+    return lines.join('<br/>')
+  }
+
   const rows = items.map((item) => {
-    const name = escapeHtml(item?.item_name || item?.name || 'Item')
+    const name = formatItemName(item?.item_name || item?.name)
     const qty = Number(item?.quantity || 0)
     const unitPrice = Number(item?.unit_price || item?.price || 0)
     const lineTotal = Number(item?.subtotal || (qty * unitPrice))
     return `
       <tr>
+        <td class="num qty">${qty}</td>
         <td>${name}</td>
-        <td class="num">${qty}</td>
         <td class="num">${escapeHtml(formatCurrency(unitPrice))}</td>
         <td class="num">${escapeHtml(formatCurrency(lineTotal))}</td>
       </tr>
@@ -108,167 +132,150 @@ function buildPosReceiptHtml(sale) {
           * { box-sizing: border-box; }
           body {
             margin: 0;
-            padding: 24px;
+            padding: 20px;
             background: #f3f4f6;
             color: #111827;
-            font-family: Arial, Helvetica, sans-serif;
+            font-family: 'Courier New', Courier, monospace;
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
           }
           .sheet {
-            max-width: 820px;
+            max-width: 320px;
             margin: 0 auto;
             background: #ffffff;
             border: 1px solid #e5e7eb;
-            border-radius: 14px;
-            padding: 26px;
+            border-radius: 8px;
+            padding: 18px;
+            font-size: 12px;
+            line-height: 1.5;
           }
           .header {
-            display: flex;
-            align-items: flex-start;
-            justify-content: space-between;
-            gap: 24px;
-            margin-bottom: 18px;
+            text-align: center;
+            margin-bottom: 14px;
+            border-bottom: 1px dashed #111827;
+            padding-bottom: 10px;
           }
           .brand {
-            border: 2px solid #111827;
-            padding: 10px 14px;
             font-weight: 700;
-            letter-spacing: 0.2em;
+            font-size: 14px;
+            letter-spacing: 0.15em;
             text-transform: uppercase;
+            margin-bottom: 4px;
+          }
+          .invoice-title {
             font-size: 12px;
-            line-height: 1.3;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-bottom: 6px;
           }
-          .invoice h1 {
-            margin: 0;
-            font-size: 28px;
-            line-height: 1.1;
-          }
-          .meta-grid {
-            margin-top: 10px;
+          .meta {
             display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 8px 24px;
-            font-size: 12px;
+            grid-template-columns: 1fr 1fr;
+            gap: 4px 12px;
+            font-size: 11px;
+            margin-bottom: 10px;
           }
           .meta-label {
             color: #6b7280;
-            display: block;
-            font-size: 11px;
+            font-size: 10px;
             text-transform: uppercase;
-            letter-spacing: 0.08em;
-            margin-bottom: 2px;
-          }
-          .parties {
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 14px;
-            margin: 18px 0 14px;
-            font-size: 12px;
-          }
-          .party {
-            border: 1px solid #e5e7eb;
-            border-radius: 10px;
-            padding: 10px 12px;
-          }
-          .party h4 {
-            margin: 0 0 8px;
-            font-size: 11px;
-            color: #6b7280;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
+            letter-spacing: 0.05em;
           }
           table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 6px;
+            margin-top: 4px;
+            font-size: 11px;
           }
           thead th {
             text-align: left;
-            font-size: 11px;
-            letter-spacing: 0.08em;
+            font-size: 10px;
+            letter-spacing: 0.05em;
             text-transform: uppercase;
             color: #6b7280;
-            background: #f3f4f6;
-            padding: 8px 10px;
+            border-bottom: 1px solid #111827;
+            padding: 4px 0;
           }
           tbody td {
             border-bottom: 1px solid #e5e7eb;
-            padding: 10px;
-            font-size: 13px;
+            padding: 4px 0;
+            vertical-align: top;
           }
           .num { text-align: right; }
+          .qty { padding-right: 8px; }
           .summary {
-            margin-top: 14px;
-            margin-left: auto;
-            width: 280px;
-            font-size: 13px;
+            margin-top: 10px;
+            font-size: 11px;
           }
           .summary-row {
             display: flex;
             justify-content: space-between;
-            padding: 4px 0;
+            padding: 2px 0;
           }
           .summary-total {
             font-weight: 700;
-            font-size: 15px;
-            border-top: 1px solid #d1d5db;
-            margin-top: 6px;
-            padding-top: 8px;
+            font-size: 13px;
+            border-top: 1px solid #111827;
+            margin-top: 4px;
+            padding-top: 4px;
           }
-          .notes {
-            margin-top: 18px;
-            border-top: 1px solid #e5e7eb;
-            padding-top: 12px;
-            font-size: 12px;
-            color: #4b5563;
+          .payment-info {
+            margin-top: 10px;
+            font-size: 11px;
+          }
+          .payment-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 2px 0;
+          }
+          .footer {
+            margin-top: 14px;
+            text-align: center;
+            font-size: 10px;
+            color: #6b7280;
+            border-top: 1px dashed #111827;
+            padding-top: 8px;
           }
           @media print {
             body { background: #fff; padding: 0; }
-            .sheet { max-width: none; border: 0; border-radius: 0; padding: 18px 22px; }
+            .sheet { max-width: none; border: 0; border-radius: 0; padding: 14px 16px; }
           }
         </style>
       </head>
       <body>
         <main class="sheet">
           <section class="header">
-            <div class="brand">Cosmos<br/>Craft</div>
-            <div class="invoice">
-              <h1>Invoice ${saleNumber}</h1>
-              <div class="meta-grid">
-                <div><span class="meta-label">Issue Date</span>${escapeHtml(createdAt)}</div>
-                <div><span class="meta-label">Payment</span>${paymentMethod}</div>
-                <div><span class="meta-label">Reference</span>${referenceNumber}</div>
-                <div><span class="meta-label">Phone</span>${customerPhone}</div>
-              </div>
-            </div>
+            <div class="brand">Cosmos Craft</div>
+            <div class="invoice-title">Invoice</div>
+            <div>${saleNumber}</div>
           </section>
 
-          <section class="parties">
-            <div class="party">
-              <h4>From</h4>
-              <div><strong>Cosmos Craft</strong></div>
-              <div>POS Counter</div>
-              <div>Capstone Workshop</div>
-            </div>
-            <div class="party">
-              <h4>To</h4>
-              <div><strong>${customerName}</strong></div>
-              <div>${customerPhone}</div>
-            </div>
+          <section class="meta">
+            <div><span class="meta-label">Date</span><br/>${createdAt || ''}</div>
+            <div><span class="meta-label">Payment</span><br/>${paymentMethod}</div>
+            <div><span class="meta-label">Customer</span><br/>${customerName}</div>
+            <div><span class="meta-label">Phone</span><br/>${customerPhone}</div>
           </section>
+
+          ${isGcashPayment ? `
+          <section class="payment-info">
+            <div class="payment-row"><span>Reference No.</span><span>${referenceNumber}</span></div>
+            <div class="payment-row"><span>Cellphone No.</span><span>${customerPhone}</span></div>
+          </section>
+          ` : ''}
 
           <table>
             <thead>
               <tr>
-                <th>Item</th>
                 <th class="num">Qty</th>
-                <th class="num">Unit Price</th>
+                <th>Item</th>
+                <th class="num">Price</th>
                 <th class="num">Total</th>
               </tr>
             </thead>
             <tbody>
-              ${rows || '<tr><td colspan="4">No items</td></tr>'}
+              ${rows || '<tr><td colspan="4" style="text-align:center;">No items</td></tr>'}
             </tbody>
           </table>
 
@@ -276,13 +283,13 @@ function buildPosReceiptHtml(sale) {
             <div class="summary-row"><span>Subtotal</span><span>${escapeHtml(formatCurrency(subtotal))}</span></div>
             <div class="summary-row"><span>Tax</span><span>${escapeHtml(formatCurrency(taxAmount))}</span></div>
             <div class="summary-row summary-total"><span>Total</span><span>${escapeHtml(formatCurrency(totalAmount))}</span></div>
-            ${isCashPayment && cashReceived != null ? `<div class="summary-row"><span>Cash Received</span><span>${escapeHtml(formatCurrency(cashReceived))}</span></div>` : ''}
-            ${isCashPayment && changeAmount != null ? `<div class="summary-row"><span>Change</span><span>${escapeHtml(formatCurrency(changeAmount))}</span></div>` : ''}
+            ${isCashPayment && cashReceived != null ? `<div class="payment-row"><span>Cash Received</span><span>${escapeHtml(formatCurrency(cashReceived))}</span></div>` : ''}
+            ${isCashPayment && changeAmount != null ? `<div class="payment-row"><span>Change</span><span>${escapeHtml(formatCurrency(changeAmount))}</span></div>` : ''}
           </section>
 
-          <section class="notes">
-            <strong>Notes:</strong> ${notes || 'N/A'}
-          </section>
+          <div class="footer">
+            Thank you for your purchase!
+          </div>
         </main>
       </body>
     </html>
@@ -304,9 +311,6 @@ export function PosWorkspace({
   const [customerName, setCustomerName] = useState('')
   const [customerPhone, setCustomerPhone] = useState('')
   const [referenceNumber, setReferenceNumber] = useState('')
-  const [gcashScreenshotFile, setGcashScreenshotFile] = useState(null)
-  const [gcashScreenshotPreviewUrl, setGcashScreenshotPreviewUrl] = useState('')
-  const [saleNotes, setSaleNotes] = useState('')
   const [cart, setCart] = useState([])
   const [recentSales, setRecentSales] = useState([])
   const [dailySummary, setDailySummary] = useState(null)
@@ -395,48 +399,14 @@ export function PosWorkspace({
     setCustomerName('')
     setCustomerPhone('')
     setReferenceNumber('')
-    if (gcashScreenshotPreviewUrl) URL.revokeObjectURL(gcashScreenshotPreviewUrl)
-    setGcashScreenshotFile(null)
-    setGcashScreenshotPreviewUrl('')
-    setSaleNotes('')
     setPaymentMethod('cash')
-  }, [gcashScreenshotPreviewUrl])
-
-  const clearGcashScreenshot = useCallback(() => {
-    if (gcashScreenshotPreviewUrl) URL.revokeObjectURL(gcashScreenshotPreviewUrl)
-    setGcashScreenshotFile(null)
-    setGcashScreenshotPreviewUrl('')
-  }, [gcashScreenshotPreviewUrl])
-
-  const handleGcashScreenshotChange = useCallback((event) => {
-    const file = event.target.files?.[0]
-    event.target.value = ''
-    if (!file) return
-
-    if (!file.type.startsWith('image/')) {
-      showToast?.('Please upload an image file', 'error')
-      return
-    }
-    if (file.size > MAX_GCASH_SCREENSHOT_BYTES) {
-      showToast?.('Screenshot must be 10MB or less', 'error')
-      return
-    }
-
-    if (gcashScreenshotPreviewUrl) URL.revokeObjectURL(gcashScreenshotPreviewUrl)
-    setGcashScreenshotFile(file)
-    setGcashScreenshotPreviewUrl(URL.createObjectURL(file))
-  }, [gcashScreenshotPreviewUrl, showToast])
+  }, [])
 
   useEffect(() => {
     if (paymentMethod === 'cash') {
-      clearGcashScreenshot()
       setReferenceNumber('')
     }
-  }, [clearGcashScreenshot, paymentMethod])
-
-  useEffect(() => () => {
-    if (gcashScreenshotPreviewUrl) URL.revokeObjectURL(gcashScreenshotPreviewUrl)
-  }, [gcashScreenshotPreviewUrl])
+  }, [paymentMethod])
 
   const loadRecentSales = useCallback(async (options = {}) => {
     const { silent = false } = options
@@ -553,22 +523,9 @@ export function PosWorkspace({
 
     setSubmitting(true)
     try {
-      let gcashScreenshotUrl = ''
-      if (paymentMethod === 'gcash' && gcashScreenshotFile) {
-        gcashScreenshotUrl = await uploadToCloudinary(gcashScreenshotFile, {
-          folder: 'cosmoscraft/pos/gcash-screenshots',
-        })
-      }
-
-      const normalizedNotes = [
-        saleNotes.trim(),
-        gcashScreenshotUrl ? `GCash screenshot: ${gcashScreenshotUrl}` : '',
-      ].filter(Boolean).join('\n')
-
       const payload = {
         customerName: customerName.trim() || null,
         customerPhone: customerPhone.trim() || null,
-        notes: normalizedNotes || null,
         subtotal,
         taxAmount: tax,
         totalAmount: total,
@@ -593,7 +550,7 @@ export function PosWorkspace({
     } finally {
       setSubmitting(false)
     }
-  }, [cart, cashReceived, customerName, customerPhone, gcashScreenshotFile, loadRecentSales, paymentMethod, referenceNumber, resetSaleForm, saleNotes, showToast, subtotal, tax, total])
+  }, [cart, cashReceived, customerName, customerPhone, loadRecentSales, paymentMethod, referenceNumber, resetSaleForm, showToast, subtotal, tax, total])
 
   const handlePrintSaleReceipt = useCallback((sale) => {
     if (!sale) {
@@ -659,13 +616,13 @@ export function PosWorkspace({
             <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-5">
               <div className="mb-3 flex items-center justify-between">
                 <h4 className="text-lg font-semibold text-[var(--text-light)]">All Products</h4>
-                <button
+                {/* <button
                   type="button"
                   onClick={() => { setCategoryFilter('all'); setSearchQuery('') }}
                   className="text-xs font-semibold text-[var(--gold-primary)] hover:text-[var(--gold-secondary)]"
                 >
                   See all
-                </button>
+                </button> */}
               </div>
 
               <div className="mb-4 flex flex-wrap items-center gap-2 overflow-x-auto">
@@ -880,7 +837,7 @@ export function PosWorkspace({
                   <p className="mt-1 text-xs text-[var(--text-muted)]">Change: {formatCurrency(change)}</p>
                 </div>
               ) : (
-                <div className="mt-3 space-y-3">
+                <div className="mt-3">
                   <div>
                     <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)]">
                       Reference Number <span className="text-red-400">*</span>
@@ -893,45 +850,8 @@ export function PosWorkspace({
                       className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-light)]"
                     />
                   </div>
-
-                  <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]/50 p-3">
-                    <div className="mb-2 flex items-center justify-between gap-2">
-                      <p className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)]">Upload Screenshot</p>
-                      <span className="text-[11px] text-[var(--text-muted)]">(Optional)</span>
-                    </div>
-                    <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-[var(--border)] px-3 py-2 text-xs font-semibold text-[var(--text-light)] hover:border-[var(--gold-primary)]/40 hover:text-[var(--gold-primary)]">
-                      <ImagePlus className="h-3.5 w-3.5" />
-                      Choose Screenshot
-                      <input
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={handleGcashScreenshotChange}
-                      />
-                    </label>
-                    {gcashScreenshotPreviewUrl && (
-                      <div className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] p-2">
-                        <img src={gcashScreenshotPreviewUrl} alt="GCash screenshot preview" className="h-32 w-full rounded-md object-cover" />
-                        <button
-                          type="button"
-                          onClick={clearGcashScreenshot}
-                          className="mt-2 rounded-md border border-[var(--border)] px-2 py-1 text-xs text-[var(--text-muted)] hover:border-red-400/60 hover:text-red-300"
-                        >
-                          Remove Screenshot
-                        </button>
-                      </div>
-                    )}
-                  </div>
                 </div>
               )}
-
-              <textarea
-                rows={2}
-                value={saleNotes}
-                onChange={(event) => setSaleNotes(event.target.value)}
-                placeholder="Notes"
-                className="mt-3 w-full resize-none rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-light)]"
-              />
 
               <div className="mt-4">
                 <button
@@ -984,15 +904,15 @@ export function PosWorkspace({
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
                           <p className="truncate text-sm font-semibold text-[var(--text-light)]">{entry.sale_number}</p>
-                          <p className="text-xs text-[var(--text-muted)]">{entry.customer_name || 'Walk-in customer'} - {new Date(entry.created_at).toLocaleString()}</p>
+                           <p className="text-xs text-[var(--text-muted)]">{entry.customer_name || 'N/A'} - {new Date(entry.created_at).toLocaleString()}</p>
                         </div>
                         <StatusBadge
-                          label={String(entry.status || 'pending').replace(/_/g, ' ')}
+                          label={formatStatusLabel(entry.status || 'pending')}
                           variant={String(entry.status || '').toLowerCase() === 'completed' ? 'success' : 'warning'}
                         />
                       </div>
                       <div className="mt-2 flex items-center justify-between text-xs">
-                        <span className="text-[var(--text-muted)]">{entry.item_count} items - {String(entry.payment_method || '').replace(/_/g, ' ')}</span>
+                         <span className="text-[var(--text-muted)]">{entry.item_count} items - {String(entry.payment_method || '').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}</span>
                         <span className="font-semibold text-[var(--gold-primary)]">{formatCurrency(Number(entry.total_amount || 0))}</span>
                       </div>
                     </div>
@@ -1076,7 +996,7 @@ export function PosWorkspace({
                 <div className="mt-4 space-y-2 border-t border-[var(--border)] pt-4">
                   <div className="flex justify-between text-sm">
                     <span className="text-[var(--text-muted)]">Payment Method</span>
-                    <span className="text-[var(--text-light)] capitalize">{String(selectedSale.payment_method || '').replace(/_/g, ' ')}</span>
+                    <span className="text-[var(--text-light)] capitalize">{String(selectedSale.payment_method || '').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}</span>
                   </div>
                   {selectedSale.reference_number && (
                     <div className="flex justify-between text-sm">

@@ -63,8 +63,45 @@ async function generateOrderNumber(client, prefix) {
   throw new Error(`Could not generate a unique order number for prefix ${prefix} after ${maxAttempts} attempts`)
 }
 
+async function getNextRefundRequestSequence(client, prefix) {
+  const result = await client.query(
+    `INSERT INTO refund_request_counters (prefix, date, last_number)
+     VALUES ($1, CURRENT_DATE, 1)
+     ON CONFLICT (prefix) DO UPDATE SET
+       last_number = CASE WHEN refund_request_counters.date = CURRENT_DATE THEN refund_request_counters.last_number + 1 ELSE 1 END,
+       date = CURRENT_DATE,
+       updated_at = CURRENT_TIMESTAMP
+     RETURNING last_number`,
+    [prefix]
+  )
+
+  return { nextSeq: result.rows[0].last_number, datePrefix: getTodayDatePrefix() }
+}
+
+async function generateRefundRequestNumber(client, prefix = 'RF') {
+  const datePrefix = getTodayDatePrefix()
+  const maxAttempts = 100
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const { nextSeq } = await getNextRefundRequestSequence(client, prefix)
+    const requestNumber = `${prefix}-${datePrefix}-${String(nextSeq).padStart(4, '0')}`
+
+    const existingRes = await client.query(
+      `SELECT 1 FROM refund_requests WHERE request_number = $1 LIMIT 1`,
+      [requestNumber]
+    )
+
+    if (existingRes.rows.length === 0) {
+      return requestNumber
+    }
+  }
+
+  throw new Error(`Could not generate a unique refund request number for prefix ${prefix} after ${maxAttempts} attempts`)
+}
+
 module.exports = {
   generateOrderNumber,
+  generateRefundRequestNumber,
   determineOrderTypePrefix,
   hasCustomizationItems,
   ORDER_TYPE_PREFIXES,

@@ -1,14 +1,15 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 import { motion, AnimatePresence } from 'motion/react'
-import { User, CreditCard, MapPin, Lock, Package, Calendar, ChevronRight, ChevronLeft, Search, Upload, Save, Wallet, ShoppingBag, ShoppingCart, Trash2, Minus, Plus, MessageSquare, Send, Guitar, Clock, Truck, CheckCircle, XCircle, Briefcase, Activity, Star, Loader2, Edit, AlertCircle, AlertTriangle, X, Banknote, Smartphone, Landmark, CreditCard as CreditCardIcon } from 'lucide-react'
+import { User, CreditCard, MapPin, Lock, Package, Calendar, ChevronRight, ChevronLeft, Search, Upload, Save, Wallet, ShoppingBag, ShoppingCart, Trash2, Minus, Plus, MessageSquare, Send, Guitar, Clock, Truck, CheckCircle, XCircle, Briefcase, Activity, Star, Loader2, Edit, AlertCircle, AlertTriangle, X, Banknote, Smartphone, Landmark, CreditCard as CreditCardIcon, Check, RefreshCw, Printer, Info } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useCart } from '../context/CartContext.jsx'
 import { BASE_PRICE, BODY_OPTIONS, BODY_WOOD_OPTIONS, BODY_FINISH_OPTIONS, NECK_OPTIONS, FRETBOARD_OPTIONS, HEADSTOCK_OPTIONS, HEADSTOCK_WOOD_OPTIONS, INLAY_OPTIONS, BRIDGE_OPTIONS, PICKGUARD_OPTIONS_BY_BODY, KNOB_OPTIONS_BY_BODY, HARDWARE_OPTIONS, PICKUP_OPTIONS } from '../lib/guitarBuilderData.js'
 import { adminApi } from '../utils/adminApi.js'
-import { formatPaymentMethod } from '../utils/paymentMethodUtils'
-import { getPaymentStatusConfig } from '../utils/orderPaymentStatus'
+import { buildInvoiceHtml } from '../utils/invoiceBuilder.js'
 import { useDebounce } from '../hooks/useDebounce'
+import { uploadToCloudinary } from '../utils/cloudinary.js'
+import { formatCurrency } from '../utils/formatCurrency.js'
 import CustomerProjectTracker from '../components/projects/CustomerProjectTracker.jsx'
 import { AddressForm } from '../components/AddressForm.jsx'
 import { getAllProvinces, getMunicipalitiesByProvince, getBarangaysByMunicipality } from '@aivangogh/ph-address'
@@ -98,6 +99,31 @@ const formatStatus = (status) => {
   if (!status) return ''
   return status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
 }
+
+const REFUND_STATUS_CONFIG = {
+  pending: {
+    label: 'Refund Request Pending',
+    icon: Clock,
+    className: 'border-amber-500/30 text-amber-400',
+  },
+  approved: {
+    label: 'Refund Approved',
+    icon: CheckCircle,
+    className: 'border-green-500/30 text-green-400',
+  },
+  rejected: {
+    label: 'Refund Rejected',
+    icon: XCircle,
+    className: 'border-red-500/30 text-red-400',
+  },
+  refunded: {
+    label: 'Refunded',
+    icon: CheckCircle,
+    className: 'border-sky-500/30 text-sky-400',
+  },
+}
+
+const getRefundStatusConfig = (status) => REFUND_STATUS_CONFIG[status] || REFUND_STATUS_CONFIG.pending
 
 const parseProjectDescription = (description) => {
   const normalized = String(description || '').replace(/\s+/g, ' ').trim()
@@ -191,10 +217,29 @@ export function DashboardPage() {
   const [cancelOrderReason, setCancelOrderReason] = useState('')
   const [cancelOrderCustomReason, setCancelOrderCustomReason] = useState('')
   const [isCancellingOrder, setIsCancellingOrder] = useState(false)
+
+  // Received / Refund state
+  const [isRefundModalOpen, setIsRefundModalOpen] = useState(false)
+  const [refundTarget, setRefundTarget] = useState(null)
+  const [refundReason, setRefundReason] = useState('')
+  const [refundCustomerNotes, setRefundCustomerNotes] = useState('')
+  const [refundSelectedItems, setRefundSelectedItems] = useState([])
+  const [refundImages, setRefundImages] = useState([])
+  const [isSubmittingRefund, setIsSubmittingRefund] = useState(false)
+  const [isMarkingReceived, setIsMarkingReceived] = useState(false)
+  const [printingOrderId, setPrintingOrderId] = useState(null)
   const [isCancelProjectModalOpen, setIsCancelProjectModalOpen] = useState(false)
   const [cancelProjectTarget, setCancelProjectTarget] = useState(null)
+  const [cancelProjectPayment, setCancelProjectPayment] = useState(null)
   const [isCancellingProject, setIsCancellingProject] = useState(false)
   const [cancelProjectConfirmed, setCancelProjectConfirmed] = useState(false)
+  // Build state preview for claim flow
+  const [cancelBuildPreview, setCancelBuildPreview] = useState(null)
+  const [cancelBuildPreviewLoading, setCancelBuildPreviewLoading] = useState(false)
+  const [cancelClaimMethod, setCancelClaimMethod] = useState('pickup')
+  const [cancelClaimRecipientName, setCancelClaimRecipientName] = useState('')
+  const [cancelClaimRecipientContact, setCancelClaimRecipientContact] = useState('')
+  const [cancelClaimDeliveryInstructions, setCancelClaimDeliveryInstructions] = useState('')
 
   // Hold / Cancel with options state
   const [isHoldProjectModalOpen, setIsHoldProjectModalOpen] = useState(false)
@@ -208,6 +253,8 @@ export function DashboardPage() {
   const [cancelWithOptionsTarget, setCancelWithOptionsTarget] = useState(null)
   const [cancelOption, setCancelOption] = useState('ship_unfinished')
   const [cancelWithOptionsReason, setCancelWithOptionsReason] = useState('')
+  const [cancelWithOptionsConfirmed, setCancelWithOptionsConfirmed] = useState(false)
+  const [isWithdrawingCancelRequest, setIsWithdrawingCancelRequest] = useState(false)
   const [isCancellingWithOptions, setIsCancellingWithOptions] = useState(false)
 
   // Resume / Continue Build state
@@ -304,6 +351,54 @@ export function DashboardPage() {
     adminApi.getMyOrders().then(res => setMyOrders(res.data?.orders || [])).catch(console.error)
   }
 
+  const printCustomerInvoice = async (order) => {
+    if (typeof window === 'undefined' || typeof document === 'undefined') return
+    setPrintingOrderId(order.order_id)
+    try {
+      const fullOrder = await adminApi.getOrder(order.order_id)
+      const receiptHtml = buildInvoiceHtml(fullOrder.data?.order || fullOrder.data || order)
+      const iframe = document.createElement('iframe')
+      iframe.setAttribute('aria-hidden', 'true')
+      iframe.style.position = 'fixed'
+      iframe.style.right = '0'
+      iframe.style.bottom = '0'
+      iframe.style.width = '0'
+      iframe.style.height = '0'
+      iframe.style.border = '0'
+
+      const cleanup = () => {
+        window.setTimeout(() => {
+          if (iframe.parentNode) iframe.parentNode.removeChild(iframe)
+        }, 250)
+      }
+
+      iframe.onload = () => {
+        const frameWindow = iframe.contentWindow
+        if (!frameWindow) { cleanup(); return }
+        const handleAfterPrint = () => {
+          frameWindow.removeEventListener('afterprint', handleAfterPrint)
+          cleanup()
+        }
+        frameWindow.addEventListener('afterprint', handleAfterPrint)
+        frameWindow.focus()
+        window.setTimeout(() => {
+          try { frameWindow.print() } catch { handleAfterPrint() }
+        }, 150)
+      }
+
+      document.body.appendChild(iframe)
+      const frameDocument = iframe.contentDocument || iframe.contentWindow?.document
+      if (!frameDocument) { cleanup(); return }
+      frameDocument.open()
+      frameDocument.write(receiptHtml)
+      frameDocument.close()
+    } catch (error) {
+      console.error('Failed to load order for invoice:', error)
+    } finally {
+      setPrintingOrderId(null)
+    }
+  }
+
   const fetchMyProjects = () => {
     adminApi.getMyProjects({ search: debouncedMyProjectSearch, sort_by: ({ updated: 'updated_at', created: 'created_at', name: 'project_name' })[myProjectSort] || 'updated_at', sort_dir: 'desc', page: myProjectPage, page_size: MY_PROJECTS_PAGE_SIZE, include_tasks: true })
       .then(res => {
@@ -368,25 +463,26 @@ export function DashboardPage() {
 
   const handleBuyAgain = async (orderId) => {
     try {
-      const res = await adminApi.getOrder(orderId);
-      const items = res.data.order.items;
+      const res = await adminApi.getOrder(orderId)
+      const items = res.data?.order?.items || res.data?.items || []
       if (items && items.length > 0) {
         items.forEach(item => {
           addToCart({
             id: item.product_id || item.product_sku || `prod-${Date.now()}`,
-            name: item.product_name || 'Item',
-            price: Number(item.unit_price),
-            category: 'Shop',
-            image: 'https://images.unsplash.com/photo-1564186763535-ebb21ef5277f?w=800&q=80',
-          }, item.quantity);
-        });
-        setToastMessage('Items added to cart!');
-        navigate('/cart');
+            name: item.product_name || item.name || 'Product',
+            price: Number(item.unit_price || item.price || 0),
+            quantity: item.quantity || 1,
+            image: item.image_url || item.image || null,
+          })
+        })
+        showToast('Items added to cart!')
+      } else {
+        showToast('No items available to reorder.', 'error')
       }
     } catch (err) {
-      alert("Failed to buy again: " + err.message);
+      showToast(`Failed to load order: ${err.message}`, 'error')
     }
-  };
+  }
 
   const openCancelOrderModal = (order) => {
     setCancelOrderTarget(order)
@@ -426,17 +522,171 @@ export function DashboardPage() {
     }
   };
 
-  const openCancelProjectModal = (project) => {
+  const handleMarkAsReceived = async (order) => {
+    if (!order?.order_id) return
+    try {
+      setIsMarkingReceived(true)
+      await adminApi.markAsReceived(order.order_id)
+      setToastMessage('Order marked as received.')
+      fetchMyOrders()
+    } catch (err) {
+      setToastMessage(`Failed to mark as received: ${err.message}`)
+    } finally {
+      setIsMarkingReceived(false)
+    }
+  }
+
+  const openRefundModal = (order) => {
+    setRefundTarget(order)
+    setRefundReason('')
+    setRefundCustomerNotes('')
+    const selectableItems = (order.items || []).map(item => ({
+      order_item_id: item.order_item_id,
+      product_name: item.product_name || 'Product',
+      quantity: Number(item.quantity || 1),
+      unit_price: Number(item.unit_price || 0),
+      selected: false,
+      refundQuantity: Number(item.quantity || 1),
+    }))
+    setRefundSelectedItems(selectableItems)
+    setRefundImages([])
+    setIsRefundModalOpen(true)
+  }
+
+  const closeRefundModal = (force = false) => {
+    if (isSubmittingRefund && !force) return
+    setIsRefundModalOpen(false)
+    setRefundTarget(null)
+    setRefundReason('')
+    setRefundCustomerNotes('')
+    setRefundSelectedItems([])
+    setRefundImages([])
+  }
+
+  const toggleRefundItem = (index) => {
+    setRefundSelectedItems(prev => {
+      const next = [...prev]
+      next[index] = { ...next[index], selected: !next[index].selected }
+      return next
+    })
+  }
+
+  const updateRefundQuantity = (index, value) => {
+    const qty = Math.max(1, Math.min(Number(value) || 1, refundSelectedItems[index].quantity))
+    setRefundSelectedItems(prev => {
+      const next = [...prev]
+      next[index] = { ...next[index], refundQuantity: qty }
+      return next
+    })
+  }
+
+  const handleRefundImageUpload = async (e) => {
+    const files = Array.from(e.target.files || [])
+    if (!files.length) return
+    const maxSize = 5 * 1024 * 1024
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp']
+    for (const file of files) {
+      if (!allowedTypes.includes(file.type)) {
+        setToastMessage('Only JPG, PNG, and WebP images are allowed')
+        continue
+      }
+      if (file.size > maxSize) {
+        setToastMessage('Each image must be less than 5MB')
+        continue
+      }
+      try {
+        const url = await uploadToCloudinary(file, { folder: 'cosmoscraft_assets/refund_proofs' })
+        setRefundImages(prev => [...prev, url])
+      } catch (err) {
+        setToastMessage(`Failed to upload image: ${err.message}`)
+      }
+    }
+    e.target.value = ''
+  }
+
+  const removeRefundImage = (index) => {
+    setRefundImages(prev => prev.filter((_, i) => i !== index))
+  }
+
+  const handleSubmitRefund = async () => {
+    if (!refundTarget?.order_id) return
+    const selected = refundSelectedItems.filter(item => item.selected)
+    if (selected.length === 0) {
+      setToastMessage('Please select at least one item to refund')
+      return
+    }
+    if (!refundReason.trim()) {
+      setToastMessage('Please provide a refund reason')
+      return
+    }
+    try {
+      setIsSubmittingRefund(true)
+      await adminApi.createRefundRequest(refundTarget.order_id, {
+        reason: refundReason.trim(),
+        customerNotes: refundCustomerNotes.trim() || undefined,
+        items: selected.map(item => ({
+          order_item_id: item.order_item_id,
+          quantity: item.refundQuantity,
+        })),
+        images: refundImages,
+      })
+      setToastMessage('Refund request submitted successfully.')
+      closeRefundModal(true)
+      fetchMyOrders()
+    } catch (err) {
+      setToastMessage(`Failed to submit refund request: ${err.message}`)
+    } finally {
+      setIsSubmittingRefund(false)
+    }
+  }
+
+  const openCancelProjectModal = async (project) => {
     setCancelProjectTarget(project)
     setCancelProjectConfirmed(false)
+    setCancelProjectPayment(null)
+    setCancelBuildPreview(null)
+    setCancelClaimMethod('pickup')
+    setCancelClaimRecipientName('')
+    setCancelClaimRecipientContact('')
+    setCancelClaimDeliveryInstructions('')
     setIsCancelProjectModalOpen(true)
+
+    if (project?.order_id) {
+      try {
+        const orderRes = await adminApi.getOrder(project.order_id)
+        const payment = orderRes?.data?.payment || orderRes?.data?.order?.payment || null
+        setCancelProjectPayment(payment)
+      } catch (err) {
+        console.error('Failed to load payment info for cancel modal:', err)
+      }
+    }
+
+    // Fetch build state preview if project has started
+    if (project?.project_id && project?.status !== 'not_started') {
+      setCancelBuildPreviewLoading(true)
+      try {
+        const res = await adminApi.getBuildStatePreview(project.project_id)
+        setCancelBuildPreview(res?.data || null)
+      } catch (err) {
+        console.error('Failed to load build state preview:', err)
+      } finally {
+        setCancelBuildPreviewLoading(false)
+      }
+    }
   }
 
   const closeCancelProjectModal = (force = false) => {
     if (isCancellingProject && !force) return
     setIsCancelProjectModalOpen(false)
     setCancelProjectTarget(null)
+    setCancelProjectPayment(null)
     setCancelProjectConfirmed(false)
+    setCancelBuildPreview(null)
+    setCancelBuildPreviewLoading(false)
+    setCancelClaimMethod('pickup')
+    setCancelClaimRecipientName('')
+    setCancelClaimRecipientContact('')
+    setCancelClaimDeliveryInstructions('')
   }
 
   const handleCancelProject = async () => {
@@ -445,7 +695,27 @@ export function DashboardPage() {
     try {
       setIsCancellingProject(true)
       await adminApi.cancelMyProject(cancelProjectTarget.project_id)
-      setToastMessage('Project has been cancelled.');
+
+      // If build has progress, submit claim method selection
+      const hasBuildProgress = cancelBuildPreview?.has_progress
+      if (hasBuildProgress) {
+        try {
+          const claimPayload = { method: cancelClaimMethod }
+          if (cancelClaimMethod === 'courier') {
+            if (cancelClaimRecipientName) claimPayload.recipient_name = cancelClaimRecipientName
+            if (cancelClaimRecipientContact) claimPayload.recipient_contact = cancelClaimRecipientContact
+            if (cancelClaimDeliveryInstructions) claimPayload.delivery_instructions = cancelClaimDeliveryInstructions
+          }
+          await adminApi.selectBuildClaimMethod(cancelProjectTarget.project_id, claimPayload)
+        } catch (claimErr) {
+          console.warn('Failed to submit claim method (claim was still created):', claimErr.message)
+        }
+      }
+
+      setToastMessage(hasBuildProgress
+        ? 'Project cancelled. A build claim has been created for your guitar.'
+        : 'Project has been cancelled.'
+      )
       fetchMyProjects();
       fetchMyOrders();
       fetchMyCustomizations();
@@ -536,6 +806,7 @@ export function DashboardPage() {
     setCancelWithOptionsTarget(project)
     setCancelOption('ship_unfinished')
     setCancelWithOptionsReason('')
+    setCancelWithOptionsConfirmed(false)
     setIsCancelWithOptionsModalOpen(true)
   }
 
@@ -545,10 +816,11 @@ export function DashboardPage() {
     setCancelWithOptionsTarget(null)
     setCancelOption('ship_unfinished')
     setCancelWithOptionsReason('')
+    setCancelWithOptionsConfirmed(false)
   }
 
   const handleCancelWithOptions = async () => {
-    if (!cancelWithOptionsTarget?.project_id || !cancelWithOptionsReason.trim()) return
+    if (!cancelWithOptionsTarget?.project_id || !cancelWithOptionsReason.trim() || !cancelWithOptionsConfirmed) return
 
     try {
       setIsCancellingWithOptions(true)
@@ -563,6 +835,22 @@ export function DashboardPage() {
       setToastMessage(`Failed to request cancellation: ${err.message}`);
     } finally {
       setIsCancellingWithOptions(false)
+    }
+  }
+
+  const handleWithdrawCancelRequest = async () => {
+    if (!cancelWithOptionsTarget?.project_id) return
+
+    try {
+      setIsWithdrawingCancelRequest(true)
+      await adminApi.cancelProjectCancelRequest(cancelWithOptionsTarget.project_id)
+      setToastMessage('Cancellation request withdrawn.');
+      fetchMyProjects();
+      closeCancelWithOptionsModal(true)
+    } catch (err) {
+      setToastMessage(`Failed to withdraw cancellation request: ${err.message}`);
+    } finally {
+      setIsWithdrawingCancelRequest(false)
     }
   }
 
@@ -922,10 +1210,10 @@ export function DashboardPage() {
       if (activePurchaseTab === 'All') return true;
       if (activePurchaseTab === 'To Pay' && order.payment_status === 'pending') return true;
       if (activePurchaseTab === 'To Ship' && order.status === 'processing') return true;
-      if (activePurchaseTab === 'To Receive' && order.status === 'shipped') return true;
-      if (activePurchaseTab === 'Completed' && (order.status === 'delivered' || order.status === 'completed')) return true;
+      if (activePurchaseTab === 'To Receive' && ['shipped', 'out_for_delivery'].includes(order.status)) return true;
+      if (activePurchaseTab === 'Completed' && ['delivered', 'received', 'completed'].includes(order.status)) return true;
       if (activePurchaseTab === 'Cancelled' && order.status === 'cancelled') return true;
-      if (activePurchaseTab === 'Refund' && order.status === 'refunded') return true;
+      if (activePurchaseTab === 'Refund' && order.refund_request_status === 'refunded') return true;
       return false;
     });
 
@@ -1056,8 +1344,18 @@ export function DashboardPage() {
                      <span className="text-xl font-bold text-[var(--gold-primary)] block">â‚±{displayTotalAmount.toLocaleString('en-PH')}</span>
                      <span className="text-xl font-bold text-[var(--gold-primary)] block">₱{Number(order.total_amount || 0).toLocaleString('en-PH')}</span>
                    </div>
-                </div>
-                {order.status === 'pending' && (
+                 </div>
+                 <div className="mt-4 pt-4 border-t border-[var(--border)] flex justify-end">
+                   <button
+                     onClick={() => printCustomerInvoice(order)}
+                     disabled={printingOrderId === order.order_id}
+                     className="px-4 py-2 border border-[var(--gold-primary)]/40 text-[var(--gold-primary)] hover:bg-[var(--gold-primary)]/10 transition-colors rounded-lg text-sm font-semibold flex items-center gap-2 disabled:opacity-50"
+                   >
+                     {printingOrderId === order.order_id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Printer className="w-4 h-4" />}
+                     Print Invoice
+                   </button>
+                 </div>
+                 {order.status === 'pending' && (
                   <div className="mt-4 pt-4 border-t border-[var(--border)] flex justify-end">
                     <button
                       onClick={() => openCancelOrderModal(order)}
@@ -1067,7 +1365,44 @@ export function DashboardPage() {
                     </button>
                   </div>
                 )}
-                {(order.status === 'delivered' || order.status === 'completed') && (
+                {['shipped', 'out_for_delivery', 'delivered'].includes(order.status) && order.status !== 'received' && (
+                  <div className="mt-4 pt-4 border-t border-[var(--border)] flex justify-end gap-3">
+                    <button
+                      onClick={() => handleMarkAsReceived(order)}
+                      disabled={isMarkingReceived}
+                      className="px-4 py-2 border border-green-500/30 text-green-500 hover:bg-green-500/10 transition-colors rounded-lg text-sm font-semibold flex items-center gap-2 disabled:opacity-50"
+                    >
+                      {isMarkingReceived ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                      Received
+                    </button>
+                  </div>
+                )}
+                {(order.status === 'received' || order.status === 'delivered') && order.payment_status !== 'refunded' && !order.has_refund_request && (
+                  <div className="mt-4 pt-4 border-t border-[var(--border)] flex justify-end gap-3">
+                    <button
+                      onClick={() => openRefundModal(order)}
+                      className="px-4 py-2 border border-[var(--border)] text-white hover:bg-white/5 transition-colors rounded-lg text-sm font-semibold flex items-center gap-2"
+                    >
+                      <RefreshCw className="w-4 h-4 text-[var(--gold-primary)]" />
+                      Refund
+                    </button>
+                  </div>
+                )}
+                {(order.status === 'received' || order.status === 'delivered') && order.has_refund_request && (
+                  <div className="mt-4 pt-4 border-t border-[var(--border)] flex justify-end">
+                    {(() => {
+                      const refundConfig = getRefundStatusConfig(order.refund_request_status)
+                      const RefundIcon = refundConfig.icon
+                      return (
+                        <span className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-semibold ${refundConfig.className}`}>
+                          <RefundIcon className="w-4 h-4" />
+                          {refundConfig.label}
+                        </span>
+                      )
+                    })()}
+                  </div>
+                )}
+                {(order.status === 'received' || order.status === 'delivered' || order.status === 'completed') && (
                   <div className="mt-4 pt-4 border-t border-[var(--border)] flex justify-end gap-3">
                     <button
                       onClick={() => setRatingModalOrderId(order.order_id)}
@@ -1447,7 +1782,7 @@ export function DashboardPage() {
         ) : (
           <div className="grid gap-6">
             {myProjects.map((project, index) => {
-              const customBuildId = project.custom_build_id || project.customBuildId;
+              const buildId = project.order_number || project.custom_build_id || project.customBuildId;
 
               // Clean project name - remove any ORD/order references from the stored title
               const cleanName = (project.name || project.title || 'Custom Build')
@@ -1460,11 +1795,9 @@ export function DashboardPage() {
                 <div className="flex justify-between items-center">
                   <div>
                     <h3 className="text-lg font-bold text-white">{cleanName}</h3>
-                    {customBuildId && (
-                      <p className="text-xs text-[var(--text-muted)] mt-1">
-                        Custom Build ID: {customBuildId}
-                      </p>
-                    )}
+                    <p className="text-xs text-[var(--text-muted)] mt-1">
+                      Build ID: {buildId || '—'}
+                    </p>
                     <p className="text-[var(--text-muted)] text-sm mt-2">
                       Estimated completion:{' '}
                       <span className="text-white font-medium">
@@ -1482,12 +1815,29 @@ export function DashboardPage() {
                     <>
                       {String(project.status || '').toLowerCase() !== 'on_hold' ? (
                         <>
-                          {project.progress < 80 && (
+                          {String(project.status || '').toLowerCase() === 'not_started' && (
                             <button
                               onClick={() => openCancelProjectModal(project)}
                               className="px-4 py-2 rounded-lg border border-red-500/30 text-red-500 hover:bg-red-500/10 transition-colors text-sm font-semibold"
                             >
                               Cancel Project
+                            </button>
+                          )}
+                          {String(project.status || '').toLowerCase() !== 'not_started' && !project.cancel_requested_at && (
+                            <button
+                              onClick={() => openCancelWithOptionsModal(project)}
+                              className="px-4 py-2 rounded-lg border border-amber-500/30 text-amber-500 hover:bg-amber-500/10 transition-colors text-sm font-semibold"
+                            >
+                              Request Cancellation
+                            </button>
+                          )}
+                          {String(project.status || '').toLowerCase() !== 'not_started' && project.cancel_requested_at && !project.cancel_approved_at && (
+                            <button
+                              onClick={() => openCancelWithOptionsModal(project)}
+                              className="px-4 py-2 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 transition-colors text-sm font-semibold flex items-center gap-1.5"
+                            >
+                              <Clock className="w-3.5 h-3.5" />
+                              Cancellation Pending
                             </button>
                           )}
                           {String(project.status || '').toLowerCase() !== 'not_started' && (
@@ -2391,6 +2741,8 @@ export function DashboardPage() {
 
   const currentMenu = menuItems.find(item => item.id === activeSection)
 
+  const isToastError = toastMessage?.startsWith?.('Failed') || false
+
   return (
     <div className="min-h-screen bg-[var(--bg-primary)] pt-24 pb-12">
       <AnimatePresence>
@@ -2399,9 +2751,9 @@ export function DashboardPage() {
             initial={{ opacity: 0, y: -20, x: '-50%' }}
             animate={{ opacity: 1, y: 0, x: '-50%' }}
             exit={{ opacity: 0, y: -20, x: '-50%' }}
-            className="fixed top-24 left-1/2 z-[100] bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] px-6 py-3 rounded-xl font-bold shadow-[0_0_20px_rgba(212,175,55,0.4)] flex items-center gap-2"
+            className={`fixed top-24 left-1/2 z-[100] px-6 py-3 rounded-xl font-bold shadow-[0_0_20px_rgba(212,175,55,0.4)] flex items-center gap-2 ${isToastError ? 'bg-gradient-to-r from-red-500 to-red-600 text-white shadow-[0_0_20px_rgba(239,68,68,0.4)]' : 'bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)]'}`}
           >
-            <CheckCircle className="w-5 h-5" />
+            {isToastError ? <AlertCircle className="w-5 h-5" /> : <CheckCircle className="w-5 h-5" />}
             {toastMessage}
           </motion.div>
         )}
@@ -2472,13 +2824,197 @@ export function DashboardPage() {
               </div>
 
               <h3 id="confirm-modal-title" className="text-white text-xl font-bold mb-2">Cancel Project</h3>
-              
-              <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-5 mb-2">
+
+              <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-5 mb-4">
                 <p className="text-sm text-red-300/90 leading-relaxed">
                   <AlertCircle className="w-4 h-4 inline-block mr-1.5 -mt-0.5" />
                   <strong className="text-red-400">This action is permanent.</strong> Once cancelled, <strong className="text-white">"{cancelProjectTarget?.name || 'This project'}"</strong> will stop at its current build stage and cannot be resumed or reactivated. If you wish to continue this build in the future, you must place a new order. Cancellation may affect payments, production progress, and reserved materials.
                 </p>
               </div>
+
+              {cancelProjectTarget && (
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] p-4 mb-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">Project</span>
+                    <span className="text-xs text-[var(--text-muted)]">{cancelProjectTarget.custom_build_id || cancelProjectTarget.project_id?.slice(0, 8)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">Status</span>
+                    <span className="text-xs font-semibold text-white capitalize">{formatStatus(cancelProjectTarget.status)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">Progress</span>
+                    <span className="text-xs font-semibold text-white">{cancelProjectTarget.progress || 0}%</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">Payment Plan</span>
+                    <span className="text-xs font-semibold text-white capitalize">{cancelProjectTarget.order_payment_plan === 'installment' ? 'Installment / Down Payment' : 'Full Payment'}</span>
+                  </div>
+                  {cancelProjectPayment && (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">Payment Method</span>
+                        <span className="text-xs font-semibold text-white capitalize">{cancelProjectPayment.method?.replace(/_/g, ' ') || '—'}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">Amount Submitted</span>
+                        <span className="text-xs font-semibold text-[var(--gold-primary)]">{formatCurrency(cancelProjectPayment.amount)}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">Payment Status</span>
+                        <span className={`text-xs font-semibold capitalize ${
+                          cancelProjectPayment.status === 'verified' ? 'text-green-400' :
+                          cancelProjectPayment.status === 'for_verification' || cancelProjectPayment.status === 'pending' ? 'text-amber-400' :
+                          cancelProjectPayment.status === 'rejected' ? 'text-red-400' :
+                          'text-white'
+                        }`}>{formatStatus(cancelProjectPayment.status)}</span>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {cancelProjectTarget && String(cancelProjectTarget.status || '').toLowerCase() === 'not_started' && (
+                <div className="rounded-xl border border-blue-500/30 bg-blue-500/5 p-4 mb-4">
+                  <p className="text-sm text-blue-300/90 leading-relaxed">
+                    {cancelProjectPayment?.status === 'verified' ? (
+                      <>
+                        <CheckCircle className="w-4 h-4 inline-block mr-1.5 -mt-0.5" />
+                        Your payment has been verified. Your refund request will be submitted automatically and is now waiting for admin approval.
+                      </>
+                    ) : cancelProjectPayment?.status === 'for_verification' || cancelProjectPayment?.status === 'pending' ? (
+                      <>
+                        <Clock className="w-4 h-4 inline-block mr-1.5 -mt-0.5" />
+                        Cancellation submitted successfully. Your payment is still being verified by the admin. Once your payment is verified, your refund request can proceed.
+                      </>
+                    ) : (
+                      <>
+                        <Info className="w-4 h-4 inline-block mr-1.5 -mt-0.5" />
+                        Cancellation submitted successfully. No refund is available for this payment status.
+                      </>
+                    )}
+                  </p>
+                </div>
+              )}
+
+              {/* Build State Preview — shown when project has started */}
+              {cancelProjectTarget && String(cancelProjectTarget.status || '').toLowerCase() !== 'not_started' && (
+                <>
+                  {cancelBuildPreviewLoading ? (
+                    <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-6 mb-4 flex items-center justify-center gap-3">
+                      <Loader2 className="w-5 h-5 animate-spin text-amber-400" />
+                      <span className="text-sm text-amber-300/90">Loading build state...</span>
+                    </div>
+                  ) : cancelBuildPreview?.has_progress ? (
+                    <div className="space-y-4 mb-4">
+                      {/* Build state explanation */}
+                      <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
+                        <p className="text-sm text-amber-300/90 leading-relaxed">
+                          <AlertCircle className="w-4 h-4 inline-block mr-1.5 -mt-0.5" />
+                          This project has already started. Your down payment was used to purchase parts and materials. <strong className="text-amber-400">You will receive the guitar in its current build state</strong> instead of a refund.
+                        </p>
+                      </div>
+
+                      {/* Milestone breakdown */}
+                      <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] p-4">
+                        <p className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)] mb-3">Current Build State — {cancelBuildPreview.progress}% Complete</p>
+                        <div className="space-y-2">
+                          {(cancelBuildPreview.stages || []).map((stage, idx) => (
+                            <div key={stage.milestone_id || idx} className="flex items-center gap-2.5">
+                              {stage.status === 'completed' ? (
+                                <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+                              ) : stage.status === 'in_progress' ? (
+                                <Clock className="w-4 h-4 text-amber-400 shrink-0" />
+                              ) : (
+                                <div className="w-4 h-4 rounded-full border-2 border-[var(--border)] shrink-0" />
+                              )}
+                              <span className={`text-sm ${stage.status === 'completed' ? 'text-emerald-300' : stage.status === 'in_progress' ? 'text-amber-300' : 'text-[var(--text-muted)]'}`}>
+                                {stage.title}
+                              </span>
+                              {stage.total_subtasks > 0 && (
+                                <span className="text-xs text-[var(--text-muted)] ml-auto">{stage.completed_subtasks}/{stage.total_subtasks}</span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                        {cancelBuildPreview.amount_paid > 0 && (
+                          <div className="mt-3 pt-3 border-t border-[var(--border)] flex items-center justify-between">
+                            <span className="text-xs text-[var(--text-muted)]">Amount Paid</span>
+                            <span className="text-xs font-semibold text-[var(--gold-primary)]">{formatCurrency(cancelBuildPreview.amount_paid)}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Claim method selection */}
+                      <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] p-4">
+                        <p className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)] mb-3">How would you like to receive your guitar?</p>
+                        <div className="grid gap-2">
+                          {[
+                            { value: 'pickup', label: 'Pick Up at Shop', desc: 'Visit our shop to collect your guitar' },
+                            { value: 'courier', label: 'Courier Delivery', desc: 'We\'ll arrange delivery to your address' },
+                          ].map(opt => (
+                            <label
+                              key={opt.value}
+                              className={`flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3 transition-colors ${
+                                cancelClaimMethod === opt.value
+                                  ? 'border-amber-500/50 bg-amber-500/10'
+                                  : 'border-[var(--border)] hover:border-amber-500/30'
+                              }`}
+                            >
+                              <input
+                                type="radio"
+                                name="claim-method"
+                                value={opt.value}
+                                checked={cancelClaimMethod === opt.value}
+                                onChange={() => setCancelClaimMethod(opt.value)}
+                                className="mt-1 h-4 w-4 accent-amber-500"
+                              />
+                              <div>
+                                <span className="text-sm text-white font-medium block">{opt.label}</span>
+                                <span className="text-xs text-[var(--text-muted)] mt-0.5 block">{opt.desc}</span>
+                              </div>
+                            </label>
+                          ))}
+                        </div>
+
+                        {/* Courier details */}
+                        {cancelClaimMethod === 'courier' && (
+                          <div className="mt-3 space-y-2">
+                            <input
+                              type="text"
+                              value={cancelClaimRecipientName}
+                              onChange={(e) => setCancelClaimRecipientName(e.target.value)}
+                              placeholder="Recipient name"
+                              className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] px-3 py-2 text-sm text-white placeholder:text-[var(--text-muted)] focus:border-amber-500/50 focus:outline-none"
+                            />
+                            <input
+                              type="text"
+                              value={cancelClaimRecipientContact}
+                              onChange={(e) => setCancelClaimRecipientContact(e.target.value)}
+                              placeholder="Contact number"
+                              className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] px-3 py-2 text-sm text-white placeholder:text-[var(--text-muted)] focus:border-amber-500/50 focus:outline-none"
+                            />
+                            <textarea
+                              value={cancelClaimDeliveryInstructions}
+                              onChange={(e) => setCancelClaimDeliveryInstructions(e.target.value)}
+                              placeholder="Delivery instructions (optional)"
+                              rows={2}
+                              className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] px-3 py-2 text-sm text-white placeholder:text-[var(--text-muted)] focus:border-amber-500/50 focus:outline-none resize-none"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 mb-4">
+                      <p className="text-sm text-amber-300/90 leading-relaxed">
+                        <AlertCircle className="w-4 h-4 inline-block mr-1.5 -mt-0.5" />
+                        This project has already started but no build progress has been recorded yet. Please contact support for assistance.
+                      </p>
+                    </div>
+                  )}
+                </>
+              )}
 
               {/* Explicit Confirmation Checkbox */}
               <div className="mt-5 rounded-xl border border-red-500/30 bg-red-500/5 p-4">
@@ -2490,7 +3026,10 @@ export function DashboardPage() {
                     className="mt-0.5 h-5 w-5 accent-red-500 rounded"
                   />
                   <span className="text-sm text-white font-medium">
-                    I understand that this action is permanent and cannot be undone. I want to cancel this project.
+                    {cancelBuildPreview?.has_progress
+                      ? 'I understand that my down payment is non-refundable and I will receive the guitar in its current unfinished state. I want to cancel this project.'
+                      : 'I understand that this action is permanent and cannot be undone. I want to cancel this project.'
+                    }
                   </span>
                 </label>
               </div>
@@ -2515,6 +3054,204 @@ export function DashboardPage() {
                 </button>
               </div>
             </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Request Cancellation Modal (Current Build Claim request flow) */}
+      <AnimatePresence>
+        {isCancelWithOptionsModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[300] bg-black/70 backdrop-blur-sm p-4 flex items-center justify-center"
+            onClick={(event) => {
+              if (event.target === event.currentTarget) closeCancelWithOptionsModal()
+            }}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 16, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 16, scale: 0.96 }}
+              className="relative w-full max-w-lg rounded-3xl border border-amber-500/30 bg-[var(--surface-dark)] p-6 sm:p-7 shadow-2xl"
+            >
+              <button
+                type="button"
+                onClick={closeCancelWithOptionsModal}
+                disabled={isCancellingWithOptions}
+                className="absolute right-4 top-4 rounded-lg p-2 text-[var(--text-muted)] hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
+                aria-label="Close request cancellation modal"
+              >
+                <X className="h-4 w-4" />
+              </button>
+
+              <div className="w-14 h-14 rounded-2xl bg-amber-500/15 flex items-center justify-center mb-5">
+                <AlertTriangle className="w-7 h-7 text-amber-400" />
+              </div>
+
+               <h3 className="text-white text-xl font-bold mb-1">Request Cancellation</h3>
+               <p className="text-sm text-[var(--text-muted)] mb-5">
+                 {cancelWithOptionsTarget?.name
+                   ? `Request cancellation for ${cancelWithOptionsTarget.name}. An admin will review your request and process the cancellation with your chosen option.`
+                   : 'An admin will review your cancellation request and process it with your chosen option.'}
+               </p>
+
+               {cancelWithOptionsTarget?.cancel_requested_at && !cancelWithOptionsTarget?.cancel_approved_at ? (
+                 <div className="space-y-5">
+                   <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 flex items-start gap-3">
+                     <Clock className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+                     <div>
+                       <p className="text-sm font-semibold text-amber-300">Cancellation Request Pending</p>
+                       <p className="mt-1 text-xs text-amber-300/70">Your cancellation request is awaiting admin review. You can withdraw it below if you change your mind.</p>
+                     </div>
+                   </div>
+
+                   {cancelWithOptionsTarget?.cancel_reason && (
+                     <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] p-4">
+                       <p className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)] mb-1">Your Reason</p>
+                       <p className="text-sm text-white break-words">{cancelWithOptionsTarget.cancel_reason}</p>
+                     </div>
+                   )}
+
+                   <div className="mt-6 flex gap-3">
+                     <button
+                       type="button"
+                       onClick={closeCancelWithOptionsModal}
+                       disabled={isWithdrawingCancelRequest}
+                       className="flex-1 rounded-xl border border-[var(--border)] bg-white/5 py-3 text-sm font-semibold text-white hover:bg-white/10 transition-colors disabled:opacity-50"
+                     >
+                       Close
+                     </button>
+                     <button
+                       type="button"
+                       onClick={handleWithdrawCancelRequest}
+                       disabled={isWithdrawingCancelRequest}
+                       className="flex-1 rounded-xl border border-amber-500/30 bg-amber-500/10 py-3 text-sm font-semibold text-amber-300 hover:bg-amber-500/20 transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                     >
+                       {isWithdrawingCancelRequest && <Loader2 className="h-4 w-4 animate-spin" />}
+                       {isWithdrawingCancelRequest ? 'Withdrawing...' : 'Withdraw Request'}
+                     </button>
+                   </div>
+                 </div>
+               ) : (
+                 <div className="space-y-5">
+
+              {cancelWithOptionsTarget && (
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] p-4 mb-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">Project</span>
+                    <span className="text-xs text-[var(--text-muted)]">{cancelWithOptionsTarget.custom_build_id || cancelWithOptionsTarget.project_id?.slice(0, 8)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">Status</span>
+                    <span className="text-xs font-semibold text-white capitalize">{formatStatus(cancelWithOptionsTarget.status)}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">Progress</span>
+                    <span className="text-xs font-semibold text-white">{cancelWithOptionsTarget.progress || 0}%</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">Payment Plan</span>
+                    <span className="text-xs font-semibold text-white capitalize">{cancelWithOptionsTarget.order_payment_plan === 'installment' ? 'Installment / Down Payment' : 'Full Payment'}</span>
+                  </div>
+                </div>
+              )}
+
+              <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 mb-4">
+                <p className="text-sm text-amber-300 leading-relaxed">
+                  <AlertCircle className="w-4 h-4 inline-block mr-1.5 -mt-0.5" />
+                  Your build has already started. Your down payment was used to purchase parts and materials, which are not refundable. <strong className="text-amber-400">You will receive the guitar in its current unfinished state</strong> instead of a refund. Select how you would like to receive your guitar below, then submit the request for admin review.
+                </p>
+              </div>
+
+              <div className="space-y-4 mb-4">
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)] mb-2">
+                    Cancellation Option <span className="text-red-400">*</span>
+                  </label>
+                  <div className="grid gap-2">
+                    {[
+                      { value: 'ship_unfinished', label: 'Ship Unfinished Guitar', desc: "We'll ship your guitar in its current build state to your address." },
+                      { value: 'pickup_unfinished', label: 'Pick Up Unfinished Guitar', desc: 'Collect your guitar in its current build state from the shop.' },
+                    ].map((opt) => (
+                      <label
+                        key={opt.value}
+                        className={`flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3 transition-colors ${
+                          cancelOption === opt.value
+                            ? 'border-amber-500/50 bg-amber-500/10'
+                            : 'border-[var(--border)] hover:border-amber-500/30'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="cancel-option"
+                          value={opt.value}
+                          checked={cancelOption === opt.value}
+                          onChange={() => setCancelOption(opt.value)}
+                          className="mt-1 h-4 w-4 accent-amber-500"
+                        />
+                        <div>
+                          <span className="text-sm text-white font-medium block">{opt.label}</span>
+                          <span className="text-xs text-[var(--text-muted)] mt-0.5 block">{opt.desc}</span>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)] mb-2">
+                    Reason for Cancellation <span className="text-red-400">*</span>
+                  </label>
+                  <textarea
+                    value={cancelWithOptionsReason}
+                    onChange={(e) => setCancelWithOptionsReason(e.target.value)}
+                    placeholder="Please explain why you want to cancel this build..."
+                    maxLength={500}
+                    rows={3}
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-3 text-sm text-white placeholder:text-[var(--text-muted)] focus:border-amber-500/50 focus:outline-none resize-none"
+                  />
+                  <p className="mt-1 text-right text-xs text-[var(--text-muted)]">{cancelWithOptionsReason.length}/500</p>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 mb-4">
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={cancelWithOptionsConfirmed}
+                    onChange={(e) => setCancelWithOptionsConfirmed(e.target.checked)}
+                    className="mt-0.5 h-5 w-5 accent-amber-500 rounded"
+                  />
+                  <span className="text-sm text-white font-medium">
+                    I understand that my down payment is non-refundable and I will receive the guitar in its current unfinished state. I want to request cancellation.
+                  </span>
+                </label>
+              </div>
+
+              <div className="mt-6 flex gap-3">
+                 <button
+                   type="button"
+                   onClick={closeCancelWithOptionsModal}
+                   disabled={isCancellingWithOptions}
+                   className="flex-1 rounded-xl border border-[var(--border)] bg-white/5 py-3 text-sm font-semibold text-white hover:bg-white/10 transition-colors disabled:opacity-50"
+                 >
+                   Cancel
+                 </button>
+                 <button
+                   type="button"
+                   onClick={handleCancelWithOptions}
+                   disabled={!cancelWithOptionsReason.trim() || !cancelWithOptionsConfirmed || isCancellingWithOptions}
+                   className="flex-1 rounded-xl bg-amber-500 py-3 text-sm font-bold text-black hover:bg-amber-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                 >
+                   {isCancellingWithOptions && <Loader2 className="h-4 w-4 animate-spin" />}
+                   {isCancellingWithOptions ? 'Requesting...' : 'Submit Cancellation Request'}
+                 </button>
+               </div>
+                  </div>
+                )}
+              </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -3548,6 +4285,107 @@ export function DashboardPage() {
                 Order This Build
               </button>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Refund Request Modal */}
+      {isRefundModalOpen && refundTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4 py-8">
+          <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6 w-full max-w-2xl max-h-full overflow-y-auto relative shadow-2xl">
+            <button type="button" onClick={() => closeRefundModal()} className="absolute top-4 right-4 text-[var(--text-muted)] hover:text-white transition-colors">
+              <X className="w-5 h-5" />
+            </button>
+            <h2 className="text-xl font-bold text-white mb-1">Request Refund</h2>
+            <p className="text-sm text-[var(--text-muted)] mb-6">Order #{refundTarget.order_number}</p>
+
+            <div className="space-y-5">
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-2">Select Items to Refund</label>
+                <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
+                  {(refundTarget.items || []).map((item, idx) => {
+                    const selectableIdx = refundSelectedItems.findIndex(ri => ri.order_item_id === item.order_item_id)
+                    if (selectableIdx === -1) return null
+                    const selectable = refundSelectedItems[selectableIdx]
+                    return (
+                      <div key={item.order_item_id || idx} className={`flex items-center justify-between gap-4 rounded-lg border px-4 py-3 ${selectable.selected ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)]/10' : 'border-[var(--border)] bg-[var(--bg-primary)]'}`}>
+                        <div className="flex items-center gap-3 min-w-0">
+                          <button type="button" onClick={() => toggleRefundItem(selectableIdx)} className={`w-5 h-5 rounded border flex items-center justify-center shrink-0 ${selectable.selected ? 'bg-[var(--gold-primary)] border-[var(--gold-primary)]' : 'border-[var(--border)]'}`}>
+                            {selectable.selected && <Check className="w-3 h-3 text-black" />}
+                          </button>
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-white truncate">{item.product_name || 'Product'}</p>
+                            <p className="text-xs text-[var(--text-muted)]">Qty: {selectable.quantity} • PHP {Number(item.unit_price || 0).toLocaleString('en-PH')}</p>
+                          </div>
+                        </div>
+                        {selectable.selected && (
+                          <div className="flex items-center gap-2">
+                            <button type="button" onClick={() => updateRefundQuantity(selectableIdx, selectable.refundQuantity - 1)} className="w-6 h-6 rounded border border-[var(--border)] flex items-center justify-center hover:bg-white/10"><Minus className="w-3 h-3 text-white" /></button>
+                            <span className="text-sm text-white w-6 text-center">{selectable.refundQuantity}</span>
+                            <button type="button" onClick={() => updateRefundQuantity(selectableIdx, selectable.refundQuantity + 1)} className="w-6 h-6 rounded border border-[var(--border)] flex items-center justify-center hover:bg-white/10"><Plus className="w-3 h-3 text-white" /></button>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-2">Reason for Refund</label>
+                <select
+                  value={refundReason}
+                  onChange={(e) => setRefundReason(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] text-sm text-white focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] mb-2"
+                >
+                  <option value="">Select a reason</option>
+                  <option value="damaged">Damaged / Defective item</option>
+                  <option value="wrong_item">Wrong item received</option>
+                  <option value="not_as_described">Not as described</option>
+                  <option value="no_longer_needed">No longer needed</option>
+                  <option value="better_price">Found better price elsewhere</option>
+                  <option value="other">Other</option>
+                </select>
+                <textarea
+                  value={refundCustomerNotes}
+                  onChange={(e) => setRefundCustomerNotes(e.target.value)}
+                  placeholder="Additional details (optional)..."
+                  rows={3}
+                  className="w-full px-4 py-3 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] text-sm text-white placeholder-[var(--text-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--gold-primary)] resize-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-2">Proof Photos (max 5)</label>
+                <div className="flex flex-wrap gap-3 mb-3">
+                  {refundImages.map((url, idx) => (
+                    <div key={idx} className="relative w-20 h-20 rounded-lg overflow-hidden border border-[var(--border)]">
+                      <img src={url} alt={`Proof ${idx + 1}`} className="w-full h-full object-cover" />
+                      <button type="button" onClick={() => removeRefundImage(idx)} className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-red-500 transition-colors">
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                  {refundImages.length < 5 && (
+                    <label className="w-20 h-20 rounded-lg border border-dashed border-[var(--border)] flex flex-col items-center justify-center cursor-pointer hover:border-[var(--gold-primary)] transition-colors">
+                      <Upload className="w-5 h-5 text-[var(--text-muted)]" />
+                      <span className="text-[10px] text-[var(--text-muted)] mt-1">Add</span>
+                      <input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={handleRefundImageUpload} className="hidden" />
+                    </label>
+                  )}
+                </div>
+                <p className="text-xs text-[var(--text-muted)]">JPG, PNG, or WebP. Max 5MB each.</p>
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button type="button" onClick={() => closeRefundModal()} disabled={isSubmittingRefund} className="flex-1 py-2.5 rounded-xl border border-[var(--border)] text-white hover:bg-white/5 transition-colors font-medium text-sm disabled:opacity-50">
+                  Cancel
+                </button>
+                <button type="button" onClick={handleSubmitRefund} disabled={isSubmittingRefund} className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-bold text-sm hover:shadow-[0_0_15px_rgba(212,175,55,0.4)] transition-all disabled:opacity-50">
+                  {isSubmittingRefund ? 'Submitting...' : 'Submit Refund Request'}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

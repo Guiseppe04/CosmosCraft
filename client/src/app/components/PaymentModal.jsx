@@ -122,6 +122,10 @@ export function PaymentModal({
   const selectedPaymentPlan = requiresCustomTerms ? paymentPlan : 'full'
   const amountDue = selectedPaymentPlan === 'full' ? fullPaymentAmount : downPaymentAmount
   const remainingBalance = Math.max(0, fullPaymentAmount - amountDue)
+  const estimatedMonthlyPayment = selectedPaymentPlan === 'down_payment'
+    ? Math.round((fullPaymentAmount * (1 - downPaymentRate) * (1 + 0.03) / 6) * 100) / 100
+    : 0
+  const estimatedCompletion = selectedPaymentPlan === 'down_payment' ? 'Approximately 6–8 months' : null
 
   const handleMethodChange = (method) => {
     setPaymentMethod(method)
@@ -224,7 +228,7 @@ export function PaymentModal({
                         value: 'down_payment',
                         title: `Pay ${downPaymentPercentage}% Down Payment`,
                         amount: downPaymentAmount,
-                        subtitle: `Remaining later: PHP ${Math.max(0, fullPaymentAmount - downPaymentAmount).toLocaleString('en-PH', { maximumFractionDigits: 2 })}`,
+                        subtitle: `Remaining later: PHP ${Math.max(0, fullPaymentAmount - downPaymentAmount).toLocaleString('en-PH', { maximumFractionDigits: 2 })} • Est. PHP ${estimatedMonthlyPayment.toLocaleString('en-PH', { maximumFractionDigits: 2 })}/month`,
                       },
                       {
                         value: 'full',
@@ -270,6 +274,16 @@ export function PaymentModal({
                       )
                     })}
                   </div>
+                  {requiresCustomTerms && selectedPaymentPlan === 'down_payment' && (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                      <p className="text-xs font-medium text-amber-900">
+                        Estimated Completion: {estimatedCompletion}
+                      </p>
+                      <p className="mt-1 text-xs text-amber-700">
+                        Monthly payment of PHP {estimatedMonthlyPayment.toLocaleString('en-PH', { maximumFractionDigits: 2 })} is estimated based on a 6-month installment plan with applicable interest.
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
 

@@ -117,6 +117,14 @@ export const adminApi = {
   updatePaymentStatus: (id, status, options = {}) => request(`/api/orders/${id}/payment-status`, { method: 'PUT', body: { status, ...options } }),
   cancelOrder: (id) => request(`/api/orders/${id}/cancel`, { method: 'POST' }),
   cancelMyOrder: (id, reason) => request(`/api/orders/${id}/cancel-my-order`, { method: 'POST', body: reason ? { reason } : {} }),
+  markAsReceived: (id) => request(`/api/orders/${id}/received`, { method: 'POST' }),
+  createRefundRequest: (id, body) => request(`/api/orders/${id}/refund-request`, { method: 'POST', body }),
+  getRefundRequests: (params = {}) => {
+    const qs = new URLSearchParams(params).toString()
+    return request(`/api/orders/refund-requests${qs ? '?' + qs : ''}`)
+  },
+  getRefundRequest: (id) => request(`/api/orders/refund-requests/${id}`),
+  updateRefundStatus: (id, status, options = {}) => request(`/api/orders/refund-requests/${id}/status`, { method: 'PUT', body: { status, ...options } }),
 
   // Projects
   getProjects: (params = {}) => {
@@ -133,6 +141,10 @@ export const adminApi = {
   cancelMyProject: (id) => request(`/api/projects/${id}/cancel`, { method: 'POST' }),
   deleteProject: (id) => request(`/api/projects/${id}`, { method: 'DELETE' }),
   restoreProject: (id) => request(`/api/projects/${id}/restore`, { method: 'PATCH' }),
+  getArchivedProjects: (params = {}) => {
+    const qs = new URLSearchParams(params).toString()
+    return request(`/api/projects/archived${qs ? '?' + qs : ''}`)
+  },
   assignTeam: (id, userIds) => request(`/api/projects/${id}/team`, { method: 'PUT', body: { user_ids: userIds } }),
 
   // Appointments
@@ -250,8 +262,28 @@ export const adminApi = {
   requestProjectHold: (projectId, body) => request(`/api/projects/${projectId}/hold`, { method: 'POST', body }),
   approveProjectHold: (projectId, body) => request(`/api/projects/${projectId}/approve-hold`, { method: 'POST', body }),
   resumeProject: (projectId) => request(`/api/projects/${projectId}/resume`, { method: 'POST' }),
-  requestProjectCancel: (projectId, body) => request(`/api/projects/${projectId}/request-cancel`, { method: 'POST', body }),
-  approveProjectCancel: (projectId, body) => request(`/api/projects/${projectId}/approve-cancel`, { method: 'POST', body }),
+   requestProjectCancel: (projectId, body) => request(`/api/projects/${projectId}/request-cancel`, { method: 'POST', body }),
+   approveProjectCancel: (projectId, body) => request(`/api/projects/${projectId}/approve-cancel`, { method: 'POST', body }),
+   cancelProjectCancelRequest: (projectId) => request(`/api/projects/${projectId}/withdraw-cancel-request`, { method: 'POST' }),
+
+  // Project Refunds (customer eligibility + request; admin status update)
+  getProjectRefundEligibility: (projectId) => request(`/api/projects/${projectId}/refund-eligibility`),
+  requestProjectRefund: (projectId, body) => request(`/api/projects/${projectId}/refund-request`, { method: 'POST', body }),
+  updateProjectRefundStatus: (refundId, status, options = {}) => request(`/api/projects/refunds/${refundId}/status`, { method: 'PUT', body: { status, ...options } }),
+
+  // Current Build Claims (cancel + claim flow)
+  getBuildStatePreview: (projectId) => request(`/api/projects/${projectId}/build-state-preview`),
+  getBuildClaim: (projectId) => request(`/api/projects/${projectId}/build-claim`),
+  selectBuildClaimMethod: (projectId, body) => request(`/api/projects/${projectId}/build-claim/select-method`, { method: 'POST', body }),
+  confirmBuildState: (projectId, body) => request(`/api/projects/${projectId}/build-claim/confirm-build`, { method: 'POST', body }),
+  arrangeBuildClaimCourier: (projectId, body) => request(`/api/projects/${projectId}/build-claim/arrange-courier`, { method: 'POST', body }),
+  updateBuildClaimStatus: (projectId, body) => request(`/api/projects/${projectId}/build-claim/status`, { method: 'PATCH', body }),
+  markBuildClaimReceived: (projectId) => request(`/api/projects/${projectId}/build-claim/mark-received`, { method: 'POST' }),
+  markBuildClaimPickedUp: (projectId, body) => request(`/api/projects/${projectId}/build-claim/mark-picked-up`, { method: 'POST', body }),
+  getAllBuildClaims: (params = {}) => {
+    const qs = new URLSearchParams(params).toString()
+    return request(`/api/projects/build-claims${qs ? '?' + qs : ''}`)
+  },
 
   // Installment Schedule
   getProjectInstallments: (projectId) => request(`/api/projects/${projectId}/installments`),
@@ -260,7 +292,7 @@ export const adminApi = {
   getProjectInstallmentTracking: (projectId) => request(`/api/installments/project/${projectId}`),
   getOrderInstallmentTracking: (orderId) => request(`/api/installments/project/by-order?orderId=${orderId}`),
   getOverdueInstallments: () => request('/api/installments/overdue'),
-  markInstallmentPaid: (scheduleId, paymentId) => request(`/api/installments/${scheduleId}/pay`, { method: 'PATCH', body: { payment_id: paymentId } }),
+  markInstallmentPaid: (scheduleId, options = {}) => request(`/api/installments/${scheduleId}/pay`, { method: 'PATCH', body: options }),
   runOverdueCheck: () => request('/api/installments/check-overdue', { method: 'POST' }),
 
   // Default Workflow

@@ -48,6 +48,11 @@ exports.restoreProject = asyncHandler(async (req, res, next) => {
   res.json({ status: 'success', data: project });
 });
 
+exports.getArchivedProjects = asyncHandler(async (req, res, next) => {
+  const result = await projectService.getAllArchivedProjects(req.query);
+  res.json({ status: 'success', data: result.projects, pagination: result.pagination });
+});
+
 exports.assignTeam = asyncHandler(async (req, res, next) => {
   const { user_ids } = req.body;
   await projectService.assignTeam(req.params.id, user_ids);
@@ -198,6 +203,11 @@ exports.requestCancel = asyncHandler(async (req, res, next) => {
 exports.approveCancel = asyncHandler(async (req, res, next) => {
   const result = await projectService.approveProjectCancel(req.params.id, req.user.id, req.body);
   res.json({ status: 'success', data: result, message: 'Cancellation request processed' });
+});
+
+exports.cancelCancelRequest = asyncHandler(async (req, res, next) => {
+  const result = await projectService.cancelProjectCancelRequest(req.params.id, req.user.id, req.user.role);
+  res.json({ status: 'success', data: result, message: 'Cancellation request withdrawn' });
 });
 
 // --- INSTALLMENT SCHEDULE ---

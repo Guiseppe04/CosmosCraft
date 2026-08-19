@@ -12,7 +12,7 @@ const { AppError } = require('../middleware/errorHandler');
  * POST /pos/sales
  * Create a new POS sale
  * Body: {
- *   customerName?, customerPhone?, notes?,
+ *   customerName?, customerPhone?,
  *   subtotal?, taxAmount?, totalAmount?,
  *   paymentMethod?, referenceNumber?, status?
  * }
@@ -22,7 +22,6 @@ exports.createSale = async (req, res, next) => {
     const {
       customerName,
       customerPhone,
-      notes,
       subtotal,
       taxAmount,
       totalAmount,
@@ -36,7 +35,6 @@ exports.createSale = async (req, res, next) => {
     const sale = await posService.createSale(req.user.user_id, {
       customerName,
       customerPhone,
-      notes,
       subtotal,
       taxAmount,
       totalAmount,
@@ -115,13 +113,17 @@ exports.getSaleById = async (req, res, next) => {
 /**
  * PATCH /pos/sales/:id/info
  * Update sale customer info and payment method
- * Body: { paymentMethod?, customerName?, customerPhone?, notes? }
+ * Body: { paymentMethod?, customerName?, customerPhone? }
  */
 exports.updateSaleInfo = async (req, res, next) => {
   try {
-    const updates = req.body;
+    const { paymentMethod, customerName, customerPhone } = req.body;
 
-    const sale = await posService.updateSaleInfo(req.params.id, updates);
+    const sale = await posService.updateSaleInfo(req.params.id, {
+      paymentMethod,
+      customerName,
+      customerPhone
+    });
     if (!sale) throw new AppError('Sale not found', 404);
 
     res.json({ status: 'success', data: sale });
@@ -213,11 +215,11 @@ exports.removeItem = async (req, res, next) => {
 /**
  * POST /pos/sales/:id/checkout
  * Complete POS sale checkout (deduct inventory, create payment)
- * Body: { paymentMethod, referenceNumber?, notes? }
+ * Body: { paymentMethod, referenceNumber? }
  */
 exports.checkoutSale = async (req, res, next) => {
   try {
-    const { paymentMethod, referenceNumber, notes } = req.body;
+    const { paymentMethod, referenceNumber } = req.body;
 
     if (!paymentMethod) {
       throw new AppError('Payment method is required', 400);
@@ -228,8 +230,7 @@ exports.checkoutSale = async (req, res, next) => {
     }
 
     const result = await posService.checkoutSale(req.params.id, paymentMethod, {
-      referenceNumber,
-      notes
+      referenceNumber
     });
 
     res.json({
@@ -344,23 +345,33 @@ exports.generateReceiptData = async (req, res, next) => {
     const sale = await posService.getSaleById(req.params.saleId);
     if (!sale) throw new AppError('Sale not found', 404);
 
+    const subtotal = parseFloat(sale.subtotal || 0);
+    const tax = parseFloat(sale.tax_amount || 0);
+    const total = parseFloat(sale.total_amount || subtotal);
+    const isCash = String(sale.payment_method || 'cash').toLowerCase() === 'cash';
+
     const receipt = {
       saleNumber: sale.sale_number,
       date: new Date(sale.created_at).toLocaleDateString('en-PH'),
       time: new Date(sale.created_at).toLocaleTimeString('en-PH'),
       staff: `${sale.first_name} ${sale.last_name}`,
+      customerName: sale.customer_name || '',
+      customerPhone: sale.customer_phone || '',
       items: sale.items.map(item => ({
         name: item.item_name,
         qty: item.quantity,
         unitPrice: parseFloat(item.unit_price),
         subtotal: parseFloat(item.subtotal)
       })),
-      subtotal: parseFloat(sale.subtotal),
-      discount: parseFloat(sale.discount_amount),
-      tax: parseFloat(sale.tax_amount),
-      total: parseFloat(sale.total_amount),
+      subtotal,
+      tax,
+      total,
       paymentMethod: sale.payment_method,
-      status: sale.status
+      referenceNumber: sale.reference_number || '',
+      cashReceived: isCash ? parseFloat(sale.cash_received || sale.amount_received || 0) : null,
+      changeAmount: isCash ? parseFloat(sale.change_amount || sale.changeAmount || 0) : null,
+      isCashPayment: isCash,
+      isGcashPayment: !isCash
     };
 
     res.json({ status: 'success', data: receipt });

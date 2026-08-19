@@ -20,6 +20,7 @@ export const validate = (rules, form) => {
 
 export const PRODUCT_RULES = {
   name: [required('Name')],
+  sku: [required('SKU')],
   category_id: [required('Category')],
   price: [required('Price'), positive('Price')],
 }

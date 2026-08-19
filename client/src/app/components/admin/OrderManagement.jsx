@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { formatCurrency } from '../../utils/formatCurrency'
 import { adminApi } from '../../utils/adminApi'
+import { buildInvoiceHtml } from '../../utils/invoiceBuilder.js'
 import InstallmentTracking from './InstallmentTracking'
 import {
   PAYMENT_STATUS_MAP,
@@ -25,6 +26,7 @@ const ORDER_STATUS_LIFECYCLE = [
   { value: 'shipped', label: 'Shipped', color: '#38bdf8', bgColor: 'bg-sky-500/20', textColor: 'text-sky-400', borderColor: 'border-sky-500/30' },
   { value: 'out_for_delivery', label: 'Out for Delivery', color: '#818cf8', bgColor: 'bg-indigo-500/20', textColor: 'text-indigo-400', borderColor: 'border-indigo-500/30' },
   { value: 'delivered', label: 'Delivered', color: '#22c55e', bgColor: 'bg-green-500/20', textColor: 'text-green-400', borderColor: 'border-green-500/30' },
+  { value: 'received', label: 'Received', color: '#34d399', bgColor: 'bg-emerald-500/20', textColor: 'text-emerald-400', borderColor: 'border-emerald-500/30' },
   { value: 'cancelled', label: 'Cancelled', color: '#f87171', bgColor: 'bg-red-500/20', textColor: 'text-red-400', borderColor: 'border-red-500/30' },
 ]
 
@@ -36,14 +38,16 @@ const TIMELINE_STEPS = [
   { status: 'shipped', label: 'Shipped', desc: 'Order shipped with tracking number' },
   { status: 'out_for_delivery', label: 'Out for Delivery', desc: 'Out for delivery with rider details' },
   { status: 'delivered', label: 'Delivered', desc: 'Successfully delivered to customer' },
+  { status: 'received', label: 'Received', desc: 'Customer confirmed receipt' },
 ]
 
 const ORDER_STATUS_TRANSITIONS = {
   pending: ['processing'],
   processing: ['shipped'],
-  shipped: ['out_for_delivery'],
-  out_for_delivery: ['delivered'],
-  delivered: [],
+  shipped: ['out_for_delivery', 'received'],
+  out_for_delivery: ['delivered', 'received'],
+  delivered: ['received'],
+  received: [],
   cancelled: [],
 }
 
@@ -157,144 +161,10 @@ function getOrderRiderDetails(order) {
   return order.rider_details || [order.rider_name, order.rider_contact].filter(Boolean).join(' • ')
 }
 
-function escapeReceiptHtml(value) {
-  return String(value ?? '')
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;')
-}
-
-function buildReceiptHtml(order) {
-  const customerName = getOrderCustomerName(order)
-  const orderAddress = getOrderAddress(order)
-  const paymentMethod = getOrderPaymentMethodLabel(order)
-  const subtotal = getOrderSubtotal(order)
-  const shipping = getOrderShippingAmount(order)
-  const total = getOrderTotal(order)
-  const createdAt = order.created_at ? new Date(order.created_at) : null
-  const receiptDate = createdAt ? createdAt.toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' }) : 'N/A'
-  const receiptTime = createdAt ? createdAt.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }) : 'N/A'
-  const paymentStatusLabel = getOrderPaymentStatusLabel(order)
-  const riderDetails = getOrderRiderDetails(order)
-  const itemsMarkup = (order.items || []).map((item) => {
-    const quantity = Number(item.quantity ?? item.qty ?? 1) || 1
-    const unitPrice = Number(item.unit_price ?? item.price ?? 0) || 0
-    const lineTotal = unitPrice * quantity
-    const itemName = item.product_name || item.name || item.product_sku || 'Product'
-    const itemImage = item.image_url || item.image || '/assets/placeholder.jpg'
-
-    return `
-      <tr>
-        <td>
-          <div style="display:flex; align-items:center; gap:10px;">
-            <img src="${escapeReceiptHtml(itemImage)}" alt="${escapeReceiptHtml(itemName)}" style="width:46px; height:46px; object-fit:cover; border-radius:8px; border:1px solid #e7dcc2;" />
-            <div>
-              <div style="font-weight:600;">${escapeReceiptHtml(itemName)}</div>
-            </div>
-          </div>
-        </td>
-        <td style="text-align:center;">${quantity}</td>
-        <td style="text-align:right;">${formatCurrency(unitPrice)}</td>
-        <td style="text-align:right;">${formatCurrency(lineTotal)}</td>
-      </tr>
-    `
-  }).join('')
-
-  return `
-    <!doctype html>
-    <html>
-      <head>
-        <meta charset="utf-8" />
-        <title>Receipt ${escapeReceiptHtml(order.order_number || order.order_id || '')}</title>
-        <style>
-          body { font-family: Arial, sans-serif; background: #f6f1e7; color: #161616; margin: 0; padding: 24px; }
-          .receipt { max-width: 820px; margin: 0 auto; background: #fffdf8; border: 1px solid #d6c6a3; border-radius: 18px; padding: 28px; }
-          .topbar { display: flex; justify-content: space-between; gap: 24px; border-bottom: 2px solid #d4af37; padding-bottom: 18px; margin-bottom: 20px; }
-          .brand { font-size: 28px; font-weight: 700; letter-spacing: 0.04em; }
-          .muted { color: #6a6458; }
-          .meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin: 18px 0; }
-          .panel { background: #faf5ea; border: 1px solid #eadcb9; border-radius: 14px; padding: 14px 16px; }
-          .panel h3 { margin: 0 0 10px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.14em; color: #8a7a4e; }
-          .panel p { margin: 4px 0; }
-          table { width: 100%; border-collapse: collapse; margin-top: 18px; }
-          th, td { padding: 12px 8px; border-bottom: 1px solid #ece4d0; font-size: 14px; vertical-align: top; }
-          th { text-align: left; color: #6a6458; font-size: 12px; text-transform: uppercase; letter-spacing: 0.12em; }
-          .totals { margin-top: 20px; margin-left: auto; width: min(100%, 320px); }
-          .totals-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #ece4d0; }
-          .totals-row.total { font-weight: 700; font-size: 18px; color: #7a5d09; border-bottom: 0; padding-top: 14px; }
-          .status { display: inline-block; padding: 6px 10px; border-radius: 999px; background: #f7edd0; color: #7a5d09; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; }
-          .footnote { margin-top: 24px; color: #6a6458; font-size: 12px; text-align: center; }
-          @media print {
-            body { background: #fff; padding: 0; }
-            .receipt { border: 0; border-radius: 0; padding: 0; max-width: none; }
-          }
-        </style>
-      </head>
-      <body>
-        <div class="receipt">
-          <div class="topbar">
-            <div>
-              <div class="brand">CosmosCraft</div>
-              <p class="muted">Order receipt</p>
-            </div>
-            <div style="text-align:right;">
-              <p style="margin:0 0 8px;"><strong>Receipt #:</strong> ${escapeReceiptHtml(order.order_number || order.order_id || 'N/A')}</p>
-              <p style="margin:0 0 8px;"><strong>Date:</strong> ${receiptDate}</p>
-              <p style="margin:0;"><strong>Time:</strong> ${receiptTime}</p>
-            </div>
-          </div>
-
-          <div class="meta">
-            <div class="panel">
-              <h3>Customer</h3>
-              <p><strong>${escapeReceiptHtml(customerName)}</strong></p>
-              <p>${escapeReceiptHtml(order.email || 'No email provided')}</p>
-              <p>${escapeReceiptHtml(order.contact_phone || order.customer_phone || order.phone || 'No phone provided')}</p>
-              <p>${escapeReceiptHtml(orderAddress)}</p>
-            </div>
-            <div class="panel">
-              <h3>Order</h3>
-              <p><strong>Status:</strong> <span class="status">${escapeReceiptHtml(String(order.status || 'pending').replace(/_/g, ' '))}</span></p>
-              <p><strong>Payment:</strong> ${escapeReceiptHtml(paymentMethod)}</p>
-              <p><strong>Payment Status:</strong> ${escapeReceiptHtml(paymentStatusLabel)}</p>
-              ${order.tracking_number ? `<p><strong>Tracking #:</strong> ${escapeReceiptHtml(order.tracking_number)}</p>` : ''}
-              ${riderDetails ? `<p><strong>Rider Details:</strong> ${escapeReceiptHtml(riderDetails)}</p>` : ''}
-            </div>
-          </div>
-
-          <table>
-            <thead>
-              <tr>
-                <th>Item</th>
-                <th style="text-align:center;">Qty</th>
-                <th style="text-align:right;">Unit Price</th>
-                <th style="text-align:right;">Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${itemsMarkup || '<tr><td colspan="4" style="text-align:center;" class="muted">No items listed</td></tr>'}
-            </tbody>
-          </table>
-
-          <div class="totals">
-            <div class="totals-row"><span>Subtotal</span><strong>${formatCurrency(subtotal)}</strong></div>
-            <div class="totals-row"><span>Shipping</span><strong>${formatCurrency(shipping)}</strong></div>
-            <div class="totals-row total"><span>Total</span><span>${formatCurrency(total)}</span></div>
-          </div>
-
-          <p class="footnote">Thank you for choosing CosmosCraft.</p>
-        </div>
-      </body>
-    </html>
-  `
-}
-
 function printOrderReceipt(order) {
   if (typeof window === 'undefined' || typeof document === 'undefined') return
 
-  const receiptHtml = buildReceiptHtml(order)
+  const receiptHtml = buildInvoiceHtml(order)
   const iframe = document.createElement('iframe')
 
   iframe.setAttribute('aria-hidden', 'true')
@@ -443,10 +313,16 @@ function ImageZoomModal({ src, alt, onClose }) {
 function ReceiptPanel({ order }) {
   const subtotal = getOrderSubtotal(order)
   const shipping = getOrderShippingAmount(order)
-  const total = getOrderTotal(order)
+  const discount = Number(order.discount_amount || 0) || 0
+  const total = Math.max(subtotal + shipping - discount, 0)
   const customerName = getOrderCustomerName(order)
   const orderAddress = getOrderAddress(order)
-  const riderDetails = getOrderRiderDetails(order)
+  const paymentMethod = getOrderPaymentMethodLabel(order)
+  const paymentReference = order.payment?.reference_number || order.payment_reference_number || ''
+  const customerPhone = order.contact_phone || order.customer_phone || order.phone || ''
+  const createdAt = order.created_at ? new Date(order.created_at) : null
+  const receiptDate = createdAt ? createdAt.toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' }) : 'N/A'
+  const receiptTime = createdAt ? createdAt.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }) : 'N/A'
 
   return (
     <div className="space-y-4">
@@ -454,8 +330,8 @@ function ReceiptPanel({ order }) {
         <div className="mb-5 flex flex-col gap-4 border-b border-[var(--gold-primary)]/20 pb-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.35em] text-[var(--gold-primary)]">CosmosCraft</p>
-            <h3 className="mt-2 text-2xl font-bold text-white">Order Receipt</h3>
-            <p className="mt-1 text-sm text-[var(--text-muted)]">Reference #{order.order_number || order.order_id?.slice(0, 8)}</p>
+            <h3 className="mt-2 text-2xl font-bold text-white">Shop Invoice</h3>
+            <p className="mt-1 text-sm text-[var(--text-muted)]">Invoice #{order.order_number || order.order_id?.slice(0, 8)}</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <button
@@ -464,7 +340,7 @@ function ReceiptPanel({ order }) {
               className="inline-flex items-center gap-2 rounded-xl bg-[var(--gold-primary)] px-4 py-2.5 text-sm font-semibold text-black transition-all hover:shadow-[0_0_20px_rgba(212,175,55,0.3)]"
             >
               <Printer className="h-4 w-4" />
-              Print Receipt
+              Print Invoice
             </button>
           </div>
         </div>
@@ -474,41 +350,27 @@ function ReceiptPanel({ order }) {
             <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[var(--text-muted)]">Customer</p>
             <p className="mt-3 text-lg font-semibold text-white">{customerName}</p>
             <p className="mt-1 text-sm text-[var(--text-muted)]">{order.email || 'No email provided'}</p>
-            <p className="mt-1 text-sm text-[var(--text-muted)]">{order.contact_phone || order.customer_phone || order.phone || 'No phone provided'}</p>
-            <p className="mt-3 text-sm leading-6 text-white">{orderAddress}</p>
+            <p className="mt-1 text-sm text-[var(--text-muted)]">{customerPhone || 'No phone provided'}</p>
+            {orderAddress !== 'N/A' && (
+              <p className="mt-3 text-sm leading-6 text-white">{orderAddress}</p>
+            )}
           </div>
 
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)]/70 p-4">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[var(--text-muted)]">Order Summary</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[var(--text-muted)]">Order</p>
             <div className="mt-3 space-y-2 text-sm">
               <div className="flex items-center justify-between gap-4">
-                <span className="text-[var(--text-muted)]">Created</span>
-                <span className="text-right text-white">{order.created_at ? new Date(order.created_at).toLocaleString() : 'N/A'}</span>
-              </div>
-              <div className="flex items-center justify-between gap-4">
-                <span className="text-[var(--text-muted)]">Status</span>
-                <span className="rounded-full border border-[var(--gold-primary)]/30 bg-[var(--gold-primary)]/10 px-2.5 py-1 text-xs font-semibold uppercase tracking-wider text-[var(--gold-primary)]">
-                  {String(order.status || 'pending').replace(/_/g, ' ')}
-                </span>
+                <span className="text-[var(--text-muted)]">Date</span>
+                <span className="text-right text-white">{receiptDate} {receiptTime}</span>
               </div>
               <div className="flex items-center justify-between gap-4">
                 <span className="text-[var(--text-muted)]">Payment Method</span>
-                <span className="text-right text-white">{getOrderPaymentMethodLabel(order)}</span>
+                <span className="text-right text-white">{paymentMethod}</span>
               </div>
-              <div className="flex items-center justify-between gap-4">
-                <span className="text-[var(--text-muted)]">Payment Status</span>
-                <span className="text-right text-white">{getOrderPaymentStatusLabel(order)}</span>
-              </div>
-              {order.tracking_number && (
+              {paymentReference && (
                 <div className="flex items-center justify-between gap-4">
-                  <span className="text-[var(--text-muted)]">Tracking Number</span>
-                  <span className="text-right text-white">{order.tracking_number}</span>
-                </div>
-              )}
-              {riderDetails && (
-                <div className="flex items-center justify-between gap-4">
-                  <span className="text-[var(--text-muted)]">Rider Details</span>
-                  <span className="text-right text-white">{riderDetails}</span>
+                  <span className="text-[var(--text-muted)]">Reference</span>
+                  <span className="text-right text-white">{paymentReference}</span>
                 </div>
               )}
             </div>
@@ -530,19 +392,13 @@ function ReceiptPanel({ order }) {
                 const quantity = Number(item.quantity ?? item.qty ?? 1) || 1
                 const unitPrice = Number(item.unit_price ?? item.price ?? 0) || 0
                 const amount = unitPrice * quantity
-                const itemImage = item.image_url || item.image || '/assets/placeholder.jpg'
                 return (
                   <div key={`${item.product_id || item.customization_id || idx}`} className="grid grid-cols-[1.6fr_0.5fr_0.8fr_0.8fr] gap-3 border-b border-[var(--border)]/50 px-4 py-3 text-sm last:border-b-0">
-                    <div className="min-w-0 flex items-center gap-3">
-                      <div className="h-12 w-12 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--bg-primary)]">
-                        <img src={itemImage} alt={item.product_name || item.name || 'Item image'} className="h-full w-full object-cover" />
-                      </div>
-                      <div className="min-w-0">
+                    <div className="min-w-0">
                       <p className="truncate font-medium text-white">{item.product_name || item.name || item.product_sku || 'Product'}</p>
                       {(item.notes || item.customization_id) && (
                         <p className="mt-1 truncate text-xs text-[var(--text-muted)]">{item.notes || `Customization ${item.customization_id}`}</p>
                       )}
-                      </div>
                     </div>
                     <span className="text-center text-white">{quantity}</span>
                     <span className="text-right text-white">{formatCurrency(unitPrice)}</span>
@@ -574,6 +430,15 @@ function ReceiptPanel({ order }) {
               <span className="text-right font-medium tabular-nums text-white">{formatCurrency(shipping)}</span>
             </div>
           </div>
+
+          {discount > 0 && (
+            <div className="border-t border-[var(--border)]/50 px-4 py-4">
+              <div className="ml-auto grid w-full max-w-md grid-cols-[minmax(0,1fr)_auto] items-center gap-x-12 text-sm">
+                <span className="text-right text-[var(--text-muted)]">Discount</span>
+                <span className="text-right font-medium tabular-nums text-white">{formatCurrency(discount)}</span>
+              </div>
+            </div>
+          )}
 
           <div className="border-t border-[var(--gold-primary)]/20 bg-[var(--gold-primary)]/8 px-4 py-4">
             <div className="ml-auto grid w-full max-w-md grid-cols-[minmax(0,1fr)_auto] items-center gap-x-12">

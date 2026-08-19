@@ -203,3 +203,61 @@ exports.markDelivered = asyncHandler(async (req, res, next) => {
   if (!order) throw new AppError('Order not found', 404)
   res.status(200).json({ status: 'success', data: order })
 })
+
+exports.markAsReceived = asyncHandler(async (req, res, next) => {
+  const userId = req.user?.id
+  if (!userId) {
+    throw new AppError('You must be logged in to mark order as received', 401)
+  }
+  const order = await orderService.markAsReceived(req.params.id, userId)
+  if (!order) throw new AppError('Order not found', 404)
+  res.status(200).json({ status: 'success', data: order })
+})
+
+exports.createRefundRequest = asyncHandler(async (req, res, next) => {
+  const userId = req.user?.id
+  if (!userId) {
+    throw new AppError('You must be logged in to request a refund', 401)
+  }
+  const { reason, customerNotes, items, images } = req.validatedData || req.body
+  if (!reason || !String(reason).trim()) {
+    throw new AppError('Refund reason is required', 400)
+  }
+  if (!items || !Array.isArray(items) || items.length === 0) {
+    throw new AppError('At least one item must be selected for refund', 400)
+  }
+  const refundRequest = await orderService.createRefundRequest({
+    orderId: req.params.id,
+    userId,
+    reason: String(reason).trim(),
+    customerNotes: customerNotes ? String(customerNotes).trim() : null,
+    items,
+    images: images || [],
+  })
+  res.status(201).json({ status: 'success', data: refundRequest })
+})
+
+exports.getRefundRequests = asyncHandler(async (req, res, next) => {
+  const result = await orderService.getRefundRequests(req.validatedQuery || req.query)
+  res.status(200).json({ status: 'success', data: result.requests, pagination: result.pagination })
+})
+
+exports.getRefundRequest = asyncHandler(async (req, res, next) => {
+  const refundRequest = await orderService.getRefundRequestById(req.params.refundId)
+  if (!refundRequest) throw new AppError('Refund request not found', 404)
+  res.status(200).json({ status: 'success', data: refundRequest })
+})
+
+exports.updateRefundStatus = asyncHandler(async (req, res, next) => {
+  const { status, adminNotes } = req.validatedData || req.body
+  const adminUserId = req.user?.user_id || req.user?.id
+  if (!status) {
+    throw new AppError('Status is required', 400)
+  }
+  const refundRequest = await orderService.updateRefundStatus(req.params.refundId, status, {
+    adminUserId,
+    adminNotes: adminNotes ? String(adminNotes).trim() : null,
+  })
+  if (!refundRequest) throw new AppError('Refund request not found', 404)
+  res.status(200).json({ status: 'success', data: refundRequest })
+})

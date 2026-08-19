@@ -108,14 +108,26 @@ exports.getOverdueInstallments = asyncHandler(async (req, res, next) => {
  */
 exports.markInstallmentPaid = asyncHandler(async (req, res, next) => {
   const { scheduleId } = req.params;
-  const { payment_id } = req.body;
+  const {
+    payment_id,
+    reference_number,
+    method,
+    notes,
+    amount,
+    admin_user_id,
+  } = req.body;
 
   if (!scheduleId) throw new AppError('Schedule ID is required', 400);
 
-  const installment = await installmentService.markInstallmentPaid(
+  const installment = await installmentService.markInstallmentPaid({
     scheduleId,
-    payment_id || null
-  );
+    paymentId: payment_id || null,
+    referenceNumber: reference_number || null,
+    method: method || null,
+    notes: notes || null,
+    amount: amount || null,
+    adminUserId: admin_user_id || null,
+  });
 
   res.json({ status: 'success', data: installment, message: 'Installment marked as paid' });
 });

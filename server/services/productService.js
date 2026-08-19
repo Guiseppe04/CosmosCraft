@@ -68,7 +68,7 @@ exports.getAllProducts = async ({
   let idx = 1;
 
   if (search) {
-    where.push(`(p.name ILIKE $${idx} OR p.brand ILIKE $${idx})`);
+    where.push(`(p.name ILIKE $${idx} OR p.brand ILIKE $${idx} OR p.sku ILIKE $${idx})`);
     params.push(`%${search}%`);
     idx++;
   }
@@ -168,7 +168,7 @@ exports.getProductById = async (id) => {
   return { ...res.rows[0], images: images.rows };
 };
 
-exports.createProduct = async ({ name, description, price, brand, cost_price, category_id, stock, low_stock_threshold, is_active }) => {
+exports.createProduct = async ({ name, description, price, brand, sku, category_id, is_active, cost_price, stock, low_stock_threshold }) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -177,10 +177,10 @@ exports.createProduct = async ({ name, description, price, brand, cost_price, ca
     // NOTE: description and brand are NOT NULL with DEFAULT '' in the DB.
     // Convert empty/undefined values to '' (not null) to avoid a NOT NULL violation.
     const productRes = await client.query(
-      `INSERT INTO products (name, description, price, brand, category_id, is_active)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO products (name, description, price, brand, sku, category_id, is_active)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING *`,
-      [name, description ?? '', price, brand ?? '', category_id || null, is_active ?? true]
+      [name, description ?? '', price, brand ?? '', sku ?? '', category_id || null, is_active ?? true]
     );
     const product = productRes.rows[0];
     
@@ -208,7 +208,7 @@ exports.createProduct = async ({ name, description, price, brand, cost_price, ca
   }
 };
 
-exports.updateProduct = async (id, { name, description, price, brand, cost_price, category_id, stock, low_stock_threshold, is_active }) => {
+exports.updateProduct = async (id, { name, description, price, brand, sku, category_id, is_active, cost_price, stock, low_stock_threshold }) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -220,12 +220,13 @@ exports.updateProduct = async (id, { name, description, price, brand, cost_price
          description        = COALESCE($2, description),
          price              = COALESCE($3, price),
          brand              = COALESCE($4, brand),
-         category_id        = COALESCE($5, category_id),
-         is_active          = COALESCE($6, is_active),
+         sku                = COALESCE($5, sku),
+         category_id        = COALESCE($6, category_id),
+         is_active          = COALESCE($7, is_active),
          updated_at         = now()
-       WHERE product_id = $7
+       WHERE product_id = $8
        RETURNING *`,
-      [name, description, price, brand, category_id, is_active, id]
+      [name, description, price, brand, sku, category_id, is_active, id]
     );
     
     if (!productRes.rows[0]) {

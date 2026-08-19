@@ -13,7 +13,7 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE TYPE user_role_enum AS ENUM ('customer', 'staff', 'admin', 'super_admin');
 CREATE TYPE auth_provider_enum AS ENUM ('local', 'google', 'facebook');
 CREATE TYPE guitar_type_enum AS ENUM ('acoustic', 'electric', 'bass');
-CREATE TYPE order_status_enum AS ENUM ('pending', 'processing', 'shipped', 'out_for_delivery', 'delivered', 'cancelled');
+CREATE TYPE order_status_enum AS ENUM ('pending', 'processing', 'shipped', 'out_for_delivery', 'delivered', 'received', 'cancelled');
 CREATE TYPE payment_method_enum AS ENUM ('gcash', 'bank_transfer', 'cash');
 CREATE TYPE payment_status_enum AS ENUM (
   'pending',
@@ -202,6 +202,7 @@ CREATE TABLE products (
     description TEXT NOT NULL DEFAULT '',
     price NUMERIC(12, 2) NOT NULL CHECK (price >= 0),
     brand VARCHAR(100) NOT NULL DEFAULT '',
+    sku VARCHAR(100) NOT NULL UNIQUE,
     category_id INT NOT NULL,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     deleted_at TIMESTAMPTZ,
@@ -211,6 +212,7 @@ CREATE TABLE products (
     FOREIGN KEY (category_id) REFERENCES categories(category_id) ON DELETE RESTRICT
 );
 CREATE INDEX idx_products_brand ON products(brand);
+CREATE INDEX idx_products_sku ON products(sku);
 CREATE INDEX idx_products_category_id ON products(category_id);
 CREATE INDEX idx_products_is_active ON products(is_active);
 CREATE INDEX idx_products_deleted_at ON products(deleted_at) WHERE deleted_at IS NOT NULL;
@@ -389,6 +391,7 @@ CREATE TABLE orders (
     shipped_at TIMESTAMPTZ,
     out_for_delivery_at TIMESTAMPTZ,
     delivered_at TIMESTAMPTZ,
+    received_at TIMESTAMPTZ,
     rider_name VARCHAR(100),
     rider_contact VARCHAR(50),
     deleted_at TIMESTAMPTZ,
@@ -408,6 +411,7 @@ CREATE INDEX idx_orders_payment_status ON orders(payment_status);
 CREATE INDEX idx_orders_tracking_number ON orders(tracking_number);
 CREATE INDEX idx_orders_shipped_at ON orders(shipped_at) WHERE shipped_at IS NOT NULL;
 CREATE INDEX idx_orders_delivered_at ON orders(delivered_at) WHERE delivered_at IS NOT NULL;
+CREATE INDEX idx_orders_received_at ON orders(received_at) WHERE received_at IS NOT NULL;
 CREATE INDEX idx_orders_payment_reference ON orders(payment_reference_number);
 CREATE INDEX idx_orders_proof_submitted_at ON orders(proof_submitted_at) WHERE proof_submitted_at IS NOT NULL;
 CREATE INDEX idx_orders_reviewed_at ON orders(reviewed_at) WHERE reviewed_at IS NOT NULL;

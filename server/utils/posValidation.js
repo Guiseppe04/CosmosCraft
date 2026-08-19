@@ -22,12 +22,6 @@ exports.validateCreateSale = [
     .optional()
     .isMobilePhone('any')
     .withMessage('Invalid phone format'),
-  body('notes')
-    .optional()
-    .isString()
-    .trim()
-    .isLength({ max: 500 })
-    .withMessage('Notes must not exceed 500 characters'),
   (req, res, next) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -116,12 +110,6 @@ exports.validateCheckout = [
     .trim()
     .isLength({ max: 100 })
     .withMessage('Reference number must not exceed 100 characters'),
-  body('notes')
-    .optional()
-    .isString()
-    .trim()
-    .isLength({ max: 500 })
-    .withMessage('Notes must not exceed 500 characters'),
   (req, res, next) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -181,12 +169,6 @@ exports.validateUpdateSaleInfo = [
     .optional()
     .isMobilePhone('any')
     .withMessage('Invalid phone format'),
-  body('notes')
-    .optional()
-    .isString()
-    .trim()
-    .isLength({ max: 500 })
-    .withMessage('Notes must not exceed 500 characters'),
   (req, res, next) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {

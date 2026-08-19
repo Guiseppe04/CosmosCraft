@@ -417,13 +417,16 @@ function CheckoutSummaryCard({
   onViewTerms,
   onToggleTerms,
   termsAccepted = false,
-  termsError = ''
+  termsError = '',
+  monthlyPayment = 0,
+  estimatedCompletion,
 }) {
   const safeSubtotal = Number.isFinite(Number(subtotal)) ? Number(subtotal) : 0
   const safeShippingCost = Number.isFinite(Number(shippingCost)) ? Number(shippingCost) : 0
   const safeTotal = Number.isFinite(Number(total)) ? Number(total) : 0
   const safeFullTotal = Number.isFinite(Number(fullTotal)) ? Number(fullTotal) : safeTotal
   const safeRemainingBalance = Number.isFinite(Number(remainingBalance)) ? Number(remainingBalance) : 0
+  const safeMonthlyPayment = Number.isFinite(Number(monthlyPayment)) ? Number(monthlyPayment) : 0
   const safeItemCount = Number.isFinite(Number(itemCount)) ? Number(itemCount) : 0
   const isCheckoutDisabled = Boolean(disabled) || !termsAccepted
 
@@ -475,6 +478,28 @@ function CheckoutSummaryCard({
           <div className="flex justify-between text-sm">
             <span className="text-[var(--text-muted)]">Remaining Balance</span>
             <span className="text-[var(--text-light)]">PHP {safeRemainingBalance.toLocaleString('en-PH', { maximumFractionDigits: 2 })}</span>
+          </div>
+        )}
+
+        {requiresDownPayment && safeMonthlyPayment > 0 && (
+          <div className="space-y-2 border-t border-[var(--border)] pt-4">
+            <div className="flex justify-between text-sm">
+              <span className="text-[var(--text-muted)]">Estimated Monthly Payment</span>
+              <span className="text-[var(--text-light)] font-medium">
+                PHP {safeMonthlyPayment.toLocaleString('en-PH', { maximumFractionDigits: 2 })}/month
+              </span>
+            </div>
+            {estimatedCompletion && (
+              <div className="flex justify-between text-sm">
+                <span className="text-[var(--text-muted)]">Estimated Completion</span>
+                <span className="text-[var(--text-light)] font-medium">
+                  {estimatedCompletion}
+                </span>
+              </div>
+            )}
+            <p className="text-xs text-[var(--text-muted)] italic">
+              Monthly payment is estimated based on a 6-month installment plan with applicable interest. Actual terms may vary.
+            </p>
           </div>
         )}
       </div>
@@ -740,6 +765,10 @@ export function CheckoutPage() {
   const hasSelectedCustomBuild = checkoutItems.some(item => isCustomBuildItem(item))
   const total = hasSelectedCustomBuild ? fullPaymentTotal * CUSTOM_BUILD_DOWN_PAYMENT_RATE : fullPaymentTotal
   const remainingBalance = Math.max(0, fullPaymentTotal - total)
+  const monthlyPayment = hasSelectedCustomBuild
+    ? Math.round((fullPaymentTotal * (1 - CUSTOM_BUILD_DOWN_PAYMENT_RATE) * (1 + 0.03) / 6) * 100) / 100
+    : 0
+  const estimatedCompletion = hasSelectedCustomBuild ? 'Approximately 6–8 months' : null
   const itemCount = checkoutItems.reduce((a, b) => a + b.quantity, 0)
   const totalCartItemCount = baseCheckoutItems.reduce((a, b) => a + b.quantity, 0)
   const hasSelectedItems = checkoutItems.length > 0
@@ -1306,6 +1335,8 @@ export function CheckoutPage() {
                   onToggleTerms={handleToggleTerms}
                   termsAccepted={acceptedTerms}
                   termsError={termsError}
+                  monthlyPayment={monthlyPayment}
+                  estimatedCompletion={estimatedCompletion}
                 />
               </motion.div>
             </div>

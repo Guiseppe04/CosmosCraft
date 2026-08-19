@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { CheckCircle, Clock, AlertCircle, Guitar, DollarSign, Calendar, CreditCard } from 'lucide-react';
+import { CheckCircle, Clock, AlertCircle, Guitar, DollarSign, Calendar, CreditCard, RefreshCw } from 'lucide-react';
 import { adminApi } from '../../utils/adminApi';
 
 const formatLabel = (value) => {
@@ -53,17 +53,37 @@ const formatCurrency = (value) => {
   return new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(value);
 };
 
+const REFUND_STATUS_CONFIG = {
+  pending: { label: 'Refund Request Pending', className: 'border-amber-500/30 text-amber-400' },
+  'pending_payment_verification': { label: 'Refund Awaiting Payment Verification', className: 'border-violet-500/30 text-violet-400' },
+  approved: { label: 'Refund Approved', className: 'border-green-500/30 text-green-400' },
+  processing: { label: 'Refund Processing', className: 'border-sky-500/30 text-sky-400' },
+  rejected: { label: 'Refund Rejected', className: 'border-red-500/30 text-red-400' },
+  refunded: { label: 'Refunded', className: 'border-sky-500/30 text-sky-400' },
+};
+
 export default function CustomerProjectTracker({ projectId, projectName, projectData, customBuildId }) {
   const [hierarchy, setHierarchy] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [installmentData, setInstallmentData] = useState(null);
   const [installmentLoading, setInstallmentLoading] = useState(false);
+  const [refundEligibility, setRefundEligibility] = useState(null);
+  const [refundLoading, setRefundLoading] = useState(false);
+  const [refundReason, setRefundReason] = useState('');
+  const [refundSubmitting, setRefundSubmitting] = useState(false);
+  const [refundMessage, setRefundMessage] = useState(null);
+  // Build claim state
+  const [buildClaim, setBuildClaim] = useState(null);
+  const [buildClaimLoading, setBuildClaimLoading] = useState(false);
+  const [markReceivedLoading, setMarkReceivedLoading] = useState(false);
 
   useEffect(() => {
     if (projectId) {
       loadData();
       loadInstallments();
+      loadRefundEligibility();
+      loadBuildClaim();
     }
   }, [projectId]);
 
@@ -93,6 +113,65 @@ export default function CustomerProjectTracker({ projectId, projectName, project
     }
   };
 
+  const loadRefundEligibility = async () => {
+    if (!projectId) return;
+    try {
+      setRefundLoading(true);
+      const res = await adminApi.getProjectRefundEligibility(projectId);
+      setRefundEligibility(res.data);
+    } catch (err) {
+      console.error('Failed to load refund eligibility:', err);
+      setRefundEligibility(null);
+    } finally {
+      setRefundLoading(false);
+    }
+  };
+
+  const handleRequestRefund = async () => {
+    if (!projectId || !refundReason.trim()) return;
+    try {
+      setRefundSubmitting(true);
+      await adminApi.requestProjectRefund(projectId, {
+        reason: refundReason.trim(),
+        amount_requested: refundEligibility?.refundable_amount,
+      });
+      setRefundMessage({ type: 'success', text: 'Refund request submitted. An admin will review it shortly.' });
+      setRefundReason('');
+      setRefundEligibility(null);
+    } catch (err) {
+      setRefundMessage({ type: 'error', text: err.message });
+    } finally {
+      setRefundSubmitting(false);
+    }
+  };
+
+  const loadBuildClaim = async () => {
+    if (!projectId) return;
+    try {
+      setBuildClaimLoading(true);
+      const res = await adminApi.getBuildClaim(projectId);
+      setBuildClaim(res?.data || null);
+    } catch (err) {
+      // No claim exists — this is normal for projects cancelled without progress
+      setBuildClaim(null);
+    } finally {
+      setBuildClaimLoading(false);
+    }
+  };
+
+  const handleMarkReceived = async () => {
+    if (!projectId) return;
+    try {
+      setMarkReceivedLoading(true);
+      await adminApi.markBuildClaimReceived(projectId);
+      await loadBuildClaim();
+    } catch (err) {
+      console.error('Failed to mark as received:', err);
+    } finally {
+      setMarkReceivedLoading(false);
+    }
+  };
+
   const taskSummary = hierarchy?.task_summary || { total: 0, completed: 0, pending: 0 };
   const clampedProgress = Math.min(Math.max(Number(hierarchy?.progress) || 0, 0), 100);
   const milestones = Array.isArray(hierarchy?.milestones) ? hierarchy.milestones : [];
@@ -112,7 +191,7 @@ export default function CustomerProjectTracker({ projectId, projectName, project
   });
 
   const currentTask = currentMilestone?.subtasks?.find((s) => s.status === 'pending' || s.status === 'in_progress');
-  
+
   const completedMilestones = milestones.filter((m) => {
     const subtasks = Array.isArray(m?.subtasks) ? m.subtasks : [];
     if (subtasks.length > 0) {
@@ -142,6 +221,14 @@ export default function CustomerProjectTracker({ projectId, projectName, project
   };
 
   const paymentStatus = getPaymentStatus();
+
+  // Refund status from the project payload (single source of truth)
+  const refundStatus = hierarchy?.refund_status || null;
+  const refundStatusConfig = refundStatus ? (REFUND_STATUS_CONFIG[refundStatus] || REFUND_STATUS_CONFIG.pending) : null;
+
+  // Last completed stage: prefer the cancellation snapshot, then the live column
+  const lastCompletedStage = hierarchy?.cancelled_stage_snapshot || hierarchy?.last_completed_stage || null;
+  const lastCompletedStageAt = hierarchy?.cancelled_stage_snapshot_at || hierarchy?.last_completed_stage_at || null;
 
   if (loading) {
     return (
@@ -265,17 +352,17 @@ export default function CustomerProjectTracker({ projectId, projectName, project
                     Current Task: {formatLabel(currentTask.title)}
                   </p>
                 )}
-                
+
                 {/* Step progress indicator */}
                 {milestones.length > 0 && (
                   <div className="mt-4 flex items-center gap-2">
                     {milestones.map((m, i) => {
                       const subtasks = Array.isArray(m?.subtasks) ? m.subtasks : [];
-                      const isStepComplete = subtasks.length > 0 
+                      const isStepComplete = subtasks.length > 0
                         ? subtasks.every(s => s.status === 'completed')
                         : m.status === 'completed';
                       const isCurrentStep = m.milestone_id === currentMilestone?.milestone_id;
-                      
+
                       return (
                         <div key={m.milestone_id} className="flex items-center gap-1">
                           <div className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold ${
@@ -314,6 +401,231 @@ export default function CustomerProjectTracker({ projectId, projectName, project
           </div>
         )}
 
+        {/* Last Completed Stage (what the customer receives if cancelled now) */}
+        <div className="mt-6 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] p-5">
+          <p className="text-xs uppercase tracking-[0.1em] text-[var(--text-muted)]">Current Build — What You Receive</p>
+          {lastCompletedStage ? (
+            <div className="mt-2 flex items-center gap-3">
+              <CheckCircle className="w-5 h-5 text-green-400 shrink-0" />
+              <div>
+                <p className="text-white font-semibold">{formatLabel(lastCompletedStage)}</p>
+                {lastCompletedStageAt && (
+                  <p className="text-xs text-[var(--text-muted)]">Completed {formatDate(lastCompletedStageAt)}</p>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="mt-2 flex items-center gap-3">
+              <AlertCircle className="w-5 h-5 text-[var(--text-muted)] shrink-0" />
+              <p className="text-sm text-[var(--text-muted)]">No completed build available.</p>
+            </div>
+          )}
+        </div>
+
+        {/* Cancellation Info */}
+        {String(hierarchy.status || '').toLowerCase() === 'cancelled' && (
+          <div className="mt-6 rounded-xl border border-red-500/30 bg-red-500/5 p-5">
+            <p className="text-xs uppercase tracking-[0.1em] text-red-300/70">Cancellation</p>
+            <p className="mt-2 text-sm text-white">
+              {hierarchy.cancel_reason || 'Cancelled'}
+            </p>
+            {hierarchy.cancel_approved_at && (
+              <p className="mt-1 text-xs text-red-300/60">
+                Cancelled on {formatDate(hierarchy.cancel_approved_at)}
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Current Build Claim Tracking */}
+        {buildClaim && String(hierarchy.status || '').toLowerCase() === 'cancelled' && (
+          <div className="mt-6 rounded-xl border border-amber-500/30 bg-amber-500/5 p-5">
+            <p className="text-xs uppercase tracking-[0.1em] text-amber-300/70">Current Build Claim</p>
+
+            {/* Claim status badge */}
+            <div className="mt-2 flex items-center gap-2">
+              <span className={`inline-flex items-center gap-2 px-3 py-1 rounded-full border text-sm font-semibold ${
+                buildClaim.claim_status === 'received' ? 'border-emerald-500/30 text-emerald-400' :
+                buildClaim.claim_status === 'delivered' || buildClaim.claim_status === 'picked_up' ? 'border-sky-500/30 text-sky-400' :
+                buildClaim.claim_status === 'out_for_delivery' || buildClaim.claim_status === 'courier_arranged' ? 'border-blue-500/30 text-blue-400' :
+                buildClaim.claim_status === 'ready_for_delivery' || buildClaim.claim_status === 'ready_for_pickup' ? 'border-cyan-500/30 text-cyan-400' :
+                'border-amber-500/30 text-amber-400'
+              }`}>
+                {formatStatus(buildClaim.claim_status)}
+              </span>
+              {buildClaim.claim_method && (
+                <span className="text-xs text-[var(--text-muted)] capitalize">
+                  via {buildClaim.claim_method === 'courier' ? 'Courier Delivery' : 'Pickup'}
+                </span>
+              )}
+            </div>
+
+            {/* Build state snapshot */}
+            {buildClaim.build_state_snapshot && Array.isArray(buildClaim.build_state_snapshot) && (
+              <div className="mt-4 space-y-1.5">
+                {buildClaim.build_state_snapshot.map((stage, idx) => (
+                  <div key={stage.milestone_id || idx} className="flex items-center gap-2">
+                    {stage.status === 'completed' ? (
+                      <CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    ) : stage.status === 'in_progress' ? (
+                      <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                    ) : (
+                      <div className="w-3.5 h-3.5 rounded-full border-2 border-[var(--border)] shrink-0" />
+                    )}
+                    <span className={`text-xs ${stage.status === 'completed' ? 'text-emerald-300' : stage.status === 'in_progress' ? 'text-amber-300' : 'text-[var(--text-muted)]'}`}>
+                      {stage.title}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Progress + amount */}
+            <div className="mt-3 pt-3 border-t border-amber-500/20 flex items-center justify-between text-xs">
+              <span className="text-[var(--text-muted)]">Progress at Cancellation</span>
+              <span className="text-white font-semibold">{buildClaim.progress_at_cancellation}%</span>
+            </div>
+            {Number(buildClaim.amount_paid) > 0 && (
+              <div className="flex items-center justify-between text-xs mt-1">
+                <span className="text-[var(--text-muted)]">Amount Paid</span>
+                <span className="text-[var(--gold-primary)] font-semibold">{formatCurrency(buildClaim.amount_paid)}</span>
+              </div>
+            )}
+
+            {/* Current state photos */}
+            {buildClaim.current_state_photos && buildClaim.current_state_photos.length > 0 && (
+              <div className="mt-3 pt-3 border-t border-amber-500/20">
+                <p className="text-xs text-[var(--text-muted)] mb-2">Current State Photos</p>
+                <div className="flex gap-2 flex-wrap">
+                  {buildClaim.current_state_photos.map((url, i) => (
+                    <img key={i} src={url} alt={`Build state ${i + 1}`} className="w-20 h-20 rounded-lg object-cover border border-[var(--border)]" />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Courier/delivery info */}
+            {buildClaim.claim_method === 'courier' && buildClaim.courier_service && (
+              <div className="mt-3 pt-3 border-t border-amber-500/20 space-y-1">
+                <div className="flex justify-between text-xs">
+                  <span className="text-[var(--text-muted)]">Courier</span>
+                  <span className="text-white">{buildClaim.courier_service}</span>
+                </div>
+                {buildClaim.courier_reference && (
+                  <div className="flex justify-between text-xs">
+                    <span className="text-[var(--text-muted)]">Reference</span>
+                    <span className="text-white font-mono">{buildClaim.courier_reference}</span>
+                  </div>
+                )}
+                {buildClaim.estimated_delivery_date && (
+                  <div className="flex justify-between text-xs">
+                    <span className="text-[var(--text-muted)]">Est. Delivery</span>
+                    <span className="text-white">{formatShortDate(buildClaim.estimated_delivery_date)}</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Pickup info */}
+            {buildClaim.claim_method === 'pickup' && buildClaim.pickup_location && (
+              <div className="mt-3 pt-3 border-t border-amber-500/20">
+                <div className="flex justify-between text-xs">
+                  <span className="text-[var(--text-muted)]">Pickup Location</span>
+                  <span className="text-white">{buildClaim.pickup_location}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Admin confirmation notes */}
+            {buildClaim.admin_confirmation_notes && (
+              <div className="mt-3 pt-3 border-t border-amber-500/20">
+                <p className="text-xs text-[var(--text-muted)] mb-1">Admin Notes</p>
+                <p className="text-sm text-white">{buildClaim.admin_confirmation_notes}</p>
+              </div>
+            )}
+
+            {/* Mark as Received button */}
+            {['delivered', 'picked_up'].includes(buildClaim.claim_status) && (
+              <button
+                onClick={handleMarkReceived}
+                disabled={markReceivedLoading}
+                className="mt-4 w-full inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-green-500 px-4 py-2.5 text-sm font-semibold text-white transition-all hover:shadow-[0_0_20px_rgba(16,185,129,0.35)] disabled:opacity-50"
+              >
+                {markReceivedLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                {markReceivedLoading ? 'Confirming...' : 'Confirm Guitar Received'}
+              </button>
+            )}
+
+            {buildClaim.claim_status === 'received' && buildClaim.received_at && (
+              <p className="mt-2 text-xs text-emerald-300/70">
+                Received on {formatDate(buildClaim.received_at)}
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Refund Status */}
+        {refundStatusConfig && (
+          <div className="mt-6 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] p-5">
+            <p className="text-xs uppercase tracking-[0.1em] text-[var(--text-muted)]">Refund</p>
+            <div className="mt-2 flex items-center gap-2">
+              <span className={`inline-flex items-center gap-2 px-3 py-1 rounded-full border text-sm font-semibold ${refundStatusConfig.className}`}>
+                {refundStatusConfig.label}
+              </span>
+              {hierarchy.refund_amount_requested && (
+                <span className="text-sm text-white">{formatCurrency(hierarchy.refund_amount_requested)}</span>
+              )}
+            </div>
+            {hierarchy.refund_requested_at && (
+              <p className="mt-1 text-xs text-[var(--text-muted)]">
+                Requested {formatDate(hierarchy.refund_requested_at)}
+              </p>
+            )}
+            {refundStatus === 'pending_payment_verification' && (
+              <p className="mt-2 text-xs text-violet-300/80">
+                Your payment proof is being reviewed by the admin. Once verified, your refund request will be submitted for approval.
+              </p>
+            )}
+            {refundStatus === 'rejected' && (
+              <p className="mt-2 text-xs text-red-300/80">
+                Refund unavailable — your submitted payment proof was not verified by the admin.
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Request Refund (customer-only, only when eligible) */}
+        {refundEligibility?.eligible && !refundStatus && (
+          <div className="mt-6 rounded-xl border border-[var(--gold-primary)]/30 bg-[var(--gold-primary)]/5 p-5">
+            <p className="text-xs uppercase tracking-[0.1em] text-[var(--text-muted)]">Request Refund</p>
+            <p className="mt-2 text-sm text-white">
+              You are eligible for a refund of{' '}
+              <span className="font-bold text-[var(--gold-primary)]">{formatCurrency(refundEligibility.refundable_amount)}</span>{' '}
+              because this project has not started yet.
+            </p>
+            <textarea
+              value={refundReason}
+              onChange={(e) => setRefundReason(e.target.value)}
+              placeholder="Reason for refund (required)..."
+              rows={3}
+              className="mt-3 w-full px-4 py-3 rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] text-sm text-white placeholder-[var(--text-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--gold-primary)] resize-none"
+            />
+            {refundMessage && (
+              <p className={`mt-2 text-sm ${refundMessage.type === 'success' ? 'text-green-400' : 'text-red-400'}`}>
+                {refundMessage.text}
+              </p>
+            )}
+            <button
+              onClick={handleRequestRefund}
+              disabled={refundSubmitting || !refundReason.trim()}
+              className="mt-3 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] px-4 py-2.5 text-sm font-semibold text-black transition-all hover:shadow-[0_0_20px_rgba(212,175,55,0.35)] disabled:opacity-50"
+            >
+              {refundSubmitting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <DollarSign className="w-4 h-4" />}
+              {refundSubmitting ? 'Submitting...' : 'Request Refund'}
+            </button>
+          </div>
+        )}
+
         {/* Installment Schedule */}
         {isFullPayment ? (
           <div className="mt-6 rounded-xl border border-green-500/30 bg-green-500/5 p-5">
@@ -336,7 +648,7 @@ export default function CustomerProjectTracker({ projectId, projectName, project
                 </span>
               )}
             </div>
-            
+
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] p-3">
                 <p className="text-xs uppercase tracking-[0.1em] text-[var(--text-muted)]">Remaining Balance</p>
@@ -384,7 +696,7 @@ export default function CustomerProjectTracker({ projectId, projectName, project
                   <div key={inst.schedule_id} className="flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] px-4 py-2.5">
                     <div className="flex items-center gap-3">
                       <div className={`w-2 h-2 rounded-full ${
-                        inst.status === 'paid' ? 'bg-green-500' : 
+                        inst.status === 'paid' ? 'bg-green-500' :
                         inst.status === 'overdue' ? 'bg-red-500' : 'bg-yellow-500'
                       }`} />
                       <span className="text-sm text-white">Month {inst.installment_number}</span>

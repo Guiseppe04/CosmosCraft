@@ -2,6 +2,14 @@ const { pool } = require('../config/database');
 const { AppError } = require('../middleware/errorHandler');
 const defaultWorkflowService = require('./defaultWorkflowService');
 const inventoryService = require('./inventoryService');
+const { generateRefundRequestNumber } = require('../utils/orderNumber');
+let currentBuildClaimService = null;
+const getClaimService = () => {
+  if (!currentBuildClaimService) {
+    currentBuildClaimService = require('./currentBuildClaimService');
+  }
+  return currentBuildClaimService;
+};
 let projectArchiveColumnsReadyPromise = null;
 
 const ensureProjectArchiveColumns = async () => {
@@ -82,6 +90,8 @@ const PROJECT_BASE_SELECT = `
     p.custom_build_id,
     o.user_id AS customer_id,
     o.order_number,
+    o.payment_plan AS order_payment_plan,
+    o.total_amount AS order_total_amount,
     a.line1 AS shipping_line1,
     a.line2 AS shipping_line2,
     a.city AS shipping_city,
@@ -98,12 +108,35 @@ const PROJECT_BASE_SELECT = `
     ) AS customer_name,
     claim_user.first_name AS claimed_first_name,
     claim_user.last_name AS claimed_last_name,
-    claim_user.role AS claimed_role
+    claim_user.role AS claimed_role,
+    refund_latest.refund_request_id,
+    refund_latest.refund_status,
+    refund_latest.refund_amount_requested,
+    refund_latest.refund_reason,
+    refund_latest.refund_requested_at,
+    refund_latest.refund_decided_at,
+    refund_latest.refund_decided_by,
+    refund_decider.first_name AS refund_decided_by_name
   FROM projects p
   JOIN orders o ON o.order_id = p.order_id
   LEFT JOIN addresses a ON a.address_id = o.shipping_address_id
   LEFT JOIN users u ON u.user_id = o.user_id
   LEFT JOIN users claim_user ON claim_user.user_id = p.claimed_by
+  LEFT JOIN LATERAL (
+    SELECT refund_request_id,
+           status AS refund_status,
+           amount_requested AS refund_amount_requested,
+           reason AS refund_reason,
+           created_at AS refund_requested_at,
+           reviewed_at AS refund_decided_at,
+           reviewed_by AS refund_decided_by
+    FROM refund_requests rr
+    WHERE rr.project_id = p.project_id
+      AND rr.deleted_at IS NULL
+    ORDER BY rr.created_at DESC
+    LIMIT 1
+  ) refund_latest ON TRUE
+  LEFT JOIN users refund_decider ON refund_decider.user_id = refund_latest.refund_decided_by
 `
 
 const LUZON_LOCATION_KEYWORDS = [
@@ -404,6 +437,119 @@ const applyProjectTaskTracking = async (db, project, { stats = null, persist = f
   };
 };
 
+/**
+ * Compute the latest fully-completed build stage (milestone) for a project.
+ * A milestone is fully completed only when ALL of its subtasks are completed.
+ * Returns { stage_title, completed_at } or { stage_title: null, completed_at: null }
+ * when no stage is complete yet.
+ */
+const getLastCompletedBuildStage = async (db, projectId) => {
+  const res = await db.query(
+    `SELECT m.title AS stage_title, MAX(s.completed_at) AS completed_at
+     FROM project_milestones m
+     LEFT JOIN project_subtasks s ON s.milestone_id = m.milestone_id
+     WHERE m.project_id = $1
+     GROUP BY m.milestone_id, m.title, m.order_index
+     HAVING COUNT(s.subtask_id) > 0
+        AND COUNT(CASE WHEN s.status = 'completed' THEN 1 END) = COUNT(s.subtask_id)
+     ORDER BY m.order_index ASC, MAX(s.completed_at) ASC
+     LIMIT 1`,
+    [projectId]
+  );
+  if (res.rows.length === 0) {
+    return { stage_title: null, completed_at: null };
+  }
+  return { stage_title: res.rows[0].stage_title, completed_at: res.rows[0].completed_at };
+};
+
+/**
+ * Persist the latest completed stage onto the project row so the snapshot
+ * survives status changes (including cancellation).
+ */
+const syncLastCompletedStage = async (db, projectId) => {
+  const { stage_title, completed_at } = await getLastCompletedBuildStage(db, projectId);
+  await db.query(
+    `UPDATE projects
+     SET last_completed_stage = $1,
+         last_completed_stage_at = $2,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE project_id = $3`,
+    [stage_title, completed_at, projectId]
+  );
+  return { stage_title, completed_at };
+};
+
+/**
+ * Freeze the current completed stage into the permanent cancellation columns.
+ * Called when an admin approves a cancellation.
+ */
+const snapshotCancelledStage = async (db, projectId) => {
+  const current = await db.query(
+    `SELECT last_completed_stage, last_completed_stage_at
+     FROM projects
+     WHERE project_id = $1`,
+    [projectId]
+  );
+  const row = current.rows[0] || {};
+  await db.query(
+    `UPDATE projects
+     SET cancelled_stage_snapshot = $1,
+         cancelled_stage_snapshot_at = $2,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE project_id = $3`,
+    [row.last_completed_stage || null, row.last_completed_stage_at || null, projectId]
+  );
+};
+
+/**
+ * Attach the latest refund request state to a batch of project rows so the
+ * project list/table, customer modal, and admin modal always show the same
+ * underlying refund data (no divergent copies).
+ */
+const attachRefundStateToProjects = async (projects) => {
+  if (!Array.isArray(projects) || projects.length === 0) return projects;
+
+  const projectIds = projects.map((p) => p.project_id);
+  const res = await pool.query(
+    `SELECT DISTINCT ON (rr.project_id)
+       rr.project_id,
+       rr.refund_request_id,
+       rr.status AS refund_status,
+       rr.amount_requested AS refund_amount_requested,
+       rr.reason AS refund_reason,
+       rr.created_at AS refund_requested_at,
+       rr.reviewed_at AS refund_decided_at,
+       rr.reviewed_by AS refund_decided_by,
+       u.first_name AS refund_decided_by_name
+     FROM refund_requests rr
+     LEFT JOIN users u ON u.user_id = rr.reviewed_by
+     WHERE rr.project_id = ANY($1::uuid[])
+       AND rr.deleted_at IS NULL
+     ORDER BY rr.project_id, rr.created_at DESC`,
+    [projectIds]
+  );
+
+  const refundByProject = res.rows.reduce((acc, row) => {
+    acc[row.project_id] = row;
+    return acc;
+  }, {});
+
+  return projects.map((project) => {
+    const refund = refundByProject[project.project_id] || {};
+    return {
+      ...project,
+      refund_request_id: refund.refund_request_id || null,
+      refund_status: refund.refund_status || null,
+      refund_amount_requested: refund.refund_amount_requested || null,
+      refund_reason: refund.refund_reason || null,
+      refund_requested_at: refund.refund_requested_at || null,
+      refund_decided_at: refund.refund_decided_at || null,
+      refund_decided_by: refund.refund_decided_by || null,
+      refund_decided_by_name: refund.refund_decided_by_name || null,
+    };
+  });
+};
+
 exports.getAllProjects = async (params = {}) => {
   await ensureProjectArchiveColumns();
 
@@ -657,8 +803,10 @@ exports.getAllProjects = async (params = {}) => {
     };
   });
 
+  const projectsWithRefund = await attachRefundStateToProjects(enrichedProjects);
+
   return {
-    projects: enrichedProjects,
+    projects: projectsWithRefund,
     pagination: {
       page,
       page_size: limit,
@@ -666,6 +814,277 @@ exports.getAllProjects = async (params = {}) => {
       total_pages: Math.max(Math.ceil(total / limit), 1),
     },
   };
+};
+
+exports.getAllArchivedProjects = async (params = {}) => {
+  await ensureProjectArchiveColumns();
+
+  const {
+    search,
+    status,
+    assigned_to,
+    guitar_type,
+    date_from,
+    date_to,
+    due_date_from,
+    due_date_to,
+    completion_percentage,
+    sort_by = 'updated_at',
+    sort_dir = 'desc',
+    page = 1,
+    page_size = 20,
+    include_tasks = false,
+    user_id = null,
+  } = params;
+
+  const limit = Math.min(Math.max(Number(page_size) || 20, 1), 100);
+  const offset = (Math.max(Number(page) || 1, 1) - 1) * limit;
+  const allowedSortColumns = [
+    'updated_at',
+    'created_at',
+    'project_name',
+    'customer_name',
+    'progress',
+    'estimated_completion_date',
+    'status',
+  ];
+  const orderBy = allowedSortColumns.includes(sort_by) ? sort_by : 'updated_at';
+  const orderDir = sort_dir === 'asc' ? 'ASC' : 'DESC';
+
+  const where = ['p.deleted_at IS NOT NULL'];
+  const queryParams = [];
+  let idx = 1;
+
+  if (user_id) {
+    where.push(`o.user_id = $${idx++}`);
+    queryParams.push(user_id);
+  }
+
+  if (status) {
+    where.push(`p.status = $${idx++}`);
+    queryParams.push(status);
+  }
+
+  if (assigned_to) {
+    where.push(
+      `(p.claimed_by = $${idx++} OR EXISTS (SELECT 1 FROM project_team_members ptm WHERE ptm.project_id = p.project_id AND ptm.user_id = $${idx++}))`
+    );
+    queryParams.push(assigned_to, assigned_to);
+  }
+
+  if (guitar_type) {
+    where.push(`c.guitar_type::text ILIKE $${idx++}`);
+    queryParams.push(`%${guitar_type}%`);
+  }
+
+  if (date_from) {
+    where.push(`p.created_at >= $${idx++}`);
+    queryParams.push(date_from);
+  }
+
+  if (date_to) {
+    where.push(`p.created_at <= $${idx++}`);
+    queryParams.push(date_to);
+  }
+
+  if (due_date_from) {
+    where.push(`p.estimated_completion_date >= $${idx++}`);
+    queryParams.push(due_date_from);
+  }
+
+  if (due_date_to) {
+    where.push(`p.estimated_completion_date <= $${idx++}`);
+    queryParams.push(due_date_to);
+  }
+
+  if (completion_percentage !== undefined && completion_percentage !== '') {
+    const num = Number(completion_percentage);
+    if (!Number.isNaN(num)) {
+      where.push(`p.progress = $${idx++}`);
+      queryParams.push(num);
+    }
+  }
+
+  const whereClause = `WHERE ${where.join(' AND ')}`;
+
+  let searchClause = '';
+  if (search && String(search).trim()) {
+    const term = `%${String(search).trim().toLowerCase()}%`;
+    searchClause = `AND (
+      p.title ILIKE $${idx++}
+      OR p.project_id::TEXT ILIKE $${idx++}
+      OR LOWER(u.first_name || ' ' || u.last_name) ILIKE $${idx++}
+      OR LOWER(claim_user.first_name || ' ' || claim_user.last_name) ILIKE $${idx++}
+      OR p.status::TEXT ILIKE $${idx++}
+      OR EXISTS (SELECT 1 FROM order_items oi_search JOIN customizations c_search ON c_search.customization_id = oi_search.customization_id WHERE oi_search.order_id = o.order_id AND c_search.guitar_type::text ILIKE $${idx++})
+      OR o.order_number ILIKE $${idx++}
+      OR EXISTS (SELECT 1 FROM project_tasks pt_search WHERE pt_search.project_id = p.project_id AND pt_search.task_name ILIKE $${idx++})
+      OR p.notes ILIKE $${idx++}
+      OR EXISTS (
+        SELECT 1 FROM project_subtasks pst
+        WHERE pst.milestone_id IN (SELECT milestone_id FROM project_milestones WHERE project_id = p.project_id)
+          AND pst.title ILIKE $${idx++}
+      )
+    )`;
+    for (let i = 0; i < 10; i++) {
+      queryParams.push(term);
+    }
+  }
+
+  const sortColumn =
+    orderBy === 'project_name'
+      ? `p.title ${orderDir}`
+      : orderBy === 'customer_name'
+        ? `u.last_name ${orderDir}, u.first_name ${orderDir}`
+        : orderBy === 'progress'
+          ? `p.progress ${orderDir}`
+          : orderBy === 'estimated_completion_date'
+            ? `p.estimated_completion_date ${orderDir} NULLS LAST`
+            : orderBy === 'status'
+              ? `p.status ${orderDir}`
+              : `p.${orderBy} ${orderDir}`;
+
+  const totalQuery = `
+    SELECT COUNT(DISTINCT p.project_id)::int AS total
+    FROM projects p
+    JOIN orders o ON o.order_id = p.order_id
+    LEFT JOIN users u ON u.user_id = o.user_id
+    LEFT JOIN users claim_user ON claim_user.user_id = p.claimed_by
+    ${whereClause}
+    ${searchClause}
+  `;
+
+  const totalResult = await pool.query(totalQuery, queryParams);
+  const total = totalResult.rows[0]?.total || 0;
+
+  const dataQuery = `
+    SELECT
+      p.*,
+      p.title AS name,
+      p.notes AS description,
+      o.user_id AS customer_id,
+      o.order_number,
+      a.line1 AS shipping_line1,
+      a.line2 AS shipping_line2,
+      a.city AS shipping_city,
+      a.province AS shipping_province,
+      a.postal_code AS shipping_postal_code,
+      a.country AS shipping_country,
+      CONCAT(
+        COALESCE(u.first_name, ''),
+        CASE WHEN COALESCE(u.first_name, '') <> '' AND COALESCE(u.last_name, '') <> '' THEN ' ' ELSE '' END,
+        COALESCE(u.last_name, '')
+      ) AS customer_name,
+      claim_user.first_name AS claimed_first_name,
+      claim_user.last_name AS claimed_last_name,
+      claim_user.role AS claimed_role,
+      (
+        SELECT MAX(c2.guitar_type)
+        FROM order_items oi2
+        JOIN customizations c2 ON c2.customization_id = oi2.customization_id
+        WHERE oi2.order_id = o.order_id
+      ) AS guitar_type
+    FROM projects p
+    JOIN orders o ON o.order_id = p.order_id
+    LEFT JOIN addresses a ON a.address_id = o.shipping_address_id
+    LEFT JOIN users u ON u.user_id = o.user_id
+    LEFT JOIN users claim_user ON claim_user.user_id = p.claimed_by
+    ${whereClause}
+    ${searchClause}
+    ORDER BY ${sortColumn}
+    LIMIT $${idx++} OFFSET $${idx++}
+  `;
+
+  const dataResult = await pool.query(dataQuery, [...queryParams, limit, offset]);
+  const projects = dataResult.rows;
+
+  if (projects.length === 0) {
+    return {
+      projects: [],
+      pagination: { page, page_size: limit, total, total_pages: 1 },
+    };
+  }
+
+  const projectIds = projects.map((p) => p.project_id);
+
+  let taskStatsByProject = {};
+  if (include_tasks === true || include_tasks === 'true') {
+    const taskStatsRes = await pool.query(
+      `SELECT
+        pm.project_id,
+        COUNT(*)::int AS total,
+        COUNT(CASE WHEN ps.status = 'completed' THEN 1 END)::int AS completed
+      FROM project_subtasks ps
+      JOIN project_milestones pm ON ps.milestone_id = pm.milestone_id
+      WHERE pm.project_id = ANY($1)
+      GROUP BY pm.project_id`,
+      [projectIds]
+    );
+    taskStatsByProject = taskStatsRes.rows.reduce((acc, row) => {
+      acc[row.project_id] = { total: row.total, completed: row.completed };
+      return acc;
+    }, {});
+  }
+
+  const customizationRes = await pool.query(
+    `SELECT DISTINCT
+       oi.order_id,
+       c.customization_id,
+       c.guitar_type
+     FROM order_items oi
+     JOIN customizations c ON c.customization_id = oi.customization_id
+     WHERE oi.order_id = ANY(
+       SELECT order_id FROM projects WHERE project_id = ANY($1)
+     )`,
+    [projectIds]
+  );
+
+  const customizationsByOrder = customizationRes.rows.reduce((acc, row) => {
+    if (!acc[row.order_id]) acc[row.order_id] = [];
+    acc[row.order_id].push(row);
+    return acc;
+  }, {});
+
+  const enrichedProjects = projects.map((project) => {
+    const taskStats = taskStatsByProject[project.project_id] || { total: 0, completed: 0 };
+    const progress = Math.max(
+      0,
+      Math.min(100, Number.isFinite(Number(project.progress)) ? Number(project.progress) : 0)
+    );
+    const tracking = buildProjectTaskTracking(taskStats, project.status);
+    const orderCustomizations = customizationsByOrder[project.order_id] || [];
+    const primaryGuitarType = orderCustomizations[0]?.guitar_type || project.guitar_type || null;
+
+    return {
+      ...project,
+      progress: tracking.progress || progress,
+      status: tracking.status || project.status,
+      task_summary: tracking.task_summary,
+      customization_ids: orderCustomizations.map((c) => c.customization_id),
+      primary_customization_id: orderCustomizations[0]?.customization_id || null,
+      guitar_type: primaryGuitarType,
+      items: [],
+      payment_method: null,
+      payment: null,
+    };
+  });
+
+  const projectsWithRefund = await attachRefundStateToProjects(enrichedProjects);
+
+  return {
+    projects: projectsWithRefund,
+    pagination: {
+      page,
+      page_size: limit,
+      total,
+      total_pages: Math.max(Math.ceil(total / limit), 1),
+    },
+  };
+};
+
+exports.getArchivedProjects = async (params = {}) => {
+  const result = await exports.getAllArchivedProjects({ ...params, include_tasks: true });
+  return result.projects;
 };
 
 exports.getProjects = async (params = {}) => {
@@ -683,7 +1102,8 @@ exports.getProjectById = async (projectId) => {
   );
   if (result.rows.length === 0) return null;
   const trackedProject = await applyProjectTaskTracking(pool, result.rows[0], { persist: true });
-  return attachFulfillmentDetails(trackedProject);
+  const withFulfillment = attachFulfillmentDetails(trackedProject);
+  return getClaimService().attachClaimToProject(withFulfillment);
 };
 
 exports.getMyProjects = async (userId, params = {}) => {
@@ -805,9 +1225,12 @@ exports.cancelProject = async (projectId, userId, userRole) => {
     await client.query('BEGIN');
 
     const projectResult = await client.query(
-      `${PROJECT_BASE_SELECT}
+      `SELECT p.project_id, p.order_id, p.status, p.progress, o.user_id AS customer_id
+       FROM projects p
+       JOIN orders o ON o.order_id = p.order_id
        WHERE p.project_id = $1
-         AND p.deleted_at IS NULL`,
+         AND p.deleted_at IS NULL
+       FOR UPDATE`,
       [projectId]
     );
 
@@ -834,6 +1257,12 @@ exports.cancelProject = async (projectId, userId, userRole) => {
       throw new AppError('Only projects below 80% progress can be cancelled', 400);
     }
 
+    const normalizedStatus = normalizeProjectStatus(project.status);
+    if (!isPrivileged && normalizedStatus !== 'not_started') {
+      throw new AppError('This project has already started. Please use the Current Build Claim flow to request cancellation.', 400);
+    }
+    const hasBuildProgress = tracking.progress > 0 || stats.completed > 0;
+
     await client.query(
       `UPDATE projects
        SET status = 'cancelled',
@@ -855,7 +1284,91 @@ exports.cancelProject = async (projectId, userId, userRole) => {
       previous_status: tracking.status,
       previous_progress: tracking.progress,
       order_id: project.order_id,
+      has_build_progress: hasBuildProgress,
     });
+
+    if (hasBuildProgress) {
+      // Build has started — create a current build claim instead of a refund.
+      // The down payment was used to purchase parts and is not refundable.
+      // Customer receives the guitar in its current state.
+      try {
+        await getClaimService().createClaimForCancelledProject(
+          client, projectId, project.customer_id, project.order_id
+        );
+      } catch (claimErr) {
+        console.warn('Failed to create build claim during cancellation:', claimErr.message);
+      }
+
+      // Snapshot the completed build stage
+      await syncLastCompletedStage(client, projectId);
+      await snapshotCancelledStage(client, projectId);
+    } else {
+      // No build progress — auto-create refund request (existing behavior)
+      const paymentRes = await client.query(
+        `SELECT payment_id, amount, status FROM payments
+         WHERE order_id = $1 AND status NOT IN ('rejected', 'cancelled', 'refunded')
+         ORDER BY created_at DESC
+         LIMIT 1`,
+        [project.order_id]
+      );
+      const latestPayment = paymentRes.rows[0] || null;
+
+      if (latestPayment) {
+        const existingRefundRes = await client.query(
+          `SELECT refund_request_id, status FROM refund_requests
+           WHERE project_id = $1
+             AND status IN ('pending', 'approved', 'pending_payment_verification')
+             AND deleted_at IS NULL
+           LIMIT 1`,
+          [projectId]
+        );
+
+        if (existingRefundRes.rows.length === 0) {
+          let refundStatus = 'pending';
+          let amountRequested = Number(latestPayment.amount);
+
+          if (latestPayment.status === 'verified') {
+            refundStatus = 'pending';
+          } else if (['pending', 'for_verification'].includes(latestPayment.status)) {
+            refundStatus = 'pending_payment_verification';
+          } else {
+            amountRequested = 0;
+            refundStatus = null;
+          }
+
+          if (refundStatus && amountRequested > 0) {
+            const requestNumber = await generateRefundRequestNumber(client, 'RF');
+
+            await client.query(
+              `INSERT INTO refund_requests (
+                 order_id, user_id, project_id, payment_id, reason, customer_notes,
+                 amount_requested, build_stage_at_request, status, request_number
+               )
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+              [
+                project.order_id,
+                userId,
+                projectId,
+                latestPayment.payment_id,
+                'Automatic refund request from project cancellation',
+                null,
+                amountRequested,
+                null,
+                refundStatus,
+                requestNumber,
+              ]
+            );
+
+            await logActivity(client, projectId, userId, 'refund_requested', {
+              refund_request_reason: 'Automatic refund request from project cancellation',
+              amount_requested: amountRequested,
+              refund_status: refundStatus,
+              payment_status_at_cancel: latestPayment.status,
+            });
+          }
+        }
+      }
+    }
 
     await client.query('COMMIT');
 
@@ -1560,7 +2073,8 @@ exports.getProjectHierarchy = async (projectId) => {
         persist: true,
       }
     );
-    return attachFulfillmentDetails(trackedProject, pickupAppointment);
+    const withFulfillment = attachFulfillmentDetails(trackedProject, pickupAppointment);
+    return getClaimService().attachClaimToProject(withFulfillment);
   } finally {
     client.release();
   }
@@ -1836,7 +2350,9 @@ const ensureProjectHoldCancelColumns = async () => {
           'cancel_requested', 'cancel_approved', 'cancel_rejected',
           'milestone_created', 'milestone_updated', 'milestone_deleted',
           'subtask_created', 'subtask_deleted', 'subtask_status_changed',
-          'fulfillment_updated'
+          'fulfillment_updated',
+          'refund_requested', 'refund_approved', 'refund_rejected',
+          'refund_processing', 'refund_refunded'
         ));
     `).catch(() => {});
     // Check if hold_reason column exists, if not add all hold/cancel columns
@@ -1999,6 +2515,10 @@ exports.updateSubtaskStatus = async (subtaskId, data, userId, userRole) => {
       const stats = await getProjectTaskStats(client, subtask.project_id);
       await applyProjectTaskTracking(client, projectData.rows[0], { stats, persist: true });
     }
+
+    // Sync the latest fully-completed build stage so the snapshot survives
+    // status changes (including cancellation).
+    await syncLastCompletedStage(client, subtask.project_id);
 
     if (status && status !== subtask.status) {
       await logActivity(client, subtask.project_id, userId, 'subtask_status_changed', { title: subtask.title, status });
@@ -2795,12 +3315,78 @@ exports.approveProjectCancel = async (projectId, userId, data = {}) => {
         [project.order_id]
       );
 
+      // Freeze the latest completed build stage so the customer-entitled
+      // stage survives the status change to cancelled and is shown forever.
+      await syncLastCompletedStage(client, projectId);
+      await snapshotCancelledStage(client, projectId);
+
+      // Create current build claim for the cancelled project
+      try {
+        await getClaimService().createClaimForCancelledProject(
+          client, projectId, project.customer_id, project.order_id
+        );
+      } catch (claimErr) {
+        console.warn('Failed to create build claim during cancel approval:', claimErr.message);
+      }
+
       await logActivity(client, projectId, userId, 'cancel_approved', {
         cancel_option: cancelOption,
         cancel_reason: project.cancel_reason,
         fulfillment_status: fulfillmentStatus,
       });
     }
+
+    await client.query('COMMIT');
+
+    const updated = await exports.getProjectById(projectId);
+    return updated;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+};
+
+/**
+ * Customer cancels (withdraws) a pending cancellation request.
+ */
+exports.cancelProjectCancelRequest = async (projectId, userId, userRole) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const pRes = await client.query(
+      `${PROJECT_BASE_SELECT} WHERE p.project_id = $1 AND p.deleted_at IS NULL`,
+      [projectId]
+    );
+    if (pRes.rows.length === 0) throw new AppError('Project not found', 404);
+    const project = pRes.rows[0];
+
+    const isPrivileged = ['staff', 'admin', 'super_admin'].includes(userRole);
+    if (!isPrivileged && project.customer_id !== userId) {
+      throw new AppError('You do not have access to this project', 403);
+    }
+
+    if (!project.cancel_requested_at || project.cancel_approved_at) {
+      throw new AppError('No pending cancellation request to withdraw', 400);
+    }
+
+    await client.query(
+      `UPDATE projects
+       SET cancel_option = NULL,
+           cancel_reason = NULL,
+           cancel_requested_at = NULL,
+           cancel_approved_by = NULL,
+           cancel_approved_at = NULL,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE project_id = $1`,
+      [projectId]
+    );
+
+    await logActivity(client, projectId, userId, 'cancel_request_withdrawn', {
+      previous_cancel_option: project.cancel_option,
+    });
 
     await client.query('COMMIT');
 

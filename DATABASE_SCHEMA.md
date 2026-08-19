@@ -11,7 +11,7 @@ Run `schema.sql` against a fresh PostgreSQL database to create the full schema.
 - `user_role_enum`: `customer`, `staff`, `admin`, `super_admin`
 - `auth_provider_enum`: `local`, `google`, `facebook`
 - `guitar_type_enum`: `acoustic`, `electric`, `bass`
-- `order_status_enum`: `pending`, `processing`, `shipped`, `out_for_delivery`, `delivered`, `cancelled`
+- `order_status_enum`: `pending`, `processing`, `shipped`, `out_for_delivery`, `delivered`, `received`, `cancelled`
 - `payment_method_enum`: `gcash`, `bank_transfer`, `cash`
 - `payment_status_enum`: `pending`, `for_verification`, `verified`, `rejected`, `cancelled`, `refunded`
 - `order_payment_status_enum`: `pending`, `proof_submitted`, `under_review`, `approved`, `rejected`, `failed`
@@ -106,6 +106,8 @@ Run `schema.sql` against a fresh PostgreSQL database to create the full schema.
 
 ### `orders`, `order_items`, `payments`, `payment_config`
 - Orders store billing/shipping totals, status, payment status, tracking, and fulfillment metadata.
+- Tracks fulfillment timestamps: `shipped_at`, `out_for_delivery_at`, `delivered_at`, `received_at`.
+- Supports `received` status for orders confirmed received by the customer.
 - Order items can reference products or customizations and duplicate SKU/name for history.
 - Payments reference orders and optional user / verifier.
 - `payment_config` holds payment method settings and instructions.
