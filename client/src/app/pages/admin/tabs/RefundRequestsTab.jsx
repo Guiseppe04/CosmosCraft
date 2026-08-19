@@ -71,8 +71,11 @@ export function RefundRequestsTab({ showToast }) {
       if (debouncedSearch) params.search = debouncedSearch
 
       const res = await adminApi.getRefundRequests(params)
-      setRefundRequests(res.data || [])
-      setPagination(res.pagination || { page: 1, page_size: 10, total: 0, total_pages: 1 })
+      const requests = Array.isArray(res.data?.refund_requests) ? res.data.refund_requests : Array.isArray(res.data) ? res.data : []
+      setRefundRequests(requests)
+      const total = res.data?.total || 0
+      const pageSize = res.data?.limit || PAGE_SIZE
+      setPagination({ page, page_size: pageSize, total, total_pages: Math.max(1, Math.ceil(total / pageSize)) })
     } catch (err) {
       showToast?.(`Failed to load refund requests: ${err.message}`, 'error')
     } finally {

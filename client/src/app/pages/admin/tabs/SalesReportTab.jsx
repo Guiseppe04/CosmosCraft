@@ -1,7 +1,8 @@
 import { motion } from 'motion/react'
-import { BarChart3, DollarSign, ShoppingBag, TrendingUp, Clock, Calendar, Printer } from 'lucide-react'
+import { BarChart3, DollarSign, ShoppingBag, TrendingUp, Clock, Calendar, Printer, CreditCard } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 import { formatCurrency } from '../../../utils/formatCurrency'
+import { formatPaymentMethod } from '../../../utils/paymentMethodUtils'
 
 function printSalesReport(salesReport) {
   if (!salesReport) return

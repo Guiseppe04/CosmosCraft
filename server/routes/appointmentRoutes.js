@@ -56,6 +56,39 @@ router.post(
   appointmentController.addUnavailableDate
 );
 
+// ─── REFUND REQUESTS ─────────────────────────────────────────────────────────
+
+/**
+ * POST /api/appointments/refund-requests
+ * Create a refund request linked to an appointment
+ * Access: Authenticated users
+ */
+router.post(
+  '/refund-requests',
+  validate(appointmentValidation.createRefundRequestSchema),
+  appointmentController.createRefundRequest
+);
+
+/**
+ * GET /api/appointments/refund-requests
+ * Get refund requests (admin/staff see all, customers see own)
+ * Access: Authenticated users
+ */
+router.get(
+  '/refund-requests',
+  appointmentController.getRefundRequests
+);
+
+/**
+ * GET /api/appointments/:id/refund-requests
+ * Get refund requests for a specific appointment
+ * Access: Appointment owner or admin/staff
+ */
+router.get(
+  '/:id/refund-requests',
+  appointmentController.getRefundRequestsByAppointment
+);
+
 /**
  * GET /api/appointments/:id
  * Get appointment details
@@ -317,37 +350,5 @@ router.patch(
   appointmentController.updatePaymentStatus
 );
 
-// ─── REFUND REQUESTS ─────────────────────────────────────────────────────────
-
-/**
- * POST /api/appointments/refund-requests
- * Create a refund request linked to an appointment
- * Access: Authenticated users
- */
-router.post(
-  '/refund-requests',
-  validate(appointmentValidation.createRefundRequestSchema),
-  appointmentController.createRefundRequest
-);
-
-/**
- * GET /api/appointments/refund-requests
- * Get refund requests (admin/staff see all, customers see own)
- * Access: Authenticated users
- */
-router.get(
-  '/refund-requests',
-  appointmentController.getRefundRequests
-);
-
-/**
- * GET /api/appointments/:id/refund-requests
- * Get refund requests for a specific appointment
- * Access: Appointment owner or admin/staff
- */
-router.get(
-  '/:id/refund-requests',
-  appointmentController.getRefundRequestsByAppointment
-);
 
 module.exports = router;

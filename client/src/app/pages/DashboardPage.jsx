@@ -7,6 +7,8 @@ import { useCart } from '../context/CartContext.jsx'
 import { BASE_PRICE, BODY_OPTIONS, BODY_WOOD_OPTIONS, BODY_FINISH_OPTIONS, NECK_OPTIONS, FRETBOARD_OPTIONS, HEADSTOCK_OPTIONS, HEADSTOCK_WOOD_OPTIONS, INLAY_OPTIONS, BRIDGE_OPTIONS, PICKGUARD_OPTIONS_BY_BODY, KNOB_OPTIONS_BY_BODY, HARDWARE_OPTIONS, PICKUP_OPTIONS } from '../lib/guitarBuilderData.js'
 import { adminApi } from '../utils/adminApi.js'
 import { buildInvoiceHtml } from '../utils/invoiceBuilder.js'
+import { formatPaymentMethod } from '../utils/paymentMethodUtils'
+import { getPaymentStatusConfig } from '../utils/orderPaymentStatus'
 import { useDebounce } from '../hooks/useDebounce'
 import { uploadToCloudinary } from '../utils/cloudinary.js'
 import { formatCurrency } from '../utils/formatCurrency.js'
@@ -273,7 +275,6 @@ export function DashboardPage() {
   const [isCancellingAppointment, setIsCancellingAppointment] = useState(false)
   const [isPaymentConfirmedModalOpen, setIsPaymentConfirmedModalOpen] = useState(false)
   const [isRequestRefundModalOpen, setIsRequestRefundModalOpen] = useState(false)
-  const [refundReason, setRefundReason] = useState('')
   const [isRequestingRefund, setIsRequestingRefund] = useState(false)
 
   const DIGITAL_PAYMENT_METHODS = ['gcash', 'e_wallet', 'e_bank', 'bank_transfer']

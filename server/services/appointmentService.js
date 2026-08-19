@@ -308,7 +308,7 @@ exports.getAppointmentById = async (appointmentId) => {
   return formatAppointmentResponse(result.rows[0]);
 };
 
-exports.listAppointments = async ({ user_id, appointment_type, status, date_from, date_to, search, sort_by = 'scheduled_at', sort_order = 'asc', limit = 20, offset = 0 } = {}) => {
+exports.listAppointments = async ({ user_id, appointment_type, status, date_from, date_to, payment_method, search, sort_by = 'scheduled_at', sort_order = 'asc', limit = 20, offset = 0 } = {}) => {
   await this.autoMarkNoShows();
   let where = [];
   let params = [];
