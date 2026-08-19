@@ -9,6 +9,7 @@ import {
 } from '../../lib/guitarBuilderData.js'
 import {
   resolveTopWoodAsset,
+  resolveBodyWoodAsset,
   resolveFinishAsset,
   resolveTopCoatAsset,
   resolveInlay,
@@ -217,13 +218,14 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
     : null
 
   const pickupLayers = useMemo(() => {
+    // Responsible for determining pickup positions and types based on configuration (HH / H-S-H / Active)
     const pickupConfig = config.pickupConfiguration || 'hh'
     const isActive = config.electronicsType === 'active'
     const pickupColorType = config.pickupColor || 'bobbins'
     const pickupColorVariant = config.pickupColorVariant || 'black'
     const paintedColor = config.pickupPaintedColor || '#000000'
     const woodType = config.pickupWoodType || 'black'
-    const poleColor = config.pickupPoleColor || 'chrome'
+    const poleColor = config.pickupPoleColor || 'silver'
     const bridgeModel = config.bridgePickupModel || 'vantium'
     const middleModel = config.middlePickupModel || 'none'
     const neckModel = config.neckPickupModel || 'vantium'
@@ -231,6 +233,7 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
     const isHSS = pickupConfig === 'hss'
     const isHH = pickupConfig === 'hh'
 
+    // Responsible for building pickup position slots (bridge/middle/neck)
     const positions = []
     if (isHH || isActive) {
       positions.push({ slot: 'bridge', type: 'humbucker', model: bridgeModel })
@@ -246,6 +249,7 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
       }
     }
 
+    // Responsible for resolving humbucker/single coil route assets
     const getRouteSrc = (type, slot) => {
       if (type === 'singlecoil') {
         return resolvePickupRoute('electric', config.body || 'dc', 'singlecoil', 'black', slot)
@@ -253,6 +257,7 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
       return resolvePickupRoute('electric', config.body || 'dc', 'humbucker', 'black', slot)
     }
 
+    // Responsible for resolving pickup body assets (covers, single coil, or null for bobbins/painted/wooden)
     const getBodySrc = (type, slot) => {
       if (pickupColorType === 'covers') {
         const coverColor = pickupColorVariant === 'chrome' ? 'chrome' : pickupColorVariant === 'gold' ? 'gold' : 'black'
@@ -265,17 +270,27 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
       return null
     }
 
+    // Responsible for resolving bobbin mask assets for bobbins, painted, and wooden styles
     const getBodyMask = (type, slot) => {
-      if (pickupColorType === 'bobbins' || pickupColorType === 'painted' || pickupColorType === 'wooden') {
-        if (type === 'singlecoil') {
-          return resolvePickupBobbinMask('electric', config.body || 'dc', 'middle-single')
+        if (pickupColorType === 'bobbins' || pickupColorType === 'painted' || pickupColorType === 'wooden') {
+          const model = slot === 'bridge' ? bridgeModel : slot === 'neck' ? neckModel : middleModel
+          if (model === 'fluence') {
+            return resolveFluenceMask('electric', config.body || 'dc', slot)
+          }
+          if (type === 'singlecoil') {
+            return resolvePickupBobbinMask('electric', config.body || 'dc', 'middle-single')
+          }
+          return resolvePickupBobbinMask('electric', config.body || 'dc', slot)
         }
-        return resolvePickupBobbinMask('electric', config.body || 'dc', slot)
-      }
-      return null
+        return null
     }
 
+    // Responsible for applying bobbin color, painted RGB color, or wooden texture style to pickup bodies
     const getBodyStyle = (type, slot) => {
+      if (pickupColorType === 'bobbins') {
+        const bobbinAsset = resolvePickupBobbinColor('electric', config.body || 'dc', pickupColorVariant, slot)
+        return { backgroundImage: `url(${bobbinAsset})` }
+      }
       if (pickupColorType === 'painted') {
         return { backgroundColor: paintedColor }
       }
@@ -286,29 +301,55 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
       return {}
     }
 
-    const getPolesSrc = (type, slot) => {
-      const poleType = type === 'singlecoil' ? 'singlecoil' : 'humbucker'
-      const coverType = pickupColorType === 'covers' ? 'covered' : 'open'
-      let poleColorKey = poleColor
-      if (poleColor === 'gold' && poleType === 'singlecoil') {
-        poleColorKey = 'chrome'
-      }
-      if (type === 'singlecoil') {
-        const scPoleMap = {
-          black: 'black',
-          white: 'white',
-          cream: 'creme',
-          'racing-green': 'green',
-          'white-black': 'black',
-          'black-cream': 'black',
-          'racing-green-black': 'black',
-        }
-        const scColor = scPoleMap[pickupColorVariant] || 'black'
-        return resolvePickupPoles('electric', config.body || 'dc', 'singlecoil', scColor, slot)
-      }
-      return resolvePickupPoles('electric', config.body || 'dc', poleType, coverType, `${poleColorKey}-${slot}`)
-    }
+        // Resolve pole-piece overlays for humbuckers and single coils
+        const getPolesSrc = (type, slot) => {
+          const pickupType = type === 'singlecoil' ? 'singlecoil' : 'humbucker'
+          const coverType = pickupColorType === 'covers' ? 'covered' : 'open'
+          
+          console.log('POLE DEBUG:', {
+            poleColor,
+            slot,
+            pickupType,
+            coverType,
+          })
 
+          // UI uses "silver"; Cloudinary uses "chrome"
+          const poleColorKey = poleColor === 'silver' ? 'chrome' : poleColor
+
+          if (type === 'singlecoil') {
+            const scPoleMap = {
+              black: 'black',
+              white: 'white',
+              cream: 'creme',
+              'racing-green': 'green',
+              'white-black': 'black',
+              'black-cream': 'black',
+              'racing-green-black': 'black',
+            }
+
+            const scColor = scPoleMap[pickupColorVariant] || 'black'
+
+            return resolvePickupPoles(
+              'electric',
+              config.body || 'dc',
+              pickupType,
+              coverType,
+              scColor,
+              slot
+            )
+          }
+
+          return resolvePickupPoles(
+            'electric',
+            config.body || 'dc',
+            pickupType,
+            coverType,
+            poleColorKey,
+            slot
+          )
+        }
+
+    // Responsible for composing final pickup layer stack (route, body/mask, poles)
     const layers = []
     for (const pos of positions) {
       const routeSrc = getRouteSrc(pos.type, pos.slot)
@@ -349,9 +390,13 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
         layers.push({
           name: `${pos.slot}-pickup-poles`,
           src: polesSrc,
-          className: 'opacity-95',
           protectedLayer: true,
-          style: { zIndex: 122 },
+          style: {
+            zIndex: 122,
+            backgroundSize: 'contain',
+            backgroundPosition: 'center',
+            backgroundRepeat: 'no-repeat',
+          }
         })
       }
     }
@@ -363,7 +408,7 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
     const bridgeSrc = resolveVariant(bridge.assets, colorKey)
     const switchSrc = resolveVariant(bodyAssets.switch, colorKey)
     return [
-      { name: 'switch', src: switchSrc, className: 'opacity-90', protectedLayer: true, style: { zIndex: 130 } },
+      { name: 'switch', src: switchSrc, protectedLayer: true, style: { zIndex: 130 } },
       { name: 'strap-button', src: strapFront, className: 'opacity-95', protectedLayer: true, style: { zIndex: 131 } },
       { name: 'knobs-hardware-base', src: knobHardwareBase, className: 'opacity-95', protectedLayer: true, style: { zIndex: 132 } },
       { name: 'knobs-style', src: knobStyleOverlay, className: 'opacity-95', protectedLayer: true, style: { zIndex: 133 } },
@@ -661,8 +706,9 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
                   {pickguardAsset && <GuitarLayer src={pickguardAsset} className="opacity-95" layerName="pickguard" style={{ zIndex: 15 }} protectedLayer />}
                   {pickupLayers.map((layer, index) => (
                     <GuitarLayer
-                      key={`${layer.src}-${index}`}
+                      key={`${layer.src ?? layer.maskSrc ?? 'layer'}-${index}`}
                       src={layer.src}
+                      maskSrc={layer.maskSrc}
                       style={layer.style}
                       className={layer.className}
                       layerName={layer.name}

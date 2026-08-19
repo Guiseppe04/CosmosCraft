@@ -86,7 +86,7 @@ export const CATEGORIES = {
             neckPickupModel: 'vantium',
             pickupColor: 'bobbins',
             pickupColorVariant: 'black',
-            pickupPoleColor: 'chrome',
+            pickupPoleColor: 'silver',
             controls: 'standard',
             saddle: 'chrome',
             nut: 'blackGraphTech',
@@ -134,7 +134,7 @@ export const CATEGORIES = {
            neckPickupModel: 'vantium',
            pickupColor: 'bobbins',
            pickupColorVariant: 'black',
-           pickupPoleColor: 'chrome',
+            pickupPoleColor: 'silver',
            controls: 'standard',
            saddle: 'chrome',
            nut: 'blackGraphTech',
@@ -182,7 +182,7 @@ export const CATEGORIES = {
             neckPickupModel: 'vantium',
             pickupColor: 'bobbins',
             pickupColorVariant: 'black',
-            pickupPoleColor: 'chrome',
+            pickupPoleColor: 'silver',
             controls: 'standard',
             saddle: 'chrome',
             nut: 'blackGraphTech',
@@ -591,6 +591,7 @@ export const OPTION_FIELDS = [
     key: 'pickupConfiguration',
     label: 'Pickup Configuration',
     type: 'select',
+    // Responsible for defining available pickup configuration layouts (HH / H-S-H)
     options: [
       { value: 'hh', label: 'HH (Dual Humbuckers)', note: 'Two humbuckers', price: 135 },
       { value: 'hss', label: 'H-S-H (Humbucker-Single-Humbucker)', note: 'Bridge humbucker, middle single, neck humbucker', price: 110 },
@@ -601,6 +602,7 @@ export const OPTION_FIELDS = [
     key: 'bridgePickupModel',
     label: 'Bridge Pickup',
     type: 'select',
+    // Responsible for defining bridge humbucker pickup model options
     dependency: 'pickupConfiguration',
     condition: (config) => {
       const cfg = config.pickupConfiguration || 'hh'
@@ -622,6 +624,7 @@ export const OPTION_FIELDS = [
     key: 'middlePickupModel',
     label: 'Middle Pickup',
     type: 'select',
+    // Responsible for defining middle single coil pickup model options
     condition: (config) => {
       const cfg = config.pickupConfiguration || 'hh'
       return cfg === 'hss'
@@ -636,6 +639,7 @@ export const OPTION_FIELDS = [
     key: 'neckPickupModel',
     label: 'Neck Pickup',
     type: 'select',
+    // Responsible for defining neck humbucker pickup model options
     options: [
       { value: 'beryllium', label: 'Beryllium', note: 'Beryllium neck pickup', price: 0 },
       { value: 'holdsworth', label: 'Holdsworth', note: 'Holdsworth neck pickup', price: 0 },
@@ -650,6 +654,7 @@ export const OPTION_FIELDS = [
     key: 'pickupColor',
     label: 'Pickup Color',
     type: 'select',
+    // Responsible for defining pickup color/style type options (bobbins, painted, wooden, covers)
     options: [
       { value: 'bobbins', label: 'Bobbin Colors', note: 'Open coil bobbins', price: 0 },
       { value: 'painted', label: 'Painted Bobbins (RGB)', note: 'Custom RGB painted bobbins', price: 10 },
@@ -662,6 +667,7 @@ export const OPTION_FIELDS = [
     key: 'pickupColorVariant',
     label: 'Pickup Color Variant',
     type: 'select',
+    // Responsible for defining specific color variants within each pickup color type
     dependency: 'pickupColor',
     condition: (config) => !!config.pickupColor && config.pickupColor !== 'none',
     getOptions: (config) => {
@@ -692,6 +698,7 @@ export const OPTION_FIELDS = [
     key: 'pickupPaintedColor',
     label: 'Painted Color (RGB)',
     type: 'color',
+    // Responsible for defining RGB color input for painted bobbins
     condition: (config) => config.pickupColor === 'painted',
   },
   {
@@ -699,6 +706,7 @@ export const OPTION_FIELDS = [
     key: 'pickupWoodType',
     label: 'Wood Type',
     type: 'image-select',
+    // Responsible for defining wood type options for wooden bobbins
     previewResolver: (category, model, value) => resolveBodyWoodAsset(category, model, value),
     condition: (config) => config.pickupColor === 'wooden',
     options: [
@@ -713,10 +721,11 @@ export const OPTION_FIELDS = [
     key: 'pickupPoleColor',
     label: 'Pole Piece Color',
     type: 'image-select',
+    // Responsible for defining pole piece color options (black, silver, gold)
     previewResolver: (category, model, value) => getButtonPreview(category, model, 'pole-pieces', value),
     options: [
       { value: 'black', label: 'Black', note: 'Black pole pieces', price: 0 },
-      { value: 'chrome', label: 'Chrome', note: 'Chrome pole pieces', price: 10 },
+      { value: 'silver', label: 'Silver', note: 'Silver pole pieces', price: 10 },
       { value: 'gold', label: 'Gold', note: 'Gold pole pieces', price: 10 },
     ],
   },
@@ -725,6 +734,7 @@ export const OPTION_FIELDS = [
     key: 'controls',
     label: 'Controls',
     type: 'select',
+    // Responsible for defining controls layout options (standard, DTC, DTMV)
     options: [
       { value: 'standard', label: 'Standard Controls', note: 'Standard volume/tone', price: 0 },
       { value: 'deleteTone', label: 'Delete Tone Control', note: 'Remove tone control', price: 0 },

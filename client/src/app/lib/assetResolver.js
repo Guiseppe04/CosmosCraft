@@ -18,7 +18,7 @@ const CLOUD_NAME = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_
   ? import.meta.env.VITE_CLOUDINARY_CLOUD_NAME 
   : ''
 
-const USE_CLOUDINARY = Boolean(CLOUD_NAME) && !import.meta.env.DEV
+const USE_CLOUDINARY = Boolean(CLOUD_NAME)
 
 /**
  * Resolve an asset path using either Cloudinary or local files
@@ -483,6 +483,7 @@ export function resolveBodyStrapButtonAsset(category, model, buttonKey) {
 /**
  * Resolve pickup assets
  */
+// Responsible for resolving humbucker pickup route asset paths (bridge.png / neck.png)
 export function resolvePickupRoute(category, model, pickupType, colorKey, position) {
   if (pickupType === 'humbucker') {
     return resolveSharedAsset(category, model, 'pickups', '6-string', '24-frets', 'standard', 'pickup-routes', pickupType, `${position}.png`)
@@ -490,18 +491,22 @@ export function resolvePickupRoute(category, model, pickupType, colorKey, positi
   return resolveSharedAsset(category, model, 'pickups', '6-string', '24-frets', 'standard', 'pickup-routes', pickupType, `${colorKey}-${position}.png`)
 }
 
+// Responsible for resolving pickup body asset paths (covered pickups)
 export function resolvePickupBody(category, model, pickupType, colorKey, position) {
   return resolveSharedAsset(category, model, 'pickups', '6-string', '24-frets', 'standard', 'pickup-bodies', pickupType, `${colorKey}-${position}.png`)
 }
 
-export function resolvePickupPoles(category, model, pickupType, colorKey, position) {
-  return resolveSharedAsset(category, model, 'pickups', '6-string', '24-frets', 'standard', 'pole-pieces', pickupType, `${colorKey}-${position}.png`)
+// Responsible for resolving pole piece asset paths (open/covered, singlecoil/humbucker)
+export function resolvePickupPoles(category, model, pickupType, coverType, colorKey, position) {
+  return resolveSharedAsset(category, model, 'pickups', '6-string', '24-frets', 'standard', 'pole-pieces', pickupType, coverType,`${colorKey}-${position}.png`)
 }
 
+// Responsible for resolving bobbin color asset paths for open bobbins
 export function resolvePickupBobbinColor(category, model, colorKey, position) {
   return resolveSharedAsset(category, model, 'pickups', '6-string', '24-frets', 'standard', 'pickup-bodies', 'open', 'bobbins', `${colorKey}-${position}.png`)
 }
 
+// Responsible for resolving bobbin mask asset paths for painted/wooden bobbins
 export function resolvePickupBobbinMask(category, model, position) {
   const maskMap = {
     neck: 'coil-masks-neck',
@@ -513,6 +518,7 @@ export function resolvePickupBobbinMask(category, model, position) {
   return resolveSharedAsset(category, model, 'pickups', '6-string', '24-frets', 'standard', 'pickup-bodies', mask + '.png')
 }
 
+// Responsible for resolving Fluence active pickup mask asset paths
 export function resolveFluenceMask(category, model, position) {
   const maskMap = {
     bridge: 'fluence-bridge-mask',
@@ -522,6 +528,7 @@ export function resolveFluenceMask(category, model, position) {
   return resolveSharedAsset(category, model, 'pickups', '6-string', '24-frets', 'standard', 'pickup-bodies', 'covered', `${mask}.png`)
 }
 
+// Responsible for resolving single coil body asset paths
 export function resolveSingleCoilBody(category, model, colorKey, position) {
   return resolveSharedAsset(category, model, 'pickups', '6-string', '24-frets', 'standard', 'pickup-bodies', 'singlecoil', `${colorKey}-${position}.png`)
 }
@@ -593,6 +600,7 @@ export default {
   resolveNeckWoodAsset,
   resolveHeadstockWoodAsset,
   resolveTopWoodAsset,
+  resolveBodyWoodAsset,
   resolveFinishAsset,
   resolveTopCoatAsset,
   resolveBodyMask,

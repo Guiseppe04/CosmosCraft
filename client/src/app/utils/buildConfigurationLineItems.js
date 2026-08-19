@@ -39,6 +39,7 @@ export const GUITAR_CONFIGURATION_ITEMS = [
   { key: 'middlePickupModel', category: 'Middle Pickup', summaryKey: 'middlePickupModel' },
   { key: 'neckPickupModel', category: 'Neck Pickup', summaryKey: 'neckPickupModel' },
   { key: 'pickupColor', category: 'Pickup Color', summaryKey: 'pickupColor' },
+  // Responsible for mapping pickupColor config to line items
   { key: 'pickupPoleColor', category: 'Pole Piece Color', summaryKey: 'pickupPoleColor' },
   { key: 'controls', category: 'Controls', summaryKey: 'controls' },
   // New Hardware options

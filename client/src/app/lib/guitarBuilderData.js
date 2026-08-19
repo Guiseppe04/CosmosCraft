@@ -91,7 +91,7 @@ export const DEFAULT_CONFIG = {
   pickupColorVariant: 'black',
   pickupPaintedColor: '#000000',
   pickupWoodType: 'black',
-  pickupPoleColor: 'chrome',
+   pickupPoleColor: 'silver',
   controls: 'standard',
   saddle: 'chrome',
   nut: 'blackGraphTech',
@@ -1153,16 +1153,19 @@ export const TRUSS_ROD_COVER_OPTIONS = {
 }
 
 // --- Electronics ---
+// Responsible for defining electronics type options (passive/active)
 export const ELECTRONICS_TYPE_OPTIONS = {
   passive: { label: 'Passive', note: 'Standard passive electronics', price: 0, specs: specs() },
   active: { label: 'Active', note: 'Active preamp electronics', price: 80, specs: specs() },
 }
 
+// Responsible for defining pickup configuration options (HH / H-S-H)
 export const PICKUP_CONFIGURATION_OPTIONS = {
   hh: { label: 'Two Humbuckers (HH)', note: 'Dual humbuckers', price: 135, specs: specs() },
   hss: { label: 'Humbucker - Single - Humbucker (H-S-H)', note: 'Bridge humbucker, middle single, neck humbucker', price: 110, specs: specs() },
 }
 
+// Responsible for defining bridge humbucker pickup model options
 export const PICKUP_MODEL_BRIDGE_OPTIONS = {
   beryllium: { label: 'Beryllium Humbucker', note: 'Beryllium bridge pickup', src: null, price: 0, specs: specs() },
   holdsworth: { label: 'Holdsworth Humbucker', note: 'Holdsworth bridge pickup', src: null, price: 0, specs: specs() },
@@ -1173,11 +1176,13 @@ export const PICKUP_MODEL_BRIDGE_OPTIONS = {
   vantium: { label: 'Vantium Humbucker', note: 'Vantium bridge pickup', src: null, price: 0, specs: specs() },
 }
 
+// Responsible for defining middle pickup model options (single coil variants)
 export const PICKUP_MODEL_MIDDLE_OPTIONS = {
   none: { label: 'None', note: 'No middle pickup', src: null, price: 0, specs: specs() },
   singleCoil: { label: 'Single Coil Models', note: 'Single coil middle models', src: null, price: 0, specs: specs() },
 }
 
+// Responsible for defining neck humbucker pickup model options
 export const PICKUP_MODEL_NECK_OPTIONS = {
   beryllium: { label: 'Beryllium Humbucker', note: 'Beryllium neck pickup', src: null, price: 0, specs: specs() },
   holdsworth: { label: 'Holdsworth Humbucker', note: 'Holdsworth neck pickup', src: null, price: 0, specs: specs() },
@@ -1187,19 +1192,7 @@ export const PICKUP_MODEL_NECK_OPTIONS = {
   delete: { label: 'Delete Neck Pickup', note: 'Remove neck pickup', src: null, price: 0, specs: specs() },
 }
 
-export const PICKUP_BOBBIN_OPTIONS = {
-  standard: { label: 'Standard Bobbins', note: 'Standard bobbin style', src: null, price: 0, specs: specs() },
-  painted: { label: 'Painted Bobbins', note: 'Painted bobbin style', src: null, price: 10, specs: specs() },
-  wooden: { label: 'Wooden Bobbins', note: 'Wooden bobbin style', src: null, price: 15, specs: specs() },
-  covered: { label: 'Covered Pickups', note: 'Covered pickup style', src: null, price: 10, specs: specs() },
-}
-
-export const PICKUP_POLE_COLOR_OPTIONS = {
-  black: { label: 'Black', note: 'Black pole pieces', src: null, price: 0, specs: specs() },
-  chrome: { label: 'Chrome', note: 'Chrome pole pieces', src: null, price: 10, specs: specs() },
-  gold: { label: 'Gold', note: 'Gold pole pieces', src: null, price: 10, specs: specs() },
-}
-
+// Responsible for defining pickup color/style options (bobbins, painted, wooden, covers)
 export const PICKUP_COLOR_OPTIONS = {
   bobbins: { label: 'Bobbin Colors', note: 'Open coil bobbins', price: 0, specs: specs() },
   painted: { label: 'Painted Bobbins (RGB)', note: 'Custom RGB painted bobbins', price: 10, specs: specs() },
@@ -1207,11 +1200,22 @@ export const PICKUP_COLOR_OPTIONS = {
   covers: { label: 'Covers', note: 'Covered pickup style', price: 10, specs: specs() },
 }
 
+// Responsible for defining pickup pole piece color options (black, silver, gold)
+export const PICKUP_POLE_COLOR_OPTIONS = {
+  black: { label: 'Black', note: 'Black pole pieces', src: null, price: 0, specs: specs() },
+  silver: { label: 'Silver', note: 'Silver pole pieces', src: null, price: 10, specs: specs() },
+  gold: { label: 'Gold', note: 'Gold pole pieces', src: null, price: 10, specs: specs() },
+}
+
+// Responsible for defining controls layout options (standard, DTC, DTMV)
 export const CONTROLS_OPTIONS = {
   standard: { label: 'Standard Controls', note: 'Standard volume/tone', price: 0, specs: specs() },
   deleteTone: { label: 'Delete Tone Control', note: 'Remove tone control', price: 0, specs: specs() },
   deleteToneMoveVolume: { label: 'Delete Tone Control and Move Volume to Tone Position', note: 'Move volume to tone position', price: 0, specs: specs() },
 }
+
+// Legacy export kept for bass builder compatibility
+export const PICKUP_BOBBIN_OPTIONS = {}
 
 // --- Hardware ---
 export const SADDLE_OPTIONS = {

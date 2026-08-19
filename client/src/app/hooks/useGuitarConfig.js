@@ -168,6 +168,7 @@ export default function useGuitarConfig() {
      if (s.includes('gt6')) return s.includes('r') ? 'gt6r' : 'gt6'
      return s
   }
+  
 
   const [dynamicBackplateList, setDynamicBackplateList] = useState([])
   const [dynamicOutputJackList, setDynamicOutputJackList] = useState([])
@@ -863,6 +864,7 @@ export default function useGuitarConfig() {
   }, [mergeOptionsFromBuilderParts, priceOverrides])
 
   const mergedMiddlePickupModelOptions = useMemo(() => {
+    // Responsible for merging admin price overrides into middle single coil pickup model options
     const merged = mergeOptionsFromBuilderParts(PICKUP_MODEL_MIDDLE_OPTIONS, { partCategory: 'misc', typeMappings: ['middlePickupModel'] })
     Object.keys(merged).forEach(key => {
       if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
@@ -871,6 +873,7 @@ export default function useGuitarConfig() {
   }, [mergeOptionsFromBuilderParts, priceOverrides])
 
   const mergedNeckPickupModelOptions = useMemo(() => {
+    // Responsible for merging admin price overrides into neck humbucker pickup model options
     const merged = mergeOptionsFromBuilderParts(PICKUP_MODEL_NECK_OPTIONS, { partCategory: 'misc', typeMappings: ['neckPickupModel'] })
     Object.keys(merged).forEach(key => {
       if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
@@ -879,6 +882,7 @@ export default function useGuitarConfig() {
   }, [mergeOptionsFromBuilderParts, priceOverrides])
 
   const mergedPickupColorOptions = useMemo(() => {
+    // Responsible for merging admin price overrides into pickup color/style options (bobbins, painted, wooden, covers)
     const merged = mergeOptionsFromBuilderParts(PICKUP_COLOR_OPTIONS, { partCategory: 'misc', typeMappings: ['pickupColor'] })
     Object.keys(merged).forEach(key => {
       if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
@@ -887,6 +891,7 @@ export default function useGuitarConfig() {
   }, [mergeOptionsFromBuilderParts, priceOverrides])
 
   const mergedPickupPoleColorOptions = useMemo(() => {
+    // Responsible for merging admin price overrides into pole piece color options
     const merged = mergeOptionsFromBuilderParts(PICKUP_POLE_COLOR_OPTIONS, { partCategory: 'misc', typeMappings: ['pickupPoleColor'] })
     Object.keys(merged).forEach(key => {
       if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
@@ -1451,26 +1456,32 @@ export default function useGuitarConfig() {
     [mergedElectronicsTypeOptions],
   )
   const pickupConfigurationOptionList = useMemo(
+    // Responsible for providing pickup configuration options to the UI (HH / H-S-H)
     () => Object.entries(mergedPickupConfigurationOptions).map(([value, option]) => ({ value, ...option })),
     [mergedPickupConfigurationOptions],
   )
   const bridgePickupModelOptionList = useMemo(
+    // Responsible for providing bridge humbucker model options to the UI
     () => Object.entries(mergedBridgePickupModelOptions).map(([value, option]) => ({ value, ...option })),
     [mergedBridgePickupModelOptions],
   )
   const middlePickupModelOptionList = useMemo(
+    // Responsible for providing middle single coil model options to the UI
     () => Object.entries(mergedMiddlePickupModelOptions).map(([value, option]) => ({ value, ...option })),
     [mergedMiddlePickupModelOptions],
   )
   const neckPickupModelOptionList = useMemo(
+    // Responsible for providing neck humbucker model options to the UI
     () => Object.entries(mergedNeckPickupModelOptions).map(([value, option]) => ({ value, ...option })),
     [mergedNeckPickupModelOptions],
   )
   const pickupColorOptionList = useMemo(
+    // Responsible for providing pickup color/style options to the UI (bobbins, painted, wooden, covers)
     () => Object.entries(mergedPickupColorOptions).map(([value, option]) => ({ value, ...option })),
     [mergedPickupColorOptions],
   )
   const pickupColorVariantOptionList = useMemo(() => {
+    // Responsible for providing pickup color variant options to the UI (bobbin colors, cover colors)
     const type = config.pickupColor || 'bobbins'
     if (type === 'bobbins' || type === 'covers') {
       const variantOptions = type === 'bobbins'
@@ -1575,54 +1586,22 @@ export default function useGuitarConfig() {
       patch.pickupColor = 'bobbins'
       patch.pickupColorVariant = config.pickupBobbin === 'open' ? 'black' : config.pickupBobbin === 'standard' ? 'black' : config.pickupBobbin === 'singlecoil' ? 'black' : 'black'
     }
-    if (config.pickupColor && typeof config.pickupColor === 'string') {
-      const legacyPickupColorMap = {
-        coveredBlack: { type: 'covers', variant: 'black' },
-        coveredGold: { type: 'covers', variant: 'gold' },
-        openBlack: { type: 'bobbins', variant: 'black' },
-        openCream: { type: 'bobbins', variant: 'cream' },
-        openWhite: { type: 'bobbins', variant: 'white' },
-        chrome: { type: 'covers', variant: 'chrome' },
-        gold: { type: 'covers', variant: 'gold' },
-        ferrariRed: { type: 'bobbins', variant: 'black' },
-        hotPink: { type: 'bobbins', variant: 'black' },
-        acidGreen: { type: 'bobbins', variant: 'black' },
-        skyBlue: { type: 'bobbins', variant: 'black' },
-        seafoamGreen: { type: 'bobbins', variant: 'black' },
-      }
-      const mapped = legacyPickupColorMap[config.pickupColor]
-      if (mapped) {
-        patch.pickupColor = mapped.type
-        patch.pickupColorVariant = mapped.variant
-      } else if (config.pickupColor.includes('-')) {
-        const parts = config.pickupColor.split('-')
-        const type = parts[0]
-        const variant = parts.slice(1).join('-')
-        if (type === 'covered') {
-          patch.pickupColor = 'covers'
-          patch.pickupColorVariant = variant
-        } else if (type === 'open') {
-          patch.pickupColor = 'bobbins'
-          patch.pickupColorVariant = variant
-        }
+    if (config.pickupColor && typeof config.pickupColor === 'string' && config.pickupColor.includes('-')) {
+      const parts = config.pickupColor.split('-')
+      const type = parts[0]
+      const variant = parts.slice(1).join('-')
+      if (type === 'covered') {
+        patch.pickupColor = 'covers'
+        patch.pickupColorVariant = variant
+      } else if (type === 'open') {
+        patch.pickupColor = 'bobbins'
+        patch.pickupColorVariant = variant
       }
     }
     if (Object.keys(patch).length > 0) {
       setConfig(prev => ({ ...prev, ...patch }))
     }
   }, [config.pickupBobbin, config.pickupColor])
-
-  useEffect(() => {
-    const patch = {}
-    if (config.electronicsType === 'active') {
-      if (config.bridgePickupModel !== 'fluence') patch.bridgePickupModel = 'fluence'
-      if (config.neckPickupModel !== 'fluence') patch.neckPickupModel = 'fluence'
-      if (config.pickupColor !== 'painted') patch.pickupColor = 'painted'
-    }
-    if (Object.keys(patch).length > 0) {
-      setConfig(prev => ({ ...prev, ...patch }))
-    }
-  }, [config.electronicsType, config.bridgePickupModel, config.neckPickupModel, config.pickupColor])
 
   const pricingBreakdown = useMemo(() => ({
       // Old pricing keys (unchanged)

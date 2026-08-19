@@ -54,6 +54,33 @@ export default function useDynamicConfigurator(baseConfig, updateConfig, resetCo
     }
   }, [guitarModel, baseConfig.body, updateConfig])
 
+  // Responsible for syncing pickupColorVariant when pickupColor changes
+  useEffect(() => {
+    const type = baseConfig.pickupColor
+    if (!type) return
+    let validVariant = null
+    if (type === 'bobbins') validVariant = 'black'
+    else if (type === 'covers') validVariant = 'black'
+    else if (type === 'painted') validVariant = null
+    else if (type === 'wooden') validVariant = 'black'
+    if (validVariant && baseConfig.pickupColorVariant !== validVariant) {
+      updateConfig({ pickupColorVariant: validVariant })
+    }
+  }, [baseConfig.pickupColor, baseConfig.pickupColorVariant, updateConfig])
+
+  // Responsible for locking active electronics to Fluence models and Painted Color only
+  useEffect(() => {
+    if (baseConfig.electronicsType === 'active') {
+      const patch = {}
+      if (baseConfig.bridgePickupModel !== 'fluence') patch.bridgePickupModel = 'fluence'
+      if (baseConfig.neckPickupModel !== 'fluence') patch.neckPickupModel = 'fluence'
+      if (baseConfig.pickupColor !== 'painted') patch.pickupColor = 'painted'
+      if (Object.keys(patch).length > 0) {
+        updateConfig(patch)
+      }
+    }
+  }, [baseConfig.electronicsType, baseConfig.bridgePickupModel, baseConfig.neckPickupModel, baseConfig.pickupColor, updateConfig])
+
   // Map finish color from new schema to the existing bodyFinish field
   const mappedConfig = useMemo(() => {
     // Bridge between new schema keys and existing config keys

@@ -1733,6 +1733,7 @@ export function CustomizePage() {
                     {/* Electronics Type */}
                     <div>
                       <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Electronics Type</h3>
+                      {/* Responsible for rendering electronics type selector (passive/active) */}
                       <div className="grid grid-cols-2 gap-2">
                         {options.electronicsTypeOptions?.map((opt) => (
                           <OptionButton
@@ -1748,6 +1749,7 @@ export function CustomizePage() {
                     {/* Pickup Configuration */}
                     <div>
                       <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Pickup Configuration</h3>
+                      {/* Responsible for rendering pickup configuration selector (HH / H-S-H) */}
                       <div className="grid grid-cols-2 gap-2">
                         {options.pickupConfigurationOptions?.map((opt) => (
                           <OptionButton
@@ -1763,6 +1765,7 @@ export function CustomizePage() {
                     {/* Bridge Pickup Model */}
                     <div>
                       <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Bridge Pickup</h3>
+                      {/* Responsible for rendering bridge humbucker model selector */}
                       <div className="grid grid-cols-2 gap-2">
                         {options.bridgePickupModelOptions?.map((opt) => (
                           <OptionButton
@@ -1779,6 +1782,7 @@ export function CustomizePage() {
                     {['hss'].includes(config.pickupConfiguration || config.pickups) && (
                       <div>
                         <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Middle Pickup</h3>
+                        {/* Responsible for rendering middle single coil model selector */}
                         <div className="grid grid-cols-2 gap-2">
                           {options.middlePickupModelOptions?.map((opt) => (
                             <OptionButton
@@ -1792,19 +1796,20 @@ export function CustomizePage() {
                       </div>
                     )}
 
-                     {/* Neck Pickup Model */}
-                     <div>
-                       <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Neck Pickup</h3>
-                       <div className="grid grid-cols-2 gap-2">
-                         {options.neckPickupModelOptions?.map((opt) => (
-                           <OptionButton
-                             key={opt.value}
-                             option={opt}
-                             isSelected={config.neckPickupModel === opt.value}
-                             onClick={() => updateConfig({ neckPickupModel: opt.value })}
-                           />
-                         ))}
-                       </div>
+                    {/* Neck Pickup Model */}
+                    <div>
+                      <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Neck Pickup</h3>
+                      {/* Responsible for rendering neck humbucker model selector */}
+                      <div className="grid grid-cols-2 gap-2">
+                        {options.neckPickupModelOptions?.map((opt) => (
+                          <OptionButton
+                            key={opt.value}
+                            option={opt}
+                            isSelected={config.neckPickupModel === opt.value}
+                            onClick={() => updateConfig({ neckPickupModel: opt.value })}
+                          />
+                        ))}
+                      </div>
                     </div>
                   </AccordionSection>
 
@@ -1813,6 +1818,7 @@ export function CustomizePage() {
                     {/* Pickup Color */}
                     <div>
                       <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Pickup Color</h3>
+                      {/* Responsible for rendering pickup color/style selector (bobbins, painted, wooden, covers) */}
                       <div className="grid grid-cols-2 gap-2">
                         {options.pickupColorOptions?.map((opt) => (
                           <OptionButton
@@ -1829,6 +1835,7 @@ export function CustomizePage() {
                     {config.pickupColor === 'bobbins' && (
                       <div>
                         <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Bobbin Color</h3>
+                        {/* Responsible for rendering bobbin color variant selector */}
                         <div className="grid grid-cols-2 gap-2">
                           {options.pickupColorVariantOptions?.map((opt) => (
                             <OptionButton
@@ -1845,6 +1852,7 @@ export function CustomizePage() {
                     {config.pickupColor === 'covers' && (
                       <div>
                         <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Cover Color</h3>
+                        {/* Responsible for rendering cover color variant selector */}
                         <div className="grid grid-cols-2 gap-2">
                           {options.pickupColorVariantOptions?.map((opt) => (
                             <OptionButton
@@ -1862,6 +1870,7 @@ export function CustomizePage() {
                     {config.pickupColor === 'painted' && (
                       <div>
                         <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Painted Color (RGB)</h3>
+                        {/* Responsible for rendering RGB color picker for painted bobbins */}
                         <RGBColorPicker
                           value={config.pickupPaintedColor || '#000000'}
                           onChange={(color) => updateConfig({ pickupPaintedColor: color })}
@@ -1873,6 +1882,7 @@ export function CustomizePage() {
                     {config.pickupColor === 'wooden' && (
                       <div>
                         <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Wood Type</h3>
+                        {/* Responsible for rendering wood type selector for wooden bobbins */}
                         <div className="grid grid-cols-2 gap-2">
                           {options.pickupWoodTypeOptions?.map((opt) => (
                             <VisualCard
@@ -1887,27 +1897,29 @@ export function CustomizePage() {
                         </div>
                       </div>
                     )}
-
-                    {/* Pole Piece Color */}
-                    <div>
-                      <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Pole Piece Color</h3>
-                      <div className="grid grid-cols-2 gap-2">
-                        {options.pickupPoleColorOptions?.map((opt) => (
-                          <OptionButton
-                            key={opt.value}
-                            option={opt}
-                            isSelected={config.pickupPoleColor === opt.value}
-                            onClick={() => updateConfig({ pickupPoleColor: opt.value })}
-                          />
-                        ))}
-                      </div>
-                    </div>
+                   
+                   {/* Pole Piece Color */}
+                   <div>
+                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Pole Piece Color</h3>
+                     {/* Responsible for rendering pole piece color selector (black, chrome, gold) */}
+                     <div className="grid grid-cols-2 gap-2">
+                       {options.pickupPoleColorOptions?.map((opt) => (
+                         <OptionButton
+                           key={opt.value}
+                           option={opt}
+                           isSelected={config.pickupPoleColor === opt.value}
+                           onClick={() => updateConfig({ pickupPoleColor: opt.value })}
+                         />
+                       ))}
+                     </div>
+                   </div>
                   </AccordionSection>
 
                   {/* Controls */}
                   <AccordionSection title="Controls" icon={Cog} defaultOpen={true}>
                     <div>
                       <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Controls</h3>
+                      {/* Responsible for rendering controls layout selector (standard, DTC, DTMV) */}
                       <div className="grid grid-cols-2 gap-2">
                         {options.controlsOptions?.map((opt) => (
                           <OptionButton
