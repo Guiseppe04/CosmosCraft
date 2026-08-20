@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { CheckCircle, Circle, ChevronDown, ChevronRight, User, Clock, AlertCircle, Calendar, Truck, Store, ShieldCheck, X, Lock, AlertTriangle } from 'lucide-react';
+import { CheckCircle, Circle, ChevronDown, ChevronRight, User, Clock, AlertCircle, Calendar, Truck, Store, ShieldCheck, X, Lock, AlertTriangle, Loader2 } from 'lucide-react';
 import { adminApi } from '../../utils/adminApi';
 import { useAuth } from '../../context/AuthContext';
 
@@ -126,6 +126,7 @@ export default function ProjectTaskTracker({ projectId, projectName, showTracker
   const [confirmedSelection, setConfirmedSelection] = useState(null);
   const [unavailableDates, setUnavailableDates] = useState([]);
   const [pendingUncheckSubtask, setPendingUncheckSubtask] = useState(null);
+  const [togglingSubtaskId, setTogglingSubtaskId] = useState(null);
 
   // Validation state
   const [validationErrors, setValidationErrors] = useState({});
@@ -311,29 +312,102 @@ export default function ProjectTaskTracker({ projectId, projectName, showTracker
   // User Actions
   const toggleSubtaskStatus = async (subtask) => {
     if (!subtask.is_customer_updatable) return;
+    if (togglingSubtaskId === subtask.subtask_id) return;
 
     try {
       if (subtask.status === 'completed') {
         setPendingUncheckSubtask(subtask);
         return;
       }
-      const newStatus = subtask.status === 'completed' ? 'pending' : 'completed';
-      await adminApi.updateSubtask(subtask.subtask_id, { status: newStatus });
-      loadData();
+
+      setTogglingSubtaskId(subtask.subtask_id);
+      const result = await adminApi.updateSubtask(subtask.subtask_id, { status: 'completed' });
+      const updatedSubtask = result?.data?.subtask || {};
+      const taskSummary = result?.data?.task_summary;
+      const progress = result?.data?.progress;
+
+      if (updatedSubtask.subtask_id) {
+        setHierarchy((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            progress: progress != null ? progress : prev.progress,
+            task_summary: taskSummary || prev.task_summary,
+            milestones: prev.milestones.map((milestone) => {
+              const milestoneSubtaskCount = milestone.subtasks?.length || 0;
+              const updatedSubtasks = milestone.subtasks?.map((s) =>
+                s.subtask_id === updatedSubtask.subtask_id ? { ...s, ...updatedSubtask } : s
+              );
+              const completedCount = updatedSubtasks.filter((s) => s.status === 'completed').length;
+              const milestoneStatus = milestoneSubtaskCount > 0 && completedCount === milestoneSubtaskCount
+                ? 'completed'
+                : completedCount > 0
+                  ? 'in_progress'
+                  : 'not_started';
+              return {
+                ...milestone,
+                status: milestoneStatus,
+                subtasks: updatedSubtasks,
+              };
+            }),
+          };
+        });
+      } else {
+        await loadData();
+      }
     } catch (err) {
       alert("Failed to update task: " + err.message);
+    } finally {
+      setTogglingSubtaskId(null);
     }
   };
 
   const handleConfirmUncheckSubtask = async () => {
     if (!pendingUncheckSubtask) return;
+    const subtask = pendingUncheckSubtask;
 
     try {
-      await adminApi.updateSubtask(pendingUncheckSubtask.subtask_id, { status: 'pending' });
+      setTogglingSubtaskId(subtask.subtask_id);
+      const result = await adminApi.updateSubtask(subtask.subtask_id, { status: 'pending' });
+      const updatedSubtask = result?.data?.subtask || {};
+      const taskSummary = result?.data?.task_summary;
+      const progress = result?.data?.progress;
+
       setPendingUncheckSubtask(null);
-      loadData();
+
+      if (updatedSubtask.subtask_id) {
+        setHierarchy((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            progress: progress != null ? progress : prev.progress,
+            task_summary: taskSummary || prev.task_summary,
+            milestones: prev.milestones.map((milestone) => {
+              const milestoneSubtaskCount = milestone.subtasks?.length || 0;
+              const updatedSubtasks = milestone.subtasks?.map((s) =>
+                s.subtask_id === updatedSubtask.subtask_id ? { ...s, ...updatedSubtask } : s
+              );
+              const completedCount = updatedSubtasks.filter((s) => s.status === 'completed').length;
+              const milestoneStatus = milestoneSubtaskCount > 0 && completedCount === milestoneSubtaskCount
+                ? 'completed'
+                : completedCount > 0
+                  ? 'in_progress'
+                  : 'not_started';
+              return {
+                ...milestone,
+                status: milestoneStatus,
+                subtasks: updatedSubtasks,
+              };
+            }),
+          };
+        });
+      } else {
+        await loadData();
+      }
     } catch (err) {
       alert("Failed to update task: " + err.message);
+    } finally {
+      setTogglingSubtaskId(null);
     }
   };
 
@@ -962,12 +1036,14 @@ export default function ProjectTaskTracker({ projectId, projectName, showTracker
 
                               return (
                                 <div key={subtask.subtask_id} className={`flex items-start gap-4 p-4 rounded-xl border transition-all ${isCompleted ? 'bg-green-500/5 border-green-500/30' : 'bg-[var(--surface-dark)] border-[var(--border)] hover:border-[var(--gold-primary)]/50'}`}>
-                                  <button 
+                                  <button
                                     onClick={() => toggleSubtaskStatus(subtask)}
-                                    disabled={!canUserUpdate}
-                                    className={`mt-0.5 rounded-full outline-none focus:ring-2 focus:ring-[var(--gold-primary)] transition-all ${canUserUpdate && !isCompleted ? 'hover:scale-110' : ''}`}
+                                    disabled={!canUserUpdate || togglingSubtaskId === subtask.subtask_id}
+                                    className={`mt-0.5 rounded-full outline-none focus:ring-2 focus:ring-[var(--gold-primary)] transition-all ${canUserUpdate && !isCompleted && togglingSubtaskId !== subtask.subtask_id ? 'hover:scale-110' : ''}`}
                                   >
-                                    {isCompleted ? (
+                                    {togglingSubtaskId === subtask.subtask_id ? (
+                                      <Loader2 className="w-6 h-6 animate-spin text-[var(--gold-primary)]" />
+                                    ) : isCompleted ? (
                                       <CheckCircle className="w-6 h-6 text-green-400" />
                                     ) : (
                                       <Circle className={`w-6 h-6 ${canUserUpdate ? 'text-[var(--text-muted)] hover:text-[var(--gold-primary)]' : 'text-gray-600 cursor-not-allowed'}`} />

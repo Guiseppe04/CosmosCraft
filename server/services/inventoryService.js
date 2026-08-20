@@ -1,9 +1,10 @@
 const { pool } = require('../config/database');
 const { AppError } = require('../middleware/errorHandler');
 
-const syncStockToBuilderParts = async (productId, delta) => {
+const syncStockToBuilderParts = async (productId, delta, client = null) => {
   if (!productId || delta === 0) return;
-  await pool.query(
+  const query = client || pool;
+  await query.query(
     `UPDATE guitar_builder_parts SET stock = stock + $1, updated_at = now() WHERE product_id = $2`,
     [delta, productId]
   );
@@ -78,14 +79,15 @@ exports.getProductsWithStock = async ({ search, category_id, low_stock_only } = 
  * @param {number} quantity - Amount to add
  * @param {object} options - { notes, createdBy }
  */
-exports.addStock = async (productId, quantity, { notes = null, createdBy = null } = {}) => {
+exports.addStock = async (productId, quantity, { notes = null, createdBy = null, client: providedClient = null } = {}) => {
   if (quantity <= 0) {
     throw new AppError('Quantity must be greater than 0', 400);
   }
 
-  const client = await pool.connect();
+  const ownClient = !providedClient;
+  const client = providedClient || await pool.connect();
   try {
-    await client.query('BEGIN');
+    if (ownClient) await client.query('BEGIN');
 
     // Get inventory lock for atomicity
     const inventoryRes = await client.query(
@@ -125,19 +127,19 @@ exports.addStock = async (productId, quantity, { notes = null, createdBy = null 
       [productId, 'stock_in', quantity, 'manual_stocking', notes, createdBy]
     );
 
-    await client.query('COMMIT');
+    if (ownClient) await client.query('COMMIT');
 
-    await syncStockToBuilderParts(productId, quantity);
+    await syncStockToBuilderParts(productId, quantity, client);
 
     return {
       product: { ...productRes.rows[0], stock: updateRes.rows[0].stock },
       log: logRes.rows[0]
     };
   } catch (err) {
-    await client.query('ROLLBACK');
+    if (ownClient) await client.query('ROLLBACK');
     throw err;
   } finally {
-    client.release();
+    if (ownClient) client.release();
   }
 };
 
@@ -154,15 +156,16 @@ exports.deductStock = async (
   quantity,
   referenceType,
   referenceId,
-  { notes = null, createdBy = null } = {}
+  { notes = null, createdBy = null, client: providedClient = null } = {}
 ) => {
   if (quantity <= 0) {
     throw new AppError('Quantity must be greater than 0', 400);
   }
 
-  const client = await pool.connect();
+  const ownClient = !providedClient;
+  const client = providedClient || await pool.connect();
   try {
-    await client.query('BEGIN');
+    if (ownClient) await client.query('BEGIN');
 
     // Get inventory and validate sufficient stock
     const inventoryRes = await client.query(
@@ -218,19 +221,19 @@ exports.deductStock = async (
       );
     }
 
-    await client.query('COMMIT');
+    if (ownClient) await client.query('COMMIT');
 
-    await syncStockToBuilderParts(productId, -quantity);
+    await syncStockToBuilderParts(productId, -quantity, client);
 
     return {
       product: { ...productRes.rows[0], stock: updateRes.rows[0].stock },
       log: logRes.rows[0]
     };
   } catch (err) {
-    await client.query('ROLLBACK');
+    if (ownClient) await client.query('ROLLBACK');
     throw err;
   } finally {
-    client.release();
+    if (ownClient) client.release();
   }
 };
 
@@ -240,14 +243,15 @@ exports.deductStock = async (
  * @param {number} quantity - Positive or negative adjustment
  * @param {object} options - { notes, createdBy }
  */
-exports.adjustStock = async (productId, quantity, { notes = null, createdBy = null } = {}) => {
+exports.adjustStock = async (productId, quantity, { notes = null, createdBy = null, client: providedClient = null } = {}) => {
   if (quantity === 0) {
     throw new AppError('Adjustment quantity cannot be zero', 400);
   }
 
-  const client = await pool.connect();
+  const ownClient = !providedClient;
+  const client = providedClient || await pool.connect();
   try {
-    await client.query('BEGIN');
+    if (ownClient) await client.query('BEGIN');
 
     // Get inventory
     const inventoryRes = await client.query(
@@ -302,19 +306,19 @@ exports.adjustStock = async (productId, quantity, { notes = null, createdBy = nu
       [productId, 'adjustment', quantity, 'manual_adjustment', notes, createdBy]
     );
 
-    await client.query('COMMIT');
+    if (ownClient) await client.query('COMMIT');
 
-    await syncStockToBuilderParts(productId, quantity);
+    await syncStockToBuilderParts(productId, quantity, client);
 
     return {
       product: { ...productRes.rows[0], stock: updateRes.rows[0].stock },
       log: logRes.rows[0]
     };
   } catch (err) {
-    await client.query('ROLLBACK');
+    if (ownClient) await client.query('ROLLBACK');
     throw err;
   } finally {
-    client.release();
+    if (ownClient) client.release();
   }
 };
 

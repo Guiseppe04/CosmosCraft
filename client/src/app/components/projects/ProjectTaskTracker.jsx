@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { CheckCircle, Circle, ChevronDown, ChevronRight, Plus, Trash2, User, Clock, AlertCircle, Calendar, Truck, Store, ShieldCheck, Flag, Loader2 } from 'lucide-react';
 import { adminApi } from '../../utils/adminApi';
 import { staffApi } from '../../utils/staffApi';
-import { formatCurrency } from '../../utils/formatCurrency';
+
 import { useAuth } from '../../context/AuthContext';
 import BuildClaimManager from './BuildClaimManager';
 
@@ -81,7 +81,6 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
   const { user } = useAuth();
   const [hierarchy, setHierarchy] = useState(null);
   const [requiredParts, setRequiredParts] = useState([]);
-  const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -98,13 +97,20 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
   const [fulfillmentNotes, setFulfillmentNotes] = useState('');
   const [fulfillmentSaving, setFulfillmentSaving] = useState(false);
   const [fulfillmentFeedback, setFulfillmentFeedback] = useState(null);
-  const [receivingPartKey, setReceivingPartKey] = useState(null);
   const [togglingPartKey, setTogglingPartKey] = useState(null);
   const [togglingSaving, setTogglingSaving] = useState(false);
   const [togglingFeedback, setTogglingFeedback] = useState(null);
+  const [togglingSubtaskId, setTogglingSubtaskId] = useState(null);
   const [pendingUncheckSubtask, setPendingUncheckSubtask] = useState(null);
+  const [pendingUncheckPart, setPendingUncheckPart] = useState(null);
   const [isEditingCompletion, setIsEditingCompletion] = useState(false);
   const [editCompletionValue, setEditCompletionValue] = useState('');
+
+  const [restockingPartKey, setRestockingPartKey] = useState(null);
+  const [restockQuantity, setRestockQuantity] = useState('1');
+  const [restockNotes, setRestockNotes] = useState('');
+  const [restockSaving, setRestockSaving] = useState(false);
+  const [restockFeedback, setRestockFeedback] = useState(null);
 
   // Cancellation request review (admin only)
   const [cancelReviewLoading, setCancelReviewLoading] = useState(false);
@@ -121,19 +127,19 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
     try {
       setLoading(true);
       const projectApi = isAdmin ? adminApi : staffApi;
-      const [hierarchyRes, requiredPartsRes, logsRes] = await Promise.all([
+      const [hierarchyRes, requiredPartsRes] = await Promise.all([
         projectApi.getProjectHierarchy(projectId),
         projectApi.getProjectRequiredParts(projectId),
-        projectApi.getProjectActivity(projectId),
       ]);
       setHierarchy(hierarchyRes.data);
       setRequiredParts(Array.isArray(requiredPartsRes.data) ? requiredPartsRes.data : []);
       
-      setLogs(logsRes.data || []);
-      
-      // Auto-expand all milestones
+      // Auto-expand all milestones on first load only
       if (hierarchyRes.data?.milestones) {
-        setExpandedMilestones(new Set(hierarchyRes.data.milestones.map(m => m.milestone_id)));
+        setExpandedMilestones(prev => {
+          if (prev.size > 0) return prev;
+          return new Set(hierarchyRes.data.milestones.map(m => m.milestone_id));
+        });
       }
       setError(null);
     } catch (err) {
@@ -201,12 +207,6 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
   };
 
   const pickupTimeSlots = useMemo(() => buildPickupTimeSlots(pickupDate), [pickupDate]);
-  const requiredPartSummary = useMemo(() => {
-    const configuredCount = requiredParts.filter((part) => part.source === 'configuration').length;
-    const additionalCount = requiredParts.filter((part) => part.source === 'additional_parts').length;
-    const needsPurchase = requiredParts.filter((part) => part.needs_purchase).length;
-    return { configuredCount, additionalCount, needsPurchase };
-  }, [requiredParts]);
   const taskSummary = hierarchy?.task_summary || { total: 0, completed: 0, pending: 0 };
 
   const getStockBadgeStyle = (stockStatus) => {
@@ -302,32 +302,104 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
 
   // User Actions
   const toggleSubtaskStatus = async (subtask) => {
-    // If not admin, check if updatable
     if (!isAdmin && !subtask.is_customer_updatable) return;
-    // Block admin actions when project is on hold
     if (isAdmin && isOnHold) return;
+    if (togglingSubtaskId === subtask.subtask_id) return;
 
     try {
       if (subtask.status === 'completed') {
         setPendingUncheckSubtask(subtask);
         return;
       }
-      const newStatus = subtask.status === 'completed' ? 'pending' : 'completed';
-      await (isAdmin ? adminApi : staffApi).updateSubtask(subtask.subtask_id, { status: newStatus });
-      loadData(); // Re-fetch to get new progress %
+
+      setTogglingSubtaskId(subtask.subtask_id);
+      const result = await (isAdmin ? adminApi : staffApi).updateSubtask(subtask.subtask_id, { status: 'completed' });
+      const updatedSubtask = result?.data?.subtask || {};
+      const taskSummary = result?.data?.task_summary;
+      const progress = result?.data?.progress;
+
+      if (updatedSubtask.subtask_id) {
+        setHierarchy((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            progress: progress != null ? progress : prev.progress,
+            task_summary: taskSummary || prev.task_summary,
+            milestones: prev.milestones.map((milestone) => {
+              const milestoneSubtaskCount = milestone.subtasks?.length || 0;
+              const updatedSubtasks = milestone.subtasks?.map((s) =>
+                s.subtask_id === updatedSubtask.subtask_id ? { ...s, ...updatedSubtask } : s
+              );
+              const completedCount = updatedSubtasks.filter((s) => s.status === 'completed').length;
+              const milestoneStatus = milestoneSubtaskCount > 0 && completedCount === milestoneSubtaskCount
+                ? 'completed'
+                : completedCount > 0
+                  ? 'in_progress'
+                  : 'not_started';
+              return {
+                ...milestone,
+                status: milestoneStatus,
+                subtasks: updatedSubtasks,
+              };
+            }),
+          };
+        });
+      } else {
+        await loadData();
+      }
     } catch (err) {
       alert("Failed to update task: " + err.message);
+    } finally {
+      setTogglingSubtaskId(null);
     }
   };
 
   const handleConfirmUncheckSubtask = async () => {
     if (!pendingUncheckSubtask) return;
+    const subtask = pendingUncheckSubtask;
+
     try {
-      await adminApi.updateSubtask(pendingUncheckSubtask.subtask_id, { status: 'pending' });
+      setTogglingSubtaskId(subtask.subtask_id);
+      const result = await adminApi.updateSubtask(subtask.subtask_id, { status: 'pending' });
+      const updatedSubtask = result?.data?.subtask || {};
+      const taskSummary = result?.data?.task_summary;
+      const progress = result?.data?.progress;
+
       setPendingUncheckSubtask(null);
-      loadData();
+
+      if (updatedSubtask.subtask_id) {
+        setHierarchy((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            progress: progress != null ? progress : prev.progress,
+            task_summary: taskSummary || prev.task_summary,
+            milestones: prev.milestones.map((milestone) => {
+              const milestoneSubtaskCount = milestone.subtasks?.length || 0;
+              const updatedSubtasks = milestone.subtasks?.map((s) =>
+                s.subtask_id === updatedSubtask.subtask_id ? { ...s, ...updatedSubtask } : s
+              );
+              const completedCount = updatedSubtasks.filter((s) => s.status === 'completed').length;
+              const milestoneStatus = milestoneSubtaskCount > 0 && completedCount === milestoneSubtaskCount
+                ? 'completed'
+                : completedCount > 0
+                  ? 'in_progress'
+                  : 'not_started';
+              return {
+                ...milestone,
+                status: milestoneStatus,
+                subtasks: updatedSubtasks,
+              };
+            }),
+          };
+        });
+      } else {
+        await loadData();
+      }
     } catch (err) {
       alert("Failed to update task: " + err.message);
+    } finally {
+      setTogglingSubtaskId(null);
     }
   };
 
@@ -439,50 +511,37 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
     }
   };
 
-  const handleReceivePart = async (part) => {
-    try {
-      setReceivingSaving(true);
-      setReceivingFeedback(null);
-      setReceivingPartKey(part.part_key);
-
-      const quantity = Number(receivingQuantity) || Number(part.quantity) || 1;
-      const payload = {
-        quantity,
-      };
-
-      const result = await adminApi.receiveProjectRequiredPart(projectId, part.part_key, payload);
-      await loadData();
-      setReceivingFeedback({
-        type: 'success',
-        message: `${part.name} marked as received with ${result.quantity_received || quantity} unit(s).`,
-      });
-      setReceivingQuantity('1');
-      setReceivingPartKey(null);
-    } catch (err) {
-      setReceivingFeedback({
-        type: 'error',
-        message: err.message || 'Failed to mark part as received.',
-      });
-    } finally {
-      setReceivingSaving(false);
-      setReceivingPartKey(null);
-    }
-  };
 
   const handleToggleReceive = async (part) => {
+    if (isAdmin && isOnHold) return;
+
+    if (part.is_received) {
+      setPendingUncheckPart(part);
+      return;
+    }
+
     try {
       setTogglingSaving(true);
       setTogglingFeedback(null);
       setTogglingPartKey(part.part_key);
 
-      const newReceivedState = !part.is_received;
-      const result = await adminApi.toggleProjectRequiredPart(projectId, part.part_key, newReceivedState);
-      await loadData();
+      const result = await adminApi.toggleProjectRequiredPart(projectId, part.part_key, true);
+      const partData = result?.data?.part || {};
+      const received = result?.data?.received ?? true;
+      if (partData.part_key && (partData.stock !== undefined || partData.is_received !== undefined)) {
+        setRequiredParts(prev =>
+          prev.map(item =>
+            item.part_key === part.part_key
+              ? { ...item, ...partData, is_received: received }
+              : item
+          )
+        );
+      } else {
+        await loadData();
+      }
       setTogglingFeedback({
         type: 'success',
-        message: newReceivedState
-          ? `${result.part?.name || part.name} marked as received.`
-          : `${result.part?.name || part.name} unmarked.`,
+        message: `${partData.name || part.name} marked as received.`,
       });
     } catch (err) {
       setTogglingFeedback({
@@ -493,6 +552,100 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
       setTogglingSaving(false);
       setTogglingPartKey(null);
     }
+  };
+
+  const handleConfirmUncheckPart = async () => {
+    if (!pendingUncheckPart) return;
+    const part = pendingUncheckPart;
+    setPendingUncheckPart(null);
+
+    try {
+      setTogglingSaving(true);
+      setTogglingFeedback(null);
+      setTogglingPartKey(part.part_key);
+
+      const result = await adminApi.toggleProjectRequiredPart(projectId, part.part_key, false);
+      const partData = result?.data?.part || {};
+      const received = result?.data?.received ?? false;
+      if (partData.part_key && (partData.stock !== undefined || partData.is_received !== undefined)) {
+        setRequiredParts(prev =>
+          prev.map(item =>
+            item.part_key === part.part_key
+              ? { ...item, ...partData, is_received: received }
+              : item
+          )
+        );
+      } else {
+        await loadData();
+      }
+      setTogglingFeedback({
+        type: 'success',
+        message: `${partData.name || part.name} returned to inventory.`,
+      });
+    } catch (err) {
+      setTogglingFeedback({
+        type: 'error',
+        message: err.message || 'Failed to return part to inventory.',
+      });
+    } finally {
+      setTogglingSaving(false);
+      setTogglingPartKey(null);
+    }
+  };
+
+  const handleCancelUncheckPart = () => {
+    setPendingUncheckPart(null);
+  };
+
+  const getStockStatus = (stock, quantity) => {
+    const s = Number(stock);
+    const q = Number(quantity) || 1;
+    if (!Number.isFinite(s)) return 'unknown';
+    if (s <= 0) return 'out_of_stock';
+    if (s < q) return 'low_stock';
+    return 'in_stock';
+  };
+
+  const handleRestockPart = async (part) => {
+    if (!part.product_id) return;
+    try {
+      setRestockSaving(true);
+      setRestockFeedback(null);
+      setRestockingPartKey(part.part_key);
+
+      const quantity = Number(restockQuantity) || 1;
+      const result = await adminApi.addInventoryStock(part.product_id, quantity, restockNotes || `Restocked for project ${projectId}`);
+      const newStock = result.data?.product?.stock;
+      const newStatus = getStockStatus(newStock, part.quantity);
+
+      setRequiredParts(prev =>
+        prev.map(item =>
+          item.part_key === part.part_key
+            ? { ...item, stock: newStock, stock_status: newStatus }
+            : item
+        )
+      );
+      setRestockFeedback({
+        type: 'success',
+        message: `${part.name} restocked with ${quantity} unit(s).`,
+      });
+      setRestockingPartKey(null);
+      setRestockQuantity('1');
+      setRestockNotes('');
+    } catch (err) {
+      setRestockFeedback({
+        type: 'error',
+        message: err.message || 'Failed to restock part.',
+      });
+    } finally {
+      setRestockSaving(false);
+    }
+  };
+
+  const handleCancelRestock = () => {
+    setRestockingPartKey(null);
+    setRestockQuantity('1');
+    setRestockNotes('');
   };
 
 
@@ -690,78 +843,108 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
 
         {requiredParts.length > 0 && (
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)]/60 p-5">
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
               <div>
-                <p className="text-xs uppercase tracking-[0.2em] text-[var(--text-muted)]">Procurement snapshot</p>
-                <h3 className="mt-1 text-lg font-bold text-white">Required parts for build execution</h3>
+                <h3 className="text-lg font-bold text-white">Parts Needed</h3>
+                <p className="text-sm text-[var(--text-muted)]">Parts required to complete this build.</p>
               </div>
-              <div className="flex flex-wrap gap-2">
-                <span className="rounded-full border border-[var(--gold-primary)]/30 bg-[var(--gold-primary)]/10 px-3 py-1 text-xs font-semibold text-[var(--gold-primary)]">
-                  {requiredParts.length} required items
-                </span>
-                <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-300">
-                  {requiredPartSummary.configuredCount} configured
-                </span>
-                <span className="rounded-full border border-sky-500/30 bg-sky-500/10 px-3 py-1 text-xs font-semibold text-sky-300">
-                  {requiredPartSummary.additionalCount} additional
-                </span>
+              <div className="flex flex-wrap items-center gap-3 text-xs">
+                <span className="text-[var(--text-muted)]">{requiredParts.length} Parts</span>
+                <span className="text-emerald-400">{requiredParts.filter(p => p.is_received).length} Received</span>
+                <span className="text-[var(--text-muted)]">{requiredParts.filter(p => !p.is_received).length} Pending</span>
               </div>
             </div>
-            <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-              <span className="rounded-full border border-sky-500/30 bg-sky-500/10 px-3 py-1 text-xs font-semibold text-sky-300">
-                {requiredPartSummary.needsPurchase} needs purchase
-              </span>
-            </div>
-            <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-4">
-              <div className="flex items-center justify-between mb-3">
-                <div>
-                  <p className="text-sm font-semibold text-white">Required part details</p>
-                  <p className="text-xs text-[var(--text-muted)]">Showing up to 8 items for quick review.</p>
-                </div>
-              </div>
-              <div className="grid gap-3">
-                {requiredParts.slice(0, 8).map((part, idx) => (
-                  <div key={`${part.part_key || `${part.category}-${part.name}-${part.source}-${part.product_id || 'anon'}`}-${idx}`} className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-white truncate">{part.name}</p>
-                        <p className="mt-1 text-xs text-[var(--text-muted)] truncate">
-                          {part.category || 'Other'} • {part.source === 'configuration' ? 'Configured' : 'Additional part'}
-                        </p>
+            <div className="mt-5 border border-[var(--border)] rounded-2xl overflow-hidden bg-[var(--bg-primary)]/40">
+              <div className="divide-y divide-[var(--border)]">
+                {requiredParts.slice(0, 8).map((part, idx) => {
+                  const isReceived = Boolean(part.is_received);
+                  const stockLabel = part.stock_status === 'unknown' || !part.stock_status
+                    ? 'Not Linked'
+                    : formatStatusLabel(part.stock_status);
+                  const isOutOfStock = (part.stock_status === 'out_of_stock' || (Number(part.stock) || 0) === 0) && !isReceived;
+                  const isRestocking = restockingPartKey === part.part_key;
+                  return (
+                    <div key={`${part.part_key || `${part.category}-${part.name}-${part.source}-${part.product_id || 'anon'}`}-${idx}`} className={`p-4 transition-colors hover:bg-white/[0.02] ${isReceived ? 'opacity-60' : ''}`}>
+                      <div className="flex items-center gap-4">
+                        <label className="flex items-center gap-3 cursor-pointer flex-1 min-w-0">
+                          <input
+                            type="checkbox"
+                            checked={isReceived}
+                            onChange={() => handleToggleReceive(part)}
+                            disabled={togglingSaving && togglingPartKey === part.part_key}
+                            className="w-4 h-4 rounded border-[var(--border)] bg-[var(--surface-dark)] text-[var(--gold-primary)] focus:ring-[var(--gold-primary)] shrink-0"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-white truncate">{part.name}</p>
+                            <p className="text-xs text-[var(--text-muted)]">
+                              {formatStatusLabel(part.category || 'Other')} • Qty: {part.quantity} • Stock: {part.stock !== null && part.stock !== undefined ? part.stock : 'Not Linked'}
+                            </p>
+                          </div>
+                        </label>
+                        <span className={`rounded-full px-2 py-1 text-[10px] font-semibold shrink-0 ${getStockBadgeStyle(part.stock_status)}`}>
+                          {stockLabel}
+                        </span>
+                        {isAdmin && isOutOfStock && !isRestocking && (
+                          <button
+                            type="button"
+                            onClick={() => setRestockingPartKey(part.part_key)}
+                            className="text-[10px] font-semibold rounded-full border border-[var(--gold-primary)]/30 bg-[var(--gold-primary)]/10 px-2 py-1 text-[var(--gold-primary)] hover:bg-[var(--gold-primary)]/20 transition-colors shrink-0"
+                          >
+                            Restock
+                          </button>
+                        )}
+                        {togglingFeedback && togglingPartKey === part.part_key && (
+                          <p className={`text-[11px] shrink-0 ${togglingFeedback.type === 'error' ? 'text-red-400' : 'text-emerald-300'}`}>
+                            {togglingFeedback.message}
+                          </p>
+                        )}
                       </div>
-                      <span className={`rounded-full px-2 py-1 text-[10px] font-semibold ${getStockBadgeStyle(part.stock_status)}`}>
-                        {part.stock_status === 'unknown' || !part.stock_status ? 'Not Linked' : part.stock_status.replace('_', ' ')}
-                      </span>
+                      {isRestocking && (
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                          <input
+                            type="number"
+                            min="1"
+                            value={restockQuantity}
+                            onChange={(e) => setRestockQuantity(e.target.value)}
+                            className="w-20 rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] px-2 py-1 text-xs text-white focus:border-[var(--gold-primary)] focus:outline-none"
+                          />
+                          <input
+                            type="text"
+                            value={restockNotes}
+                            onChange={(e) => setRestockNotes(e.target.value)}
+                            placeholder="Notes (optional)"
+                            className="flex-1 min-w-[120px] rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] px-2 py-1 text-xs text-white placeholder:text-[var(--text-muted)] focus:border-[var(--gold-primary)] focus:outline-none"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleRestockPart(part)}
+                            disabled={restockSaving}
+                            className="rounded-lg bg-[var(--gold-primary)] px-3 py-1 text-xs font-bold text-black hover:bg-[var(--gold-secondary)] disabled:opacity-60"
+                          >
+                            {restockSaving ? 'Saving...' : 'Save'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleCancelRestock}
+                            className="rounded-lg border border-[var(--border)] px-3 py-1 text-xs font-semibold text-[var(--text-muted)] hover:text-white hover:bg-white/5 transition-colors"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      )}
+                      {restockFeedback && restockingPartKey === part.part_key && (
+                        <p className={`mt-2 text-[11px] ${restockFeedback.type === 'error' ? 'text-red-400' : 'text-emerald-300'}`}>
+                          {restockFeedback.message}
+                        </p>
+                      )}
                     </div>
-                     <div className="mt-3 grid gap-2 sm:grid-cols-3 text-[0.75rem] text-[var(--text-muted)]">
-                       <span>Qty: {part.quantity}</span>
-                       <span>Stock: {part.stock !== null && part.stock !== undefined ? part.stock : 'Not Linked'}</span>
-                       <span>Price: {part.price || part.price === 0 ? formatCurrency(part.price) : 'Not Linked'}</span>
-                     </div>
-                     <div className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]/70 p-3">
-                       <label className="flex items-center gap-2 cursor-pointer">
-                         <input
-                           type="checkbox"
-                           checked={part.is_received}
-                           onChange={() => handleToggleReceive(part)}
-                           disabled={togglingSaving && togglingPartKey === part.part_key}
-                           className="w-4 h-4 rounded border-[var(--border)] bg-[var(--surface-dark)] text-[var(--gold-primary)] focus:ring-[var(--gold-primary)]"
-                         />
-                         <span className="text-xs font-semibold text-white">
-                           {part.is_received ? 'Received' : 'Not Received'}
-                         </span>
-                       </label>
-                       {togglingFeedback && togglingPartKey === part.part_key && (
-                         <p className={`mt-2 text-[11px] ${togglingFeedback.type === 'error' ? 'text-red-400' : 'text-emerald-300'}`}>
-                           {togglingFeedback.message}
-                         </p>
-                       )}
-                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
               {requiredParts.length > 8 && (
-                <p className="mt-3 text-xs text-[var(--text-muted)]">Showing 8 of {requiredParts.length} required parts. View more in the full project details.</p>
+                <div className="p-3 border-t border-[var(--border)] text-xs text-[var(--text-muted)] text-center">
+                  Showing 8 of {requiredParts.length} required parts. View more in the full project details.
+                </div>
               )}
             </div>
           </div>
@@ -1141,12 +1324,14 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
 
                               return (
                                 <div key={subtask.subtask_id} className={`flex items-start gap-4 p-4 rounded-xl border transition-all ${isCompleted ? 'bg-green-500/5 border-green-500/30' : 'bg-[var(--surface-dark)] border-[var(--border)] hover:border-[var(--gold-primary)]/50'}`}>
-                                  <button 
+                                  <button
                                     onClick={() => toggleSubtaskStatus(subtask)}
-                                    disabled={!canUserUpdate}
-                                    className={`mt-0.5 rounded-full outline-none focus:ring-2 focus:ring-[var(--gold-primary)] transition-all ${canUserUpdate && !isCompleted ? 'hover:scale-110' : ''}`}
+                                    disabled={!canUserUpdate || togglingSubtaskId === subtask.subtask_id}
+                                    className={`mt-0.5 rounded-full outline-none focus:ring-2 focus:ring-[var(--gold-primary)] transition-all ${canUserUpdate && !isCompleted && togglingSubtaskId !== subtask.subtask_id ? 'hover:scale-110' : ''}`}
                                   >
-                                    {isCompleted ? (
+                                    {togglingSubtaskId === subtask.subtask_id ? (
+                                      <Loader2 className="w-6 h-6 animate-spin text-[var(--gold-primary)]" />
+                                    ) : isCompleted ? (
                                       <CheckCircle className="w-6 h-6 text-green-400" />
                                     ) : (
                                       <Circle className={`w-6 h-6 ${canUserUpdate ? 'text-[var(--text-muted)] hover:text-[var(--gold-primary)]' : 'text-gray-600 cursor-not-allowed'}`} />
@@ -1267,6 +1452,47 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
                   className="flex-1 rounded-lg bg-[var(--gold-primary)] px-3 py-2 text-sm font-semibold text-black hover:bg-[var(--gold-secondary)]"
                 >
                   Yes, Uncheck
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {pendingUncheckPart && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-5"
+            >
+              <h3 className="text-lg font-semibold text-white">Return this part to inventory?</h3>
+              <p className="mt-2 text-sm text-[var(--text-muted)]">
+                Unchecking will return the deducted quantity back to inventory for{' '}
+                <span className="text-white font-medium">{pendingUncheckPart.name}</span>.
+              </p>
+              <div className="mt-5 flex gap-2">
+                <button
+                  type="button"
+                  onClick={handleCancelUncheckPart}
+                  className="flex-1 rounded-lg border border-[var(--border)] px-3 py-2 text-sm font-semibold text-[var(--text-light)] hover:bg-[var(--bg-primary)]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmUncheckPart}
+                  disabled={togglingSaving}
+                  className="flex-1 rounded-lg bg-[var(--gold-primary)] px-3 py-2 text-sm font-semibold text-black hover:bg-[var(--gold-secondary)] disabled:opacity-60"
+                >
+                  {togglingSaving ? 'Returning...' : 'Confirm Return'}
                 </button>
               </div>
             </motion.div>

@@ -242,6 +242,7 @@ export const adminApi = {
   toggleProjectRequiredPart: (id, partKey, received) => request(`/api/projects/${id}/required-parts/${encodeURIComponent(partKey)}/toggle-receive`, { method: 'PATCH', body: { received } }),
   getProjectActivity: (id) => request(`/api/projects/${id}/activity`),
   submitProjectFulfillment: (id, body) => request(`/api/projects/${id}/fulfillment`, { method: 'POST', body }),
+  addInventoryStock: (productId, quantity, notes) => request('/api/inventory/stock-in', { method: 'PATCH', body: { productId, quantity, notes } }),
 
   // Claim / Unclaim / Reassign
   claimProject: (id) => request(`/api/projects/${id}/claim`, { method: 'POST' }),

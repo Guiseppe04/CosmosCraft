@@ -1548,7 +1548,7 @@ exports.getProjectRequiredParts = async (projectId) => {
                AND gbp.is_active = true`,
             [lowercasedTypes]
           );
-          console.log(`[projectService] Found ${builderRes.rows.length} active builder parts for guitar types: ${lowercasedTypes.join(', ')}`);
+          // console.log(`[projectService] Found ${builderRes.rows.length} active builder parts for guitar types: ${lowercasedTypes.join(', ')}`);
           if (builderRes.rows.length > 0 && builderRes.rows.length <= 50) {
             console.log('[projectService] Builder parts:', builderRes.rows.map(r => `${r.guitar_type}|${r.type_mapping}|${r.name}|stock=${r.stock}|price=${r.price}`).join(' || '));
           }
@@ -1571,7 +1571,7 @@ exports.getProjectRequiredParts = async (projectId) => {
             for (const row of productsRes.rows) {
               productsByNameLookup.set(row.name.toLowerCase(), row.price);
             }
-            console.log(`[projectService] Loaded ${productsByNameLookup.size} product prices from products table`);
+            // console.log(`[projectService] Loaded ${productsByNameLookup.size} product prices from products table`);
           }
         }
       }
@@ -1598,7 +1598,7 @@ exports.getProjectRequiredParts = async (projectId) => {
             if (match) {
               const productPrice = productsByNameLookup?.get((match.name || '').toLowerCase());
               const finalPrice = match.price > 0 ? match.price : (productPrice || 0);
-              console.log(`[projectService] MATCHED part "${enrichedPart.name}" (${enrichedPart.part_type}) → builder part "${match.name}" stock=${match.stock} price=${finalPrice}${productPrice ? ' (from products table)' : ''}`);
+              // console.log(`[projectService] MATCHED part "${enrichedPart.name}" (${enrichedPart.part_type}) → builder part "${match.name}" stock=${match.stock} price=${finalPrice}${productPrice ? ' (from products table)' : ''}`);
               enrichedPart.product_id = enrichedPart.product_id || null;
               enrichedPart.stock = match.stock ?? null;
               enrichedPart.price = finalPrice;
@@ -1612,7 +1612,7 @@ exports.getProjectRequiredParts = async (projectId) => {
               if (fallbackMatch) {
                 const productPrice = productsByNameLookup?.get((fallbackMatch.name || '').toLowerCase());
                 const finalPrice = fallbackMatch.price > 0 ? fallbackMatch.price : (productPrice || 0);
-                console.log(`[projectService] FALLBACK MATCHED part "${enrichedPart.name}" → "${fallbackMatch.name}" stock=${fallbackMatch.stock} price=${finalPrice}`);
+                // console.log(`[projectService] FALLBACK MATCHED part "${enrichedPart.name}" → "${fallbackMatch.name}" stock=${fallbackMatch.stock} price=${finalPrice}`);
                 enrichedPart.product_id = enrichedPart.product_id || null;
                 enrichedPart.stock = fallbackMatch.stock ?? null;
                 enrichedPart.price = finalPrice;
@@ -1714,16 +1714,19 @@ exports.receiveProjectRequiredPart = async (projectId, partKey, payload = {}, us
 
   const receivedQuantity = Math.max(1, Number(payload.quantity) || Number(part.quantity) || 1);
 
-  if (part.product_id) {
-    await inventoryService.deductStock(part.product_id, receivedQuantity, {
-      notes: `Project required part received for ${part.name}`,
-      createdBy: userId,
-    });
-  }
-
   const client = await pool.connect();
+  let updatedStock = null;
   try {
     await client.query('BEGIN');
+
+    if (part.product_id) {
+      await inventoryService.deductStock(part.product_id, receivedQuantity, 'project_part', projectId, {
+        notes: `Project required part received for ${part.name}`,
+        createdBy: userId,
+        client,
+      });
+    }
+
     await client.query(
       `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, details)
        VALUES ($1, $2, $3, $4, $5)`,
@@ -1744,12 +1747,18 @@ exports.receiveProjectRequiredPart = async (projectId, partKey, payload = {}, us
         }),
       ]
     );
+
     await client.query('COMMIT');
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;
   } finally {
     client.release();
+  }
+
+  if (part.product_id) {
+    const stockRow = await pool.query('SELECT stock FROM inventory WHERE product_id = $1', [part.product_id]);
+    updatedStock = stockRow.rows[0] ? Number(stockRow.rows[0].stock) : null;
   }
 
   const refreshedParts = await exports.getProjectRequiredParts(projectId);
@@ -1793,7 +1802,11 @@ exports.receiveProjectRequiredPart = async (projectId, partKey, payload = {}, us
   }
 
   return {
-    part: refreshedPart || part,
+    part: {
+      ...(refreshedPart || part),
+      stock: updatedStock,
+      stock_status: getPartStockStatus(updatedStock, Number(receivedQuantity)),
+    },
     quantity_received: Number(receivedQuantity),
     stock_updated: Boolean(part.product_id),
     all_parts_received: allPartsReceived,
@@ -1812,18 +1825,32 @@ exports.toggleProjectRequiredPart = async (projectId, partKey, received, userId)
   }
 
   const quantity = Number(part.quantity) || 1;
+  const currentReceivedQty = Number(part.received_quantity || 0);
 
   if (received) {
-    if (part.product_id) {
-      await inventoryService.deductStock(part.product_id, quantity, {
-        notes: `Project required part received for ${part.name}`,
-        createdBy: userId,
-      });
+    if (currentReceivedQty >= quantity) {
+      return { part, received: true, stock_updated: Boolean(part.product_id), already_received: true };
     }
+  } else {
+    if (currentReceivedQty === 0) {
+      return { part, received: false, stock_updated: Boolean(part.product_id), already_received: false };
+    }
+  }
 
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
+  const client = await pool.connect();
+  let updatedStock = null;
+  try {
+    await client.query('BEGIN');
+
+    if (received) {
+      if (part.product_id) {
+        await inventoryService.deductStock(part.product_id, quantity, 'project_part', projectId, {
+          notes: `Project required part received for ${part.name}`,
+          createdBy: userId,
+          client,
+        });
+      }
+
       await client.query(
         `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, details)
          VALUES ($1, $2, $3, $4, $5)`,
@@ -1844,35 +1871,26 @@ exports.toggleProjectRequiredPart = async (projectId, partKey, received, userId)
           }),
         ]
       );
-      await client.query('COMMIT');
-    } catch (error) {
-      await client.query('ROLLBACK');
-      throw error;
-    } finally {
-      client.release();
-    }
-  } else {
-    const projectRes = await pool.query(
-      `SELECT progress, status FROM projects WHERE project_id = $1`,
-      [projectId]
-    );
-    const projectProgress = Number(projectRes.rows[0]?.progress || 0);
-    const projectStatus = projectRes.rows[0]?.status || '';
+    } else {
+      const projectRes = await client.query(
+        `SELECT progress, status FROM projects WHERE project_id = $1`,
+        [projectId]
+      );
+      const projectProgress = Number(projectRes.rows[0]?.progress || 0);
+      const projectStatus = projectRes.rows[0]?.status || '';
 
-    if (projectProgress >= 100 || normalizeProjectStatus(projectStatus) === 'completed') {
-      throw new AppError('Cannot uncheck part: project has already progressed beyond the stage that consumes this part.', 400);
-    }
+      if (projectProgress >= 100 || normalizeProjectStatus(projectStatus) === 'completed') {
+        throw new AppError('Cannot uncheck part: project has already progressed beyond the stage that consumes this part.', 400);
+      }
 
-    if (part.product_id) {
-      await inventoryService.addStock(part.product_id, quantity, {
-        notes: `Project required part unchecked for ${part.name}`,
-        createdBy: userId,
-      });
-    }
+      if (part.product_id) {
+        await inventoryService.addStock(part.product_id, quantity, {
+          notes: `Project required part unchecked for ${part.name}`,
+          createdBy: userId,
+          client,
+        });
+      }
 
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
       await client.query(
         `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, details)
          VALUES ($1, $2, $3, $4, $5)`,
@@ -1893,20 +1911,33 @@ exports.toggleProjectRequiredPart = async (projectId, partKey, received, userId)
           }),
         ]
       );
-      await client.query('COMMIT');
-    } catch (error) {
-      await client.query('ROLLBACK');
-      throw error;
-    } finally {
-      client.release();
     }
+
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
   }
 
-  const refreshedParts = await exports.getProjectRequiredParts(projectId);
-  const refreshedPart = refreshedParts.find((candidate) => candidate.part_key === partKey);
+  if (part.product_id) {
+    const stockRow = await pool.query('SELECT stock FROM inventory WHERE product_id = $1', [part.product_id]);
+    updatedStock = stockRow.rows[0] ? Number(stockRow.rows[0].stock) : null;
+  }
+
+  const stockStatus = getPartStockStatus(updatedStock, quantity);
 
   return {
-    part: refreshedPart || part,
+    part: {
+      part_key: part.part_key,
+      name: part.name,
+      is_received: received,
+      quantity,
+      stock: updatedStock,
+      stock_status: stockStatus,
+      product_id: part.product_id,
+    },
     received,
     stock_updated: Boolean(part.product_id),
   };
@@ -2512,9 +2543,13 @@ exports.updateSubtaskStatus = async (subtaskId, data, userId, userRole) => {
 
     // Update project progress tracking
     const projectData = await client.query(`SELECT * FROM projects WHERE project_id = $1`, [subtask.project_id]);
+    let taskSummary = null;
+    let progress = null;
     if (projectData.rows.length > 0) {
       const stats = await getProjectTaskStats(client, subtask.project_id);
-      await applyProjectTaskTracking(client, projectData.rows[0], { stats, persist: true });
+      const tracking = await applyProjectTaskTracking(client, projectData.rows[0], { stats, persist: true });
+      taskSummary = tracking.task_summary;
+      progress = tracking.progress;
     }
 
     // Sync the latest fully-completed build stage so the snapshot survives
@@ -2588,7 +2623,11 @@ exports.updateSubtaskStatus = async (subtaskId, data, userId, userRole) => {
     }
 
     await client.query('COMMIT');
-    return updatedRes.rows[0];
+    return {
+      subtask: updatedRes.rows[0],
+      task_summary: taskSummary,
+      progress,
+    };
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;

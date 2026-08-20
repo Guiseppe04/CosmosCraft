@@ -1005,8 +1005,8 @@ exports.createSubtaskSchema = Joi.object({
 });
 
 exports.updateSubtaskSchema = Joi.object({
-  status: Joi.string().valid('not_started', 'in_progress', 'completed', 'cancelled').optional(),
-  notes: Joi.string().max(500).optional().allow('').trim(),
+  status: Joi.string().valid('not_started', 'in_progress', 'completed', 'cancelled', 'pending').optional(),
+  notes: Joi.string().max(500).optional().allow('', null),
 });
 
 const builderPartCommonFields = {
