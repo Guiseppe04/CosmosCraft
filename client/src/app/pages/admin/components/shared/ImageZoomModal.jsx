@@ -2,12 +2,24 @@ import { useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { RotateCcw, X, ChevronDown, ChevronUp } from 'lucide-react'
 
-export function ImageZoomModal({ src, alt }) {
-  const [isOpen, setIsOpen] = useState(false)
+export function ImageZoomModal({ src, alt, isOpen: controlledIsOpen, onClose }) {
+  const [internalIsOpen, setIsOpen] = useState(false)
   const [scale, setScale] = useState(1)
   const [position, setPosition] = useState({ x: 0, y: 0 })
   const [isDragging, setIsDragging] = useState(false)
   const dragStart = useRef({ x: 0, y: 0 })
+
+  const isControlled = controlledIsOpen !== undefined
+  const isOpen = isControlled ? controlledIsOpen : internalIsOpen
+
+  const handleClose = () => {
+    if (isControlled) {
+      onClose?.()
+    } else {
+      setIsOpen(false)
+    }
+    resetZoom()
+  }
 
   const handleWheel = (event) => {
     event.preventDefault()
@@ -35,6 +47,67 @@ export function ImageZoomModal({ src, alt }) {
     setPosition({ x: 0, y: 0 })
   }
 
+  const zoomModal = (
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          key="image-zoom-modal"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[200] bg-black/90 backdrop-blur-sm flex items-center justify-center"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) handleClose()
+          }}
+        >
+          <button
+            onClick={handleClose}
+            className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors z-10"
+          >
+            <X className="w-6 h-6 text-white" />
+          </button>
+
+          <div
+            className="w-full h-full overflow-hidden flex items-center justify-center p-8"
+            onWheel={handleWheel}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+          >
+            <motion.img
+              src={src}
+              alt={alt}
+              className="max-w-full max-h-full object-contain select-none"
+              style={{
+                transform: `scale(${scale}) translate(${position.x / scale}px, ${position.y / scale}px)`,
+                cursor: isDragging ? 'grabbing' : 'grab',
+              }}
+              draggable={false}
+            />
+          </div>
+
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-3 bg-black/60 px-4 py-2 rounded-full">
+            <button onClick={() => setScale((value) => Math.max(0.5, value - 0.25))} className="text-white hover:text-[var(--gold-primary)] transition-colors">
+              <ChevronDown className="w-5 h-5" />
+            </button>
+            <span className="text-white text-sm min-w-[60px] text-center">{Math.round(scale * 100)}%</span>
+            <button onClick={() => setScale((value) => Math.min(3, value + 0.25))} className="text-white hover:text-[var(--gold-primary)] transition-colors">
+              <ChevronUp className="w-5 h-5" />
+            </button>
+            <button onClick={resetZoom} className="ml-2 text-white hover:text-[var(--gold-primary)] transition-colors">
+              <RotateCcw className="w-4 h-4" />
+            </button>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  )
+
+  if (isControlled) {
+    return zoomModal
+  }
+
   return (
     <>
       <div
@@ -46,64 +119,7 @@ export function ImageZoomModal({ src, alt }) {
           <span className="bg-black/60 px-3 py-1.5 rounded-full text-white text-sm">Click to zoom</span>
         </div>
       </div>
-
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            key="image-zoom-modal"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[200] bg-black/90 backdrop-blur-sm flex items-center justify-center"
-            onClick={(event) => {
-              if (event.target === event.currentTarget) setIsOpen(false)
-            }}
-          >
-            <button
-              onClick={() => {
-                setIsOpen(false)
-                resetZoom()
-              }}
-              className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors z-10"
-            >
-              <X className="w-6 h-6 text-white" />
-            </button>
-
-            <div
-              className="w-full h-full overflow-hidden flex items-center justify-center p-8"
-              onWheel={handleWheel}
-              onMouseDown={handleMouseDown}
-              onMouseMove={handleMouseMove}
-              onMouseUp={handleMouseUp}
-              onMouseLeave={handleMouseUp}
-            >
-              <motion.img
-                src={src}
-                alt={alt}
-                className="max-w-full max-h-full object-contain select-none"
-                style={{
-                  transform: `scale(${scale}) translate(${position.x / scale}px, ${position.y / scale}px)`,
-                  cursor: isDragging ? 'grabbing' : 'grab',
-                }}
-                draggable={false}
-              />
-            </div>
-
-            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-3 bg-black/60 px-4 py-2 rounded-full">
-              <button onClick={() => setScale((value) => Math.max(0.5, value - 0.25))} className="text-white hover:text-[var(--gold-primary)] transition-colors">
-                <ChevronDown className="w-5 h-5" />
-              </button>
-              <span className="text-white text-sm min-w-[60px] text-center">{Math.round(scale * 100)}%</span>
-              <button onClick={() => setScale((value) => Math.min(3, value + 0.25))} className="text-white hover:text-[var(--gold-primary)] transition-colors">
-                <ChevronUp className="w-5 h-5" />
-              </button>
-              <button onClick={resetZoom} className="ml-2 text-white hover:text-[var(--gold-primary)] transition-colors">
-                <RotateCcw className="w-4 h-4" />
-              </button>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {zoomModal}
     </>
   )
 }

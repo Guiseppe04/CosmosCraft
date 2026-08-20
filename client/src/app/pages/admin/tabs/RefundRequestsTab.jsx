@@ -424,7 +424,7 @@ export function RefundRequestsTab({ showToast }) {
       )}
 
       {imageZoom && (
-        <ImageZoomModal src={imageZoom} alt="Refund proof" onClose={() => setImageZoom(null)} />
+        <ImageZoomModal src={imageZoom} alt="Refund proof" isOpen onClose={() => setImageZoom(null)} />
       )}
     </motion.div>
   )
