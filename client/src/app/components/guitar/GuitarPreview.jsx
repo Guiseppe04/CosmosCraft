@@ -313,8 +313,7 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
             coverType,
           })
 
-          // UI uses "silver"; Cloudinary uses "chrome"
-          const poleColorKey = poleColor === 'silver' ? 'chrome' : poleColor
+          const poleColorKey = poleColor 
 
           if (type === 'singlecoil') {
             const scPoleMap = {
