@@ -387,20 +387,7 @@ return `
 
         </section>
 
-        <!-- GCASH PAYMENT INFORMATION -->
-        ${
-          isGcashPayment
-            ? `
-              <section class="payment-info">
-                <div class="payment-row">
-                  <span>Reference No.</span>
-                  <span>${referenceNumber}</span>
-                </div>
-
-              
-            `
-            : ''
-        }
+        
 
         <!-- ITEMS -->
         <table>
