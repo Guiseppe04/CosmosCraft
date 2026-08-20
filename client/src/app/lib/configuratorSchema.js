@@ -87,7 +87,7 @@ export const CATEGORIES = {
             pickupColor: 'bobbins',
             pickupColorVariant: 'black',
             pickupPoleColor: 'silver',
-            controls: 'standard',
+             controls: 'off',
             saddle: 'chrome',
             nut: 'blackGraphTech',
             tuning: 'eStandard',
@@ -134,8 +134,8 @@ export const CATEGORIES = {
            neckPickupModel: 'vantium',
            pickupColor: 'bobbins',
            pickupColorVariant: 'black',
-            pickupPoleColor: 'silver',
-           controls: 'standard',
+             pickupPoleColor: 'silver',
+             controls: 'off',
            saddle: 'chrome',
            nut: 'blackGraphTech',
            tuning: 'eStandard',
@@ -183,7 +183,7 @@ export const CATEGORIES = {
             pickupColor: 'bobbins',
             pickupColorVariant: 'black',
             pickupPoleColor: 'silver',
-            controls: 'standard',
+             controls: 'off',
             saddle: 'chrome',
             nut: 'blackGraphTech',
             tuning: 'eStandard',
@@ -734,11 +734,11 @@ export const OPTION_FIELDS = [
     key: 'controls',
     label: 'Controls',
     type: 'select',
-    // Responsible for defining controls layout options (standard, DTC, DTMV)
+    // Responsible for defining controls layout options (Off, DTC, DTMV)
     options: [
-      { value: 'standard', label: 'Standard Controls', note: 'Standard volume/tone', price: 0 },
+      { value: 'off', label: 'Off', note: 'Standard control layout', price: 0 },
       { value: 'deleteTone', label: 'Delete Tone Control', note: 'Remove tone control', price: 0 },
-      { value: 'deleteToneMoveVolume', label: 'Move Volume to Tone', note: 'Move volume to tone position', price: 0 },
+      { value: 'deleteToneMoveVolume', label: 'Delete Tone Control and Move Volume to Tone Position', note: 'Move volume to tone position', price: 0 },
     ],
   },
 

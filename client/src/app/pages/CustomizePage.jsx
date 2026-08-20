@@ -252,8 +252,10 @@ export function CustomizePage() {
     options,
     refreshPrices,
     loadingPrices,
-  } = useGuitarConfig()
-  const navigate = useNavigate()
+   } = useGuitarConfig()
+   const navigate = useNavigate()
+   // Responsible for active-electronics visibility toggles in the Electronics panel.
+   const isActive = config.electronicsType === 'active'
   const [view, setView] = useState('front')
   const [zoomLevel, setZoomLevel] = useState(1)
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 })
@@ -1725,11 +1727,11 @@ export function CustomizePage() {
                 </div>
               )}
               
-              {/* ELECTRONICS OPTIONS */}
-              {activeCategory === 'electronics' && (
-                <div className="p-4 space-y-4">
-                  {/* Pickup Configuration */}
-                  <AccordionSection title="Pickup Configuration" icon={Zap} defaultOpen={true}>
+               {/* ELECTRONICS OPTIONS */}
+               {activeCategory === 'electronics' && (
+                 <div className="p-4 space-y-4">
+                   {/* Pickup Configuration */}
+                   <AccordionSection title="Pickup Configuration" icon={Zap} defaultOpen={true}>
                     {/* Electronics Type */}
                     <div>
                       <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Electronics Type</h3>
@@ -1746,93 +1748,101 @@ export function CustomizePage() {
                       </div>
                     </div>
 
-                    {/* Pickup Configuration */}
-                    <div>
-                      <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Pickup Configuration</h3>
-                      {/* Responsible for rendering pickup configuration selector (HH / H-S-H) */}
-                      <div className="grid grid-cols-2 gap-2">
-                        {options.pickupConfigurationOptions?.map((opt) => (
-                          <OptionButton
-                            key={opt.value}
-                            option={opt}
-                            isSelected={config.pickupConfiguration === opt.value}
-                            onClick={() => updateConfig({ pickupConfiguration: opt.value })}
-                          />
-                        ))}
-                      </div>
-                    </div>
+                     {/* Pickup Configuration - hidden when Active (Fluence locks the layout) */}
+                     {!isActive && (
+                     <div>
+                       <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Pickup Configuration</h3>
+                       {/* Responsible for rendering pickup configuration selector (HH / H-S-H) */}
+                       <div className="grid grid-cols-2 gap-2">
+                         {options.pickupConfigurationOptions?.map((opt) => (
+                           <OptionButton
+                             key={opt.value}
+                             option={opt}
+                             isSelected={config.pickupConfiguration === opt.value}
+                             onClick={() => updateConfig({ pickupConfiguration: opt.value })}
+                           />
+                         ))}
+                       </div>
+                     </div>
+                     )}
 
-                    {/* Bridge Pickup Model */}
-                    <div>
-                      <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Bridge Pickup</h3>
-                      {/* Responsible for rendering bridge humbucker model selector */}
-                      <div className="grid grid-cols-2 gap-2">
-                        {options.bridgePickupModelOptions?.map((opt) => (
-                          <OptionButton
-                            key={opt.value}
-                            option={opt}
-                            isSelected={config.bridgePickupModel === opt.value}
-                            onClick={() => updateConfig({ bridgePickupModel: opt.value })}
-                          />
-                        ))}
-                      </div>
-                    </div>
+                     {/* Bridge Pickup Model - hidden when Active */}
+                     {!isActive && (
+                     <div>
+                       <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Bridge Pickup</h3>
+                       {/* Responsible for rendering bridge humbucker model selector */}
+                       <div className="grid grid-cols-2 gap-2">
+                         {options.bridgePickupModelOptions?.map((opt) => (
+                           <OptionButton
+                             key={opt.value}
+                             option={opt}
+                             isSelected={config.bridgePickupModel === opt.value}
+                             onClick={() => updateConfig({ bridgePickupModel: opt.value })}
+                           />
+                         ))}
+                       </div>
+                     </div>
+                     )}
 
-                    {/* Middle Pickup Model - only for H-S-H */}
-                    {['hss'].includes(config.pickupConfiguration || config.pickups) && (
-                      <div>
-                        <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Middle Pickup</h3>
-                        {/* Responsible for rendering middle single coil model selector */}
-                        <div className="grid grid-cols-2 gap-2">
-                          {options.middlePickupModelOptions?.map((opt) => (
-                            <OptionButton
-                              key={opt.value}
-                              option={opt}
-                              isSelected={config.middlePickupModel === opt.value}
-                              onClick={() => updateConfig({ middlePickupModel: opt.value })}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    )}
+                     {/* Middle Pickup Model - only for H-S-H - hidden when Active */}
+                     {!isActive && ['hss'].includes(config.pickupConfiguration || config.pickups) && (
+                       <div>
+                         <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Middle Pickup</h3>
+                         {/* Responsible for rendering middle single coil model selector */}
+                         <div className="grid grid-cols-2 gap-2">
+                           {options.middlePickupModelOptions?.map((opt) => (
+                             <OptionButton
+                               key={opt.value}
+                               option={opt}
+                               isSelected={config.middlePickupModel === opt.value}
+                               onClick={() => updateConfig({ middlePickupModel: opt.value })}
+                             />
+                           ))}
+                         </div>
+                       </div>
+                     )}
 
-                    {/* Neck Pickup Model */}
-                    <div>
-                      <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Neck Pickup</h3>
-                      {/* Responsible for rendering neck humbucker model selector */}
-                      <div className="grid grid-cols-2 gap-2">
-                        {options.neckPickupModelOptions?.map((opt) => (
-                          <OptionButton
-                            key={opt.value}
-                            option={opt}
-                            isSelected={config.neckPickupModel === opt.value}
-                            onClick={() => updateConfig({ neckPickupModel: opt.value })}
-                          />
-                        ))}
-                      </div>
-                    </div>
+                     {/* Neck Pickup Model - hidden when Active */}
+                     {!isActive && (
+                     <div>
+                       <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Neck Pickup</h3>
+                       {/* Responsible for rendering neck humbucker model selector */}
+                       <div className="grid grid-cols-2 gap-2">
+                         {options.neckPickupModelOptions?.map((opt) => (
+                           <OptionButton
+                             key={opt.value}
+                             option={opt}
+                             isSelected={config.neckPickupModel === opt.value}
+                             onClick={() => updateConfig({ neckPickupModel: opt.value })}
+                           />
+                         ))}
+                       </div>
+                     </div>
+                     )}
                   </AccordionSection>
 
                   {/* Pickup Appearance */}
                   <AccordionSection title="Pickup Appearance" icon={Palette} defaultOpen={true}>
-                    {/* Pickup Color */}
-                    <div>
-                      <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Pickup Color</h3>
-                      {/* Responsible for rendering pickup color/style selector (bobbins, painted, wooden, covers) */}
-                      <div className="grid grid-cols-2 gap-2">
-                        {options.pickupColorOptions?.map((opt) => (
-                          <OptionButton
-                            key={opt.value}
-                            option={opt}
-                            isSelected={config.pickupColor === opt.value}
-                            onClick={() => updateConfig({ pickupColor: opt.value })}
-                          />
-                        ))}
+                     {/* Pickup Color - hidden when Active (Painted Bobbin RGB is used instead) */}
+                     {!isActive && (
+                     <div>
+                       <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Pickup Color</h3>
+                       {/* Responsible for rendering pickup color/style selector (bobbins, painted, wooden, covers) */}
+                       <div className="grid grid-cols-2 gap-2">
+                         {options.pickupColorOptions?.map((opt) => (
+                           <OptionButton
+                             key={opt.value}
+                             option={opt}
+                             isSelected={config.pickupColor === opt.value}
+                              onClick={() => updateConfig({ pickupColor: opt.value })}
+                            />
+                          ))}
+                        </div>
                       </div>
-                    </div>
+                      )}
 
-                    {/* Pickup Color Variant */}
-                    {config.pickupColor === 'bobbins' && (
+                     {/* Pickup Color Variant - hidden when Active */}
+                     {!isActive && config.pickupColor === 'bobbins' && (
                       <div>
                         <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Bobbin Color</h3>
                         {/* Responsible for rendering bobbin color variant selector */}
@@ -1849,7 +1859,8 @@ export function CustomizePage() {
                       </div>
                     )}
 
-                    {config.pickupColor === 'covers' && (
+                     {/* Cover Color - hidden when Active */}
+                     {!isActive && config.pickupColor === 'covers' && (
                       <div>
                         <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Cover Color</h3>
                         {/* Responsible for rendering cover color variant selector */}
@@ -1866,8 +1877,8 @@ export function CustomizePage() {
                       </div>
                     )}
 
-                    {/* Painted Color */}
-                    {config.pickupColor === 'painted' && (
+                     {/* Painted Color (RGB) - visible in Active mode (Fluence mask tint) */}
+                     {(config.pickupColor === 'painted' || isActive) && (
                       <div>
                         <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Painted Color (RGB)</h3>
                         {/* Responsible for rendering RGB color picker for painted bobbins */}
@@ -1878,8 +1889,8 @@ export function CustomizePage() {
                       </div>
                     )}
 
-                    {/* Wood Type */}
-                    {config.pickupColor === 'wooden' && (
+                     {/* Wood Type - hidden when Active */}
+                     {!isActive && config.pickupColor === 'wooden' && (
                       <div>
                         <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Wood Type</h3>
                         {/* Responsible for rendering wood type selector for wooden bobbins */}
@@ -1898,7 +1909,8 @@ export function CustomizePage() {
                       </div>
                     )}
                    
-                   {/* Pole Piece Color */}
+                   {/* Pole Piece Color - hidden when Active (Fluence pickups use fixed poles) */}
+                   {!isActive && (
                    <div>
                      <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Pole Piece Color</h3>
                      {/* Responsible for rendering pole piece color selector (black, chrome, gold) */}
@@ -1913,20 +1925,21 @@ export function CustomizePage() {
                        ))}
                      </div>
                    </div>
+                   )}
                   </AccordionSection>
 
                   {/* Controls */}
                   <AccordionSection title="Controls" icon={Cog} defaultOpen={true}>
                     <div>
                       <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Controls</h3>
-                      {/* Responsible for rendering controls layout selector (standard, DTC, DTMV) */}
-                      <div className="grid grid-cols-2 gap-2">
-                        {options.controlsOptions?.map((opt) => (
-                          <OptionButton
-                            key={opt.value}
-                            option={opt}
-                            isSelected={config.controls === opt.value}
-                            onClick={() => updateConfig({ controls: opt.value })}
+                      {/* Responsible for rendering controls layout selector (Off, DTC, DTMV) */}
+                       <div className="grid grid-cols-2 gap-2">
+                         {options.controlsOptions?.map((opt) => (
+                           <OptionButton
+                             key={opt.value}
+                             option={opt}
+                             isSelected={config.controls === opt.value}
+                             onClick={() => updateConfig({ controls: opt.value })}
                           />
                         ))}
                       </div>

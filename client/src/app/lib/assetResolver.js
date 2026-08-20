@@ -18,7 +18,7 @@ const CLOUD_NAME = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_
   ? import.meta.env.VITE_CLOUDINARY_CLOUD_NAME 
   : ''
 
-const USE_CLOUDINARY = Boolean(CLOUD_NAME)
+const USE_CLOUDINARY = Boolean(CLOUD_NAME) && !(typeof import.meta !== 'undefined' && import.meta.env?.DEV)
 
 /**
  * Resolve an asset path using either Cloudinary or local files
@@ -501,20 +501,32 @@ export function resolvePickupPoles(category, model, pickupType, coverType, color
   return resolveSharedAsset(category, model, 'pickups', '6-string', '24-frets', 'standard', 'pole-pieces', pickupType, coverType,`${colorKey}-${position}.png`)
 }
 
-// Responsible for resolving bobbin color asset paths for open bobbins
+// Responsible for resolving bobbin color asset paths for open bobbins.
+// Option values do not match the on-disk file keys for multi-color bobbins, so map
+// them to the correct {color}-{position}.png filename under .../pickup-bodies/open/bobbins/.
+const BOBBIN_COLOR_FILE_KEY = {
+  black: 'black',
+  white: 'white',
+  cream: 'creme',
+  'racing-green': 'green',
+  'white-black': 'white-black',
+  'black-cream': 'creme-black',
+  'racing-green-black': 'black-green',
+}
 export function resolvePickupBobbinColor(category, model, colorKey, position) {
-  return resolveSharedAsset(category, model, 'pickups', '6-string', '24-frets', 'standard', 'pickup-bodies', 'open', 'bobbins', `${colorKey}-${position}.png`)
+  const fileKey = BOBBIN_COLOR_FILE_KEY[colorKey] ?? colorKey
+  return resolveSharedAsset(category, model, 'pickups', '6-string', '24-frets', 'standard', 'pickup-bodies', 'open', 'bobbins', `${fileKey}-${position}.png`)
 }
 
 // Responsible for resolving bobbin mask asset paths for painted/wooden bobbins
 export function resolvePickupBobbinMask(category, model, position) {
   const maskMap = {
-    neck: 'coil-masks-neck',
-    middle: 'coil-masks-middle-single',
-    bridge: 'coil-masks-bridge',
-    'middle-single': 'coil-masks-middle-single-route',
+    neck: 'coil-mask-neck',
+    middle: 'coil-mask-middle-single',
+    bridge: 'coil-mask-bridge',
+    'middle-single': 'coil-mask-middle-single-route',
   }
-  const mask = maskMap[position] || `coil-masks-${position}`
+  const mask = maskMap[position] || `coil-mask-${position}`
   return resolveSharedAsset(category, model, 'pickups', '6-string', '24-frets', 'standard', 'pickup-bodies', mask + '.png')
 }
 

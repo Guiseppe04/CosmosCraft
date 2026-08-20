@@ -39,7 +39,7 @@ import {
 } from '../../lib/assetResolver.js'
 
 const layerStyle = (src, extra = {}) => ({
-  backgroundImage: `url(${src})`,
+  backgroundImage: `url(${encodeURI(src)})`,
   backgroundRepeat: 'no-repeat',
   backgroundPosition: 'center',
   backgroundSize: 'contain',
@@ -48,8 +48,8 @@ const layerStyle = (src, extra = {}) => ({
 
 const maskedLayerStyle = (maskSrc, extra = {}) => ({
   backgroundColor: 'transparent',
-  WebkitMaskImage: `url(${maskSrc})`,
-  maskImage: `url(${maskSrc})`,
+  WebkitMaskImage: `url(${encodeURI(maskSrc)})`,
+  maskImage: `url(${encodeURI(maskSrc)})`,
   WebkitMaskRepeat: 'no-repeat',
   maskRepeat: 'no-repeat',
   WebkitMaskSize: 'contain',
@@ -140,12 +140,17 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
 
   const pickguardAsset = guitarBuilder.PICKGUARD_OPTIONS_BY_BODY[config.body]?.[config.pickguard]?.src ?? null
 
+  // Responsible for appending the Controls layout suffix to the knob image key.
+  // DTC -> -dtc, DTMV -> -dtmv, Off / anything else -> base key only.
+  const knobControlsSuffix =
+    config.controls === 'deleteTone' ? '-dtc' :
+    config.controls === 'deleteToneMoveVolume' ? '-dtmv' : ''
   const knobStyle = config.body === 'dc' ? guitarBuilder.KNOB_STYLE_OPTIONS[config.knobs] : null
   const knobHardwareBase = config.body === 'dc'
-    ? resolveKnobHardwareBase('electric', config.body || 'dc', hardware.color)
+    ? resolveKnobHardwareBase('electric', config.body || 'dc', `${hardware.color}${knobControlsSuffix}`)
     : null
   const knobStyleOverlay = config.body === 'dc' && knobStyle
-    ? resolveKnobStyleOverlay('electric', config.body || 'dc', knobStyle.fileKey)
+    ? resolveKnobStyleOverlay('electric', config.body || 'dc', `${knobStyle.fileKey}${knobControlsSuffix}`)
     : (guitarBuilder.KNOB_OPTIONS_BY_BODY[config.body]?.[config.knobs]?.src ?? null)
 
   const nutOption = guitarBuilder.NUT_OPTIONS[config.nut] ?? guitarBuilder.NUT_OPTIONS.blackGraphTech
@@ -221,14 +226,16 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
     // Responsible for determining pickup positions and types based on configuration (HH / H-S-H / Active)
     const pickupConfig = config.pickupConfiguration || 'hh'
     const isActive = config.electronicsType === 'active'
-    const pickupColorType = config.pickupColor || 'bobbins'
+    // Active electronics lock the pickup models to Fluence and render the
+    // "Painted Bobbin" RGB color through the Fluence masks (see plan §1b).
+    const pickupColorType = isActive ? 'painted' : (config.pickupColor || 'bobbins')
     const pickupColorVariant = config.pickupColorVariant || 'black'
     const paintedColor = config.pickupPaintedColor || '#000000'
     const woodType = config.pickupWoodType || 'black'
     const poleColor = config.pickupPoleColor || 'silver'
-    const bridgeModel = config.bridgePickupModel || 'vantium'
+    const bridgeModel = isActive ? 'fluence' : (config.bridgePickupModel || 'vantium')
     const middleModel = config.middlePickupModel || 'none'
-    const neckModel = config.neckPickupModel || 'vantium'
+    const neckModel = isActive ? 'fluence' : (config.neckPickupModel || 'vantium')
 
     const isHSS = pickupConfig === 'hss'
     const isHH = pickupConfig === 'hh'
@@ -241,7 +248,7 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
         positions.push({ slot: 'neck', type: 'humbucker', model: neckModel })
       }
     }
-    if (isHSS) {
+    if (isHSS && !isActive) {
       positions.push({ slot: 'bridge', type: 'humbucker', model: bridgeModel })
       positions.push({ slot: 'middle', type: 'singlecoil', model: middleModel })
       if (neckModel !== 'delete') {
@@ -257,7 +264,8 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
       return resolvePickupRoute('electric', config.body || 'dc', 'humbucker', 'black', slot)
     }
 
-    // Responsible for resolving pickup body assets (covers, single coil, or null for bobbins/painted/wooden)
+    // Responsible for resolving pickup body assets (covers, single coil, open bobbins,
+    // or fluence active art); returns null only for painted/wooden styles (masked below).
     const getBodySrc = (type, slot) => {
       if (pickupColorType === 'covers') {
         const coverColor = pickupColorVariant === 'chrome' ? 'chrome' : pickupColorVariant === 'gold' ? 'gold' : 'black'
@@ -266,6 +274,16 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
       if (type === 'singlecoil') {
         const scColor = ['white', 'cream', 'racing-green'].includes(pickupColorVariant) ? pickupColorVariant : 'black'
         return resolveSingleCoilBody('electric', config.body || 'dc', scColor, slot)
+      }
+      // Open bobbin pickups render their dedicated colored body art
+      // (.../pickup-bodies/open/bobbins/{color}-{slot}.png) as a full image,
+      // in the same way covered pickups render .../covered/{color}-{slot}.png.
+      if (pickupColorType === 'bobbins') {
+        return resolvePickupBobbinColor('electric', config.body || 'dc', pickupColorVariant, slot)
+      }
+      // Active Fluence pickups render their dedicated body art (fluence-bridge / fluence-neck).
+      if (isActive) {
+        return resolvePickupBody('electric', config.body || 'dc', 'covered', 'fluence', slot)
       }
       return null
     }
@@ -303,6 +321,8 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
 
         // Resolve pole-piece overlays for humbuckers and single coils
         const getPolesSrc = (type, slot) => {
+          // Active/Fluence pickups render through the Fluence mask only; hide pole pieces.
+          if (isActive) return null
           const pickupType = type === 'singlecoil' ? 'singlecoil' : 'humbucker'
           const coverType = pickupColorType === 'covers' ? 'covered' : 'open'
           
@@ -385,6 +405,18 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
         })
       }
 
+      // Active Fluence: tint the Fluence body image through the Fluence mask with
+      // the chosen RGB "Painted Bobbin" color (no pole pieces).
+      if (isActive && bodyMask && bodySrc) {
+        layers.push({
+          name: `${pos.slot}-pickup-fluence-tint`,
+          maskSrc: bodyMask,
+          className: 'opacity-90',
+          protectedLayer: true,
+          style: { zIndex: 122, ...bodyStyle, mixBlendMode: 'color' },
+        })
+      }
+
       if (polesSrc) {
         layers.push({
           name: `${pos.slot}-pickup-poles`,
@@ -407,11 +439,11 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
     const bridgeSrc = resolveVariant(bridge.assets, colorKey)
     const switchSrc = resolveVariant(bodyAssets.switch, colorKey)
     return [
-      { name: 'switch', src: switchSrc, protectedLayer: true, style: { zIndex: 130 } },
-      { name: 'strap-button', src: strapFront, className: 'opacity-95', protectedLayer: true, style: { zIndex: 131 } },
-      { name: 'knobs-hardware-base', src: knobHardwareBase, className: 'opacity-95', protectedLayer: true, style: { zIndex: 132 } },
-      { name: 'knobs-style', src: knobStyleOverlay, className: 'opacity-95', protectedLayer: true, style: { zIndex: 133 } },
-      { name: 'bridge', src: bridgeSrc, className: 'opacity-95', protectedLayer: true, style: { zIndex: 134 } },
+      { name: 'switch', src: switchSrc, protectedLayer: true, style: { zIndex: 300 } },
+      { name: 'strap-button', src: strapFront, className: 'opacity-95', protectedLayer: true, style: { zIndex: 301 } },
+      { name: 'knobs-hardware-base', src: knobHardwareBase, className: 'opacity-95', protectedLayer: true, style: { zIndex: 302 } },
+      { name: 'knobs-style', src: knobStyleOverlay, className: 'opacity-95', protectedLayer: true, style: { zIndex: 303 } },
+      { name: 'bridge', src: bridgeSrc, className: 'opacity-95', protectedLayer: true, style: { zIndex: 304 } },
     ].filter(layer => Boolean(layer.src))
   }, [bodyAssets, bridge.assets, colorKey, knobHardwareBase, knobStyleOverlay, strapFront])
 
@@ -431,7 +463,7 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
         maskSrc: modelBodySrc,
         style: {
           backgroundImage: `url(${bodyWood.texture})`,
-          opacity: 1,
+         
           mixBlendMode: 'normal',
           zIndex: 1,
         },
@@ -443,7 +475,7 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
             maskSrc: modelBodySrc,
             style: {
               backgroundImage: `url(${topWoodTexture})`,
-              opacity: 0.8,
+             
               mixBlendMode: 'normal',
               zIndex: 2,
             },
@@ -467,7 +499,7 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
             maskSrc: modelBodySrc,
             style: {
               backgroundImage: `url(${bodyFinish.texture})`,
-              opacity: 1,
+             
               mixBlendMode: 'normal',
               zIndex: 3,
             },
@@ -490,7 +522,7 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
           style: {
             backgroundImage: `url(${neck.src})`,
             filter: neck.filter,
-            opacity: 0.98,
+           
             zIndex: 100,
             transform: 'scaleX(-1)',
           },
@@ -501,28 +533,28 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
         maskSrc: NECK_MASK,
         style: {
           backgroundImage: `url(${fretboard.src})`,
-          opacity: 0.94,
+          
           mixBlendMode: 'multiply',
           zIndex: 101,
         },
         protectedLayer: true,
       },
-      { name: 'inlays', src: inlaySrc, className: 'opacity-95', protectedLayer: true, style: { zIndex: 102 } },
-      { name: 'frets', src: NECK_FRETS[config.pickups === 'hh' ? 'gold' : 'stainless'], className: 'opacity-85', protectedLayer: true, style: { zIndex: 103 } },
-      { name: 'nut', src: NECK_NUT[nutOption.assetKey], className: 'opacity-90', protectedLayer: true, style: { zIndex: 104 } },
+      { name: 'inlays', src: inlaySrc,  protectedLayer: true, style: { zIndex: 102 } },
+      { name: 'frets', src: NECK_FRETS[config.pickups === 'hh' ? 'gold' : 'stainless'], protectedLayer: true, style: { zIndex: 103 } },
+      { name: 'nut', src: NECK_NUT[nutOption.assetKey], protectedLayer: true, style: { zIndex: 104 } },
       {
         name: 'headstock-wood',
         maskSrc: headstock.mask,
         style: {
           backgroundImage: `url(${headstockWood.texture})`,
-          opacity: 0.95,
+         
           zIndex: 105,
         },
         protectedLayer: true,
       },
-      { name: 'headstock-truss-cover', src: headstockTrussCover, className: 'opacity-95', protectedLayer: true, style: { zIndex: 106 } },
-      { name: 'headstock-tuners-base', src: headstockTunerBase, className: 'opacity-95', protectedLayer: true, style: { zIndex: 107 } },
-      headstockTunerButtons ? { name: 'headstock-tuners-overlay', src: headstockTunerButtons, className: 'opacity-95', protectedLayer: true, style: { zIndex: 108 } } : null,
+      { name: 'headstock-truss-cover', src: headstockTrussCover, protectedLayer: true, style: { zIndex: 106 } },
+      { name: 'headstock-tuners-base', src: headstockTunerBase,  protectedLayer: true, style: { zIndex: 107 } },
+      headstockTunerButtons ? { name: 'headstock-tuners-overlay', src: headstockTunerButtons, protectedLayer: true, style: { zIndex: 108 } } : null,
     ].filter(Boolean)
    }, [bodyFinish.texture, bodyFinish.color, bodyWood.texture, colorKey, config.body, config.pickups, config.topWood, config.finishType, config.finishColor, finishTypeColorAsset, topWoodTexture, fretboard.src, headstock, headstockWood.texture, headstockTrussCover, inlaySrc, neck.filter, neck.src, hardware.color, modelBodySrc, config.trussRodCover, nutOption, headstockTunerBase, headstockTunerButtons])
    
@@ -547,7 +579,7 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
              maskSrc: bodyMask,
              style: {
                backgroundImage: `url(${topWoodTexture})`,
-               opacity: 0.8,
+              
                mixBlendMode: 'normal',
                zIndex: 2,
                transform: 'scaleX(-1)',
@@ -611,7 +643,7 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
          style: {
            backgroundImage: `url(${neck.src})`,
            filter: neck.filter,
-           opacity: 0.98,
+          
            zIndex: 100,
          },
          protectedLayer: true,
@@ -621,7 +653,7 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
          maskSrc: NECK_MASK,
          style: {
            backgroundImage: `url(${fretboard.src})`,
-           opacity: 0.94,
+           
            mixBlendMode: 'multiply',
            zIndex: 101,
          },
@@ -632,20 +664,20 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
           maskSrc: rearHeadstockMask,
           style: {
             backgroundImage: `url(${headstockWood.texture})`,
-            opacity: 0.95,
+           
             zIndex: 102,
             transform: 'scaleX(-1)',
           },
          protectedLayer: true,
        },
          rearTunerAsset
-           ? { name: 'headstock-tuners-base', src: rearTunerAsset, className: 'opacity-95', protectedLayer: true, style: { zIndex: 103, transform: 'scaleX(-1)', backgroundPosition: 'top center' } }
+           ? { name: 'headstock-tuners-base', src: rearTunerAsset, protectedLayer: true, style: { zIndex: 103, transform: 'scaleX(-1)', backgroundPosition: 'top center' } }
            : null,
         ].filter(Boolean)
       }, [bodyFinish.texture, bodyFinish.color, bodyWood.texture, colorKey, config.topWood, config.finishType, config.finishColor, finishTypeColorAsset, topWoodTexture, fretboard.src, headstock, headstockWood.texture, modelBodySrc, neck.filter, neck.src, topCoatAsset, rearTunerAsset, rearHeadstockMask, rearBodyMask])
   
   const stringLayer = useMemo(() => {
-    return headstock.strings ? { src: headstock.strings, className: 'opacity-95', style: { zIndex: 110 } } : null
+    return headstock.strings ? { src: headstock.strings,  style: { zIndex: 110 } } : null
   }, [headstock.strings])
 
   return (

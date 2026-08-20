@@ -1062,6 +1062,15 @@ export default function useGuitarConfig() {
     }
   }, [config.bridge, config.tremoloCover, TREMOLO_COVER_OPTIONS_BY_BRIDGE])
 
+  useEffect(() => {
+    // Responsible for migrating the legacy 'standard' controls value to the new
+    // 'off' option. Controls now mirror the plan: Off / DTC / DTMV for both
+    // Passive and Active electronics.
+    if (config.controls === 'standard') {
+      setConfig(prev => ({ ...prev, controls: 'off' }))
+    }
+  }, [config.controls])
+
   const updateConfig = useCallback((patch) => {
     setConfig(prev => ({ ...prev, ...patch }))
   }, [])
