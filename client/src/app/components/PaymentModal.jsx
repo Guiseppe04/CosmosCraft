@@ -45,31 +45,32 @@ function ReceiptUpload({ onUpload, onRemove, image, label }) {
     )
   }
 
-  return (
-    <label className="cursor-pointer rounded-2xl border-2 border-dashed border-slate-300 bg-gradient-to-br from-slate-50 to-blue-50 p-8 text-center transition-all hover:border-slate-400 hover:bg-slate-100/50">
-      <div className="mb-3 text-4xl">Upload</div>
-      <p className="mb-1 text-base font-bold text-slate-900">{label || 'Upload Receipt'}</p>
-      <p className="mb-4 text-xs text-slate-500">PNG, JPG, or JPEG. Max 10MB</p>
-      <button
-        type="button"
-        onClick={(e) => {
-          e.preventDefault()
-          fileInputRef.current?.click()
-        }}
-        className="inline-flex items-center gap-2 rounded-xl bg-yellow-400 px-6 py-3 text-sm font-bold text-slate-900 shadow-md transition-all hover:bg-yellow-500 hover:shadow-lg"
-      >
-        <span>+</span>
-        <span>Choose File</span>
-      </button>
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        onChange={handleFileSelect}
-        className="hidden"
-      />
-    </label>
-  )
+ return (
+  <label className="block cursor-pointer rounded-2xl border-2 border-dashed border-slate-300 bg-gradient-to-br from-slate-50 to-blue-50 p-8 text-center transition-all hover:border-slate-400 hover:bg-slate-100/50">
+    <div className="mb-3 text-4xl">📤</div>
+
+    <p className="mb-1 text-base font-bold text-slate-900">
+      {label || 'Upload Receipt'}
+    </p>
+
+    <p className="mb-4 text-xs text-slate-500">
+      PNG, JPG, or JPEG. Max 10MB
+    </p>
+
+    <span className="inline-flex items-center gap-2 rounded-xl bg-yellow-400 px-6 py-3 text-sm font-bold text-slate-900 shadow-md transition-all hover:bg-yellow-500 hover:shadow-lg">
+      <span>+</span>
+      <span>Choose File</span>
+    </span>
+
+    <input
+      ref={fileInputRef}
+      type="file"
+      accept="image/png,image/jpeg,image/jpg"
+      onChange={handleFileSelect}
+      className="hidden"
+    />
+  </label>
+)
 }
 
 export function PaymentModal({

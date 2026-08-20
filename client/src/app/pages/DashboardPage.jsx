@@ -2886,12 +2886,12 @@ export function DashboardPage() {
                     ) : cancelProjectPayment?.status === 'for_verification' || cancelProjectPayment?.status === 'pending' ? (
                       <>
                         <Clock className="w-4 h-4 inline-block mr-1.5 -mt-0.5" />
-                        Cancellation submitted successfully. Your payment is still being verified by the admin. Once your payment is verified, your refund request can proceed.
+                        Your payment is still being verified by the admin. Once your payment is verified, your refund request can proceed.
                       </>
                     ) : (
                       <>
                         <Info className="w-4 h-4 inline-block mr-1.5 -mt-0.5" />
-                        Cancellation submitted successfully. No refund is available for this payment status.
+                        No refund is available for this payment status.
                       </>
                     )}
                   </p>
@@ -3029,7 +3029,7 @@ export function DashboardPage() {
                   <span className="text-sm text-white font-medium">
                     {cancelBuildPreview?.has_progress
                       ? 'I understand that my down payment is non-refundable and I will receive the guitar in its current unfinished state. I want to cancel this project.'
-                      : 'I understand that this action is permanent and cannot be undone. I want to cancel this project.'
+                      : 'I understand that cancellation is permanent once approved by the admin. I want to cancel this project.'
                     }
                   </span>
                 </label>

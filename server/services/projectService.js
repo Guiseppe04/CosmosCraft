@@ -698,6 +698,7 @@ exports.getAllProjects = async (params = {}) => {
       p.notes AS description,
       o.user_id AS customer_id,
       o.order_number,
+      o.payment_plan AS order_payment_plan,
       a.line1 AS shipping_line1,
       a.line2 AS shipping_line2,
       a.city AS shipping_city,

@@ -283,13 +283,17 @@ export default function InstallmentTracking({ projectId, order, orderId }) {
     paid_count = 0,
     total_months = tenure_months,
     next_due_date = null,
-  } = summary
+  } = summary || {}
+
+  const safeRemainingBalance = Number.isFinite(Number(remaining_balance)) ? Number(remaining_balance) : (Number.isFinite(Number(total_contract_amount)) ? Number(total_contract_amount) : 0)
+  const safePaidCount = Number.isFinite(Number(paid_count)) ? Number(paid_count) : 0
+  const safeTotalMonths = Number.isFinite(Number(total_months)) ? Number(total_months) : (Number.isFinite(Number(tenure_months)) ? Number(tenure_months) : 0)
 
   // Compute payment status
   const getPaymentStatus = () => {
-    if (!total_months) return null;
-    if (paid_count === 0) return { label: 'Pending', color: 'text-yellow-400', bg: 'bg-yellow-500/10', border: 'border-yellow-500/30' };
-    if (paid_count >= total_months) return { label: 'Fully Paid', color: 'text-green-400', bg: 'bg-green-500/10', border: 'border-green-500/30' };
+    if (!safeTotalMonths) return null;
+    if (safePaidCount === 0) return { label: 'Pending', color: 'text-yellow-400', bg: 'bg-yellow-500/10', border: 'border-yellow-500/30' };
+    if (safePaidCount >= safeTotalMonths) return { label: 'Fully Paid', color: 'text-green-400', bg: 'bg-green-500/10', border: 'border-green-500/30' };
     return { label: 'Ongoing', color: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/30' };
   };
 
@@ -328,7 +332,7 @@ export default function InstallmentTracking({ projectId, order, orderId }) {
             )}
           </div>
           <span className="text-xs text-[var(--text-muted)]">
-            {tenure_months} months • {Math.round(initial_payment_percentage * 100)}% down
+            {safeTotalMonths} months • {Math.round(initial_payment_percentage * 100)}% down
           </span>
         </div>
 
@@ -347,20 +351,20 @@ export default function InstallmentTracking({ projectId, order, orderId }) {
           </div>
           <div className="bg-[var(--surface-dark)]/70 rounded-xl p-3 border border-[var(--border)]">
             <p className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] font-semibold">Remaining</p>
-            <p className="text-lg font-bold text-white mt-1">{formatCurrency(remaining_balance)}</p>
+            <p className="text-lg font-bold text-white mt-1">{formatCurrency(safeRemainingBalance)}</p>
           </div>
         </div>
 
         {/* Progress Bar */}
         <InstallmentProgressBar
-          paidCount={paid_count}
-          totalCount={total_months}
-          remainingBalance={remaining_balance}
+          paidCount={safePaidCount}
+          totalCount={safeTotalMonths}
+          remainingBalance={safeRemainingBalance}
           totalAmount={total_contract_amount}
         />
 
         {/* Next Due Date Alert */}
-        {next_due_date && remaining_balance > 0 && (
+        {next_due_date && safeRemainingBalance > 0 && (
           <div className="mt-4 flex items-center gap-2 bg-[var(--surface-dark)]/70 rounded-xl p-3 border border-[var(--border)]">
             <Calendar className="w-4 h-4 text-[var(--gold-primary)] flex-shrink-0" />
             <span className="text-sm text-[var(--text-muted)]">Next due date:</span>
@@ -376,7 +380,7 @@ export default function InstallmentTracking({ projectId, order, orderId }) {
             <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
             <span className="text-sm text-red-400">
               This project has {installments.filter(i => i.status === 'overdue').length} overdue installment(s).
-              {remaining_balance > 0 && ' The project has been auto-paused.'}
+              {safeRemainingBalance > 0 && ' The project has been auto-paused.'}
             </span>
           </div>
         )}
@@ -392,7 +396,7 @@ export default function InstallmentTracking({ projectId, order, orderId }) {
             <History className="w-4 h-4 text-[var(--gold-primary)]" />
             <h4 className="text-white font-semibold text-sm">Payment Schedule</h4>
             <span className="text-xs text-[var(--text-muted)]">
-              ({paid_count}/{total_months} paid)
+              ({safePaidCount}/{safeTotalMonths} paid)
             </span>
           </div>
           {showDetails ? (

@@ -1009,7 +1009,7 @@ export function CheckoutPage() {
         ? paymentPlan === 'full' ? 'full' : 'down_payment'
         : 'full'
       const paymentAmount = selectedPaymentTerms === 'full' ? fullPaymentTotal : total
-      const paymentAmountLabel = selectedPaymentTerms === 'full' ? 'Full payment submitted' : 'Down payment submitted'
+      const paymentAmountLabel = selectedPaymentTerms === 'full' ? 'Full payment amount' : 'Down payment amount'
       const outstandingBalance = Math.max(0, fullPaymentTotal - paymentAmount)
 
       if (hasSelectedCustomBuild) {
