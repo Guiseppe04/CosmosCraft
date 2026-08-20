@@ -106,194 +106,383 @@ function buildPosReceiptHtml(sale) {
   }
 
   const rows = items.map((item) => {
-    const name = formatItemName(item?.item_name || item?.name)
-    const qty = Number(item?.quantity || 0)
-    const unitPrice = Number(item?.unit_price || item?.price || 0)
-    const lineTotal = Number(item?.subtotal || (qty * unitPrice))
-    return `
-      <tr>
-        <td class="num qty">${qty}</td>
-        <td>${name}</td>
-        <td class="num">${escapeHtml(formatCurrency(unitPrice))}</td>
-        <td class="num">${escapeHtml(formatCurrency(lineTotal))}</td>
-      </tr>
-    `
-  }).join('')
+  const name = formatItemName(item?.item_name || item?.name)
+  const qty = Number(item?.quantity || 0)
+  const unitPrice = Number(item?.unit_price || item?.price || 0)
+  const lineTotal = Number(item?.subtotal || (qty * unitPrice))
 
   return `
-    <!doctype html>
-    <html>
-      <head>
-        <meta charset="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>POS Receipt ${saleNumber}</title>
-        <style>
-          :root { color-scheme: light; }
-          * { box-sizing: border-box; }
-          body {
-            margin: 0;
-            padding: 20px;
-            background: #f3f4f6;
-            color: #111827;
-            font-family: 'Courier New', Courier, monospace;
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
-          }
-          .sheet {
-            max-width: 320px;
-            margin: 0 auto;
-            background: #ffffff;
-            border: 1px solid #e5e7eb;
-            border-radius: 8px;
-            padding: 18px;
-            font-size: 12px;
-            line-height: 1.5;
-          }
-          .header {
-            text-align: center;
-            margin-bottom: 14px;
-            border-bottom: 1px dashed #111827;
-            padding-bottom: 10px;
-          }
-          .brand {
-            font-weight: 700;
-            font-size: 14px;
-            letter-spacing: 0.15em;
-            text-transform: uppercase;
-            margin-bottom: 4px;
-          }
-          .invoice-title {
-            font-size: 12px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-            margin-bottom: 6px;
-          }
-          .meta {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 4px 12px;
-            font-size: 11px;
-            margin-bottom: 10px;
-          }
-          .meta-label {
-            color: #6b7280;
-            font-size: 10px;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-          }
-          table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 4px;
-            font-size: 11px;
-          }
-          thead th {
-            text-align: left;
-            font-size: 10px;
-            letter-spacing: 0.05em;
-            text-transform: uppercase;
-            color: #6b7280;
-            border-bottom: 1px solid #111827;
-            padding: 4px 0;
-          }
-          tbody td {
-            border-bottom: 1px solid #e5e7eb;
-            padding: 4px 0;
-            vertical-align: top;
-          }
-          .num { text-align: right; }
-          .qty { padding-right: 8px; }
-          .summary {
-            margin-top: 10px;
-            font-size: 11px;
-          }
-          .summary-row {
-            display: flex;
-            justify-content: space-between;
-            padding: 2px 0;
-          }
-          .summary-total {
-            font-weight: 700;
-            font-size: 13px;
-            border-top: 1px solid #111827;
-            margin-top: 4px;
-            padding-top: 4px;
-          }
-          .payment-info {
-            margin-top: 10px;
-            font-size: 11px;
-          }
-          .payment-row {
-            display: flex;
-            justify-content: space-between;
-            padding: 2px 0;
-          }
-          .footer {
-            margin-top: 14px;
-            text-align: center;
-            font-size: 10px;
-            color: #6b7280;
-            border-top: 1px dashed #111827;
-            padding-top: 8px;
-          }
-          @media print {
-            body { background: #fff; padding: 0; }
-            .sheet { max-width: none; border: 0; border-radius: 0; padding: 14px 16px; }
-          }
-        </style>
-      </head>
-      <body>
-        <main class="sheet">
-          <section class="header">
-            <div class="brand">Cosmos Craft</div>
-            <div class="invoice-title">Invoice</div>
-            <div>${saleNumber}</div>
-          </section>
-
-          <section class="meta">
-            <div><span class="meta-label">Date</span><br/>${createdAt || ''}</div>
-            <div><span class="meta-label">Payment</span><br/>${paymentMethod}</div>
-            <div><span class="meta-label">Customer</span><br/>${customerName}</div>
-            <div><span class="meta-label">Phone</span><br/>${customerPhone}</div>
-          </section>
-
-          ${isGcashPayment ? `
-          <section class="payment-info">
-            <div class="payment-row"><span>Reference No.</span><span>${referenceNumber}</span></div>
-            <div class="payment-row"><span>Cellphone No.</span><span>${customerPhone}</span></div>
-          </section>
-          ` : ''}
-
-          <table>
-            <thead>
-              <tr>
-                <th class="num">Qty</th>
-                <th>Item</th>
-                <th class="num">Price</th>
-                <th class="num">Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${rows || '<tr><td colspan="4" style="text-align:center;">No items</td></tr>'}
-            </tbody>
-          </table>
-
-          <section class="summary">
-            <div class="summary-row"><span>Subtotal</span><span>${escapeHtml(formatCurrency(subtotal))}</span></div>
-            <div class="summary-row"><span>Tax</span><span>${escapeHtml(formatCurrency(taxAmount))}</span></div>
-            <div class="summary-row summary-total"><span>Total</span><span>${escapeHtml(formatCurrency(totalAmount))}</span></div>
-            ${isCashPayment && cashReceived != null ? `<div class="payment-row"><span>Cash Received</span><span>${escapeHtml(formatCurrency(cashReceived))}</span></div>` : ''}
-            ${isCashPayment && changeAmount != null ? `<div class="payment-row"><span>Change</span><span>${escapeHtml(formatCurrency(changeAmount))}</span></div>` : ''}
-          </section>
-
-          <div class="footer">
-            Thank you for your purchase!
-          </div>
-        </main>
-      </body>
-    </html>
+    <tr>
+      <td class="item">${name}</td>
+      <td class="qty">${qty}</td>
+      <td class="price">${escapeHtml(formatCurrency(unitPrice))}</td>
+      <td class="total">${escapeHtml(formatCurrency(lineTotal))}</td>
+    </tr>
   `
+}).join('')
+
+return `
+  <!doctype html>
+  <html>
+    <head>
+      <meta charset="utf-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1" />
+      <title>POS Receipt ${saleNumber}</title>
+
+      <style>
+        :root {
+          color-scheme: light;
+        }
+
+        * {
+          box-sizing: border-box;
+        }
+
+        body {
+          margin: 0;
+          padding: 20px;
+          background: #f3f4f6;
+          color: #111827;
+          font-family: 'Courier New', Courier, monospace;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
+
+        .sheet {
+          width: 100%;
+          max-width: 320px;
+          margin: 0 auto;
+          background: #ffffff;
+          border: 1px solid #e5e7eb;
+          border-radius: 8px;
+          padding: 18px;
+          font-size: 12px;
+          line-height: 1.5;
+        }
+
+        /* =========================
+           HEADER
+        ========================= */
+
+        .header {
+          text-align: center;
+          margin-bottom: 14px;
+          border-bottom: 1px dashed #111827;
+          padding-bottom: 10px;
+        }
+
+        .brand {
+          font-weight: 700;
+          font-size: 14px;
+          letter-spacing: 0.15em;
+          text-transform: uppercase;
+          margin-bottom: 4px;
+        }
+
+        .invoice-title {
+          font-size: 12px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.08em;
+          margin-bottom: 6px;
+        }
+
+        /* =========================
+           CUSTOMER / SALE INFO
+        ========================= */
+
+        .meta {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 4px 12px;
+          font-size: 11px;
+          margin-bottom: 10px;
+        }
+
+        .meta-label {
+          color: #6b7280;
+          font-size: 10px;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+        }
+
+        /* =========================
+           PAYMENT INFO
+        ========================= */
+
+        .payment-info {
+          margin-top: 10px;
+          font-size: 11px;
+        }
+
+        .payment-row {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 12px;
+          padding: 2px 0;
+        }
+
+        /* =========================
+           ITEMS TABLE
+        ========================= */
+
+        table {
+          width: 100%;
+          border-collapse: collapse;
+          table-layout: fixed;
+          margin-top: 4px;
+          font-size: 11px;
+        }
+
+        thead th {
+          text-align: left;
+          font-size: 10px;
+          letter-spacing: 0.05em;
+          text-transform: uppercase;
+          color: #6b7280;
+          border-bottom: 1px solid #111827;
+          padding: 4px 0;
+          vertical-align: middle;
+        }
+
+        tbody td {
+          border-bottom: 1px solid #e5e7eb;
+          padding: 5px 0;
+          vertical-align: middle;
+          line-height: 1.4;
+          overflow-wrap: break-word;
+        }
+
+        /* Item column */
+        th.item,
+        td.item {
+          width: 44%;
+          text-align: left;
+          padding-right: 8px;
+          vertical-align: middle;
+        }
+
+        /* Quantity column */
+        th.qty,
+        td.qty {
+          width: 12%;
+          text-align: right;
+          padding: 5px 6px 5px 2px;
+          white-space: nowrap;
+          vertical-align: middle;
+        }
+
+        /* Price column */
+        th.price,
+        td.price {
+          width: 22%;
+          text-align: right;
+          padding-left: 4px;
+          white-space: nowrap;
+          vertical-align: middle;
+        }
+
+        /* Total column */
+        th.total,
+        td.total {
+          width: 22%;
+          text-align: right;
+          padding-left: 4px;
+          white-space: nowrap;
+          vertical-align: middle;
+        }
+
+        /* =========================
+           SUMMARY
+        ========================= */
+
+        .summary {
+          margin-top: 10px;
+          font-size: 11px;
+        }
+
+        .summary-row {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 12px;
+          padding: 2px 0;
+        }
+
+        .summary-total {
+          font-weight: 700;
+          font-size: 13px;
+          border-top: 1px solid #111827;
+          margin-top: 4px;
+          padding-top: 4px;
+        }
+
+        /* =========================
+           FOOTER
+        ========================= */
+
+        .footer {
+          margin-top: 14px;
+          text-align: center;
+          font-size: 10px;
+          color: #6b7280;
+          border-top: 1px dashed #111827;
+          padding-top: 8px;
+        }
+
+        /* =========================
+           PRINT
+        ========================= */
+
+        @media print {
+          body {
+            background: #fff;
+            padding: 0;
+          }
+
+          .sheet {
+            width: 100%;
+            max-width: none;
+            border: 0;
+            border-radius: 0;
+            padding: 14px 16px;
+          }
+        }
+      </style>
+    </head>
+
+    <body>
+      <main class="sheet">
+
+        <!-- HEADER -->
+        <section class="header">
+          <div class="brand">Cosmos Craft</div>
+          <div class="invoice-title">Invoice</div>
+          <div>${saleNumber}</div>
+        </section>
+
+        <!-- SALE INFORMATION -->
+        <section class="meta">
+          <div>
+            <span class="meta-label">Date</span><br />
+            ${createdAt || ''}
+          </div>
+
+          <div>
+            <span class="meta-label">Payment</span><br />
+            ${paymentMethod}
+          </div>
+
+        </section>
+
+        <!-- GCASH PAYMENT INFORMATION -->
+        ${
+          isGcashPayment
+            ? `
+              <section class="payment-info">
+                <div class="payment-row">
+                  <span>Reference No.</span>
+                  <span>${referenceNumber}</span>
+                </div>
+
+              
+            `
+            : ''
+        }
+
+        <!-- ITEMS -->
+        <table>
+          <thead>
+            <tr>
+              <th class="item">Item</th>
+              <th class="qty">Qty</th>
+              <th class="price">Price</th>
+              <th class="total">Total</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            ${
+              rows ||
+              `
+                <tr>
+                  <td
+                    colspan="4"
+                    style="
+                      text-align: center;
+                      padding: 8px 0;
+                    "
+                  >
+                    No items
+                  </td>
+                </tr>
+              `
+            }
+          </tbody>
+        </table>
+
+        <!-- SUMMARY -->
+        <section class="summary">
+
+          <div class="summary-row">
+            <span>Subtotal</span>
+            <span>
+              ${escapeHtml(formatCurrency(subtotal))}
+            </span>
+          </div>
+
+          <div class="summary-row">
+            <span>Tax</span>
+            <span>
+              ${escapeHtml(formatCurrency(taxAmount))}
+            </span>
+          </div>
+
+          <div class="summary-row summary-total">
+            <span>Total</span>
+            <span>
+              ${escapeHtml(formatCurrency(totalAmount))}
+            </span>
+          </div>
+
+          ${
+            isCashPayment && cashReceived != null
+              ? `
+                <div class="payment-row">
+                  <span>Cash Received</span>
+                  <span>
+                    ${escapeHtml(formatCurrency(cashReceived))}
+                  </span>
+                </div>
+              `
+              : ''
+          }
+
+          ${
+            isCashPayment && changeAmount != null
+              ? `
+                <div class="payment-row">
+                  <span>Change</span>
+                  <span>
+                    ${escapeHtml(formatCurrency(changeAmount))}
+                  </span>
+                </div>
+              `
+              : ''
+          }
+
+        </section>
+
+        <!-- FOOTER -->
+        <div class="footer">
+          Thank you for your purchase!
+        </div>
+
+      </main>
+    </body>
+  </html>
+`;
 }
 
 export function PosWorkspace({
@@ -318,6 +507,13 @@ export function PosWorkspace({
   const [submitting, setSubmitting] = useState(false)
   const [selectedSale, setSelectedSale] = useState(null)
   const [loadingSaleDetails, setLoadingSaleDetails] = useState(false)
+  const [showHistoryModal, setShowHistoryModal] = useState(false)
+  const [historySales, setHistorySales] = useState([])
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [historyLoadingMore, setHistoryLoadingMore] = useState(false)
+  const [historyOffset, setHistoryOffset] = useState(0)
+  const [historyTotal, setHistoryTotal] = useState(0)
+  const [historyHasMore, setHistoryHasMore] = useState(false)
 
   const prevSalesRef = useRef(null)
   const prevSummaryRef = useRef(null)
@@ -448,6 +644,36 @@ export function PosWorkspace({
       setLoadingSaleDetails(false)
     }
   }, [showToast])
+
+  const loadHistorySales = useCallback(async (options = {}) => {
+    const { reset = false } = options
+    if (reset) {
+      setHistoryLoading(true)
+    } else {
+      setHistoryLoadingMore(true)
+    }
+    try {
+      const nextOffset = reset ? 0 : historyOffset
+      const res = await posApi.listSales({ limit: 20, offset: nextOffset })
+      const nextSales = normalizeSales(res)
+      const total = Number(res?.pagination?.total || 0)
+      const loadedCount = reset ? nextSales.length : historySales.length + nextSales.length
+      setHistorySales((prev) => (reset ? nextSales : [...prev, ...nextSales]))
+      setHistoryOffset(nextOffset + nextSales.length)
+      setHistoryTotal(total)
+      setHistoryHasMore(loadedCount < total)
+    } catch (error) {
+      showToast?.(error.message, 'error')
+    } finally {
+      setHistoryLoading(false)
+      setHistoryLoadingMore(false)
+    }
+  }, [historyOffset, historySales.length, showToast])
+
+  const openHistoryModal = useCallback(() => {
+    setShowHistoryModal(true)
+    loadHistorySales({ reset: true })
+  }, [loadHistorySales])
 
   const lastSaleTimestampRef = useRef(null)
   const latestSalesRef = useRef(null)
@@ -877,13 +1103,22 @@ export function PosWorkspace({
                   <h4 className="font-semibold text-[var(--text-light)]">Recent Orders</h4>
                   <p className="text-xs text-[var(--text-muted)]">Latest POS transactions</p>
                 </div>
-                <button
-                  type="button"
-                  onClick={loadRecentSales}
-                  className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--text-light)]"
-                >
-                  Refresh
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={openHistoryModal}
+                    className="rounded-lg border border-[var(--gold-primary)]/40 bg-[var(--gold-primary)]/15 px-3 py-1.5 text-xs font-semibold text-[var(--gold-primary)] hover:bg-[var(--gold-primary)]/25"
+                  >
+                    View All History
+                  </button>
+                  <button
+                    type="button"
+                    onClick={loadRecentSales}
+                    className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--text-light)]"
+                  >
+                    Refresh
+                  </button>
+                </div>
               </div>
               <div className="space-y-2">
                 {loadingRecent ? (
@@ -922,6 +1157,79 @@ export function PosWorkspace({
             </div>
           </div>
         </div>
+
+      {showHistoryModal && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onClick={() => setShowHistoryModal(false)}
+        >
+          <div 
+            className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-[var(--border)] p-5">
+              <div>
+                <h3 className="text-lg font-semibold text-[var(--text-light)]">Receipt History</h3>
+                <p className="text-xs text-[var(--text-muted)]">
+                  {historyTotal > 0 ? `${historyTotal} total transaction${historyTotal === 1 ? '' : 's'}` : 'All POS transactions'}
+                </p>
+              </div>
+              <button 
+                onClick={() => setShowHistoryModal(false)}
+                className="rounded-lg p-1 text-[var(--text-muted)] hover:bg-[var(--bg-primary)]"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-5">
+              {historyLoading ? (
+                <div className="py-10 text-center text-[var(--text-muted)]">Loading receipt history...</div>
+              ) : historySales.length === 0 ? (
+                <div className="py-10 text-center text-[var(--text-muted)]">No POS sales recorded yet.</div>
+              ) : (
+                <div className="space-y-2">
+                  {historySales.map((entry) => (
+                    <div
+                      key={entry.sale_id}
+                      onClick={() => loadSaleDetails(entry.sale_id)}
+                      className="cursor-pointer rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]/60 p-3 hover:border-[var(--gold-primary)]/50"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-[var(--text-light)]">{entry.sale_number}</p>
+                          <p className="text-xs text-[var(--text-muted)]">{entry.customer_name || 'N/A'} - {new Date(entry.created_at).toLocaleString()}</p>
+                        </div>
+                        <StatusBadge
+                          label={formatStatusLabel(entry.status || 'pending')}
+                          variant={String(entry.status || '').toLowerCase() === 'completed' ? 'success' : 'warning'}
+                        />
+                      </div>
+                      <div className="mt-2 flex items-center justify-between text-xs">
+                        <span className="text-[var(--text-muted)]">{entry.item_count} items - {String(entry.payment_method || '').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}</span>
+                        <span className="font-semibold text-[var(--gold-primary)]">{formatCurrency(Number(entry.total_amount || 0))}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {historyHasMore && (
+              <div className="border-t border-[var(--border)] p-4">
+                <button
+                  type="button"
+                  onClick={() => loadHistorySales()}
+                  disabled={historyLoadingMore}
+                  className="w-full rounded-xl border border-[var(--border)] px-4 py-2 text-sm font-semibold text-[var(--text-muted)] hover:text-[var(--text-light)] disabled:opacity-60"
+                >
+                  {historyLoadingMore ? 'Loading more...' : 'Load More'}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {selectedSale && (
         <div 
