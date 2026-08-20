@@ -127,6 +127,7 @@ import { PartModal } from './admin/components/modals/PartModal'
 import { PaymentApprovalModal } from './admin/components/modals/PaymentApprovalModal'
 import { OrderDetailsModal } from './admin/components/modals/OrderDetailsModal'
 import { OrderStatusModal } from './admin/components/modals/OrderStatusModal'
+import { getStockTier } from '../utils/stockUtils'
 
 export function AdminPage() {
   const { user, isAuthenticated } = useAuth()
@@ -426,10 +427,11 @@ export function AdminPage() {
       result = result.filter(item => {
         const stock = Number(item.stock ?? 0)
         const threshold = item.type === 'product' ? Number(item.low_stock_threshold ?? 10) : 10
-        if (inventoryStatusFilter === 'out_of_stock') return stock === 0
-        if (inventoryStatusFilter === 'critical') return stock > 0 && stock <= threshold
-        if (inventoryStatusFilter === 'warning') return stock > threshold && stock <= threshold * 2
-        if (inventoryStatusFilter === 'healthy') return stock > threshold * 2
+        const tier = getStockTier(stock, threshold, item.max_stock)
+        if (inventoryStatusFilter === 'out_of_stock') return tier === 'out_of_stock'
+        if (inventoryStatusFilter === 'critical') return tier === 'critical'
+        if (inventoryStatusFilter === 'warning') return tier === 'warning'
+        if (inventoryStatusFilter === 'healthy') return tier === 'healthy'
         return true
       })
     }
@@ -465,10 +467,11 @@ export function AdminPage() {
       result = result.filter(item => {
         const stock = Number(item.stock ?? 0)
         const threshold = Number(item.low_stock_threshold ?? 10)
-        if (statusFilter === 'out_of_stock') return stock === 0
-        if (statusFilter === 'critical') return stock > 0 && stock <= threshold
-        if (statusFilter === 'warning') return stock > threshold && stock <= threshold * 2
-        if (statusFilter === 'healthy') return stock > threshold * 2
+        const tier = getStockTier(stock, threshold, item.max_stock)
+        if (statusFilter === 'out_of_stock') return tier === 'out_of_stock'
+        if (statusFilter === 'critical') return tier === 'critical'
+        if (statusFilter === 'warning') return tier === 'warning'
+        if (statusFilter === 'healthy') return tier === 'healthy'
         return true
       })
     }
@@ -525,10 +528,11 @@ export function AdminPage() {
       result = result.filter(item => {
         const stock = Number(item.stock ?? 0)
         const threshold = 10 // parts always use 10 as threshold
-        if (statusFilter === 'out_of_stock') return stock === 0
-        if (statusFilter === 'critical') return stock > 0 && stock <= threshold
-        if (statusFilter === 'warning') return stock > threshold && stock <= threshold * 2
-        if (statusFilter === 'healthy') return stock > threshold * 2
+        const tier = getStockTier(stock, threshold, item.max_stock)
+        if (statusFilter === 'out_of_stock') return tier === 'out_of_stock'
+        if (statusFilter === 'critical') return tier === 'critical'
+        if (statusFilter === 'warning') return tier === 'warning'
+        if (statusFilter === 'healthy') return tier === 'healthy'
         return true
       })
     }
@@ -559,14 +563,15 @@ export function AdminPage() {
   }, [filteredInventory, inventoryPage])
 
   const inventoryHealthData = (() => {
-    const productItems = visibleProducts.map((p) => ({ stock: Number(p.stock ?? 0), threshold: Number(p.low_stock_threshold ?? 10) }))
-    const partItems = visibleParts.map((p) => ({ stock: Number(p.stock ?? p.quantity ?? 0), threshold: 10 }))
+    const productItems = visibleProducts.map((p) => ({ stock: Number(p.stock ?? 0), threshold: Number(p.low_stock_threshold ?? 10), maxStock: Number(p.max_stock ?? 0) }))
+    const partItems = visibleParts.map((p) => ({ stock: Number(p.stock ?? p.quantity ?? 0), threshold: 10, maxStock: 0 }))
     const items = [...productItems, ...partItems]
     if (items.length === 0) return { value: '0%', status: 'Healthy', statusClass: 'text-emerald-400', iconBg: 'bg-emerald-500/15' }
     let critical = false, warning = false, healthyCount = 0
-    items.forEach(({ stock, threshold }) => {
-      if (stock <= threshold) critical = true
-      else if (stock <= threshold * 2) warning = true
+    items.forEach(({ stock, threshold, maxStock }) => {
+      const tier = getStockTier(stock, threshold, maxStock)
+      if (tier === 'out_of_stock' || tier === 'critical') critical = true
+      else if (tier === 'warning') warning = true
       else healthyCount += 1
     })
     const status = critical ? 'Critical' : warning ? 'Warning' : 'Healthy'
@@ -876,9 +881,10 @@ export function AdminPage() {
         image_url: finalImageUrl,
         price: Number(form.price),
         cost_price: form.cost_price !== '' && form.cost_price != null ? Number(form.cost_price) : 0,
-        stock: form.stock !== '' && form.stock != null ? Number(form.stock) : 0,
         low_stock_threshold: form.low_stock_threshold !== '' && form.low_stock_threshold != null ? Number(form.low_stock_threshold) : 10,
+        max_stock: form.max_stock !== '' && form.max_stock != null && Number(form.max_stock) > 0 ? Number(form.max_stock) : undefined,
       }
+      delete payload.stock
       delete payload.image_file
       delete payload.preview_url
 

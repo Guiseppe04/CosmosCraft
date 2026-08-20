@@ -6,6 +6,7 @@ import { AdminTable } from '../components/shared/AdminTable'
 import { PaginationBar } from '../components/shared/PaginationBar'
 import { PAGE_SIZE_OPTIONS } from '../constants/adminOptions'
 import { formatCurrency } from '../../../utils/formatCurrency'
+import { getStockStatusInfo } from '../../../utils/stockUtils'
 
 export function ProductsTab({
   productViewMode,
@@ -186,10 +187,17 @@ export function ProductsTab({
               <td className="py-4 px-6 text-[var(--text-muted)] text-sm">{p.cost_price ? formatCurrency(p.cost_price) : '—'}</td>
               <td className="py-4 px-6">
                 <div className="flex items-center gap-2" title={`Stock: ${p.stock}`}>
-                  <span className={`w-2 h-2 rounded-full ${p.stock > (p.low_stock_threshold || 10) ? 'bg-green-400' : p.stock > 0 ? 'bg-amber-400' : 'bg-red-400'}`} />
-                  <span className={`text-sm font-semibold ${p.stock > (p.low_stock_threshold || 10) ? 'text-green-400' : p.stock > 0 ? 'text-amber-400' : 'text-red-400'}`}>
-                    {p.stock > (p.low_stock_threshold || 10) ? 'In Stock' : p.stock > 0 ? 'Low Stock' : 'Out of Stock'}
-                  </span>
+                  {(() => {
+                    const { dotClass, color, label } = getStockStatusInfo(p.stock, p.low_stock_threshold, p.max_stock)
+                    return (
+                      <>
+                        <span className={`w-2 h-2 rounded-full ${dotClass}`} />
+                        <span className={`text-sm font-semibold ${color}`}>
+                          {label}
+                        </span>
+                      </>
+                    )
+                  })()}
                 </div>
               </td>
               <td className="py-4 px-6">
@@ -252,10 +260,17 @@ export function ProductsTab({
                         )}
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className={`w-2 h-2 rounded-full ${p.stock > (p.low_stock_threshold || 10) ? 'bg-green-400' : p.stock > 0 ? 'bg-amber-400' : 'bg-red-400'}`} />
-                        <span className={`text-xs font-semibold ${p.stock > (p.low_stock_threshold || 10) ? 'text-green-400' : p.stock > 0 ? 'text-amber-400' : 'text-red-400'}`}>
-                          {p.stock > (p.low_stock_threshold || 10) ? 'In Stock' : p.stock > 0 ? 'Low Stock' : 'Out of Stock'}
-                        </span>
+                        {(() => {
+                          const { dotClass, color, label } = getStockStatusInfo(p.stock, p.low_stock_threshold, p.max_stock)
+                          return (
+                            <>
+                              <span className={`w-2 h-2 rounded-full ${dotClass}`} />
+                              <span className={`text-xs font-semibold ${color}`}>
+                                {label}
+                              </span>
+                            </>
+                          )
+                        })()}
                       </div>
                     </div>
                     <div className="flex gap-1">

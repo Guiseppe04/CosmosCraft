@@ -21,4 +21,6 @@ export const posApi = {
   },
   getSale: (id) => request(`/api/pos/sales/${id}`),
   getDailySummary: (date) => request(`/api/pos/reports/daily-summary${date ? `?date=${date}` : ''}`),
+  voidSale: (id, body) => request(`/api/pos/sales/${id}/void`, { method: 'POST', body }),
+  returnSale: (id, body) => request(`/api/pos/sales/${id}/return`, { method: 'POST', body }),
 }

@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react'
-import { Package, Search, X, Printer, Download, ArrowUpDown, Grid3X3, List, Plus } from 'lucide-react'
+import { Package, Search, X, Printer, Download, ArrowUpDown, Grid3X3, List, Plus, RotateCcw, AlertTriangle } from 'lucide-react'
 import { posApi } from '../../utils/posApi'
 import { formatCurrency } from '../../utils/formatCurrency'
 import { useSmartPolling } from '../../hooks/useSmartPolling'
+import { useAuth } from '../../context/AuthContext'
+import { hasRole } from '../../utils/roles'
 
 function EmptyState({ icon: Icon, label, description }) {
   return (
@@ -71,8 +73,17 @@ function formatStatusLabel(status) {
     paid: 'Paid',
     void: 'Void',
     voided: 'Voided',
+    returned: 'Returned',
   }
   return labels[String(status || '').toLowerCase()] || String(status || 'pending').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
+function getStatusVariant(status) {
+  const value = String(status || '').toLowerCase()
+  if (value === 'completed') return 'success'
+  if (value === 'voided' || value === 'returned') return 'warning'
+  if (value === 'cancelled' || value === 'canceled') return 'default'
+  return 'warning'
 }
 
 function buildPosReceiptHtml(sale) {
@@ -491,7 +502,13 @@ export function PosWorkspace({
   heading = 'Point of Sale',
   description = 'Create and record walk-in sales.',
 }) {
+  const { user } = useAuth()
+  const isAdmin = hasRole(user?.role, 'admin')
   const [searchQuery, setSearchQuery] = useState('')
+  const [voidReturnModal, setVoidReturnModal] = useState({ open: false, mode: null, sale: null })
+  const [voidReturnReason, setVoidReturnReason] = useState('')
+  const [voidReturnConditions, setVoidReturnConditions] = useState({})
+  const [voidReturnSubmitting, setVoidReturnSubmitting] = useState(false)
   const [paymentMethod, setPaymentMethod] = useState('cash')
   const [catalogSort, setCatalogSort] = useState('name_asc')
   const [categoryFilter, setCategoryFilter] = useState('all')
@@ -796,6 +813,85 @@ export function PosWorkspace({
       printWindow.print()
     }, 150)
   }, [showToast])
+
+  const openVoidReturnModal = useCallback((sale, mode) => {
+    if (!isAdmin) {
+      showToast?.('Only admins can void or return sales', 'error')
+      return
+    }
+    if (String(sale?.status || '').toLowerCase() !== 'completed') {
+      showToast?.('Only completed sales can be voided or returned', 'error')
+      return
+    }
+    setVoidReturnModal({ open: true, mode, sale })
+    setVoidReturnReason('')
+    setVoidReturnConditions({})
+  }, [isAdmin, showToast])
+
+  const closeVoidReturnModal = useCallback(() => {
+    setVoidReturnModal({ open: false, mode: null, sale: null })
+    setVoidReturnReason('')
+    setVoidReturnConditions({})
+  }, [])
+
+  const handleVoidReturn = useCallback(async () => {
+    const { mode, sale } = voidReturnModal
+    if (!sale) return
+
+    if (!voidReturnReason.trim()) {
+      showToast?.('A reason is required for void/return', 'error')
+      return
+    }
+
+    if (mode === 'return') {
+      const items = (sale.items || []).filter((item) => item.product_id)
+      if (items.length === 0) {
+        showToast?.('No returnable product items found', 'error')
+        return
+      }
+      for (const item of items) {
+        if (!voidReturnConditions[item.item_id]) {
+          showToast?.(`Select condition for ${item.item_name}`, 'error')
+          return
+        }
+      }
+    }
+
+    setVoidReturnSubmitting(true)
+    try {
+      if (mode === 'void') {
+        await posApi.voidSale(sale.sale_id, { reason: voidReturnReason.trim() })
+        showToast?.(`Sale ${sale.sale_number} voided`, 'success')
+      } else {
+        const items = (sale.items || [])
+          .filter((item) => item.product_id)
+          .map((item) => ({
+            item_id: item.item_id,
+            quantity: item.quantity,
+            item_condition: voidReturnConditions[item.item_id] || 'resalable',
+          }))
+        await posApi.returnSale(sale.sale_id, { reason: voidReturnReason.trim(), items })
+        showToast?.(`Sale ${sale.sale_number} returned`, 'success')
+      }
+      closeVoidReturnModal()
+      setSelectedSale(null)
+      await loadRecentSales()
+    } catch (error) {
+      showToast?.(error.message, 'error')
+    } finally {
+      setVoidReturnSubmitting(false)
+    }
+  }, [closeVoidReturnModal, loadRecentSales, showToast, voidReturnConditions, voidReturnModal, voidReturnReason])
+
+  const expectedRestockCount = useMemo(() => {
+    if (!voidReturnModal.sale) return 0
+    if (voidReturnModal.mode === 'void') {
+      return (voidReturnModal.sale.items || []).filter((item) => item.product_id).reduce((sum, item) => sum + Number(item.quantity || 0), 0)
+    }
+    return (voidReturnModal.sale.items || [])
+      .filter((item) => item.product_id && voidReturnConditions[item.item_id] === 'resalable')
+      .reduce((sum, item) => sum + Number(item.quantity || 0), 0)
+  }, [voidReturnModal, voidReturnConditions])
 
   return (
     <div className="space-y-6">
@@ -1143,7 +1239,7 @@ export function PosWorkspace({
                         </div>
                         <StatusBadge
                           label={formatStatusLabel(entry.status || 'pending')}
-                          variant={String(entry.status || '').toLowerCase() === 'completed' ? 'success' : 'warning'}
+                          variant={getStatusVariant(entry.status)}
                         />
                       </div>
                       <div className="mt-2 flex items-center justify-between text-xs">
@@ -1202,7 +1298,7 @@ export function PosWorkspace({
                         </div>
                         <StatusBadge
                           label={formatStatusLabel(entry.status || 'pending')}
-                          variant={String(entry.status || '').toLowerCase() === 'completed' ? 'success' : 'warning'}
+                          variant={getStatusVariant(entry.status)}
                         />
                       </div>
                       <div className="mt-2 flex items-center justify-between text-xs">
@@ -1314,7 +1410,28 @@ export function PosWorkspace({
                   )}
                 </div>
 
-                <div className="mt-6 flex gap-3">
+                {isAdmin && String(selectedSale.status || '').toLowerCase() === 'completed' && (
+                  <div className="mt-4 flex gap-3">
+                    <button
+                      type="button"
+                      className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-2 text-sm font-semibold text-red-300 hover:bg-red-500/20"
+                      onClick={() => openVoidReturnModal(selectedSale, 'void')}
+                    >
+                      <RotateCcw className="h-4 w-4" />
+                      Void
+                    </button>
+                    <button
+                      type="button"
+                      className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-sm font-semibold text-amber-300 hover:bg-amber-500/20"
+                      onClick={() => openVoidReturnModal(selectedSale, 'return')}
+                    >
+                      <AlertTriangle className="h-4 w-4" />
+                      Return
+                    </button>
+                  </div>
+                )}
+
+                <div className="mt-4 flex gap-3">
                   <button
                     type="button"
                     className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-[var(--border)] px-4 py-2 text-sm font-semibold text-[var(--text-muted)] hover:text-[var(--text-light)]"
@@ -1334,6 +1451,120 @@ export function PosWorkspace({
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {voidReturnModal.open && voidReturnModal.sale && (
+        <div 
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4"
+          onClick={closeVoidReturnModal}
+        >
+          <div 
+            className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-[var(--text-light)]">
+                {voidReturnModal.mode === 'void' ? 'Void Transaction' : 'Return Items'}
+              </h3>
+              <button 
+                onClick={closeVoidReturnModal}
+                className="rounded-lg p-1 text-[var(--text-muted)] hover:bg-[var(--bg-primary)]"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-2 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]/50 p-4 text-sm">
+              <div className="flex justify-between">
+                <span className="text-[var(--text-muted)]">Receipt #</span>
+                <span className="font-semibold text-[var(--text-light)]">{voidReturnModal.sale.sale_number}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[var(--text-muted)]">Customer</span>
+                <span className="text-[var(--text-light)]">{voidReturnModal.sale.customer_name || 'N/A'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[var(--text-muted)]">Total</span>
+                <span className="font-semibold text-[var(--gold-primary)]">{formatCurrency(Number(voidReturnModal.sale.total_amount || 0))}</span>
+              </div>
+            </div>
+
+            <div className="mt-4">
+              <p className="text-sm font-semibold text-[var(--text-light)]">Items</p>
+              <div className="mt-2 space-y-2">
+                {(voidReturnModal.sale.items || []).filter((item) => item.product_id).map((item) => (
+                  <div key={item.item_id} className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]/50 p-3">
+                    <div className="flex items-center justify-between">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-[var(--text-light)]">{item.item_name}</p>
+                        <p className="text-xs text-[var(--text-muted)]">Qty: {item.quantity} - {formatCurrency(Number(item.unit_price || 0))} each</p>
+                      </div>
+                      <span className="text-sm font-semibold text-[var(--text-light)]">{formatCurrency(Number(item.subtotal || 0))}</span>
+                    </div>
+                    {voidReturnModal.mode === 'return' && (
+                      <div className="mt-2 flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setVoidReturnConditions((prev) => ({ ...prev, [item.item_id]: 'resalable' }))}
+                          className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-semibold ${voidReturnConditions[item.item_id] === 'resalable' ? 'bg-green-500/20 text-green-300 border border-green-500/40' : 'border border-[var(--border)] text-[var(--text-muted)]'}`}
+                        >
+                          Perfect / Resalable
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setVoidReturnConditions((prev) => ({ ...prev, [item.item_id]: 'damaged' }))}
+                          className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-semibold ${voidReturnConditions[item.item_id] === 'damaged' ? 'bg-red-500/20 text-red-300 border border-red-500/40' : 'border border-[var(--border)] text-[var(--text-muted)]'}`}
+                        >
+                          Damaged / Not Resalable
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-4">
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)]">
+                Reason <span className="text-red-400">*</span>
+              </label>
+              <textarea
+                rows={3}
+                value={voidReturnReason}
+                onChange={(event) => setVoidReturnReason(event.target.value)}
+                placeholder={voidReturnModal.mode === 'void' ? 'Why is this transaction being voided?' : 'Why is this transaction being returned?'}
+                className="w-full resize-none rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-light)]"
+              />
+            </div>
+
+            <div className="mt-4 rounded-xl border border-[var(--gold-primary)]/30 bg-[var(--gold-primary)]/10 p-3 text-sm">
+              <p className="font-semibold text-[var(--gold-primary)]">Expected Inventory Adjustment</p>
+              <p className="mt-1 text-xs text-[var(--text-muted)]">
+                {expectedRestockCount > 0
+                  ? `${expectedRestockCount} unit${expectedRestockCount === 1 ? '' : 's'} will be added back to available inventory.`
+                  : 'No items will be restocked. All returned items will be recorded as damaged/not resalable.'}
+              </p>
+            </div>
+
+            <div className="mt-6 flex gap-3">
+              <button
+                type="button"
+                onClick={closeVoidReturnModal}
+                className="flex-1 rounded-xl border border-[var(--border)] px-4 py-2 text-sm font-semibold text-[var(--text-muted)] hover:text-[var(--text-light)]"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleVoidReturn}
+                disabled={voidReturnSubmitting}
+                className={`flex-1 rounded-xl px-4 py-2 text-sm font-semibold text-white disabled:opacity-60 ${voidReturnModal.mode === 'void' ? 'bg-red-500/80 hover:bg-red-500' : 'bg-amber-500/80 hover:bg-amber-500'}`}
+              >
+                {voidReturnSubmitting ? 'Processing...' : voidReturnModal.mode === 'void' ? 'Confirm Void' : 'Confirm Return'}
+              </button>
+            </div>
           </div>
         </div>
       )}

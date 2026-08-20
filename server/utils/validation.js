@@ -474,12 +474,22 @@ exports.createProductSchema = Joi.object({
       'number.min': 'Stock must be at least 0',
     }),
   low_stock_threshold: Joi.number()
-    .integer()
+    .precision(2)
     .min(0)
+    .max(100)
     .optional()
     .messages({
-      'number.base': 'Low stock threshold must be a number',
+      'number.base': 'Low stock threshold must be a number between 0 and 100',
       'number.min': 'Low stock threshold must be at least 0',
+      'number.max': 'Low stock threshold must not exceed 100',
+    }),
+  max_stock: Joi.number()
+    .integer()
+    .min(1)
+    .optional()
+    .messages({
+      'number.base': 'Max stock must be a number',
+      'number.min': 'Max stock must be at least 1',
     }),
   image_url: Joi.string()
     .uri()
@@ -554,12 +564,22 @@ exports.updateProductSchema = Joi.object({
       'number.min': 'Stock must be at least 0',
     }),
   low_stock_threshold: Joi.number()
-    .integer()
+    .precision(2)
     .min(0)
+    .max(100)
     .optional()
     .messages({
-      'number.base': 'Low stock threshold must be a number',
+      'number.base': 'Low stock threshold must be a number between 0 and 100',
       'number.min': 'Low stock threshold must be at least 0',
+      'number.max': 'Low stock threshold must not exceed 100',
+    }),
+  max_stock: Joi.number()
+    .integer()
+    .min(1)
+    .optional()
+    .messages({
+      'number.base': 'Max stock must be a number',
+      'number.min': 'Max stock must be at least 1',
     }),
   image_url: Joi.string()
     .uri()

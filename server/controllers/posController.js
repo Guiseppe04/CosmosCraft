@@ -264,6 +264,54 @@ exports.cancelSale = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+// ─── VOID & RETURN ──────────────────────────────────────────────────────────
+
+/**
+ * POST /pos/sales/:id/void
+ * Void a completed POS sale (restores inventory)
+ * Body: { reason? }
+ */
+exports.voidSale = async (req, res, next) => {
+  try {
+    const { reason } = req.body;
+
+    const result = await posService.voidSale(
+      req.params.id,
+      req.user.user_id,
+      reason
+    );
+
+    res.json({
+      status: 'success',
+      message: 'Sale voided successfully',
+      data: result
+    });
+  } catch (err) { next(err); }
+};
+
+/**
+ * POST /pos/sales/:id/return
+ * Return items from a completed POS sale
+ * Body: { reason?, items: [{ item_id, quantity, item_condition }] }
+ */
+exports.returnSale = async (req, res, next) => {
+  try {
+    const { reason, items } = req.body;
+
+    const result = await posService.returnSale(
+      req.params.id,
+      req.user.user_id,
+      { reason, items }
+    );
+
+    res.json({
+      status: 'success',
+      message: 'Sale returned successfully',
+      data: result
+    });
+  } catch (err) { next(err); }
+};
+
 // ─── PAYMENT VERIFICATION ────────────────────────────────────────────────────
 
 /**

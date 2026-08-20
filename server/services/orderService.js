@@ -377,7 +377,7 @@ const validateAndDeductInventory = async (client, reservations, orderId) => {
     const quantity = reservations.get(productId)
 
     const productRes = await client.query(
-      `SELECT p.product_id, p.name, p.is_active, i.stock, i.low_stock_threshold
+      `SELECT p.product_id, p.name, p.is_active, i.stock, i.low_stock_threshold, i.max_stock
        FROM products p
        LEFT JOIN inventory i ON p.product_id = i.product_id
        WHERE p.product_id = $1`,
@@ -395,7 +395,7 @@ const validateAndDeductInventory = async (client, reservations, orderId) => {
     }
 
     const inventoryRes = await client.query(
-      `SELECT stock, low_stock_threshold
+      `SELECT stock, low_stock_threshold, max_stock
        FROM inventory
        WHERE product_id = $1
        FOR UPDATE`,
@@ -408,6 +408,8 @@ const validateAndDeductInventory = async (client, reservations, orderId) => {
 
     const currentStock = Number(inventoryRes.rows[0].stock) || 0
     const lowStockThreshold = Number(inventoryRes.rows[0].low_stock_threshold) || 10
+    const maxStock = Number(inventoryRes.rows[0].max_stock) || 0
+    const lowStockLimit = maxStock > 0 ? maxStock * (lowStockThreshold / 100) : 0
 
     if (currentStock < quantity) {
       throw createValidationError(`Not enough stock for ${product.name}. Available stock: ${currentStock}.`, 400)
@@ -431,11 +433,11 @@ const validateAndDeductInventory = async (client, reservations, orderId) => {
 
     const newStock = Number(updateRes.rows[0]?.stock) || 0
 
-    if (newStock <= lowStockThreshold && newStock > 0) {
+    if (newStock <= lowStockLimit && newStock > 0) {
       await client.query(
         `INSERT INTO low_stock_alerts (product_id, current_stock, threshold)
          VALUES ($1, $2, $3)`,
-        [productId, newStock, lowStockThreshold]
+        [productId, newStock, Math.round(lowStockLimit)]
       )
     }
   }

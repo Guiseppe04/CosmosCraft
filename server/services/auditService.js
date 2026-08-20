@@ -31,6 +31,8 @@ const ACTIONS = {
   EXPORT: 'EXPORT',
   PASSWORD_RESET: 'PASSWORD_RESET',
   STOCK_ALERT: 'STOCK_ALERT',
+  VOID: 'VOID',
+  RETURN: 'RETURN',
 };
 
 async function createAuditLog({ user_id, action, entity_type, entity_id, previous_status, new_status, details, ip_address, user_agent }) {

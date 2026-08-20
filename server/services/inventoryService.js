@@ -21,7 +21,7 @@ const syncStockToBuilderParts = async (productId, delta) => {
  */
 exports.getProductStock = async (productId) => {
   const res = await pool.query(
-    `SELECT p.product_id, p.name, p.is_active, i.stock, i.low_stock_threshold, i.cost_price
+    `SELECT        p.product_id, p.name, p.is_active, i.stock, i.low_stock_threshold, i.max_stock, i.cost_price
      FROM products p
      LEFT JOIN inventory i ON p.product_id = i.product_id
      WHERE p.product_id = $1`,
@@ -49,7 +49,7 @@ exports.getProductsWithStock = async ({ search, category_id, low_stock_only } = 
     idx++;
   }
   if (low_stock_only === true || low_stock_only === 'true') {
-    where.push(`i.stock <= COALESCE(i.low_stock_threshold, 10)`);
+    where.push(`i.stock <= COALESCE(i.max_stock * (i.low_stock_threshold / 100.0), i.max_stock * 0.10)`);
   }
   where.push(`p.is_active = true`);
 
@@ -58,9 +58,9 @@ exports.getProductsWithStock = async ({ search, category_id, low_stock_only } = 
   const res = await pool.query(
     `SELECT 
       p.product_id, p.name, p.description, p.price, p.sku, p.updated_at, p.category_id,
-      i.cost_price, i.stock, i.low_stock_threshold, i.inventory_id,
+      i.cost_price, i.stock, i.low_stock_threshold, i.max_stock, i.inventory_id,
       c.name AS category_name,
-      (i.stock <= COALESCE(i.low_stock_threshold, 10)) AS is_low_stock,
+      (i.stock <= COALESCE(i.max_stock * (i.low_stock_threshold / 100.0), i.max_stock * 0.10)) AS is_low_stock,
       (SELECT COUNT(*) FROM inventory_logs WHERE product_id = p.product_id) AS total_movements
      FROM products p
      LEFT JOIN categories c ON p.category_id = c.category_id
@@ -203,16 +203,18 @@ exports.deductStock = async (
     // Check for low stock alert
     const newStock = updateRes.rows[0].stock;
     const thresholdRes = await client.query(
-      'SELECT low_stock_threshold FROM inventory WHERE product_id = $1',
+      'SELECT low_stock_threshold, max_stock FROM inventory WHERE product_id = $1',
       [productId]
     );
-    const threshold = thresholdRes.rows[0]?.low_stock_threshold || 10;
+    const pct = Number(thresholdRes.rows[0]?.low_stock_threshold) || 10;
+    const maxStock = Number(thresholdRes.rows[0]?.max_stock) || 0;
+    const lowStockLimit = maxStock > 0 ? maxStock * (pct / 100) : 0;
 
-    if (newStock <= threshold && newStock > 0) {
+    if (newStock <= lowStockLimit && newStock > 0) {
       await client.query(
         `INSERT INTO low_stock_alerts (product_id, current_stock, threshold)
          VALUES ($1, $2, $3)`,
-        [productId, newStock, threshold]
+        [productId, newStock, Math.round(lowStockLimit)]
       );
     }
 
@@ -472,7 +474,7 @@ exports.getInventorySummary = async () => {
     `SELECT 
       COUNT(DISTINCT p.product_id) as total_products,
       SUM(i.stock) as total_units,
-      COUNT(DISTINCT CASE WHEN i.stock <= i.low_stock_threshold THEN p.product_id END) as low_stock_count,
+       COUNT(DISTINCT CASE WHEN i.stock <= COALESCE(i.max_stock * (i.low_stock_threshold / 100.0), i.max_stock * 0.10) THEN p.product_id END) as low_stock_count,
       COUNT(DISTINCT CASE WHEN i.stock = 0 THEN p.product_id END) as out_of_stock_count,
       SUM(i.stock * p.price) as total_inventory_value
      FROM products p

@@ -305,10 +305,12 @@ async function getProductReport(filters = {}) {
   );
 
   const lowStock = await pool.query(
-    `SELECT product_id, name, stock, low_stock_threshold
-     FROM products
-     WHERE stock <= low_stock_threshold AND is_active = true
-     ORDER BY stock ASC
+    `SELECT p.product_id, p.name, i.stock, i.low_stock_threshold, i.max_stock
+     FROM products p
+     LEFT JOIN inventory i ON p.product_id = i.product_id
+     WHERE i.stock <= COALESCE(i.max_stock * (i.low_stock_threshold / 100.0), i.max_stock * 0.10)
+       AND p.is_active = true
+     ORDER BY i.stock ASC
      LIMIT 10`
   );
 

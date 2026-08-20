@@ -40,6 +40,7 @@ import { formatCurrency } from '../utils/formatCurrency'
 import { hasRole } from '../utils/roles'
 import { staffApi } from '../utils/staffApi'
 import { normalizeBuilderPart } from '../pages/admin/utils/partHelpers'
+import { getStockTier } from '../utils/stockUtils'
 import { InventoryTab } from './admin/tabs/InventoryTab'
 import { AdjustPartStockModal } from './admin/components/inventory/StockAdjustmentModals'
 
@@ -475,10 +476,11 @@ const fetchUnavailableDates = useCallback(async () => {
       result = result.filter(item => {
         const stock = Number(item.stock ?? 0)
         const threshold = Number(item.low_stock_threshold ?? 10)
-        if (statusFilter === 'out_of_stock') return stock === 0
-        if (statusFilter === 'critical') return stock > 0 && stock <= threshold
-        if (statusFilter === 'warning') return stock > threshold && stock <= threshold * 2
-        if (statusFilter === 'healthy') return stock > threshold * 2
+        const tier = getStockTier(stock, threshold, item.max_stock)
+        if (statusFilter === 'out_of_stock') return tier === 'out_of_stock'
+        if (statusFilter === 'critical') return tier === 'critical'
+        if (statusFilter === 'warning') return tier === 'warning'
+        if (statusFilter === 'healthy') return tier === 'healthy'
         return true
       })
     }
@@ -524,10 +526,11 @@ const fetchUnavailableDates = useCallback(async () => {
       result = result.filter(item => {
         const stock = Number(item.stock ?? 0)
         const threshold = 10
-        if (statusFilter === 'out_of_stock') return stock === 0
-        if (statusFilter === 'critical') return stock > 0 && stock <= threshold
-        if (statusFilter === 'warning') return stock > threshold && stock <= threshold * 2
-        if (statusFilter === 'healthy') return stock > threshold * 2
+        const tier = getStockTier(stock, threshold, 0)
+        if (statusFilter === 'out_of_stock') return tier === 'out_of_stock'
+        if (statusFilter === 'critical') return tier === 'critical'
+        if (statusFilter === 'warning') return tier === 'warning'
+        if (statusFilter === 'healthy') return tier === 'healthy'
         return true
       })
     }

@@ -3,6 +3,7 @@ import { Check, AlertCircle, Loader2, X, Sparkles } from 'lucide-react'
 import { ModalHeader } from '../shared/ModalHeader'
 import { ImageUploadWidget } from '../shared/ImageUploadWidget'
 import { useRef, useState, useEffect, useCallback } from 'react'
+import { formatLowStockHelper } from '../../../../utils/stockUtils'
 
 function AutoResizeTextarea({ value, onChange, placeholder, className, maxLength = 500 }) {
   const textareaRef = useRef(null)
@@ -193,13 +194,40 @@ export function ProductModal({
   }, [wizardTab, setWizardTab])
 
   const handleCancel = useCallback(() => {
-    const hasChanges = form.name || form.price || form.description || form.image_file
+    const trackedFields = [
+      'name', 'sku', 'description', 'brand', 'category_id', 'price',
+      'cost_price', 'low_stock_threshold', 'max_stock',
+    ]
+
+    const normStr = (val) => {
+      if (val === null || val === undefined) return ''
+      return String(val)
+    }
+
+    const normActive = (val) => {
+      if (val === null || val === undefined) return ''
+      if (val === true || val === 1 || val === '1' || val === 'true') return 'true'
+      if (val === false || val === 0 || val === '0' || val === 'false') return 'false'
+      return String(val)
+    }
+
+    const hasChanges = modal.data
+      ? trackedFields.some((key) => normStr(form[key]) !== normStr(modal.data[key])) ||
+        normActive(form.is_active ?? true) !== normActive(modal.data.is_active) ||
+        form.image_file instanceof File ||
+        normStr(form.image_url) !== normStr(modal.data.primary_image ?? modal.data.image_url)
+      : trackedFields.some((key) => {
+          const val = form[key]
+          return val !== '' && val !== null && val !== undefined
+        }) ||
+        form.image_file instanceof File
+
     if (hasChanges) {
       setShowUnsavedWarning(true)
     } else {
       closeModal()
     }
-  }, [form, closeModal])
+  }, [form, modal.data, closeModal])
 
   const generateSku = useCallback(() => {
     const rawBrand = String(form.brand || '').trim()
@@ -640,33 +668,40 @@ export function ProductModal({
                 </motion.div>
               )}
 
-              <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]/60 p-4 sm:p-5">
-                <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Stock levels</p>
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5">
-                  <div>
-                    <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Initial Stock Quantity</label>
-                    <ClearableInput
-                      type="number"
-                      value={form.stock ?? ''}
-                      onChange={(e) => setForm((f) => ({ ...f, stock: e.target.value }))}
-                      placeholder="0"
-                      className={fieldOk}
-                    />
-                    <p className="mt-1.5 text-xs text-[var(--text-muted)]">On-hand count when creating the product.</p>
-                  </div>
-                  <div>
-                    <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Low Stock Alert Threshold</label>
-                    <ClearableInput
-                      type="number"
-                      value={form.low_stock_threshold ?? ''}
-                      onChange={(e) => setForm((f) => ({ ...f, low_stock_threshold: e.target.value }))}
-                      placeholder="10"
-                      className={fieldOk}
-                    />
-                    <p className="mt-1.5 text-xs text-[var(--text-muted)]">You'll be alerted when stock drops to this level.</p>
-                  </div>
-                </div>
-              </div>
+               <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]/60 p-4 sm:p-5">
+                 <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Stock levels</p>
+                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5">
+                   <div>
+                     <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Maximum Stock</label>
+                     <ClearableInput
+                       type="number"
+                       value={form.max_stock ?? ''}
+                       onChange={(e) => setForm((f) => ({ ...f, max_stock: e.target.value }))}
+                       placeholder="e.g. 100"
+                       className={fieldOk}
+                     />
+                     <p className="mt-1.5 text-xs text-[var(--text-muted)]">Full-stock capacity. On creation, current stock is initialized to this value.</p>
+                   </div>
+                   <div>
+                     <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Low Stock Threshold (%)</label>
+                     <ClearableInput
+                       type="number"
+                       value={form.low_stock_threshold ?? ''}
+                       onChange={(e) => setForm((f) => ({ ...f, low_stock_threshold: e.target.value }))}
+                       placeholder="10"
+                       className={fieldOk}
+                     />
+                     {form.max_stock !== '' && form.max_stock != null && Number(form.max_stock) > 0 && form.low_stock_threshold !== '' && form.low_stock_threshold != null && (
+                       <p className="mt-1.5 text-xs text-[var(--text-muted)]">
+                         {formatLowStockHelper(form.low_stock_threshold, form.max_stock)}
+                       </p>
+                     )}
+                     {(!form.max_stock || Number(form.max_stock) <= 0 || !form.low_stock_threshold || Number(form.low_stock_threshold) <= 0) && (
+                       <p className="mt-1.5 text-xs text-[var(--text-muted)]">You'll be alerted when stock drops below this percentage of maximum stock.</p>
+                     )}
+                   </div>
+                 </div>
+               </div>
             </motion.div>
           )}
 
