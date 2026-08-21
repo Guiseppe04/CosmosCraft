@@ -162,6 +162,11 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
     return resolveTremoloCoverAsset('electric', config.body || 'dc', opt.fileKey)
   }, [config.bridge, config.tremoloCover, config.body])
 
+  const batteryCompartmentAsset = useMemo(() => {
+    if (config.bridge !== 'hipshotFixed') return null
+    return resolveBackplateAsset('electric', config.body || 'dc', 'battery-compartment')
+  }, [config.bridge, config.body])
+
   const outputJackAsset = config.outputJack === 'on'
     ? resolveOutputJackByColor('electric', config.body || 'dc', hardware.color)
     : null
@@ -785,6 +790,9 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
                     )}
                     {cavityScrewsAsset && (
                       <GuitarLayer maskSrc={rearBodyMask} style={{ backgroundImage: `url(${cavityScrewsAsset})`, zIndex: 136, backgroundRepeat: 'no-repeat', backgroundPosition: 'center', backgroundSize: 'contain', transform: 'scaleX(-1)' }} layerName="cavity-screws" protectedLayer />
+                    )}
+                    {batteryCompartmentAsset && (
+                      <GuitarLayer maskSrc={rearBodyMask} style={{ backgroundImage: `url(${batteryCompartmentAsset})`, zIndex: 137, backgroundRepeat: 'no-repeat', backgroundPosition: 'center', backgroundSize: 'contain', transform: 'scaleX(-1)' }} layerName="battery-compartment" protectedLayer />
                     )}
                     {overlayLayers.map((layer, index) => (
                       <GuitarLayer key={`overlay-${index}`} src={layer.src} style={layer.style} layerName={`overlay-${index}`} />
