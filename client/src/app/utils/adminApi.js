@@ -236,6 +236,15 @@ export const adminApi = {
     const qs = new URLSearchParams(params).toString()
     return request(`/api/reports/sales${qs ? '?' + qs : ''}`)
   },
+  getCustomizationReport: (params = {}) => {
+    const qs = new URLSearchParams(params).toString()
+    return request(`/api/reports/customizations${qs ? '?' + qs : ''}`)
+  },
+  getPaymentMethodAnalysis: (params = {}) => {
+    const qs = new URLSearchParams(params).toString()
+    return request(`/api/reports/payment-methods${qs ? '?' + qs : ''}`)
+  },
+
 
   // Project Hierarchy & Activity
   getProjectHierarchy: (id) => request(`/api/projects/${id}/hierarchy`),

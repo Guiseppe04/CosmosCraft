@@ -17,6 +17,8 @@ router.get('/cart', ctrl.getCartReport);
 router.get('/users', ctrl.getUserReport);
 router.get('/revenue', ctrl.getRevenueReport);
 router.get('/customizations', ctrl.getCustomizationReport);
+router.get('/payment-methods', ctrl.getPaymentMethodAnalysis);
 router.get('/export', ctrl.exportReport);
 
 module.exports = router;
+

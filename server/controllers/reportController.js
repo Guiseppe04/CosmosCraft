@@ -88,6 +88,14 @@ exports.getCustomizationReport = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+exports.getPaymentMethodAnalysis = async (req, res, next) => {
+  try {
+    const { start_date, end_date, order_type, payment_method, status, payment_status } = req.query;
+    const result = await reportService.getPaymentMethodAnalysis({ start_date, end_date, order_type, payment_method, status, payment_status });
+    res.json({ status: 'success', data: result });
+  } catch (err) { next(err); }
+};
+
 exports.exportReport = async (req, res, next) => {
   try {
     const { type, start_date, end_date, status, payment_method } = req.query;
@@ -96,3 +104,4 @@ exports.exportReport = async (req, res, next) => {
     res.json({ status: 'success', data: result });
   } catch (err) { next(err); }
 };
+
