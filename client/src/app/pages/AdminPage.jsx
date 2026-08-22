@@ -2445,7 +2445,7 @@ export function AdminPage() {
           )}
 
           {activeTab === 'sales-report' && (
-            <SalesReportTab salesReport={salesReport} />
+            <SalesReportTab salesReport={salesReport} fetchSalesReport={fetchSalesReport} categories={categories} />
           )}
 
         </main>

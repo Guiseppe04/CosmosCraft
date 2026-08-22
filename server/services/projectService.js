@@ -3241,6 +3241,7 @@ exports.requestProjectCancel = async (projectId, userId, userRole, data = {}) =>
     const normalizedStatus = normalizeProjectStatus(project.status);
     if (normalizedStatus === 'cancelled') throw new AppError('Project is already cancelled', 400);
     if (normalizedStatus === 'completed') throw new AppError('Project is already completed', 400);
+    if (normalizedStatus === 'on_hold') throw new AppError('Project is on hold. Resume the project before requesting cancellation.', 400);
 
     const cancelOption = data.cancel_option;
     if (!['ship_unfinished', 'pickup_unfinished'].includes(cancelOption)) {
@@ -3291,6 +3292,10 @@ exports.approveProjectCancel = async (projectId, userId, data = {}) => {
 
     if (!project.cancel_option || !project.cancel_reason) {
       throw new AppError('No cancellation request exists for this project', 400);
+    }
+
+    if (normalizeProjectStatus(project.status) === 'on_hold') {
+      throw new AppError('Project is on hold. Resume the project before approving cancellation.', 400);
     }
 
     const action = data.action || 'approve';
@@ -3355,24 +3360,98 @@ exports.approveProjectCancel = async (projectId, userId, data = {}) => {
         [project.order_id]
       );
 
-      // Freeze the latest completed build stage so the customer-entitled
-      // stage survives the status change to cancelled and is shown forever.
-      await syncLastCompletedStage(client, projectId);
-      await snapshotCancelledStage(client, projectId);
+      // Determine build progress to decide money refund vs physical release.
+      const stats = await getProjectTaskStats(client, projectId);
+      const hasBuildProgress = stats.completed > 0 || stats.total > 0;
 
-      // Create current build claim for the cancelled project
-      try {
-        await getClaimService().createClaimForCancelledProject(
-          client, projectId, project.customer_id, project.order_id
+      if (hasBuildProgress) {
+        // Freeze the latest completed build stage so the customer-entitled
+        // stage survives the status change to cancelled and is shown forever.
+        await syncLastCompletedStage(client, projectId);
+        await snapshotCancelledStage(client, projectId);
+
+        // Create current build claim for the cancelled project (physical release).
+        try {
+          await getClaimService().createClaimForCancelledProject(
+            client, projectId, project.customer_id, project.order_id
+          );
+        } catch (claimErr) {
+          console.warn('Failed to create build claim during cancel approval:', claimErr.message);
+        }
+      } else {
+        // No build progress — create a money refund request consistent with
+        // the cancelProject flow. Never auto-refunds.
+        const paymentRes = await client.query(
+          `SELECT payment_id, amount, status FROM payments
+           WHERE order_id = $1 AND status NOT IN ('rejected', 'cancelled', 'refunded')
+           ORDER BY created_at DESC
+           LIMIT 1`,
+          [project.order_id]
         );
-      } catch (claimErr) {
-        console.warn('Failed to create build claim during cancel approval:', claimErr.message);
+        const latestPayment = paymentRes.rows[0] || null;
+
+        if (latestPayment) {
+          const existingRefundRes = await client.query(
+            `SELECT refund_request_id, status FROM refund_requests
+             WHERE project_id = $1
+               AND status IN ('pending', 'approved', 'pending_payment_verification')
+               AND deleted_at IS NULL
+             LIMIT 1`,
+            [projectId]
+          );
+
+          if (existingRefundRes.rows.length === 0) {
+            let refundStatus = 'pending';
+            let amountRequested = Number(latestPayment.amount);
+
+            if (latestPayment.status === 'verified') {
+              refundStatus = 'pending';
+            } else if (['pending', 'for_verification'].includes(latestPayment.status)) {
+              refundStatus = 'pending_payment_verification';
+            } else {
+              amountRequested = 0;
+              refundStatus = null;
+            }
+
+            if (refundStatus && amountRequested > 0) {
+              const requestNumber = await generateRefundRequestNumber(client, 'RF');
+
+              await client.query(
+                `INSERT INTO refund_requests (
+                   order_id, user_id, project_id, payment_id, reason, customer_notes,
+                   amount_requested, build_stage_at_request, status, request_number, refund_type
+                 )
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'money_refund')`,
+                [
+                  project.order_id,
+                  project.customer_id,
+                  projectId,
+                  latestPayment.payment_id,
+                  'Automatic refund request from approved project cancellation',
+                  null,
+                  amountRequested,
+                  null,
+                  refundStatus,
+                  requestNumber,
+                ]
+              );
+
+              await logActivity(client, projectId, userId, 'refund_requested', {
+                refund_request_reason: 'Automatic refund request from approved project cancellation',
+                amount_requested: amountRequested,
+                refund_status: refundStatus,
+                payment_status_at_cancel: latestPayment.status,
+              });
+            }
+          }
+        }
       }
 
       await logActivity(client, projectId, userId, 'cancel_approved', {
         cancel_option: cancelOption,
         cancel_reason: project.cancel_reason,
         fulfillment_status: fulfillmentStatus,
+        refund_type: hasBuildProgress ? 'physical_release' : 'money_refund',
       });
     }
 

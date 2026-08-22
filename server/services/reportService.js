@@ -25,6 +25,11 @@ function buildDateFilter(startDate, endDate, column = 'created_at') {
   return { conditions, params };
 }
 
+function renumberConditions(conditions, startIdx) {
+  let idx = startIdx;
+  return conditions.map(c => c.replace(/\$\d+/g, () => `$${idx++}`));
+}
+
 function orderRevenueExpr(alias = null) {
   const prefix = alias ? `${alias}.` : '';
   return `COALESCE(${prefix}total_amount, 0) - COALESCE(${prefix}tax_amount, 0)`;
@@ -529,144 +534,248 @@ async function getRevenueReport(filters = {}) {
 }
 
 async function getSalesReport(filters = {}) {
-  const startDate = parseDate(filters.start_date);
-  const endDate = parseDate(filters.end_date);
+  const {
+    start_date, end_date,
+    order_type, payment_method, category_id,
+    status, payment_status
+  } = filters;
 
-  const buildRange = (column) => {
-    const conditions = [];
-    const params = [];
-    let idx = 1;
+  const startDate = parseDate(start_date);
+  const endDate = parseDate(end_date);
 
-    if (startDate) {
-      conditions.push(`${column} >= $${idx++}`);
-      params.push(startDate);
-    }
+  const posRange = buildDateFilter(startDate, endDate, 'ps.created_at');
+  const posAdjustmentRange = buildDateFilter(startDate, endDate, 'ps.created_at');
+  const orderRange = buildDateFilter(startDate, endDate, 'o.created_at');
+  const orderAdjustmentRange = buildDateFilter(startDate, endDate, 'o.created_at');
+  const customizationAdjustmentRange = buildDateFilter(startDate, endDate, 'o.created_at');
+  const appointmentRange = buildDateFilter(startDate, endDate, 'a.scheduled_at');
+  const appointmentAdjustmentRange = buildDateFilter(startDate, endDate, 'a.scheduled_at');
+  const refundRange = buildDateFilter(startDate, endDate, 'rr.created_at');
+  const posReturnRange = buildDateFilter(startDate, endDate, 'pr.created_at');
+  const itemsRange = buildDateFilter(startDate, endDate, 'src.created_at');
 
-    if (endDate) {
-      conditions.push(`${column} <= $${idx++}`);
-      params.push(endDate);
-    }
-
-    return {
-      clause: conditions.length ? ` AND ${conditions.join(' AND ')}` : '',
-      params,
-    };
-  };
-
-  const ordersRange = buildRange('o.created_at');
-  const posRange = buildRange('ps.created_at');
-  const itemsRange = buildRange('src.created_at');
-  const appointmentRange = buildRange('a.scheduled_at');
+  const hasDateRange = !!(startDate || endDate);
 
   const now = new Date();
   const todayStart = new Date(now);
   todayStart.setHours(0, 0, 0, 0);
-
   const weekStart = new Date(todayStart);
   weekStart.setDate(weekStart.getDate() - 6);
-
   const monthStart = new Date(todayStart.getFullYear(), todayStart.getMonth(), 1);
+
+  const revenue = (alias) => orderRevenueExpr(alias);
+
+  // Build order-level dynamic filters
+  // $1 and $2 are reserved for effectiveOrderStatus and effectiveOrderPaymentStatus
+  const orderFilterClauses = [];
+  const orderFilterParams = [];
+  let orderFilterIdx = 3;
+  const effectiveOrderStatus = status || 'delivered';
+  const effectiveOrderPaymentStatus = payment_status || 'approved';
+
+  if (order_type) {
+    orderFilterClauses.push(`o.order_type = $${orderFilterIdx++}`);
+    orderFilterParams.push(order_type);
+  }
+  const orderFilterSql = orderFilterClauses.length > 0 ? `AND ${orderFilterClauses.join(' AND ')}` : '';
+
+  // Build appointment-level dynamic filters
+  // $1 and $2 are reserved for effectiveApptStatus and effectiveApptPaymentStatus
+  const apptFilterClauses = [];
+  const apptFilterParams = [];
+  let apptFilterIdx = 3;
+  const effectiveApptStatus = status || 'completed';
+  const effectiveApptPaymentStatus = payment_status || 'approved';
+
+  if (payment_method) {
+    apptFilterClauses.push(`a.payment_method = $${apptFilterIdx++}`);
+    apptFilterParams.push(payment_method);
+  }
+  const apptFilterSql = apptFilterClauses.length > 0 ? `AND ${apptFilterClauses.join(' AND ')}` : '';
+
+  const dailyWeeklyMonthlyPromise = hasDateRange
+    ? Promise.resolve({ rows: [{}] })
+    : pool.query(
+        `SELECT
+            COALESCE(SUM(${revenue('o')}), 0)::numeric AS dailySales,
+            COUNT(CASE WHEN created_at >= $1 THEN 1 END)::int AS dailyTransactions,
+            COALESCE(SUM(${revenue('o')}), 0)::numeric AS weeklySales,
+            COUNT(CASE WHEN created_at >= $2 THEN 1 END)::int AS weeklyTransactions,
+            COALESCE(SUM(${revenue('o')}), 0)::numeric AS monthlySales,
+            COUNT(CASE WHEN created_at >= $3 THEN 1 END)::int AS monthlyTransactions
+         FROM orders o
+         WHERE status = $4 AND payment_status = $5`,
+        [todayStart, weekStart, monthStart, effectiveOrderStatus, effectiveOrderPaymentStatus]
+      );
 
   const [
     walkInSummary,
+    walkInAdjustmentsResult,
     onlineSummary,
+    onlineAdjustmentsResult,
     customizationSummary,
-    dailyOrders,
-    dailyPos,
-    weeklyOrders,
-    weeklyPos,
-    monthlyOrders,
-    monthlyPos,
-    bestSellingProducts,
-    customizationTypes,
-    appointmentPaymentSummary,
+    customizationAdjustmentsResult,
+    appointmentSummary,
+    appointmentAdjustmentsResult,
+    adjustmentsByTypeResult,
+    adjustmentsByChannelResult,
+    dailyTrendResult,
+    bestSellingProductsResult,
+    topAdjustedProductsResult,
+    refundReasonsResult,
+    appointmentPaymentMethodsResult,
+    dailyWeeklyMonthlyResult,
   ] = await Promise.all([
     pool.query(
-      `SELECT
-          COUNT(*)::int AS transactions,
-          COALESCE(SUM(ps.total_amount), 0)::numeric AS sales
+      `SELECT COUNT(*)::int AS transactions, COALESCE(SUM(${revenue('ps')}), 0)::numeric AS gross
        FROM pos_sales ps
-       WHERE ps.status = 'completed'
-       ${posRange.clause}`,
+       WHERE ps.status = 'completed' AND ps.payment_status = 'verified'
+         ${posRange.conditions.length > 0 ? 'AND ' + posRange.conditions.join(' AND ') : ''}`,
       posRange.params
     ),
     pool.query(
-      `SELECT
-          COUNT(*)::int AS transactions,
-          COALESCE(SUM(${orderRevenueExpr('o')}), 0)::numeric AS sales
+      `SELECT COALESCE(SUM(refund_amount), 0)::numeric AS adjustments
+       FROM pos_sales
+       WHERE status IN ('voided', 'returned')
+         ${posAdjustmentRange.conditions.length > 0 ? 'AND ' + posAdjustmentRange.conditions.join(' AND ') : ''}`,
+      posAdjustmentRange.params
+    ),
+    pool.query(
+      `SELECT COUNT(*)::int AS transactions, COALESCE(SUM(${revenue('o')}), 0)::numeric AS gross
        FROM orders o
-       WHERE o.status = 'delivered'
+       WHERE o.status = $1 AND o.payment_status = $2
          AND NOT EXISTS (
-           SELECT 1
-           FROM order_items oi
-           WHERE oi.order_id::text = o.order_id::text
-             AND oi.customization_id IS NOT NULL
+           SELECT 1 FROM order_items oi
+           WHERE oi.order_id::text = o.order_id::text AND oi.customization_id IS NOT NULL
          )
-       ${ordersRange.clause}`,
-      ordersRange.params
+         ${orderFilterSql}
+         ${orderRange.conditions.length > 0 ? 'AND ' + renumberConditions(orderRange.conditions, orderFilterIdx).join(' AND ') : ''}`,
+      [effectiveOrderStatus, effectiveOrderPaymentStatus, ...orderFilterParams, ...orderRange.params]
     ),
     pool.query(
-      `SELECT
-          COUNT(*)::int AS transactions,
-          COALESCE(SUM(${orderRevenueExpr('o')}), 0)::numeric AS sales
+      `SELECT COALESCE(SUM(COALESCE(rr.amount_requested, 0)), 0)::numeric AS adjustments
        FROM orders o
-       WHERE o.status = 'delivered'
+       LEFT JOIN refund_requests rr ON (
+         rr.order_id = o.order_id
+         AND rr.status IN ('approved', 'refunded', 'processing')
+       )
+        WHERE o.status = $1 AND o.payment_status = $2
+          AND NOT EXISTS (
+            SELECT 1 FROM order_items oi
+            WHERE oi.order_id::text = o.order_id::text AND oi.customization_id IS NOT NULL
+          )
+          ${orderFilterSql}
+          ${orderAdjustmentRange.conditions.length > 0 ? 'AND ' + renumberConditions(orderAdjustmentRange.conditions, orderFilterIdx).join(' AND ') : ''}`,
+      [effectiveOrderStatus, effectiveOrderPaymentStatus, ...orderFilterParams, ...orderAdjustmentRange.params]
+    ),
+    pool.query(
+      `SELECT COUNT(*)::int AS transactions, COALESCE(SUM(${revenue('o')}), 0)::numeric AS gross
+       FROM orders o
+       WHERE o.status = $1 AND o.payment_status = $2
          AND EXISTS (
-           SELECT 1
-           FROM order_items oi
-           WHERE oi.order_id::text = o.order_id::text
-             AND oi.customization_id IS NOT NULL
+           SELECT 1 FROM order_items oi
+           WHERE oi.order_id::text = o.order_id::text AND oi.customization_id IS NOT NULL
          )
-       ${ordersRange.clause}`,
-      ordersRange.params
+         ${orderFilterSql}
+         ${orderRange.conditions.length > 0 ? 'AND ' + renumberConditions(orderRange.conditions, orderFilterIdx).join(' AND ') : ''}`,
+      [effectiveOrderStatus, effectiveOrderPaymentStatus, ...orderFilterParams, ...orderRange.params]
     ),
     pool.query(
-      `SELECT
-          COUNT(*)::int AS transactions,
-          COALESCE(SUM(${orderRevenueExpr()}), 0)::numeric AS sales
-       FROM orders
-       WHERE status = 'delivered' AND created_at >= $1`,
-      [todayStart]
+      `SELECT COALESCE(SUM(COALESCE(rr.amount_requested, 0)), 0)::numeric AS adjustments
+       FROM orders o
+       LEFT JOIN refund_requests rr ON (
+         (rr.order_id = o.order_id OR (rr.project_id IS NOT NULL AND rr.project_id IN (SELECT project_id FROM projects WHERE order_id = o.order_id)))
+         AND rr.status IN ('approved', 'refunded', 'processing')
+       )
+        WHERE o.status = $1 AND o.payment_status = $2
+          AND EXISTS (
+            SELECT 1 FROM order_items oi
+            WHERE oi.order_id::text = o.order_id::text AND oi.customization_id IS NOT NULL
+          )
+          ${orderFilterSql}
+          ${customizationAdjustmentRange.conditions.length > 0 ? 'AND ' + renumberConditions(customizationAdjustmentRange.conditions, orderFilterIdx).join(' AND ') : ''}`,
+      [effectiveOrderStatus, effectiveOrderPaymentStatus, ...orderFilterParams, ...customizationAdjustmentRange.params]
     ),
     pool.query(
-      `SELECT
-          COUNT(*)::int AS transactions,
-          COALESCE(SUM(${orderRevenueExpr()}), 0)::numeric AS sales
-       FROM pos_sales
-       WHERE status = 'completed' AND created_at >= $1`,
-      [todayStart]
+      `SELECT COUNT(*)::int AS transactions, COALESCE(SUM(s.price), 0)::numeric AS gross
+       FROM appointments a
+       JOIN services s ON s.service_id::text IN (
+         SELECT jsonb_array_elements_text(a.services)
+       )
+       WHERE a.status = $1 AND a.payment_status = $2 AND a.payment_method IS NOT NULL
+         ${apptFilterSql}
+         ${appointmentRange.conditions.length > 0 ? 'AND ' + renumberConditions(appointmentRange.conditions, apptFilterIdx).join(' AND ') : ''}`,
+      [effectiveApptStatus, effectiveApptPaymentStatus, ...apptFilterParams, ...appointmentRange.params]
     ),
     pool.query(
-      `SELECT
-          COUNT(*)::int AS transactions,
-          COALESCE(SUM(${orderRevenueExpr()}), 0)::numeric AS sales
-       FROM orders
-       WHERE status = 'delivered' AND created_at >= $1`,
-      [weekStart]
+      `SELECT 'void' AS type, COUNT(*)::int AS count, COALESCE(SUM(refund_amount), 0)::numeric AS amount
+       FROM pos_sales WHERE status = 'voided'
+         ${posAdjustmentRange.conditions.length > 0 ? 'AND ' + renumberConditions(posAdjustmentRange.conditions, 1).join(' AND ') : ''}
+       UNION ALL
+       SELECT 'return', COUNT(*)::int, COALESCE(SUM(refund_amount), 0)
+       FROM pos_sales WHERE status = 'returned'
+         ${posAdjustmentRange.conditions.length > 0 ? 'AND ' + renumberConditions(posAdjustmentRange.conditions, posAdjustmentRange.params.length + 1).join(' AND ') : ''}
+       UNION ALL
+        SELECT 'refund', COUNT(*)::int, COALESCE(SUM(COALESCE(amount_requested, 0)), 0)
+       FROM refund_requests WHERE status IN ('approved', 'refunded', 'processing')
+         ${refundRange.conditions.length > 0 ? 'AND ' + renumberConditions(refundRange.conditions, posAdjustmentRange.params.length * 2 + 1).join(' AND ') : ''}`,
+      [...posAdjustmentRange.params, ...posAdjustmentRange.params, ...refundRange.params]
     ),
     pool.query(
-      `SELECT
-          COUNT(*)::int AS transactions,
-          COALESCE(SUM(total_amount), 0)::numeric AS sales
-       FROM pos_sales
-       WHERE status = 'completed' AND created_at >= $1`,
-      [weekStart]
+      `SELECT 'walkIn' AS channel, COUNT(*)::int AS count, COALESCE(SUM(refund_amount), 0)::numeric AS amount
+       FROM pos_sales WHERE status IN ('voided', 'returned')
+         ${posAdjustmentRange.conditions.length > 0 ? 'AND ' + renumberConditions(posAdjustmentRange.conditions, 1).join(' AND ') : ''}
+        UNION ALL
+       SELECT 'online', COUNT(*)::int, COALESCE(SUM(COALESCE(rr.amount_requested, 0)), 0)
+       FROM refund_requests rr
+       JOIN orders o ON rr.order_id = o.order_id
+        WHERE rr.status IN ('approved', 'refunded', 'processing')
+          AND o.payment_status = '${effectiveOrderPaymentStatus}'
+          AND NOT EXISTS (
+            SELECT 1 FROM order_items oi
+            WHERE oi.order_id::text = o.order_id::text AND oi.customization_id IS NOT NULL
+          )
+         ${orderAdjustmentRange.conditions.length > 0 ? 'AND ' + renumberConditions(orderAdjustmentRange.conditions, posAdjustmentRange.params.length + 1).join(' AND ') : ''}
+        UNION ALL
+       SELECT 'customization', COUNT(*)::int, COALESCE(SUM(COALESCE(rr.amount_requested, 0)), 0)
+       FROM refund_requests rr
+       JOIN orders o ON rr.order_id = o.order_id
+        WHERE rr.status IN ('approved', 'refunded', 'processing')
+          AND o.payment_status = '${effectiveOrderPaymentStatus}'
+          AND EXISTS (
+            SELECT 1 FROM order_items oi
+            WHERE oi.order_id::text = o.order_id::text AND oi.customization_id IS NOT NULL
+          )
+         ${orderAdjustmentRange.conditions.length > 0 ? 'AND ' + renumberConditions(orderAdjustmentRange.conditions, posAdjustmentRange.params.length + orderAdjustmentRange.params.length + 1).join(' AND ') : ''}
+        UNION ALL
+        SELECT 'appointments', COUNT(*)::int, COALESCE(SUM(COALESCE(rr.amount_requested, 0)), 0)
+        FROM refund_requests rr
+        JOIN appointments a ON a.order_id = rr.order_id
+         WHERE rr.status IN ('approved', 'refunded', 'processing')
+           AND a.payment_status = '${effectiveApptPaymentStatus}'
+         ${appointmentAdjustmentRange.conditions.length > 0 ? 'AND ' + renumberConditions(appointmentAdjustmentRange.conditions, posAdjustmentRange.params.length + orderAdjustmentRange.params.length * 2 + 1).join(' AND ') : ''}`,
+      [...posAdjustmentRange.params, ...orderAdjustmentRange.params, ...orderAdjustmentRange.params, ...appointmentAdjustmentRange.params]
     ),
     pool.query(
-      `SELECT
-          COUNT(*)::int AS transactions,
-          COALESCE(SUM(${orderRevenueExpr()}), 0)::numeric AS sales
-       FROM orders
-       WHERE status = 'delivered' AND created_at >= $1`,
-      [monthStart]
-    ),
-    pool.query(
-      `SELECT
-          COUNT(*)::int AS transactions,
-          COALESCE(SUM(total_amount), 0)::numeric AS sales
-       FROM pos_sales
-       WHERE status = 'completed' AND created_at >= $1`,
-      [monthStart]
+      `WITH daily_sales AS (
+         SELECT DATE_TRUNC('day', created_at) AS day, ${revenue('o')} AS revenue, 1 AS tx
+         FROM orders o
+         WHERE o.status = $1 AND o.payment_status = $2
+           ${orderRange.conditions.length > 0 ? 'AND ' + renumberConditions(orderRange.conditions, 3).join(' AND ') : ''}
+         UNION ALL
+         SELECT DATE_TRUNC('day', created_at) AS day, ${revenue('ps')} AS revenue, 1 AS tx
+         FROM pos_sales ps
+         WHERE status = 'completed' AND payment_status = 'verified'
+           ${posRange.conditions.length > 0 ? 'AND ' + renumberConditions(posRange.conditions, orderRange.params.length + 1).join(' AND ') : ''}
+       )
+       SELECT day AS date,
+              COALESCE(SUM(revenue), 0)::numeric AS revenue,
+              COUNT(*)::int AS transactions
+       FROM daily_sales
+       GROUP BY day
+       ORDER BY day ASC
+       LIMIT 60`,
+      [effectiveOrderStatus, effectiveOrderPaymentStatus, ...orderRange.params, ...posRange.params]
     ),
     pool.query(
       `WITH combined_sales AS (
@@ -675,14 +784,16 @@ async function getSalesReport(filters = {}) {
            COALESCE(p.name, oi.product_name, 'Product') AS name,
            COALESCE(cat.name, 'Uncategorized') AS category,
            oi.quantity::int AS units,
-           (oi.quantity * oi.unit_price)::numeric AS revenue,
+           (oi.quantity * oi.unit_price * (1 - COALESCE(o.tax_amount, 0) / NULLIF(o.total_amount, 0)))::numeric AS revenue,
            o.created_at
          FROM order_items oi
          JOIN orders o ON o.order_id::text = oi.order_id::text
          LEFT JOIN products p ON p.product_id::text = oi.product_id::text
          LEFT JOIN categories cat ON cat.category_id = p.category_id
-         WHERE o.status = 'delivered'
+         WHERE o.status = $1 AND o.payment_status = $2
            AND oi.product_id IS NOT NULL
+           ${orderFilterSql}
+           ${orderRange.conditions.length > 0 ? 'AND ' + renumberConditions(orderRange.conditions, orderFilterIdx).join(' AND ') : ''}
 
          UNION ALL
 
@@ -699,114 +810,217 @@ async function getSalesReport(filters = {}) {
          LEFT JOIN categories cat ON cat.category_id = p.category_id
          WHERE ps.status = 'completed'
            AND psi.product_id IS NOT NULL
+           ${posRange.conditions.length > 0 ? 'AND ' + renumberConditions(posRange.conditions, orderRange.params.length + 1).join(' AND ') : ''}
        )
-       SELECT
-         name,
-         category,
-         SUM(units)::int AS units,
-         COALESCE(SUM(revenue), 0)::numeric AS revenue
+       SELECT name, category, SUM(units)::int AS units, COALESCE(SUM(revenue), 0)::numeric AS revenue
        FROM combined_sales src
-       WHERE 1 = 1${itemsRange.clause}
+        WHERE 1 = 1${itemsRange.conditions.length ? ' AND ' + itemsRange.conditions.join(' AND ') : ''}
        GROUP BY product_key, name, category
        ORDER BY units DESC, revenue DESC
        LIMIT 10`,
-      itemsRange.params
+      [effectiveOrderStatus, effectiveOrderPaymentStatus, ...orderFilterParams, ...orderRange.params, ...posRange.params, ...itemsRange.params]
     ),
     pool.query(
-      `SELECT
-          c.guitar_type AS type,
-          COUNT(DISTINCT o.order_id)::int AS orders,
-          COALESCE(SUM(oi.quantity * oi.unit_price), 0)::numeric AS revenue
-       FROM order_items oi
-       JOIN orders o ON o.order_id::text = oi.order_id::text
-       JOIN customizations c ON c.customization_id::text = oi.customization_id::text
-       WHERE o.status = 'delivered'
-       ${ordersRange.clause}
-       GROUP BY c.guitar_type
-       ORDER BY revenue DESC, orders DESC`,
-      ordersRange.params
+      `SELECT COALESCE(p.name, rri.product_name, 'Product') AS name,
+              SUM(rri.quantity * rri.unit_price)::numeric AS adjustmentAmount,
+              COALESCE(MAX(rr.reason), 'Return/Refund') AS reason
+       FROM refund_request_items rri
+       JOIN refund_requests rr ON rr.refund_request_id = rri.refund_request_id
+       LEFT JOIN products p ON p.product_id::text = rri.product_id::text
+       WHERE rr.status IN ('approved', 'refunded', 'processing')
+         AND rri.deleted_at IS NULL
+         ${refundRange.conditions.length > 0 ? 'AND ' + refundRange.conditions.join(' AND ') : ''}
+       GROUP BY COALESCE(p.name, rri.product_name, 'Product')
+       ORDER BY adjustmentAmount DESC
+       LIMIT 10`,
+      refundRange.params
     ),
     pool.query(
-      `SELECT
-          a.payment_method AS method,
-          COUNT(*)::int AS appointments,
-          COALESCE(SUM(s.price), 0)::numeric AS revenue
+      `SELECT COALESCE(p.name, psi.item_name, 'Product') AS name,
+              SUM(pr.quantity * psi.unit_price)::numeric AS adjustmentAmount,
+              COALESCE(MAX(pr.reason), 'Return/Refund') AS reason
+       FROM pos_returns pr
+       JOIN pos_sale_items psi ON psi.item_id = pr.item_id
+       LEFT JOIN products p ON p.product_id::text = psi.product_id::text
+       WHERE 1 = 1
+         ${posReturnRange.conditions.length > 0 ? 'AND ' + posReturnRange.conditions.join(' AND ') : ''}
+       GROUP BY COALESCE(p.name, psi.item_name, 'Product')
+       ORDER BY adjustmentAmount DESC
+       LIMIT 10`,
+      posReturnRange.params
+    ),
+    pool.query(
+      `SELECT rr.reason,
+              COUNT(*)::int AS count,
+              COALESCE(SUM(COALESCE(rr.amount_requested, 0)), 0)::numeric AS amount
+       FROM refund_requests rr
+       WHERE rr.status IN ('approved', 'refunded', 'processing')
+         AND rr.reason IS NOT NULL
+         ${refundRange.conditions.length > 0 ? 'AND ' + refundRange.conditions.join(' AND ') : ''}
+       GROUP BY rr.reason
+       ORDER BY count DESC
+       LIMIT 10`,
+      refundRange.params
+    ),
+    pool.query(
+      `SELECT a.payment_method AS method,
+              COUNT(*)::int AS appointments,
+              COALESCE(SUM(s.price), 0)::numeric AS revenue
        FROM appointments a
-        JOIN services s ON s.service_id::text IN (
-          SELECT (jsonb_array_elements_text(a.services))::text
-        )
-       WHERE a.status = 'completed'
-         AND a.payment_method IS NOT NULL
-       ${appointmentRange.clause}
+       JOIN services s ON s.service_id::text IN (
+         SELECT jsonb_array_elements_text(a.services)
+       )
+       WHERE a.status = $1 AND a.payment_status = $2 AND a.payment_method IS NOT NULL
+         ${apptFilterSql}
+         ${appointmentRange.conditions.length > 0 ? 'AND ' + renumberConditions(appointmentRange.conditions, apptFilterIdx).join(' AND ') : ''}
        GROUP BY a.payment_method
        ORDER BY revenue DESC`,
-      appointmentRange.params
+      [effectiveApptStatus, effectiveApptPaymentStatus, ...apptFilterParams, ...appointmentRange.params]
     ),
+    dailyWeeklyMonthlyPromise,
   ]);
 
-  const walkInSales = parseFloat(walkInSummary.rows[0]?.sales || 0);
+  const walkInGross = parseFloat(walkInSummary.rows[0]?.gross || 0);
   const walkInTransactions = parseInt(walkInSummary.rows[0]?.transactions || 0, 10);
-  const onlineSales = parseFloat(onlineSummary.rows[0]?.sales || 0);
+  const walkInAdjustments = parseFloat(walkInAdjustmentsResult.rows[0]?.adjustments || 0);
+  const walkInNet = walkInGross - walkInAdjustments;
+
+  const onlineGross = parseFloat(onlineSummary.rows[0]?.gross || 0);
   const onlineTransactions = parseInt(onlineSummary.rows[0]?.transactions || 0, 10);
-  const customizationSales = parseFloat(customizationSummary.rows[0]?.sales || 0);
+  const onlineAdjustments = parseFloat(onlineAdjustmentsResult.rows[0]?.adjustments || 0);
+  const onlineNet = onlineGross - onlineAdjustments;
+
+  const customizationGross = parseFloat(customizationSummary.rows[0]?.gross || 0);
   const customizationTransactions = parseInt(customizationSummary.rows[0]?.transactions || 0, 10);
+  const customizationAdjustments = parseFloat(customizationAdjustmentsResult.rows[0]?.adjustments || 0);
+  const customizationNet = customizationGross - customizationAdjustments;
 
-  const totalGrossSales = walkInSales + onlineSales + customizationSales;
-  const totalTransactions = walkInTransactions + onlineTransactions + customizationTransactions;
+  const appointmentGross = parseFloat(appointmentSummary.rows[0]?.gross || 0);
+  const appointmentTransactions = parseInt(appointmentSummary.rows[0]?.transactions || 0, 10);
+  const appointmentAdjustments = parseFloat(appointmentAdjustmentsResult.rows[0]?.adjustments || 0);
+  const appointmentNet = appointmentGross - appointmentAdjustments;
 
-  const dailySales = parseFloat(dailyOrders.rows[0]?.sales || 0) + parseFloat(dailyPos.rows[0]?.sales || 0);
-  const dailyTransactions = parseInt(dailyOrders.rows[0]?.transactions || 0, 10) + parseInt(dailyPos.rows[0]?.transactions || 0, 10);
-  const weeklySales = parseFloat(weeklyOrders.rows[0]?.sales || 0) + parseFloat(weeklyPos.rows[0]?.sales || 0);
-  const weeklyTransactions = parseInt(weeklyOrders.rows[0]?.transactions || 0, 10) + parseInt(weeklyPos.rows[0]?.transactions || 0, 10);
-  const monthlySales = parseFloat(monthlyOrders.rows[0]?.sales || 0) + parseFloat(monthlyPos.rows[0]?.sales || 0);
-  const monthlyTransactions = parseInt(monthlyOrders.rows[0]?.transactions || 0, 10) + parseInt(monthlyPos.rows[0]?.transactions || 0, 10);
+  const totalGrossSales = walkInGross + onlineGross + customizationGross + appointmentGross;
+  const totalAdjustments = walkInAdjustments + onlineAdjustments + customizationAdjustments + appointmentAdjustments;
+  const totalTransactions = walkInTransactions + onlineTransactions + customizationTransactions + appointmentTransactions;
+  const netSales = totalGrossSales - totalAdjustments;
+
+  const adjustmentRate = totalGrossSales > 0 ? Number(((totalAdjustments / totalGrossSales) * 100).toFixed(1)) : 0;
 
   const pct = (value, total) => (total > 0 ? Number(((value / total) * 100).toFixed(1)) : 0);
   const avg = (value, count) => (count > 0 ? Number((value / count).toFixed(2)) : 0);
 
+  const adjustmentsByType = (adjustmentsByTypeResult.rows || []).map((row) => ({
+    type: row.type,
+    count: parseInt(row.count || 0, 10),
+    amount: parseFloat(row.amount || 0),
+  }));
+
+  const adjustmentsByChannel = (adjustmentsByChannelResult.rows || []).map((row) => ({
+    channel: row.channel,
+    count: parseInt(row.count || 0, 10),
+    amount: parseFloat(row.amount || 0),
+  }));
+
+  const dailyTrend = (dailyTrendResult.rows || [])
+    .filter((row) => row.date)
+    .map((row) => ({
+      date: new Date(row.date).toISOString().split('T')[0],
+      revenue: parseFloat(row.revenue || 0),
+      transactions: parseInt(row.transactions || 0, 10),
+    }));
+
+  const bestSellingProducts = (bestSellingProductsResult.rows || []).map((row) => ({
+    name: row.name,
+    units: parseInt(row.units || 0, 10),
+    revenue: parseFloat(row.revenue || 0),
+    category: row.category,
+  }));
+
+  const topAdjustedProducts = [
+    ...(topAdjustedProductsResult.rows || []).map((row) => ({
+      name: row.name,
+      adjustmentAmount: parseFloat(row.adjustmentAmount || 0),
+      reason: row.reason,
+    })),
+  ];
+
+  const refundReasons = (refundReasonsResult.rows || []).map((row) => ({
+    reason: row.reason,
+    count: parseInt(row.count || 0, 10),
+    amount: parseFloat(row.amount || 0),
+  }));
+
+  const appointmentPaymentMethods = (appointmentPaymentMethodsResult.rows || []).map((row) => ({
+    method: row.method,
+    appointments: parseInt(row.appointments || 0, 10),
+    revenue: parseFloat(row.revenue || 0),
+  }));
+
+  let dailySales = 0;
+  let dailyTransactions = 0;
+  let weeklySales = 0;
+  let weeklyTransactions = 0;
+  let monthlySales = 0;
+  let monthlyTransactions = 0;
+
+  if (!hasDateRange) {
+    const dailyWeeklyMonthly = dailyWeeklyMonthlyResult.rows[0] || {};
+    dailySales = parseFloat(dailyWeeklyMonthly.dailySales || 0);
+    dailyTransactions = parseInt(dailyWeeklyMonthly.dailyTransactions || 0, 10);
+    weeklySales = parseFloat(dailyWeeklyMonthly.weeklySales || 0);
+    weeklyTransactions = parseInt(dailyWeeklyMonthly.weeklyTransactions || 0, 10);
+    monthlySales = parseFloat(dailyWeeklyMonthly.monthlySales || 0);
+    monthlyTransactions = parseInt(dailyWeeklyMonthly.monthlyTransactions || 0, 10);
+  }
+
   return {
-    totalGrossSales: Number(totalGrossSales.toFixed(2)),
+    grossSales: Number(totalGrossSales.toFixed(2)),
+    totalAdjustments: Number(totalAdjustments.toFixed(2)),
+    netSales: Number(netSales.toFixed(2)),
     totalTransactions,
     averagePerTransaction: avg(totalGrossSales, totalTransactions),
     customizationOrders: customizationTransactions,
-    walkInSales: Number(walkInSales.toFixed(2)),
-    walkInTransactions,
-    walkInAvg: avg(walkInSales, walkInTransactions),
-    walkInPercentage: pct(walkInSales, totalGrossSales),
-    onlineSales: Number(onlineSales.toFixed(2)),
-    onlineTransactions,
-    onlineAvg: avg(onlineSales, onlineTransactions),
-    onlinePercentage: pct(onlineSales, totalGrossSales),
-    customizationSales: Number(customizationSales.toFixed(2)),
-    customizationTransactions,
-    customizationAvg: avg(customizationSales, customizationTransactions),
-    customizationPercentage: pct(customizationSales, totalGrossSales),
+    channels: {
+      walkIn: {
+        gross: Number(walkInGross.toFixed(2)),
+        adjustments: Number(walkInAdjustments.toFixed(2)),
+        net: Number(walkInNet.toFixed(2)),
+        transactions: walkInTransactions,
+      },
+      online: {
+        gross: Number(onlineGross.toFixed(2)),
+        adjustments: Number(onlineAdjustments.toFixed(2)),
+        net: Number(onlineNet.toFixed(2)),
+        transactions: onlineTransactions,
+      },
+      customization: {
+        gross: Number(customizationGross.toFixed(2)),
+        adjustments: Number(customizationAdjustments.toFixed(2)),
+        net: Number(customizationNet.toFixed(2)),
+        transactions: customizationTransactions,
+      },
+      appointments: {
+        gross: Number(appointmentGross.toFixed(2)),
+        adjustments: Number(appointmentAdjustments.toFixed(2)),
+        net: Number(appointmentNet.toFixed(2)),
+        transactions: appointmentTransactions,
+      },
+    },
+    adjustmentsByType,
+    adjustmentsByChannel,
+    adjustmentRate,
+    dailyTrend,
+    bestSellingProducts,
+    topAdjustedProducts,
+    refundReasons,
+    appointmentPaymentMethods,
     dailySales: Number(dailySales.toFixed(2)),
     dailyTransactions,
     weeklySales: Number(weeklySales.toFixed(2)),
     weeklyTransactions,
     monthlySales: Number(monthlySales.toFixed(2)),
     monthlyTransactions,
-    bestSellingProducts: bestSellingProducts.rows.map((row) => ({
-      name: row.name,
-      units: parseInt(row.units || 0, 10),
-      revenue: parseFloat(row.revenue || 0),
-      category: row.category,
-    })),
-    customizationTypes: customizationTypes.rows.map((row) => ({
-      type: row.type,
-      orders: parseInt(row.orders || 0, 10),
-      revenue: parseFloat(row.revenue || 0),
-    })),
-    customizationRevenue: Number(customizationSales.toFixed(2)),
-    avgCustomization: avg(customizationSales, customizationTransactions),
-    walkInConversion: pct(walkInTransactions, totalTransactions),
-    onlineConversion: pct(onlineTransactions, totalTransactions),
-    appointmentPaymentMethods: appointmentPaymentSummary.rows.map((row) => ({
-      method: row.method,
-      appointments: parseInt(row.appointments || 0, 10),
-      revenue: parseFloat(row.revenue || 0),
-    })),
   };
 }
 

@@ -53,9 +53,9 @@ export function useInventoryAdmin({ products, showToast }) {
     }
   }, [showToast, products])
 
-  const fetchSalesReport = useCallback(async () => {
+  const fetchSalesReport = useCallback(async (filters = {}) => {
     try {
-      const res = await adminApi.getSalesReport()
+      const res = await adminApi.getSalesReport(filters)
       const nextSalesReport = res.data || {}
       if (JSON.stringify(salesReportRef.current) !== JSON.stringify(nextSalesReport)) {
         salesReportRef.current = nextSalesReport
@@ -64,14 +64,25 @@ export function useInventoryAdmin({ products, showToast }) {
     } catch (e) {
       showToast(e.message, 'error')
       const fallbackSalesReport = {
-        totalGrossSales: 0, totalTransactions: 0, averagePerTransaction: 0, customizationOrders: 0,
-        walkInSales: 0, walkInTransactions: 0, walkInAvg: 0, walkInPercentage: 0,
-        onlineSales: 0, onlineTransactions: 0, onlineAvg: 0, onlinePercentage: 0,
-        customizationSales: 0, customizationTransactions: 0, customizationAvg: 0, customizationPercentage: 0,
-        dailySales: 0, dailyTransactions: 0, weeklySales: 0, weeklyTransactions: 0,
-        monthlySales: 0, monthlyTransactions: 0, bestSellingProducts: [], customizationTypes: [],
-        customizationRevenue: 0, avgCustomization: 0, walkInConversion: 0, onlineConversion: 0,
+        grossSales: 0, totalAdjustments: 0, netSales: 0, totalTransactions: 0,
+        averagePerTransaction: 0, customizationOrders: 0,
+        channels: {
+          walkIn: { gross: 0, adjustments: 0, net: 0, transactions: 0 },
+          online: { gross: 0, adjustments: 0, net: 0, transactions: 0 },
+          customization: { gross: 0, adjustments: 0, net: 0, transactions: 0 },
+          appointments: { gross: 0, adjustments: 0, net: 0, transactions: 0 },
+        },
+        adjustmentsByType: [],
+        adjustmentsByChannel: [],
+        adjustmentRate: 0,
+        dailyTrend: [],
+        bestSellingProducts: [],
+        topAdjustedProducts: [],
+        refundReasons: [],
         appointmentPaymentMethods: [],
+        dailySales: 0, dailyTransactions: 0,
+        weeklySales: 0, weeklyTransactions: 0,
+        monthlySales: 0, monthlyTransactions: 0,
       }
       if (JSON.stringify(salesReportRef.current) !== JSON.stringify(fallbackSalesReport)) {
         salesReportRef.current = fallbackSalesReport

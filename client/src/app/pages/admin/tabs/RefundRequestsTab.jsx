@@ -18,6 +18,16 @@ const REFUND_STATUS_MAP = {
   processing: { label: 'Processing', color: '#38bdf8', bgColor: 'bg-sky-500/20', textColor: 'text-sky-400', borderColor: 'border-sky-500/30' },
   rejected: { label: 'Rejected', color: '#f87171', bgColor: 'bg-red-500/20', textColor: 'text-red-400', borderColor: 'border-red-500/30' },
   refunded: { label: 'Refunded', color: '#22c55e', bgColor: 'bg-green-500/20', textColor: 'text-green-400', borderColor: 'border-green-500/30' },
+  withdrawn: { label: 'Withdrawn', color: '#94a3b8', bgColor: 'bg-slate-500/20', textColor: 'text-slate-400', borderColor: 'border-slate-500/30' },
+  'return_pending': { label: 'Return Pending', color: '#f59e0b', bgColor: 'bg-amber-500/20', textColor: 'text-amber-400', borderColor: 'border-amber-500/30' },
+  returned: { label: 'Returned', color: '#38bdf8', bgColor: 'bg-sky-500/20', textColor: 'text-sky-400', borderColor: 'border-sky-500/30' },
+  'return_confirmed': { label: 'Return Confirmed', color: '#22c55e', bgColor: 'bg-green-500/20', textColor: 'text-green-400', borderColor: 'border-green-500/30' },
+}
+
+const REFUND_TYPE_MAP = {
+  money_refund: { label: 'Money Refund', color: '#22c55e', bgColor: 'bg-green-500/20', textColor: 'text-green-400', borderColor: 'border-green-500/30' },
+  physical_release: { label: 'Physical Release', color: '#38bdf8', bgColor: 'bg-sky-500/20', textColor: 'text-sky-400', borderColor: 'border-sky-500/30' },
+  no_refund: { label: 'No Refund', color: '#f87171', bgColor: 'bg-red-500/20', textColor: 'text-red-400', borderColor: 'border-red-500/30' },
 }
 
 const REASON_LABELS = {
@@ -55,6 +65,8 @@ export function RefundRequestsTab({ showToast }) {
   const [imageZoom, setImageZoom] = useState(null)
   const [adminNotes, setAdminNotes] = useState('')
   const [updatingStatus, setUpdatingStatus] = useState(false)
+  const [approvedAmount, setApprovedAmount] = useState('')
+  const [adjustmentReason, setAdjustmentReason] = useState('')
 
   const debouncedSearch = useDebounce(searchQuery, 300)
 
@@ -112,9 +124,33 @@ export function RefundRequestsTab({ showToast }) {
       showToast?.(`Refund request ${newStatus} successfully.`)
       setSelectedRequest(null)
       setAdminNotes('')
+      setApprovedAmount('')
+      setAdjustmentReason('')
       fetchRefundRequests()
     } catch (err) {
       showToast?.(`Failed to update refund status: ${err.message}`, 'error')
+    } finally {
+      setUpdatingStatus(false)
+    }
+  }
+
+  const handleApproveWithAmount = async () => {
+    if (!selectedRequest?.refund_request_id) return
+    setUpdatingStatus(true)
+    try {
+      const amount = approvedAmount ? Number(approvedAmount) : null
+      await adminApi.adjustRefundAmount(selectedRequest.refund_request_id, {
+        approvedAmount: amount,
+        adjustmentReason: adjustmentReason || undefined,
+      })
+      showToast?.('Refund approved with adjusted amount.')
+      setSelectedRequest(null)
+      setAdminNotes('')
+      setApprovedAmount('')
+      setAdjustmentReason('')
+      fetchRefundRequests()
+    } catch (err) {
+      showToast?.(`Failed to approve refund: ${err.message}`, 'error')
     } finally {
       setUpdatingStatus(false)
     }
@@ -295,6 +331,15 @@ export function RefundRequestsTab({ showToast }) {
                 </div>
               </div>
 
+              {selectedRequest.refund_type && (
+                <div className="bg-[var(--bg-primary)]/50 rounded-xl p-4">
+                  <p className="text-[var(--text-muted)] text-xs uppercase tracking-wider mb-2">Refund Type</p>
+                  <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold border ${(REFUND_TYPE_MAP[selectedRequest.refund_type] || REFUND_TYPE_MAP.money_refund).bgColor} ${(REFUND_TYPE_MAP[selectedRequest.refund_type] || REFUND_TYPE_MAP.money_refund).textColor} ${(REFUND_TYPE_MAP[selectedRequest.refund_type] || REFUND_TYPE_MAP.money_refund).borderColor}`}>
+                    {(REFUND_TYPE_MAP[selectedRequest.refund_type] || REFUND_TYPE_MAP.money_refund).label}
+                  </span>
+                </div>
+              )}
+
               <div className="bg-[var(--bg-primary)]/50 rounded-xl p-4">
                 <p className="text-[var(--text-muted)] text-xs uppercase tracking-wider mb-2">Reason</p>
                 <p className="text-white text-sm">{formatReason(selectedRequest.reason) || selectedRequest.reason}</p>
@@ -363,9 +408,33 @@ export function RefundRequestsTab({ showToast }) {
                     rows={3}
                     className="w-full px-4 py-3 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] text-sm text-white placeholder-[var(--text-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--gold-primary)] resize-none"
                   />
+                  <div className="grid grid-cols-2 gap-3 mt-4">
+                    <div>
+                      <p className="text-[var(--text-muted)] text-xs uppercase tracking-wider mb-2">Approved Amount (optional)</p>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={approvedAmount}
+                        onChange={(e) => setApprovedAmount(e.target.value)}
+                        placeholder={String(getRefundTotal(selectedRequest.items, selectedRequest.amount_requested))}
+                        className="w-full px-4 py-3 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] text-sm text-white placeholder-[var(--text-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--gold-primary)]"
+                      />
+                    </div>
+                    <div>
+                      <p className="text-[var(--text-muted)] text-xs uppercase tracking-wider mb-2">Adjustment Reason</p>
+                      <input
+                        type="text"
+                        value={adjustmentReason}
+                        onChange={(e) => setAdjustmentReason(e.target.value)}
+                        placeholder="e.g. Partial refund for damaged item"
+                        className="w-full px-4 py-3 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] text-sm text-white placeholder-[var(--text-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--gold-primary)]"
+                      />
+                    </div>
+                  </div>
                   <div className="flex gap-3 mt-4">
                     <button
-                      onClick={() => handleUpdateStatus('approved')}
+                      onClick={() => approvedAmount ? handleApproveWithAmount() : handleUpdateStatus('approved')}
                       disabled={updatingStatus}
                       className="flex-1 py-2.5 rounded-xl bg-green-500 text-white font-bold text-sm hover:bg-green-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
                     >

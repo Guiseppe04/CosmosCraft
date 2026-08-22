@@ -1,15 +1,7 @@
 const { pool } = require('../config/database');
 const { AppError } = require('../middleware/errorHandler');
 const { generateRefundRequestNumber } = require('../utils/orderNumber');
-
-const PROJECT_REFUND_TRANSITIONS = {
-  pending: ['approved', 'rejected'],
-  'pending_payment_verification': ['pending', 'rejected'],
-  approved: ['processing'],
-  processing: ['refunded'],
-  rejected: [],
-  refunded: [],
-};
+const sharedRefundService = require('./refundService');
 
 const hasBuildProgress = async (db, projectId) => {
   const res = await db.query(
@@ -290,112 +282,20 @@ exports.updateProjectRefundStatus = async (refundRequestId, status, adminUserId,
     throw new AppError('Only admins can update refund status', 403);
   }
 
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
+  return sharedRefundService.applyTransition(refundRequestId, status, adminUserId, userRole, {
+    adminNotes: data.adminNotes,
+    rejectionReason: data.rejectionReason || data.rejection_reason,
+    approvedAmount: data.approvedAmount ?? data.approved_amount,
+    adjustmentReason: data.adjustmentReason,
+    refundMethod: data.refundMethod || data.refund_method,
+    refundReference: data.refundReference || data.refund_reference,
+    refundFee: data.refundFee ?? data.refund_fee,
+  });
+};
 
-    const rrRes = await client.query(
-      `SELECT * FROM refund_requests WHERE refund_request_id = $1 AND deleted_at IS NULL`,
-      [refundRequestId]
-    );
-    if (rrRes.rows.length === 0) {
-      throw new AppError('Refund request not found', 404);
-    }
-    const refund = rrRes.rows[0];
-
-    const allowed = PROJECT_REFUND_TRANSITIONS[refund.status] || [];
-    if (!allowed.includes(status)) {
-      throw new AppError(`Invalid refund status transition from '${refund.status}' to '${status}'`, 400);
-    }
-
-    const updateFields = ['status = $1', 'updated_at = CURRENT_TIMESTAMP'];
-    const updateValues = [status];
-    let paramIndex = 2;
-
-    // Audit trail: record deciding admin + timestamp on every decision.
-    updateFields.push(`reviewed_by = $${paramIndex++}`);
-    updateValues.push(adminUserId);
-    updateFields.push(`reviewed_at = CURRENT_TIMESTAMP`);
-
-    if (data.adminNotes) {
-      updateFields.push(`admin_notes = $${paramIndex++}`);
-      updateValues.push(String(data.adminNotes).trim());
-    }
-
-    if (status === 'approved') {
-      // Lock the amount on approval so it cannot be modified.
-      updateFields.push(`requested_amount_locked = TRUE`);
-    }
-
-    if (status === 'refunded') {
-      updateFields.push(`refunded_at = CURRENT_TIMESTAMP`);
-
-      // Mark all verified payments for the project's order as refunded so the
-      // whole paid amount (including down-payment installments) is reflected
-      // in the same transaction.
-      if (refund.payment_id) {
-        const orderRes = await client.query(
-          `SELECT order_id FROM refund_requests WHERE refund_request_id = $1`,
-          [refundRequestId]
-        );
-        const orderId = orderRes.rows[0]?.order_id || null;
-        if (orderId) {
-          const verifiedRes = await client.query(
-            `SELECT payment_id FROM payments
-             WHERE order_id = $1 AND status = 'verified'
-             ORDER BY created_at ASC
-             FOR UPDATE`,
-            [orderId]
-          );
-          const paymentIds = verifiedRes.rows.map((r) => r.payment_id);
-          if (paymentIds.length > 0) {
-            await client.query(
-              `UPDATE payments
-               SET status = 'refunded',
-                   updated_at = CURRENT_TIMESTAMP
-               WHERE payment_id = ANY($1::uuid[])`,
-              [paymentIds]
-            );
-          }
-        }
-      }
-    }
-
-    updateValues.push(refundRequestId);
-    const res = await client.query(
-      `UPDATE refund_requests SET ${updateFields.join(', ')}
-       WHERE refund_request_id = $${paramIndex} RETURNING *`,
-      updateValues
-    );
-
-    // Log the admin decision action.
-    const actionMap = {
-      pending: 'refund_pending_payment_verified',
-      rejected: 'refund_rejected',
-      approved: 'refund_approved',
-      processing: 'refund_processing',
-      refunded: 'refund_refunded',
-    };
-    if (refund.project_id && actionMap[status]) {
-      await client.query(
-        `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, details)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [
-          adminUserId,
-          actionMap[status],
-          'project',
-          refund.project_id,
-          JSON.stringify({ refund_request_id: refundRequestId, from: refund.status, to: status }),
-        ]
-      );
-    }
-
-    await client.query('COMMIT');
-    return res.rows[0];
-  } catch (err) {
-    await client.query('ROLLBACK');
-    throw err;
-  } finally {
-    client.release();
-  }
+/**
+ * Customer withdraws a project refund request while still pending.
+ */
+exports.withdrawProjectRefund = async (refundRequestId, userId) => {
+  return sharedRefundService.withdrawRefund(refundRequestId, userId);
 };

@@ -108,10 +108,20 @@ const REFUND_STATUS_CONFIG = {
     icon: Clock,
     className: 'border-amber-500/30 text-amber-400',
   },
+  'pending_payment_verification': {
+    label: 'Awaiting Payment Verification',
+    icon: Clock,
+    className: 'border-violet-500/30 text-violet-400',
+  },
   approved: {
     label: 'Refund Approved',
     icon: CheckCircle,
     className: 'border-green-500/30 text-green-400',
+  },
+  processing: {
+    label: 'Refund Processing',
+    icon: RefreshCw,
+    className: 'border-sky-500/30 text-sky-400',
   },
   rejected: {
     label: 'Refund Rejected',
@@ -122,6 +132,26 @@ const REFUND_STATUS_CONFIG = {
     label: 'Refunded',
     icon: CheckCircle,
     className: 'border-sky-500/30 text-sky-400',
+  },
+  withdrawn: {
+    label: 'Refund Withdrawn',
+    icon: XCircle,
+    className: 'border-slate-500/30 text-slate-400',
+  },
+  'return_pending': {
+    label: 'Return Pending',
+    icon: Truck,
+    className: 'border-amber-500/30 text-amber-400',
+  },
+  returned: {
+    label: 'Returned',
+    icon: CheckCircle,
+    className: 'border-sky-500/30 text-sky-400',
+  },
+  'return_confirmed': {
+    label: 'Return Confirmed',
+    icon: CheckCircle,
+    className: 'border-green-500/30 text-green-400',
   },
 }
 
@@ -1390,7 +1420,7 @@ export function DashboardPage() {
                   </div>
                 )}
                 {(order.status === 'received' || order.status === 'delivered') && order.has_refund_request && (
-                  <div className="mt-4 pt-4 border-t border-[var(--border)] flex justify-end">
+                  <div className="mt-4 pt-4 border-t border-[var(--border)] flex justify-end items-center gap-3">
                     {(() => {
                       const refundConfig = getRefundStatusConfig(order.refund_request_status)
                       const RefundIcon = refundConfig.icon
@@ -1401,6 +1431,22 @@ export function DashboardPage() {
                         </span>
                       )
                     })()}
+                    {['pending', 'pending_payment_verification'].includes(order.refund_request_status) && (
+                      <button
+                        onClick={async () => {
+                          try {
+                            await adminApi.withdrawRefund(order.refund_request_id)
+                            setToastMessage('Refund request withdrawn.')
+                            fetchMyOrders()
+                          } catch (err) {
+                            setToastMessage(`Failed to withdraw refund: ${err.message}`)
+                          }
+                        }}
+                        className="px-4 py-2 border border-slate-500/30 text-slate-400 hover:bg-slate-500/10 transition-colors rounded-lg text-sm font-semibold"
+                      >
+                        Withdraw Refund
+                      </button>
+                    )}
                   </div>
                 )}
                 {(order.status === 'received' || order.status === 'delivered' || order.status === 'completed') && (

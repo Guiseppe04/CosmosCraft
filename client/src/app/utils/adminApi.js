@@ -125,6 +125,8 @@ export const adminApi = {
   },
   getRefundRequest: (id) => request(`/api/orders/refund-requests/${id}`),
   updateRefundStatus: (id, status, options = {}) => request(`/api/orders/refund-requests/${id}/status`, { method: 'PUT', body: { status, ...options } }),
+  withdrawRefund: (id) => request(`/api/orders/refund-requests/${id}/withdraw`, { method: 'POST' }),
+  adjustRefundAmount: (id, body) => request(`/api/orders/refund-requests/${id}/adjust`, { method: 'PATCH', body }),
 
   // Projects
   getProjects: (params = {}) => {

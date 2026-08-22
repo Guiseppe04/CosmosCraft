@@ -1465,33 +1465,123 @@ exports.cancelOrder = async (orderId) => {
   return res.rows[0];
 }
 
+const refundService = require('./refundService');
+
 exports.cancelMyOrder = async (orderId, userId, reason) => {
-  const checkRes = await pool.query(
-    `SELECT status, notes FROM orders WHERE order_id = $1 AND user_id = $2`,
-    [orderId, userId]
-  );
-  if (checkRes.rows.length === 0) {
-    throw new Error('Order not found');
-  }
-  const { status, notes } = checkRes.rows[0];
-  if (status !== 'pending') {
-    throw new Error('Only pending orders can be cancelled');
-  }
+  const client = await pool.connect();
+  
+  try {
+    await client.query('BEGIN');
 
-  const cancellationStamp = new Date().toISOString()
-  const cancellationNote = `Customer cancellation reason (${cancellationStamp}): ${reason}`
-  const nextNotes = [notes, cancellationNote].filter(Boolean).join('\n')
+    const checkRes = await client.query(
+      `SELECT status, notes FROM orders WHERE order_id = $1 AND user_id = $2`,
+      [orderId, userId]
+    );
+    if (checkRes.rows.length === 0) {
+      throw new Error('Order not found');
+    }
+    const { status, notes } = checkRes.rows[0];
+    if (status !== 'pending') {
+      throw new Error('Only pending orders can be cancelled');
+    }
 
-  const res = await pool.query(
-    `UPDATE orders
-     SET status = 'cancelled',
-         notes = $3,
-         updated_at = CURRENT_TIMESTAMP
-     WHERE order_id = $1 AND user_id = $2
-     RETURNING *`,
-    [orderId, userId, nextNotes]
-  );
-  return res.rows[0];
+    // Get the latest payment for this order
+    const paymentRes = await client.query(
+      `SELECT payment_id, amount, status FROM payments
+       WHERE order_id = $1 AND status NOT IN ('rejected', 'cancelled', 'refunded')
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [orderId]
+    );
+    const latestPayment = paymentRes.rows[0] || null;
+
+    const cancellationStamp = new Date().toISOString()
+    const cancellationNote = `Customer cancellation reason (${cancellationStamp}): ${reason}`
+    const nextNotes = [notes, cancellationNote].filter(Boolean).join('\n')
+
+    const res = await client.query(
+      `UPDATE orders
+       SET status = 'cancelled',
+           notes = $3,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE order_id = $1 AND user_id = $2
+       RETURNING *`,
+      [orderId, userId, nextNotes]
+    );
+
+    // Create refund request based on payment status
+    if (latestPayment) {
+      const existingRefundRes = await client.query(
+        `SELECT refund_request_id, status FROM refund_requests
+         WHERE order_id = $1
+           AND status IN ('pending', 'approved', 'pending_payment_verification')
+           AND deleted_at IS NULL
+         LIMIT 1`,
+        [orderId]
+      );
+
+      if (existingRefundRes.rows.length === 0) {
+        let refundStatus = 'pending';
+        let amountRequested = Number(latestPayment.amount);
+
+        if (latestPayment.status === 'verified') {
+          refundStatus = 'pending';
+        } else if (['pending', 'for_verification'].includes(latestPayment.status)) {
+          refundStatus = 'pending_payment_verification';
+        } else {
+          amountRequested = 0;
+          refundStatus = null;
+        }
+
+        if (refundStatus && amountRequested > 0) {
+          const requestNumber = await generateRefundRequestNumber(client, 'RF');
+
+          await client.query(
+            `INSERT INTO refund_requests (
+               order_id, user_id, payment_id, reason, customer_notes,
+               amount_requested, status, request_number, refund_type
+             )
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'money_refund')`,
+            [
+              orderId,
+              userId,
+              latestPayment.payment_id,
+              'Automatic refund request from order cancellation',
+              reason,
+              amountRequested,
+              refundStatus,
+              requestNumber,
+            ]
+          );
+
+          await client.query(
+            `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, details)
+             VALUES ($1, $2, $3, $4, $5)`,
+            [
+              userId,
+              'refund_requested',
+              'order',
+              orderId,
+              JSON.stringify({
+                refund_request_reason: 'Automatic refund request from order cancellation',
+                amount_requested: amountRequested,
+                refund_status: refundStatus,
+                payment_status_at_cancel: latestPayment.status,
+              }),
+            ]
+          );
+        }
+      }
+    }
+
+    await client.query('COMMIT');
+    return res.rows[0];
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 exports.markAsReceived = async (orderId, userId) => {
