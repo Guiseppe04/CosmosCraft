@@ -364,6 +364,7 @@ async function verifyPayment(paymentId, verifiedByUserId, notes) {
   }
 
   const client = await pool.connect();
+  let verifiedInstallment = null;
   
   try {
     await client.query('BEGIN');
@@ -382,6 +383,18 @@ async function verifyPayment(paymentId, verifiedByUserId, notes) {
       ]
     );
 
+    // If this payment is for an installment, mark the installment schedule as paid
+    const instRes = await client.query(
+      `UPDATE project_installment_schedules
+       SET status = 'paid',
+           paid_at = CURRENT_TIMESTAMP,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE payment_id = $1
+       RETURNING *`,
+      [paymentId]
+    );
+    verifiedInstallment = instRes.rows[0] || null;
+
     await client.query(
       `UPDATE orders SET payment_status = $1, updated_at = $2 WHERE order_id = $3`,
       [ORDER_PAYMENT_STATUS.APPROVED, new Date(), payment.order_id]
@@ -392,6 +405,28 @@ async function verifyPayment(paymentId, verifiedByUserId, notes) {
     await projectRefundService.transitionRefundStatusesForPayment(client, payment.order_id, 'verified');
 
     await client.query('COMMIT');
+
+    if (verifiedInstallment) {
+      try {
+        const installmentService = require('./installmentService');
+        await installmentService.checkAndAutoResumeProject(verifiedInstallment.project_id);
+
+        const notificationService = require('./notificationService');
+        if (payment.user_id) {
+          await notificationService.createNotification({
+            user_id: payment.user_id,
+            title: 'Payment Approved',
+            message: `Your payment of ₱${Number(verifiedInstallment.amount).toLocaleString('en-PH', { minimumFractionDigits: 2 })} for Installment #${verifiedInstallment.installment_number} has been verified.`,
+            type: 'payment',
+            related_entity_id: payment.order_id,
+            related_entity_type: 'order',
+          });
+        }
+      } catch (postVerifyErr) {
+        console.warn('Installment post-verify error:', postVerifyErr.message);
+      }
+    }
+
     return result.rows[0];
   } catch (err) {
     await client.query('ROLLBACK');
@@ -414,6 +449,7 @@ async function rejectPayment(paymentId, rejectedByUserId, reason, notes) {
   }
 
   const client = await pool.connect();
+  let rejectedInstallment = null;
   
   try {
     await client.query('BEGIN');
@@ -433,6 +469,19 @@ async function rejectPayment(paymentId, rejectedByUserId, reason, notes) {
       ]
     );
 
+    // If this payment is for an installment, reset installment status to pending/overdue
+    const today = new Date().toISOString().split('T')[0];
+    const instRes = await client.query(
+      `UPDATE project_installment_schedules
+       SET status = CASE WHEN due_date < $2::date THEN 'overdue' ELSE 'pending' END,
+           paid_at = NULL,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE payment_id = $1
+       RETURNING *`,
+      [paymentId, today]
+    );
+    rejectedInstallment = instRes.rows[0] || null;
+
     await client.query(
       `UPDATE orders SET payment_status = $1, updated_at = $2 WHERE order_id = $3`,
       [ORDER_PAYMENT_STATUS.PENDING, new Date(), payment.order_id]
@@ -441,6 +490,25 @@ async function rejectPayment(paymentId, rejectedByUserId, reason, notes) {
     await projectRefundService.transitionRefundStatusesForPayment(client, payment.order_id, 'rejected');
 
     await client.query('COMMIT');
+
+    if (rejectedInstallment) {
+      try {
+        const notificationService = require('./notificationService');
+        if (payment.user_id) {
+          await notificationService.createNotification({
+            user_id: payment.user_id,
+            title: 'Payment Rejected',
+            message: `Your payment for Installment #${rejectedInstallment.installment_number} could not be verified.${reason ? ' Reason: ' + reason + '.' : ''} Please review the payment information and submit a new payment.`,
+            type: 'payment',
+            related_entity_id: payment.order_id,
+            related_entity_type: 'order',
+          });
+        }
+      } catch (postRejectErr) {
+        console.warn('Installment post-reject error:', postRejectErr.message);
+      }
+    }
+
     return result.rows[0];
   } catch (err) {
     await client.query('ROLLBACK');

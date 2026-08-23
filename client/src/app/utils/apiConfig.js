@@ -7,6 +7,15 @@ const rawApiUrl = isProd
   : (import.meta.env.VITE_API_URL || '');
 export const API = rawApiUrl ? rawApiUrl.replace(/\/+$/, '') : window.location.origin;
 
+export function resolveImageUrl(url) {
+  if (!url) return '';
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('blob:') || url.startsWith('data:')) {
+    return url;
+  }
+  const cleanPath = url.startsWith('/') ? url : `/${url}`;
+  return `${API}${cleanPath}`;
+}
+
 export async function listBuilderAssets({ guitarType, group, subgroup, model } = {}) {
   const params = new URLSearchParams()
   if (guitarType) params.set('guitarType', guitarType)

@@ -21,7 +21,7 @@ const ensureProjectArchiveColumns = async () => {
        FROM information_schema.columns
        WHERE table_name = 'projects'
          AND table_schema = current_schema()
-         AND column_name IN ('deleted_at', 'deleted_by')`
+         AND column_name IN ('deleted_at', 'deleted_by', 'cancel_resolution', 'cancellation_settlement')`
     );
 
     const existing = new Set(checkRes.rows.map((row) => row.column_name));
@@ -31,6 +31,12 @@ const ensureProjectArchiveColumns = async () => {
     }
     if (!existing.has('deleted_by')) {
       await pool.query(`ALTER TABLE projects ADD COLUMN deleted_by UUID REFERENCES users(user_id) ON DELETE SET NULL`);
+    }
+    if (!existing.has('cancel_resolution')) {
+      await pool.query(`ALTER TABLE projects ADD COLUMN cancel_resolution VARCHAR(50)`);
+    }
+    if (!existing.has('cancellation_settlement')) {
+      await pool.query(`ALTER TABLE projects ADD COLUMN cancellation_settlement JSONB`);
     }
   })()
     .catch((error) => {
@@ -88,6 +94,8 @@ const PROJECT_BASE_SELECT = `
     p.claimed_by,
     p.claimed_at,
     p.custom_build_id,
+    p.cancel_resolution,
+    p.cancellation_settlement,
     o.user_id AS customer_id,
     o.order_number,
     o.payment_plan AS order_payment_plan,
@@ -106,30 +114,55 @@ const PROJECT_BASE_SELECT = `
       END,
       COALESCE(u.last_name, '')
     ) AS customer_name,
+    u.phone AS customer_phone,
+    u.email AS customer_email,
+    ca.label AS cancel_address_label,
+    ca.line1 AS cancel_address_line1,
+    ca.line2 AS cancel_address_line2,
+    ca.barangay AS cancel_address_barangay,
+    ca.city AS cancel_address_city,
+    ca.province AS cancel_address_province,
+    ca.postal_code AS cancel_address_postal_code,
+    ca.country AS cancel_address_country,
     claim_user.first_name AS claimed_first_name,
     claim_user.last_name AS claimed_last_name,
     claim_user.role AS claimed_role,
     refund_latest.refund_request_id,
     refund_latest.refund_status,
+    refund_latest.refund_type,
     refund_latest.refund_amount_requested,
+    refund_latest.refund_approved_amount,
+    refund_latest.refunded_amount,
+    refund_latest.refund_method,
+    refund_latest.refund_reference,
+    refund_latest.refund_fee,
     refund_latest.refund_reason,
     refund_latest.refund_requested_at,
     refund_latest.refund_decided_at,
     refund_latest.refund_decided_by,
+    refund_latest.refunded_at,
     refund_decider.first_name AS refund_decided_by_name
   FROM projects p
   JOIN orders o ON o.order_id = p.order_id
   LEFT JOIN addresses a ON a.address_id = o.shipping_address_id
+  LEFT JOIN addresses ca ON ca.address_id = p.cancel_address_id
   LEFT JOIN users u ON u.user_id = o.user_id
   LEFT JOIN users claim_user ON claim_user.user_id = p.claimed_by
   LEFT JOIN LATERAL (
     SELECT refund_request_id,
            status AS refund_status,
+           refund_type,
            amount_requested AS refund_amount_requested,
+           approved_amount AS refund_approved_amount,
+           refunded_amount,
+           refund_method,
+           refund_reference,
+           refund_fee,
            reason AS refund_reason,
            created_at AS refund_requested_at,
            reviewed_at AS refund_decided_at,
-           reviewed_by AS refund_decided_by
+           reviewed_by AS refund_decided_by,
+           refunded_at
     FROM refund_requests rr
     WHERE rr.project_id = p.project_id
       AND rr.deleted_at IS NULL
@@ -515,11 +548,18 @@ const attachRefundStateToProjects = async (projects) => {
        rr.project_id,
        rr.refund_request_id,
        rr.status AS refund_status,
+       rr.refund_type,
        rr.amount_requested AS refund_amount_requested,
+       rr.approved_amount AS refund_approved_amount,
+       rr.refunded_amount,
+       rr.refund_method,
+       rr.refund_reference,
+       rr.refund_fee,
        rr.reason AS refund_reason,
        rr.created_at AS refund_requested_at,
        rr.reviewed_at AS refund_decided_at,
        rr.reviewed_by AS refund_decided_by,
+       rr.refunded_at,
        u.first_name AS refund_decided_by_name
      FROM refund_requests rr
      LEFT JOIN users u ON u.user_id = rr.reviewed_by
@@ -540,12 +580,19 @@ const attachRefundStateToProjects = async (projects) => {
       ...project,
       refund_request_id: refund.refund_request_id || null,
       refund_status: refund.refund_status || null,
+      refund_type: refund.refund_type || null,
       refund_amount_requested: refund.refund_amount_requested || null,
+      refund_approved_amount: refund.refund_approved_amount || null,
+      refunded_amount: refund.refunded_amount || null,
+      refund_method: refund.refund_method || null,
+      refund_reference: refund.refund_reference || null,
+      refund_fee: refund.refund_fee || null,
       refund_reason: refund.refund_reason || null,
       refund_requested_at: refund.refund_requested_at || null,
       refund_decided_at: refund.refund_decided_at || null,
       refund_decided_by: refund.refund_decided_by || null,
       refund_decided_by_name: refund.refund_decided_by_name || null,
+      refunded_at: refund.refunded_at || null,
     };
   });
 };
@@ -1264,12 +1311,24 @@ exports.cancelProject = async (projectId, userId, userRole) => {
     }
     const hasBuildProgress = tracking.progress > 0 || stats.completed > 0;
 
+    const projectRefundService = require('./projectRefundService');
+    let settlement = null;
+    try {
+      settlement = await projectRefundService.calculateProjectCancellationSettlement(projectId);
+    } catch (err) {
+      console.warn('Failed to calculate settlement in cancelProject:', err.message);
+    }
+
+    const resolutionType = settlement?.resolution?.recommended || (hasBuildProgress ? 'current_build_released' : 'full_refund');
+
     await client.query(
       `UPDATE projects
        SET status = 'cancelled',
+           cancel_resolution = $1,
+           cancellation_settlement = $2,
            updated_at = CURRENT_TIMESTAMP
-       WHERE project_id = $1`,
-      [projectId]
+       WHERE project_id = $3`,
+      [resolutionType, settlement ? JSON.stringify(settlement) : null, projectId]
     );
 
     await client.query(
@@ -1286,6 +1345,8 @@ exports.cancelProject = async (projectId, userId, userRole) => {
       previous_progress: tracking.progress,
       order_id: project.order_id,
       has_build_progress: hasBuildProgress,
+      cancel_resolution: resolutionType,
+      settlement,
     });
 
     if (hasBuildProgress) {
@@ -2387,32 +2448,11 @@ const ensureProjectHoldCancelColumns = async () => {
           'refund_processing', 'refund_refunded'
         ));
     `).catch(() => {});
-    // Check if hold_reason column exists, if not add all hold/cancel columns
-    const checkRes = await pool.query(
-      `SELECT column_name
-       FROM information_schema.columns
-       WHERE table_name = 'projects'
-         AND table_schema = current_schema()
-         AND column_name = 'hold_reason'`
-    );
-    if (checkRes.rows.length === 0) {
-      await pool.query(`ALTER TABLE projects ADD COLUMN hold_reason TEXT`);
-      await pool.query(`ALTER TABLE projects ADD COLUMN hold_option VARCHAR(50) CHECK (hold_option IS NULL OR hold_option IN ('resume_later', 'hold_before_next_step'))`);
-      await pool.query(`ALTER TABLE projects ADD COLUMN hold_at_step VARCHAR(200)`);
-      await pool.query(`ALTER TABLE projects ADD COLUMN hold_requested_at TIMESTAMPTZ`);
-      await pool.query(`ALTER TABLE projects ADD COLUMN hold_approved_by UUID REFERENCES users(user_id) ON DELETE SET NULL`);
-      await pool.query(`ALTER TABLE projects ADD COLUMN hold_approved_at TIMESTAMPTZ`);
-      await pool.query(`ALTER TABLE projects ADD COLUMN resumed_at TIMESTAMPTZ`);
-      await pool.query(`ALTER TABLE projects ADD COLUMN cancel_option VARCHAR(50) CHECK (cancel_option IS NULL OR cancel_option IN ('ship_unfinished', 'pickup_unfinished'))`);
-      await pool.query(`ALTER TABLE projects ADD COLUMN cancel_reason TEXT`);
-      await pool.query(`ALTER TABLE projects ADD COLUMN cancel_requested_at TIMESTAMPTZ`);
-      await pool.query(`ALTER TABLE projects ADD COLUMN cancel_approved_by UUID REFERENCES users(user_id) ON DELETE SET NULL`);
-      await pool.query(`ALTER TABLE projects ADD COLUMN cancel_approved_at TIMESTAMPTZ`);
-      await pool.query(`ALTER TABLE projects ADD COLUMN shipped_at TIMESTAMPTZ`);
-      await pool.query(`ALTER TABLE projects ADD COLUMN ready_for_pickup_at TIMESTAMPTZ`);
-      await pool.query(`ALTER TABLE projects ADD COLUMN picked_up_at TIMESTAMPTZ`);
-      console.log('Added hold/cancel columns to projects table');
-    }
+    // Ensure cancel_address_id and cancel_address_snapshot exist
+    await pool.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS cancel_address_id UUID REFERENCES addresses(address_id) ON DELETE SET NULL`).catch(() => {});
+    await pool.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS cancel_address_snapshot JSONB`).catch(() => {});
+    await pool.query(`ALTER TABLE projects DROP CONSTRAINT IF EXISTS projects_cancel_option_check`).catch(() => {});
+    await pool.query(`ALTER TABLE projects ADD CONSTRAINT projects_cancel_option_check CHECK (cancel_option IS NULL OR cancel_option IN ('ship_to_address', 'pickup_at_shop', 'ship_unfinished', 'pickup_unfinished'))`).catch(() => {});
   } catch (err) {
     console.warn('Could not add hold/cancel columns:', err.message);
   }
@@ -3219,9 +3259,11 @@ exports.resumeProject = async (projectId, userId, userRole) => {
  * @param {string} projectId
  * @param {string} userId
  * @param {string} userRole
- * @param {object} data - { cancel_option: 'ship_unfinished'|'pickup_unfinished', cancel_reason }
+ * @param {object} data - { cancel_option: 'ship_to_address'|'pickup_at_shop', cancel_reason, address_id }
  */
 exports.requestProjectCancel = async (projectId, userId, userRole, data = {}) => {
+  await ensureProjectArchiveColumns();
+  await ensureProjectHoldCancelColumns();
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -3243,24 +3285,162 @@ exports.requestProjectCancel = async (projectId, userId, userRole, data = {}) =>
     if (normalizedStatus === 'completed') throw new AppError('Project is already completed', 400);
     if (normalizedStatus === 'on_hold') throw new AppError('Project is on hold. Resume the project before requesting cancellation.', 400);
 
-    const cancelOption = data.cancel_option;
-    if (!['ship_unfinished', 'pickup_unfinished'].includes(cancelOption)) {
-      throw new AppError('Invalid cancellation option. Choose ship_unfinished or pickup_unfinished', 400);
+    // Enforce < 80% progress rule for unfinished guitar cancellation fulfillment
+    const currentProgress = Number(project.progress) || 0;
+    if (currentProgress >= 80) {
+      throw new AppError('Cancellation with unfinished guitar release is only available for projects with progress below 80%', 400);
+    }
+
+    const rawCancelOption = data.cancel_option || 'pickup_at_shop';
+    if (!['ship_to_address', 'pickup_at_shop', 'ship_unfinished', 'pickup_unfinished'].includes(rawCancelOption)) {
+      throw new AppError('Invalid cancellation option. Choose Ship to Address or Pick Up at Shop', 400);
+    }
+
+    const isShipping = ['ship_to_address', 'ship_unfinished'].includes(rawCancelOption);
+    const cancelOption = isShipping ? 'ship_to_address' : 'pickup_at_shop';
+
+    let cancelAddressId = null;
+    let cancelAddressSnapshot = null;
+
+    if (isShipping) {
+      const addressId = data.address_id;
+      if (!addressId) {
+        throw new AppError('Please select a delivery address.', 400);
+      }
+
+      const addrRes = await client.query(
+        `SELECT * FROM addresses WHERE address_id = $1 AND (user_id = $2 OR $3 = true) AND deleted_at IS NULL`,
+        [addressId, project.customer_id, isPrivileged]
+      );
+
+      if (addrRes.rows.length === 0) {
+        throw new AppError('Please select a valid delivery address.', 400);
+      }
+
+      const addr = addrRes.rows[0];
+      const userRes = await client.query(
+        `SELECT first_name, last_name, phone, email FROM users WHERE user_id = $1`,
+        [project.customer_id]
+      );
+      const custUser = userRes.rows[0] || {};
+
+      cancelAddressId = addr.address_id;
+      cancelAddressSnapshot = {
+        address_id: addr.address_id,
+        label: addr.label || 'Home',
+        recipient_name: `${custUser.first_name || ''} ${custUser.last_name || ''}`.trim() || project.customer_name || 'Customer',
+        phone: custUser.phone || null,
+        email: custUser.email || null,
+        line1: addr.line1,
+        line2: addr.line2 || null,
+        barangay: addr.barangay || null,
+        city: addr.city,
+        province: addr.province,
+        postal_code: addr.postal_code,
+        country: addr.country,
+        selected_at: new Date().toISOString(),
+      };
+    }
+
+    // Compute live settlement snapshot
+    const projectRefundService = require('./projectRefundService');
+    let settlementSnapshot = null;
+    try {
+      settlementSnapshot = await projectRefundService.calculateProjectCancellationSettlement(projectId, userId, userRole);
+    } catch (err) {
+      console.warn('Failed to calculate settlement during cancel request:', err.message);
     }
 
     await client.query(
       `UPDATE projects
        SET cancel_option = $1,
            cancel_reason = $2,
+           cancel_address_id = $3,
+           cancel_address_snapshot = $4,
            cancel_requested_at = CURRENT_TIMESTAMP,
+           cancellation_settlement = $5,
            updated_at = CURRENT_TIMESTAMP
-       WHERE project_id = $3`,
-      [cancelOption, data.cancel_reason || 'Customer requested cancellation', projectId]
+       WHERE project_id = $6`,
+      [
+        cancelOption,
+        data.cancel_reason || 'Customer requested cancellation',
+        cancelAddressId,
+        cancelAddressSnapshot ? JSON.stringify(cancelAddressSnapshot) : null,
+        settlementSnapshot ? JSON.stringify(settlementSnapshot) : null,
+        projectId
+      ]
     );
+
+    // Create or reactivate a refund_requests entry so it shows up in Admin Refund Requests tab
+    const existingReq = await client.query(
+      `SELECT refund_request_id FROM refund_requests
+       WHERE project_id = $1 AND deleted_at IS NULL AND status IN ('pending', 'pending_payment_verification')
+       LIMIT 1`,
+      [projectId]
+    );
+
+    if (existingReq.rows.length === 0) {
+      const paymentRes = await client.query(
+        `SELECT payment_id, amount, status FROM payments
+         WHERE order_id = $1 AND status NOT IN ('rejected', 'cancelled', 'refunded')
+         ORDER BY created_at DESC
+         LIMIT 1`,
+        [project.order_id]
+      );
+      const latestPayment = paymentRes.rows[0] || null;
+
+      const requestedAmount = settlementSnapshot?.financials?.refundable_amount !== undefined
+        ? Number(settlementSnapshot.financials.refundable_amount)
+        : (latestPayment ? Number(latestPayment.amount) : 0);
+
+      const refundStatus = (latestPayment && ['pending', 'for_verification'].includes(latestPayment.status))
+        ? 'pending_payment_verification'
+        : 'pending';
+
+      const requestNumber = await generateRefundRequestNumber(client, 'RF');
+
+      await client.query(
+        `INSERT INTO refund_requests (
+           order_id, user_id, project_id, payment_id, reason, customer_notes,
+           amount_requested, build_stage_at_request, status, request_number, refund_type
+         )
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'money_refund')`,
+        [
+          project.order_id,
+          userId,
+          projectId,
+          latestPayment?.payment_id || null,
+          data.cancel_reason || 'Customer requested project cancellation',
+          `Cancellation option: ${cancelOption}`,
+          requestedAmount,
+          project.last_completed_stage || null,
+          refundStatus,
+          requestNumber,
+        ]
+      );
+    } else {
+      await client.query(
+        `UPDATE refund_requests
+         SET reason = $1,
+             customer_notes = $2,
+             status = 'pending',
+             deleted_at = NULL,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE refund_request_id = $3`,
+        [
+          data.cancel_reason || 'Customer requested project cancellation',
+          `Cancellation option: ${cancelOption}`,
+          existingReq.rows[0].refund_request_id,
+        ]
+      );
+    }
 
     await logActivity(client, projectId, userId, 'cancel_requested', {
       cancel_option: cancelOption,
       cancel_reason: data.cancel_reason,
+      cancel_address_id: cancelAddressId,
+      cancel_address_snapshot: cancelAddressSnapshot,
+      settlement: settlementSnapshot,
     });
 
     await client.query('COMMIT');
@@ -3279,6 +3459,8 @@ exports.requestProjectCancel = async (projectId, userId, userRole, data = {}) =>
  * Admin approves (or rejects) a cancellation request.
  */
 exports.approveProjectCancel = async (projectId, userId, data = {}) => {
+  await ensureProjectArchiveColumns();
+  await ensureProjectHoldCancelColumns();
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -3301,55 +3483,78 @@ exports.approveProjectCancel = async (projectId, userId, data = {}) => {
     const action = data.action || 'approve';
 
     if (action === 'reject') {
-      // Reject cancellation - clear cancel request
+      // Reject cancellation - clear cancel request from active fields but log full details
       await client.query(
         `UPDATE projects
          SET cancel_option = NULL,
              cancel_reason = NULL,
+             cancel_address_id = NULL,
+             cancel_address_snapshot = NULL,
              cancel_requested_at = NULL,
              cancel_approved_by = NULL,
              cancel_approved_at = NULL,
+             cancel_resolution = 'cancellation_rejected',
+             cancellation_settlement = NULL,
              updated_at = CURRENT_TIMESTAMP
          WHERE project_id = $1`,
         [projectId]
       );
 
+      // Mark any pending refund requests as rejected
+      await client.query(
+        `UPDATE refund_requests
+         SET status = 'rejected',
+             rejection_reason = $1,
+             reviewed_at = CURRENT_TIMESTAMP,
+             reviewed_by = $2,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE (project_id = $3 OR order_id = $4)
+           AND status IN ('pending', 'pending_payment_verification')
+           AND deleted_at IS NULL`,
+        [data.rejection_reason || 'Cancellation request rejected by admin', userId, projectId, project.order_id]
+      );
+
       await logActivity(client, projectId, userId, 'cancel_rejected', {
         rejection_reason: data.rejection_reason || 'Rejected by admin',
         previous_cancel_option: project.cancel_option,
+        previous_cancel_address_id: project.cancel_address_id,
+        previous_cancel_address_snapshot: project.cancel_address_snapshot,
       });
     } else {
-      // Approve cancellation
-      const cancelOption = project.cancel_option;
-      let fulfillmentStatus = 'cancelled';
-
-      if (cancelOption === 'ship_unfinished') {
-        fulfillmentStatus = 'shipped_unfinished';
-        await client.query(
-          `UPDATE projects
-           SET status = 'cancelled',
-               cancel_approved_by = $1,
-               cancel_approved_at = CURRENT_TIMESTAMP,
-               shipped_at = CURRENT_TIMESTAMP,
-               fulfillment_status = $2,
-               updated_at = CURRENT_TIMESTAMP
-           WHERE project_id = $3`,
-          [userId, fulfillmentStatus, projectId]
-        );
-      } else if (cancelOption === 'pickup_unfinished') {
-        fulfillmentStatus = 'awaiting_pickup_unfinished';
-        await client.query(
-          `UPDATE projects
-           SET status = 'cancelled',
-               cancel_approved_by = $1,
-               cancel_approved_at = CURRENT_TIMESTAMP,
-               ready_for_pickup_at = CURRENT_TIMESTAMP,
-               fulfillment_status = $2,
-               updated_at = CURRENT_TIMESTAMP
-           WHERE project_id = $3`,
-          [userId, fulfillmentStatus, projectId]
-        );
+      // Approve cancellation with full settlement resolution
+      const projectRefundService = require('./projectRefundService');
+      let settlement = null;
+      try {
+        settlement = await projectRefundService.calculateProjectCancellationSettlement(projectId);
+      } catch (err) {
+        console.warn('Failed to calculate settlement during cancel approval:', err.message);
       }
+
+      const cancelOption = project.cancel_option;
+      const isShipping = ['ship_to_address', 'ship_unfinished'].includes(cancelOption);
+      const resolutionType = data.resolution_type || settlement?.resolution?.recommended || 'no_refund';
+      const approvedRefundAmount = data.approved_refund_amount !== undefined && data.approved_refund_amount !== null
+        ? Number(data.approved_refund_amount)
+        : (settlement?.financials?.refundable_amount ?? 0);
+
+      let fulfillmentStatus = isShipping ? 'ready_for_delivery' : 'ready_for_pickup';
+      let projectFulfillmentMethod = isShipping ? 'shop_delivery' : 'pickup_appointment';
+
+      await client.query(
+        `UPDATE projects
+         SET status = 'cancelled',
+             cancel_approved_by = $1,
+             cancel_approved_at = CURRENT_TIMESTAMP,
+             cancel_resolution = $2,
+             cancellation_settlement = $3,
+             fulfillment_method = $4,
+             fulfillment_status = $5::varchar,
+             shipped_at = CASE WHEN $5::varchar = 'ready_for_delivery' THEN CURRENT_TIMESTAMP ELSE shipped_at END,
+             ready_for_pickup_at = CASE WHEN $5::varchar = 'ready_for_pickup' THEN CURRENT_TIMESTAMP ELSE ready_for_pickup_at END,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE project_id = $6`,
+        [userId, resolutionType, settlement ? JSON.stringify(settlement) : null, projectFulfillmentMethod, fulfillmentStatus, projectId]
+      );
 
       // Cancel the order as well
       await client.query(
@@ -3360,27 +3565,36 @@ exports.approveProjectCancel = async (projectId, userId, data = {}) => {
         [project.order_id]
       );
 
-      // Determine build progress to decide money refund vs physical release.
       const stats = await getProjectTaskStats(client, projectId);
       const hasBuildProgress = stats.completed > 0 || stats.total > 0;
 
-      if (hasBuildProgress) {
-        // Freeze the latest completed build stage so the customer-entitled
-        // stage survives the status change to cancelled and is shown forever.
+      // Handle Physical Items (parts or current build)
+      const hasPhysicalRelease = ['parts_returned', 'current_build_released', 'partial_refund_and_parts', 'partial_refund_and_build'].includes(resolutionType) || (hasBuildProgress && resolutionType !== 'no_refund');
+
+      if (hasPhysicalRelease) {
         await syncLastCompletedStage(client, projectId);
         await snapshotCancelledStage(client, projectId);
 
-        // Create current build claim for the cancelled project (physical release).
+        const deliveryAddressSnapshot = project.cancel_address_snapshot
+          ? (typeof project.cancel_address_snapshot === 'string' ? JSON.parse(project.cancel_address_snapshot) : project.cancel_address_snapshot)
+          : null;
+
         try {
           await getClaimService().createClaimForCancelledProject(
-            client, projectId, project.customer_id, project.order_id
+            client, projectId, project.customer_id, project.order_id, {
+              claim_method: isShipping ? 'courier' : 'pickup',
+              delivery_address: deliveryAddressSnapshot,
+            }
           );
         } catch (claimErr) {
           console.warn('Failed to create build claim during cancel approval:', claimErr.message);
         }
-      } else {
-        // No build progress — create a money refund request consistent with
-        // the cancelProject flow. Never auto-refunds.
+      }
+
+      // Handle Monetary Refund
+      const hasMoneyRefund = ['full_refund', 'partial_refund', 'partial_refund_and_parts', 'partial_refund_and_build'].includes(resolutionType) || (!hasBuildProgress && approvedRefundAmount > 0);
+
+      if (hasMoneyRefund || (!hasBuildProgress && resolutionType !== 'no_refund')) {
         const paymentRes = await client.query(
           `SELECT payment_id, amount, status FROM payments
            WHERE order_id = $1 AND status NOT IN ('rejected', 'cancelled', 'refunded')
@@ -3402,7 +3616,7 @@ exports.approveProjectCancel = async (projectId, userId, data = {}) => {
 
           if (existingRefundRes.rows.length === 0) {
             let refundStatus = 'pending';
-            let amountRequested = Number(latestPayment.amount);
+            let amountRequested = approvedRefundAmount > 0 ? approvedRefundAmount : Number(latestPayment.amount);
 
             if (latestPayment.status === 'verified') {
               refundStatus = 'pending';
@@ -3419,17 +3633,18 @@ exports.approveProjectCancel = async (projectId, userId, data = {}) => {
               await client.query(
                 `INSERT INTO refund_requests (
                    order_id, user_id, project_id, payment_id, reason, customer_notes,
-                   amount_requested, build_stage_at_request, status, request_number, refund_type
+                   amount_requested, approved_amount, build_stage_at_request, status, request_number, refund_type
                  )
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'money_refund')`,
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'money_refund')`,
                 [
                   project.order_id,
                   project.customer_id,
                   projectId,
                   latestPayment.payment_id,
-                  'Automatic refund request from approved project cancellation',
+                  data.admin_notes || 'Approved project cancellation settlement',
                   null,
                   amountRequested,
+                  approvedRefundAmount > 0 ? approvedRefundAmount : amountRequested,
                   null,
                   refundStatus,
                   requestNumber,
@@ -3437,8 +3652,9 @@ exports.approveProjectCancel = async (projectId, userId, data = {}) => {
               );
 
               await logActivity(client, projectId, userId, 'refund_requested', {
-                refund_request_reason: 'Automatic refund request from approved project cancellation',
+                refund_request_reason: 'Approved project cancellation settlement',
                 amount_requested: amountRequested,
+                approved_amount: approvedRefundAmount,
                 refund_status: refundStatus,
                 payment_status_at_cancel: latestPayment.status,
               });
@@ -3450,8 +3666,12 @@ exports.approveProjectCancel = async (projectId, userId, data = {}) => {
       await logActivity(client, projectId, userId, 'cancel_approved', {
         cancel_option: cancelOption,
         cancel_reason: project.cancel_reason,
+        cancel_address_id: project.cancel_address_id,
+        cancel_address_snapshot: project.cancel_address_snapshot,
         fulfillment_status: fulfillmentStatus,
-        refund_type: hasBuildProgress ? 'physical_release' : 'money_refund',
+        cancel_resolution: resolutionType,
+        settlement,
+        refund_type: hasPhysicalRelease ? (hasMoneyRefund ? 'partial_refund_and_release' : 'physical_release') : 'money_refund',
       });
     }
 
@@ -3495,16 +3715,34 @@ exports.cancelProjectCancelRequest = async (projectId, userId, userRole) => {
       `UPDATE projects
        SET cancel_option = NULL,
            cancel_reason = NULL,
+           cancel_address_id = NULL,
+           cancel_address_snapshot = NULL,
            cancel_requested_at = NULL,
            cancel_approved_by = NULL,
            cancel_approved_at = NULL,
+           cancellation_settlement = NULL,
            updated_at = CURRENT_TIMESTAMP
        WHERE project_id = $1`,
       [projectId]
     );
 
+    // Also withdraw any pending refund requests created for this project / order
+    await client.query(
+      `UPDATE refund_requests
+       SET status = 'withdrawn',
+           deleted_at = CURRENT_TIMESTAMP,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE (project_id = $1 OR order_id = $2)
+         AND status IN ('pending', 'pending_payment_verification')
+         AND deleted_at IS NULL`,
+      [projectId, project.order_id]
+    );
+
     await logActivity(client, projectId, userId, 'cancel_request_withdrawn', {
       previous_cancel_option: project.cancel_option,
+      previous_cancel_reason: project.cancel_reason,
+      previous_cancel_address_id: project.cancel_address_id,
+      previous_cancel_address_snapshot: project.cancel_address_snapshot,
     });
 
     await client.query('COMMIT');
@@ -3578,18 +3816,10 @@ exports.getInstallmentSchedule = async (projectId, userId, userRole) => {
     throw new AppError('You do not have access to this project', 403);
   }
 
-  // Get installment schedules
-  const scheduleRes = await pool.query(
-    `SELECT * FROM project_installment_schedules
-     WHERE project_id = $1
-     ORDER BY installment_number ASC`,
-    [projectId]
-  );
+  const installmentService = require('./installmentService');
+  const scheduleData = await installmentService.getInstallmentSchedule(projectId);
 
-  const installments = scheduleRes.rows;
-
-  // If no installments stored yet, compute from order data
-  if (installments.length === 0) {
+  if (scheduleData.installments.length === 0) {
     const orderRes = await pool.query(
       `SELECT total_amount, payment_status, payment_plan, initial_payment_amount, monthly_installment_amount, installment_tenure_months FROM orders WHERE order_id = $1`,
       [project.order_id]
@@ -3598,13 +3828,9 @@ exports.getInstallmentSchedule = async (projectId, userId, userRole) => {
     if (!order) return { installments: [], summary: null, payment_plan: null };
 
     const totalAmount = Number(order.total_amount) || 0;
-
-    // Determine if this is an installment plan using the same logic as installmentService.js
-    // Check: payment_plan field, OR presence of installment data fields
     const hasInstallmentData = Number(order.initial_payment_amount || 0) > 0 || Number(order.monthly_installment_amount || 0) > 0;
     const isInstallmentPlan = order.payment_plan === 'installment' || hasInstallmentData;
 
-    // If the order is full payment (not installment), show the "You paid it in Full Payment" message
     if (!isInstallmentPlan) {
       return {
         installments: [],
@@ -3612,69 +3838,10 @@ exports.getInstallmentSchedule = async (projectId, userId, userRole) => {
         payment_plan: 'full_payment',
       };
     }
-
-    const monthlyRate = 0.03; // 3% monthly interest (configurable)
-    const tenureMonths = 6; // Default 6 months (configurable)
-
-    // Simple installment calculation
-    const monthlyPayment = Math.round((totalAmount * (1 + monthlyRate)) / tenureMonths);
-    const remainingBalance = totalAmount;
-    const today = new Date();
-
-    // Calculate next due date as exactly 1 month from today
-    const nextDueDate = new Date(today);
-    nextDueDate.setMonth(nextDueDate.getMonth() + 1);
-
-    return {
-      installments: [],
-      summary: {
-        total_amount: totalAmount,
-        monthly_payment: monthlyPayment,
-        remaining_balance: remainingBalance,
-        total_months: tenureMonths,
-        remaining_months: tenureMonths,
-        paid_count: 0,
-        paid_amount: 0,
-        next_due_date: nextDueDate.toISOString(),
-        interest_rate: monthlyRate,
-        last_updated: null,
-      },
-      payment_plan: 'installment',
-    };
   }
 
-  // Calculate summary from actual installment records
-  const totalAmount = installments.reduce((sum, inst) => sum + Number(inst.amount), 0);
-  const paidCount = installments.filter((inst) => inst.status === 'paid').length;
-  const totalCount = installments.length;
-  const paidAmount = installments
-    .filter((inst) => inst.status === 'paid')
-    .reduce((sum, inst) => sum + Number(inst.amount), 0);
-  const remainingBalance = totalAmount - paidAmount;
-  const remainingMonths = totalCount - paidCount;
-
-  // Find the next unpaid installment
-  const nextUnpaid = installments.find((inst) => inst.status === 'pending' || inst.status === 'overdue');
-
-  // Get the latest updated_at from all installments
-  const lastUpdated = installments.reduce((latest, inst) => {
-    const updated = inst.updated_at || inst.created_at;
-    return updated && (!latest || new Date(updated) > new Date(latest)) ? updated : latest;
-  }, null);
-
   return {
-    installments,
+    ...scheduleData,
     payment_plan: 'installment',
-    summary: {
-      total_amount: totalAmount,
-      monthly_payment: installments[0]?.amount || 0,
-      remaining_balance: remainingBalance,
-      total_months: totalCount,
-      remaining_months: remainingMonths,
-      next_due_date: nextUnpaid?.due_date || null,
-      paid_amount: paidAmount,
-      paid_count: paidCount,
-      last_updated: lastUpdated,
-    },
   };
 };

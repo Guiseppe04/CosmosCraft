@@ -284,7 +284,7 @@ exports.getBuildStatePreview = async (projectId, userId, userRole) => {
  * Create a current build claim when a project with progress is cancelled.
  * Called inside a transaction from the cancel flow.
  */
-exports.createClaimForCancelledProject = async (db, projectId, customerId, orderId) => {
+exports.createClaimForCancelledProject = async (db, projectId, customerId, orderId, options = {}) => {
   await ensureCurrentBuildClaimsTable();
 
   // Check for existing claim
@@ -317,19 +317,28 @@ exports.createClaimForCancelledProject = async (db, projectId, customerId, order
   const amountPaid = await getVerifiedPaymentTotal(db, orderId);
   const estimatedBuildValue = amountPaid;
 
+  const claimMethod = options.claim_method || null;
+  const deliveryAddress = options.delivery_address ? JSON.stringify(options.delivery_address) : null;
+  const initialStatus = claimMethod
+    ? (claimMethod === 'courier' ? 'ready_for_delivery' : 'ready_for_pickup')
+    : 'pending_customer_selection';
+
   const insertRes = await db.query(
     `INSERT INTO current_build_claims (
        project_id, customer_id, order_id,
        progress_at_cancellation, current_build_stage, build_state_snapshot,
        amount_paid, estimated_build_value,
+       claim_method, delivery_address,
        claim_status
      )
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending_customer_selection')
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
      RETURNING *`,
     [
       projectId, customerId, orderId,
       progress, current_stage, JSON.stringify(stages),
       amountPaid, estimatedBuildValue,
+      claimMethod, deliveryAddress,
+      initialStatus,
     ]
   );
 
@@ -338,6 +347,7 @@ exports.createClaimForCancelledProject = async (db, projectId, customerId, order
     progress_at_cancellation: progress,
     current_build_stage: current_stage,
     amount_paid: amountPaid,
+    claim_method: claimMethod,
   });
 
   return insertRes.rows[0];

@@ -16,6 +16,7 @@ import {
 import { jsPDF } from "jspdf";
 import * as XLSX from "xlsx";
 import { formatCurrency } from "../../../utils/formatCurrency";
+import { useAuth } from "../../../context/AuthContext";
 
 /* ─── Constants ─── */
 
@@ -121,10 +122,12 @@ const DEFAULT_PRINT_SECTIONS = PRINT_SECTIONS.map((s) => s.key);
 
 /* ─── Print helper (B&W, no colors) ─── */
 
-function printSalesReport(salesReport, dateLabel, selectedSections) {
+function printSalesReport(salesReport, dateLabel, selectedSections, printedBy, datePrinted) {
   if (!salesReport) return;
   const sections = new Set(selectedSections || DEFAULT_PRINT_SECTIONS);
   const reportDate = new Date().toLocaleDateString("en-PH", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+  const printMetaDate = datePrinted || new Date().toLocaleString("en-PH", { year: "numeric", month: "long", day: "numeric", hour: "numeric", minute: "2-digit" });
+  const printMetaBy = printedBy || "Unknown User";
   const channels = salesReport.channels || {};
   const adjustmentsByType = salesReport.adjustmentsByType || [];
   const adjustmentsByChannel = salesReport.adjustmentsByChannel || [];
@@ -188,6 +191,7 @@ function printSalesReport(salesReport, dateLabel, selectedSections) {
     <h1>COSMOSCRAFT</h1>
     <h2>Sales Performance Report</h2>
     <p>${dateLabel ? `Period: ${dateLabel}` : "All Time"} &nbsp;|&nbsp; Generated: ${reportDate}</p>
+    <p style="margin-top: 4px; font-size: 9px; color: #555;">Date Printed: ${printMetaDate} &nbsp;|&nbsp; Printed By: ${printMetaBy}</p>
   </div>
 
   ${sections.has("summary") ? `
@@ -450,7 +454,7 @@ function printSalesReport(salesReport, dateLabel, selectedSections) {
 
 /* ─── Print Options Modal ─── */
 
-function PrintOptionsModal({ isOpen, onClose, onPrint, salesReport }) {
+function PrintOptionsModal({ isOpen, onClose, onPrint, salesReport, printedBy, datePrinted }) {
   const [selected, setSelected] = useState(new Set(DEFAULT_PRINT_SECTIONS));
 
   if (!isOpen) return null;
@@ -569,11 +573,11 @@ function PrintOptionsModal({ isOpen, onClose, onPrint, salesReport }) {
             >
               Cancel
             </button>
-            <button
-              onClick={() => { onPrint(Array.from(selected)); onClose(); }}
-              disabled={selected.size === 0}
-              className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-[var(--gold-primary)] text-black rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
-            >
+              <button
+                onClick={() => { onPrint(Array.from(selected), printedBy, datePrinted); onClose(); }}
+                disabled={selected.size === 0}
+                className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-[var(--gold-primary)] text-black rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
+              >
               <Printer className="w-4 h-4" />
               Print ({selected.size} sections)
             </button>
@@ -641,6 +645,7 @@ function ToggleGroup({ options, value, onChange }) {
    ═══════════════════════════════════════════════ */
 
 export function SalesReportTab({ salesReport, fetchSalesReport }) {
+  const { user } = useAuth();
   const [preset, setPreset] = useState("all");
   const [customStart, setCustomStart] = useState("");
   const [customEnd, setCustomEnd] = useState("");
@@ -650,6 +655,11 @@ export function SalesReportTab({ salesReport, fetchSalesReport }) {
   const [sortBy, setSortBy] = useState("units");
   const [showPrintModal, setShowPrintModal] = useState(false);
   const [paymentScope, setPaymentScope] = useState("overall"); // "overall" | "appointments"
+
+  const printedBy = user?.name?.firstName && user?.name?.lastName
+    ? `${user.name.firstName} ${user.name.lastName}`
+    : user?.name?.firstName || user?.firstName || user?.email?.split('@')[0] || "Unknown User";
+  const datePrinted = new Date().toLocaleString("en-PH", { year: "numeric", month: "long", day: "numeric", hour: "numeric", minute: "2-digit" });
 
   /* ─── Derived data ─── */
 
@@ -1391,8 +1401,10 @@ export function SalesReportTab({ salesReport, fetchSalesReport }) {
       <PrintOptionsModal
         isOpen={showPrintModal}
         onClose={() => setShowPrintModal(false)}
-        onPrint={(sections) => printSalesReport(salesReport, dateLabel, sections)}
+        onPrint={(sections, printedBy, datePrinted) => printSalesReport(salesReport, dateLabel, sections, printedBy, datePrinted)}
         salesReport={salesReport}
+        printedBy={printedBy}
+        datePrinted={datePrinted}
       />
     </motion.div>
   );

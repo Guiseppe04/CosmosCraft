@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { CheckCircle, Circle, ChevronDown, ChevronRight, Plus, Trash2, User, Clock, AlertCircle, Calendar, Truck, Store, ShieldCheck, Flag, Loader2 } from 'lucide-react';
+import { CheckCircle, Circle, ChevronDown, ChevronRight, Plus, Trash2, User, Clock, AlertCircle, Calendar, Truck, Store, ShieldCheck, Flag, Loader2, MapPin } from 'lucide-react';
 import { adminApi } from '../../utils/adminApi';
 import { staffApi } from '../../utils/staffApi';
 
@@ -1000,18 +1000,70 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-xs mt-3">
-              <div className="flex"><span className="text-[var(--text-muted)]">Requested</span><span className="text-white ml-auto">{formatDisplayDate(hierarchy.cancel_requested_at) || '—'}</span></div>
-              <div className="flex"><span className="text-[var(--text-muted)]">Option</span><span className="text-white ml-auto capitalize">{String(hierarchy.cancel_option || '—').replace(/_/g, ' ')}</span></div>
-              <div className="flex"><span className="text-[var(--text-muted)]">Progress</span><span className="text-white ml-auto">{hierarchy.progress || 0}%</span></div>
-              <div className="flex"><span className="text-[var(--text-muted)]">Status</span><span className="text-white ml-auto capitalize">{formatStatusLabel(hierarchy.status)}</span></div>
-            </div>
-            {hierarchy.cancel_reason && (
-              <div className="mt-3">
-                <p className="text-xs uppercase tracking-[0.1em] text-[var(--text-muted)]">Reason</p>
-                <p className="mt-1 text-sm text-white break-words">{hierarchy.cancel_reason}</p>
+            <div className="space-y-3 mt-3 text-xs">
+              <div className="grid grid-cols-2 gap-x-6 gap-y-2">
+                <div className="flex"><span className="text-[var(--text-muted)]">Progress</span><span className="text-white ml-auto font-semibold">{hierarchy.progress || 0}%</span></div>
+                <div className="flex"><span className="text-[var(--text-muted)]">Status</span><span className="text-amber-400 ml-auto font-semibold">Pending Approval</span></div>
+                <div className="flex"><span className="text-[var(--text-muted)]">Requested</span><span className="text-white ml-auto">{formatDisplayDate(hierarchy.cancel_requested_at) || '—'}</span></div>
+                <div className="flex">
+                  <span className="text-[var(--text-muted)]">Fulfillment</span>
+                  <span className="text-white ml-auto font-medium">
+                    {hierarchy.cancel_option === 'ship_to_address' || hierarchy.cancel_option === 'ship_unfinished'
+                      ? 'Ship to Address'
+                      : 'Pick Up at Shop'}
+                  </span>
+                </div>
               </div>
-            )}
+
+              {/* Reason */}
+              {hierarchy.cancel_reason && (
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] p-3">
+                  <p className="text-[11px] uppercase tracking-[0.1em] text-[var(--text-muted)] font-semibold mb-1">Reason</p>
+                  <p className="text-sm text-white break-words">{hierarchy.cancel_reason}</p>
+                </div>
+              )}
+
+              {/* Delivery Address */}
+              {(hierarchy.cancel_option === 'ship_to_address' || hierarchy.cancel_option === 'ship_unfinished') ? (
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] p-3 space-y-1">
+                  <p className="text-[11px] uppercase tracking-[0.1em] text-[var(--text-muted)] font-semibold flex items-center gap-1.5">
+                    <MapPin className="w-3.5 h-3.5 text-amber-400" /> Delivery Address
+                  </p>
+                  {(() => {
+                    const snap = hierarchy.cancel_address_snapshot
+                      ? (typeof hierarchy.cancel_address_snapshot === 'string'
+                          ? JSON.parse(hierarchy.cancel_address_snapshot)
+                          : hierarchy.cancel_address_snapshot)
+                      : null;
+                    const recipient = snap?.recipient_name || hierarchy.customer_name || 'Customer';
+                    const phone = snap?.phone || hierarchy.customer_phone;
+                    const line1 = snap?.line1 || hierarchy.cancel_address_line1;
+                    const line2 = snap?.line2 || hierarchy.cancel_address_line2;
+                    const barangay = snap?.barangay || hierarchy.cancel_address_barangay;
+                    const city = snap?.city || hierarchy.cancel_address_city;
+                    const province = snap?.province || hierarchy.cancel_address_province;
+                    const postalCode = snap?.postal_code || hierarchy.cancel_address_postal_code;
+
+                    return (
+                      <div className="text-xs text-white/90 space-y-0.5 mt-1">
+                        <p className="font-semibold text-white">{recipient}</p>
+                        {phone && <p className="text-[var(--text-muted)]">{phone}</p>}
+                        {line1 && <p>{line1}</p>}
+                        {line2 && <p>{line2}</p>}
+                        {barangay && <p>{barangay}</p>}
+                        {(city || province) && <p>{[city, province].filter(Boolean).join(', ')}</p>}
+                        {postalCode && <p className="text-[var(--text-muted)]">{postalCode}</p>}
+                      </div>
+                    );
+                  })()}
+                </div>
+              ) : (
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] p-3 text-xs text-[var(--text-muted)] flex items-center gap-2">
+                  <Package className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>No delivery address required.</span>
+                </div>
+              )}
+            </div>
 
             {cancelReviewFeedback && (
               <p className={`mt-3 text-xs font-medium ${cancelReviewFeedback.type === 'error' ? 'text-red-400' : 'text-emerald-300'}`}>{cancelReviewFeedback.message}</p>
@@ -1049,6 +1101,95 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
               </button>
             </div>
             <p className="mt-2 text-[11px] text-[var(--text-muted)]">Approving cancels the build and creates a build claim the customer will receive in its current state. The customer requested: "{String(hierarchy.cancel_option || 'pickup').replace(/_/g, ' ')}".</p>
+          </div>
+        )}
+
+        {/* Shop Fulfillment Section for Approved Cancellations */}
+        {isAdmin && String(hierarchy.status || '').toLowerCase() === 'cancelled' && (
+          <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-5 mb-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                {hierarchy.cancel_option === 'ship_to_address' || hierarchy.cancel_option === 'ship_unfinished' ? (
+                  <Truck className="w-5 h-5 text-amber-400" />
+                ) : (
+                  <Package className="w-5 h-5 text-amber-400" />
+                )}
+                <div>
+                  <h4 className="text-amber-300 font-semibold text-sm">
+                    {hierarchy.cancel_option === 'ship_to_address' || hierarchy.cancel_option === 'ship_unfinished'
+                      ? 'Shop-Managed Delivery'
+                      : 'Pick Up at Shop'}
+                  </h4>
+                  <p className="text-xs text-[var(--text-muted)]">
+                    {hierarchy.cancel_option === 'ship_to_address' || hierarchy.cancel_option === 'ship_unfinished'
+                      ? 'Owner/admin manually arranges courier delivery for unfinished build and parts.'
+                      : 'Customer will collect unfinished build and parts in person from workshop.'}
+                  </p>
+                </div>
+              </div>
+              <span className="px-2.5 py-1 rounded-full border border-amber-500/30 bg-amber-500/10 text-xs font-semibold text-amber-400">
+                {hierarchy.cancel_option === 'ship_to_address' || hierarchy.cancel_option === 'ship_unfinished'
+                  ? 'Ready for Delivery'
+                  : 'Ready for Pickup'}
+              </span>
+            </div>
+
+            {(hierarchy.cancel_option === 'ship_to_address' || hierarchy.cancel_option === 'ship_unfinished') && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs bg-[var(--surface-dark)] p-3.5 rounded-xl border border-[var(--border)]">
+                <div>
+                  <span className="text-[11px] uppercase tracking-wider text-[var(--text-muted)] block font-medium mb-0.5">Customer / Recipient</span>
+                  <p className="font-semibold text-white">
+                    {(() => {
+                      const snap = hierarchy.cancel_address_snapshot
+                        ? (typeof hierarchy.cancel_address_snapshot === 'string'
+                            ? JSON.parse(hierarchy.cancel_address_snapshot)
+                            : hierarchy.cancel_address_snapshot)
+                        : null;
+                      return snap?.recipient_name || hierarchy.customer_name || 'Customer';
+                    })()}
+                  </p>
+                  <span className="text-[11px] uppercase tracking-wider text-[var(--text-muted)] block font-medium mt-2 mb-0.5">Contact</span>
+                  <p className="text-white">
+                    {(() => {
+                      const snap = hierarchy.cancel_address_snapshot
+                        ? (typeof hierarchy.cancel_address_snapshot === 'string'
+                            ? JSON.parse(hierarchy.cancel_address_snapshot)
+                            : hierarchy.cancel_address_snapshot)
+                        : null;
+                      return snap?.phone || hierarchy.customer_phone || '—';
+                    })()}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-[11px] uppercase tracking-wider text-[var(--text-muted)] block font-medium mb-0.5">Delivery Address</span>
+                  <div className="text-white/90 space-y-0.5">
+                    {(() => {
+                      const snap = hierarchy.cancel_address_snapshot
+                        ? (typeof hierarchy.cancel_address_snapshot === 'string'
+                            ? JSON.parse(hierarchy.cancel_address_snapshot)
+                            : hierarchy.cancel_address_snapshot)
+                        : null;
+                      const line1 = snap?.line1 || hierarchy.cancel_address_line1;
+                      const line2 = snap?.line2 || hierarchy.cancel_address_line2;
+                      const barangay = snap?.barangay || hierarchy.cancel_address_barangay;
+                      const city = snap?.city || hierarchy.cancel_address_city;
+                      const province = snap?.province || hierarchy.cancel_address_province;
+                      const postalCode = snap?.postal_code || hierarchy.cancel_address_postal_code;
+
+                      return (
+                        <>
+                          {line1 && <p>{line1}</p>}
+                          {line2 && <p>{line2}</p>}
+                          {barangay && <p>{barangay}</p>}
+                          {(city || province) && <p>{[city, province].filter(Boolean).join(', ')}</p>}
+                          {postalCode && <p className="text-[var(--text-muted)]">{postalCode}</p>}
+                        </>
+                      );
+                    })()}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

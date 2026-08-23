@@ -22,6 +22,7 @@ export default defineConfig(({ mode }) => {
         '/auth/resend-otp': apiUrl,
         '/user': apiUrl,
         '/api': apiUrl,
+        '/uploads': apiUrl,
       },
     },
     build: {

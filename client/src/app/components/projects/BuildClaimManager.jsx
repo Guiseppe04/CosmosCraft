@@ -197,9 +197,37 @@ export default function BuildClaimManager({ projectId, projectData }) {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-[var(--text-muted)]">Method</span>
-                  <span className="text-white capitalize">{claim.claim_method || '—'}</span>
+                  <span className="text-white capitalize">{claim.claim_method === 'courier' ? 'Shop Delivery' : (claim.claim_method === 'pickup' ? 'Workshop Pick Up' : (claim.claim_method || '—'))}</span>
                 </div>
               </div>
+
+              {/* Delivery Address */}
+              {claim.delivery_address && (
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] p-3.5 space-y-1">
+                  <span className="text-[11px] uppercase tracking-wider text-[var(--text-muted)] font-semibold flex items-center gap-1.5">
+                    <MapPin className="w-3.5 h-3.5 text-amber-400" /> Delivery Address
+                  </span>
+                  <p className="text-xs font-semibold text-white">
+                    {claim.delivery_address.recipient_name || `${claim.customer_first_name} ${claim.customer_last_name}`}
+                    {(claim.delivery_address.phone || claim.customer_phone) && (
+                      <span className="font-normal text-[var(--text-muted)] ml-1">
+                        ({claim.delivery_address.phone || claim.customer_phone})
+                      </span>
+                    )}
+                  </p>
+                  <p className="text-xs text-[var(--text-muted)] leading-relaxed">
+                    {[
+                      claim.delivery_address.line1,
+                      claim.delivery_address.line2,
+                      claim.delivery_address.barangay,
+                      claim.delivery_address.city,
+                      claim.delivery_address.province,
+                      claim.delivery_address.postal_code,
+                      claim.delivery_address.country,
+                    ].filter(Boolean).join(', ')}
+                  </p>
+                </div>
+              )}
 
               {/* Build state snapshot */}
               {claim.build_state_snapshot && Array.isArray(claim.build_state_snapshot) && (

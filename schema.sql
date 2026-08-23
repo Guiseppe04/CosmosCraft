@@ -722,8 +722,10 @@ CREATE TABLE projects (
     hold_approved_at TIMESTAMPTZ,
     resumed_at TIMESTAMPTZ,
     -- Cancel columns
-    cancel_option VARCHAR(50) CHECK (cancel_option IN ('ship_unfinished', 'pickup_unfinished')),
+    cancel_option VARCHAR(50) CHECK (cancel_option IN ('ship_to_address', 'pickup_at_shop', 'ship_unfinished', 'pickup_unfinished')),
     cancel_reason TEXT,
+    cancel_address_id UUID REFERENCES addresses(address_id) ON DELETE SET NULL,
+    cancel_address_snapshot JSONB,
     cancel_requested_at TIMESTAMPTZ,
     cancel_approved_by UUID REFERENCES users(user_id) ON DELETE SET NULL,
     cancel_approved_at TIMESTAMPTZ,

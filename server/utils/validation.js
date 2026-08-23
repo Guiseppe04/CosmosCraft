@@ -975,6 +975,26 @@ exports.submitFulfillmentSchema = Joi.object({
   notes: Joi.string().max(500).optional().allow('').trim(),
 });
 
+exports.requestProjectCancelSchema = Joi.object({
+  cancel_option: Joi.string().valid('ship_to_address', 'pickup_at_shop', 'ship_unfinished', 'pickup_unfinished').required().messages({
+    'any.only': 'Fulfillment method must be Ship to Address or Pick Up at Shop',
+    'any.required': 'Fulfillment method is required',
+  }),
+  cancel_reason: Joi.string().trim().min(5).max(500).required().messages({
+    'string.min': 'Cancellation reason must be at least 5 characters',
+    'string.max': 'Cancellation reason must not exceed 500 characters',
+    'any.required': 'Cancellation reason is required',
+  }),
+  address_id: Joi.when('cancel_option', {
+    is: Joi.string().valid('ship_to_address', 'ship_unfinished'),
+    then: Joi.string().uuid().required().messages({
+      'string.guid': 'Please select a valid delivery address',
+      'any.required': 'Please select a delivery address.',
+    }),
+    otherwise: Joi.string().uuid().optional().allow(null, ''),
+  }),
+});
+
 exports.createMilestoneSchema = Joi.object({
   title: Joi.string().trim().min(3).max(150).required().messages({
     'string.min': 'Milestone title must be at least 3 characters',

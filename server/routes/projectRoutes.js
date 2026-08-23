@@ -1,8 +1,12 @@
 const express = require('express');
 const router = express.Router();
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 const ctrl = require('../controllers/projectController');
 const refundCtrl = require('../controllers/projectRefundController');
 const claimCtrl = require('../controllers/currentBuildClaimController');
+const installmentCtrl = require('../controllers/installmentController');
 const { authenticateToken, authorize } = require('../middleware/auth');
 const {
   validate,
@@ -17,6 +21,7 @@ const {
   createSubtaskSchema,
   updateSubtaskSchema,
   submitFulfillmentSchema,
+  requestProjectCancelSchema,
   listProjectsSchema,
   createProjectRefundRequestSchema,
   updateRefundStatusSchema,
@@ -25,6 +30,42 @@ const {
   arrangeCourierSchema,
   updateBuildClaimStatusSchema,
 } = require('../utils/validation');
+
+const uploadsDir = path.join(__dirname, '../uploads/proofs');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadsDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const ext = path.extname(file.originalname);
+    cb(null, 'proof-' + uniqueSuffix + ext);
+  },
+});
+
+const fileFilter = (req, file, cb) => {
+  const allowedTypes = /jpeg|jpg|png|pdf|webp/;
+  const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+  const mimetype = allowedTypes.test(file.mimetype);
+
+  if (extname && mimetype) {
+    return cb(null, true);
+  } else {
+    cb(new Error('Only image files (JPEG, PNG, WebP) and PDF are allowed'), false);
+  }
+};
+
+const upload = multer({
+  storage,
+  limits: {
+    fileSize: 10 * 1024 * 1024,
+  },
+  fileFilter,
+});
 
 router.use(authenticateToken);
 
@@ -43,7 +84,7 @@ router.post('/:id/approve-hold', ctrl.approveHold);
 router.post('/:id/resume', ctrl.resumeProject);
 
 // Cancel with options (customer can request with cancel_option)
-router.post('/:id/request-cancel', ctrl.requestCancel);
+router.post('/:id/request-cancel', validate(requestProjectCancelSchema), ctrl.requestCancel);
 // Customer withdraws a pending cancellation request
 router.post('/:id/withdraw-cancel-request', ctrl.cancelCancelRequest);
 // Approve/reject a cancellation request — staff+ only (admin review)
@@ -55,13 +96,15 @@ router.get('/:id/build-claim', claimCtrl.getBuildClaim);
 router.post('/:id/build-claim/select-method', validate(selectClaimMethodSchema), claimCtrl.selectClaimMethod);
 router.post('/:id/build-claim/mark-received', claimCtrl.markAsReceived);
 
-// Project Refunds (customer eligibility + request; admin status update)
+// Project Refunds & Cancellation Settlement (customer eligibility + request; admin status update)
 router.get('/:id/refund-eligibility', refundCtrl.getRefundEligibility);
+router.get('/:id/cancellation-settlement', refundCtrl.getCancellationSettlement);
 router.post('/:id/refund-request', validate(createProjectRefundRequestSchema), refundCtrl.createRefundRequest);
 router.put('/refunds/:refundId/status', authorize('staff', 'admin', 'super_admin'), validate(updateRefundStatusSchema), refundCtrl.updateRefundStatus);
 
-// Installment schedule
+// Installment schedule & customer payment
 router.get('/:id/installments', ctrl.getInstallmentSchedule);
+router.post('/:id/installments/:scheduleId/pay', upload.single('proof'), installmentCtrl.submitCustomerInstallmentPayment);
 
 // === ADMIN ONLY ROUTES ===
 router.use(authorize('staff', 'admin', 'super_admin'));

@@ -118,8 +118,10 @@ app.use('/api/cloudinary', cloudinaryRoutes);
 app.use('/api/payment-settings', paymentSettingsRoutes);
 app.use('/api/installments', installmentRoutes);
 app.use('/api/address', addressRoutes);
-// Legacy route alias kept for backwards-compat
 app.use('/user', userRoutes);
+
+const path = require('path');
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 app.use(notFound);
 app.use(errorHandler);

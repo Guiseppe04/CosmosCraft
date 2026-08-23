@@ -1,4 +1,5 @@
 const { pool } = require('../config/database');
+const { AppError } = require('../middleware/errorHandler');
 
 /**
  * Installment Service
@@ -8,6 +9,7 @@ const { pool } = require('../config/database');
  * - Auto-putting projects on hold when installments are overdue
  * - Auto-resuming projects when overdue installments are paid
  * - Providing installment tracking data
+ * - Customer installment payments with admin verification/rejection
  */
 
 let ensureInstallmentTableReady = false;
@@ -129,6 +131,361 @@ exports.createInstallmentSchedule = async (
 };
 
 /**
+ * Customer submits payment proof for an installment.
+ */
+exports.submitCustomerInstallmentPayment = async ({
+  projectId,
+  scheduleId,
+  userId,
+  userRole,
+  method = 'gcash',
+  referenceNumber,
+  proofUrl,
+}) => {
+  await ensureInstallmentTable();
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // 1. Get the installment and project/order info
+    const instRes = await client.query(
+      `SELECT pis.*, p.order_id, o.user_id AS customer_id, o.user_id AS order_user_id, o.total_amount AS order_total, o.order_number
+       FROM project_installment_schedules pis
+       JOIN projects p ON p.project_id = pis.project_id
+       LEFT JOIN orders o ON o.order_id = p.order_id
+       WHERE pis.schedule_id = $1 AND pis.project_id = $2`,
+      [scheduleId, projectId]
+    );
+
+    if (instRes.rows.length === 0) {
+      throw new AppError('Installment schedule not found for this project', 404);
+    }
+
+    const installment = instRes.rows[0];
+    const customerId = installment.customer_id || installment.order_user_id;
+
+    // Check ownership if customer
+    const isStaffOrAdmin = ['staff', 'admin', 'super_admin'].includes(userRole);
+    if (!isStaffOrAdmin && customerId && customerId !== userId) {
+      throw new AppError('You do not have permission to pay for this installment', 403);
+    }
+
+    // Check if already paid
+    if (installment.status === 'paid') {
+      throw new AppError('This installment has already been paid and verified', 400);
+    }
+
+    // Check if there is already an active payment for this installment awaiting verification
+    if (installment.payment_id) {
+      const activePayRes = await client.query(
+        `SELECT * FROM payments WHERE payment_id = $1`,
+        [installment.payment_id]
+      );
+      if (activePayRes.rows.length > 0) {
+        const activePay = activePayRes.rows[0];
+        if (activePay.status === 'for_verification' || activePay.status === 'pending') {
+          throw new AppError('A payment for this installment has already been submitted and is waiting for verification.', 400);
+        }
+        if (activePay.status === 'verified') {
+          throw new AppError('This installment has already been paid and verified.', 400);
+        }
+      }
+    }
+
+    const paymentMethod = ['gcash', 'bank_transfer', 'cash'].includes(method) ? method : 'gcash';
+    const amount = Number(installment.amount);
+
+    // Create payment record with for_verification status
+    const paymentRes = await client.query(
+      `INSERT INTO payments (order_id, user_id, method, amount, currency, reference_number, proof_url, status, metadata)
+       VALUES ($1, $2, $3, $4, 'PHP', $5, $6, 'for_verification', $7)
+       RETURNING *`,
+      [
+        installment.order_id,
+        userId || customerId,
+        paymentMethod,
+        amount,
+        referenceNumber || null,
+        proofUrl || null,
+        JSON.stringify({
+          type: 'installment',
+          schedule_id: scheduleId,
+          installment_number: installment.installment_number,
+          project_id: projectId,
+          submitted_at: new Date().toISOString(),
+        })
+      ]
+    );
+
+    const payment = paymentRes.rows[0];
+
+    // Link payment_id to project_installment_schedules
+    const updateRes = await client.query(
+      `UPDATE project_installment_schedules
+       SET payment_id = $1,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE schedule_id = $2
+       RETURNING *`,
+      [payment.payment_id, scheduleId]
+    );
+
+    await client.query('COMMIT');
+
+    // Create Customer Notification
+    if (customerId) {
+      try {
+        const notificationService = require('./notificationService');
+        await notificationService.createNotification({
+          user_id: customerId,
+          title: 'Payment Submitted',
+          message: `Your payment for Installment #${installment.installment_number} has been submitted and is waiting for verification.`,
+          type: 'payment',
+          related_entity_id: installment.order_id,
+          related_entity_type: 'order',
+        });
+      } catch (notifErr) {
+        console.warn('Failed to send installment payment submission notification:', notifErr.message);
+      }
+    }
+
+    return {
+      installment: updateRes.rows[0],
+      payment,
+    };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+};
+
+/**
+ * Admin verifies an installment payment.
+ */
+exports.verifyInstallmentPayment = async ({
+  scheduleId,
+  adminUserId,
+  notes,
+}) => {
+  await ensureInstallmentTable();
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Get installment and linked payment
+    const instRes = await client.query(
+      `SELECT pis.*, p.order_id, o.user_id AS customer_id, o.user_id AS order_user_id
+       FROM project_installment_schedules pis
+       JOIN projects p ON p.project_id = pis.project_id
+       LEFT JOIN orders o ON o.order_id = p.order_id
+       WHERE pis.schedule_id = $1`,
+      [scheduleId]
+    );
+
+    if (instRes.rows.length === 0) {
+      throw new AppError('Installment schedule not found', 404);
+    }
+
+    const installment = instRes.rows[0];
+    const customerId = installment.customer_id || installment.order_user_id;
+
+    // Update payment record if exists
+    let payment = null;
+    if (installment.payment_id) {
+      const payRes = await client.query(
+        `UPDATE payments
+         SET status = 'verified',
+             verified_by = $1,
+             verified_at = CURRENT_TIMESTAMP,
+             metadata = COALESCE(metadata, '{}'::jsonb) || $2,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE payment_id = $3
+         RETURNING *`,
+        [
+          adminUserId || null,
+          JSON.stringify({ verification_notes: notes || null, verified_via: 'installment_tracking' }),
+          installment.payment_id
+        ]
+      );
+      payment = payRes.rows[0] || null;
+    } else {
+      // If no payment was linked, create a verified payment
+      const payRes = await client.query(
+        `INSERT INTO payments (order_id, user_id, method, amount, currency, reference_number, status, verified_by, verified_at, metadata)
+         VALUES ($1, $2, 'gcash', $3, 'PHP', $4, 'verified', $5, CURRENT_TIMESTAMP, $6)
+         RETURNING *`,
+        [
+          installment.order_id,
+          customerId,
+          Number(installment.amount),
+          `INST-${Date.now()}`,
+          adminUserId || null,
+          JSON.stringify({ admin_marked: true, notes: notes || null, verified_via: 'installment_tracking' })
+        ]
+      );
+      payment = payRes.rows[0];
+    }
+
+    // Update installment schedule to paid
+    const updateRes = await client.query(
+      `UPDATE project_installment_schedules
+       SET status = 'paid',
+           paid_at = CURRENT_TIMESTAMP,
+           payment_id = $1,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE schedule_id = $2
+       RETURNING *`,
+      [payment ? payment.payment_id : installment.payment_id, scheduleId]
+    );
+
+    // Update the order payment_status to approved if pending
+    await client.query(
+      `UPDATE orders
+       SET payment_status = 'approved',
+           reviewed_at = COALESCE(reviewed_at, CURRENT_TIMESTAMP),
+           updated_at = CURRENT_TIMESTAMP
+       WHERE order_id = $1
+         AND payment_status IN ('pending', 'proof_submitted', 'under_review')`,
+      [installment.order_id]
+    );
+
+    await client.query('COMMIT');
+
+    const updatedInstallment = updateRes.rows[0];
+    updatedInstallment.payment = payment;
+
+    // Check and auto-resume if project was on hold due to overdue
+    await exports.checkAndAutoResumeProject(installment.project_id);
+
+    // Send customer notification
+    if (customerId) {
+      try {
+        const notificationService = require('./notificationService');
+        await notificationService.createNotification({
+          user_id: customerId,
+          title: 'Payment Approved',
+          message: `Your payment of ₱${Number(installment.amount).toLocaleString('en-PH', { minimumFractionDigits: 2 })} for Installment #${installment.installment_number} has been verified.`,
+          type: 'payment',
+          related_entity_id: installment.order_id,
+          related_entity_type: 'order',
+        });
+      } catch (notifErr) {
+        console.warn('Failed to send installment payment verified notification:', notifErr.message);
+      }
+    }
+
+    return updatedInstallment;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+};
+
+/**
+ * Admin rejects an installment payment.
+ */
+exports.rejectInstallmentPayment = async ({
+  scheduleId,
+  adminUserId,
+  reason,
+  notes,
+}) => {
+  await ensureInstallmentTable();
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const instRes = await client.query(
+      `SELECT pis.*, p.order_id, o.user_id AS customer_id, o.user_id AS order_user_id
+       FROM project_installment_schedules pis
+       JOIN projects p ON p.project_id = pis.project_id
+       LEFT JOIN orders o ON o.order_id = p.order_id
+       WHERE pis.schedule_id = $1`,
+      [scheduleId]
+    );
+
+    if (instRes.rows.length === 0) {
+      throw new AppError('Installment schedule not found', 404);
+    }
+
+    const installment = instRes.rows[0];
+    const customerId = installment.customer_id || installment.order_user_id;
+
+    let payment = null;
+    if (installment.payment_id) {
+      const payRes = await client.query(
+        `UPDATE payments
+         SET status = 'rejected',
+             verified_by = $1,
+             verified_at = CURRENT_TIMESTAMP,
+             rejection_reason = $2,
+             metadata = COALESCE(metadata, '{}'::jsonb) || $3,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE payment_id = $4
+         RETURNING *`,
+        [
+          adminUserId || null,
+          reason || 'Payment verification failed',
+          JSON.stringify({ rejection_notes: notes || null, rejected_via: 'installment_tracking' }),
+          installment.payment_id
+        ]
+      );
+      payment = payRes.rows[0] || null;
+    }
+
+    // Determine status: if due_date < today, 'overdue', else 'pending'
+    const today = new Date().toISOString().split('T')[0];
+    const resetStatus = installment.due_date < today ? 'overdue' : 'pending';
+
+    // Update installment schedule: reset status to pending/overdue
+    const updateRes = await client.query(
+      `UPDATE project_installment_schedules
+       SET status = $1,
+           paid_at = NULL,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE schedule_id = $2
+       RETURNING *`,
+      [resetStatus, scheduleId]
+    );
+
+    await client.query('COMMIT');
+
+    const updatedInstallment = updateRes.rows[0];
+    updatedInstallment.payment = payment;
+
+    // Send Customer Notification
+    if (customerId) {
+      try {
+        const notificationService = require('./notificationService');
+        await notificationService.createNotification({
+          user_id: customerId,
+          title: 'Payment Rejected',
+          message: `Your payment for Installment #${installment.installment_number} could not be verified.${reason ? ' Reason: ' + reason + '.' : ''} Please review the payment information and submit a new payment.`,
+          type: 'payment',
+          related_entity_id: installment.order_id,
+          related_entity_type: 'order',
+        });
+      } catch (notifErr) {
+        console.warn('Failed to send installment payment rejected notification:', notifErr.message);
+      }
+    }
+
+    return updatedInstallment;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+};
+
+/**
  * Mark an installment as paid (linked to a payment).
  * @param {string|object} scheduleIdOrOptions - The installment schedule ID or options object
  * @param {string} [scheduleIdOrOptions.scheduleId] - The installment schedule ID
@@ -138,7 +495,7 @@ exports.createInstallmentSchedule = async (
  * @param {string} [scheduleIdOrOptions.notes] - Admin notes
  * @param {number} [scheduleIdOrOptions.amount] - Payment amount
  * @param {string} [scheduleIdOrOptions.adminUserId] - Admin user ID doing the verification
- * @param {string} [paymentId] - Backwards-compatible payment ID parameter
+ * @param {string} [paymentIdLegacy] - Backwards-compatible payment ID parameter
  * @returns {Promise<object>} Updated installment record
  */
 exports.markInstallmentPaid = async (scheduleIdOrOptions, paymentIdLegacy) => {
@@ -513,42 +870,116 @@ exports.checkAllOverdueInstallments = async () => {
 };
 
 /**
- * Get installment schedule with summary for a project.
+ * Get installment schedule with summary for a project, enriched with payment details.
  * @param {string} projectId
- * @returns {Promise<object>} { installments, summary }
+ * @returns {Promise<object>} { installments, summary, payment_plan }
  */
 exports.getInstallmentSchedule = async (projectId) => {
   await ensureInstallmentTable();
 
   const scheduleRes = await pool.query(
-    `SELECT * FROM project_installment_schedules
-     WHERE project_id = $1
-     ORDER BY installment_number ASC`,
+    `SELECT 
+       pis.*,
+       p.status AS payment_status,
+       p.reference_number AS payment_reference,
+       p.method AS payment_method,
+       p.proof_url AS payment_proof_url,
+       p.created_at AS payment_submitted_at,
+       p.verified_at AS payment_verified_at,
+       p.rejection_reason AS payment_rejection_reason,
+       p.payment_instructions
+     FROM project_installment_schedules pis
+     LEFT JOIN payments p ON p.payment_id = pis.payment_id
+     WHERE pis.project_id = $1
+     ORDER BY pis.installment_number ASC`,
     [projectId]
   );
 
-  const installments = scheduleRes.rows;
+  const rawInstallments = scheduleRes.rows;
 
-  if (installments.length === 0) {
+  if (rawInstallments.length === 0) {
     return { installments: [], summary: null };
   }
 
+  const todayStr = new Date().toISOString().split('T')[0];
+
+  // First pass: resolve exact status for each installment
+  // Find first unpaid installment index to determine 'due' vs 'upcoming'
+  let foundFirstUnpaid = false;
+
+  const installments = rawInstallments.map((inst) => {
+    const isPaid = inst.status === 'paid' || inst.payment_status === 'verified';
+    const isForVerification = !isPaid && inst.payment_status === 'for_verification';
+    const isRejected = !isPaid && inst.payment_status === 'rejected';
+    const isOverdue = !isPaid && !isForVerification && (inst.status === 'overdue' || (inst.status === 'pending' && inst.due_date < todayStr));
+
+    let displayStatus = 'upcoming';
+    let statusLabel = 'Upcoming';
+    let isPayable = false;
+
+    if (isPaid) {
+      displayStatus = 'paid';
+      statusLabel = 'Paid';
+      isPayable = false;
+    } else if (isForVerification) {
+      displayStatus = 'for_verification';
+      statusLabel = 'Payment Verification Pending';
+      isPayable = false;
+    } else if (isRejected) {
+      displayStatus = 'rejected';
+      statusLabel = 'Payment Rejected';
+      isPayable = true;
+    } else if (isOverdue) {
+      displayStatus = 'overdue';
+      statusLabel = 'Overdue';
+      isPayable = true;
+      foundFirstUnpaid = true;
+    } else {
+      // Pending and not past due date
+      if (!foundFirstUnpaid) {
+        displayStatus = 'due';
+        statusLabel = 'Due';
+        isPayable = true;
+        foundFirstUnpaid = true;
+      } else {
+        displayStatus = 'upcoming';
+        statusLabel = 'Upcoming';
+        isPayable = false;
+      }
+    }
+
+    return {
+      ...inst,
+      display_status: displayStatus,
+      status_label: statusLabel,
+      is_payable: isPayable,
+      payment_method: inst.payment_method || (isPaid ? 'gcash' : null),
+      payment_reference: inst.payment_reference || null,
+      payment_proof_url: inst.payment_proof_url || null,
+      payment_date: isPaid ? (inst.paid_at || inst.payment_verified_at) : null,
+      rejection_reason: isRejected ? (inst.payment_rejection_reason || null) : null,
+      submitted_at: inst.payment_submitted_at || null,
+    };
+  });
+
   // Calculate summary
   const totalAmount = installments.reduce((sum, inst) => sum + Number(inst.amount), 0);
-  const paidCount = installments.filter((inst) => inst.status === 'paid').length;
+  const paidInstallments = installments.filter((inst) => inst.display_status === 'paid');
+  const paidCount = paidInstallments.length;
   const totalCount = installments.length;
-  const paidAmount = installments
-    .filter((inst) => inst.status === 'paid')
-    .reduce((sum, inst) => sum + Number(inst.amount), 0);
-  const remainingBalance = totalAmount - paidAmount;
+  const paidAmount = paidInstallments.reduce((sum, inst) => sum + Number(inst.amount), 0);
+  const pendingVerificationCount = installments.filter((inst) => inst.display_status === 'for_verification').length;
+  const overdueCount = installments.filter((inst) => inst.display_status === 'overdue').length;
+  const unpaidCount = totalCount - paidCount;
+  // Official remaining balance only reduces with verified payments!
+  const remainingBalance = Math.max(0, totalAmount - paidAmount);
   const remainingMonths = totalCount - paidCount;
 
-  // Find the next unpaid installment
-  const nextUnpaid = installments.find(
-    (inst) => inst.status === 'pending' || inst.status === 'overdue'
-  );
+  // Next due installment
+  const nextDue = installments.find(
+    (inst) => inst.display_status === 'due' || inst.display_status === 'overdue' || inst.display_status === 'for_verification'
+  ) || installments.find((inst) => inst.display_status !== 'paid');
 
-  // Get the latest updated_at from all installments
   const lastUpdated = installments.reduce((latest, inst) => {
     const updated = inst.updated_at || inst.created_at;
     return updated && (!latest || new Date(updated) > new Date(latest)) ? updated : latest;
@@ -562,9 +993,12 @@ exports.getInstallmentSchedule = async (projectId) => {
       remaining_balance: remainingBalance,
       total_months: totalCount,
       remaining_months: remainingMonths,
-      next_due_date: nextUnpaid?.due_date || null,
+      next_due_date: nextDue?.due_date || null,
       paid_amount: paidAmount,
       paid_count: paidCount,
+      unpaid_count: unpaidCount,
+      overdue_count: overdueCount,
+      pending_verification_count: pendingVerificationCount,
       last_updated: lastUpdated,
     },
   };
@@ -584,7 +1018,8 @@ exports.getInstallmentTrackingData = async (projectId, order) => {
   // Get order payment plan info
   const orderRes = await pool.query(
     `SELECT payment_plan, initial_payment_percentage, installment_tenure_months,
-            initial_payment_amount, monthly_installment_amount, total_amount
+            initial_payment_amount, monthly_installment_amount, total_amount, payment_status,
+            order_number
      FROM orders WHERE order_id = $1`,
     [order.order_id]
   );
@@ -596,38 +1031,22 @@ exports.getInstallmentTrackingData = async (projectId, order) => {
   const initialPaymentAmount = Number(orderData.initial_payment_amount || 0);
   const monthlyPaymentAmount = Number(orderData.monthly_installment_amount || 0);
 
-  // Determine payment plan:
-  // 1. If installment schedules exist in the DB -> it's installment
-  // 2. If order has installment amounts stored -> it's installment
-  // 3. Otherwise fall back to DB value or full_payment
   const hasInstallmentSchedules = scheduleData.installments.length > 0;
   const hasInstallmentData = Number(orderData.initial_payment_amount || 0) > 0 || Number(orderData.monthly_installment_amount || 0) > 0;
   const resolvedPaymentPlan = (hasInstallmentSchedules || hasInstallmentData || orderData.payment_plan === 'installment')
     ? 'installment'
     : 'full_payment';
 
-  // Get payment history for installments
-  const paymentHistory = [];
-  if (scheduleData.installments.length > 0) {
-    const paidInstallments = scheduleData.installments.filter((inst) => inst.status === 'paid');
-    if (paidInstallments.length > 0) {
-      const paymentIds = paidInstallments
-        .map((inst) => inst.payment_id)
-        .filter(Boolean);
-
-      if (paymentIds.length > 0) {
-        const payRes = await pool.query(
-          `SELECT p.*, u.first_name AS verified_first, u.last_name AS verified_last
-           FROM payments p
-           LEFT JOIN users u ON u.user_id = p.verified_by
-           WHERE p.payment_id = ANY($1)
-           ORDER BY p.created_at ASC`,
-          [paymentIds]
-        );
-        paymentHistory.push(...payRes.rows);
-      }
-    }
-  }
+  // Get payment history for this order (both down payment and installments)
+  const payRes = await pool.query(
+    `SELECT p.*, u.first_name AS verified_first, u.last_name AS verified_last
+     FROM payments p
+     LEFT JOIN users u ON u.user_id = p.verified_by
+     WHERE p.order_id = $1 AND p.deleted_at IS NULL
+     ORDER BY p.created_at ASC`,
+    [order.order_id]
+  );
+  const paymentHistory = payRes.rows;
 
   const summary = scheduleData.summary || {
     total_amount: totalAmount,
@@ -638,6 +1057,9 @@ exports.getInstallmentTrackingData = async (projectId, order) => {
     next_due_date: null,
     paid_amount: 0,
     paid_count: 0,
+    unpaid_count: tenureMonths,
+    overdue_count: 0,
+    pending_verification_count: 0,
   };
 
   return {

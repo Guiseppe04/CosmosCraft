@@ -52,7 +52,7 @@ export function OrdersTab({ orders, fetchOrders, user, pagination, showToast }) 
       {view === 'orders' ? (
         <OrderManagement orders={orders} onRefresh={fetchOrders} user={user} pagination={pagination} />
       ) : (
-        <RefundRequestsTab showToast={showToast} />
+        <RefundRequestsTab showToast={showToast} user={user} />
       )}
     </motion.div>
   )

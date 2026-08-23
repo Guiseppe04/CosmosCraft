@@ -740,7 +740,14 @@ exports.getUserOrders = async (userId) => {
        order_id,
        refund_request_id,
        status,
-       created_at
+       created_at,
+       refunded_amount,
+       approved_amount,
+       refund_reference,
+       refund_method,
+       rejection_reason,
+       refund_type,
+       request_number
      FROM refund_requests
      WHERE order_id = ANY($1) AND deleted_at IS NULL
      ORDER BY order_id, created_at DESC`,
@@ -768,6 +775,13 @@ exports.getUserOrders = async (userId) => {
       refund_request_id: refund?.refund_request_id || null,
       refund_request_status: refund?.status || null,
       refund_requested_at: refund?.created_at || null,
+      refund_refunded_amount: refund?.refunded_amount || null,
+      refund_approved_amount: refund?.approved_amount || null,
+      refund_reference: refund?.refund_reference || null,
+      refund_method: refund?.refund_method || null,
+      refund_rejection_reason: refund?.rejection_reason || null,
+      refund_type: refund?.refund_type || null,
+      refund_request_number: refund?.request_number || null,
     }
   })
 }
@@ -1754,7 +1768,7 @@ exports.getRefundRequests = async (params = {}) => {
   const total = totalResult.rows[0]?.total || 0;
 
   const dataQuery = `
-    SELECT rr.*, o.order_number, u.first_name, u.last_name, u.email as customer_email
+    SELECT rr.*, o.order_number, o.payment_status, o.payment_status as order_payment_status, o.total_amount as order_total_amount, o.status as order_status, u.first_name, u.last_name, u.email as customer_email
     FROM refund_requests rr
     LEFT JOIN orders o ON rr.order_id = o.order_id
     LEFT JOIN users u ON rr.user_id = u.user_id
@@ -1810,7 +1824,7 @@ exports.getRefundRequests = async (params = {}) => {
 
 exports.getRefundRequestById = async (refundRequestId) => {
   const res = await pool.query(
-    `SELECT rr.*, o.order_number, u.first_name, u.last_name, u.email as customer_email
+    `SELECT rr.*, o.order_number, o.payment_status, o.payment_status as order_payment_status, o.total_amount as order_total_amount, o.status as order_status, u.first_name, u.last_name, u.email as customer_email
      FROM refund_requests rr
      LEFT JOIN orders o ON rr.order_id = o.order_id
      LEFT JOIN users u ON rr.user_id = u.user_id
@@ -1829,10 +1843,20 @@ exports.getRefundRequestById = async (refundRequestId) => {
     [refundRequestId]
   );
 
+  let payment = null;
+  if (request.order_id) {
+    const paymentRes = await pool.query(
+      `SELECT * FROM payments WHERE order_id = $1 ORDER BY created_at DESC LIMIT 1`,
+      [request.order_id]
+    );
+    payment = paymentRes.rows[0] || null;
+  }
+
   return {
     ...request,
     items: itemsRes.rows,
     images: imagesRes.rows,
+    payment,
   };
 }
 

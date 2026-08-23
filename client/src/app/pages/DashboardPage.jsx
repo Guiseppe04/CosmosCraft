@@ -51,22 +51,22 @@ const HOLD_REASONS = [
 ]
 
 const getOldConfigData = (key, val, bodyType) => {
-    let price;
-    let label = val;
-    if (key === 'body') { price = BODY_OPTIONS[val]?.price; label = BODY_OPTIONS[val]?.label; }
-    else if (key === 'bodyWood') { price = BODY_WOOD_OPTIONS[val]?.price; label = BODY_WOOD_OPTIONS[val]?.label; }
-    else if (key === 'bodyFinish') { price = BODY_FINISH_OPTIONS[val]?.price; label = BODY_FINISH_OPTIONS[val]?.label; }
-    else if (key === 'neck') { price = NECK_OPTIONS[val]?.price; label = NECK_OPTIONS[val]?.label; }
-    else if (key === 'fretboard') { price = FRETBOARD_OPTIONS[val]?.price; label = FRETBOARD_OPTIONS[val]?.label; }
-    else if (key === 'headstock') { price = HEADSTOCK_OPTIONS[val]?.price; label = HEADSTOCK_OPTIONS[val]?.label; }
-    else if (key === 'headstockWood') { price = HEADSTOCK_WOOD_OPTIONS[val]?.price; label = HEADSTOCK_WOOD_OPTIONS[val]?.label; }
-    else if (key === 'inlays') { price = INLAY_OPTIONS[val]?.price; label = INLAY_OPTIONS[val]?.label; }
-    else if (key === 'bridge') { price = BRIDGE_OPTIONS[val]?.price; label = BRIDGE_OPTIONS[val]?.label; }
-    else if (key === 'pickguard') { price = PICKGUARD_OPTIONS_BY_BODY[bodyType]?.[val]?.price; label = PICKGUARD_OPTIONS_BY_BODY[bodyType]?.[val]?.label; }
-    else if (key === 'knobs') { price = KNOB_OPTIONS_BY_BODY[bodyType]?.[val]?.price; label = KNOB_OPTIONS_BY_BODY[bodyType]?.[val]?.label; }
-    else if (key === 'hardware') { price = HARDWARE_OPTIONS[val]?.price; label = HARDWARE_OPTIONS[val]?.label; }
-    else if (key === 'pickups') { price = PICKUP_OPTIONS[val]?.price; label = PICKUP_OPTIONS[val]?.label; }
-    return { price, label: label || val };
+  let price;
+  let label = val;
+  if (key === 'body') { price = BODY_OPTIONS[val]?.price; label = BODY_OPTIONS[val]?.label; }
+  else if (key === 'bodyWood') { price = BODY_WOOD_OPTIONS[val]?.price; label = BODY_WOOD_OPTIONS[val]?.label; }
+  else if (key === 'bodyFinish') { price = BODY_FINISH_OPTIONS[val]?.price; label = BODY_FINISH_OPTIONS[val]?.label; }
+  else if (key === 'neck') { price = NECK_OPTIONS[val]?.price; label = NECK_OPTIONS[val]?.label; }
+  else if (key === 'fretboard') { price = FRETBOARD_OPTIONS[val]?.price; label = FRETBOARD_OPTIONS[val]?.label; }
+  else if (key === 'headstock') { price = HEADSTOCK_OPTIONS[val]?.price; label = HEADSTOCK_OPTIONS[val]?.label; }
+  else if (key === 'headstockWood') { price = HEADSTOCK_WOOD_OPTIONS[val]?.price; label = HEADSTOCK_WOOD_OPTIONS[val]?.label; }
+  else if (key === 'inlays') { price = INLAY_OPTIONS[val]?.price; label = INLAY_OPTIONS[val]?.label; }
+  else if (key === 'bridge') { price = BRIDGE_OPTIONS[val]?.price; label = BRIDGE_OPTIONS[val]?.label; }
+  else if (key === 'pickguard') { price = PICKGUARD_OPTIONS_BY_BODY[bodyType]?.[val]?.price; label = PICKGUARD_OPTIONS_BY_BODY[bodyType]?.[val]?.label; }
+  else if (key === 'knobs') { price = KNOB_OPTIONS_BY_BODY[bodyType]?.[val]?.price; label = KNOB_OPTIONS_BY_BODY[bodyType]?.[val]?.label; }
+  else if (key === 'hardware') { price = HARDWARE_OPTIONS[val]?.price; label = HARDWARE_OPTIONS[val]?.label; }
+  else if (key === 'pickups') { price = PICKUP_OPTIONS[val]?.price; label = PICKUP_OPTIONS[val]?.label; }
+  return { price, label: label || val };
 }
 
 const formatAddress = (addr) => {
@@ -230,7 +230,7 @@ export function DashboardPage() {
   const [toastMessage, setToastMessage] = useState(location.state?.message || null)
   const [refreshCounter, setRefreshCounter] = useState(0)
   const [buildToDelete, setBuildToDelete] = useState(null)
-  
+
   const [myProjects, setMyProjects] = useState([])
   const [myProjectSearch, setMyProjectSearch] = useState('')
   const [myProjectSort, setMyProjectSort] = useState('updated')
@@ -241,7 +241,7 @@ export function DashboardPage() {
   const [myCustomizations, setMyCustomizations] = useState([])
   const [activeProjectView, setActiveProjectView] = useState(null)
   const [activeBuildTab, setActiveBuildTab] = useState('build-projects')
-  
+
   const [myOrders, setMyOrders] = useState([])
   const [activePurchaseTab, setActivePurchaseTab] = useState('All')
   const [isCancelOrderModalOpen, setIsCancelOrderModalOpen] = useState(false)
@@ -263,6 +263,7 @@ export function DashboardPage() {
   const [isCancelProjectModalOpen, setIsCancelProjectModalOpen] = useState(false)
   const [cancelProjectTarget, setCancelProjectTarget] = useState(null)
   const [cancelProjectPayment, setCancelProjectPayment] = useState(null)
+  const [cancelProjectPaymentLoading, setCancelProjectPaymentLoading] = useState(false)
   const [isCancellingProject, setIsCancellingProject] = useState(false)
   const [cancelProjectConfirmed, setCancelProjectConfirmed] = useState(false)
   // Build state preview for claim flow
@@ -283,9 +284,13 @@ export function DashboardPage() {
 
   const [isCancelWithOptionsModalOpen, setIsCancelWithOptionsModalOpen] = useState(false)
   const [cancelWithOptionsTarget, setCancelWithOptionsTarget] = useState(null)
-  const [cancelOption, setCancelOption] = useState('ship_unfinished')
+  const [cancelOption, setCancelOption] = useState('ship_to_address')
   const [cancelWithOptionsReason, setCancelWithOptionsReason] = useState('')
   const [cancelWithOptionsConfirmed, setCancelWithOptionsConfirmed] = useState(false)
+  const [selectedCancelAddressId, setSelectedCancelAddressId] = useState(null)
+  const [isAddingCancelAddress, setIsAddingCancelAddress] = useState(false)
+  const [cancelAddressSuccessMsg, setCancelAddressSuccessMsg] = useState('')
+  const [isSavingCancelAddress, setIsSavingCancelAddress] = useState(false)
   const [isWithdrawingCancelRequest, setIsWithdrawingCancelRequest] = useState(false)
   const [isCancellingWithOptions, setIsCancellingWithOptions] = useState(false)
 
@@ -313,7 +318,7 @@ export function DashboardPage() {
     const normalized = (status || 'pending').toLowerCase()
     return ['verified', 'approved', 'paid'].includes(normalized)
   }
-  
+
   const [ratingModalOrderId, setRatingModalOrderId] = useState(null)
   const [rating, setRating] = useState(0)
   const [ratingText, setRatingText] = useState('')
@@ -674,7 +679,13 @@ export function DashboardPage() {
   const openCancelProjectModal = async (project) => {
     setCancelProjectTarget(project)
     setCancelProjectConfirmed(false)
-    setCancelProjectPayment(null)
+
+    // Check if payment already exists in cached orders
+    const cachedOrder = myOrders?.find(o => o.order_id === project?.order_id)
+    const cachedPayment = cachedOrder?.payment || null
+    setCancelProjectPayment(cachedPayment)
+    setCancelProjectPaymentLoading(!cachedPayment && Boolean(project?.order_id))
+
     setCancelBuildPreview(null)
     setCancelClaimMethod('pickup')
     setCancelClaimRecipientName('')
@@ -686,9 +697,13 @@ export function DashboardPage() {
       try {
         const orderRes = await adminApi.getOrder(project.order_id)
         const payment = orderRes?.data?.payment || orderRes?.data?.order?.payment || null
-        setCancelProjectPayment(payment)
+        if (payment) {
+          setCancelProjectPayment(payment)
+        }
       } catch (err) {
         console.error('Failed to load payment info for cancel modal:', err)
+      } finally {
+        setCancelProjectPaymentLoading(false)
       }
     }
 
@@ -711,6 +726,7 @@ export function DashboardPage() {
     setIsCancelProjectModalOpen(false)
     setCancelProjectTarget(null)
     setCancelProjectPayment(null)
+    setCancelProjectPaymentLoading(false)
     setCancelProjectConfirmed(false)
     setCancelBuildPreview(null)
     setCancelBuildPreviewLoading(false)
@@ -835,35 +851,83 @@ export function DashboardPage() {
   // Cancel with options handlers
   const openCancelWithOptionsModal = (project) => {
     setCancelWithOptionsTarget(project)
-    setCancelOption('ship_unfinished')
-    setCancelWithOptionsReason('')
+    const initialOpt = project?.cancel_option || 'ship_to_address'
+    setCancelOption(initialOpt === 'ship_unfinished' ? 'ship_to_address' : (initialOpt === 'pickup_unfinished' ? 'pickup_at_shop' : initialOpt))
+    setCancelWithOptionsReason(project?.cancel_reason || '')
     setCancelWithOptionsConfirmed(false)
+    setIsAddingCancelAddress(false)
+    setCancelAddressSuccessMsg('')
+
+    const projectAddressId = project?.cancel_address_id || project?.shipping_address_id
+    if (projectAddressId) {
+      setSelectedCancelAddressId(projectAddressId)
+    } else if (addresses && addresses.length > 0) {
+      const def = addresses.find((a) => a.is_default) || addresses[0]
+      setSelectedCancelAddressId(def?.address_id || null)
+    } else {
+      setSelectedCancelAddressId(null)
+    }
+
+    if (!addresses || addresses.length === 0) {
+      fetchAddresses()
+    }
     setIsCancelWithOptionsModalOpen(true)
   }
 
   const closeCancelWithOptionsModal = (force = false) => {
-    if (isCancellingWithOptions && !force) return
+    if ((isCancellingWithOptions || isWithdrawingCancelRequest || isSavingCancelAddress) && !force) return
     setIsCancelWithOptionsModalOpen(false)
     setCancelWithOptionsTarget(null)
-    setCancelOption('ship_unfinished')
+    setCancelOption('ship_to_address')
     setCancelWithOptionsReason('')
     setCancelWithOptionsConfirmed(false)
+    setSelectedCancelAddressId(null)
+    setIsAddingCancelAddress(false)
+    setCancelAddressSuccessMsg('')
+  }
+
+  const handleSaveCancelAddress = async (payload) => {
+    try {
+      setIsSavingCancelAddress(true)
+      await adminApi.addAddress({ ...payload, isDefault: false })
+      const res = await adminApi.getProfile()
+      const updatedAddrs = res?.data?.user?.addresses || []
+      setAddresses(updatedAddrs)
+      const newlyAdded = updatedAddrs[updatedAddrs.length - 1] || updatedAddrs.find((a) => a.street_line1 === payload.streetLine1) || updatedAddrs[0]
+      if (newlyAdded?.address_id) {
+        setSelectedCancelAddressId(newlyAdded.address_id)
+      }
+      setCancelAddressSuccessMsg('New Address Saved ✓')
+      setIsAddingCancelAddress(false)
+      setTimeout(() => setCancelAddressSuccessMsg(''), 4000)
+    } catch (err) {
+      alert('Failed to save address: ' + err.message)
+    } finally {
+      setIsSavingCancelAddress(false)
+    }
   }
 
   const handleCancelWithOptions = async () => {
     if (!cancelWithOptionsTarget?.project_id || !cancelWithOptionsReason.trim() || !cancelWithOptionsConfirmed) return
 
+    const isShipping = cancelOption === 'ship_to_address' || cancelOption === 'ship_unfinished'
+    if (isShipping && !selectedCancelAddressId) {
+      setToastMessage('Please select a delivery address.')
+      return
+    }
+
     try {
       setIsCancellingWithOptions(true)
       await adminApi.requestProjectCancel(cancelWithOptionsTarget.project_id, {
-        cancel_option: cancelOption,
+        cancel_option: isShipping ? 'ship_to_address' : 'pickup_at_shop',
         cancel_reason: cancelWithOptionsReason,
+        address_id: isShipping ? selectedCancelAddressId : null,
       })
-      setToastMessage('Cancellation request submitted. Admin will review it shortly.');
-      fetchMyProjects();
+      setToastMessage('Cancellation request submitted. Admin will review it shortly.')
+      fetchMyProjects()
       closeCancelWithOptionsModal(true)
     } catch (err) {
-      setToastMessage(`Failed to request cancellation: ${err.message}`);
+      setToastMessage(`Failed to request cancellation: ${err.message}`)
     } finally {
       setIsCancellingWithOptions(false)
     }
@@ -875,11 +939,11 @@ export function DashboardPage() {
     try {
       setIsWithdrawingCancelRequest(true)
       await adminApi.cancelProjectCancelRequest(cancelWithOptionsTarget.project_id)
-      setToastMessage('Cancellation request withdrawn.');
-      fetchMyProjects();
+      setToastMessage('Cancellation request withdrawn.')
+      fetchMyProjects()
       closeCancelWithOptionsModal(true)
     } catch (err) {
-      setToastMessage(`Failed to withdraw cancellation request: ${err.message}`);
+      setToastMessage(`Failed to withdraw cancellation request: ${err.message}`)
     } finally {
       setIsWithdrawingCancelRequest(false)
     }
@@ -899,7 +963,7 @@ export function DashboardPage() {
       setRescheduleDate('');
       setRescheduleTime('');
       fetchMyAppointments();
-    } catch(err) {
+    } catch (err) {
       alert("Failed to reschedule: " + err.message);
     }
   };
@@ -1036,16 +1100,16 @@ export function DashboardPage() {
 
     const updatedBuild = { ...viewingBuild };
     const partsArray = [...updatedBuild.additionalParts];
-    
+
     if (newQuantity <= 0) {
       partsArray.splice(partIndex, 1);
     } else {
       partsArray[partIndex] = { ...partsArray[partIndex], quantity: newQuantity };
     }
     updatedBuild.additionalParts = partsArray;
-    
+
     setViewingBuild(updatedBuild);
-    
+
     for (const key of ['cosmoscraft_saved_builds', 'cosmoscraft_saved_bass_builds']) {
       const builds = JSON.parse(window.localStorage.getItem(key) || '[]');
       const bIndex = builds.findIndex(b => b.id === buildId);
@@ -1067,7 +1131,7 @@ export function DashboardPage() {
     phone: '',
     gender: 'male',
   })
-  
+
   const [passwordData, setPasswordData] = useState({
     oldPassword: '',
     newPassword: '',
@@ -1079,7 +1143,7 @@ export function DashboardPage() {
   const [isPasswordConfirmOpen, setIsPasswordConfirmOpen] = useState(false)
   const [showNewPassword, setShowNewPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
-  
+
   const [addressData, setAddressData] = useState({
     label: 'Home',
     country: 'PH',
@@ -1103,7 +1167,7 @@ export function DashboardPage() {
     cities: [],
     barangays: []
   })
-  
+
   const [isEditingProfile, setIsEditingProfile] = useState(false)
   const [profileLoading, setProfileLoading] = useState(false)
   const [confirm, setConfirm] = useState({ open: false, addressId: null, isBusy: false })
@@ -1253,224 +1317,223 @@ export function DashboardPage() {
         {/* {renderProjectsContent()} */}
 
         <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-5 sm:p-8">
-        <h2 className="text-2xl font-bold text-white mb-1">My Purchase</h2>
-        <p className="text-sm text-[var(--text-muted)] mb-8">Track and manage your orders</p>
+          <h2 className="text-2xl font-bold text-white mb-1">My Purchase</h2>
+          <p className="text-sm text-[var(--text-muted)] mb-8">Track and manage your orders</p>
 
-        {/* Tabs */}
-        <div className="flex flex-wrap gap-4 text-sm font-medium border-b border-[var(--border)] pb-3 mb-10 overflow-x-auto">
-          {['All', 'To Pay', 'To Ship', 'To Receive', 'Completed', 'Cancelled', 'Refund'].map(label => (
-            <button
-              key={label}
-              onClick={() => setActivePurchaseTab(label)}
-              className={`pb-2 transition-colors duration-200 whitespace-nowrap ${
-                label === activePurchaseTab
-                  ? 'border-b-2 border-[var(--gold-primary)] text-[var(--gold-primary)]'
-                  : 'border-transparent text-[var(--text-muted)] hover:text-white border-b-2'
-              }`}
-              type="button"
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+          {/* Tabs */}
+          <div className="flex flex-wrap gap-4 text-sm font-medium border-b border-[var(--border)] pb-3 mb-10 overflow-x-auto">
+            {['All', 'To Pay', 'To Ship', 'To Receive', 'Completed', 'Cancelled', 'Refund'].map(label => (
+              <button
+                key={label}
+                onClick={() => setActivePurchaseTab(label)}
+                className={`pb-2 transition-colors duration-200 whitespace-nowrap ${label === activePurchaseTab
+                    ? 'border-b-2 border-[var(--gold-primary)] text-[var(--gold-primary)]'
+                    : 'border-transparent text-[var(--text-muted)] hover:text-white border-b-2'
+                  }`}
+                type="button"
+              >
+                {label}
+              </button>
+            ))}
+          </div>
 
-        {myOrders.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-10">
-            <div className="w-16 h-16 rounded-full border-2 border-[var(--border)] flex items-center justify-center mb-6">
-              <Package className="w-8 h-8 text-[var(--text-muted)]" />
+          {myOrders.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-10">
+              <div className="w-16 h-16 rounded-full border-2 border-[var(--border)] flex items-center justify-center mb-6">
+                <Package className="w-8 h-8 text-[var(--text-muted)]" />
+              </div>
+              <p className="text-white font-medium mb-1">No orders yet</p>
+              <p className="text-sm text-[var(--text-muted)] mb-6">
+                Start shopping to see your orders here
+              </p>
+              <button
+                type="button"
+                onClick={() => navigate('/shop')}
+                className="px-6 py-2.5 rounded-full bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-sm font-semibold text-[var(--text-dark)] hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition"
+              >
+                Browse Shop
+              </button>
             </div>
-            <p className="text-white font-medium mb-1">No orders yet</p>
-            <p className="text-sm text-[var(--text-muted)] mb-6">
-              Start shopping to see your orders here
-            </p>
-            <button
-              type="button"
-              onClick={() => navigate('/shop')}
-              className="px-6 py-2.5 rounded-full bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-sm font-semibold text-[var(--text-dark)] hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition"
-            >
-              Browse Shop
-            </button>
-          </div>
-        ) : filteredOrders.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-10">
-            <p className="text-white font-medium mb-1">No orders found</p>
-            <p className="text-sm text-[var(--text-muted)]">
-              You don't have any orders with this status.
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-6">
-            {filteredOrders.map(order => {
-              const subtotalAmount = Number(order.subtotal || 0)
-              const shippingAmount = Number(order.shipping_cost || 0)
-              const taxAmount = Number(order.tax_amount || 0)
-              const totalAmount = Number(order.total_amount || 0)
-              const displayTotalAmount = totalAmount > 0
-                ? Math.max(totalAmount - taxAmount, 0)
-                : subtotalAmount + shippingAmount
-              const orderItems = Array.isArray(order.items) ? order.items : []
+          ) : filteredOrders.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-10">
+              <p className="text-white font-medium mb-1">No orders found</p>
+              <p className="text-sm text-[var(--text-muted)]">
+                You don't have any orders with this status.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {filteredOrders.map(order => {
+                const subtotalAmount = Number(order.subtotal || 0)
+                const shippingAmount = Number(order.shipping_cost || 0)
+                const taxAmount = Number(order.tax_amount || 0)
+                const totalAmount = Number(order.total_amount || 0)
+                const displayTotalAmount = totalAmount > 0
+                  ? Math.max(totalAmount - taxAmount, 0)
+                  : subtotalAmount + shippingAmount
+                const orderItems = Array.isArray(order.items) ? order.items : []
 
-              return (
-              <div key={order.order_id} className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl p-5 hover:border-[var(--gold-primary)]/40 transition-colors">
-                <div className="flex flex-col gap-4 mb-4 border-b border-[var(--border)] pb-4 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
-                    <h3 className="font-bold text-white text-lg">{order.order_number}</h3>
-                    <p className="text-xs text-[var(--text-muted)] mt-1">{new Date(order.created_at).toLocaleDateString()} {new Date(order.created_at).toLocaleTimeString()}</p>
-                  </div>
-                  <div className="flex flex-col gap-2 sm:items-end">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[11px] uppercase tracking-wider text-[var(--text-muted)]">Order Status</span>
-                      <span className="inline-block px-3 py-1 bg-[var(--surface-light)] border border-[var(--border)] rounded-full text-xs font-semibold text-white capitalize">
-                         {formatStatus(order.status)}
-                      </span>
+                return (
+                  <div key={order.order_id} className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl p-5 hover:border-[var(--gold-primary)]/40 transition-colors">
+                    <div className="flex flex-col gap-4 mb-4 border-b border-[var(--border)] pb-4 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <h3 className="font-bold text-white text-lg">{order.order_number}</h3>
+                        <p className="text-xs text-[var(--text-muted)] mt-1">{new Date(order.created_at).toLocaleDateString()} {new Date(order.created_at).toLocaleTimeString()}</p>
+                      </div>
+                      <div className="flex flex-col gap-2 sm:items-end">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] uppercase tracking-wider text-[var(--text-muted)]">Order Status</span>
+                          <span className="inline-block px-3 py-1 bg-[var(--surface-light)] border border-[var(--border)] rounded-full text-xs font-semibold text-white capitalize">
+                            {formatStatus(order.status)}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] uppercase tracking-wider text-[var(--text-muted)]">Payment Status</span>
+                          <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold capitalize border ${['approved', 'paid', 'verified'].includes(String(order.payment_status || '').toLowerCase())
+                              ? 'bg-green-500/10 text-green-400 border-green-500/30'
+                              : 'bg-yellow-500/10 text-yellow-500 border-yellow-500/30'
+                            }`}>
+                            {formatStatus(order.payment_status)}
+                          </span>
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[11px] uppercase tracking-wider text-[var(--text-muted)]">Payment Status</span>
-                      <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold capitalize border ${
-                         ['approved', 'paid', 'verified'].includes(String(order.payment_status || '').toLowerCase())
-                           ? 'bg-green-500/10 text-green-400 border-green-500/30'
-                           : 'bg-yellow-500/10 text-yellow-500 border-yellow-500/30'
-                      }`}>
-                         {formatStatus(order.payment_status)}
-                      </span>
-                    </div>
-                  </div>
-                </div>
 
-                {orderItems.length > 0 && (
-                  <div className="mt-4">
-                    <p className="text-[11px] uppercase tracking-wider text-[var(--text-muted)] mb-3">Item Details</p>
-                    <div className="space-y-2">
-                      {orderItems.map((item, index) => {
-                        const customization = item.customization_id ? customizationLookup.get(item.customization_id) : null
-                        const itemName = item.product_name || customization?.name || item.product_sku || 'Custom Item'
-                        const quantity = Number(item.quantity || 1)
-                        const unitPrice = Number(item.unit_price || 0)
+                    {orderItems.length > 0 && (
+                      <div className="mt-4">
+                        <p className="text-[11px] uppercase tracking-wider text-[var(--text-muted)] mb-3">Item Details</p>
+                        <div className="space-y-2">
+                          {orderItems.map((item, index) => {
+                            const customization = item.customization_id ? customizationLookup.get(item.customization_id) : null
+                            const itemName = item.product_name || customization?.name || item.product_sku || 'Custom Item'
+                            const quantity = Number(item.quantity || 1)
+                            const unitPrice = Number(item.unit_price || 0)
 
-                        return (
-                          <div key={item.order_item_id || `${order.order_id}-${index}`} className="flex items-start justify-between gap-4 rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] px-4 py-3">
-                            <div className="min-w-0">
-                              <p className="text-sm font-semibold text-white">{itemName}</p>
-                              <p className="text-xs text-[var(--text-muted)] mt-1">
-                                Qty: {quantity}{item.customization_id ? ' • Custom Build' : ''}
-                              </p>
-                            </div>
-                            <span className="text-sm font-semibold text-white whitespace-nowrap">PHP {unitPrice.toLocaleString('en-PH')}</span>
-                          </div>
-                        )
-                      })}
+                            return (
+                              <div key={item.order_item_id || `${order.order_id}-${index}`} className="flex items-start justify-between gap-4 rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] px-4 py-3">
+                                <div className="min-w-0">
+                                  <p className="text-sm font-semibold text-white">{itemName}</p>
+                                  <p className="text-xs text-[var(--text-muted)] mt-1">
+                                    Qty: {quantity}{item.customization_id ? ' • Custom Build' : ''}
+                                  </p>
+                                </div>
+                                <span className="text-sm font-semibold text-white whitespace-nowrap">PHP {unitPrice.toLocaleString('en-PH')}</span>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="flex justify-between items-end mt-4">
+                      <div className="text-sm text-[var(--text-muted)] [&>span:last-child]:hidden">
+                        <span className="block">Items: {orderItems.length}</span>
+                        <span className="block">Shipping: ₱{Number(order.shipping_cost || 0).toLocaleString('en-PH')}</span>
+                        <span className="block mt-1">Tax: ₱{Number(order.tax_amount || 0).toLocaleString('en-PH')}</span>
+                      </div>
+                      <div className="text-right items-end flex flex-col [&>span:not(:first-child)]:hidden">
+                        <span className="text-sm text-[var(--text-muted)] mb-1">Total Amount</span>
+                        <div className="text-xl font-bold text-[var(--gold-primary)] block">PHP {displayTotalAmount.toLocaleString('en-PH')}</div>
+                        <span className="text-xl font-bold text-[var(--gold-primary)] block">â‚±{displayTotalAmount.toLocaleString('en-PH')}</span>
+                        <span className="text-xl font-bold text-[var(--gold-primary)] block">₱{Number(order.total_amount || 0).toLocaleString('en-PH')}</span>
+                      </div>
                     </div>
-                  </div>
-                )}
-                
-                <div className="flex justify-between items-end mt-4">
-                   <div className="text-sm text-[var(--text-muted)] [&>span:last-child]:hidden">
-                      <span className="block">Items: {orderItems.length}</span>
-                      <span className="block">Shipping: ₱{Number(order.shipping_cost || 0).toLocaleString('en-PH')}</span>
-                      <span className="block mt-1">Tax: ₱{Number(order.tax_amount || 0).toLocaleString('en-PH')}</span>
-                   </div>
-                   <div className="text-right items-end flex flex-col [&>span:not(:first-child)]:hidden">
-                     <span className="text-sm text-[var(--text-muted)] mb-1">Total Amount</span>
-                     <div className="text-xl font-bold text-[var(--gold-primary)] block">PHP {displayTotalAmount.toLocaleString('en-PH')}</div>
-                     <span className="text-xl font-bold text-[var(--gold-primary)] block">â‚±{displayTotalAmount.toLocaleString('en-PH')}</span>
-                     <span className="text-xl font-bold text-[var(--gold-primary)] block">₱{Number(order.total_amount || 0).toLocaleString('en-PH')}</span>
-                   </div>
-                 </div>
-                 <div className="mt-4 pt-4 border-t border-[var(--border)] flex justify-end">
-                   <button
-                     onClick={() => printCustomerInvoice(order)}
-                     disabled={printingOrderId === order.order_id}
-                     className="px-4 py-2 border border-[var(--gold-primary)]/40 text-[var(--gold-primary)] hover:bg-[var(--gold-primary)]/10 transition-colors rounded-lg text-sm font-semibold flex items-center gap-2 disabled:opacity-50"
-                   >
-                     {printingOrderId === order.order_id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Printer className="w-4 h-4" />}
-                     Print Invoice
-                   </button>
-                 </div>
-                 {order.status === 'pending' && (
-                  <div className="mt-4 pt-4 border-t border-[var(--border)] flex justify-end">
-                    <button
-                      onClick={() => openCancelOrderModal(order)}
-                      className="px-4 py-2 border border-red-500/30 text-red-500 hover:bg-red-500/10 transition-colors rounded-lg text-sm font-semibold"
-                    >
-                      Cancel Order
-                    </button>
-                  </div>
-                )}
-                {['shipped', 'out_for_delivery', 'delivered'].includes(order.status) && order.status !== 'received' && (
-                  <div className="mt-4 pt-4 border-t border-[var(--border)] flex justify-end gap-3">
-                    <button
-                      onClick={() => handleMarkAsReceived(order)}
-                      disabled={isMarkingReceived}
-                      className="px-4 py-2 border border-green-500/30 text-green-500 hover:bg-green-500/10 transition-colors rounded-lg text-sm font-semibold flex items-center gap-2 disabled:opacity-50"
-                    >
-                      {isMarkingReceived ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
-                      Received
-                    </button>
-                  </div>
-                )}
-                {(order.status === 'received' || order.status === 'delivered') && order.payment_status !== 'refunded' && !order.has_refund_request && (
-                  <div className="mt-4 pt-4 border-t border-[var(--border)] flex justify-end gap-3">
-                    <button
-                      onClick={() => openRefundModal(order)}
-                      className="px-4 py-2 border border-[var(--border)] text-white hover:bg-white/5 transition-colors rounded-lg text-sm font-semibold flex items-center gap-2"
-                    >
-                      <RefreshCw className="w-4 h-4 text-[var(--gold-primary)]" />
-                      Refund
-                    </button>
-                  </div>
-                )}
-                {(order.status === 'received' || order.status === 'delivered') && order.has_refund_request && (
-                  <div className="mt-4 pt-4 border-t border-[var(--border)] flex justify-end items-center gap-3">
-                    {(() => {
-                      const refundConfig = getRefundStatusConfig(order.refund_request_status)
-                      const RefundIcon = refundConfig.icon
-                      return (
-                        <span className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-semibold ${refundConfig.className}`}>
-                          <RefundIcon className="w-4 h-4" />
-                          {refundConfig.label}
-                        </span>
-                      )
-                    })()}
-                    {['pending', 'pending_payment_verification'].includes(order.refund_request_status) && (
+                    <div className="mt-4 pt-4 border-t border-[var(--border)] flex justify-end">
                       <button
-                        onClick={async () => {
-                          try {
-                            await adminApi.withdrawRefund(order.refund_request_id)
-                            setToastMessage('Refund request withdrawn.')
-                            fetchMyOrders()
-                          } catch (err) {
-                            setToastMessage(`Failed to withdraw refund: ${err.message}`)
-                          }
-                        }}
-                        className="px-4 py-2 border border-slate-500/30 text-slate-400 hover:bg-slate-500/10 transition-colors rounded-lg text-sm font-semibold"
+                        onClick={() => printCustomerInvoice(order)}
+                        disabled={printingOrderId === order.order_id}
+                        className="px-4 py-2 border border-[var(--gold-primary)]/40 text-[var(--gold-primary)] hover:bg-[var(--gold-primary)]/10 transition-colors rounded-lg text-sm font-semibold flex items-center gap-2 disabled:opacity-50"
                       >
-                        Withdraw Refund
+                        {printingOrderId === order.order_id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Printer className="w-4 h-4" />}
+                        Print Invoice
                       </button>
+                    </div>
+                    {order.status === 'pending' && (
+                      <div className="mt-4 pt-4 border-t border-[var(--border)] flex justify-end">
+                        <button
+                          onClick={() => openCancelOrderModal(order)}
+                          className="px-4 py-2 border border-red-500/30 text-red-500 hover:bg-red-500/10 transition-colors rounded-lg text-sm font-semibold"
+                        >
+                          Cancel Order
+                        </button>
+                      </div>
+                    )}
+                    {['shipped', 'out_for_delivery', 'delivered'].includes(order.status) && order.status !== 'received' && (
+                      <div className="mt-4 pt-4 border-t border-[var(--border)] flex justify-end gap-3">
+                        <button
+                          onClick={() => handleMarkAsReceived(order)}
+                          disabled={isMarkingReceived}
+                          className="px-4 py-2 border border-green-500/30 text-green-500 hover:bg-green-500/10 transition-colors rounded-lg text-sm font-semibold flex items-center gap-2 disabled:opacity-50"
+                        >
+                          {isMarkingReceived ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                          Received
+                        </button>
+                      </div>
+                    )}
+                    {(order.status === 'received' || order.status === 'delivered') && order.payment_status !== 'refunded' && !order.has_refund_request && (
+                      <div className="mt-4 pt-4 border-t border-[var(--border)] flex justify-end gap-3">
+                        <button
+                          onClick={() => openRefundModal(order)}
+                          className="px-4 py-2 border border-[var(--border)] text-white hover:bg-white/5 transition-colors rounded-lg text-sm font-semibold flex items-center gap-2"
+                        >
+                          <RefreshCw className="w-4 h-4 text-[var(--gold-primary)]" />
+                          Refund
+                        </button>
+                      </div>
+                    )}
+                    {(order.status === 'received' || order.status === 'delivered') && order.has_refund_request && (
+                      <div className="mt-4 pt-4 border-t border-[var(--border)] flex justify-end items-center gap-3">
+                        {(() => {
+                          const refundConfig = getRefundStatusConfig(order.refund_request_status)
+                          const RefundIcon = refundConfig.icon
+                          return (
+                            <span className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-semibold ${refundConfig.className}`}>
+                              <RefundIcon className="w-4 h-4" />
+                              {refundConfig.label}
+                            </span>
+                          )
+                        })()}
+                        {['pending', 'pending_payment_verification'].includes(order.refund_request_status) && (
+                          <button
+                            onClick={async () => {
+                              try {
+                                await adminApi.withdrawRefund(order.refund_request_id)
+                                setToastMessage('Refund request withdrawn.')
+                                fetchMyOrders()
+                              } catch (err) {
+                                setToastMessage(`Failed to withdraw refund: ${err.message}`)
+                              }
+                            }}
+                            className="px-4 py-2 border border-slate-500/30 text-slate-400 hover:bg-slate-500/10 transition-colors rounded-lg text-sm font-semibold"
+                          >
+                            Withdraw Refund
+                          </button>
+                        )}
+                      </div>
+                    )}
+                    {(order.status === 'received' || order.status === 'delivered' || order.status === 'completed') && (
+                      <div className="mt-4 pt-4 border-t border-[var(--border)] flex justify-end gap-3">
+                        <button
+                          onClick={() => setRatingModalOrderId(order.order_id)}
+                          className="px-4 py-2 border border-[var(--border)] text-white hover:bg-white/5 transition-colors rounded-lg text-sm font-semibold flex items-center gap-2"
+                        >
+                          <Star className="w-4 h-4 text-[var(--gold-primary)]" />
+                          Rate Product
+                        </button>
+                        <button
+                          onClick={() => handleBuyAgain(order.order_id)}
+                          className="px-4 py-2 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] hover:shadow-[0_0_15px_rgba(212,175,55,0.4)] transition-all rounded-lg text-sm font-bold flex items-center gap-2"
+                        >
+                          <ShoppingBag className="w-4 h-4" />
+                          Buy Again
+                        </button>
+                      </div>
                     )}
                   </div>
-                )}
-                {(order.status === 'received' || order.status === 'delivered' || order.status === 'completed') && (
-                  <div className="mt-4 pt-4 border-t border-[var(--border)] flex justify-end gap-3">
-                    <button
-                      onClick={() => setRatingModalOrderId(order.order_id)}
-                      className="px-4 py-2 border border-[var(--border)] text-white hover:bg-white/5 transition-colors rounded-lg text-sm font-semibold flex items-center gap-2"
-                    >
-                      <Star className="w-4 h-4 text-[var(--gold-primary)]" />
-                      Rate Product
-                    </button>
-                    <button
-                      onClick={() => handleBuyAgain(order.order_id)}
-                      className="px-4 py-2 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] hover:shadow-[0_0_15px_rgba(212,175,55,0.4)] transition-all rounded-lg text-sm font-bold flex items-center gap-2"
-                    >
-                      <ShoppingBag className="w-4 h-4" />
-                      Buy Again
-                    </button>
-                  </div>
-                )}
-              </div>
-            )})}
-          </div>
-        )}
+                )
+              })}
+            </div>
+          )}
         </div>
       </div>
     )
@@ -1508,239 +1571,238 @@ export function DashboardPage() {
     <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-5 sm:p-8">
       <div className="flex justify-between items-center mb-6">
         <div>
-            <h2 className="text-2xl font-bold text-white mb-1">My Appointments</h2>
-            <p className="text-sm text-[var(--text-muted)]">View and manage your service appointments</p>
-          </div>
-          <button
-            onClick={() => navigate('/appointments')}
-            className="px-4 py-2 rounded-lg bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-semibold text-sm hover:shadow-[0_0_15px_rgba(212,175,55,0.4)] transition-all flex items-center gap-2"
-          >
-            <Calendar className="w-4 h-4" />
-            Book Appointment
-          </button>
+          <h2 className="text-2xl font-bold text-white mb-1">My Appointments</h2>
+          <p className="text-sm text-[var(--text-muted)]">View and manage your service appointments</p>
         </div>
+        <button
+          onClick={() => navigate('/appointments')}
+          className="px-4 py-2 rounded-lg bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-semibold text-sm hover:shadow-[0_0_15px_rgba(212,175,55,0.4)] transition-all flex items-center gap-2"
+        >
+          <Calendar className="w-4 h-4" />
+          Book Appointment
+        </button>
+      </div>
 
-        {myAppointments.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-10">
-            <div className="w-16 h-16 rounded-full border-2 border-[var(--border)] flex items-center justify-center mb-6">
-              <Calendar className="w-8 h-8 text-[var(--text-muted)]" />
-            </div>
-            <p className="text-white font-medium mb-1">No appointments yet</p>
-            <p className="text-sm text-[var(--text-muted)] mb-6">Book a service appointment to see it here</p>
+      {myAppointments.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-10">
+          <div className="w-16 h-16 rounded-full border-2 border-[var(--border)] flex items-center justify-center mb-6">
+            <Calendar className="w-8 h-8 text-[var(--text-muted)]" />
           </div>
-        ) : (
-          <div className="max-h-[62vh] space-y-4 overflow-y-auto pr-2">
-            <div className="flex items-center justify-end mb-2">
-              <label className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
-                <span>Sort by:</span>
-                <select
-                  value={appointmentSort}
-                  onChange={(e) => setAppointmentSort(e.target.value)}
-                  className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
-                >
-                  <option value="soonest">Soonest first</option>
-                  <option value="latest">Latest first</option>
-                </select>
-              </label>
-            </div>
-            {[...myAppointments].sort((a, b) => {
-              const dateA = new Date(a.scheduled_at || a.date || a.created_at || 0)
-              const dateB = new Date(b.scheduled_at || b.date || b.created_at || 0)
-              return appointmentSort === 'soonest' ? dateA - dateB : dateB - dateA
-            }).map(apt => {
-              const apptDate = apt.scheduled_at || apt.date;
-              
-              // Check if past current time and not completed/cancelled
-              const isPast = apptDate && new Date(apptDate) < new Date();
-              const needsReschedule = isPast && apt.status !== 'completed' && apt.status !== 'cancelled';
-              const isReschedulingThis = reschedulingAptId === (apt.appointment_id || apt.id);
-              
-              const selectedGuitar = getSelectedGuitarLabel(apt);
-              const contactNumber = getContactNumber(apt);
-              const addressLabel = getAddressLabel(apt);
-              const appointmentNotes = apt.notes || '';
-              const isCancelledApt = apt.status === 'cancelled';
-              let cancellationReason = '';
-              let displayNotes = appointmentNotes;
+          <p className="text-white font-medium mb-1">No appointments yet</p>
+          <p className="text-sm text-[var(--text-muted)] mb-6">Book a service appointment to see it here</p>
+        </div>
+      ) : (
+        <div className="max-h-[62vh] space-y-4 overflow-y-auto pr-2">
+          <div className="flex items-center justify-end mb-2">
+            <label className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
+              <span>Sort by:</span>
+              <select
+                value={appointmentSort}
+                onChange={(e) => setAppointmentSort(e.target.value)}
+                className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
+              >
+                <option value="soonest">Soonest first</option>
+                <option value="latest">Latest first</option>
+              </select>
+            </label>
+          </div>
+          {[...myAppointments].sort((a, b) => {
+            const dateA = new Date(a.scheduled_at || a.date || a.created_at || 0)
+            const dateB = new Date(b.scheduled_at || b.date || b.created_at || 0)
+            return appointmentSort === 'soonest' ? dateA - dateB : dateB - dateA
+          }).map(apt => {
+            const apptDate = apt.scheduled_at || apt.date;
 
-              if (isCancelledApt) {
-                // Handle both customer cancellations ("Cancelled: ...") and
-                // admin/shop cancellations ("Status changed: ...")
-                const cancelMatch = appointmentNotes.match(/^\s*(?:Cancelled|Status changed):\s*(.*)$/im);
-                if (cancelMatch) {
-                  cancellationReason = cancelMatch[1].trim();
-                  // Strip "Cancelled by customer:" prefix so only the reason is shown
-                  cancellationReason = cancellationReason.replace(/^Cancelled by customer:\s*/i, '').trim();
-                  displayNotes = appointmentNotes.replace(/^\s*(?:Cancelled|Status changed):[^\n]*\n?/im, '').trim();
-                }
+            // Check if past current time and not completed/cancelled
+            const isPast = apptDate && new Date(apptDate) < new Date();
+            const needsReschedule = isPast && apt.status !== 'completed' && apt.status !== 'cancelled';
+            const isReschedulingThis = reschedulingAptId === (apt.appointment_id || apt.id);
+
+            const selectedGuitar = getSelectedGuitarLabel(apt);
+            const contactNumber = getContactNumber(apt);
+            const addressLabel = getAddressLabel(apt);
+            const appointmentNotes = apt.notes || '';
+            const isCancelledApt = apt.status === 'cancelled';
+            let cancellationReason = '';
+            let displayNotes = appointmentNotes;
+
+            if (isCancelledApt) {
+              // Handle both customer cancellations ("Cancelled: ...") and
+              // admin/shop cancellations ("Status changed: ...")
+              const cancelMatch = appointmentNotes.match(/^\s*(?:Cancelled|Status changed):\s*(.*)$/im);
+              if (cancelMatch) {
+                cancellationReason = cancelMatch[1].trim();
+                // Strip "Cancelled by customer:" prefix so only the reason is shown
+                cancellationReason = cancellationReason.replace(/^Cancelled by customer:\s*/i, '').trim();
+                displayNotes = appointmentNotes.replace(/^\s*(?:Cancelled|Status changed):[^\n]*\n?/im, '').trim();
               }
+            }
 
-              return (
-                <div key={apt.appointment_id || apt.id} className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl p-5 hover:border-[var(--gold-primary)]/40 transition-colors">
-                  <div className="flex justify-between items-start mb-4 gap-4">
-                    <div>
-                      <h3 className="font-bold text-white text-lg">Appointment</h3>
-                      {apt.reference_code && (
-                        <p className="text-xs font-mono text-[#d4af37] mt-0.5">{apt.reference_code}</p>
-                      )}
-                      <p className="text-xs text-[var(--text-muted)] mt-1 capitalize">
-                        {apt.service_name || (Array.isArray(apt.services) ? apt.services.map(s => s.replace(/-/g, ' ')).join(', ') : 'Consultation')}
-                      </p>
-                    </div>
-                    <span className={`px-3 py-1 rounded-full text-xs font-semibold capitalize border ${
-                      apt.status === 'approved' ? 'bg-green-500/10 text-green-400 border-green-500/30' : 
-                      apt.status === 'completed' ? 'bg-blue-500/10 text-blue-400 border-blue-500/30' : 
-                      apt.status === 'cancelled' ? 'bg-red-500/10 text-red-500 border-red-500/30' :
-                      'bg-yellow-500/10 text-yellow-500 border-yellow-500/30'
-                    }`}>
-                      {apt.status || 'Pending'}
-                    </span>
+            return (
+              <div key={apt.appointment_id || apt.id} className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl p-5 hover:border-[var(--gold-primary)]/40 transition-colors">
+                <div className="flex justify-between items-start mb-4 gap-4">
+                  <div>
+                    <h3 className="font-bold text-white text-lg">Appointment</h3>
+                    {apt.reference_code && (
+                      <p className="text-xs font-mono text-[#d4af37] mt-0.5">{apt.reference_code}</p>
+                    )}
+                    <p className="text-xs text-[var(--text-muted)] mt-1 capitalize">
+                      {apt.service_name || (Array.isArray(apt.services) ? apt.services.map(s => s.replace(/-/g, ' ')).join(', ') : 'Consultation')}
+                    </p>
                   </div>
-                  
-                  {isReschedulingThis ? (
-                    <div className="mt-4 pt-4 border-t border-[var(--border)] bg-[var(--surface-dark)] p-4 rounded-xl">
-                      <p className="text-white font-semibold mb-3">Select New Schedule</p>
-                      <div className="grid sm:grid-cols-2 gap-4 mb-4">
-                        <div>
-                          <label className="block text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-1">New Date</label>
-                          <input type="date" min={new Date().toISOString().split('T')[0]} value={rescheduleDate} onChange={(e) => setRescheduleDate(e.target.value)} className="w-full px-4 py-2.5 bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl text-white text-sm" />
-                        </div>
-                        <div>
-                          <label className="block text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-1">New Time</label>
-                          <input type="time" value={rescheduleTime} onChange={(e) => setRescheduleTime(e.target.value)} className="w-full px-4 py-2.5 bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl text-white text-sm" />
-                        </div>
+                  <span className={`px-3 py-1 rounded-full text-xs font-semibold capitalize border ${apt.status === 'approved' ? 'bg-green-500/10 text-green-400 border-green-500/30' :
+                      apt.status === 'completed' ? 'bg-blue-500/10 text-blue-400 border-blue-500/30' :
+                        apt.status === 'cancelled' ? 'bg-red-500/10 text-red-500 border-red-500/30' :
+                          'bg-yellow-500/10 text-yellow-500 border-yellow-500/30'
+                    }`}>
+                    {apt.status || 'Pending'}
+                  </span>
+                </div>
+
+                {isReschedulingThis ? (
+                  <div className="mt-4 pt-4 border-t border-[var(--border)] bg-[var(--surface-dark)] p-4 rounded-xl">
+                    <p className="text-white font-semibold mb-3">Select New Schedule</p>
+                    <div className="grid sm:grid-cols-2 gap-4 mb-4">
+                      <div>
+                        <label className="block text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-1">New Date</label>
+                        <input type="date" min={new Date().toISOString().split('T')[0]} value={rescheduleDate} onChange={(e) => setRescheduleDate(e.target.value)} className="w-full px-4 py-2.5 bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl text-white text-sm" />
                       </div>
-                      <div className="flex justify-end gap-2">
-                         <button onClick={() => setReschedulingAptId(null)} className="px-4 py-2 rounded-lg text-[var(--text-muted)] text-sm font-semibold hover:text-white transition">Cancel</button>
-                         <button onClick={() => handleRescheduleSubmit(apt.appointment_id || apt.id)} className="px-4 py-2 rounded-lg bg-[var(--gold-primary)] text-black text-sm font-semibold hover:bg-[var(--gold-secondary)] transition">Confirm Reschedule</button>
+                      <div>
+                        <label className="block text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-1">New Time</label>
+                        <input type="time" value={rescheduleTime} onChange={(e) => setRescheduleTime(e.target.value)} className="w-full px-4 py-2.5 bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl text-white text-sm" />
                       </div>
                     </div>
-                  ) : (
-                    <div className="grid sm:grid-cols-2 gap-x-6 gap-y-3 text-sm mt-4 pt-4 border-t border-[var(--border)]">
-                      <div>
-                        <span className="block text-[var(--text-muted)] mb-0.5">Date & Time</span>
-                        <span className="text-white">
-                          {apptDate ? new Date(apptDate).toLocaleDateString() : '—'} at {apt.time || (apptDate ? new Date(apptDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—')}
-                        </span>
+                    <div className="flex justify-end gap-2">
+                      <button onClick={() => setReschedulingAptId(null)} className="px-4 py-2 rounded-lg text-[var(--text-muted)] text-sm font-semibold hover:text-white transition">Cancel</button>
+                      <button onClick={() => handleRescheduleSubmit(apt.appointment_id || apt.id)} className="px-4 py-2 rounded-lg bg-[var(--gold-primary)] text-black text-sm font-semibold hover:bg-[var(--gold-secondary)] transition">Confirm Reschedule</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid sm:grid-cols-2 gap-x-6 gap-y-3 text-sm mt-4 pt-4 border-t border-[var(--border)]">
+                    <div>
+                      <span className="block text-[var(--text-muted)] mb-0.5">Date & Time</span>
+                      <span className="text-white">
+                        {apptDate ? new Date(apptDate).toLocaleDateString() : '—'} at {apt.time || (apptDate ? new Date(apptDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—')}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="block text-[var(--text-muted)] mb-0.5">Branch</span>
+                      <span className="text-white capitalize">{apt.location_id ? apt.location_id.replace(/-/g, ' ') : '—'}</span>
+                    </div>
+                    <div>
+                      <span className="block text-[var(--text-muted)] mb-0.5">Service Type</span>
+                      <span className="text-white">{formatAppointmentServiceType(apt.appointment_type)}</span>
+                    </div>
+                    <div>
+                      <span className="block text-[var(--text-muted)] mb-0.5">Selected Guitar</span>
+                      <span className="text-white">{selectedGuitar || '—'}</span>
+                    </div>
+                    {displayNotes && (
+                      <div className="sm:col-span-2 mt-1">
+                        <span className="block text-[var(--text-muted)] mb-0.5">Notes</span>
+                        <div className="space-y-2">
+                          {(() => {
+                            const lines = displayNotes.split('\n')
+                            const textParts = []
+                            const imageParts = []
+
+                            lines.forEach(line => {
+                              const imageMatch = line.match(/(https?:\/\/[^\s]+(?:\.jpg|\.jpeg|\.png|\.gif|\.webp|\.bmp)[^\s]*)/i)
+                              if (imageMatch) {
+                                const before = line.replace(imageMatch[0], '').trim()
+                                // Skip image reference labels like "Guitar reference image:" / "Service reference image:"
+                                const isImageLabel = /^(?:guitar|service)\s+reference\s+image:?\s*$/i.test(before)
+                                if (before && !isImageLabel) textParts.push(before)
+                                imageParts.push(imageMatch[1])
+                              } else {
+                                const trimmed = line.trim()
+                                if (trimmed) textParts.push(trimmed)
+                              }
+                            })
+
+                            return (
+                              <>
+                                {textParts.filter(Boolean).length > 0 && (
+                                  <span className="text-white/80 text-xs leading-relaxed block bg-[var(--surface-dark)] rounded-lg p-3 border border-[var(--border)]">
+                                    {textParts.filter(Boolean).join('\n')}
+                                  </span>
+                                )}
+                                {imageParts.map((url, i) => (
+                                  <div key={i} className="rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] p-2">
+                                    <img
+                                      src={url}
+                                      alt={`Reference image ${i + 1}`}
+                                      className="h-40 w-full rounded-lg object-cover"
+                                      onError={(e) => { e.target.style.display = 'none' }}
+                                    />
+                                  </div>
+                                ))}
+                              </>
+                            )
+                          })()}
+                        </div>
                       </div>
-                      <div>
-                        <span className="block text-[var(--text-muted)] mb-0.5">Branch</span>
-                        <span className="text-white capitalize">{apt.location_id ? apt.location_id.replace(/-/g, ' ') : '—'}</span>
+                    )}
+
+                    {isCancelledApt && cancellationReason && (
+                      <div className="sm:col-span-2 mt-3 pt-4 border-t border-[var(--border)]">
+                        <span className="block text-[var(--text-muted)] mb-0.5">Cancellation Reason</span>
+                        <span className="text-red-400 text-xs leading-relaxed">{cancellationReason}</span>
                       </div>
-                      <div>
-                        <span className="block text-[var(--text-muted)] mb-0.5">Service Type</span>
-                        <span className="text-white">{formatAppointmentServiceType(apt.appointment_type)}</span>
+                    )}
+
+                    {apt.status !== 'completed' && apt.status !== 'cancelled' && (
+                      <div className="sm:col-span-2 mt-3 pt-4 border-t border-[var(--border)] flex justify-end">
+                        <button
+                          onClick={() => handleCancelClick(apt)}
+                          className="px-4 py-2 border border-red-500/30 text-red-500 hover:bg-red-500/10 transition-colors rounded-lg text-sm font-semibold"
+                        >
+                          Cancel Appointment
+                        </button>
                       </div>
-                      <div>
-                        <span className="block text-[var(--text-muted)] mb-0.5">Selected Guitar</span>
-                        <span className="text-white">{selectedGuitar || '—'}</span>
-                      </div>
-                      {displayNotes && (
-                        <div className="sm:col-span-2 mt-1">
-                          <span className="block text-[var(--text-muted)] mb-0.5">Notes</span>
-                          <div className="space-y-2">
-                            {(() => {
-                              const lines = displayNotes.split('\n')
-                              const textParts = []
-                              const imageParts = []
-                              
-                              lines.forEach(line => {
-                                const imageMatch = line.match(/(https?:\/\/[^\s]+(?:\.jpg|\.jpeg|\.png|\.gif|\.webp|\.bmp)[^\s]*)/i)
-                                if (imageMatch) {
-                                  const before = line.replace(imageMatch[0], '').trim()
-                                  // Skip image reference labels like "Guitar reference image:" / "Service reference image:"
-                                  const isImageLabel = /^(?:guitar|service)\s+reference\s+image:?\s*$/i.test(before)
-                                  if (before && !isImageLabel) textParts.push(before)
-                                  imageParts.push(imageMatch[1])
-                                } else {
-                                  const trimmed = line.trim()
-                                  if (trimmed) textParts.push(trimmed)
-                                }
-                              })
-                              
-                              return (
-                                <>
-                                  {textParts.filter(Boolean).length > 0 && (
-                                    <span className="text-white/80 text-xs leading-relaxed block bg-[var(--surface-dark)] rounded-lg p-3 border border-[var(--border)]">
-                                      {textParts.filter(Boolean).join('\n')}
-                                    </span>
-                                  )}
-                                  {imageParts.map((url, i) => (
-                                    <div key={i} className="rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] p-2">
-                                      <img
-                                        src={url}
-                                        alt={`Reference image ${i + 1}`}
-                                        className="h-40 w-full rounded-lg object-cover"
-                                        onError={(e) => { e.target.style.display = 'none' }}
-                                      />
-                                    </div>
-                                  ))}
-                                </>
-                              )
-                            })()}
+                    )}
+
+                    {needsReschedule && (
+                      <div className="sm:col-span-2 mt-3 pt-4 border-t border-[var(--border)] flex items-center justify-between bg-orange-500/10 p-4 rounded-xl border border-orange-500/20">
+                        <div className="flex items-center gap-3">
+                          <AlertCircle className="w-5 h-5 text-orange-400" />
+                          <div>
+                            <p className="text-orange-400 font-semibold text-sm">Action Required</p>
+                            <p className="text-orange-400/80 text-xs mt-0.5">This appointment is past due. Please reschedule it.</p>
                           </div>
                         </div>
-                      )}
-
-                      {isCancelledApt && cancellationReason && (
-                        <div className="sm:col-span-2 mt-3 pt-4 border-t border-[var(--border)]">
-                          <span className="block text-[var(--text-muted)] mb-0.5">Cancellation Reason</span>
-                          <span className="text-red-400 text-xs leading-relaxed">{cancellationReason}</span>
-                        </div>
-                      )}
-
-                      {apt.status !== 'completed' && apt.status !== 'cancelled' && (
-                        <div className="sm:col-span-2 mt-3 pt-4 border-t border-[var(--border)] flex justify-end">
-                          <button
-                            onClick={() => handleCancelClick(apt)}
-                            className="px-4 py-2 border border-red-500/30 text-red-500 hover:bg-red-500/10 transition-colors rounded-lg text-sm font-semibold"
-                          >
-                            Cancel Appointment
-                          </button>
-                        </div>
-                      )}
-                      
-                       {needsReschedule && (
-                        <div className="sm:col-span-2 mt-3 pt-4 border-t border-[var(--border)] flex items-center justify-between bg-orange-500/10 p-4 rounded-xl border border-orange-500/20">
-                           <div className="flex items-center gap-3">
-                             <AlertCircle className="w-5 h-5 text-orange-400" />
-                             <div>
-                               <p className="text-orange-400 font-semibold text-sm">Action Required</p>
-                               <p className="text-orange-400/80 text-xs mt-0.5">This appointment is past due. Please reschedule it.</p>
-                             </div>
-                           </div>
-                           <button 
-                             onClick={() => {
-                               navigate('/appointments', {
-                                 state: {
-                                   rescheduleAppointment: {
-                                     appointment_id: apt.appointment_id || apt.id,
-                                     appointment_type: apt.appointment_type,
-                                     services: apt.services,
-                                     location_id: apt.location_id,
-                                     guitar_details: apt.guitar_details,
-                                     notes: apt.notes,
-                                     scheduled_at: apt.scheduled_at,
-                                     status: apt.status,
-                                   }
-                                 }
-                               });
-                             }} 
-                             className="px-4 py-2 rounded-lg bg-orange-500 text-white font-semibold text-xs hover:bg-orange-600 transition"
-                           >
-                             Reschedule
-                           </button>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    )
+                        <button
+                          onClick={() => {
+                            navigate('/appointments', {
+                              state: {
+                                rescheduleAppointment: {
+                                  appointment_id: apt.appointment_id || apt.id,
+                                  appointment_type: apt.appointment_type,
+                                  services: apt.services,
+                                  location_id: apt.location_id,
+                                  guitar_details: apt.guitar_details,
+                                  notes: apt.notes,
+                                  scheduled_at: apt.scheduled_at,
+                                  status: apt.status,
+                                }
+                              }
+                            });
+                          }}
+                          className="px-4 py-2 rounded-lg bg-orange-500 text-white font-semibold text-xs hover:bg-orange-600 transition"
+                        >
+                          Reschedule
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  )
 
   const renderProjectsContent = () => {
     if (activeProjectView) {
@@ -1776,15 +1838,13 @@ export function DashboardPage() {
                 key={tab.id}
                 type="button"
                 onClick={() => setActiveBuildTab(tab.id)}
-                className={`relative pb-3 text-sm sm:text-base font-semibold whitespace-nowrap transition-colors ${
-                  isActive ? 'text-white' : 'text-[var(--text-muted)] hover:text-white'
-                }`}
+                className={`relative pb-3 text-sm sm:text-base font-semibold whitespace-nowrap transition-colors ${isActive ? 'text-white' : 'text-[var(--text-muted)] hover:text-white'
+                  }`}
               >
                 {tab.label}
                 <span
-                  className={`absolute left-0 -bottom-px h-0.5 w-full rounded-full transition-opacity ${
-                    isActive ? 'opacity-100 bg-[var(--gold-primary)]' : 'opacity-0'
-                  }`}
+                  className={`absolute left-0 -bottom-px h-0.5 w-full rounded-full transition-opacity ${isActive ? 'opacity-100 bg-[var(--gold-primary)]' : 'opacity-0'
+                    }`}
                 />
               </button>
             )
@@ -1825,7 +1885,7 @@ export function DashboardPage() {
             <p className="text-sm text-[var(--text-muted)] mb-6">
               When you order a custom build or repair, it will appear here.
             </p>
-          </div>       
+          </div>
         ) : (
           <div className="grid gap-6">
             {myProjects.map((project, index) => {
@@ -1838,128 +1898,154 @@ export function DashboardPage() {
                 .trim();
 
               return (
-              <div key={project.project_id} className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl p-5 hover:border-[var(--gold-primary)]/40 transition-colors">
-                <div className="flex justify-between items-center">
-                  <div>
-                    <h3 className="text-lg font-bold text-white">{cleanName}</h3>
-                    <p className="text-xs text-[var(--text-muted)] mt-1">
-                      Build ID: {buildId || '—'}
-                    </p>
-                    <p className="text-[var(--text-muted)] text-sm mt-2">
-                      Estimated completion:{' '}
-                      <span className="text-white font-medium">
-                        {formatEstimatedCompletionDate(project) || 'Not set'}
-                      </span>
-                    </p>
-                    <div className="mt-4 flex items-center gap-4">
-                      <span className="px-2 py-0.5 border border-[var(--border)] rounded-full text-xs font-semibold text-white">{formatStatus(project.status)}</span>
-                      <span className="text-[var(--gold-primary)] font-bold text-sm">{project.progress}% Complete</span>
+                <div key={project.project_id} className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl p-5 hover:border-[var(--gold-primary)]/40 transition-colors">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <h3 className="text-lg font-bold text-white">{cleanName}</h3>
+                      <p className="text-xs text-[var(--text-muted)] mt-1">
+                        Build ID: {buildId || '—'}
+                      </p>
+                      <p className="text-[var(--text-muted)] text-sm mt-2">
+                        Estimated completion:{' '}
+                        <span className="text-white font-medium">
+                          {formatEstimatedCompletionDate(project) || 'Not set'}
+                        </span>
+                      </p>
+                      <div className="mt-4 flex flex-wrap items-center gap-2 sm:gap-4">
+                        {String(project.status || '').toLowerCase() === 'cancelled' ? (
+                          <span className={`px-2.5 py-1 border rounded-full text-xs font-bold ${project.refund_status === 'refunded' ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300' :
+                              project.refund_status === 'processing' ? 'border-sky-500/40 bg-sky-500/10 text-sky-300' :
+                                project.refund_status === 'approved' ? 'border-green-500/40 bg-green-500/10 text-green-300' :
+                                  project.refund_status === 'pending_payment_verification' ? 'border-violet-500/40 bg-violet-500/10 text-violet-300' :
+                                    project.cancel_resolution === 'partial_refund_and_build' ? 'border-cyan-500/40 bg-cyan-500/10 text-cyan-300' :
+                                      project.cancel_resolution === 'partial_refund_and_parts' ? 'border-cyan-500/40 bg-cyan-500/10 text-cyan-300' :
+                                        project.cancel_resolution === 'current_build_released' ? 'border-amber-500/40 bg-amber-500/10 text-amber-300' :
+                                          project.cancel_resolution === 'parts_returned' ? 'border-amber-500/40 bg-amber-500/10 text-amber-300' :
+                                            project.refund_status === 'pending' || project.cancel_resolution === 'full_refund' ? 'border-blue-500/40 bg-blue-500/10 text-blue-300' :
+                                              'border-red-500/40 bg-red-500/10 text-red-300'
+                            }`}>
+                            {project.refund_status === 'refunded' ? `Cancelled — Refunded (${formatCurrency(project.refunded_amount || project.refund_approved_amount || project.refund_amount_requested)})` :
+                              project.refund_status === 'processing' ? `Cancelled — Refund Processing (${formatCurrency(project.refund_approved_amount || project.refund_amount_requested)})` :
+                                project.refund_status === 'approved' ? `Cancelled — Refund Approved (${formatCurrency(project.refund_approved_amount || project.refund_amount_requested)})` :
+                                  project.refund_status === 'pending_payment_verification' ? 'Cancelled — Payment Verification Pending' :
+                                    project.cancel_resolution === 'partial_refund_and_build' ? 'Cancelled — Partial Refund & Build Claim' :
+                                      project.cancel_resolution === 'partial_refund_and_parts' ? 'Cancelled — Partial Refund & Parts Return' :
+                                        project.cancel_resolution === 'current_build_released' ? 'Cancelled — Guitar Build Claim' :
+                                          project.cancel_resolution === 'parts_returned' ? 'Cancelled — Acquired Parts Release' :
+                                            project.refund_status === 'pending' ? 'Cancelled — Refund Under Review' :
+                                              'Cancelled — Settlement Closed'}
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 border border-[var(--border)] rounded-full text-xs font-semibold text-white">{formatStatus(project.status)}</span>
+                        )}
+                        <span className="text-[var(--gold-primary)] font-bold text-sm">{project.progress}% Complete</span>
+                      </div>
                     </div>
                   </div>
-                </div>
-                <div className="flex gap-2 mt-4 pt-4 border-t border-[var(--border)]">
-                  {String(project.status || '').toLowerCase() !== 'cancelled' && String(project.status || '').toLowerCase() !== 'completed' && (
-                    <>
-                      {String(project.status || '').toLowerCase() !== 'on_hold' ? (
-                        <>
-                          {String(project.status || '').toLowerCase() === 'not_started' && (
-                            <button
-                              onClick={() => openCancelProjectModal(project)}
-                              className="px-4 py-2 rounded-lg border border-red-500/30 text-red-500 hover:bg-red-500/10 transition-colors text-sm font-semibold"
-                            >
-                              Cancel Project
-                            </button>
-                          )}
-                          {String(project.status || '').toLowerCase() !== 'not_started' && !project.cancel_requested_at && (
-                            <button
-                              onClick={() => openCancelWithOptionsModal(project)}
-                              className="px-4 py-2 rounded-lg border border-amber-500/30 text-amber-500 hover:bg-amber-500/10 transition-colors text-sm font-semibold"
-                            >
-                              Request Cancellation
-                            </button>
-                          )}
-                          {String(project.status || '').toLowerCase() !== 'not_started' && project.cancel_requested_at && !project.cancel_approved_at && (
-                            <button
-                              onClick={() => openCancelWithOptionsModal(project)}
-                              className="px-4 py-2 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 transition-colors text-sm font-semibold flex items-center gap-1.5"
-                            >
+                  <div className="flex gap-2 mt-4 pt-4 border-t border-[var(--border)]">
+                    {String(project.status || '').toLowerCase() !== 'cancelled' && String(project.status || '').toLowerCase() !== 'completed' && (
+                      <>
+                        {String(project.status || '').toLowerCase() !== 'on_hold' ? (
+                          <>
+                            {String(project.status || '').toLowerCase() === 'not_started' && (
+                              <button
+                                onClick={() => openCancelProjectModal(project)}
+                                className="px-4 py-2 rounded-lg border border-red-500/30 text-red-500 hover:bg-red-500/10 transition-colors text-sm font-semibold"
+                              >
+                                Cancel Project
+                              </button>
+                            )}
+                            {String(project.status || '').toLowerCase() !== 'not_started' && !project.cancel_requested_at && (
+                              <button
+                                onClick={() => openCancelWithOptionsModal(project)}
+                                className="px-4 py-2 rounded-lg border border-amber-500/30 text-amber-500 hover:bg-amber-500/10 transition-colors text-sm font-semibold"
+                              >
+                                Request Cancellation
+                              </button>
+                            )}
+                            {String(project.status || '').toLowerCase() !== 'not_started' && project.cancel_requested_at && !project.cancel_approved_at && (
+                              <button
+                                onClick={() => openCancelWithOptionsModal(project)}
+                                className="px-4 py-2 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 transition-colors text-sm font-semibold flex items-center gap-1.5"
+                              >
+                                <Clock className="w-3.5 h-3.5" />
+                                Cancellation Pending
+                              </button>
+                            )}
+                            {String(project.status || '').toLowerCase() !== 'not_started' && (
+                              <button
+                                onClick={() => openHoldProjectModal(project)}
+                                className="px-4 py-2 rounded-lg border border-amber-500/30 text-amber-500 hover:bg-amber-500/10 transition-colors text-sm font-semibold"
+                              >
+                                Hold Build
+                              </button>
+                            )}
+                          </>
+                        ) : (
+                          <>
+                            <span className="px-4 py-2 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-400 text-sm font-semibold flex items-center gap-1.5">
                               <Clock className="w-3.5 h-3.5" />
-                              Cancellation Pending
-                            </button>
-                          )}
-                          {String(project.status || '').toLowerCase() !== 'not_started' && (
+                              On Hold
+                            </span>
                             <button
-                              onClick={() => openHoldProjectModal(project)}
-                              className="px-4 py-2 rounded-lg border border-amber-500/30 text-amber-500 hover:bg-amber-500/10 transition-colors text-sm font-semibold"
+                              onClick={() => openResumeProjectModal(project)}
+                              className="px-4 py-2 rounded-lg border border-emerald-500/30 text-emerald-500 hover:bg-emerald-500/10 transition-colors text-sm font-semibold flex items-center gap-1.5"
                             >
-                              Hold Build
+                              <CheckCircle className="w-3.5 h-3.5" />
+                              Continue Build
                             </button>
-                          )}
-                        </>
-                      ) : (
-                        <>
-                          <span className="px-4 py-2 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-400 text-sm font-semibold flex items-center gap-1.5">
-                            <Clock className="w-3.5 h-3.5" />
-                            On Hold
-                          </span>
-                          <button
-                            onClick={() => openResumeProjectModal(project)}
-                            className="px-4 py-2 rounded-lg border border-emerald-500/30 text-emerald-500 hover:bg-emerald-500/10 transition-colors text-sm font-semibold flex items-center gap-1.5"
-                          >
-                            <CheckCircle className="w-3.5 h-3.5" />
-                            Continue Build
-                          </button>
-                        </>
-                      )}
-                    </>
-                  )}
-                  <button
-                    onClick={() => setActiveProjectView(project)}
-                    className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-bold shadow-[0_0_10px_rgba(212,175,55,0.3)] hover:shadow-[0_0_15px rgba(212,175,55,0.5)] transition-all flex items-center gap-2"
-                  >
-                    <span className="flex items-center gap-3">
-                      <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-black/10">
-                        <Activity className="w-4 h-4" />
+                          </>
+                        )}
+                      </>
+                    )}
+                    <button
+                      onClick={() => setActiveProjectView(project)}
+                      className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-bold shadow-[0_0_10px_rgba(212,175,55,0.3)] hover:shadow-[0_0_15px rgba(212,175,55,0.5)] transition-all flex items-center gap-2"
+                    >
+                      <span className="flex items-center gap-3">
+                        <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-black/10">
+                          <Activity className="w-4 h-4" />
+                        </span>
+                        <span className="flex flex-col items-start leading-tight">
+                          <span className="text-[10px] uppercase tracking-wide text-[var(--text-dark)]/70">Project</span>
+                          <span className="text-sm font-bold">Track Progress</span>
+                        </span>
+                        <ChevronRight className="w-4 h-4 ml-1" />
                       </span>
-                      <span className="flex flex-col items-start leading-tight">
-                        <span className="text-[10px] uppercase tracking-wide text-[var(--text-dark)]/70">Project</span>
-                        <span className="text-sm font-bold">Track Progress</span>
-                      </span>
-                      <ChevronRight className="w-4 h-4 ml-1" />
-                    </span>
-                  </button>
+                    </button>
+                  </div>
                 </div>
-              </div>
-            )})}
+              )
+            })}
 
             {myProjectsPagination.total_pages > 1 && (
               <div className="flex items-center justify-between mt-6">
-              <p className="text-[var(--text-muted)] text-sm">
-                Showing {(myProjectPage - 1) * MY_PROJECTS_PAGE_SIZE + 1} to {Math.min(myProjectPage * MY_PROJECTS_PAGE_SIZE, myProjectsPagination.total || 0)} of {myProjectsPagination.total || 0} projects
-              </p>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setMyProjectPage(p => Math.max(1, p - 1))}
-                  disabled={myProjectPage === 1}
-                  className="p-2 hover:bg-[var(--surface-dark)] rounded-lg transition-colors disabled:opacity-50"
-                >
-                  <ChevronLeft className="w-4 h-4 text-white" />
-                </button>
-                <span className="text-white text-sm">
-                  Page {myProjectPage} of {myProjectsPagination.total_pages}
-                </span>
-                <button
-                  onClick={() => setMyProjectPage(p => Math.min(myProjectsPagination.total_pages, p + 1))}
-                  disabled={myProjectPage === myProjectsPagination.total_pages}
-                  className="p-2 hover:bg-[var(--surface-dark)] rounded-lg transition-colors disabled:opacity-50"
-                >
-                  <ChevronRight className="w-4 h-4 text-white" />
-                </button>
+                <p className="text-[var(--text-muted)] text-sm">
+                  Showing {(myProjectPage - 1) * MY_PROJECTS_PAGE_SIZE + 1} to {Math.min(myProjectPage * MY_PROJECTS_PAGE_SIZE, myProjectsPagination.total || 0)} of {myProjectsPagination.total || 0} projects
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setMyProjectPage(p => Math.max(1, p - 1))}
+                    disabled={myProjectPage === 1}
+                    className="p-2 hover:bg-[var(--surface-dark)] rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    <ChevronLeft className="w-4 h-4 text-white" />
+                  </button>
+                  <span className="text-white text-sm">
+                    Page {myProjectPage} of {myProjectsPagination.total_pages}
+                  </span>
+                  <button
+                    onClick={() => setMyProjectPage(p => Math.min(myProjectsPagination.total_pages, p + 1))}
+                    disabled={myProjectPage === myProjectsPagination.total_pages}
+                    className="p-2 hover:bg-[var(--surface-dark)] rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    <ChevronRight className="w-4 h-4 text-white" />
+                  </button>
+                </div>
               </div>
-            </div>
-            )} 
+            )}
           </div>
-          
+
         )}
       </div>
     );
@@ -1971,8 +2057,8 @@ export function DashboardPage() {
       return renderProjectsContent()
     }
 
-    const savedGuitarBuilds = JSON.parse(window.localStorage.getItem('cosmoscraft_saved_builds') || '[]').map(b => ({...b, isBass: false}))
-    const savedBassBuilds = JSON.parse(window.localStorage.getItem('cosmoscraft_saved_bass_builds') || '[]').map(b => ({...b, isBass: true}))
+    const savedGuitarBuilds = JSON.parse(window.localStorage.getItem('cosmoscraft_saved_builds') || '[]').map(b => ({ ...b, isBass: false }))
+    const savedBassBuilds = JSON.parse(window.localStorage.getItem('cosmoscraft_saved_bass_builds') || '[]').map(b => ({ ...b, isBass: true }))
     const allBuilds = [...savedGuitarBuilds, ...savedBassBuilds].sort((a, b) => new Date(b.savedAt || 0) - new Date(a.savedAt || 0))
     const isBuildLimitReached = allBuilds.length >= MAX_SAVED_GUITAR_BUILDS
 
@@ -1985,203 +2071,199 @@ export function DashboardPage() {
         {activeBuildTab === 'build-projects' && renderProjectsContent()}
 
         {activeBuildTab === 'saved-builds' && (
-        <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-5 sm:p-8">
-        <div className="flex flex-wrap gap-6 sm:gap-8 border-b border-[var(--border)] mb-6">
-          {[
-            { id: 'build-projects', label: 'Build Projects' },
-            { id: 'saved-builds', label: 'Saved Builds' },
-          ].map((tab) => {
-            const isActive = activeBuildTab === tab.id
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setActiveBuildTab(tab.id)}
-                className={`relative pb-3 text-sm sm:text-base font-semibold whitespace-nowrap transition-colors ${
-                  isActive ? 'text-white' : 'text-[var(--text-muted)] hover:text-white'
-                }`}
-              >
-                {tab.label}
-                <span
-                  className={`absolute left-0 -bottom-px h-0.5 w-full rounded-full transition-opacity ${
-                    isActive ? 'opacity-100 bg-[var(--gold-primary)]' : 'opacity-0'
-                  }`}
-                />
-              </button>
-            )
-          })}
-        </div>
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h2 className="text-2xl font-bold text-white mb-1">My Saved Builds</h2>
-            <p className="text-sm text-[var(--text-muted)]">
-              Manage your custom guitar and bass designs ({allBuilds.length}/{MAX_SAVED_GUITAR_BUILDS})
-            </p>
-          </div>
-          <div className="flex gap-3">
-            <button
-              onClick={() => {
-                if (isBuildLimitReached) {
-                  setToastMessage('You can only save up to 10 guitar builds. Please delete an existing build before creating a new one.')
-                  return
-                }
-                setShowSelectInstrumentModal(true)
-              }}
-              disabled={isBuildLimitReached}
-              className={`px-4 py-2 rounded-lg font-semibold text-sm transition-all flex items-center gap-2 ${
-                isBuildLimitReached
-                  ? 'bg-[var(--surface-light)] text-[var(--text-muted)] cursor-not-allowed'
-                  : 'bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] hover:shadow-[0_0_15px_rgba(212,175,55,0.4)]'
-              }`}
-            >
-              <Guitar className="w-4 h-4" />
-              Create New
-            </button>
-          </div>
-        </div>
-
-        {isBuildLimitReached && (
-          <div className="mb-6 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3">
-            <p className="text-amber-300 text-sm font-medium">
-              You can only save up to 10 guitar builds. Please delete an existing build before creating a new one.
-            </p>
-          </div>
-        )}
-
-        {allBuilds.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-10">
-            <div className="w-16 h-16 rounded-full border-2 border-[var(--border)] flex items-center justify-center mb-6">
-              <Guitar className="w-8 h-8 text-[var(--text-muted)]" />
-            </div>
-            <p className="text-white font-medium mb-1">No saved builds yet</p>
-            <p className="text-sm text-[var(--text-muted)] mb-6">Start customizing your dream instrument</p>
-          </div>
-        ) : (
-          <div className="grid md:grid-cols-2 gap-6">
-            {allBuilds.map((build) => {
-              const additionalPartsTotal = (build.additionalParts || []).reduce((sum, p) => sum + (p.price * p.quantity), 0);
-              const grandTotal = build.price + additionalPartsTotal;
-              const buildLockState = getBuildLockState(build)
-
-              return (
-              <div key={build.id} className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl p-5 hover:border-[var(--gold-primary)]/40 transition-colors flex flex-col h-full">
-                <div className="flex justify-between items-start mb-4 gap-4">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="text-lg font-bold text-white">{build.name || 'Custom Build'}</h3>
-                      {buildLockState.isLocked && (
-                        <span className="px-2 py-0.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 text-[11px] font-semibold">
-                          Already Ordered
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-[var(--text-muted)] mt-1">Saved on {new Date(build.savedAt || new Date()).toLocaleDateString()}</p>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-lg font-bold text-[var(--gold-primary)] block">₱{grandTotal.toLocaleString('en-PH')}</span>
-                    {additionalPartsTotal > 0 && <span className="text-xs text-[var(--text-muted)]">Includes Add-ons</span>}
-                  </div>
-                </div>
-                
-                <div className="grid grid-cols-2 gap-2 mt-4 text-sm flex-1">
-                   {Object.entries(build.config || {}).map(([key, val]) => (
-                     val && typeof val === 'string' ? (
-                       <div key={key} className="flex items-center gap-1">
-                         <span className="text-xs text-[var(--text-muted)] capitalize truncate max-w-[80px]">{key}:</span>
-                         <span className="text-xs text-white truncate max-w-[100px]">{val}</span>
-                       </div>
-                     ) : null
-                   )).slice(0, 6)}
-                </div>
-
-                {buildLockState.isLocked && (
-                  <div className="mt-4 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200 flex items-start gap-2">
-                    <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
-                    <span>This build is already in an active order, so parts, specs, and checkout are now locked.</span>
-                  </div>
-                )}
-
-                <div className="mt-6 space-y-2">
-                   <div className="flex gap-2">
-                      <button
-                        type="button"
-                        disabled={buildLockState.isLocked}
-                        onClick={() => {
-                          window.localStorage.setItem('cosmoscraft_target_build_id', build.id);
-                          navigate('/shop');
-                        }}
-                        className={`flex-1 py-1.5 px-2 rounded-lg border text-[var(--text-light)] text-xs transition-all text-center font-medium ${
-                          buildLockState.isLocked
-                            ? 'border-[var(--border)] opacity-40 cursor-not-allowed'
-                            : 'border-[var(--border)] hover:bg-white/5'
-                        }`}
-                      >
-                        Add Parts
-                      </button>
-                      <button
-                        onClick={() => setViewingBuild(build)}
-                        className="flex-1 py-1.5 px-2 rounded-lg border border-[var(--border)] text-[var(--text-light)] text-xs hover:bg-white/5 transition-all text-center font-medium"
-                      >
-                        View Summary
-                      </button>
-                   </div>
-                   <div className="flex gap-2">
-                      <button
-                        type="button"
-                        disabled={buildLockState.isLocked}
-                        onClick={() => navigate(build.isBass ? `/customize-bass?edit=${build.id}` : `/customize?edit=${build.id}`)}
-                        className={`flex-1 py-1.5 px-2 rounded-lg border text-xs transition-all text-center font-medium ${
-                          buildLockState.isLocked
-                            ? 'border-blue-500/20 text-blue-200/40 cursor-not-allowed'
-                            : 'border-blue-500/30 text-blue-400 hover:bg-blue-500/10'
-                        }`}
-                      >
-                        Edit Build
-                      </button>
-                      <button
-                        onClick={() => deleteBuild(build.id)}
-                        className="flex-[0.5] py-1.5 px-2 rounded-lg border border-red-500/30 text-red-400 text-xs hover:bg-red-500/10 transition-all flex items-center justify-center font-medium"
-                      >
-                        Delete
-                      </button>
-                   </div>
-                  {buildLockState.isLocked ? (
-                    buildLockState.project ? (
-                      <button
-                        type="button"
-                        onClick={() => setActiveProjectView(buildLockState.project)}
-                        className="w-full mt-2 py-2.5 px-3 rounded-lg bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-bold text-sm shadow-[0_0_10px_rgba(212,175,55,0.3)] hover:shadow-[0_0_15px_rgba(212,175,55,0.5)] transition-all flex items-center justify-center gap-2"
-                      >
-                        <ShoppingCart className="w-4 h-4" />
-                        Buy Now
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={handleLockedBuildAction}
-                        className="w-full mt-2 py-2.5 px-3 rounded-lg border border-[var(--border)] text-[var(--text-muted)] font-bold text-sm transition-all flex items-center justify-center gap-2"
-                      >
-                        <Clock className="w-4 h-4" />
-                        Awaiting Project Setup
-                      </button>
-                    )
-                  ) : (
-                    <button
-                      onClick={() => {
-                          navigate('/checkout', { state: { checkoutItem: build, isCustomBuild: true } });
-                      }}
-                    className="w-full mt-2 py-2.5 px-3 rounded-lg bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-bold text-sm shadow-[0_0_10px_rgba(212,175,55,0.3)] hover:shadow-[0_0_15px_rgba(212,175,55,0.5)] transition-all flex items-center justify-center gap-2"
+          <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-5 sm:p-8">
+            <div className="flex flex-wrap gap-6 sm:gap-8 border-b border-[var(--border)] mb-6">
+              {[
+                { id: 'build-projects', label: 'Build Projects' },
+                { id: 'saved-builds', label: 'Saved Builds' },
+              ].map((tab) => {
+                const isActive = activeBuildTab === tab.id
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setActiveBuildTab(tab.id)}
+                    className={`relative pb-3 text-sm sm:text-base font-semibold whitespace-nowrap transition-colors ${isActive ? 'text-white' : 'text-[var(--text-muted)] hover:text-white'
+                      }`}
                   >
-                    <ShoppingCart className="w-4 h-4" />
-                      Buy Now
-                    </button>
-                  )}
-                </div>
+                    {tab.label}
+                    <span
+                      className={`absolute left-0 -bottom-px h-0.5 w-full rounded-full transition-opacity ${isActive ? 'opacity-100 bg-[var(--gold-primary)]' : 'opacity-0'
+                        }`}
+                    />
+                  </button>
+                )
+              })}
+            </div>
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-2xl font-bold text-white mb-1">My Saved Builds</h2>
+                <p className="text-sm text-[var(--text-muted)]">
+                  Manage your custom guitar and bass designs ({allBuilds.length}/{MAX_SAVED_GUITAR_BUILDS})
+                </p>
               </div>
-            )})}
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    if (isBuildLimitReached) {
+                      setToastMessage('You can only save up to 10 guitar builds. Please delete an existing build before creating a new one.')
+                      return
+                    }
+                    setShowSelectInstrumentModal(true)
+                  }}
+                  disabled={isBuildLimitReached}
+                  className={`px-4 py-2 rounded-lg font-semibold text-sm transition-all flex items-center gap-2 ${isBuildLimitReached
+                      ? 'bg-[var(--surface-light)] text-[var(--text-muted)] cursor-not-allowed'
+                      : 'bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] hover:shadow-[0_0_15px_rgba(212,175,55,0.4)]'
+                    }`}
+                >
+                  <Guitar className="w-4 h-4" />
+                  Create New
+                </button>
+              </div>
+            </div>
+
+            {isBuildLimitReached && (
+              <div className="mb-6 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3">
+                <p className="text-amber-300 text-sm font-medium">
+                  You can only save up to 10 guitar builds. Please delete an existing build before creating a new one.
+                </p>
+              </div>
+            )}
+
+            {allBuilds.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-10">
+                <div className="w-16 h-16 rounded-full border-2 border-[var(--border)] flex items-center justify-center mb-6">
+                  <Guitar className="w-8 h-8 text-[var(--text-muted)]" />
+                </div>
+                <p className="text-white font-medium mb-1">No saved builds yet</p>
+                <p className="text-sm text-[var(--text-muted)] mb-6">Start customizing your dream instrument</p>
+              </div>
+            ) : (
+              <div className="grid md:grid-cols-2 gap-6">
+                {allBuilds.map((build) => {
+                  const additionalPartsTotal = (build.additionalParts || []).reduce((sum, p) => sum + (p.price * p.quantity), 0);
+                  const grandTotal = build.price + additionalPartsTotal;
+                  const buildLockState = getBuildLockState(build)
+
+                  return (
+                    <div key={build.id} className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl p-5 hover:border-[var(--gold-primary)]/40 transition-colors flex flex-col h-full">
+                      <div className="flex justify-between items-start mb-4 gap-4">
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h3 className="text-lg font-bold text-white">{build.name || 'Custom Build'}</h3>
+                            {buildLockState.isLocked && (
+                              <span className="px-2 py-0.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 text-[11px] font-semibold">
+                                Already Ordered
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-[var(--text-muted)] mt-1">Saved on {new Date(build.savedAt || new Date()).toLocaleDateString()}</p>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-lg font-bold text-[var(--gold-primary)] block">₱{grandTotal.toLocaleString('en-PH')}</span>
+                          {additionalPartsTotal > 0 && <span className="text-xs text-[var(--text-muted)]">Includes Add-ons</span>}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 mt-4 text-sm flex-1">
+                        {Object.entries(build.config || {}).map(([key, val]) => (
+                          val && typeof val === 'string' ? (
+                            <div key={key} className="flex items-center gap-1">
+                              <span className="text-xs text-[var(--text-muted)] capitalize truncate max-w-[80px]">{key}:</span>
+                              <span className="text-xs text-white truncate max-w-[100px]">{val}</span>
+                            </div>
+                          ) : null
+                        )).slice(0, 6)}
+                      </div>
+
+                      {buildLockState.isLocked && (
+                        <div className="mt-4 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200 flex items-start gap-2">
+                          <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+                          <span>This build is already in an active order, so parts, specs, and checkout are now locked.</span>
+                        </div>
+                      )}
+
+                      <div className="mt-6 space-y-2">
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            disabled={buildLockState.isLocked}
+                            onClick={() => {
+                              window.localStorage.setItem('cosmoscraft_target_build_id', build.id);
+                              navigate('/shop');
+                            }}
+                            className={`flex-1 py-1.5 px-2 rounded-lg border text-[var(--text-light)] text-xs transition-all text-center font-medium ${buildLockState.isLocked
+                                ? 'border-[var(--border)] opacity-40 cursor-not-allowed'
+                                : 'border-[var(--border)] hover:bg-white/5'
+                              }`}
+                          >
+                            Add Parts
+                          </button>
+                          <button
+                            onClick={() => setViewingBuild(build)}
+                            className="flex-1 py-1.5 px-2 rounded-lg border border-[var(--border)] text-[var(--text-light)] text-xs hover:bg-white/5 transition-all text-center font-medium"
+                          >
+                            View Summary
+                          </button>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            disabled={buildLockState.isLocked}
+                            onClick={() => navigate(build.isBass ? `/customize-bass?edit=${build.id}` : `/customize?edit=${build.id}`)}
+                            className={`flex-1 py-1.5 px-2 rounded-lg border text-xs transition-all text-center font-medium ${buildLockState.isLocked
+                                ? 'border-blue-500/20 text-blue-200/40 cursor-not-allowed'
+                                : 'border-blue-500/30 text-blue-400 hover:bg-blue-500/10'
+                              }`}
+                          >
+                            Edit Build
+                          </button>
+                          <button
+                            onClick={() => deleteBuild(build.id)}
+                            className="flex-[0.5] py-1.5 px-2 rounded-lg border border-red-500/30 text-red-400 text-xs hover:bg-red-500/10 transition-all flex items-center justify-center font-medium"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                        {buildLockState.isLocked ? (
+                          buildLockState.project ? (
+                            <button
+                              type="button"
+                              onClick={() => setActiveProjectView(buildLockState.project)}
+                              className="w-full mt-2 py-2.5 px-3 rounded-lg bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-bold text-sm shadow-[0_0_10px_rgba(212,175,55,0.3)] hover:shadow-[0_0_15px_rgba(212,175,55,0.5)] transition-all flex items-center justify-center gap-2"
+                            >
+                              <ShoppingCart className="w-4 h-4" />
+                              Buy Now
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={handleLockedBuildAction}
+                              className="w-full mt-2 py-2.5 px-3 rounded-lg border border-[var(--border)] text-[var(--text-muted)] font-bold text-sm transition-all flex items-center justify-center gap-2"
+                            >
+                              <Clock className="w-4 h-4" />
+                              Awaiting Project Setup
+                            </button>
+                          )
+                        ) : (
+                          <button
+                            onClick={() => {
+                              navigate('/checkout', { state: { checkoutItem: build, isCustomBuild: true } });
+                            }}
+                            className="w-full mt-2 py-2.5 px-3 rounded-lg bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-bold text-sm shadow-[0_0_10px_rgba(212,175,55,0.3)] hover:shadow-[0_0_15px_rgba(212,175,55,0.5)] transition-all flex items-center justify-center gap-2"
+                          >
+                            <ShoppingCart className="w-4 h-4" />
+                            Buy Now
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
-        )}
-        </div>
         )}
       </div>
     )
@@ -2307,7 +2389,7 @@ export function DashboardPage() {
   const handleChangePassword = () => {
     setPasswordError('')
     setPasswordSuccessMessage('')
-    
+
     if (!passwordData.newPassword || !passwordData.confirmPassword) {
       setPasswordError('New password and confirmation are required')
       return
@@ -2845,7 +2927,7 @@ export function DashboardPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[300] bg-black/70 backdrop-blur-sm p-4 flex items-center justify-center"
+            className="fixed inset-0 z-[300] bg-black/80 backdrop-blur-md p-4 sm:p-6 flex items-center justify-center overflow-y-auto"
             onClick={(event) => {
               if (event.target === event.currentTarget) closeCancelProjectModal()
             }}
@@ -2854,251 +2936,327 @@ export function DashboardPage() {
               initial={{ opacity: 0, y: 16, scale: 0.96 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 16, scale: 0.96 }}
-              className="relative w-full max-w-lg rounded-3xl border border-red-500/30 bg-[var(--surface-dark)] p-6 sm:p-7 shadow-2xl"
+              className="relative w-full max-w-xl rounded-3xl border border-red-500/30 bg-[var(--surface-dark)] p-6 sm:p-7 shadow-2xl my-auto max-h-[90vh] flex flex-col overflow-hidden"
             >
-              <button
-                type="button"
-                onClick={closeCancelProjectModal}
-                disabled={isCancellingProject}
-                className="absolute right-4 top-4 rounded-lg p-2 text-[var(--text-muted)] hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
-                aria-label="Close cancel project modal"
-              >
-                <X className="h-4 w-4" />
-              </button>
-
-              <div className="w-14 h-14 rounded-2xl bg-red-500/15 flex items-center justify-center mb-5">
-                <AlertTriangle className="w-7 h-7 text-red-400" />
-              </div>
-
-              <h3 id="confirm-modal-title" className="text-white text-xl font-bold mb-2">Cancel Project</h3>
-
-              <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-5 mb-4">
-                <p className="text-sm text-red-300/90 leading-relaxed">
-                  <AlertCircle className="w-4 h-4 inline-block mr-1.5 -mt-0.5" />
-                  <strong className="text-red-400">This action is permanent.</strong> Once cancelled, <strong className="text-white">"{cancelProjectTarget?.name || 'This project'}"</strong> will stop at its current build stage and cannot be resumed or reactivated. If you wish to continue this build in the future, you must place a new order. Cancellation may affect payments, production progress, and reserved materials.
-                </p>
-              </div>
-
-              {cancelProjectTarget && (
-                <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] p-4 mb-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">Project</span>
-                    <span className="text-xs text-[var(--text-muted)]">{cancelProjectTarget.custom_build_id || cancelProjectTarget.project_id?.slice(0, 8)}</span>
+              {/* Modal Header */}
+              <div className="flex items-center justify-between pb-4 border-b border-[var(--border)] shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-2xl bg-red-500/15 border border-red-500/30 flex items-center justify-center shrink-0 shadow-[0_0_15px_rgba(239,68,68,0.15)]">
+                    <AlertTriangle className="w-5 h-5 text-red-400" />
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">Status</span>
-                    <span className="text-xs font-semibold text-white capitalize">{formatStatus(cancelProjectTarget.status)}</span>
+                  <div>
+                    <h3 className="text-white text-lg sm:text-xl font-bold">Cancel Project</h3>
+                    <p className="text-xs text-[var(--text-muted)] truncate max-w-[240px] sm:max-w-md">
+                      {cancelProjectTarget?.name || 'Custom Build Project'}
+                    </p>
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">Progress</span>
-                    <span className="text-xs font-semibold text-white">{cancelProjectTarget.progress || 0}%</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">Payment Plan</span>
-                    <span className="text-xs font-semibold text-white capitalize">{cancelProjectTarget.order_payment_plan === 'installment' ? 'Installment / Down Payment' : 'Full Payment'}</span>
-                  </div>
-                  {cancelProjectPayment && (
-                    <>
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">Payment Method</span>
-                        <span className="text-xs font-semibold text-white capitalize">{cancelProjectPayment.method?.replace(/_/g, ' ') || '—'}</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">Amount Submitted</span>
-                        <span className="text-xs font-semibold text-[var(--gold-primary)]">{formatCurrency(cancelProjectPayment.amount)}</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">Payment Status</span>
-                        <span className={`text-xs font-semibold capitalize ${
-                          cancelProjectPayment.status === 'verified' ? 'text-green-400' :
-                          cancelProjectPayment.status === 'for_verification' || cancelProjectPayment.status === 'pending' ? 'text-amber-400' :
-                          cancelProjectPayment.status === 'rejected' ? 'text-red-400' :
-                          'text-white'
-                        }`}>{formatStatus(cancelProjectPayment.status)}</span>
-                      </div>
-                    </>
-                  )}
                 </div>
-              )}
-
-              {cancelProjectTarget && String(cancelProjectTarget.status || '').toLowerCase() === 'not_started' && (
-                <div className="rounded-xl border border-blue-500/30 bg-blue-500/5 p-4 mb-4">
-                  <p className="text-sm text-blue-300/90 leading-relaxed">
-                    {cancelProjectPayment?.status === 'verified' ? (
-                      <>
-                        <CheckCircle className="w-4 h-4 inline-block mr-1.5 -mt-0.5" />
-                        Your payment has been verified. Your refund request will be submitted automatically and is now waiting for admin approval.
-                      </>
-                    ) : cancelProjectPayment?.status === 'for_verification' || cancelProjectPayment?.status === 'pending' ? (
-                      <>
-                        <Clock className="w-4 h-4 inline-block mr-1.5 -mt-0.5" />
-                        Your payment is still being verified by the admin. Once your payment is verified, your refund request can proceed.
-                      </>
-                    ) : (
-                      <>
-                        <Info className="w-4 h-4 inline-block mr-1.5 -mt-0.5" />
-                        No refund is available for this payment status.
-                      </>
-                    )}
-                  </p>
-                </div>
-              )}
-
-              {/* Build State Preview — shown when project has started */}
-              {cancelProjectTarget && String(cancelProjectTarget.status || '').toLowerCase() !== 'not_started' && (
-                <>
-                  {cancelBuildPreviewLoading ? (
-                    <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-6 mb-4 flex items-center justify-center gap-3">
-                      <Loader2 className="w-5 h-5 animate-spin text-amber-400" />
-                      <span className="text-sm text-amber-300/90">Loading build state...</span>
-                    </div>
-                  ) : cancelBuildPreview?.has_progress ? (
-                    <div className="space-y-4 mb-4">
-                      {/* Build state explanation */}
-                      <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
-                        <p className="text-sm text-amber-300/90 leading-relaxed">
-                          <AlertCircle className="w-4 h-4 inline-block mr-1.5 -mt-0.5" />
-                          This project has already started. Your down payment was used to purchase parts and materials. <strong className="text-amber-400">You will receive the guitar in its current build state</strong> instead of a refund.
-                        </p>
-                      </div>
-
-                      {/* Milestone breakdown */}
-                      <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] p-4">
-                        <p className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)] mb-3">Current Build State — {cancelBuildPreview.progress}% Complete</p>
-                        <div className="space-y-2">
-                          {(cancelBuildPreview.stages || []).map((stage, idx) => (
-                            <div key={stage.milestone_id || idx} className="flex items-center gap-2.5">
-                              {stage.status === 'completed' ? (
-                                <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
-                              ) : stage.status === 'in_progress' ? (
-                                <Clock className="w-4 h-4 text-amber-400 shrink-0" />
-                              ) : (
-                                <div className="w-4 h-4 rounded-full border-2 border-[var(--border)] shrink-0" />
-                              )}
-                              <span className={`text-sm ${stage.status === 'completed' ? 'text-emerald-300' : stage.status === 'in_progress' ? 'text-amber-300' : 'text-[var(--text-muted)]'}`}>
-                                {stage.title}
-                              </span>
-                              {stage.total_subtasks > 0 && (
-                                <span className="text-xs text-[var(--text-muted)] ml-auto">{stage.completed_subtasks}/{stage.total_subtasks}</span>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                        {cancelBuildPreview.amount_paid > 0 && (
-                          <div className="mt-3 pt-3 border-t border-[var(--border)] flex items-center justify-between">
-                            <span className="text-xs text-[var(--text-muted)]">Amount Paid</span>
-                            <span className="text-xs font-semibold text-[var(--gold-primary)]">{formatCurrency(cancelBuildPreview.amount_paid)}</span>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Claim method selection */}
-                      <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] p-4">
-                        <p className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)] mb-3">How would you like to receive your guitar?</p>
-                        <div className="grid gap-2">
-                          {[
-                            { value: 'pickup', label: 'Pick Up at Shop', desc: 'Visit our shop to collect your guitar' },
-                            { value: 'courier', label: 'Courier Delivery', desc: 'We\'ll arrange delivery to your address' },
-                          ].map(opt => (
-                            <label
-                              key={opt.value}
-                              className={`flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3 transition-colors ${
-                                cancelClaimMethod === opt.value
-                                  ? 'border-amber-500/50 bg-amber-500/10'
-                                  : 'border-[var(--border)] hover:border-amber-500/30'
-                              }`}
-                            >
-                              <input
-                                type="radio"
-                                name="claim-method"
-                                value={opt.value}
-                                checked={cancelClaimMethod === opt.value}
-                                onChange={() => setCancelClaimMethod(opt.value)}
-                                className="mt-1 h-4 w-4 accent-amber-500"
-                              />
-                              <div>
-                                <span className="text-sm text-white font-medium block">{opt.label}</span>
-                                <span className="text-xs text-[var(--text-muted)] mt-0.5 block">{opt.desc}</span>
-                              </div>
-                            </label>
-                          ))}
-                        </div>
-
-                        {/* Courier details */}
-                        {cancelClaimMethod === 'courier' && (
-                          <div className="mt-3 space-y-2">
-                            <input
-                              type="text"
-                              value={cancelClaimRecipientName}
-                              onChange={(e) => setCancelClaimRecipientName(e.target.value)}
-                              placeholder="Recipient name"
-                              className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] px-3 py-2 text-sm text-white placeholder:text-[var(--text-muted)] focus:border-amber-500/50 focus:outline-none"
-                            />
-                            <input
-                              type="text"
-                              value={cancelClaimRecipientContact}
-                              onChange={(e) => setCancelClaimRecipientContact(e.target.value)}
-                              placeholder="Contact number"
-                              className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] px-3 py-2 text-sm text-white placeholder:text-[var(--text-muted)] focus:border-amber-500/50 focus:outline-none"
-                            />
-                            <textarea
-                              value={cancelClaimDeliveryInstructions}
-                              onChange={(e) => setCancelClaimDeliveryInstructions(e.target.value)}
-                              placeholder="Delivery instructions (optional)"
-                              rows={2}
-                              className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] px-3 py-2 text-sm text-white placeholder:text-[var(--text-muted)] focus:border-amber-500/50 focus:outline-none resize-none"
-                            />
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 mb-4">
-                      <p className="text-sm text-amber-300/90 leading-relaxed">
-                        <AlertCircle className="w-4 h-4 inline-block mr-1.5 -mt-0.5" />
-                        This project has already started but no build progress has been recorded yet. Please contact support for assistance.
-                      </p>
-                    </div>
-                  )}
-                </>
-              )}
-
-              {/* Explicit Confirmation Checkbox */}
-              <div className="mt-5 rounded-xl border border-red-500/30 bg-red-500/5 p-4">
-                <label className="flex items-start gap-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={cancelProjectConfirmed}
-                    onChange={(e) => setCancelProjectConfirmed(e.target.checked)}
-                    className="mt-0.5 h-5 w-5 accent-red-500 rounded"
-                  />
-                  <span className="text-sm text-white font-medium">
-                    {cancelBuildPreview?.has_progress
-                      ? 'I understand that my down payment is non-refundable and I will receive the guitar in its current unfinished state. I want to cancel this project.'
-                      : 'I understand that cancellation is permanent once approved by the admin. I want to cancel this project.'
-                    }
-                  </span>
-                </label>
-              </div>
-
-              <div className="mt-6 flex gap-3">
                 <button
                   type="button"
                   onClick={closeCancelProjectModal}
                   disabled={isCancellingProject}
-                  className="flex-1 rounded-xl border border-[var(--border)] bg-white/5 py-3 text-sm font-semibold text-white hover:bg-white/10 transition-colors disabled:opacity-50"
+                  className="rounded-xl p-2 text-[var(--text-muted)] hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
+                  aria-label="Close cancel project modal"
                 >
-                  Keep Project
+                  <X className="h-5 w-5" />
                 </button>
-                <button
-                  type="button"
-                  onClick={handleCancelProject}
-                  disabled={!cancelProjectConfirmed || isCancellingProject}
-                  className="flex-1 rounded-xl bg-red-500 py-3 text-sm font-bold text-white hover:bg-red-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                >
-                  {isCancellingProject && <Loader2 className="h-4 w-4 animate-spin" />}
-                  {isCancellingProject ? 'Cancelling...' : 'Confirm Cancellation'}
-                </button>
+              </div>
+
+              {/* Modal Scrollable Body */}
+              <div className="overflow-y-auto pr-1 -mr-1 py-4 space-y-4 flex-1">
+                {/* Permanent Action Notice */}
+                <div className="rounded-2xl border border-red-500/30 bg-gradient-to-br from-red-500/15 via-red-500/10 to-transparent p-4">
+                  <div className="flex items-start gap-3">
+                    <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-xs sm:text-sm text-red-200/90 leading-relaxed">
+                        <strong className="text-red-400 font-semibold">This action is permanent.</strong> Once cancelled, <strong className="text-white">"{cancelProjectTarget?.name || 'This project'}"</strong> will stop at its current build stage and cannot be resumed or reactivated. If you wish to continue this build in the future, you must place a new order.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Project Summary Card */}
+                {cancelProjectTarget && (
+                  <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)] font-medium">Build Reference</span>
+                      <span className="text-xs font-mono font-semibold text-white bg-white/5 px-2 py-0.5 rounded-md border border-white/10">
+                        {cancelProjectTarget.custom_build_id || cancelProjectTarget.project_id?.slice(0, 8)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)] font-medium">Current Status</span>
+                      <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full border border-red-500/30 bg-red-500/10 text-red-400 capitalize">
+                        {formatStatus(cancelProjectTarget.status)}
+                      </span>
+                    </div>
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="uppercase tracking-[0.14em] text-[var(--text-muted)] font-medium">Manufacturing Progress</span>
+                        <span className="font-bold text-[var(--gold-primary)]">{cancelProjectTarget.progress || 0}%</span>
+                      </div>
+                      <div className="h-2 w-full bg-[var(--surface-dark)] rounded-full overflow-hidden border border-white/5">
+                        <div
+                          className="h-full bg-gradient-to-r from-red-500 via-amber-500 to-[var(--gold-primary)] transition-all duration-300"
+                          style={{ width: `${Math.max(5, cancelProjectTarget.progress || 0)}%` }}
+                        />
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between pt-1 border-t border-[var(--border)]">
+                      <span className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)] font-medium">Payment Plan</span>
+                      <span className="text-xs font-semibold text-white capitalize">
+                        {cancelProjectTarget.order_payment_plan === 'installment' ? 'Installment / Down Payment' : 'Full Payment'}
+                      </span>
+                    </div>
+                    {cancelProjectPaymentLoading ? (
+                      <div className="space-y-2.5 pt-1">
+                        <div className="flex items-center justify-between">
+                          <div className="h-3 w-28 bg-white/10 rounded animate-pulse" />
+                          <div className="h-3.5 w-24 bg-white/10 rounded animate-pulse" />
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <div className="h-3 w-32 bg-white/10 rounded animate-pulse" />
+                          <div className="h-4 w-28 bg-[var(--gold-primary)]/20 rounded animate-pulse" />
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <div className="h-3 w-24 bg-white/10 rounded animate-pulse" />
+                          <div className="h-5 w-24 bg-white/10 rounded-full animate-pulse" />
+                        </div>
+                      </div>
+                    ) : cancelProjectPayment ? (
+                      <>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)] font-medium">Payment Method</span>
+                          <span className="text-xs font-semibold text-white capitalize">{cancelProjectPayment.method?.replace(/_/g, ' ') || '—'}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)] font-medium">Amount Submitted</span>
+                          <span className="text-xs font-bold text-[var(--gold-primary)]">{formatCurrency(cancelProjectPayment.amount)}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)] font-medium">Payment Status</span>
+                          <span className={`text-xs font-semibold capitalize ${cancelProjectPayment.status === 'verified' ? 'text-green-400' :
+                              cancelProjectPayment.status === 'for_verification' || cancelProjectPayment.status === 'pending' ? 'text-amber-400' :
+                                cancelProjectPayment.status === 'rejected' ? 'text-red-400' :
+                                  'text-white'
+                            }`}>{formatStatus(cancelProjectPayment.status)}</span>
+                        </div>
+                      </>
+                    ) : null}
+                  </div>
+                )}
+
+                {/* Refund Notice for Not Started Builds */}
+                {cancelProjectTarget && String(cancelProjectTarget.status || '').toLowerCase() === 'not_started' && (
+                  cancelProjectPaymentLoading ? (
+                    <div className="rounded-2xl border border-blue-500/20 bg-blue-500/5 p-4 animate-pulse">
+                      <div className="flex items-start gap-3">
+                        <div className="w-5 h-5 rounded-full bg-blue-400/20 shrink-0 mt-0.5" />
+                        <div className="flex-1 space-y-2 py-0.5">
+                          <div className="h-3 w-3/4 bg-blue-400/20 rounded" />
+                          <div className="h-3 w-1/2 bg-blue-400/10 rounded" />
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="rounded-2xl border border-blue-500/30 bg-gradient-to-br from-blue-500/15 via-blue-500/10 to-transparent p-4">
+                      <div className="flex items-start gap-3">
+                        <div className="mt-0.5">
+                          {cancelProjectPayment?.status === 'verified' ? (
+                            <CheckCircle className="w-5 h-5 text-blue-400 shrink-0" />
+                          ) : cancelProjectPayment?.status === 'for_verification' || cancelProjectPayment?.status === 'pending' ? (
+                            <Clock className="w-5 h-5 text-blue-400 shrink-0" />
+                          ) : (
+                            <Info className="w-5 h-5 text-blue-400 shrink-0" />
+                          )}
+                        </div>
+                        <p className="text-xs sm:text-sm text-blue-200/90 leading-relaxed">
+                          {cancelProjectPayment?.status === 'verified' ? (
+                            <>Your payment has been verified. Your refund request will be submitted automatically and is now waiting for admin approval.</>
+                          ) : cancelProjectPayment?.status === 'for_verification' || cancelProjectPayment?.status === 'pending' ? (
+                            <>Your payment is still being verified by the admin. Once your payment is verified, your refund request can proceed.</>
+                          ) : (
+                            <>No refund is available for this payment status.</>
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                  )
+                )}
+
+                {/* Build State Preview — shown when project has started */}
+                {cancelProjectTarget && String(cancelProjectTarget.status || '').toLowerCase() !== 'not_started' && (
+                  <>
+                    {cancelBuildPreviewLoading ? (
+                      <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-6 flex items-center justify-center gap-3">
+                        <Loader2 className="w-5 h-5 animate-spin text-amber-400" />
+                        <span className="text-sm text-amber-300 font-medium">Loading build state...</span>
+                      </div>
+                    ) : cancelBuildPreview?.has_progress ? (
+                      <div className="space-y-4">
+                        {/* Build state explanation */}
+                        <div className="rounded-2xl border border-amber-500/30 bg-gradient-to-br from-amber-500/15 via-amber-500/10 to-transparent p-4">
+                          <div className="flex items-start gap-3">
+                            <AlertCircle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+                            <p className="text-xs sm:text-sm text-amber-200/90 leading-relaxed">
+                              This project has already started. Your down payment was used to purchase parts and materials. <strong className="text-amber-300">You will receive the guitar in its current build state</strong> instead of a refund.
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Milestone breakdown */}
+                        <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] p-4">
+                          <p className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)] font-semibold mb-3">
+                            Current Build State — <span className="text-[var(--gold-primary)]">{cancelBuildPreview.progress}% Complete</span>
+                          </p>
+                          <div className="space-y-2">
+                            {(cancelBuildPreview.stages || []).map((stage, idx) => (
+                              <div key={stage.milestone_id || idx} className="flex items-center gap-2.5">
+                                {stage.status === 'completed' ? (
+                                  <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+                                ) : stage.status === 'in_progress' ? (
+                                  <Clock className="w-4 h-4 text-amber-400 shrink-0" />
+                                ) : (
+                                  <div className="w-4 h-4 rounded-full border border-white/20 shrink-0" />
+                                )}
+                                <span className={`text-xs sm:text-sm ${stage.status === 'completed' ? 'text-emerald-300 font-medium' : stage.status === 'in_progress' ? 'text-amber-300 font-medium' : 'text-[var(--text-muted)]'}`}>
+                                  {stage.title}
+                                </span>
+                                {stage.total_subtasks > 0 && (
+                                  <span className="text-xs text-[var(--text-muted)] ml-auto">{stage.completed_subtasks}/{stage.total_subtasks}</span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                          {cancelBuildPreview.amount_paid > 0 && (
+                            <div className="mt-3 pt-3 border-t border-[var(--border)] flex items-center justify-between">
+                              <span className="text-xs text-[var(--text-muted)]">Amount Paid</span>
+                              <span className="text-xs font-bold text-[var(--gold-primary)]">{formatCurrency(cancelBuildPreview.amount_paid)}</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Claim method selection */}
+                        <div className="space-y-2">
+                          <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+                            How would you like to receive your guitar? <span className="text-red-400">*</span>
+                          </label>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                            {[
+                              { value: 'pickup', title: 'Pick Up at Shop', subtitle: 'Visit our shop to collect your guitar', icon: Package },
+                              { value: 'courier', title: 'Courier Delivery', subtitle: "We'll arrange delivery to your address", icon: Truck },
+                            ].map((opt) => {
+                              const isSelected = cancelClaimMethod === opt.value
+                              const IconComp = opt.icon
+                              return (
+                                <label
+                                  key={opt.value}
+                                  className={`flex cursor-pointer items-start gap-3 rounded-2xl border p-3.5 transition-all ${
+                                    isSelected
+                                      ? 'border-amber-500/70 bg-gradient-to-br from-amber-500/15 to-amber-500/5 shadow-[0_0_15px_rgba(245,158,11,0.1)] ring-1 ring-amber-500/40'
+                                      : 'border-[var(--border)] bg-[var(--bg-primary)] hover:border-amber-500/40 hover:bg-white/[0.02]'
+                                  }`}
+                                >
+                                  <input
+                                    type="radio"
+                                    name="claim-method"
+                                    value={opt.value}
+                                    checked={isSelected}
+                                    onChange={() => setCancelClaimMethod(opt.value)}
+                                    className="mt-1 h-4 w-4 accent-amber-500 shrink-0"
+                                  />
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-1.5">
+                                      <IconComp className={`w-4 h-4 ${isSelected ? 'text-amber-400' : 'text-[var(--text-muted)]'}`} />
+                                      <span className={`text-sm font-semibold block truncate ${isSelected ? 'text-white' : 'text-white/80'}`}>{opt.title}</span>
+                                    </div>
+                                    <p className="text-[11px] text-[var(--text-muted)] mt-0.5 leading-snug">{opt.subtitle}</p>
+                                  </div>
+                                </label>
+                              )
+                            })}
+                          </div>
+
+                          {/* Courier details */}
+                          {cancelClaimMethod === 'courier' && (
+                            <div className="mt-3 space-y-2">
+                              <input
+                                type="text"
+                                value={cancelClaimRecipientName}
+                                onChange={(e) => setCancelClaimRecipientName(e.target.value)}
+                                placeholder="Recipient name"
+                                className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] px-3.5 py-2.5 text-sm text-white placeholder:text-[var(--text-muted)] focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20 focus:outline-none transition-all"
+                              />
+                              <input
+                                type="text"
+                                value={cancelClaimRecipientContact}
+                                onChange={(e) => setCancelClaimRecipientContact(e.target.value)}
+                                placeholder="Contact number"
+                                className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] px-3.5 py-2.5 text-sm text-white placeholder:text-[var(--text-muted)] focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20 focus:outline-none transition-all"
+                              />
+                              <textarea
+                                value={cancelClaimDeliveryInstructions}
+                                onChange={(e) => setCancelClaimDeliveryInstructions(e.target.value)}
+                                placeholder="Delivery instructions (optional)"
+                                rows={2}
+                                className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] px-3.5 py-2.5 text-sm text-white placeholder:text-[var(--text-muted)] focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/20 focus:outline-none resize-none transition-all"
+                              />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4">
+                        <div className="flex items-start gap-2.5">
+                          <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                          <p className="text-xs text-amber-300/90 leading-relaxed">
+                            This project has already started but no build progress has been recorded yet. Please contact support for assistance.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {/* Explicit Confirmation Checkbox */}
+                <div className="rounded-2xl border border-red-500/30 bg-red-500/5 p-4">
+                  <label className="flex items-start gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={cancelProjectConfirmed}
+                      onChange={(e) => setCancelProjectConfirmed(e.target.checked)}
+                      className="mt-0.5 h-4 w-4 accent-red-500 rounded shrink-0 cursor-pointer"
+                    />
+                    <span className="text-xs sm:text-sm text-white/90 leading-snug font-medium select-none">
+                      {cancelBuildPreview?.has_progress
+                        ? 'I understand that my down payment is non-refundable and I will receive the guitar in its current unfinished state. I want to cancel this project.'
+                        : 'I understand that cancellation is permanent once approved by the admin. I want to cancel this project.'
+                      }
+                    </span>
+                  </label>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="pt-2 flex flex-col sm:flex-row gap-3">
+                  <button
+                    type="button"
+                    onClick={closeCancelProjectModal}
+                    disabled={isCancellingProject}
+                    className="flex-1 rounded-xl border border-[var(--border)] bg-white/5 py-3 text-sm font-semibold text-white hover:bg-white/10 transition-colors disabled:opacity-50"
+                  >
+                    Keep Project
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCancelProject}
+                    disabled={!cancelProjectConfirmed || isCancellingProject}
+                    className="flex-1 rounded-xl bg-gradient-to-r from-red-500 to-red-600 hover:from-red-400 hover:to-red-500 py-3 text-sm font-bold text-white shadow-lg shadow-red-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none flex items-center justify-center gap-2"
+                  >
+                    {isCancellingProject && <Loader2 className="h-4 w-4 animate-spin" />}
+                    {isCancellingProject ? 'Cancelling...' : 'Confirm Cancellation'}
+                  </button>
+                </div>
               </div>
             </motion.div>
           </motion.div>
@@ -3112,7 +3270,7 @@ export function DashboardPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[300] bg-black/70 backdrop-blur-sm p-4 flex items-center justify-center"
+            className="fixed inset-0 z-[300] bg-black/80 backdrop-blur-md p-4 sm:p-6 flex items-center justify-center overflow-y-auto"
             onClick={(event) => {
               if (event.target === event.currentTarget) closeCancelWithOptionsModal()
             }}
@@ -3121,184 +3279,495 @@ export function DashboardPage() {
               initial={{ opacity: 0, y: 16, scale: 0.96 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 16, scale: 0.96 }}
-              className="relative w-full max-w-lg rounded-3xl border border-amber-500/30 bg-[var(--surface-dark)] p-6 sm:p-7 shadow-2xl"
+              className="relative w-full max-w-xl rounded-3xl border border-amber-500/30 bg-[var(--surface-dark)] p-6 sm:p-7 shadow-2xl my-auto max-h-[90vh] flex flex-col overflow-hidden"
             >
-              <button
-                type="button"
-                onClick={closeCancelWithOptionsModal}
-                disabled={isCancellingWithOptions}
-                className="absolute right-4 top-4 rounded-lg p-2 text-[var(--text-muted)] hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
-                aria-label="Close request cancellation modal"
-              >
-                <X className="h-4 w-4" />
-              </button>
-
-              <div className="w-14 h-14 rounded-2xl bg-amber-500/15 flex items-center justify-center mb-5">
-                <AlertTriangle className="w-7 h-7 text-amber-400" />
-              </div>
-
-               <h3 className="text-white text-xl font-bold mb-1">Request Cancellation</h3>
-               <p className="text-sm text-[var(--text-muted)] mb-5">
-                 {cancelWithOptionsTarget?.name
-                   ? `Request cancellation for ${cancelWithOptionsTarget.name}. An admin will review your request and process the cancellation with your chosen option.`
-                   : 'An admin will review your cancellation request and process it with your chosen option.'}
-               </p>
-
-               {cancelWithOptionsTarget?.cancel_requested_at && !cancelWithOptionsTarget?.cancel_approved_at ? (
-                 <div className="space-y-5">
-                   <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 flex items-start gap-3">
-                     <Clock className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
-                     <div>
-                       <p className="text-sm font-semibold text-amber-300">Cancellation Request Pending</p>
-                       <p className="mt-1 text-xs text-amber-300/70">Your cancellation request is awaiting admin review. You can withdraw it below if you change your mind.</p>
-                     </div>
-                   </div>
-
-                   {cancelWithOptionsTarget?.cancel_reason && (
-                     <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] p-4">
-                       <p className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)] mb-1">Your Reason</p>
-                       <p className="text-sm text-white break-words">{cancelWithOptionsTarget.cancel_reason}</p>
-                     </div>
-                   )}
-
-                   <div className="mt-6 flex gap-3">
-                     <button
-                       type="button"
-                       onClick={closeCancelWithOptionsModal}
-                       disabled={isWithdrawingCancelRequest}
-                       className="flex-1 rounded-xl border border-[var(--border)] bg-white/5 py-3 text-sm font-semibold text-white hover:bg-white/10 transition-colors disabled:opacity-50"
-                     >
-                       Close
-                     </button>
-                     <button
-                       type="button"
-                       onClick={handleWithdrawCancelRequest}
-                       disabled={isWithdrawingCancelRequest}
-                       className="flex-1 rounded-xl border border-amber-500/30 bg-amber-500/10 py-3 text-sm font-semibold text-amber-300 hover:bg-amber-500/20 transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                     >
-                       {isWithdrawingCancelRequest && <Loader2 className="h-4 w-4 animate-spin" />}
-                       {isWithdrawingCancelRequest ? 'Withdrawing...' : 'Withdraw Request'}
-                     </button>
-                   </div>
-                 </div>
-               ) : (
-                 <div className="space-y-5">
-
-              {cancelWithOptionsTarget && (
-                <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] p-4 mb-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">Project</span>
-                    <span className="text-xs text-[var(--text-muted)]">{cancelWithOptionsTarget.custom_build_id || cancelWithOptionsTarget.project_id?.slice(0, 8)}</span>
+              {/* Modal Header */}
+              <div className="flex items-center justify-between pb-4 border-b border-[var(--border)] shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center shrink-0 shadow-[0_0_15px_rgba(245,158,11,0.15)]">
+                    <AlertTriangle className="w-5 h-5 text-amber-400" />
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">Status</span>
-                    <span className="text-xs font-semibold text-white capitalize">{formatStatus(cancelWithOptionsTarget.status)}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">Progress</span>
-                    <span className="text-xs font-semibold text-white">{cancelWithOptionsTarget.progress || 0}%</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">Payment Plan</span>
-                    <span className="text-xs font-semibold text-white capitalize">{cancelWithOptionsTarget.order_payment_plan === 'installment' ? 'Installment / Down Payment' : 'Full Payment'}</span>
+                  <div>
+                    <h3 className="text-white text-lg sm:text-xl font-bold">Request Cancellation</h3>
+                    <p className="text-xs text-[var(--text-muted)] truncate max-w-[240px] sm:max-w-md">
+                      {cancelWithOptionsTarget?.name || 'Custom Build Project'}
+                    </p>
                   </div>
                 </div>
-              )}
-
-              <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 mb-4">
-                <p className="text-sm text-amber-300 leading-relaxed">
-                  <AlertCircle className="w-4 h-4 inline-block mr-1.5 -mt-0.5" />
-                  Your build has already started. Your down payment was used to purchase parts and materials, which are not refundable. <strong className="text-amber-400">You will receive the guitar in its current unfinished state</strong> instead of a refund. Select how you would like to receive your guitar below, then submit the request for admin review.
-                </p>
+                <button
+                  type="button"
+                  onClick={closeCancelWithOptionsModal}
+                  disabled={isCancellingWithOptions || isWithdrawingCancelRequest}
+                  className="rounded-xl p-2 text-[var(--text-muted)] hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
+                  aria-label="Close request cancellation modal"
+                >
+                  <X className="h-5 w-5" />
+                </button>
               </div>
 
-              <div className="space-y-4 mb-4">
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)] mb-2">
-                    Cancellation Option <span className="text-red-400">*</span>
-                  </label>
-                  <div className="grid gap-2">
-                    {[
-                      { value: 'ship_unfinished', label: 'Ship Unfinished Guitar', desc: "We'll ship your guitar in its current build state to your address." },
-                      { value: 'pickup_unfinished', label: 'Pick Up Unfinished Guitar', desc: 'Collect your guitar in its current build state from the shop.' },
-                    ].map((opt) => (
-                      <label
-                        key={opt.value}
-                        className={`flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3 transition-colors ${
-                          cancelOption === opt.value
-                            ? 'border-amber-500/50 bg-amber-500/10'
-                            : 'border-[var(--border)] hover:border-amber-500/30'
-                        }`}
-                      >
-                        <input
-                          type="radio"
-                          name="cancel-option"
-                          value={opt.value}
-                          checked={cancelOption === opt.value}
-                          onChange={() => setCancelOption(opt.value)}
-                          className="mt-1 h-4 w-4 accent-amber-500"
-                        />
-                        <div>
-                          <span className="text-sm text-white font-medium block">{opt.label}</span>
-                          <span className="text-xs text-[var(--text-muted)] mt-0.5 block">{opt.desc}</span>
+              {/* Modal Scrollable Body */}
+              <div className="overflow-y-auto pr-1 -mr-1 py-4 space-y-4 flex-1">
+                {cancelWithOptionsTarget?.cancel_requested_at && !cancelWithOptionsTarget?.cancel_approved_at ? (
+                  /* Pending Cancellation Review View */
+                  <div className="space-y-4">
+                    <div className="rounded-2xl border border-amber-500/30 bg-gradient-to-r from-amber-500/15 via-amber-500/10 to-transparent p-4 sm:p-5">
+                      <div className="flex items-start gap-3">
+                        <div className="relative mt-0.5">
+                          <Clock className="w-5 h-5 text-amber-400 shrink-0" />
+                          <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-amber-400 animate-ping" />
                         </div>
-                      </label>
-                    ))}
+                        <div className="flex-1">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <p className="text-sm font-bold text-amber-300">Cancellation Request Pending Review</p>
+                            <span className="text-[11px] px-2.5 py-0.5 rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-300 font-medium">
+                              Under Admin Review
+                            </span>
+                          </div>
+                          <p className="mt-1 text-xs text-amber-200/80 leading-relaxed">
+                            Your request to cancel this custom build has been submitted and is currently being evaluated by our workshop administration team.
+                          </p>
+                          {cancelWithOptionsTarget.cancel_requested_at && (
+                            <p className="mt-2 text-[11px] text-[var(--text-muted)]">
+                              Submitted: <span className="text-white">{new Date(cancelWithOptionsTarget.cancel_requested_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Request Summary Card */}
+                    <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] p-4 sm:p-5 space-y-3.5">
+                      <p className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)] font-semibold">Request Details</p>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                        <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] p-3">
+                          <span className="text-[11px] uppercase tracking-wider text-[var(--text-muted)] block mb-1">Fulfillment Method</span>
+                          <div className="flex items-center gap-2">
+                            {cancelWithOptionsTarget.cancel_option === 'ship_to_address' || cancelWithOptionsTarget.cancel_option === 'ship_unfinished' ? (
+                              <>
+                                <Truck className="w-4 h-4 text-amber-400 shrink-0" />
+                                <span className="text-sm font-semibold text-white">Ship to Address</span>
+                              </>
+                            ) : (
+                              <>
+                                <Package className="w-4 h-4 text-amber-400 shrink-0" />
+                                <span className="text-sm font-semibold text-white">Pick Up at Shop</span>
+                              </>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-[var(--text-muted)] mt-1">
+                            {cancelWithOptionsTarget.cancel_option === 'ship_to_address' || cancelWithOptionsTarget.cancel_option === 'ship_unfinished'
+                              ? 'Courier delivery of unfinished guitar and parts'
+                              : 'In-person collection from our workshop'}
+                          </p>
+                        </div>
+
+                        <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] p-3">
+                          <span className="text-[11px] uppercase tracking-wider text-[var(--text-muted)] block mb-1">Build Progress</span>
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-semibold text-white">{cancelWithOptionsTarget.progress || 0}% Complete</span>
+                            <span className="text-xs text-[var(--gold-primary)] font-medium capitalize">{formatStatus(cancelWithOptionsTarget.status)}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Delivery Address if Shipping */}
+                      {(cancelWithOptionsTarget.cancel_option === 'ship_to_address' || cancelWithOptionsTarget.cancel_option === 'ship_unfinished') && (
+                        <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] p-3.5 space-y-1">
+                          <span className="text-[11px] uppercase tracking-wider text-[var(--text-muted)] block mb-1 font-semibold flex items-center gap-1.5">
+                            <MapPin className="w-3.5 h-3.5 text-amber-400" /> Delivery Address
+                          </span>
+                          {(() => {
+                            const snap = cancelWithOptionsTarget.cancel_address_snapshot
+                              ? (typeof cancelWithOptionsTarget.cancel_address_snapshot === 'string'
+                                  ? JSON.parse(cancelWithOptionsTarget.cancel_address_snapshot)
+                                  : cancelWithOptionsTarget.cancel_address_snapshot)
+                              : null
+                            const recipient = snap?.recipient_name || cancelWithOptionsTarget.customer_name || 'Customer'
+                            const phone = snap?.phone || cancelWithOptionsTarget.customer_phone
+                            const addrLines = snap ? [
+                              snap.line1,
+                              snap.line2,
+                              snap.barangay,
+                              snap.city,
+                              snap.province,
+                              snap.postal_code,
+                              snap.country
+                            ].filter(Boolean).join(', ') : (
+                              cancelWithOptionsTarget.cancel_address_line1
+                                ? [
+                                    cancelWithOptionsTarget.cancel_address_line1,
+                                    cancelWithOptionsTarget.cancel_address_line2,
+                                    cancelWithOptionsTarget.cancel_address_barangay,
+                                    cancelWithOptionsTarget.cancel_address_city,
+                                    cancelWithOptionsTarget.cancel_address_province,
+                                    cancelWithOptionsTarget.cancel_address_postal_code,
+                                    cancelWithOptionsTarget.cancel_address_country
+                                  ].filter(Boolean).join(', ')
+                                : 'No delivery address recorded'
+                            )
+
+                            return (
+                              <div className="text-xs space-y-0.5 text-white/90">
+                                <p className="font-semibold text-white">{recipient} {phone && <span className="font-normal text-[var(--text-muted)]">({phone})</span>}</p>
+                                <p className="text-[var(--text-muted)] leading-relaxed">{addrLines}</p>
+                              </div>
+                            )
+                          })()}
+                        </div>
+                      )}
+
+                      {cancelWithOptionsTarget.cancel_reason && (
+                        <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] p-3.5">
+                          <span className="text-[11px] uppercase tracking-wider text-[var(--text-muted)] block mb-1.5 font-medium">Customer Reason</span>
+                          <p className="text-sm text-white/90 leading-relaxed break-words bg-black/20 p-2.5 rounded-lg border border-white/5 italic">
+                            "{cancelWithOptionsTarget.cancel_reason}"
+                          </p>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-3.5 flex items-start gap-2.5">
+                      <Info className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
+                      <p className="text-xs text-blue-200/80 leading-relaxed">
+                        If you changed your mind and wish to keep building this instrument, you can withdraw your cancellation request below at any time before admin approval.
+                      </p>
+                    </div>
+
+                    {/* Pending Action Buttons */}
+                    <div className="pt-2 flex flex-col sm:flex-row gap-3">
+                      <button
+                        type="button"
+                        onClick={closeCancelWithOptionsModal}
+                        disabled={isWithdrawingCancelRequest}
+                        className="flex-1 rounded-xl border border-[var(--border)] bg-white/5 py-3 text-sm font-semibold text-white hover:bg-white/10 transition-colors disabled:opacity-50"
+                      >
+                        Keep Request (Close)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleWithdrawCancelRequest}
+                        disabled={isWithdrawingCancelRequest}
+                        className="flex-1 rounded-xl border border-amber-500/40 bg-amber-500/10 py-3 text-sm font-bold text-amber-300 hover:bg-amber-500/20 transition-all disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-sm"
+                      >
+                        {isWithdrawingCancelRequest && <Loader2 className="h-4 w-4 animate-spin" />}
+                        {isWithdrawingCancelRequest ? 'Withdrawing...' : 'Withdraw Cancellation Request'}
+                      </button>
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  /* Submit Cancellation Request Form */
+                  <div className="space-y-4">
+                    {/* Project Overview Card */}
+                    {cancelWithOptionsTarget && (
+                      <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] p-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)] font-medium">Build Reference</span>
+                          <span className="text-xs font-mono font-semibold text-white bg-white/5 px-2 py-0.5 rounded-md border border-white/10">
+                            {cancelWithOptionsTarget.custom_build_id || cancelWithOptionsTarget.project_id?.slice(0, 8)}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)] font-medium">Current Status</span>
+                          <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-400 capitalize">
+                            {formatStatus(cancelWithOptionsTarget.status)}
+                          </span>
+                        </div>
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="uppercase tracking-[0.14em] text-[var(--text-muted)] font-medium">Manufacturing Progress</span>
+                            <span className="font-bold text-[var(--gold-primary)]">{cancelWithOptionsTarget.progress || 0}%</span>
+                          </div>
+                          <div className="h-2 w-full bg-[var(--surface-dark)] rounded-full overflow-hidden border border-white/5">
+                            <div
+                              className="h-full bg-gradient-to-r from-amber-500 to-[var(--gold-primary)] transition-all duration-300"
+                              style={{ width: `${Math.max(5, cancelWithOptionsTarget.progress || 0)}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
 
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)] mb-2">
-                    Reason for Cancellation <span className="text-red-400">*</span>
-                  </label>
-                  <textarea
-                    value={cancelWithOptionsReason}
-                    onChange={(e) => setCancelWithOptionsReason(e.target.value)}
-                    placeholder="Please explain why you want to cancel this build..."
-                    maxLength={500}
-                    rows={3}
-                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-3 text-sm text-white placeholder:text-[var(--text-muted)] focus:border-amber-500/50 focus:outline-none resize-none"
-                  />
-                  <p className="mt-1 text-right text-xs text-[var(--text-muted)]">{cancelWithOptionsReason.length}/500</p>
-                </div>
-              </div>
+                    {/* Policy & Material Notice */}
+                    <div className="rounded-2xl border border-amber-500/30 bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-transparent p-4">
+                      <div className="flex items-start gap-3">
+                        <AlertCircle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-xs sm:text-sm text-amber-200/90 leading-relaxed">
+                            <strong className="text-amber-300 font-semibold">Active Production Notice: </strong>
+                            This guitar is currently in production. In accordance with custom build terms, initial down payments are non-refundable as parts and custom labor have already been allocated. <strong className="text-white">You will receive the guitar in its current unfinished state.</strong>
+                          </p>
+                        </div>
+                      </div>
+                    </div>
 
-              <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 mb-4">
-                <label className="flex items-start gap-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={cancelWithOptionsConfirmed}
-                    onChange={(e) => setCancelWithOptionsConfirmed(e.target.checked)}
-                    className="mt-0.5 h-5 w-5 accent-amber-500 rounded"
-                  />
-                  <span className="text-sm text-white font-medium">
-                    I understand that my down payment is non-refundable and I will receive the guitar in its current unfinished state. I want to request cancellation.
-                  </span>
-                </label>
-              </div>
+                    {/* Fulfillment Method Selection */}
+                    <div className="space-y-3">
+                      <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+                        Fulfillment Method <span className="text-red-400">*</span>
+                      </label>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        {[
+                          {
+                            value: 'ship_to_address',
+                            title: 'Ship to Address',
+                            subtitle: 'Courier delivery of unfinished guitar and parts',
+                            icon: Truck,
+                          },
+                          {
+                            value: 'pickup_at_shop',
+                            title: 'Pick Up at Shop',
+                            subtitle: 'In-person collection from our workshop',
+                            icon: Package,
+                          },
+                        ].map((opt) => {
+                          const isSelected = cancelOption === opt.value
+                          const IconComp = opt.icon
+                          return (
+                            <label
+                              key={opt.value}
+                              className={`flex cursor-pointer items-start gap-3 rounded-2xl border p-3.5 transition-all ${isSelected
+                                  ? 'border-amber-500/70 bg-gradient-to-br from-amber-500/15 to-amber-500/5 shadow-[0_0_15px_rgba(245,158,11,0.1)] ring-1 ring-amber-500/40'
+                                  : 'border-[var(--border)] bg-[var(--bg-primary)] hover:border-amber-500/40 hover:bg-white/[0.02]'
+                                }`}
+                            >
+                              <input
+                                type="radio"
+                                name="cancel-option"
+                                value={opt.value}
+                                checked={isSelected}
+                                onChange={() => {
+                                  setCancelOption(opt.value)
+                                  if (opt.value === 'ship_to_address' && !selectedCancelAddressId && addresses && addresses.length > 0) {
+                                    const def = addresses.find(a => a.is_default) || addresses[0]
+                                    setSelectedCancelAddressId(def?.address_id || null)
+                                  }
+                                }}
+                                className="mt-1 h-4 w-4 accent-amber-500 shrink-0"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                  <IconComp className={`w-4 h-4 ${isSelected ? 'text-amber-400' : 'text-[var(--text-muted)]'}`} />
+                                  <span className={`text-sm font-semibold block truncate ${isSelected ? 'text-white' : 'text-white/80'}`}>
+                                    {opt.title}
+                                  </span>
+                                </div>
+                                <p className="text-[11px] text-[var(--text-muted)] mt-1 leading-snug">
+                                  {opt.subtitle}
+                                </p>
+                              </div>
+                            </label>
+                          )
+                        })}
+                      </div>
 
-              <div className="mt-6 flex gap-3">
-                 <button
-                   type="button"
-                   onClick={closeCancelWithOptionsModal}
-                   disabled={isCancellingWithOptions}
-                   className="flex-1 rounded-xl border border-[var(--border)] bg-white/5 py-3 text-sm font-semibold text-white hover:bg-white/10 transition-colors disabled:opacity-50"
-                 >
-                   Cancel
-                 </button>
-                 <button
-                   type="button"
-                   onClick={handleCancelWithOptions}
-                   disabled={!cancelWithOptionsReason.trim() || !cancelWithOptionsConfirmed || isCancellingWithOptions}
-                   className="flex-1 rounded-xl bg-amber-500 py-3 text-sm font-bold text-black hover:bg-amber-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                 >
-                   {isCancellingWithOptions && <Loader2 className="h-4 w-4 animate-spin" />}
-                   {isCancellingWithOptions ? 'Requesting...' : 'Submit Cancellation Request'}
-                 </button>
-               </div>
+                      {/* Ship to Address Details: Saved Addresses & Add New Address */}
+                      {cancelOption === 'ship_to_address' && (
+                        <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] p-4 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+                              Saved Address <span className="text-red-400">*</span>
+                            </span>
+                            {!isAddingCancelAddress && (
+                              <button
+                                type="button"
+                                onClick={() => setIsAddingCancelAddress(true)}
+                                className="text-xs font-semibold text-[var(--gold-primary)] hover:underline flex items-center gap-1"
+                              >
+                                + Add New Address
+                              </button>
+                            )}
+                          </div>
+
+                          {cancelAddressSuccessMsg && (
+                            <div className="flex items-center justify-between px-3 py-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-xs font-semibold text-emerald-300">
+                              <span className="flex items-center gap-1.5">
+                                <Check className="w-3.5 h-3.5 text-emerald-400" /> {cancelAddressSuccessMsg}
+                              </span>
+                              <span className="text-[11px] text-emerald-400 font-medium">Selected for this request</span>
+                            </div>
+                          )}
+
+                          {isAddingCancelAddress ? (
+                            <div className="rounded-xl border border-amber-500/30 bg-[var(--surface-dark)] p-4 space-y-3">
+                              <div className="flex items-center justify-between pb-2 border-b border-[var(--border)]">
+                                <span className="text-xs font-bold text-amber-300">New Delivery Address</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setIsAddingCancelAddress(false)}
+                                  className="text-xs text-[var(--text-muted)] hover:text-white transition-colors"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                              <AddressForm
+                                initialAddress={{ label: 'Home', country: 'PH', isDefault: false }}
+                                onSubmit={handleSaveCancelAddress}
+                                onCancel={() => setIsAddingCancelAddress(false)}
+                                submitLabel="Save & Select Address"
+                                isSubmitting={isSavingCancelAddress}
+                                showCategory={true}
+                              />
+                            </div>
+                          ) : (
+                            <>
+                              {addresses && addresses.length > 0 ? (
+                                <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
+                                  {addresses.map((addr) => {
+                                    const isAddrSelected = selectedCancelAddressId === addr.address_id
+                                    return (
+                                      <label
+                                        key={addr.address_id}
+                                        onClick={() => setSelectedCancelAddressId(addr.address_id)}
+                                        className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                                          isAddrSelected
+                                            ? 'border-amber-500/70 bg-amber-500/10 ring-1 ring-amber-500/40 shadow-sm'
+                                            : 'border-[var(--border)] bg-[var(--surface-dark)] hover:border-amber-500/40 hover:bg-white/[0.02]'
+                                        }`}
+                                      >
+                                        <input
+                                          type="radio"
+                                          name="cancel-address-radio"
+                                          checked={isAddrSelected}
+                                          onChange={() => setSelectedCancelAddressId(addr.address_id)}
+                                          className="mt-1 h-4 w-4 accent-amber-500 shrink-0"
+                                        />
+                                        <div className="flex-1 min-w-0 text-xs">
+                                          <div className="flex items-center gap-2 mb-0.5">
+                                            <span className="font-bold text-white capitalize">{addr.label || 'Home'}</span>
+                                            {addr.is_default && (
+                                              <span className="text-[9px] px-1.5 py-0.2 rounded bg-[var(--gold-primary)] text-[var(--text-dark)] font-bold">
+                                                Default
+                                              </span>
+                                            )}
+                                          </div>
+                                          <p className="text-[var(--text-muted)] leading-relaxed">
+                                            {formatAddress(addr)}
+                                          </p>
+                                        </div>
+                                      </label>
+                                    )
+                                  })}
+                                </div>
+                              ) : (
+                                <div className="rounded-xl border border-dashed border-[var(--border)] p-4 text-center">
+                                  <MapPin className="w-6 h-6 text-[var(--text-muted)] mx-auto mb-1 opacity-50" />
+                                  <p className="text-xs text-[var(--text-muted)]">No saved delivery addresses found.</p>
+                                  <button
+                                    type="button"
+                                    onClick={() => setIsAddingCancelAddress(true)}
+                                    className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-[var(--gold-primary)] hover:underline"
+                                  >
+                                    + Add New Address
+                                  </button>
+                                </div>
+                              )}
+
+                              {!selectedCancelAddressId && (
+                                <p className="text-[11px] text-amber-400 flex items-center gap-1 pt-1">
+                                  <AlertCircle className="w-3.5 h-3.5 shrink-0" /> Please select a delivery address.
+                                </p>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Pickup at Shop Note */}
+                      {cancelOption === 'pickup_at_shop' && (
+                        <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] p-3 flex items-center gap-2 text-xs text-[var(--text-muted)]">
+                          <Package className="w-4 h-4 text-amber-400 shrink-0" />
+                          <span>No delivery address is required. You will be notified when your guitar and parts are ready for collection at our workshop.</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Cancellation Reason with Quick Tags */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
+                          Reason for Cancellation <span className="text-red-400">*</span>
+                        </label>
+                        <span className="text-[11px] text-[var(--text-muted)]">{cancelWithOptionsReason.length}/500</span>
+                      </div>
+
+                      {/* Quick Suggestion Chips */}
+                      <div className="flex flex-wrap gap-1.5">
+                        {[
+                          'Budget / financial constraints',
+                          'Timeline / schedule change',
+                          'Design revision needed',
+                          'Personal circumstances',
+                        ].map((tag) => (
+                          <button
+                            key={tag}
+                            type="button"
+                            onClick={() => setCancelWithOptionsReason(tag)}
+                            className={`text-[11px] px-2.5 py-1 rounded-lg border transition-colors ${cancelWithOptionsReason === tag
+                                ? 'border-amber-500/60 bg-amber-500/20 text-amber-200'
+                                : 'border-[var(--border)] bg-[var(--bg-primary)] text-[var(--text-muted)] hover:text-white hover:border-amber-500/30'
+                              }`}
+                          >
+                            {tag}
+                          </button>
+                        ))}
+                      </div>
+
+                      <textarea
+                        value={cancelWithOptionsReason}
+                        onChange={(e) => setCancelWithOptionsReason(e.target.value)}
+                        placeholder="Please provide details regarding your cancellation request..."
+                        maxLength={500}
+                        rows={3}
+                        className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-3 text-sm text-white placeholder:text-[var(--text-muted)] focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 focus:outline-none resize-none transition-all"
+                      />
+                    </div>
+
+                    {/* Checkbox Acknowledgment */}
+                    <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4">
+                      <label className="flex items-start gap-3 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={cancelWithOptionsConfirmed}
+                          onChange={(e) => setCancelWithOptionsConfirmed(e.target.checked)}
+                          className="mt-0.5 h-4 w-4 accent-amber-500 rounded shrink-0 cursor-pointer"
+                        />
+                        <span className="text-xs sm:text-sm text-white/90 leading-snug font-medium select-none">
+                          I understand that my down payment is non-refundable and I will receive the guitar in its current unfinished state. I wish to submit this cancellation request for admin review.
+                        </span>
+                      </label>
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="pt-2 flex flex-col sm:flex-row gap-3">
+                      <button
+                        type="button"
+                        onClick={closeCancelWithOptionsModal}
+                        disabled={isCancellingWithOptions || isSavingCancelAddress}
+                        className="flex-1 rounded-xl border border-[var(--border)] bg-white/5 py-3 text-sm font-semibold text-white hover:bg-white/10 transition-colors disabled:opacity-50"
+                      >
+                        Keep Project
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleCancelWithOptions}
+                        disabled={
+                          !cancelWithOptionsReason.trim() ||
+                          !cancelWithOptionsConfirmed ||
+                          (cancelOption === 'ship_to_address' && !selectedCancelAddressId) ||
+                          isCancellingWithOptions ||
+                          isSavingCancelAddress
+                        }
+                        className="flex-1 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 py-3 text-sm font-bold text-black shadow-lg shadow-amber-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none flex items-center justify-center gap-2"
+                      >
+                        {isCancellingWithOptions && <Loader2 className="h-4 w-4 animate-spin" />}
+                        {isCancellingWithOptions ? 'Submitting Request...' : 'Submit Cancellation Request'}
+                      </button>
+                    </div>
                   </div>
                 )}
-              </motion.div>
+              </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -3336,7 +3805,7 @@ export function DashboardPage() {
               </div>
 
               <h3 className="text-white text-xl font-bold mb-2">Hold Build</h3>
-              
+
               {holdProjectTarget?.name && (
                 <p className="text-sm text-[var(--text-muted)] mb-5">
                   Pause manufacturing for <span className="text-white font-semibold">{holdProjectTarget.name}</span>
@@ -3362,11 +3831,10 @@ export function DashboardPage() {
                     ].map((opt) => (
                       <label
                         key={opt.value}
-                        className={`flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3 transition-colors ${
-                          holdOption === opt.value
+                        className={`flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3 transition-colors ${holdOption === opt.value
                             ? 'border-amber-500/50 bg-amber-500/10'
                             : 'border-[var(--border)] hover:border-amber-500/30'
-                        }`}
+                          }`}
                       >
                         <input
                           type="radio"
@@ -3395,11 +3863,10 @@ export function DashboardPage() {
                       return (
                         <label
                           key={reason}
-                          className={`flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3 transition-colors ${
-                            isSelected
+                          className={`flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3 transition-colors ${isSelected
                               ? 'border-amber-500/50 bg-amber-500/10'
                               : 'border-[var(--border)] hover:border-amber-500/30'
-                          }`}
+                            }`}
                         >
                           <input
                             type="radio"
@@ -3490,7 +3957,7 @@ export function DashboardPage() {
               </div>
 
               <h3 className="text-white text-xl font-bold mb-2">Continue Build</h3>
-              
+
               {resumeProjectTarget?.name && (
                 <p className="text-sm text-[var(--text-muted)] mb-1">
                   Resume manufacturing for <span className="text-white font-semibold">{resumeProjectTarget.name}</span>
@@ -3563,11 +4030,10 @@ export function DashboardPage() {
                   return (
                     <label
                       key={reason}
-                      className={`flex cursor-pointer items-center gap-3 rounded-xl border px-4 py-3 transition-colors ${
-                        isSelected
+                      className={`flex cursor-pointer items-center gap-3 rounded-xl border px-4 py-3 transition-colors ${isSelected
                           ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)]/10'
                           : 'border-[var(--border)] hover:border-[var(--gold-primary)]/40'
-                      }`}
+                        }`}
                     >
                       <input
                         type="radio"
@@ -3666,11 +4132,10 @@ export function DashboardPage() {
                     return (
                       <label
                         key={reason}
-                        className={`flex cursor-pointer items-center gap-3 rounded-xl border px-4 py-3 transition-colors ${
-                          isSelected
+                        className={`flex cursor-pointer items-center gap-3 rounded-xl border px-4 py-3 transition-colors ${isSelected
                             ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)]/10'
                             : 'border-[var(--border)] hover:border-[var(--gold-primary)]/40'
-                        }`}
+                          }`}
                       >
                         <input
                           type="radio"
@@ -3885,11 +4350,10 @@ export function DashboardPage() {
                           key={item.id}
                           type="button"
                           onClick={() => setActiveSection(item.id)}
-                          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 ${
-                            active
+                          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 ${active
                               ? 'bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-medium border-2 border-[var(--gold-primary)] shadow-[0_0_15px_rgba(212,175,55,0.3)]'
                               : 'text-[var(--text-muted)] hover:bg-[var(--bg-primary)] hover:text-white border-2 border-transparent'
-                          }`}
+                            }`}
                         >
                           <Icon className="w-4 h-4" />
                           <span className="flex-1 text-left">{item.label}</span>
@@ -3915,11 +4379,10 @@ export function DashboardPage() {
                           key={item.id}
                           type="button"
                           onClick={() => setActiveSection(item.id)}
-                          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 ${
-                            active
+                          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 ${active
                               ? 'bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-medium border-2 border-[var(--gold-primary)] shadow-[0_0_15px_rgba(212,175,55,0.3)]'
                               : 'text-[var(--text-muted)] hover:bg-[var(--bg-primary)] hover:text-white border-2 border-transparent'
-                          }`}
+                            }`}
                         >
                           <Icon className="w-4 h-4" />
                           <span className="flex-1 text-left">{item.label}</span>
@@ -3954,11 +4417,10 @@ export function DashboardPage() {
                         key={`mobile-${item.id}`}
                         type="button"
                         onClick={() => setActiveSection(item.id)}
-                        className={`inline-flex shrink-0 items-center gap-2 rounded-full border px-3 py-2 text-xs font-medium transition-colors ${
-                          active
+                        className={`inline-flex shrink-0 items-center gap-2 rounded-full border px-3 py-2 text-xs font-medium transition-colors ${active
                             ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)] text-[var(--text-dark)]'
                             : 'border-[var(--border)] bg-[var(--bg-primary)] text-[var(--text-muted)]'
-                        }`}
+                          }`}
                       >
                         <Icon className="h-3.5 w-3.5" />
                         <span>{item.label}</span>
@@ -4091,17 +4553,17 @@ export function DashboardPage() {
           <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6 w-full max-w-md relative">
             <h2 className="text-xl font-bold text-white mb-2">Rate Product</h2>
             <p className="text-sm text-[var(--text-muted)] mb-6">How was your experience with this order?</p>
-            
+
             <div className="flex justify-center gap-2 mb-6">
               {[1, 2, 3, 4, 5].map((star) => (
-                <button 
-                  key={star} 
+                <button
+                  key={star}
                   type="button"
                   onClick={() => setRating(star)}
                   className="p-1 transition-transform hover:scale-110"
                 >
-                  <Star 
-                    className={`w-8 h-8 ${star <= rating ? 'fill-[var(--gold-primary)] text-[var(--gold-primary)]' : 'text-[var(--border)]'}`} 
+                  <Star
+                    className={`w-8 h-8 ${star <= rating ? 'fill-[var(--gold-primary)] text-[var(--gold-primary)]' : 'text-[var(--border)]'}`}
                   />
                 </button>
               ))}
@@ -4116,26 +4578,25 @@ export function DashboardPage() {
             />
 
             <div className="flex gap-3">
-              <button 
-                type="button" 
+              <button
+                type="button"
                 onClick={() => {
                   setRatingModalOrderId(null);
                   setRating(0);
                   setRatingText('');
-                }} 
+                }}
                 className="flex-1 py-2.5 rounded-xl border border-[var(--border)] text-white hover:bg-white/5 transition-colors font-medium text-sm"
               >
                 Cancel
               </button>
-              <button 
-                type="button" 
+              <button
+                type="button"
                 onClick={submitRating}
                 disabled={rating === 0}
-                className={`flex-1 py-2.5 rounded-xl text-[var(--text-dark)] transition-all font-bold text-sm ${
-                  rating === 0 
-                    ? 'bg-[var(--surface-light)] text-[var(--text-muted)] cursor-not-allowed' 
+                className={`flex-1 py-2.5 rounded-xl text-[var(--text-dark)] transition-all font-bold text-sm ${rating === 0
+                    ? 'bg-[var(--surface-light)] text-[var(--text-muted)] cursor-not-allowed'
                     : 'bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] hover:shadow-[0_0_15px_rgba(212,175,55,0.4)]'
-                }`}
+                  }`}
               >
                 Submit Rating
               </button>
@@ -4175,15 +4636,15 @@ export function DashboardPage() {
             </h2>
             <p className="text-sm text-[var(--text-muted)] mb-6">Are you sure you want to permanently delete this build? This action cannot be undone.</p>
             <div className="flex gap-3">
-              <button 
-                type="button" 
-                onClick={() => setBuildToDelete(null)} 
+              <button
+                type="button"
+                onClick={() => setBuildToDelete(null)}
                 className="flex-1 py-2.5 rounded-xl border border-[var(--border)] text-white hover:bg-white/5 transition-colors font-medium text-sm"
               >
                 Cancel
               </button>
-              <button 
-                type="button" 
+              <button
+                type="button"
                 onClick={confirmDelete}
                 className="flex-1 py-2.5 rounded-xl bg-red-500 text-white hover:bg-red-600 transition-colors font-bold text-sm shadow-[0_0_10px_rgba(239,68,68,0.3)]"
               >
@@ -4210,53 +4671,53 @@ export function DashboardPage() {
                 <span>This build is already part of an active order, so its specs and checkout are now locked. You can still review the summary and track project progress here.</span>
               </div>
             )}
-            
+
             <div className="bg-[var(--bg-primary)] rounded-xl p-5 border border-[var(--border)] mb-6">
               <h3 className="text-lg font-bold text-white mb-4 border-b border-[var(--border)] pb-2 flex justify-between">
                 <span>Configuration Breakdown</span>
                 <span className="text-[var(--gold-primary)]">₱{(viewingBuild.price || 0).toLocaleString('en-PH')}</span>
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-4">
-                 {viewingBuild.pricingBreakdown ? Object.entries(viewingBuild.pricingBreakdown).map(([key, price]) => {
-                   const label = key === 'base' ? 'Base Model' : viewingBuild.summary?.[key] || viewingBuild.config?.[key];
-                   if (!label && price === 0) return null;
-                   return (
-                     <div key={key} className="flex justify-between items-center text-sm pb-2 border-b border-[var(--border)]">
-                       <div className="truncate pr-4">
-                           <span className="block text-xs text-[var(--text-muted)] capitalize mb-0.5">{key.replace(/([A-Z])/g, ' ').trim()}</span>
-                           <span className="block font-medium text-white truncate">{label}</span>
-                       </div>
-                       {price > 0 && (
-                          <span className="text-gray-300 shrink-0 font-mono text-right">₱{price.toLocaleString('en-PH')}</span>
-                       )}
-                     </div>
-                   )
-                 }) : (
-                   <>
-                     <div className="flex justify-between items-center text-sm pb-2 border-b border-[var(--border)]">
-                       <div className="truncate pr-4">
-                           <span className="block text-xs text-[var(--text-muted)] capitalize mb-0.5">Base Model</span>
-                           <span className="block font-medium text-white truncate">Standard Build</span>
-                       </div>
-                       <span className="text-gray-300 shrink-0 font-mono text-right">₱{BASE_PRICE.toLocaleString('en-PH')}</span>
-                     </div>
-                     {Object.entries(viewingBuild.config || {}).map(([key, val]) => {
-                       if (!val || typeof val !== 'string') return null;
-                       const { price, label } = getOldConfigData(key, val, viewingBuild.config?.body);
-                       return (
-                         <div key={key} className="flex justify-between items-center text-sm pb-2 border-b border-[var(--border)]">
-                           <div className="truncate pr-4">
-                               <span className="block text-xs text-[var(--text-muted)] capitalize mb-0.5">{key.replace(/([A-Z])/g, ' ').trim()}</span>
-                               <span className="block font-medium text-white truncate">{label}</span>
-                           </div>
-                           {price > 0 && (
-                             <span className="text-gray-300 shrink-0 font-mono text-right">₱{price.toLocaleString('en-PH')}</span>
-                           )}
-                         </div>
-                       )
-                     })}
-                   </>
-                 )}
+                {viewingBuild.pricingBreakdown ? Object.entries(viewingBuild.pricingBreakdown).map(([key, price]) => {
+                  const label = key === 'base' ? 'Base Model' : viewingBuild.summary?.[key] || viewingBuild.config?.[key];
+                  if (!label && price === 0) return null;
+                  return (
+                    <div key={key} className="flex justify-between items-center text-sm pb-2 border-b border-[var(--border)]">
+                      <div className="truncate pr-4">
+                        <span className="block text-xs text-[var(--text-muted)] capitalize mb-0.5">{key.replace(/([A-Z])/g, ' ').trim()}</span>
+                        <span className="block font-medium text-white truncate">{label}</span>
+                      </div>
+                      {price > 0 && (
+                        <span className="text-gray-300 shrink-0 font-mono text-right">₱{price.toLocaleString('en-PH')}</span>
+                      )}
+                    </div>
+                  )
+                }) : (
+                  <>
+                    <div className="flex justify-between items-center text-sm pb-2 border-b border-[var(--border)]">
+                      <div className="truncate pr-4">
+                        <span className="block text-xs text-[var(--text-muted)] capitalize mb-0.5">Base Model</span>
+                        <span className="block font-medium text-white truncate">Standard Build</span>
+                      </div>
+                      <span className="text-gray-300 shrink-0 font-mono text-right">₱{BASE_PRICE.toLocaleString('en-PH')}</span>
+                    </div>
+                    {Object.entries(viewingBuild.config || {}).map(([key, val]) => {
+                      if (!val || typeof val !== 'string') return null;
+                      const { price, label } = getOldConfigData(key, val, viewingBuild.config?.body);
+                      return (
+                        <div key={key} className="flex justify-between items-center text-sm pb-2 border-b border-[var(--border)]">
+                          <div className="truncate pr-4">
+                            <span className="block text-xs text-[var(--text-muted)] capitalize mb-0.5">{key.replace(/([A-Z])/g, ' ').trim()}</span>
+                            <span className="block font-medium text-white truncate">{label}</span>
+                          </div>
+                          {price > 0 && (
+                            <span className="text-gray-300 shrink-0 font-mono text-right">₱{price.toLocaleString('en-PH')}</span>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </>
+                )}
               </div>
             </div>
 
@@ -4289,20 +4750,20 @@ export function DashboardPage() {
             )}
 
             <div className="flex justify-between items-center border-t border-[var(--border)] pt-6 mt-4">
-               <span className="text-lg text-[var(--text-muted)]">Grand Total</span>
-               <span className="text-3xl font-bold text-[var(--gold-primary)]">
-                 ₱{(Number(viewingBuild.price) + (viewingBuild.additionalParts || []).reduce((sum, p) => sum + (p.price * p.quantity), 0)).toLocaleString('en-PH')}
+              <span className="text-lg text-[var(--text-muted)]">Grand Total</span>
+              <span className="text-3xl font-bold text-[var(--gold-primary)]">
+                ₱{(Number(viewingBuild.price) + (viewingBuild.additionalParts || []).reduce((sum, p) => sum + (p.price * p.quantity), 0)).toLocaleString('en-PH')}
               </span>
             </div>
-            
+
             {getBuildLockState(viewingBuild).isLocked ? (
               getBuildLockState(viewingBuild).project ? (
                 <button
                   type="button"
                   onClick={() => {
-                      const linkedProject = getBuildLockState(viewingBuild).project
-                      setViewingBuild(null);
-                      setActiveProjectView(linkedProject);
+                    const linkedProject = getBuildLockState(viewingBuild).project
+                    setViewingBuild(null);
+                    setActiveProjectView(linkedProject);
                   }}
                   className="w-full mt-8 py-4 px-4 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-bold text-lg shadow-[0_0_10px_rgba(212,175,55,0.3)] hover:shadow-[0_0_20px_rgba(212,175,55,0.5)] transition-all flex items-center justify-center gap-3"
                 >
@@ -4323,8 +4784,8 @@ export function DashboardPage() {
               <button
                 type="button"
                 onClick={() => {
-                    setViewingBuild(null);
-                    navigate('/checkout', { state: { checkoutItem: viewingBuild, isCustomBuild: true } });
+                  setViewingBuild(null);
+                  navigate('/checkout', { state: { checkoutItem: viewingBuild, isCustomBuild: true } });
                 }}
                 className="w-full mt-8 py-4 px-4 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-bold text-lg shadow-[0_0_10px_rgba(212,175,55,0.3)] hover:shadow-[0_0_20px_rgba(212,175,55,0.5)] transition-all flex items-center justify-center gap-3"
               >
