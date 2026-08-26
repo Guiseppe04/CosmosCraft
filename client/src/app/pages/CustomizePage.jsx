@@ -805,6 +805,17 @@ export function CustomizePage() {
     }
   }, [toastMessage])
 
+  useEffect(() => {
+    if (config.finishColor === 'rainbow' && config.topCoat === 'satinMatte') {
+      setToastMessage('Incompatible Option: Cannot pair rainbow sparkle with satin matte top coat.')
+      updateConfig({ topCoat: 'clearGloss' })
+    }
+    if (config.neckRearFinish === 'clearGloss' && config.topCoat === 'satinMatte') {
+      setToastMessage('Incompatible Option: Cannot pair clear gloss neck finish with satin matte top coat.')
+      updateConfig({ neckRearFinish: 'tungOil' })
+    }
+  }, [config.finishColor, config.topCoat, config.neckRearFinish, updateConfig])
+
   const saveBuild = async ({ shouldNavigate = true, continueBlockedNavigation = false } = {}) => {
     if (isLockedCustomization) {
       setToastMessage('This build is already in an active order and can no longer be edited.')
@@ -1406,7 +1417,7 @@ export function CustomizePage() {
                   <div>
                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Neck Wood</h3>
                     <div className="grid grid-cols-2 gap-2">
-                      {options.neckOptions?.map((opt) => (
+                      {options.neckOptions?.filter(opt => opt.construction === config.neckConstruction).map((opt) => (
                         <OptionButton
                           key={opt.value}
                           option={opt}
@@ -1447,20 +1458,26 @@ export function CustomizePage() {
                     </div>
                   </div>
                   
-                  {/* Neck Rear Finish */}
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Neck Rear Finish</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.neckRearFinishOptions?.map((opt) => (
-                        <OptionButton
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.neckRearFinish === opt.value}
-                          onClick={() => updateConfig({ neckRearFinish: opt.value })}
-                        />
-                      ))}
-                    </div>
-                  </div>
+                   {/* Neck Rear Finish */}
+                   <div>
+                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Neck Rear Finish</h3>
+                     <div className="grid grid-cols-2 gap-2">
+                       {options.neckRearFinishOptions?.map((opt) => (
+                         <OptionButton
+                           key={opt.value}
+                           option={opt}
+                           isSelected={config.neckRearFinish === opt.value}
+                           onClick={() => updateConfig({ neckRearFinish: opt.value })}
+                         />
+                       ))}
+                     </div>
+                     {config.neckRearFinish && (() => {
+                       const opt = options.neckRearFinishOptions?.find(o => o.value === config.neckRearFinish)
+                       return opt?.disclaimer ? (
+                         <p className="mt-2 text-[10px] leading-tight text-amber-300/80">{opt.disclaimer}</p>
+                       ) : null
+                     })()}
+                   </div>
                   
                   {/* Headstock Shape */}
                   <div>

@@ -13,7 +13,7 @@
  * When VITE_CLOUDINARY_CLOUD_NAME is set, assets are served from Cloudinary.
  * Otherwise, assets are served from the local /builder/ directory.
  */
-
+import { NECK_REAR_FINISH_OPTIONS } from './guitarBuilderData.js'
 const CLOUD_NAME = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_CLOUDINARY_CLOUD_NAME) 
   ? import.meta.env.VITE_CLOUDINARY_CLOUD_NAME 
   : ''
@@ -323,7 +323,9 @@ export function resolveInlay(category, model, inlayKey, materialKey = null) {
  * Resolve a neck rear finish overlay
  */
 export function resolveNeckRearFinishAsset(category, model, finishKey) {
-  return resolveModelAsset(category, model, 'back', 'shadows_highlights', `${finishKey}.png`)
+  const option = NECK_REAR_FINISH_OPTIONS[finishKey]
+  const filename = option?.fileKey ? `${option.fileKey}.png` : `${finishKey}.png`
+  return resolveModelAsset(category, model, 'back', 'shadows_highlights', filename)
 }
 
 /**
@@ -419,11 +421,11 @@ export function resolveTunerButtonStyle(category, model, headstockShape, styleKe
 
 const FRONT_TO_REAR_HEADSTOCK_MAP = {
   h33:  'headstock2',
-  h33r: 'headstock4',
+  h33r: 'headstock3',
   gt6:  'headstock14',
   gt6r: 'headstock13',
   '6inr': 'headstock5',
-  '624': 'headstock3',
+  '624': 'headstock4',
   '6in': 'headstock6',
   '6kr': '6kr',
 }
@@ -441,7 +443,7 @@ export function resolveRearHeadstockMask(category, model, frontHeadstockShape) {
 }
 
 export function resolveRearBodyMask(category, model) {
-  return resolveModelAsset(category, model, 'back', 'masks', 'bodymask.png')
+  return resolveModelAsset(category, model, 'back', 'masks', 'noneckbodymask.png')
 }
 
 /**
@@ -572,7 +574,6 @@ export function resolveOptionPreview(category, model, optionKey, value) {
     fingerboardWood: () => resolveFingerboardWoodAsset(category, model, value),
     fretboard: () => resolveFingerboardWoodAsset(category, model, value),
     neckWood: () => resolveNeckWoodAsset(category, model, value),
-    neck: () => resolveNeckWoodAsset(category, model, value),
     headstockWood: () => resolveHeadstockWoodAsset(category, model, value),
     topWood: () => resolveTopWoodAsset(category, model, value),
     bridge: () => getButtonPreview(category, model, 'bridge', value),

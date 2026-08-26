@@ -52,7 +52,7 @@ export const woodAsset = path => {
 export const DEFAULT_CONFIG = {
   guitarType: 'electric',
   body: 'dc',
-  bodyWood: 'rosewood',
+  bodyWood: 'mah',
   bodyFinish: 'none',
   neck: 'maple',
   fretboard: 'rosewood',
@@ -79,7 +79,7 @@ export const DEFAULT_CONFIG = {
   inlayMaterial: 'pearl',
   inlay: 'idwhite-pearl',
   frets: 'stainlessRegular',
-  neckRearFinish: 'none',
+  neckRearFinish: 'tungOil',
   headstockShape: 'gt6',
   trussRodCover: 'black',
   electronicsType: 'passive',
@@ -163,34 +163,58 @@ export const BODY_OPTIONS = {
 }
 
 export const BODY_WOOD_OPTIONS = {
-  maple: {
-    label: 'Maple',
-    note: 'Bright even grain',
-    texture: woodAsset('maple.jpg'),
+  ald: {
+    label: 'Alder',
+    note: 'Classic alder body wood',
+    texture: asset('all-models/woods-colors/body-woods/ald.png'),
     price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
-  rosewood: {
-    label: 'Rosewood',
-    note: 'Warm dark grain',
-    texture: woodAsset('rosewood.jpg'),
+  ash2: {
+    label: 'Ash',
+    note: 'Warm resonant ash grain',
+    texture: asset('all-models/woods-colors/body-woods/ash2.png'),
     price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
-  ebony: {
-    label: 'Ebony',
-    note: 'Deep dark grain',
-    texture: woodAsset('ebony.jpg'),
+  gmelina: {
+    label: 'Gmelina',
+    note: 'Tropical gmelina wood',
+    texture: asset('all-models/woods-colors/body-woods/gmelina-wood.jpg'),
     price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
-  pauFerro: {
-    label: 'Pau Ferro',
-    note: 'Balanced brown grain',
-    texture: woodAsset('pau-ferro.jpg'),
+  jackfruit: {
+    label: 'Jackfruit Wood',
+    note: 'Exotic jackfruit grain',
+    texture: asset('all-models/woods-colors/body-woods/jackfruit-wood.jpg'),
     price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
-  indianLaurel: {
-    label: 'Indian Laurel',
-    note: 'Subtle mid-brown grain',
-    texture: woodAsset('indian-laurel.jpg'),
+  lmb: {
+    label: 'Laminated',
+    note: 'Laminated wood body',
+    texture: asset('all-models/woods-colors/body-woods/lmb.png'),
+    price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+  mah: {
+    label: 'Mahogany',
+    note: 'Rich warm mahogany',
+    texture: asset('all-models/woods-colors/body-woods/mah.png'),
+    price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+  roastedAsh: {
+    label: 'Roasted Ash',
+    note: 'Dark roasted ash finish',
+    texture: asset('all-models/woods-colors/body-woods/roasted-ash.png'),
+    price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+  summerAsh: {
+    label: 'Summer Ash',
+    note: 'Light summer ash grain',
+    texture: asset('all-models/woods-colors/body-woods/summer-ash1.png'),
+    price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+  wal: {
+    label: 'Walnut',
+    note: 'Deep dark walnut grain',
+    texture: asset('all-models/woods-colors/body-woods/wal.png'),
     price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
 }
@@ -246,30 +270,19 @@ export const BODY_FINISH_OPTIONS = {
 }
 
 export const NECK_OPTIONS = {
-  maple: {
-    label: 'Maple',
-    note: 'Bright neck feel',
-    src: asset('all-models/woods-colors/neck-woods/plain-maple.png'),
-    price: 0,
-    specs: { size: '', dimensions: '', material: '', notes: '' },
-    filter: 'none',
-  },
-  roasted: {
-    label: 'Roasted',
-    note: 'Dark roasted finish',
-    src: asset('all-models/woods-colors/neck-woods/plain-maple.png'),
-    price: 75,
-    specs: { size: '', dimensions: '', material: '', notes: '' },
-    filter: 'sepia(0.65) saturate(1.15) brightness(0.82) contrast(1.05)',
-  },
-  walnut: {
-    label: 'Walnut',
-    note: 'Warm darker neck',
-    src: asset('all-models/woods-colors/neck-woods/plain-maple.png'),
-    price: 95,
-    specs: { size: '', dimensions: '', material: '', notes: '' },
-    filter: 'sepia(0.9) saturate(1.15) brightness(0.55) contrast(1.08)',
-  },
+  'maple': { label: 'Maple', note: 'Bright neck feel', src: asset('all-models/woods-colors/neck-woods/plain-maple.png'), price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }, filter: 'none', construction: '1piece' },
+  'roasted': { label: 'Roasted', note: 'Dark roasted finish', src: asset('all-models/woods-colors/neck-woods/rfmn.png'), price: 75, specs: { size: '', dimensions: '', material: '', notes: '' }, filter: 'none', construction: '1piece' },
+  'walnut': { label: 'Walnut', note: 'Warm darker neck', src: asset('all-models/woods-colors/neck-woods/waln.png'), price: 95, specs: { size: '', dimensions: '', material: '', notes: '' }, filter: 'none', construction: '1piece' },
+  '3mm': { label: '3-Piece Maple', note: 'Stable 3-piece maple neck', src: asset('all-models/woods-colors/neck-woods/3mm.png'), price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }, filter: 'none', construction: '3piece' },
+  '3mw': { label: 'Maple w/ 1 Walnut Stripe', note: '3-piece maple with walnut stripe', src: asset('all-models/woods-colors/neck-woods/3mw.png'), price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }, filter: 'none', construction: '3piece' },
+  '3mp': { label: 'Maple w/ 1 Purple Heart Stripe', note: '3-piece maple with purple heart stripe', src: asset('all-models/woods-colors/neck-woods/3mp.png'), price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }, filter: 'none', construction: '3piece' },
+  '3wp': { label: 'Walnut w/ 1 Purple Heart Stripe', note: '3-piece walnut with purple heart stripe', src: asset('all-models/woods-colors/neck-woods/3wp.png'), price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }, filter: 'none', construction: '3piece' },
+  '5lm': { label: 'Black Limba w/ 2 Maple Stripes', note: '5-piece limba with maple stripes', src: asset('all-models/woods-colors/neck-woods/5lm.png'), price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }, filter: 'none', construction: '5piece' },
+  '5ml': { label: 'Maple w/ 2 Black Limba Stripes', note: '5-piece maple with limba stripes', src: asset('all-models/woods-colors/neck-woods/5ml.png'), price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }, filter: 'none', construction: '5piece' },
+  '5mp': { label: 'Maple w/ 2 Purple Heart Stripes', note: '5-piece maple with purple heart stripes', src: asset('all-models/woods-colors/neck-woods/5mp.png'), price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }, filter: 'none', construction: '5piece' },
+  '5mw': { label: 'Maple w/ 2 Walnut Stripes', note: '5-piece maple with walnut stripes', src: asset('all-models/woods-colors/neck-woods/5mw.png'), price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }, filter: 'none', construction: '5piece' },
+  '5wm': { label: 'Walnut w/ 2 Maple Stripes', note: '5-piece walnut with maple stripes', src: asset('all-models/woods-colors/neck-woods/5wm.png'), price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }, filter: 'none', construction: '5piece' },
+  '5wp': { label: 'Walnut w/ 2 Purple Heart Stripes', note: '5-piece walnut with purple heart stripes', src: asset('all-models/woods-colors/neck-woods/5wp.png'), price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }, filter: 'none', construction: '5piece' },
 }
 
 export const FRETBOARD_OPTIONS = {
@@ -398,22 +411,16 @@ export const NECK_NUT = {
 }
 
 export const HEADSTOCK_WOOD_OPTIONS = {
-  rosewood: {
-    label: 'Rosewood',
-    note: 'Warm headstock wood',
-    texture: asset('all-models/woods-colors/headstock-woods/rosewood.png'),
-    price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
-  },
-  ebony: {
-    label: 'Ebony',
-    note: 'Dark premium wood',
-    texture: asset('all-models/woods-colors/headstock-woods/ebony.png'),
-    price: 20, specs: { size: '', dimensions: '', material: '', notes: '' }
-  },
   'plain-maple': {
     label: 'Plain Maple',
     note: 'Light plain maple headstock',
     texture: asset('all-models/woods-colors/headstock-woods/plain-maple.png'),
+    price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+  ash: {
+    label: 'Ash',
+    note: 'Warm ash headstock',
+    texture: asset('all-models/woods-colors/headstock-woods/ash.png'),
     price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
 }
@@ -1074,9 +1081,15 @@ export const BEVEL_OPTIONS = {
 
 export const TOP_WOOD_OPTIONS = {
   none: { label: 'None', note: 'No top wood', price: 0, specs: specs() },
-  maple: { label: 'Maple Top', note: 'Bright top wood', texture: null, price: 0, specs: specs() },
-  walnut: { label: 'Walnut Top', note: 'Warm top wood', texture: null, price: 0, specs: specs() },
-  mahogany: { label: 'Mahogany Top', note: 'Classic top wood', texture: null, price: 0, specs: specs() },
+  'antique-ash': { label: 'Antique Ash', note: 'Vintage ash top', texture: asset('all-models/woods-colors/top-woods/antique-ash.png'), price: 0, specs: specs() },
+  'blacked-out-ash': { label: 'Blacked Out Ash', note: 'Dark ash top', texture: asset('all-models/woods-colors/top-woods/blacked-out-ash.png'), price: 0, specs: specs() },
+  kalantas: { label: 'Kalantas', note: 'Exotic kalantas top', texture: asset('all-models/woods-colors/top-woods/kalantas-wood.png'), price: 0, specs: specs() },
+  kamagong: { label: 'Kamagong', note: 'Dense kamagong top', texture: asset('all-models/woods-colors/top-woods/kamagong-wood.png'), price: 0, specs: specs() },
+  mango: { label: 'Mango Wood', note: 'Tropical mango top', texture: asset('all-models/woods-colors/top-woods/mango-wood.png'), price: 0, specs: specs() },
+  narra: { label: 'Narra', note: 'Premium narra top', texture: asset('all-models/woods-colors/top-woods/narra-wood.png'), price: 0, specs: specs() },
+  'ph-mahogany': { label: 'Philippine Mahogany', note: 'Classic mahogany top', texture: asset('all-models/woods-colors/top-woods/ph-mahogany.jpg'), price: 0, specs: specs() },
+  'swamp-ash': { label: 'Swamp Ash', note: 'Light swamp ash top', texture: asset('all-models/woods-colors/top-woods/swamp-ash.png'), price: 0, specs: specs() },
+  zebrawood: { label: 'Zebrawood', note: 'Exotic striped zebrawood top', texture: asset('all-models/woods-colors/top-woods/zebrawood.png'), price: 0, specs: specs() },
 }
 
 export const FINISH_TYPE_OPTIONS = {
@@ -1086,17 +1099,19 @@ export const FINISH_TYPE_OPTIONS = {
 }
 
 export const TOP_COAT_OPTIONS = {
-  clearGloss: { label: 'Clear Gloss', note: 'High-gloss clear coat', price: 0, specs: specs() },
-  tungOil: { label: 'Tung Oil', note: 'Natural tung oil finish', price: 0, specs: specs() },
-  satinMatte: { label: 'Satin Matte', note: 'Low-sheen satin', price: 0, specs: specs() },
+  clearGloss: { label: 'Clear Gloss', note: 'High-gloss clear coat', price: 0, specs: specs(), fileKey: 'gloss' },
+  tungOil: { label: 'Tung Oil', note: 'Natural tung oil finish', price: 0, specs: specs(), fileKey: 'matte-tung-oil' },
+  satinMatte: { label: 'Satin Matte', note: 'Low-sheen satin', price: 0, specs: specs(), fileKey: 'gloss-matte' },
 }
 
 export const BURST_FINISH_OPTIONS = {
   none: { label: 'None', note: 'No burst', price: 0, specs: specs() },
-  blackBurst: { label: 'Black Burst Edges', note: 'Black burst edges', texture: null, price: 45, specs: specs() },
-  whiteBurst: { label: 'White Burst Edges', note: 'White burst edges', texture: null, price: 45, specs: specs() },
-  translucentBlackBurst: { label: 'Translucent Black Burst Edges', note: 'Translucent black burst', texture: null, price: 50, specs: specs() },
-  reverseTranslucentBlackBurst: { label: 'Reverse Translucent Black Burst', note: 'Reverse translucent black burst', texture: null, price: 55, specs: specs() },
+  blackBurst: { label: 'Black Burst Edges', note: 'Black burst edges', texture: asset('dc/bodies/front/masks/bvdmask.png'), color: '#000000', price: 45, specs: specs() },
+  whiteBurst: { label: 'White Burst Edges', note: 'White burst edges', texture: asset('dc/bodies/front/masks/bvdmask.png'), color: '#ffffff', price: 45, specs: specs() },
+  translucentBlackBurst: { label: 'Translucent Black Burst Edges', note: 'Translucent black burst', texture: null, color: '#1a1a1a', price: 50, specs: specs() },
+  reverseTranslucentBlackBurst: { label: 'Reverse Translucent Black Burst', note: 'Reverse translucent black burst', texture: null, color: '#1a1a1a', price: 55, specs: specs() },
+  blackBackSides: { label: 'Black Back & Sides', note: 'Black rear finish', texture: null, color: '#000000', price: 55, specs: specs(), rearOnly: true },
+  blackSidesBlackBurstBack: { label: 'Black Sides w/ Black Burst Back (Clear Center)', note: 'Black sides with black burst back', texture: asset('dc/back/masks/burstmask.png'), color: '#000000', price: 65, specs: specs(), rearOnly: true },
 }
 
 // --- Neck ---
@@ -1127,8 +1142,11 @@ export const FRET_OPTIONS = {
 }
 
 export const NECK_REAR_FINISH_OPTIONS = {
-  none: { label: 'None', note: 'Natural neck rear', price: 0, specs: specs() },
-  tungOilNeck: { label: 'Tung Oil Neck', note: 'Tung oil neck finish', price: 0, specs: specs() },
+  tungOil: { label: 'Tung Oil Neck', note: 'Tung oil neck finish', price: 0, specs: specs(), fileKey: 'matte-tung-oil' },
+  paintedGloss: { label: 'Painted Gloss Neck Finish (Match Body Color)', note: 'Painted gloss neck finish matching body color', price: 0, specs: specs(), fileKey: 'gloss', requiresColor: true, disclaimer: 'Adding a satin or gloss neck finish will add ~0.040" to the neck profile. Neck thickness listed in model specs is based on tung oil finishes.' },
+  clearGloss: { label: 'Clear Gloss Neck Finish', note: 'Clear gloss neck finish', price: 0, specs: specs(), fileKey: 'gloss', clear: true, incompatibleWith: ['satinMatte'] },
+  paintedSatin: { label: 'Painted Satin Neck Finish (Match Body Color)', note: 'Painted satin neck finish matching body color', price: 0, specs: specs(), fileKey: 'matte', requiresColor: true, disclaimer: 'Adding a satin or gloss neck finish will add ~0.040" to the neck profile. Neck thickness listed in model specs is based on tung oil finishes.' },
+  clearSatin: { label: 'Clear Satin Neck Finish', note: 'Clear satin neck finish', price: 0, specs: specs(), fileKey: 'matte', clear: true, disclaimer: 'Adding a satin or gloss neck finish will add ~0.040" to the neck profile. Neck thickness listed in model specs is based on tung oil finishes.' },
 }
 
 export const HEADSTOCK_SHAPE_OPTIONS = {
