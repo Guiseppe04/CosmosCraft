@@ -161,7 +161,26 @@ export function resolveFinishAsset(category, model, finishType, finishKey) {
   const folder = folderMap[finishType] || finishType
   return resolveSharedAsset(category, model, 'woods-colors', 'colors', folder, `${finishKey}.png`)
 }
-
+export function resolveBurstMask(category, model, burstKey) {
+  const burstMaskMap = {
+    delos: {
+      blackBurst: 'delos/bodies/front/masks/black-burst-mask.png',
+      whiteBurst: 'delos/bodies/front/masks/burstmask.png',
+    },
+    dc: {
+      blackBurst: 'dc/bodies/front/masks/bvdmask.png',
+      whiteBurst: 'dc/bodies/front/masks/bvdmask.png',
+    },
+  }
+  
+  const modelMap = burstMaskMap[model]
+  if (modelMap && modelMap[burstKey]) {
+    return `/${category}_assets/${model}_assets/${modelMap[burstKey]}`
+  }
+  
+  // Fallback to default resolution
+  return resolveModelAsset(category, model, 'bodies', 'front', 'masks', `${burstKey === 'blackBurst' || burstKey === 'whiteBurst' ? 'bvdmask' : 'burstmask'}.png`)
+}
 /**
  * Resolve a body mask path
  */
@@ -194,8 +213,39 @@ export function resolveGloss(category, model) {
  * 
  * Path: {category}_assets/{model}_assets/models/{model}/back/shadows_highlights/{topCoatKey}.png
  */
-export function resolveTopCoatAsset(category, model, topCoatKey) {
-  return resolveModelAsset(category, model, 'back', 'shadows_highlights', `${topCoatKey}.png`)
+export function resolveTopCoatAsset(category, model, topCoatKey, neckRearFinish) {
+  const neckFinish = neckRearFinish || 'tungOil'
+  
+  const pathMap = {
+    tungOil: {
+      clearGloss: 'gloss-tung-oil',
+      tungOil: 'op',
+      satinMatte: 'matte-tung-oil',
+    },
+    clearSatin: {
+      clearGloss: 'gloss-matte',
+      satinMatte: 'matte',
+    },
+    clearGloss: {
+      clearGloss: 'gloss',
+    },
+    paintedGloss: {
+      clearGloss: 'gloss',
+    },
+    paintedSatin: {
+      satinMatte: 'matte',
+    },
+    none: {
+      clearGloss: 'gloss',
+      tungOil: 'op',
+      satinMatte: 'gloss-matte',
+    }
+  }
+  
+  const finishMap = pathMap[neckFinish] || pathMap.none
+  const fileKey = finishMap[topCoatKey] || topCoatKey
+  
+  return resolveModelAsset(category, model, 'back', 'shadows_highlights', `${fileKey}.png`)
 }
 
 /**

@@ -87,15 +87,18 @@ function Tooltip({ content, children }) {
 }
 
 // Option button with premium styling
-function OptionButton({ option, isSelected, onClick }) {
+function OptionButton({ option, isSelected, onClick, disabled = false }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      disabled={disabled}
       className={`group relative w-full rounded-xl border p-3.5 text-left transition-all duration-200 ${
-        isSelected
-          ? 'border-[#d4af37] bg-gradient-to-br from-[#d4af37]/20 to-[#d4af37]/5 shadow-lg shadow-[#d4af37]/10'
-          : 'border-[var(--border)] bg-[var(--surface-elevated)] hover:border-[var(--gold-primary)] hover:bg-[var(--surface-dark)]'
+        disabled
+          ? 'opacity-50 cursor-not-allowed'
+          : isSelected
+            ? 'border-[#d4af37] bg-gradient-to-br from-[#d4af37]/20 to-[#d4af37]/5 shadow-lg shadow-[#d4af37]/10'
+            : 'border-[var(--border)] bg-[var(--surface-elevated)] hover:border-[var(--gold-primary)] hover:bg-[var(--surface-dark)]'
       }`}
     >
       {/* Selected indicator */}
@@ -814,6 +817,10 @@ export function CustomizePage() {
       setToastMessage('Incompatible Option: Cannot pair clear gloss neck finish with satin matte top coat.')
       updateConfig({ neckRearFinish: 'tungOil' })
     }
+    if (config.topCoat === 'tungOil' && config.neckRearFinish !== 'tungOil') {
+      setToastMessage('Disabled: You Choose Tung oil choose different topcoat to enable this.')
+      updateConfig({ neckRearFinish: 'tungOil' })
+    }
   }, [config.finishColor, config.topCoat, config.neckRearFinish, updateConfig])
 
   const saveBuild = async ({ shouldNavigate = true, continueBlockedNavigation = false } = {}) => {
@@ -1468,6 +1475,7 @@ export function CustomizePage() {
                            option={opt}
                            isSelected={config.neckRearFinish === opt.value}
                            onClick={() => updateConfig({ neckRearFinish: opt.value })}
+                           disabled={config.topCoat === 'tungOil'}
                          />
                        ))}
                      </div>

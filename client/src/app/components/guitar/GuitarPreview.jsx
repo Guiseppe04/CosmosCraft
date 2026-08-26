@@ -13,6 +13,7 @@ import {
   resolveBodyWoodAsset,
   resolveFinishAsset,
   resolveTopCoatAsset,
+  resolveBurstMask,
   resolveInlay,
   resolveNeckWoodAsset,
   resolveHeadstockWoodAsset,
@@ -225,8 +226,8 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
   // Resolve top coat overlay asset
   const topCoat = config.topCoat || 'clearGloss'
   const topCoatAsset = config.topCoat
-    ? resolveTopCoatAsset('electric', config.body || 'dc', config.topCoat)
-    : null
+  ? resolveTopCoatAsset('electric', config.body || 'dc', config.topCoat, config.neckRearFinish)
+      : null
 
   const pickupLayers = useMemo(() => {
     // Responsible for determining pickup positions and types based on configuration (HH / H-S-H / Active)
@@ -524,7 +525,7 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
           }
         : null,
       // Burst finish layer (front)
-      burstOption && burstOption.texture && (config.burstFinish === 'blackBurst' || config.burstFinish === 'whiteBurst')
+      burstOption && resolveBurstMask('electric', config.body || 'dc', config.burstFinish) && (config.burstFinish === 'blackBurst' || config.burstFinish === 'whiteBurst')
         ? {
             name: 'body-burst-finish',
             maskSrc: burstOption.texture,
@@ -655,10 +656,9 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
                maskSrc: burstOption.texture,
                style: {
                  backgroundColor: burstOption.color,
-                 opacity: 0.9,
                  mixBlendMode: 'multiply',
-                 zIndex: 4,
-                 transform: 'scaleX(-1)',
+                 zIndex: 2,
+
                },
              }
            : null,
@@ -669,9 +669,8 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
                maskSrc: burstOption.texture,
                style: {
                  backgroundColor: burstOption.color,
-                 opacity: 0.9,
                  mixBlendMode: 'multiply',
-                 zIndex: 4,
+                 zIndex: 2,
                  transform: 'scaleX(-1)',
                },
              }
@@ -683,7 +682,7 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
                  backgroundColor: burstOption.color,
                  opacity: 1,
                  mixBlendMode: 'normal',
-                 zIndex: 4,
+                 zIndex: 2,
                  transform: 'scaleX(-1)',
                },
              }
