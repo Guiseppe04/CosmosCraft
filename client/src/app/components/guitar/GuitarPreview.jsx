@@ -331,13 +331,6 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
           if (isActive) return null
           const pickupType = type === 'singlecoil' ? 'singlecoil' : 'humbucker'
           const coverType = pickupColorType === 'covers' ? 'covered' : 'open'
-          
-          console.log('POLE DEBUG:', {
-            poleColor,
-            slot,
-            pickupType,
-            coverType,
-          })
 
           const poleColorKey = poleColor 
 
@@ -446,10 +439,10 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
     const switchSrc = resolveVariant(bodyAssets.switch, colorKey)
     return [
       { name: 'switch', src: switchSrc, protectedLayer: true, style: { zIndex: 300 } },
-      { name: 'strap-button', src: strapFront, className: 'opacity-95', protectedLayer: true, style: { zIndex: 301 } },
-      { name: 'knobs-hardware-base', src: knobHardwareBase, className: 'opacity-95', protectedLayer: true, style: { zIndex: 302 } },
-      { name: 'knobs-style', src: knobStyleOverlay, className: 'opacity-95', protectedLayer: true, style: { zIndex: 303 } },
-      { name: 'bridge', src: bridgeSrc, className: 'opacity-95', protectedLayer: true, style: { zIndex: 304 } },
+      { name: 'strap-button', src: strapFront,  protectedLayer: true, style: { zIndex: 301 } },
+      { name: 'knobs-hardware-base', src: knobHardwareBase, protectedLayer: true, style: { zIndex: 302 } },
+      { name: 'knobs-style', src: knobStyleOverlay,  protectedLayer: true, style: { zIndex: 303 } },
+      { name: 'bridge', src: bridgeSrc,  protectedLayer: true, style: { zIndex: 304 } },
     ].filter(layer => Boolean(layer.src))
   }, [bodyAssets, bridge.assets, colorKey, knobHardwareBase, knobStyleOverlay, strapFront])
 

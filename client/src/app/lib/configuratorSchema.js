@@ -759,17 +759,6 @@ export const OPTION_FIELDS = [
   },
   {
     section: 'Hardware',
-    key: 'saddle',
-    label: 'Saddle',
-    type: 'select',
-    options: [
-      { value: 'chrome', label: 'Chrome', note: 'Chrome saddle', price: 0 },
-      { value: 'black', label: 'Black', note: 'Black saddle', price: 0 },
-      { value: 'gold', label: 'Gold', note: 'Gold saddle', price: 0 },
-    ],
-  },
-  {
-    section: 'Hardware',
     key: 'hardwareColor',
     label: 'Hardware Color',
     type: 'image-select',

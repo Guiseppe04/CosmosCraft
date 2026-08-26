@@ -382,7 +382,7 @@ export function resolveKnobAsset(category, model, knobKey) {
  * compatibility; GuitarPreview currently relies on the style overlay alone.
  */
 export function resolveKnobHardwareBase(category, model, hardwareColor) {
-  return resolveModelAsset(category, model, 'bodies', 'front', 'knobs', 'hardware', `${hardwareColor}.png`)
+  return resolveModelAsset(category, model, 'bodies', 'front', 'knobs', `${hardwareColor}.png`)
 }
 export function resolveKnobStyleOverlay(category, model, knobKey) {
   return resolveModelAsset(category, model, 'bodies', 'front', 'knobs', `${knobKey}.png`)

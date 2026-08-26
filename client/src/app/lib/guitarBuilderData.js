@@ -463,7 +463,7 @@ export const BRIDGE_OPTIONS = {
     assets: {
       chrome: asset('all-models/bridges/6/standard/hipshot-trem/hipshot-trem-chrome.png'),
       black: asset('all-models/bridges/6/standard/hipshot-trem/hipshot-trem-black.png'),
-      gold: asset('all-models/bridges/6/standard/hipshot-trem/hipshot-trem-chrome.png'),
+      gold: asset('all-models/bridges/6/standard/hipshot-trem/hipshot-trem-gold.png'),
     },
     price: 75, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
@@ -1267,10 +1267,10 @@ export const STRING_BRAND_OPTIONS = {
 
 export const KNOB_STYLE_OPTIONS = {
   plasticBlack: { label: 'Black Plastic', fileKey: 'plasticblack', price: 0, specs: specs() },
-  chrome: { label: 'Chrome', fileKey: 'chrome', price: 15, specs: specs() },
+  chrome: { label: 'No Style', fileKey: '', price: 15, specs: specs() },
   plasticWhite: { label: 'White Plastic', fileKey: 'plasticwhite', price: 0, specs: specs() },
   abaloneInlay: { label: 'Metal Knobs w/ Abalone Inlays', fileKey: 'abalone-inlay', price: 30, specs: specs() },
-  whitePearlInlay: { label: 'Metal Knobs w/ White Pearl Inlays', fileKey: 'white-pearl', price: 25, specs: specs() },
+  whitePearlInlay: { label: 'Metal Knobs w/ White Pearl Inlays', fileKey: 'white-pearl-inlay', price: 25, specs: specs() },
   tamarind: { label: 'Tamarind Wood', fileKey: 'tamarind', price: 20, specs: specs() },
 }
 

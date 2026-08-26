@@ -907,14 +907,6 @@ export default function useGuitarConfig() {
     return merged
   }, [mergeOptionsFromBuilderParts, priceOverrides])
 
-  const mergedSaddleOptions = useMemo(() => {
-    const merged = mergeOptionsFromBuilderParts(SADDLE_OPTIONS, { partCategory: 'misc', typeMappings: ['saddle'] })
-    Object.keys(merged).forEach(key => {
-      if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
-    })
-    return merged
-  }, [mergeOptionsFromBuilderParts, priceOverrides])
-
   const mergedNutOptions = useMemo(() => {
     const merged = mergeOptionsFromBuilderParts(NUT_OPTIONS, { partCategory: 'misc', typeMappings: ['nut'] })
     Object.keys(merged).forEach(key => {
@@ -1130,7 +1122,6 @@ export default function useGuitarConfig() {
       (mergedPickupPoleColorOptions[config.pickupPoleColor]?.price ?? 0) +
       (mergedControlsOptions[config.controls]?.price ?? 0) +
       // Hardware new options
-      (mergedSaddleOptions[config.saddle]?.price ?? 0) +
       (mergedNutOptions[config.nut]?.price ?? 0) +
       (mergedTuningOptions[config.tuning]?.price ?? 0) +
       (mergedStringBrandOptions[config.stringBrand]?.price ?? 0) +
@@ -1156,8 +1147,7 @@ export default function useGuitarConfig() {
     mergedHeadstockShapeOptions, mergedTrussRodCoverOptions, mergedElectronicsTypeOptions,
       mergedPickupConfigurationOptions, mergedBridgePickupModelOptions,
       mergedMiddlePickupModelOptions, mergedNeckPickupModelOptions,
-      mergedPickupColorOptions, mergedPickupPoleColorOptions, mergedControlsOptions,
-    mergedSaddleOptions, mergedNutOptions, mergedTuningOptions,
+      mergedPickupColorOptions, mergedPickupPoleColorOptions, mergedControlsOptions, mergedNutOptions, mergedTuningOptions,
     mergedStringBrandOptions, mergedOutputJackOptions, mergedStrapButtonOptions,
      mergedTunerButtonOptions, mergedElectronicsCavityCoverOptions, tremoloCoverOptions,
    ])
@@ -1529,10 +1519,6 @@ export default function useGuitarConfig() {
     () => Object.entries(mergedControlsOptions).map(([value, option]) => ({ value, ...option })),
     [mergedControlsOptions],
   )
-  const saddleOptionList = useMemo(
-    () => Object.entries(mergedSaddleOptions).map(([value, option]) => ({ value, ...option })),
-    [mergedSaddleOptions],
-  )
   const nutOptionList = useMemo(
     () => Object.entries(mergedNutOptions).map(([value, option]) => ({ value, ...option })),
     [mergedNutOptions],
@@ -1664,7 +1650,6 @@ export default function useGuitarConfig() {
       pickupColor: mergedPickupColorOptions[config.pickupColor]?.price ?? 0,
       pickupPoleColor: mergedPickupPoleColorOptions[config.pickupPoleColor]?.price ?? 0,
       controls: mergedControlsOptions[config.controls]?.price ?? 0,
-      saddle: mergedSaddleOptions[config.saddle]?.price ?? 0,
       nut: mergedNutOptions[config.nut]?.price ?? 0,
       tuning: mergedTuningOptions[config.tuning]?.price ?? 0,
       stringBrand: mergedStringBrandOptions[config.stringBrand]?.price ?? 0,
@@ -1690,7 +1675,6 @@ export default function useGuitarConfig() {
       mergedPickupConfigurationOptions, mergedBridgePickupModelOptions,
       mergedMiddlePickupModelOptions, mergedNeckPickupModelOptions,
       mergedPickupColorOptions, mergedPickupPoleColorOptions, mergedControlsOptions,
-     mergedSaddleOptions, mergedNutOptions, mergedTuningOptions,
      mergedStringBrandOptions, mergedOutputJackOptions, mergedStrapButtonOptions,
      mergedTunerButtonOptions, mergedElectronicsCavityCoverOptions, tremoloCoverOptions,
    ])
@@ -1767,7 +1751,6 @@ export default function useGuitarConfig() {
       ],
       pickupPoleColorOptions: pickupPoleColorOptionList,
       controlsOptions: controlsOptionList,
-      saddleOptions: saddleOptionList,
       nutOptions: nutOptionList,
       tuningOptions: tuningOptionList,
       stringBrandOptions: stringBrandOptionList,
