@@ -1057,7 +1057,7 @@ export function CheckoutPage() {
           shippingMethod,
           paymentMethod: mappedPaymentMethod,
           termsAccepted: acceptedTerms,
-          shippingAddressId: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(selectedAddressId) ? selectedAddressId : null,
+          shippingAddressId: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(selectedAddressId) ? selectedAddressId : undefined,
           billingAddress: {
             street: finalAddress.street,
             street2: finalAddress.street2,
