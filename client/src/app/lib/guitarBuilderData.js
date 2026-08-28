@@ -477,6 +477,31 @@ export const BRIDGE_OPTIONS = {
     },
     price: 90, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
+  gotoh: {
+    label: 'Gotoh',
+    note: 'Precision Gotoh bridge',
+    assets: {
+      chrome: asset('delos_assets/models/all-models/bridges/6/standard/gotoh/chrome.png'),
+      black: asset('delos_assets/models/all-models/bridges/6/standard/gotoh/black.png'),
+      gold: asset('delos_assets/models/all-models/bridges/6/standard/gotoh/gold.png'),
+    },
+    price: 85, specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+  evertune: {
+    label: 'Evertune',
+    note: 'Automatic tuning bridge',
+    assets: {
+      black: asset('delos_assets/models/all-models/bridges/6/standard/evertune/evertune-black.png'),
+    },
+    price: 150, specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+}
+
+export const BRIDGE_OPTIONS_BY_BODY = {
+  strat: ['hipshotFixed', 'hipshotTremolo', 'floydRoseTremolo'],
+  solo: ['hipshotFixed', 'hipshotTremolo', 'floydRoseTremolo'],
+  dc: ['hipshotFixed', 'hipshotTremolo', 'floydRoseTremolo'],
+  delos: ['hipshotFixed', 'hipshotTremolo', 'floydRoseTremolo', 'gotoh', 'evertune'],
 }
 
 export const PICKGUARD_OPTIONS_BY_BODY = {

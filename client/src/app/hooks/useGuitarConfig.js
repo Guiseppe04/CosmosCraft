@@ -7,6 +7,7 @@ import {
   BODY_OPTIONS,
   BODY_WOOD_OPTIONS,
   BRIDGE_OPTIONS,
+  BRIDGE_OPTIONS_BY_BODY,
   DEFAULT_CONFIG,
   FRETBOARD_OPTIONS,
   NECK_OPTIONS,
@@ -16,47 +17,47 @@ import {
   INLAY_OPTIONS,
   INLAY_SHAPE_OPTIONS,
   INLAY_MATERIAL_OPTIONS,
-   KNOB_OPTIONS_BY_BODY,
-   KNOB_STYLE_OPTIONS,
-   PICKGUARD_OPTIONS_BY_BODY,
-  PICKUP_OPTIONS,
-  GUITAR_TYPE_OPTIONS,
-  guitarBuilder,
-  // New option data
-  DEXTERITY_OPTIONS,
-  STRING_COUNT_OPTIONS,
-  MULTISCALE_OPTIONS,
-  SCALE_LENGTH_OPTIONS,
-  CASE_OPTIONS,
-  BEVEL_OPTIONS,
-  TOP_WOOD_OPTIONS,
-  FINISH_TYPE_OPTIONS,
-  TOP_COAT_OPTIONS,
-  BURST_FINISH_OPTIONS,
-  NECK_CONSTRUCTION_OPTIONS,
-  FRET_OPTIONS,
-  NECK_REAR_FINISH_OPTIONS,
-  HEADSTOCK_SHAPE_OPTIONS,
-  TRUSS_ROD_COVER_OPTIONS,
-  ELECTRONICS_TYPE_OPTIONS,
-  PICKUP_CONFIGURATION_OPTIONS,
-  PICKUP_MODEL_BRIDGE_OPTIONS,
-  PICKUP_MODEL_MIDDLE_OPTIONS,
-  PICKUP_MODEL_NECK_OPTIONS,
-  PICKUP_COLOR_OPTIONS,
-  PICKUP_POLE_COLOR_OPTIONS,
-  CONTROLS_OPTIONS,
-  SADDLE_OPTIONS,
-   NUT_OPTIONS,
-   TUNING_OPTIONS,
-   TUNING_DISCLAIMER,
-   STRING_BRAND_OPTIONS,
-  OUTPUT_JACK_OPTIONS,
-  STRAP_BUTTON_OPTIONS,
-  TUNER_BUTTON_OPTIONS,
-   ELECTRONICS_CAVITY_COVER_OPTIONS,
-   TREMOLO_COVER_OPTIONS_BY_BRIDGE,
-} from '../lib/guitarBuilderData.js'
+    KNOB_OPTIONS_BY_BODY,
+    KNOB_STYLE_OPTIONS,
+    PICKGUARD_OPTIONS_BY_BODY,
+   PICKUP_OPTIONS,
+   GUITAR_TYPE_OPTIONS,
+   guitarBuilder,
+   // New option data
+   DEXTERITY_OPTIONS,
+   STRING_COUNT_OPTIONS,
+   MULTISCALE_OPTIONS,
+   SCALE_LENGTH_OPTIONS,
+   CASE_OPTIONS,
+   BEVEL_OPTIONS,
+   TOP_WOOD_OPTIONS,
+   FINISH_TYPE_OPTIONS,
+   TOP_COAT_OPTIONS,
+   BURST_FINISH_OPTIONS,
+   NECK_CONSTRUCTION_OPTIONS,
+   FRET_OPTIONS,
+   NECK_REAR_FINISH_OPTIONS,
+   HEADSTOCK_SHAPE_OPTIONS,
+   TRUSS_ROD_COVER_OPTIONS,
+   ELECTRONICS_TYPE_OPTIONS,
+   PICKUP_CONFIGURATION_OPTIONS,
+   PICKUP_MODEL_BRIDGE_OPTIONS,
+   PICKUP_MODEL_MIDDLE_OPTIONS,
+   PICKUP_MODEL_NECK_OPTIONS,
+   PICKUP_COLOR_OPTIONS,
+   PICKUP_POLE_COLOR_OPTIONS,
+   CONTROLS_OPTIONS,
+   SADDLE_OPTIONS,
+    NUT_OPTIONS,
+    TUNING_OPTIONS,
+    TUNING_DISCLAIMER,
+    STRING_BRAND_OPTIONS,
+   OUTPUT_JACK_OPTIONS,
+   STRAP_BUTTON_OPTIONS,
+   TUNER_BUTTON_OPTIONS,
+    ELECTRONICS_CAVITY_COVER_OPTIONS,
+    TREMOLO_COVER_OPTIONS_BY_BRIDGE,
+ } from '../lib/guitarBuilderData.js'
 
 import { resolveTopWoodAsset, resolveFinishAsset, resolveTopCoatAsset, resolveNeckWoodAsset, resolveHeadstockWoodAsset, resolveFingerboardWoodAsset, resolveInlay, resolveNeckRearFinishAsset, resolveBackNeckAsset, resolveBackplateAsset, resolveOutputJackAsset, resolveKnobAsset, resolveKnobStyleOverlay, resolveSwitchAsset } from '../lib/assetResolver.js'
 import { listBuilderAssets } from '../utils/apiConfig.js'
@@ -1064,7 +1065,16 @@ export default function useGuitarConfig() {
   }, [config.controls])
 
   const updateConfig = useCallback((patch) => {
-    setConfig(prev => ({ ...prev, ...patch }))
+    setConfig(prev => {
+      const next = { ...prev, ...patch }
+      if (patch.body) {
+        const allowed = BRIDGE_OPTIONS_BY_BODY[patch.body] || Object.keys(BRIDGE_OPTIONS)
+        if (!allowed.includes(next.bridge)) {
+          next.bridge = allowed[0] ?? 'hipshotFixed'
+        }
+      }
+      return next
+    })
   }, [])
 
   const resetConfig = useCallback(() => {
@@ -1302,13 +1312,17 @@ export default function useGuitarConfig() {
   )
 
   const bridgeOptions = useMemo(
-    () =>
-      Object.entries(mergedBridgeOptions).map(([value, option]) => ({
-        value,
-        ...option,
-        preview: option.assets?.[config.hardware] ?? option.assets?.chrome ?? option.assets?.black ?? option.assets?.gold,
-      })),
-    [config.hardware, mergedBridgeOptions],
+    () => {
+      const allowed = BRIDGE_OPTIONS_BY_BODY[config.body] || Object.keys(BRIDGE_OPTIONS)
+      return Object.entries(mergedBridgeOptions)
+        .filter(([value]) => allowed.includes(value))
+        .map(([value, option]) => ({
+          value,
+          ...option,
+          preview: option.assets?.[config.hardware] ?? option.assets?.chrome ?? option.assets?.black ?? option.assets?.gold,
+        }))
+    },
+    [config.body, config.hardware, mergedBridgeOptions],
   )
   const pickupOptions = useMemo(
     () => Object.entries(mergedPickupOptions).map(([value, option]) => ({ value, ...option })),

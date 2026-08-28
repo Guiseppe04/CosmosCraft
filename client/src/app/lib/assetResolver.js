@@ -252,7 +252,7 @@ export function resolveTopCoatAsset(category, model, topCoatKey, neckRearFinish)
  * Resolve a bridge asset
  */
 export function resolveBridgeAsset(category, model, bridgeKey, colorKey) {
-  return resolveSharedAsset(category, model, 'bridges', '6', 'standard', bridgeKey, `${bridgeKey}-${colorKey}.png`)
+  return resolveSharedAsset(category, model, 'bridges', '6', 'standard', bridgeKey, `${colorKey}.png`)
 }
 
 /**
@@ -493,7 +493,13 @@ export function resolveRearHeadstockMask(category, model, frontHeadstockShape) {
 }
 
 export function resolveRearBodyMask(category, model) {
-  return resolveModelAsset(category, model, 'back', 'masks', 'noneckbodymask.png')
+  if (model === 'delos') {
+    return resolveModelAsset(category, model, 'back', 'masks', 'bodymask.png')
+  }
+  if (model === 'dc') {
+    return resolveModelAsset(category, model, 'back', 'masks', 'noneckbodymask.png')
+  }
+  return resolveModelAsset(category, model, 'back', 'masks', 'bodymask.png')
 }
 
 /**

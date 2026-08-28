@@ -40,6 +40,8 @@ import {
   TREMOLO_COVER_OPTIONS_BY_BRIDGE,
   TUNING_DISCLAIMER,
   PICKUP_COLOR_OPTIONS,
+  BRIDGE_OPTIONS_BY_BODY,
+  BRIDGE_OPTIONS,
 } from './guitarBuilderData'
 
 // ============================================================
@@ -751,10 +753,19 @@ export const OPTION_FIELDS = [
     label: 'Bridge',
     type: 'image-select',
     previewResolver: (category, model, value) => getButtonPreview(category, model, 'bridge', value),
+    getOptions: (config, category, model) => {
+      const body = config.body || model || 'dc'
+      const allowed = BRIDGE_OPTIONS_BY_BODY[body] || BRIDGE_OPTIONS_BY_BODY.delos
+      return Object.entries(BRIDGE_OPTIONS)
+        .filter(([key]) => allowed.includes(key))
+        .map(([key, opt]) => ({ value: key, label: opt.label, note: opt.note, price: opt.price }))
+    },
     options: [
       { value: 'hipshotFixed', label: 'Hipshot Hardtail', note: 'Modern hardtail bridge', price: 45 },
       { value: 'hipshotTremolo', label: 'Hipshot Tremolo', note: 'Six-string tremolo bridge', price: 75 },
       { value: 'floydRoseTremolo', label: 'Floyd Rose Tremolo', note: 'Locking trem bridge', price: 90 },
+      { value: 'gotoh', label: 'Gotoh', note: 'Precision Gotoh bridge', price: 85 },
+      { value: 'evertune', label: 'Evertune', note: 'Automatic tuning bridge', price: 150 },
     ],
   },
   {
