@@ -4,48 +4,44 @@
  * Automatically resolves asset paths based on category, model, and option selections.
  * Supports both Cloudinary CDN and local file fallback.
  * 
- * Folder structure:
- *   {category}_assets/{model}_assets/
- *     buttons/{option-type}-buttons/
- *     models/all-models/{shared-asset-type}/
- *     models/{model}/{model-specific-asset-type}/
+ * Local folder structure (public/builder/):
+ *   electric_assets/builder/all-models/{shared-asset-type}/
+ *   electric_assets/builder/{model}/bodies|back|shadows_highlights/...
+ *   electric_assets/builder/{model}/buttons/{option-type}-buttons/
  * 
  * When VITE_CLOUDINARY_CLOUD_NAME is set, assets are served from Cloudinary.
- * Otherwise, assets are served from the local /builder/ directory.
+ * Otherwise, assets are served from the local /builder/electric_assets/builder/ directory.
  */
 import { NECK_REAR_FINISH_OPTIONS } from './guitarBuilderData.js'
 const CLOUD_NAME = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_CLOUDINARY_CLOUD_NAME) 
   ? import.meta.env.VITE_CLOUDINARY_CLOUD_NAME 
   : ''
 
-const USE_CLOUDINARY = Boolean(CLOUD_NAME) && !(typeof import.meta !== 'undefined' && import.meta.env?.DEV)
+const USE_CLOUDINARY = Boolean(CLOUD_NAME) 
 
 /**
  * Resolve an asset path using either Cloudinary or local files
  */
 export function resolveAssetPath(subPath) {
   if (USE_CLOUDINARY) {
-    if (subPath.startsWith('dc_assets/') || subPath.startsWith('delos_assets/')) {
+    // Local files live under electric_assets/builder/{dc|delos|all-models}/...,
+    // but Cloudinary stores them under the legacy
+    // electric_assets/{dc_assets|delos_assets}/models/{dc|delos|all-models}/...
+    const m = subPath.match(/^electric_assets\/builder\/(dc|delos|all-models)\/(.*)$/)
+    if (m) {
+      const modelKey = m[1]
+      const rest = m[2]
+      if (modelKey === 'delos') {
+        return `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/cosmoscraft_assets/electric_assets/delos_assets/models/delos/${rest}`
+      }
+      return `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/cosmoscraft_assets/electric_assets/dc_assets/models/${modelKey}/${rest}`
+    }
+    if (subPath.startsWith('electric_assets/')) {
       return `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/cosmoscraft_assets/${subPath}`
     }
-    if (subPath.startsWith('delos/')) {
-      return `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/cosmoscraft_assets/electric_assets/delos_assets/models/${subPath}`
-    }
-    if (subPath.startsWith('dc/') || subPath.startsWith('rs/') || subPath.startsWith('solo/')) {
-      return `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/cosmoscraft_assets/electric_assets/dc_assets/models/${subPath}`
-    }
-    return `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/cosmoscraft_assets/${subPath}`
+    return `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/cosmoscraft_assets/electric_assets/builder/${subPath}`
   }
-  // Local fallback - serve from public/builder/
-  if (subPath.startsWith('dc_assets/') || subPath.startsWith('delos_assets/')) {
-    return `/builder/${subPath}`
-  }
-  if (subPath.startsWith('delos/')) {
-    return `/builder/electric_assets/delos_assets/models/${subPath}`
-  }
-  if (subPath.startsWith('dc/') || subPath.startsWith('rs/') || subPath.startsWith('solo/')) {
-    return `/builder/electric_assets/dc_assets/models/${subPath}`
-  }
+  // Local fallback - serve from public/builder/electric_assets/builder/
   return `/builder/${subPath}`
 }
 
@@ -63,7 +59,7 @@ export const asset = path => resolveAssetPath(path)
  * Get the base asset path for a given category and model
  */
 export function getModelAssetPath(category, model) {
-  return `${category}_assets/${model}_assets`
+  return `${category}_assets/builder/${model}`
 }
 
 /**
@@ -74,8 +70,8 @@ export function getModelAssetPath(category, model) {
  * visually aligned with the DC reference preview.
  */
 export function resolveSharedAsset(category, model, assetType, ...subPaths) {
-  const base = getModelAssetPath(category, 'dc')
-  const path = [base, 'models', 'all-models', assetType, ...subPaths]
+  const base = `${category}_assets/builder/all-models`
+  const path = [base, assetType, ...subPaths]
     .filter(Boolean)
     .join('/')
   return asset(path)
@@ -86,7 +82,7 @@ export function resolveSharedAsset(category, model, assetType, ...subPaths) {
  */
 export function resolveModelAsset(category, model, assetType, ...subPaths) {
   const base = getModelAssetPath(category, model)
-  const path = [base, 'models', model, assetType, ...subPaths]
+  const path = [base, assetType, ...subPaths]
     .filter(Boolean)
     .join('/')
   return asset(path)
@@ -106,29 +102,33 @@ export function resolveButtonAsset(category, model, optionType, fileName) {
 /**
  * Resolve a body wood texture path
  */
+// Normalize an option value (which may be camelCase, e.g. "birdseyeMaple")
+// to the kebab-case filename used on disk / Cloudinary ("birdseye-maple").
+const toKebab = (s) => String(s).replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase()
+
 export function resolveBodyWoodAsset(category, model, woodKey) {
-  return resolveSharedAsset(category, model, 'woods-colors', 'body-woods', `${woodKey}.png`)
+  return resolveSharedAsset(category, model, 'woods-colors', 'body-woods', `${toKebab(woodKey)}.png`)
 }
 
 /**
  * Resolve a fingerboard wood texture path
  */
 export function resolveFingerboardWoodAsset(category, model, woodKey) {
-  return resolveSharedAsset(category, model, 'woods-colors', 'fingerboard-woods', `${woodKey}.png`)
+  return resolveSharedAsset(category, model, 'woods-colors', 'fingerboard-woods', `${toKebab(woodKey)}.png`)
 }
 
 /**
  * Resolve a neck wood texture path
  */
 export function resolveNeckWoodAsset(category, model, woodKey) {
-  return resolveSharedAsset(category, model, 'woods-colors', 'neck-woods', `${woodKey}.png`)
+  return resolveSharedAsset(category, model, 'woods-colors', 'neck-woods', `${toKebab(woodKey)}.png`)
 }
 
 /**
  * Resolve a headstock wood texture path
  */
 export function resolveHeadstockWoodAsset(category, model, woodKey) {
-  return resolveSharedAsset(category, model, 'woods-colors', 'headstock-woods', `${woodKey}.png`)
+  return resolveSharedAsset(category, model, 'woods-colors', 'headstock-woods', `${toKebab(woodKey)}.png`)
 }
 
 /**
@@ -136,7 +136,7 @@ export function resolveHeadstockWoodAsset(category, model, woodKey) {
  * Loads from: electric_assets/dc_assets/models/all-models/woods-colors/top-woods/{woodKey}.png
  */
 export function resolveTopWoodAsset(category, model, woodKey) {
-  return resolveSharedAsset(category, model, 'woods-colors', 'top-woods', `${woodKey}.png`)
+  return resolveSharedAsset(category, model, 'woods-colors', 'top-woods', `${toKebab(woodKey)}.png`)
 }
 
 /**
@@ -175,7 +175,7 @@ export function resolveBurstMask(category, model, burstKey) {
   
   const modelMap = burstMaskMap[model]
   if (modelMap && modelMap[burstKey]) {
-    return `/${category}_assets/${model}_assets/${modelMap[burstKey]}`
+    return `/builder/${category}_assets/builder/${modelMap[burstKey]}`
   }
   
   // Fallback to default resolution

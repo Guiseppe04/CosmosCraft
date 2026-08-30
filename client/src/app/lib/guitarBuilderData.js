@@ -1,7 +1,7 @@
 // Repointed to Cloudinary collection: cosmoscraft_assets/electric_assets
 // Falls back to local /builder/ directory when Cloudinary is not configured.
 const CLOUD_NAME = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_CLOUDINARY_CLOUD_NAME) ? import.meta.env.VITE_CLOUDINARY_CLOUD_NAME : ''
-const USE_CLOUDINARY = Boolean(CLOUD_NAME) && !import.meta.env.DEV
+const USE_CLOUDINARY = Boolean(CLOUD_NAME) 
 
 export const cloudImage = (root, path) => {
   if (USE_CLOUDINARY) {
@@ -13,6 +13,8 @@ export const cloudImage = (root, path) => {
 
 export const asset = (path) => {
   if (USE_CLOUDINARY) {
+    // Cloudinary stores assets under the legacy structure:
+    // electric_assets/{dc_assets|delos_assets}/models/{dc|delos|all-models}/...
     if (path.startsWith('dc_assets/') || path.startsWith('delos_assets/')) {
       return `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/cosmoscraft_assets/electric_assets/${path}`
     }
@@ -30,23 +32,18 @@ export const asset = (path) => {
   }
   // Local fallback - serve from public/builder/
   // If path starts with a model prefix that already includes the `_assets` directory, use as-is.
-  if (path.startsWith('dc_assets/') || path.startsWith('delos_assets/')) {
-    return `/builder/electric_assets/${path}`
+  if (path.startsWith('dc/') || path.startsWith('delos/')) {
+    return `/builder/electric_assets/builder/${path}`
   }
   // Model-specific paths without _assets should map to their actual local model directories.
   if (path.startsWith('delos/')) {
-    return `/builder/electric_assets/delos_assets/models/${path}`
+    return `/builder/electric_assets/builder/delos/${path}`
   }
   if (path.startsWith('dc/') || path.startsWith('rs/') || path.startsWith('solo/')) {
-    return `/builder/electric_assets/dc_assets/models/${path}`
+    return `/builder/electric_assets/builder/delos/${path}`
   }
   // Shared assets (all-models/...) live under dc_assets/models/
-  return `/builder/electric_assets/dc_assets/models/${path}`
-}
-
-export const woodAsset = path => {
-  // Wood type textures are served from public/woodtype/ (not uploaded to Cloudinary)
-  return `/woodtype/${path}`
+  return `/builder/electric_assets/builder/${path}`
 }
 
 export const DEFAULT_CONFIG = {
