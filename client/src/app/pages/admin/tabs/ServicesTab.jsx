@@ -52,8 +52,8 @@ export function ServicesTab({
         <ServiceGridView services={services} onEdit={(svc) => openModal('service', svc)} onDelete={deleteService} />
       )}
 
-      {!servicesLoading && servicesPagination.totalPages > 1 && (
-        <PaginationBar pagination={servicesPagination} onPageChange={(page) => setServiceQuery((prev) => ({ ...prev, page }))} />
+      {servicesPagination.totalPages > 1 && (
+        <PaginationBar pagination={servicesPagination} loading={servicesLoading} onPageChange={(page) => setServiceQuery((prev) => ({ ...prev, page }))} />
       )}
     </motion.div>
   )

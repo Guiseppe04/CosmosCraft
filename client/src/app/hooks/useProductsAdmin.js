@@ -21,6 +21,7 @@ export function useProductsAdmin({ debouncedSearch, showToast, initialQuery = DE
   const [productsPagination, setProductsPagination] = useState({ page: 1, pageSize: 10, total: 0, totalPages: 1 })
   const productsRef = useRef(products)
   const inFlightRequestRef = useRef(null)
+  const latestRequestIdRef = useRef(0)
 
   useEffect(() => {
     productsRef.current = products
@@ -34,9 +35,11 @@ export function useProductsAdmin({ debouncedSearch, showToast, initialQuery = DE
     }
 
     inFlightRequestRef.current = requestKey
+    const requestId = ++latestRequestIdRef.current
     setProductsLoading(true)
     try {
       const res = await adminApi.getProducts({ search: debouncedSearch, ...productQuery })
+      if (latestRequestIdRef.current !== requestId) return
       const newData = res.data || []
       if (JSON.stringify(productsRef.current) !== JSON.stringify(newData)) {
         productsRef.current = newData
@@ -44,9 +47,9 @@ export function useProductsAdmin({ debouncedSearch, showToast, initialQuery = DE
       }
       setProductsPagination(res.pagination || { page: 1, pageSize: 10, total: 0, totalPages: 1 })
     } catch (e) {
-      showToast(e.message, 'error')
+      if (latestRequestIdRef.current === requestId) showToast(e.message, 'error')
     } finally {
-      setProductsLoading(false)
+      if (latestRequestIdRef.current === requestId) setProductsLoading(false)
       if (inFlightRequestRef.current === requestKey) {
         inFlightRequestRef.current = null
       }

@@ -17,6 +17,7 @@ export function useServicesAdmin({ debouncedSearch, showToast, initialQuery = DE
   const [serviceQuery, setServiceQuery] = useState(initialQuery)
   const servicesRef = useRef(services)
   const inFlightRequestRef = useRef(null)
+  const latestRequestIdRef = useRef(0)
 
   useEffect(() => {
     servicesRef.current = services
@@ -30,6 +31,7 @@ export function useServicesAdmin({ debouncedSearch, showToast, initialQuery = DE
     }
 
     inFlightRequestRef.current = requestKey
+    const requestId = ++latestRequestIdRef.current
     setServicesLoading(true)
     try {
       const params = {
@@ -42,6 +44,7 @@ export function useServicesAdmin({ debouncedSearch, showToast, initialQuery = DE
       if (serviceQuery.is_active !== '') params.is_active = serviceQuery.is_active
 
       const res = await adminApi.getServices(params)
+      if (latestRequestIdRef.current !== requestId) return
       const newData = Array.isArray(res.data) ? res.data : res.data?.services || []
       if (JSON.stringify(servicesRef.current) !== JSON.stringify(newData)) {
         servicesRef.current = newData
@@ -56,9 +59,9 @@ export function useServicesAdmin({ debouncedSearch, showToast, initialQuery = DE
         totalPages,
       })
     } catch (e) {
-      showToast(e.message, 'error')
+      if (latestRequestIdRef.current === requestId) showToast(e.message, 'error')
     } finally {
-      setServicesLoading(false)
+      if (latestRequestIdRef.current === requestId) setServicesLoading(false)
       if (inFlightRequestRef.current === requestKey) {
         inFlightRequestRef.current = null
       }

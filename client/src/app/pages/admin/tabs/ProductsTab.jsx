@@ -293,7 +293,7 @@ export function ProductsTab({
         </div>
       )}
 
-      <PaginationBar pagination={productsPagination} onPageChange={(nextPage) => setProductQuery((prev) => ({ ...prev, page: nextPage }))} />
+      <PaginationBar pagination={productsPagination} loading={productsLoading} onPageChange={(nextPage) => setProductQuery((prev) => ({ ...prev, page: nextPage }))} />
     </motion.div>
   )
 }

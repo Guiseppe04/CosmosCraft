@@ -7,6 +7,7 @@ export function useProjectsAdmin({ debouncedSearch, showToast }) {
   const [projectsPagination, setProjectsPagination] = useState({ page: 1, pageSize: 10, total: 0, totalPages: 1 })
   const projectsRef = useRef(projects)
   const inFlightRequestRef = useRef(null)
+  const latestRequestIdRef = useRef(0)
 
   useEffect(() => {
     projectsRef.current = projects
@@ -20,9 +21,11 @@ export function useProjectsAdmin({ debouncedSearch, showToast }) {
     }
 
     inFlightRequestRef.current = requestKey
+    const requestId = ++latestRequestIdRef.current
 
     try {
       const res = await adminApi.getProjects({ search: debouncedSearch, include_tasks: true, ...queryParams })
+      if (latestRequestIdRef.current !== requestId) return
       const newData = Array.isArray(res.data) ? res.data : res.data?.projects || []
       if (JSON.stringify(projectsRef.current) !== JSON.stringify(newData)) {
         projectsRef.current = newData
@@ -30,7 +33,7 @@ export function useProjectsAdmin({ debouncedSearch, showToast }) {
       }
       setProjectsPagination(res.pagination || { page: 1, pageSize: 10, total: 0, totalPages: 1 })
     } catch (e) {
-      showToast(e.message, 'error')
+      if (latestRequestIdRef.current === requestId) showToast(e.message, 'error')
     } finally {
       if (inFlightRequestRef.current === requestKey) {
         inFlightRequestRef.current = null

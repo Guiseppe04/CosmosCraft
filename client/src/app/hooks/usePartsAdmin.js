@@ -21,6 +21,7 @@ export function usePartsAdmin({ debouncedSearch, showToast, initialQuery = DEFAU
   const [partsPagination, setPartsPagination] = useState({ page: 1, pageSize: 500, total: 0, totalPages: 1 })
   const partsRef = useRef(parts)
   const inFlightRequestRef = useRef(null)
+  const latestRequestIdRef = useRef(0)
 
   useEffect(() => {
     partsRef.current = parts
@@ -34,9 +35,11 @@ export function usePartsAdmin({ debouncedSearch, showToast, initialQuery = DEFAU
     }
 
     inFlightRequestRef.current = requestKey
+    const requestId = ++latestRequestIdRef.current
     setPartsLoading(true)
     try {
       const res = await adminApi.getBuilderParts({ search: debouncedSearch, ...partQuery })
+      if (latestRequestIdRef.current !== requestId) return
       const newData = res.data || []
       if (JSON.stringify(partsRef.current) !== JSON.stringify(newData)) {
         partsRef.current = newData
@@ -44,9 +47,9 @@ export function usePartsAdmin({ debouncedSearch, showToast, initialQuery = DEFAU
       }
       setPartsPagination(res.pagination || { page: 1, pageSize: 500, total: 0, totalPages: 1 })
     } catch (e) {
-      showToast(e.message, 'error')
+      if (latestRequestIdRef.current === requestId) showToast(e.message, 'error')
     } finally {
-      setPartsLoading(false)
+      if (latestRequestIdRef.current === requestId) setPartsLoading(false)
       if (inFlightRequestRef.current === requestKey) {
         inFlightRequestRef.current = null
       }
