@@ -1,13 +1,13 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { adminApi } from '../utils/adminApi'
-import { updateIfChanged } from '../pages/admin/utils/slug'
 
 export function useOrdersAdmin({ debouncedSearch, showToast }) {
   const [orders, setOrders] = useState([])
+  const [ordersLoading, setOrdersLoading] = useState(false)
   const [ordersPagination, setOrdersPagination] = useState({ page: 1, pageSize: 10, total: 0, totalPages: 1 })
   const ordersRef = useRef(orders)
-  const inFlightRequestRef = useRef(null)
-  const latestRequestIdRef = useRef(0)
+  const inFlightRequestsRef = useRef(new Map())
+  const activeRequestKeyRef = useRef(null)
   const lastRequestedPageRef = useRef(1)
   const lastQueryParamsRef = useRef({})
 
@@ -15,15 +15,19 @@ export function useOrdersAdmin({ debouncedSearch, showToast }) {
     ordersRef.current = orders
   }, [orders])
 
-  const fetchOrders = useCallback(async (queryParams = {}) => {
+  const fetchOrders = useCallback((queryParams = {}) => {
     const isDefaultCall = Object.keys(queryParams).length === 0
     const baseQuery = isDefaultCall ? lastQueryParamsRef.current : queryParams
 
+    const resolvedSearch = baseQuery.search !== undefined
+      ? baseQuery.search
+      : (debouncedSearch || undefined)
+
     const normalizedQuery = {
-      search: debouncedSearch,
       include_items: true,
       page_size: 10,
       ...baseQuery,
+      search: resolvedSearch || undefined,
     }
 
     if (normalizedQuery.page == null) {
@@ -32,43 +36,80 @@ export function useOrdersAdmin({ debouncedSearch, showToast }) {
       lastRequestedPageRef.current = normalizedQuery.page
     }
 
+    // Clean undefined keys
+    Object.keys(normalizedQuery).forEach(k => normalizedQuery[k] === undefined && delete normalizedQuery[k])
+
     const requestKey = JSON.stringify(normalizedQuery)
-    if (inFlightRequestRef.current === requestKey) {
+    // Record the newest intended query before the request resolves. This keeps a
+    // poll from reusing an older successful query and overwriting newer filters.
+    lastQueryParamsRef.current = { ...normalizedQuery }
+    activeRequestKeyRef.current = requestKey
+
+    const existingRequest = inFlightRequestsRef.current.get(requestKey)
+    if (existingRequest) {
       if (import.meta.env.DEV) console.debug('[useOrdersAdmin] skipping duplicate request', requestKey)
-      return
+      setOrdersLoading(true)
+      return existingRequest.promise
     }
 
-    const requestId = ++latestRequestIdRef.current
-    inFlightRequestRef.current = requestKey
+    setOrdersLoading(true)
 
-    try {
-      const res = await adminApi.getOrders(normalizedQuery)
+    const requestPromise = Promise.resolve()
+      .then(() => adminApi.getOrders(normalizedQuery))
+      .then((res) => {
+        if (activeRequestKeyRef.current !== requestKey) {
+          if (import.meta.env.DEV) console.debug('[useOrdersAdmin] ignoring stale response', { requestKey, activeRequestKey: activeRequestKeyRef.current })
+          return res
+        }
 
-      if (latestRequestIdRef.current !== requestId) {
-        if (import.meta.env.DEV) console.debug('[useOrdersAdmin] ignoring stale response', { requestKey, requestId, latest: latestRequestIdRef.current })
-        return
-      }
+        const newData = Array.isArray(res.data) ? res.data : res.data?.orders || []
+        if (JSON.stringify(ordersRef.current) !== JSON.stringify(newData)) {
+          ordersRef.current = newData
+          setOrders(newData)
+        }
 
-      const newData = Array.isArray(res.data) ? res.data : res.data?.orders || []
-      if (JSON.stringify(ordersRef.current) !== JSON.stringify(newData)) {
-        ordersRef.current = newData
-        setOrders(newData)
-      }
-      setOrdersPagination(res.pagination || { page: 1, pageSize: 10, total: 0, totalPages: 1 })
-      lastQueryParamsRef.current = { ...normalizedQuery }
-    } catch (e) {
-      if (latestRequestIdRef.current === requestId) {
-        showToast(e.message, 'error')
-      }
-    } finally {
-      if (inFlightRequestRef.current === requestKey) {
-        inFlightRequestRef.current = null
-      }
-    }
+        const pag = res.pagination || res.data?.pagination
+        if (pag) {
+          const nextPagination = {
+            page: Number(pag.page) || normalizedQuery.page || 1,
+            pageSize: Number(pag.pageSize || pag.page_size) || 10,
+            total: Number(pag.total) || newData.length,
+            totalPages: Number(pag.totalPages || pag.total_pages || pag.pages) || 1,
+          }
+          setOrdersPagination((currentPagination) => (
+            currentPagination.page === nextPagination.page &&
+            currentPagination.pageSize === nextPagination.pageSize &&
+            currentPagination.total === nextPagination.total &&
+            currentPagination.totalPages === nextPagination.totalPages
+              ? currentPagination
+              : nextPagination
+          ))
+        }
+        return res
+      })
+      .catch((e) => {
+        if (activeRequestKeyRef.current === requestKey) {
+          showToast(e.message, 'error')
+        }
+        throw e
+      })
+      .finally(() => {
+        const request = inFlightRequestsRef.current.get(requestKey)
+        if (request?.promise === requestPromise) {
+          inFlightRequestsRef.current.delete(requestKey)
+        }
+        if (activeRequestKeyRef.current === requestKey) {
+          setOrdersLoading(false)
+        }
+      })
+
+    inFlightRequestsRef.current.set(requestKey, { promise: requestPromise })
+    return requestPromise
   }, [debouncedSearch, showToast])
 
   return {
     orders,
+    ordersLoading,
     ordersPagination,
     fetchOrders,
     setOrdersPagination,

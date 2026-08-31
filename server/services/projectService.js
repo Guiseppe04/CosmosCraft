@@ -3,6 +3,7 @@ const { AppError } = require('../middleware/errorHandler');
 const defaultWorkflowService = require('./defaultWorkflowService');
 const inventoryService = require('./inventoryService');
 const { generateRefundRequestNumber } = require('../utils/orderNumber');
+const notificationService = require('./notificationService');
 let currentBuildClaimService = null;
 const getClaimService = () => {
   if (!currentBuildClaimService) {
@@ -59,6 +60,72 @@ const normalizeProjectStatus = (status) => {
   return null
 }
 
+const CUSTOMIZATION_ORDER_STATUSES = new Set([
+  'payment_pending', 'active', 'on_hold', 'payment_required',
+  'fulfillment_pending', 'fulfillment_in_progress', 'fulfilled',
+  'cancellation_requested', 'resolution_in_progress', 'cancelled',
+]);
+
+const updateCustomizationOrderStatus = async (db, orderId, status, options = {}) => {
+  if (!CUSTOMIZATION_ORDER_STATUSES.has(status)) {
+    throw new AppError(`Invalid customization order status: ${status}`, 400);
+  }
+
+  const result = await db.query(
+    `UPDATE orders
+     SET customization_status = $1,
+         customization_hold_reason = COALESCE($2, customization_hold_reason),
+         customization_hold_requested_at = COALESCE($3, customization_hold_requested_at),
+         customization_hold_approved_by = COALESCE($4, customization_hold_approved_by),
+         customization_hold_approved_at = COALESCE($5, customization_hold_approved_at),
+         customization_resumed_at = COALESCE($6, customization_resumed_at),
+         updated_at = CURRENT_TIMESTAMP
+     WHERE order_id = $7 AND order_type = 'customization'
+     RETURNING order_id, user_id, order_number, customization_status`,
+    [
+      status,
+      options.holdReason ?? null,
+      options.holdRequestedAt ?? null,
+      options.holdApprovedBy ?? null,
+      options.holdApprovedAt ?? null,
+      options.resumedAt ?? null,
+      orderId,
+    ]
+  );
+  return result.rows[0] || null;
+};
+
+const notifyCustomizationCustomer = async (order, title, message) => {
+  if (!order?.user_id) return;
+  try {
+    await notificationService.createNotification({
+      user_id: order.user_id,
+      title,
+      message,
+      type: notificationService.NOTIFICATION_TYPES.ORDER,
+      related_entity_id: order.order_id,
+      related_entity_type: 'orders',
+    });
+  } catch (error) {
+    // Status changes must not be rolled back merely because notifications fail.
+    console.warn('Could not create customization notification:', error.message);
+  }
+};
+
+const hasBlockingInstallment = async (db, projectId) => {
+  const result = await db.query(
+    `SELECT EXISTS (
+       SELECT 1
+       FROM project_installment_schedules
+       WHERE project_id = $1
+         AND due_date <= CURRENT_DATE
+         AND status <> 'paid'
+     ) AS blocked`,
+    [projectId]
+  ).catch(() => ({ rows: [{ blocked: false }] }));
+  return Boolean(result.rows[0]?.blocked);
+};
+
 const generateCustomBuildId = async () => {
   const now = new Date();
   const yy = String(now.getFullYear()).slice(-2);
@@ -98,6 +165,12 @@ const PROJECT_BASE_SELECT = `
     p.cancellation_settlement,
     o.user_id AS customer_id,
     o.order_number,
+    o.order_type,
+    o.customization_status,
+    o.shipping_address_id AS order_shipping_address_id,
+    o.customization_hold_reason,
+    o.customization_hold_requested_at,
+    o.customization_hold_approved_at,
     o.payment_plan AS order_payment_plan,
     o.total_amount AS order_total_amount,
     a.line1 AS shipping_line1,
@@ -124,6 +197,14 @@ const PROJECT_BASE_SELECT = `
     ca.province AS cancel_address_province,
     ca.postal_code AS cancel_address_postal_code,
     ca.country AS cancel_address_country,
+    fa.label AS fulfillment_address_label,
+    fa.line1 AS fulfillment_address_line1,
+    fa.line2 AS fulfillment_address_line2,
+    fa.barangay AS fulfillment_address_barangay,
+    fa.city AS fulfillment_address_city,
+    fa.province AS fulfillment_address_province,
+    fa.postal_code AS fulfillment_address_postal_code,
+    fa.country AS fulfillment_address_country,
     claim_user.first_name AS claimed_first_name,
     claim_user.last_name AS claimed_last_name,
     claim_user.role AS claimed_role,
@@ -146,6 +227,7 @@ const PROJECT_BASE_SELECT = `
   JOIN orders o ON o.order_id = p.order_id
   LEFT JOIN addresses a ON a.address_id = o.shipping_address_id
   LEFT JOIN addresses ca ON ca.address_id = p.cancel_address_id
+  LEFT JOIN addresses fa ON fa.address_id = p.fulfillment_address_id
   LEFT JOIN users u ON u.user_id = o.user_id
   LEFT JOIN users claim_user ON claim_user.user_id = p.claimed_by
   LEFT JOIN LATERAL (
@@ -218,6 +300,17 @@ const buildShippingAddress = (project) => ({
   country: project.shipping_country || null,
 });
 
+const buildFulfillmentAddress = (project) => project.fulfillment_address_snapshot || {
+  label: project.fulfillment_address_label || null,
+  line1: project.fulfillment_address_line1 || null,
+  line2: project.fulfillment_address_line2 || null,
+  barangay: project.fulfillment_address_barangay || null,
+  city: project.fulfillment_address_city || null,
+  province: project.fulfillment_address_province || null,
+  postal_code: project.fulfillment_address_postal_code || null,
+  country: project.fulfillment_address_country || null,
+};
+
 const attachFulfillmentDetails = (project, pickupAppointment = null) => {
   const shipping_address = buildShippingAddress(project);
   const shop_delivery_eligible = isLuzonLocation(project);
@@ -225,6 +318,7 @@ const attachFulfillmentDetails = (project, pickupAppointment = null) => {
   return {
     ...project,
     shipping_address,
+    fulfillment_address: buildFulfillmentAddress(project),
     fulfillment_method: project.fulfillment_method || null,
     fulfillment_status: project.fulfillment_status || null,
     fulfillment_notes: project.fulfillment_notes || null,
@@ -746,6 +840,10 @@ exports.getAllProjects = async (params = {}) => {
       o.user_id AS customer_id,
       o.order_number,
       o.payment_plan AS order_payment_plan,
+      o.customization_status,
+      o.customization_hold_reason,
+      o.customization_hold_requested_at,
+      o.customization_hold_approved_at,
       a.line1 AS shipping_line1,
       a.line2 AS shipping_line2,
       a.city AS shipping_city,
@@ -1192,6 +1290,22 @@ exports.createProject = async (projectData) => {
     await defaultWorkflowService.applyDefaultWorkflowToProject(projectId, null);
   }
 
+  const orderResult = await pool.query(
+    `UPDATE orders
+     SET customization_status = CASE WHEN payment_status = 'approved' THEN 'active' ELSE 'payment_pending' END,
+         updated_at = CURRENT_TIMESTAMP
+     WHERE order_id = $1 AND order_type = 'customization'
+     RETURNING order_id, user_id, order_number, customization_status`,
+    [projectOrderId]
+  );
+  if (orderResult.rows[0]) {
+    await notifyCustomizationCustomer(
+      orderResult.rows[0],
+      'Customization project created',
+      `Your customization project for ${orderResult.rows[0].order_number} is ready to be tracked.`
+    );
+  }
+
   // If the order is on installment plan, create the installment schedule
   try {
     const orderRes = await pool.query(
@@ -1231,12 +1345,28 @@ exports.updateProject = async (projectId, projectData) => {
   const normalizedStatus = normalizeProjectStatus(status)
 
   const existingRes = await pool.query(
-    `SELECT status FROM projects WHERE project_id = $1 AND deleted_at IS NULL`,
+    `SELECT p.status, p.order_id, o.order_type, o.user_id
+     FROM projects p JOIN orders o ON o.order_id = p.order_id
+     WHERE p.project_id = $1 AND p.deleted_at IS NULL`,
     [projectId]
   );
   if (existingRes.rows.length === 0) return null;
   const existingStatus = normalizeProjectStatus(existingRes.rows[0].status);
   const updatedStatus = normalizedStatus || existingStatus;
+
+  if (normalizedStatus === 'on_hold') {
+    throw new AppError('Use the order-level hold workflow for customization projects', 400);
+  }
+  if (normalizedStatus === 'completed') {
+    const stats = await getProjectTaskStats(pool, projectId);
+    if (!stats.total || stats.completed !== stats.total) {
+      throw new AppError('All project tasks must be completed before completing the project', 400);
+    }
+    if (await hasBlockingInstallment(pool, projectId)) {
+      await updateCustomizationOrderStatus(pool, existingRes.rows[0].order_id, 'payment_required');
+      throw new AppError('A required installment must be approved before fulfillment can begin', 400);
+    }
+  }
 
   const result = await pool.query(
     `UPDATE projects 
@@ -1262,6 +1392,15 @@ exports.updateProject = async (projectId, projectData) => {
     }
   }
 
+  if (normalizedStatus === 'completed' && existingRes.rows[0].order_type === 'customization') {
+    const order = await updateCustomizationOrderStatus(pool, existingRes.rows[0].order_id, 'fulfillment_pending');
+    await notifyCustomizationCustomer(
+      order,
+      'Your customization is complete',
+      'Your custom build is ready. Choose delivery or a pickup appointment from your project tracker.'
+    );
+  }
+
   return { ...result.rows[0], name: result.rows[0].title, description: result.rows[0].notes };
 };
 
@@ -1273,7 +1412,7 @@ exports.cancelProject = async (projectId, userId, userRole) => {
     await client.query('BEGIN');
 
     const projectResult = await client.query(
-      `SELECT p.project_id, p.order_id, p.status, p.progress, o.user_id AS customer_id
+      `SELECT p.project_id, p.order_id, p.status, p.progress, o.user_id AS customer_id, o.order_type
        FROM projects p
        JOIN orders o ON o.order_id = p.order_id
        WHERE p.project_id = $1
@@ -1331,14 +1470,19 @@ exports.cancelProject = async (projectId, userId, userRole) => {
       [resolutionType, settlement ? JSON.stringify(settlement) : null, projectId]
     );
 
-    await client.query(
-      `UPDATE orders
-       SET status = 'cancelled',
-           updated_at = CURRENT_TIMESTAMP
-       WHERE order_id = $1
-         AND status <> 'cancelled'`,
-      [project.order_id]
-    );
+    if (project.order_type === 'customization') {
+      await updateCustomizationOrderStatus(
+        client,
+        project.order_id,
+        hasBuildProgress ? 'resolution_in_progress' : 'cancelled'
+      );
+    } else {
+      await client.query(
+        `UPDATE orders SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP
+         WHERE order_id = $1 AND status <> 'cancelled'`,
+        [project.order_id]
+      );
+    }
 
     await logActivity(client, projectId, userId, 'project_cancelled', {
       previous_status: tracking.status,
@@ -1373,7 +1517,7 @@ exports.cancelProject = async (projectId, userId, userRole) => {
          LIMIT 1`,
         [project.order_id]
       );
-      const latestPayment = paymentRes.rows[0] || null;
+      const latestPayment = paymentRes.rows[0]?.payment_id ? paymentRes.rows[0] : null;
 
       if (latestPayment) {
         const existingRefundRes = await client.query(
@@ -1747,6 +1891,7 @@ exports.requestProjectProcurement = async (projectId, userId) => {
         }),
       ]
     );
+
     await client.query('COMMIT');
   } catch (error) {
     await client.query('ROLLBACK');
@@ -2196,11 +2341,15 @@ exports.submitFulfillmentChoice = async (projectId, userId, userRole, data = {})
       throw new AppError('You do not have access to this project', 403);
     }
 
+    if (project.order_type === 'customization' && project.customization_status !== 'fulfillment_pending') {
+      throw new AppError('Fulfillment selection is available only after the completed build is awaiting fulfillment', 400);
+    }
+
     if (Number(project.progress || 0) < 100) {
       throw new AppError('Fulfillment options unlock once the project is completed', 400);
     }
 
-    const method = String(data.method || '').trim();
+    const method = String(data.method || data.fulfillment_method || '').trim();
     const notes = data.notes?.trim() || null;
     const allowedMethods = ['pickup_appointment', 'external_delivery', 'shop_delivery'];
 
@@ -2215,6 +2364,36 @@ exports.submitFulfillmentChoice = async (projectId, userId, userRole, data = {})
 
     let pickupAppointmentId = project.pickup_appointment_id || null;
     let pickupAppointment = null;
+    let fulfillmentAddressId = project.fulfillment_address_id || null;
+    let fulfillmentAddressSnapshot = project.fulfillment_address_snapshot || null;
+
+    if (['shop_delivery', 'external_delivery'].includes(method) && data.address_id) {
+      const addressResult = await client.query(
+        `SELECT address_id, label, line1, line2, barangay, city, province, postal_code, country
+         FROM addresses WHERE address_id = $1 AND user_id = $2`,
+        [data.address_id, project.customer_id]
+      );
+      if (addressResult.rows.length === 0) throw new AppError('Select one of your saved delivery addresses', 400);
+      const address = addressResult.rows[0];
+      fulfillmentAddressId = address.address_id;
+      fulfillmentAddressSnapshot = address;
+    }
+
+    // A completed customization can reuse the verified checkout address. The
+    // snapshot keeps the fulfillment record stable if the customer edits that
+    // address later.
+    if (['shop_delivery', 'external_delivery'].includes(method) && !fulfillmentAddressSnapshot) {
+      const checkoutAddress = buildShippingAddress(project);
+      if (!checkoutAddress.line1 || !checkoutAddress.city) {
+        throw new AppError('Select a saved delivery address before requesting delivery', 400);
+      }
+      fulfillmentAddressId = project.order_shipping_address_id || null;
+      fulfillmentAddressSnapshot = checkoutAddress;
+    }
+
+    if (['courier_arranged', 'out_for_delivery', 'ready_for_pickup', 'picked_up', 'delivered', 'received'].includes(project.fulfillment_status)) {
+      throw new AppError('Fulfillment is already in progress; contact the shop to change the method', 400);
+    }
 
     if (method === 'pickup_appointment') {
       if (!data.scheduled_at) {
@@ -2308,14 +2487,24 @@ exports.submitFulfillmentChoice = async (projectId, userId, userRole, data = {})
            fulfillment_notes = $3,
            fulfillment_selected_at = now(),
            pickup_appointment_id = $4,
+           fulfillment_address_id = $5,
+           fulfillment_address_snapshot = $6,
            updated_at = now()
-       WHERE project_id = $5`,
-      [method, fulfillmentStatus, notes, pickupAppointmentId, projectId]
+       WHERE project_id = $7`,
+      [method, fulfillmentStatus, notes, pickupAppointmentId, fulfillmentAddressId, fulfillmentAddressSnapshot ? JSON.stringify(fulfillmentAddressSnapshot) : null, projectId]
     );
 
     await logActivity(client, projectId, userId, 'fulfillment_updated', { method, fulfillmentStatus });
 
     await client.query('COMMIT');
+
+    await notifyCustomizationCustomer(
+      { order_id: project.order_id, user_id: project.customer_id },
+      'Fulfillment choice saved',
+      method === 'pickup_appointment'
+        ? 'Your pickup appointment has been saved. We will notify you when your custom build is ready.'
+        : 'Your delivery preference has been saved. We will notify you when fulfillment starts.'
+    );
 
     return attachFulfillmentDetails(
       {
@@ -2325,6 +2514,8 @@ exports.submitFulfillmentChoice = async (projectId, userId, userRole, data = {})
         fulfillment_notes: notes,
         fulfillment_selected_at: new Date(),
         pickup_appointment_id: pickupAppointmentId,
+        fulfillment_address_id: fulfillmentAddressId,
+        fulfillment_address_snapshot: fulfillmentAddressSnapshot,
       },
       pickupAppointment
     );
@@ -2516,18 +2707,25 @@ exports.updateSubtaskStatus = async (subtaskId, data, userId, userRole) => {
         await ensureProjectHoldCancelColumns();
         holdCancelColumnsEnsured = true;
       }
-      // Check if this project is on hold
+      // Order-level hold and overdue installments pause production without
+      // changing project progress/status.
       const projectRes = await client.query(
-        `SELECT status, hold_reason FROM projects WHERE project_id = $1`,
+        `SELECT p.status, p.order_id, o.customization_status
+         FROM projects p JOIN orders o ON o.order_id = p.order_id
+         WHERE p.project_id = $1`,
         [subtask.project_id]
       );
       if (projectRes.rows.length > 0) {
         const projectStatus = normalizeProjectStatus(projectRes.rows[0].status);
-        if (projectStatus === 'on_hold') {
-          throw new Error('Cannot update tasks while the project is on hold');
+        if (projectRes.rows[0].customization_status === 'on_hold') {
+          throw new Error('Cannot update tasks while the customization order is on hold');
         }
         if (projectStatus === 'cancelled') {
           throw new Error('Project is cancelled. No further updates allowed');
+        }
+        if (await hasBlockingInstallment(client, subtask.project_id)) {
+          await updateCustomizationOrderStatus(client, projectRes.rows[0].order_id, 'payment_required');
+          throw new Error('The required installment for the current period must be approved before production can continue');
         }
       }
 
@@ -2604,15 +2802,10 @@ exports.updateSubtaskStatus = async (subtaskId, data, userId, userRole) => {
     // When "Ready for Release" subtask is completed, automatically transition the
     // associated order from Build Projects to My Purchases with "To Ship" status
     // (or "Ready for Pickup" if the project has a pickup appointment).
-    if (
-      status === 'completed' &&
-      subtask.status !== 'completed' &&
-      subtask.title &&
-      String(subtask.title).trim().toLowerCase() === 'ready for release'
-    ) {
+    if (taskSummary?.total > 0 && taskSummary.completed === taskSummary.total) {
       // Fetch the project to determine fulfillment method
       const projectData = await client.query(
-        `SELECT p.*, o.status AS order_status, o.fulfillment_method
+        `SELECT p.*, o.status AS order_status, o.order_type, o.user_id AS customer_id, o.order_number
          FROM projects p
          JOIN orders o ON o.order_id = p.order_id
          WHERE p.project_id = $1`,
@@ -2622,6 +2815,27 @@ exports.updateSubtaskStatus = async (subtaskId, data, userId, userRole) => {
       if (projectData.rows.length > 0) {
         const project = projectData.rows[0];
         const isPickup = String(project.fulfillment_method || '').trim() === 'pickup_appointment';
+
+        if (project.order_type === 'customization') {
+          if (await hasBlockingInstallment(client, subtask.project_id)) {
+            await updateCustomizationOrderStatus(client, project.order_id, 'payment_required');
+            throw new Error('Project tasks are complete, but fulfillment is blocked until the required installment is approved');
+          }
+          await client.query(
+            `UPDATE projects SET status = 'completed', updated_at = CURRENT_TIMESTAMP WHERE project_id = $1`,
+            [subtask.project_id]
+          );
+          const order = await updateCustomizationOrderStatus(client, project.order_id, 'fulfillment_pending');
+          await logActivity(client, subtask.project_id, userId, 'build_released', {
+            order_id: project.order_id,
+            customization_status: 'fulfillment_pending',
+          });
+          await notifyCustomizationCustomer(
+            order,
+            'Your customization is complete',
+            'Your custom build is ready. Choose delivery or a pickup appointment from your project tracker.'
+          );
+        } else {
 
         // Update the order status to transition it into My Purchases
         // "processing" = "To Ship" in the My Purchase tab
@@ -2659,6 +2873,7 @@ exports.updateSubtaskStatus = async (subtaskId, data, userId, userRole) => {
             is_pickup: isPickup,
           }
         );
+        }
       }
     }
 
@@ -2823,7 +3038,9 @@ exports.claimProject = async (projectId, userId, userRole) => {
 
     // Fetch project
     const pRes = await client.query(
-      `SELECT * FROM projects WHERE project_id = $1 AND deleted_at IS NULL`,
+      `SELECT p.*, o.customization_status, o.customization_hold_reason
+       FROM projects p JOIN orders o ON o.order_id = p.order_id
+       WHERE p.project_id = $1 AND p.deleted_at IS NULL`,
       [projectId]
     );
     if (pRes.rows.length === 0) throw new AppError('Project not found', 404);
@@ -2904,7 +3121,9 @@ exports.unclaimProject = async (projectId, userId, userRole) => {
     await client.query('BEGIN');
 
     const pRes = await client.query(
-      `SELECT * FROM projects WHERE project_id = $1 AND deleted_at IS NULL`,
+      `SELECT p.*, o.customization_status, o.customization_hold_reason
+       FROM projects p JOIN orders o ON o.order_id = p.order_id
+       WHERE p.project_id = $1 AND p.deleted_at IS NULL`,
       [projectId]
     );
     if (pRes.rows.length === 0) throw new AppError('Project not found', 404);
@@ -2967,7 +3186,9 @@ exports.reassignProject = async (projectId, newUserId, currentUserId, userRole) 
     await client.query('BEGIN');
 
     const pRes = await client.query(
-      `SELECT * FROM projects WHERE project_id = $1 AND deleted_at IS NULL`,
+      `SELECT p.*, o.user_id AS customer_id, o.customization_status, o.customization_hold_reason
+       FROM projects p JOIN orders o ON o.order_id = p.order_id
+       WHERE p.project_id = $1 AND p.deleted_at IS NULL`,
       [projectId]
     );
     if (pRes.rows.length === 0) throw new AppError('Project not found', 404);
@@ -3069,7 +3290,7 @@ exports.requestProjectHold = async (projectId, userId, userRole, data = {}) => {
     const normalizedStatus = normalizeProjectStatus(project.status);
     if (normalizedStatus === 'cancelled') throw new AppError('Project is already cancelled', 400);
     if (normalizedStatus === 'completed') throw new AppError('Project is already completed', 400);
-    if (normalizedStatus === 'on_hold') throw new AppError('Project is already on hold', 400);
+    if (project.customization_status === 'on_hold') throw new AppError('Customization order is already on hold', 400);
 
     const holdOption = data.hold_option || 'resume_later';
     if (!['resume_later', 'hold_before_next_step'].includes(holdOption)) {
@@ -3086,16 +3307,15 @@ exports.requestProjectHold = async (projectId, userId, userRole, data = {}) => {
       currentStepName = milestones.rows[0].title;
     }
 
+    const order = await updateCustomizationOrderStatus(client, project.order_id, 'on_hold', {
+      holdReason: data.reason || 'Customer requested hold',
+      holdRequestedAt: new Date(),
+    });
+
+    // Sync project-level status so the UI and list queries reflect the hold
     await client.query(
-      `UPDATE projects
-       SET hold_reason = $1,
-           hold_option = $2,
-           hold_at_step = $3,
-           hold_requested_at = CURRENT_TIMESTAMP,
-           status = 'on_hold',
-           updated_at = CURRENT_TIMESTAMP
-       WHERE project_id = $4`,
-      [data.reason || 'Customer requested hold', holdOption, currentStepName, projectId]
+      `UPDATE projects SET status = 'on_hold', updated_at = CURRENT_TIMESTAMP WHERE project_id = $1`,
+      [projectId]
     );
 
     await logActivity(client, projectId, userId, 'hold_requested', {
@@ -3106,6 +3326,7 @@ exports.requestProjectHold = async (projectId, userId, userRole, data = {}) => {
 
     await client.query('COMMIT');
 
+    await notifyCustomizationCustomer(order, 'Customization order on hold', 'Your customization order is on hold. Open the project tracker for details.');
     const updated = await exports.getProjectById(projectId);
     return updated;
   } catch (err) {
@@ -3125,52 +3346,34 @@ exports.approveProjectHold = async (projectId, userId, data = {}) => {
     await client.query('BEGIN');
 
     const pRes = await client.query(
-      `SELECT * FROM projects WHERE project_id = $1 AND deleted_at IS NULL`,
+      `SELECT p.*, o.customization_status, o.customization_hold_reason
+       FROM projects p JOIN orders o ON o.order_id = p.order_id
+       WHERE p.project_id = $1 AND p.deleted_at IS NULL`,
       [projectId]
     );
     if (pRes.rows.length === 0) throw new AppError('Project not found', 404);
     const project = pRes.rows[0];
 
-    if (!project.hold_reason) {
+    if (project.customization_status !== 'on_hold') {
       throw new AppError('No hold request exists for this project', 400);
     }
 
     const action = data.action || 'approve'; // 'approve' or 'reject'
 
     if (action === 'reject') {
-      // Reject the hold - clear hold request and revert status
-      await client.query(
-        `UPDATE projects
-         SET hold_reason = NULL,
-             hold_option = NULL,
-             hold_at_step = NULL,
-             hold_requested_at = NULL,
-             hold_approved_by = NULL,
-             hold_approved_at = NULL,
-             status = $1,
-             updated_at = CURRENT_TIMESTAMP
-         WHERE project_id = $2`,
-        [project.status || 'in_progress', projectId]
-      );
+      await updateCustomizationOrderStatus(client, project.order_id, 'active');
 
       await logActivity(client, projectId, userId, 'hold_rejected', {
         reason: data.rejection_reason || 'Rejected by admin',
       });
     } else {
-      // Approve the hold
-      await client.query(
-        `UPDATE projects
-         SET hold_approved_by = $1,
-             hold_approved_at = CURRENT_TIMESTAMP,
-             updated_at = CURRENT_TIMESTAMP
-         WHERE project_id = $2`,
-        [userId, projectId]
-      );
+      await updateCustomizationOrderStatus(client, project.order_id, 'on_hold', {
+        holdApprovedBy: userId,
+        holdApprovedAt: new Date(),
+      });
 
       await logActivity(client, projectId, userId, 'hold_approved', {
-        hold_option: project.hold_option,
-        hold_at_step: project.hold_at_step,
-        reason: project.hold_reason,
+        reason: project.customization_hold_reason,
       });
     }
 
@@ -3195,48 +3398,37 @@ exports.resumeProject = async (projectId, userId, userRole) => {
     await client.query('BEGIN');
 
     const pRes = await client.query(
-      `SELECT * FROM projects WHERE project_id = $1 AND deleted_at IS NULL`,
+      `SELECT p.*, o.user_id AS customer_id, o.customization_status, o.customization_hold_reason
+       FROM projects p JOIN orders o ON o.order_id = p.order_id
+       WHERE p.project_id = $1 AND p.deleted_at IS NULL`,
       [projectId]
     );
     if (pRes.rows.length === 0) throw new AppError('Project not found', 404);
     const project = pRes.rows[0];
 
-    // Get the customer_id from the order
-    const orderRes = await client.query(
-      `SELECT user_id FROM orders WHERE order_id = $1`,
-      [project.order_id]
-    );
-    const customerId = orderRes.rows.length > 0 ? orderRes.rows[0].user_id : null;
-
     const isPrivileged = ['staff', 'admin', 'super_admin'].includes(userRole);
-    const isOwner = customerId === userId;
+    const isOwner = project.customer_id === userId;
 
     if (!isPrivileged && !isOwner) {
       throw new AppError('You do not have access to this project', 403);
     }
 
-    const normalizedStatus = normalizeProjectStatus(project.status);
-    if (normalizedStatus !== 'on_hold') {
-      throw new AppError('Project is not on hold', 400);
+    if (project.customization_status !== 'on_hold') {
+      throw new AppError('Customization order is not on hold', 400);
     }
 
+    await updateCustomizationOrderStatus(client, project.order_id, 'active', { resumedAt: new Date() });
+
+    // Restore project-level status from task tracking so it reflects actual progress
+    const stats = await getProjectTaskStats(client, projectId);
+    const tracking = buildProjectTaskTracking(stats, 'in_progress');
     await client.query(
-      `UPDATE projects
-       SET status = 'in_progress',
-           hold_reason = NULL,
-           hold_option = NULL,
-           hold_at_step = NULL,
-           hold_requested_at = NULL,
-           hold_approved_by = NULL,
-           hold_approved_at = NULL,
-           resumed_at = CURRENT_TIMESTAMP,
-           updated_at = CURRENT_TIMESTAMP
-       WHERE project_id = $1`,
-      [projectId]
+      `UPDATE projects SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE project_id = $2`,
+      [tracking.status, projectId]
     );
 
     await logActivity(client, projectId, userId, 'project_resumed', {
-      previous_hold_reason: project.hold_reason,
+      previous_hold_reason: project.customization_hold_reason,
       resumed_at: new Date(),
     });
 
@@ -3304,20 +3496,23 @@ exports.requestProjectCancel = async (projectId, userId, userRole, data = {}) =>
 
     if (isShipping) {
       const addressId = data.address_id;
-      if (!addressId) {
-        throw new AppError('Please select a delivery address.', 400);
-      }
+      const addrRes = addressId
+        ? await client.query(
+          `SELECT * FROM addresses WHERE address_id = $1 AND (user_id = $2 OR $3 = true) AND deleted_at IS NULL`,
+          [addressId, project.customer_id, isPrivileged]
+        )
+        : { rows: [] };
 
-      const addrRes = await client.query(
-        `SELECT * FROM addresses WHERE address_id = $1 AND (user_id = $2 OR $3 = true) AND deleted_at IS NULL`,
-        [addressId, project.customer_id, isPrivileged]
-      );
-
-      if (addrRes.rows.length === 0) {
+      if (addressId && addrRes.rows.length === 0) {
         throw new AppError('Please select a valid delivery address.', 400);
       }
 
       const addr = addrRes.rows[0];
+      if (!addr) {
+        // Legacy callers may not provide an address; fulfillment falls back to
+        // the order's saved checkout address exposed in the project payload.
+        cancelAddressSnapshot = buildShippingAddress(project);
+      } else {
       const userRes = await client.query(
         `SELECT first_name, last_name, phone, email FROM users WHERE user_id = $1`,
         [project.customer_id]
@@ -3340,6 +3535,7 @@ exports.requestProjectCancel = async (projectId, userId, userRole, data = {}) =>
         country: addr.country,
         selected_at: new Date().toISOString(),
       };
+      }
     }
 
     // Compute live settlement snapshot
@@ -3387,7 +3583,7 @@ exports.requestProjectCancel = async (projectId, userId, userRole, data = {}) =>
          LIMIT 1`,
         [project.order_id]
       );
-      const latestPayment = paymentRes.rows[0] || null;
+      const latestPayment = paymentRes.rows[0]?.payment_id ? paymentRes.rows[0] : null;
 
       const requestedAmount = settlementSnapshot?.financials?.refundable_amount !== undefined
         ? Number(settlementSnapshot.financials.refundable_amount)
@@ -3397,9 +3593,12 @@ exports.requestProjectCancel = async (projectId, userId, userRole, data = {}) =>
         ? 'pending_payment_verification'
         : 'pending';
 
-      const requestNumber = await generateRefundRequestNumber(client, 'RF');
+      // No payment means there is no monetary refund request to create. The
+      // cancellation itself still proceeds to the project settlement workflow.
+      if (latestPayment && requestedAmount > 0) {
+        const requestNumber = await generateRefundRequestNumber(client, 'RF');
 
-      await client.query(
+        await client.query(
         `INSERT INTO refund_requests (
            order_id, user_id, project_id, payment_id, reason, customer_notes,
            amount_requested, build_stage_at_request, status, request_number, refund_type
@@ -3417,7 +3616,8 @@ exports.requestProjectCancel = async (projectId, userId, userRole, data = {}) =>
           refundStatus,
           requestNumber,
         ]
-      );
+        );
+      }
     } else {
       await client.query(
         `UPDATE refund_requests
@@ -3443,7 +3643,15 @@ exports.requestProjectCancel = async (projectId, userId, userRole, data = {}) =>
       settlement: settlementSnapshot,
     });
 
+    await updateCustomizationOrderStatus(client, project.order_id, 'cancellation_requested');
+
     await client.query('COMMIT');
+
+    await notifyCustomizationCustomer(
+      { order_id: project.order_id, user_id: project.customer_id },
+      'Cancellation request received',
+      'We received your customization cancellation request and will review the project settlement.'
+    );
 
     const updated = await exports.getProjectById(projectId);
     return updated;
@@ -3476,7 +3684,7 @@ exports.approveProjectCancel = async (projectId, userId, data = {}) => {
       throw new AppError('No cancellation request exists for this project', 400);
     }
 
-    if (normalizeProjectStatus(project.status) === 'on_hold') {
+    if (project.customization_status === 'on_hold') {
       throw new AppError('Project is on hold. Resume the project before approving cancellation.', 400);
     }
 
@@ -3520,6 +3728,7 @@ exports.approveProjectCancel = async (projectId, userId, data = {}) => {
         previous_cancel_address_id: project.cancel_address_id,
         previous_cancel_address_snapshot: project.cancel_address_snapshot,
       });
+      await updateCustomizationOrderStatus(client, project.order_id, 'active');
     } else {
       // Approve cancellation with full settlement resolution
       const projectRefundService = require('./projectRefundService');
@@ -3556,14 +3765,8 @@ exports.approveProjectCancel = async (projectId, userId, data = {}) => {
         [userId, resolutionType, settlement ? JSON.stringify(settlement) : null, projectFulfillmentMethod, fulfillmentStatus, projectId]
       );
 
-      // Cancel the order as well
-      await client.query(
-        `UPDATE orders
-         SET status = 'cancelled',
-             updated_at = CURRENT_TIMESTAMP
-         WHERE order_id = $1 AND status <> 'cancelled'`,
-        [project.order_id]
-      );
+      // Keep the generic product status untouched for customization orders.
+      await updateCustomizationOrderStatus(client, project.order_id, 'resolution_in_progress');
 
       const stats = await getProjectTaskStats(client, projectId);
       const hasBuildProgress = stats.completed > 0 || stats.total > 0;
@@ -3744,6 +3947,8 @@ exports.cancelProjectCancelRequest = async (projectId, userId, userRole) => {
       previous_cancel_address_id: project.cancel_address_id,
       previous_cancel_address_snapshot: project.cancel_address_snapshot,
     });
+
+    await updateCustomizationOrderStatus(client, project.order_id, 'active');
 
     await client.query('COMMIT');
 

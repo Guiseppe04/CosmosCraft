@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { CheckCircle, Circle, ChevronDown, ChevronRight, Plus, Trash2, User, Clock, AlertCircle, Calendar, Truck, Store, ShieldCheck, Flag, Loader2, MapPin } from 'lucide-react';
+import { CheckCircle, Circle, ChevronDown, ChevronRight, Plus, Trash2, User, Clock, AlertCircle, Calendar, Truck, Store, ShieldCheck, Flag, Loader2, MapPin, Package } from 'lucide-react';
 import { adminApi } from '../../utils/adminApi';
 import { staffApi } from '../../utils/staffApi';
 

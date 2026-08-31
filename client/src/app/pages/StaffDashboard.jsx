@@ -128,6 +128,12 @@ export function StaffDashboard() {
 
   const [orders, setOrders] = useState([])
   const [ordersPagination, setOrdersPagination] = useState({ page: 1, limit: 10, total: 0, pages: 1 })
+  const [ordersLoading, setOrdersLoading] = useState(false)
+  const ordersRef = useRef(orders)
+  const ordersPaginationRef = useRef(ordersPagination)
+  const inFlightOrderRequestsRef = useRef(new Map())
+  const activeOrderRequestKeyRef = useRef(null)
+  const lastOrderQueryRef = useRef({})
 
   const [products, setProducts] = useState([])
   const [parts, setParts] = useState([])
@@ -203,6 +209,14 @@ export function StaffDashboard() {
   ]
 
   // ── API Fetchers ─────────────────────────────────────────────────────────
+  useEffect(() => {
+    ordersRef.current = orders
+  }, [orders])
+
+  useEffect(() => {
+    ordersPaginationRef.current = ordersPagination
+  }, [ordersPagination])
+
   const fetchProducts = useCallback(async () => {
     try {
       const res = await staffApi.getProducts({ page: 1, pageSize: 500 })
@@ -275,27 +289,89 @@ export function StaffDashboard() {
     }
   }, [])
 
-  const fetchOrders = useCallback(async () => {
-    try {
-      const res = await staffApi.getOrders({
-        search: debouncedSearch,
-        include_items: true,
-        page: ordersPagination.page,
-        limit: ordersPagination.limit,
-      })
-      const rows = normalizeArray(res, 'orders')
-      setOrders(rows)
-      if (res.data?.pagination) {
-        setOrdersPagination((prev) => ({
-          ...prev,
-          total: res.data.pagination.total ?? rows.length,
-          pages: res.data.pagination.pages ?? 1,
-        }))
-      }
-    } catch (e) {
-      showToast(e.message, 'error')
+  const fetchOrders = useCallback((queryParams = {}) => {
+    const isDefaultCall = Object.keys(queryParams).length === 0
+    const baseQuery = isDefaultCall ? lastOrderQueryRef.current : queryParams
+    const resolvedSearch = baseQuery.search !== undefined
+      ? baseQuery.search
+      : (debouncedSearch || undefined)
+    const params = {
+      include_items: true,
+      page_size: ordersPaginationRef.current.pageSize || ordersPaginationRef.current.limit || 10,
+      ...baseQuery,
+      search: resolvedSearch || undefined,
     }
-  }, [debouncedSearch, ordersPagination.limit, ordersPagination.page, showToast])
+
+    if (params.page == null) {
+      params.page = ordersPaginationRef.current.page || 1
+    }
+    Object.keys(params).forEach(k => params[k] === undefined && delete params[k])
+
+    const requestKey = JSON.stringify(params)
+    lastOrderQueryRef.current = { ...params }
+    activeOrderRequestKeyRef.current = requestKey
+
+    const existingRequest = inFlightOrderRequestsRef.current.get(requestKey)
+    if (existingRequest) {
+      setOrdersLoading(true)
+      return existingRequest.promise
+    }
+
+    setOrdersLoading(true)
+    const requestPromise = Promise.resolve()
+      .then(() => staffApi.getOrders(params))
+      .then((res) => {
+        if (activeOrderRequestKeyRef.current !== requestKey) {
+          return res
+        }
+
+        const rows = normalizeArray(res, 'orders')
+        if (JSON.stringify(ordersRef.current) !== JSON.stringify(rows)) {
+          ordersRef.current = rows
+          setOrders(rows)
+        }
+
+        const pag = res.pagination || res.data?.pagination
+        if (pag) {
+          setOrdersPagination((prev) => {
+            const nextPagination = {
+              ...prev,
+              page: Number(pag.page) || prev.page,
+              limit: Number(pag.pageSize || pag.page_size) || prev.limit || 10,
+              total: Number.isFinite(Number(pag.total)) ? Number(pag.total) : rows.length,
+              pages: Number(pag.totalPages || pag.total_pages || pag.pages) || 1,
+              totalPages: Number(pag.totalPages || pag.total_pages || pag.pages) || 1,
+            }
+            return (
+              prev.page === nextPagination.page &&
+              prev.limit === nextPagination.limit &&
+              prev.total === nextPagination.total &&
+              prev.pages === nextPagination.pages &&
+              prev.totalPages === nextPagination.totalPages
+            ) ? prev : nextPagination
+          })
+        }
+        return res
+      })
+      .catch((e) => {
+        if (activeOrderRequestKeyRef.current === requestKey) {
+          showToast(e.message, 'error')
+        }
+        throw e
+      })
+      .finally(() => {
+        const request = inFlightOrderRequestsRef.current.get(requestKey)
+        if (request?.promise === requestPromise) {
+          inFlightOrderRequestsRef.current.delete(requestKey)
+        }
+        if (activeOrderRequestKeyRef.current === requestKey) {
+          setOrdersLoading(false)
+        }
+      })
+
+    inFlightOrderRequestsRef.current.set(requestKey, { promise: requestPromise })
+    return requestPromise
+  }, [debouncedSearch, showToast])
 
   const fetchProjects = useCallback(async () => {
     try {
@@ -737,6 +813,38 @@ export function StaffDashboard() {
     setModal({ open: true, type, data })
   }
 
+  const handleManageCustomizationProject = async (order) => {
+    setActiveTab('projects')
+    let project = null
+    const projectId = order?.project_id || order?.project?.project_id || (typeof order === 'string' ? order : null)
+
+    if (projectId) {
+      try {
+        const response = await staffApi.getProject(projectId)
+        project = response?.data || response
+      } catch (error) {
+        console.error('Failed to get project by projectId:', error)
+      }
+    }
+
+    if (!project && (order?.order_id || order?.order_number)) {
+      try {
+        const searchVal = order.order_number || order.order_id
+        const response = await staffApi.getAllProjects({ search: searchVal, page: 1, page_size: 10 })
+        const list = response?.data?.projects || response?.projects || response?.data || []
+        project = list.find((p) => String(p.order_id) === String(order.order_id) || String(p.order_number) === String(order.order_number)) || list[0]
+      } catch (error) {
+        console.error('Failed to find project by order info:', error)
+      }
+    }
+
+    if (project?.project_id) {
+      openModal('project_tasks', project)
+    } else if (order) {
+      showToast('This customization order does not have an associated project yet.', 'error')
+    }
+  }
+
   const closeModal = () => {
     setModal({ open: false, type: null, data: null })
     setForm({})
@@ -1138,6 +1246,9 @@ export function StaffDashboard() {
               user={user}
               pagination={ordersPagination}
               showToast={showToast}
+              ordersLoading={ordersLoading}
+              onManageProject={handleManageCustomizationProject}
+              onGoToProjects={() => handleManageCustomizationProject()}
             />
           )}
 

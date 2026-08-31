@@ -698,7 +698,7 @@ exports.namedUuidParamSchema = (paramName) =>
 const paymentMethodEnum = ['gcash', 'bank_transfer', 'cash'];
 const orderStatusEnum = ['pending', 'processing', 'shipped', 'out_for_delivery', 'delivered', 'received', 'cancelled'];
 const orderPaymentStatusEnum = ['pending', 'proof_submitted', 'under_review', 'approved', 'rejected', 'failed'];
-const fulfillmentMethods = ['pickup_appointment', 'home_delivery', 'store_pickup', 'courier'];
+const fulfillmentMethods = ['pickup_appointment', 'external_delivery', 'shop_delivery'];
 const notificationTypeEnum = ['order_update', 'appointment_reminder', 'system', 'promotional', 'low_stock'];
 const refundStatusEnum = ['pending', 'approved', 'processing', 'rejected', 'refunded', 'pending_payment_verification'];
 
@@ -968,12 +968,15 @@ exports.assignTeamSchema = Joi.object({
 });
 
 exports.submitFulfillmentSchema = Joi.object({
-  fulfillment_method: Joi.string().valid(...fulfillmentMethods).required().messages({
+  fulfillment_method: Joi.string().valid(...fulfillmentMethods).optional().messages({
     'any.only': `Fulfillment method must be one of: ${fulfillmentMethods.join(', ')}`,
     'any.required': 'Fulfillment method is required',
   }),
+  method: Joi.string().valid(...fulfillmentMethods).optional(),
   notes: Joi.string().max(500).optional().allow('').trim(),
-});
+  address_id: Joi.string().uuid().optional(),
+  scheduled_at: Joi.date().iso().optional(),
+}).or('fulfillment_method', 'method');
 
 exports.requestProjectCancelSchema = Joi.object({
   cancel_option: Joi.string().valid('ship_to_address', 'pickup_at_shop', 'ship_unfinished', 'pickup_unfinished').required().messages({
@@ -1188,7 +1191,7 @@ exports.saveDefaultWorkflowSchema = Joi.object({
 
 const listOrdersSchema = Joi.object({
   search: Joi.string().max(100).optional().allow('').trim(),
-  order_type: Joi.string().valid('product', 'customization', 'service').optional(),
+  order_type: Joi.string().valid('product', 'customization', 'service', 'all').optional().allow(''),
   status: Joi.string().valid(
     'pending',
     'processing',
@@ -1196,28 +1199,33 @@ const listOrdersSchema = Joi.object({
     'out_for_delivery',
     'delivered',
     'received',
-    'cancelled'
-  ).optional(),
+    'cancelled',
+    'all'
+  ).optional().allow(''),
   payment_status: Joi.string().valid(
     'pending',
     'proof_submitted',
     'under_review',
     'approved',
     'rejected',
-    'failed'
-  ).optional(),
-  date_from: Joi.string().isoDate().optional(),
-  date_to: Joi.string().isoDate().optional(),
-  payment_method: Joi.string().valid('gcash', 'bank_transfer', 'cash').optional(),
+    'failed',
+    'all'
+  ).optional().allow(''),
+  date_from: Joi.string().optional().allow(''),
+  date_to: Joi.string().optional().allow(''),
+  payment_method: Joi.string().valid('gcash', 'bank_transfer', 'cash', 'all').optional().allow(''),
   sort_by: Joi.string().valid(
     'created_at',
     'order_number',
     'total_amount',
     'status',
     'payment_status',
-    'customer_name'
-  ).optional(),
-  sort_dir: Joi.string().valid('asc', 'desc').optional(),
+    'customer_name',
+    'order_type',
+    'customization_name',
+    'date'
+  ).optional().allow(''),
+  sort_dir: Joi.string().valid('asc', 'desc').optional().allow(''),
   page: Joi.number().integer().min(1).optional(),
   page_size: Joi.number().integer().min(1).max(100).optional(),
   include_items: Joi.alternatives().try(Joi.string(), Joi.boolean()).optional(),

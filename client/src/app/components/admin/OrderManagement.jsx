@@ -3,10 +3,10 @@ import { motion, AnimatePresence } from 'motion/react'
 import {
   ShoppingBag, Eye, Edit, Search, Filter,
   Package, CreditCard, RefreshCw, ChevronLeft, ChevronRight,
-  CheckCircle, XCircle, Clock, AlertCircle, Loader2,
+  CheckCircle, XCircle, Clock, AlertCircle, Loader2, BriefcaseBusiness,
   FileText, Image as ImageIcon, ExternalLink, Save, User,
   History, DollarSign, Trash2, Check, X, Printer, Calendar,
-  ArrowUp, ArrowDown,
+  ArrowUp, ArrowDown, ArrowUpRight,
 } from 'lucide-react'
 import { formatCurrency } from '../../utils/formatCurrency'
 import { adminApi } from '../../utils/adminApi'
@@ -452,7 +452,7 @@ function ReceiptPanel({ order }) {
   )
 }
 
-function OrderDetailsModal({ order, onClose, onUpdatePaymentStatus, onUpdateOrderStatus, onVerifyPayment, user, initialSection = 'details' }) {
+function OrderDetailsModal({ order, onClose, onUpdatePaymentStatus, onUpdateOrderStatus, onVerifyPayment, onManageProject, user, initialSection = 'details' }) {
   const [activeSection, setActiveSection] = useState(initialSection)
   const isCODOrder = isCashOnDeliveryOrder(order)
 
@@ -534,17 +534,29 @@ function OrderDetailsModal({ order, onClose, onUpdatePaymentStatus, onUpdateOrde
               Update Payment Status
             </button>
           )}
-          <button
-            onClick={() => setActiveSection('order')}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-              activeSection === 'order'
-                ? 'bg-[var(--gold-primary)] text-black'
-                : 'text-[var(--text-muted)] hover:text-white'
-            }`}
-          >
-            <Package className="w-4 h-4 inline mr-2" />
-            Update Order Status
-          </button>
+          {order.order_type !== 'customization' && (
+            <button
+              onClick={() => setActiveSection('order')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                activeSection === 'order'
+                  ? 'bg-[var(--gold-primary)] text-black'
+                  : 'text-[var(--text-muted)] hover:text-white'
+              }`}
+            >
+              <Package className="w-4 h-4 inline mr-2" />
+              Update Order Status
+            </button>
+          )}
+          {(order.order_type === 'customization' || order.project_id) && (
+            <button
+              onClick={() => onManageProject?.(order)}
+              className="px-4 py-2 rounded-lg text-sm font-medium border border-violet-500/30 bg-violet-500/10 text-violet-300 hover:bg-violet-500/20 hover:text-white transition-all inline-flex items-center gap-2 cursor-pointer"
+              title="Go to Project Tab & View Project Progress Modal"
+            >
+              <BriefcaseBusiness className="w-4 h-4" />
+              Project Progress
+            </button>
+          )}
           {order.order_type === 'customization' && (
             <button
               onClick={() => setActiveSection('installment')}
@@ -636,6 +648,7 @@ function OrderDetailsModal({ order, onClose, onUpdatePaymentStatus, onUpdateOrde
                 )}
               </div>
 
+              {order.order_type !== 'customization' && (
               <div>
                 <p className="text-[var(--text-muted)] text-xs uppercase tracking-wider mb-3">Timeline</p>
                 <div className="relative">
@@ -679,6 +692,7 @@ function OrderDetailsModal({ order, onClose, onUpdatePaymentStatus, onUpdateOrde
                   </div>
                 </div>
               </div>
+              )}
 
               <div className="bg-[var(--bg-primary)]/50 rounded-lg p-4 space-y-2">
                 <div className="flex justify-between text-sm">
@@ -1064,7 +1078,7 @@ function OrderStatusPanel({ order, onUpdate }) {
         )}
         {!allowedStatuses.length && (
           <p className="text-xs text-[var(--text-muted)] mt-3">
-            This order status is final and cannot be moved backward.
+                    This order status is final and cannot be moved backward.
           </p>
         )}
       </div>
@@ -1072,7 +1086,8 @@ function OrderStatusPanel({ order, onUpdate }) {
   )
 }
 
-export function OrderManagement({ orders, onRefresh, user, pagination }) {
+
+export function OrderManagement({ orders, onRefresh, user, pagination, onManageProject, loading = false }) {
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [orderTypeFilter, setOrderTypeFilter] = useState('all')
@@ -1083,6 +1098,7 @@ export function OrderManagement({ orders, onRefresh, user, pagination }) {
   const [sortField, setSortField] = useState('date')
   const [sortDirection, setSortDirection] = useState('desc')
   const [page, setPage] = useState(1)
+  const [isPageLoading, setIsPageLoading] = useState(false)
   const [selectedOrder, setSelectedOrder] = useState(null)
   const [selectedSection, setSelectedSection] = useState('details')
   const [isUpdatingPayment, setIsUpdatingPayment] = useState(false)
@@ -1091,18 +1107,68 @@ export function OrderManagement({ orders, onRefresh, user, pagination }) {
   const onRefreshRef = useRef(onRefresh)
   onRefreshRef.current = onRefresh
 
-  const paginationTotalPagesRef = useRef(pagination?.total_pages || 1)
+  const inFlightKeyRef = useRef('')
+  const activeRequestIdRef = useRef(0)
+
+  const isDataLoading = Boolean(loading || isPageLoading)
+  // Keep the last successful page visible while a new page is loading. Replacing
+  // populated rows with skeletons on every poll makes the table look like it is
+  // continuously re-downloading.
+  const showInitialSkeleton = isDataLoading && orders.length === 0
+  const showBackgroundProgress = isDataLoading && orders.length > 0
+
+  const totalPages = Math.max(1, Number(pagination?.totalPages || pagination?.total_pages || pagination?.pages || 1))
+  const paginationTotalPagesRef = useRef(totalPages)
   useEffect(() => {
-    paginationTotalPagesRef.current = pagination?.total_pages || 1
-  }, [pagination?.total_pages])
+    paginationTotalPagesRef.current = totalPages
+  }, [totalPages])
+
+  // Sync page with incoming pagination prop if changed externally
+  useEffect(() => {
+    if (pagination?.page && pagination.page !== page) {
+      setPage(Number(pagination.page))
+    }
+  }, [pagination?.page])
 
   const statusCounts = useMemo(() => {
-    const counts = { all: pagination?.total || 0 }
+    const counts = { all: pagination?.total || orders.length || 0 }
     orders.forEach(order => {
       const status = order.status || 'pending'
       counts[status] = (counts[status] || 0) + 1
     })
     return counts
+  }, [orders, pagination?.total])
+
+  // Summary KPI Metrics
+  const summaryMetrics = useMemo(() => {
+    let pendingActionCount = 0
+    let fulfillmentCount = 0
+    let completedCount = 0
+    let totalRevenue = 0
+
+    orders.forEach(order => {
+      const st = order.status || 'pending'
+      const paySt = normalizePaymentStatus(order.payment_status || 'pending')
+
+      if (st === 'pending' || paySt === 'proof_submitted' || paySt === 'under_review') {
+        pendingActionCount++
+      }
+      if (st === 'processing' || st === 'shipped' || st === 'out_for_delivery') {
+        fulfillmentCount++
+      }
+      if (st === 'delivered' || st === 'received') {
+        completedCount++
+      }
+      totalRevenue += getOrderTotal(order)
+    })
+
+    return {
+      total: pagination?.total || orders.length || 0,
+      pending: pendingActionCount,
+      fulfillment: fulfillmentCount,
+      completed: completedCount,
+      revenue: totalRevenue,
+    }
   }, [orders, pagination?.total])
 
   const debouncedSearch = useDebounce(searchQuery, 300)
@@ -1121,7 +1187,7 @@ export function OrderManagement({ orders, onRefresh, user, pagination }) {
 
   const buildQuery = useCallback((pageNum = 1) => {
     const params = {
-      search: debouncedSearch || undefined,
+      search: debouncedSearch.trim() ? debouncedSearch.trim() : undefined,
       order_type: orderTypeFilter === 'all' ? undefined : orderTypeFilter,
       status: statusFilter === 'all' ? undefined : statusFilter,
       payment_status: paymentStatusFilter === 'all' ? undefined : paymentStatusFilter,
@@ -1130,7 +1196,7 @@ export function OrderManagement({ orders, onRefresh, user, pagination }) {
       date_to: dateTo || undefined,
       include_items: true,
       page: pageNum,
-      page_size: 10,
+      page_size: PAGE_SIZE,
       ...(SORT_FIELD_MAP[sortField] || SORT_FIELD_MAP.date),
       sort_dir: sortDirection,
     }
@@ -1138,24 +1204,50 @@ export function OrderManagement({ orders, onRefresh, user, pagination }) {
     return params
   }, [debouncedSearch, orderTypeFilter, statusFilter, paymentStatusFilter, paymentMethodFilter, dateFrom, dateTo, sortField, sortDirection])
 
-  const requestOrdersPage = useCallback((targetPage = 1) => {
-    const safePage = Math.max(1, Math.min(targetPage, Math.max(1, paginationTotalPagesRef.current)))
-    setPage(safePage)
+  const requestOrdersPage = useCallback(async (targetPage = 1) => {
+    const maxPages = Math.max(1, paginationTotalPagesRef.current || 1)
+    const safePage = Math.max(1, Math.min(targetPage, maxPages))
     const params = buildQuery(safePage)
-    if (onRefreshRef.current) onRefreshRef.current(params)
+    const requestKey = JSON.stringify(params)
+
+    if (inFlightKeyRef.current === requestKey) {
+      return
+    }
+
+    const requestId = ++activeRequestIdRef.current
+    inFlightKeyRef.current = requestKey
+    setPage(safePage)
+    setIsPageLoading(true)
+
+    try {
+      if (onRefreshRef.current) {
+        await onRefreshRef.current(params)
+      }
+    } catch (err) {
+      if (import.meta.env.DEV) console.error('[OrderManagement] requestOrdersPage error:', err)
+    } finally {
+      if (activeRequestIdRef.current === requestId) {
+        setIsPageLoading(false)
+        inFlightKeyRef.current = ''
+      }
+    }
   }, [buildQuery])
 
+  // When search or any filter changes, reset to page 1 and fetch
   useEffect(() => {
     setPage(1)
     requestOrdersPage(1)
   }, [debouncedSearch, orderTypeFilter, statusFilter, paymentStatusFilter, paymentMethodFilter, dateFrom, dateTo, sortField, sortDirection, requestOrdersPage])
 
-  const totalPages = pagination?.total_pages || 1
-
   const handleUpdatePaymentStatus = async (orderId, newStatus, referenceNumber, notes) => {
     setIsUpdatingPayment(true)
     try {
-      await adminApi.updatePaymentStatus(orderId, newStatus, { reference_number: referenceNumber, notes, admin_name: user?.firstName ? `${user.firstName}${user.lastName ? ' ' + user.lastName : ''}` : user?.email, admin_email: user?.email })
+      await adminApi.updatePaymentStatus(orderId, newStatus, {
+        reference_number: referenceNumber,
+        notes,
+        admin_name: user?.firstName ? `${user.firstName}${user.lastName ? ' ' + user.lastName : ''}` : user?.email,
+        admin_email: user?.email
+      })
       onRefresh(buildQuery(page))
       setSelectedOrder(prev => prev ? { ...prev, payment_status: newStatus } : null)
     } catch (error) {
@@ -1191,7 +1283,6 @@ export function OrderManagement({ orders, onRefresh, user, pagination }) {
       console.error('Failed to update order status:', error)
     } finally {
       setIsUpdatingOrder(false)
-      setShowConfirm(false)
     }
   }
 
@@ -1215,274 +1306,664 @@ export function OrderManagement({ orders, onRefresh, user, pagination }) {
     }
   }
 
+  const hasActiveFilters = statusFilter !== 'all' || orderTypeFilter !== 'all' || paymentStatusFilter !== 'all' || paymentMethodFilter !== 'all' || !!dateFrom || !!dateTo || !!searchQuery
+
+  const handleClearAllFilters = () => {
+    setSearchQuery('')
+    setStatusFilter('all')
+    setOrderTypeFilter('all')
+    setPaymentStatusFilter('all')
+    setPaymentMethodFilter('all')
+    setDateFrom('')
+    setDateTo('')
+    setPage(1)
+  }
+
   return (
-    <motion.div key="order-management" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => { setSortField('date'); setSortDirection('desc') }}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all border ${
-              sortField === 'date' && sortDirection === 'desc'
-                ? 'bg-[var(--gold-primary)]/20 text-[var(--gold-primary)] border-[var(--gold-primary)]/30'
-                : 'bg-[var(--surface-dark)] text-[var(--text-muted)] hover:text-white'
-            }`}
-          >
-            Newest
-          </button>
+    <motion.div key="order-management" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+      {/* KPI Metric Overview Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+        <div className="p-4 rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)]/80 backdrop-blur-sm relative overflow-hidden group hover:border-[var(--gold-primary)]/40 transition-all">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Total Orders</span>
+            <div className="w-8 h-8 rounded-xl bg-amber-500/10 flex items-center justify-center text-[var(--gold-primary)]">
+              <ShoppingBag className="w-4 h-4" />
+            </div>
+          </div>
+          <p className="mt-2 text-2xl font-extrabold text-white tracking-tight">{summaryMetrics.total}</p>
+          <p className="mt-1 text-xs text-[var(--text-muted)]">Store orders registered</p>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-[var(--text-muted)] text-sm">Sort:</span>
-          <select
-            value={sortField}
-            onChange={(e) => setSortField(e.target.value)}
-            className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
-          >
-            <option value="date">Date</option>
-            <option value="order_number">Order Number</option>
-            <option value="customer">Customer</option>
-            <option value="total">Total</option>
-            <option value="status">Status</option>
-            <option value="payment_status">Payment Status</option>
-            <option value="order_type">Order Type</option>
-            <option value="customization">Customization</option>
-          </select>
-          <button
-            type="button"
-            onClick={() => setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')}
-            className="p-2 bg-[var(--surface-dark)] border border-[var(--border)] rounded-lg text-white hover:border-[var(--gold-primary)]/50 transition-colors"
-            title={sortDirection === 'asc' ? 'Ascending' : 'Descending'}
-          >
-            {sortDirection === 'asc' ? <ArrowUp className="w-4 h-4" /> : <ArrowDown className="w-4 h-4" />}
-          </button>
+
+        <div className="p-4 rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)]/80 backdrop-blur-sm relative overflow-hidden group hover:border-amber-500/40 transition-all">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wider text-amber-400">Needs Action</span>
+            <div className="w-8 h-8 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-400">
+              <Clock className="w-4 h-4" />
+            </div>
+          </div>
+          <p className="mt-2 text-2xl font-extrabold text-white tracking-tight">{summaryMetrics.pending}</p>
+          <p className="mt-1 text-xs text-[var(--text-muted)]">Pending verification/fulfillment</p>
+        </div>
+
+        <div className="p-4 rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)]/80 backdrop-blur-sm relative overflow-hidden group hover:border-sky-500/40 transition-all">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wider text-sky-400">In Fulfillment</span>
+            <div className="w-8 h-8 rounded-xl bg-sky-500/10 flex items-center justify-center text-sky-400">
+              <Package className="w-4 h-4" />
+            </div>
+          </div>
+          <p className="mt-2 text-2xl font-extrabold text-white tracking-tight">{summaryMetrics.fulfillment}</p>
+          <p className="mt-1 text-xs text-[var(--text-muted)]">Processing or in transit</p>
+        </div>
+
+        <div className="p-4 rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)]/80 backdrop-blur-sm relative overflow-hidden group hover:border-green-500/40 transition-all">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wider text-green-400">Delivered</span>
+            <div className="w-8 h-8 rounded-xl bg-green-500/10 flex items-center justify-center text-green-400">
+              <CheckCircle className="w-4 h-4" />
+            </div>
+          </div>
+          <p className="mt-2 text-2xl font-extrabold text-white tracking-tight">{summaryMetrics.completed}</p>
+          <p className="mt-1 text-xs text-[var(--text-muted)]">Completed & received</p>
         </div>
       </div>
 
-      <div className="mb-4 flex flex-wrap items-end gap-4">
-        {/* Search - slightly wider */}
-        <div className="relative min-w-[200px] flex-1 lg:flex-[2]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
-          <input
-            type="text"
-            placeholder="Search orders..."
-            value={searchQuery}
-            onChange={(e) => { setSearchQuery(e.target.value); setPage(1) }}
-            className="w-full pl-10 pr-4 py-2.5 bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] h-[42px]"
-          />
-        </div>
-        {/* Order Type */}
-        <select
-          value={orderTypeFilter}
-          onChange={(e) => { setOrderTypeFilter(e.target.value); setPage(1) }}
-          className="min-w-[150px] flex-1 bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] h-[42px]"
+      {/* Quick Status Filter Chips */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+        <button
+          type="button"
+          onClick={() => { setStatusFilter('all'); setPage(1) }}
+          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all border ${
+            statusFilter === 'all'
+              ? 'bg-[var(--gold-primary)] text-black border-[var(--gold-primary)] shadow-md shadow-[var(--gold-primary)]/20'
+              : 'bg-[var(--surface-dark)] text-[var(--text-muted)] border-[var(--border)] hover:text-white hover:border-[var(--gold-primary)]/40'
+          }`}
         >
-          <option value="all">All Order Types</option>
-          <option value="product">Product Orders</option>
-          <option value="customization">Custom Guitar Orders</option>
-          <option value="service">Service Orders</option>
-        </select>
-        {/* Status */}
-        <select
-          value={statusFilter}
-          onChange={(e) => { setStatusFilter(e.target.value); setPage(1) }}
-          className="min-w-[150px] flex-1 bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] h-[42px]"
-        >
-          <option value="all">All statuses ({statusCounts.all || 0})</option>
-          {ORDER_STATUS_LIFECYCLE.map(status => (
-            <option key={status.value} value={status.value}>
-              {status.label} ({statusCounts[status.value] || 0})
-            </option>
-          ))}
-        </select>
-        {/* Payment Status */}
-        <select
-          value={paymentStatusFilter}
-          onChange={(e) => { setPaymentStatusFilter(e.target.value); setPage(1) }}
-          className="min-w-[150px] flex-1 bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] h-[42px]"
-        >
-          <option value="all">All Payment Statuses</option>
-          <option value="pending">Pending</option>
-          <option value="proof_submitted">Proof Submitted</option>
-          <option value="under_review">Under Review</option>
-          <option value="approved">Approved</option>
-          <option value="rejected">Rejected</option>
-          <option value="failed">Failed</option>
-        </select>
-        {/* Payment Method */}
-        <select
-          value={paymentMethodFilter}
-          onChange={(e) => { setPaymentMethodFilter(e.target.value); setPage(1) }}
-          className="min-w-[150px] flex-1 bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] h-[42px]"
-        >
-          <option value="all">All Payment Methods</option>
-          <option value="gcash">GCash</option>
-          <option value="bank_transfer">Bank Transfer</option>
-          <option value="cash">Cash</option>
-        </select>
-        {/* Date From */}
-        <div className="min-w-[140px] flex-1">
-          <label className="block text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-1.5 leading-none">Date From</label>
-          <input
-            type="date"
-            value={dateFrom}
-            onChange={(e) => { setDateFrom(e.target.value); setPage(1) }}
-            className="w-full px-3 py-2.5 bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] h-[42px]"
-          />
-        </div>
-        {/* Date To */}
-        <div className="min-w-[140px] flex-1">
-          <label className="block text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-1.5 leading-none">Date To</label>
-          <input
-            type="date"
-            value={dateTo}
-            onChange={(e) => { setDateTo(e.target.value); setPage(1) }}
-            className="w-full px-3 py-2.5 bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] h-[42px]"
-          />
-        </div>
+          <span>All Statuses</span>
+          <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${statusFilter === 'all' ? 'bg-black/20 text-black' : 'bg-white/10 text-[var(--text-muted)]'}`}>
+            {statusCounts.all || 0}
+          </span>
+        </button>
+
+        {ORDER_STATUS_LIFECYCLE.map(status => {
+          const isSelected = statusFilter === status.value
+          const count = statusCounts[status.value] || 0
+
+          return (
+            <button
+              key={status.value}
+              type="button"
+              onClick={() => { setStatusFilter(status.value); setPage(1) }}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all border ${
+                isSelected
+                  ? `${status.bgColor} ${status.textColor} ${status.borderColor} ring-1 ring-inset ring-current font-bold`
+                  : 'bg-[var(--surface-dark)] text-[var(--text-muted)] border-[var(--border)] hover:text-white hover:border-[var(--border)]/80'
+              }`}
+            >
+              <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: status.color }} />
+              <span>{status.label}</span>
+              {count > 0 && (
+                <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${isSelected ? 'bg-white/20' : 'bg-white/10 text-[var(--text-muted)]'}`}>
+                  {count}
+                </span>
+              )}
+            </button>
+          )
+        })}
       </div>
 
-      {(statusFilter !== 'all' || orderTypeFilter !== 'all' || paymentStatusFilter !== 'all' || paymentMethodFilter !== 'all' || dateFrom || dateTo) && (
-        <div className="mb-4 flex flex-wrap gap-2">
-          <button
-            onClick={() => {
-              setStatusFilter('all')
-              setOrderTypeFilter('all')
-              setPaymentStatusFilter('all')
-              setPaymentMethodFilter('all')
-              setDateFrom('')
-              setDateTo('')
-              setPage(1)
-            }}
-            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 border border-red-500/30 text-sm font-medium hover:bg-red-500/20 transition-colors"
-          >
-            <X className="w-3 h-3" /> Clear Filters
-          </button>
-        </div>
-      )}
+      {/* Advanced Search & Filter Controls Box */}
+      <div className="p-4 sm:p-5 rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)]/90 backdrop-blur-sm space-y-4 shadow-xl">
+        {/* Top Row: Search Bar & Sort Controls */}
+        <div className="flex flex-col lg:flex-row gap-3 items-stretch lg:items-center justify-between">
+          {/* Search Input */}
+          <div className="relative flex-1">
+            <Search className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
+            <input
+              type="text"
+              placeholder="Search by order #, customer name, email, tracking, or rider..."
+              value={searchQuery}
+              onChange={(e) => { setSearchQuery(e.target.value); setPage(1) }}
+              className="w-full pl-10 pr-10 py-2.5 bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl text-white text-sm placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]/50 focus:border-[var(--gold-primary)] transition-all"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => { setSearchQuery(''); setPage(1) }}
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-md text-[var(--text-muted)] hover:text-white hover:bg-white/10 transition-colors"
+                title="Clear search"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
 
-      {orders.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 bg-[var(--surface-dark)] rounded-xl border border-[var(--border)]">
-          <ShoppingBag className="w-12 h-12 text-[var(--text-muted)] mb-4" />
-          <p className="text-[var(--text-muted)]">No orders found</p>
+          {/* Sort Controls */}
+          <div className="flex items-center gap-2 self-end lg:self-auto">
+            <span className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Sort by:</span>
+            <select
+              value={sortField}
+              onChange={(e) => setSortField(e.target.value)}
+              className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]/50 focus:border-[var(--gold-primary)] transition-all cursor-pointer"
+            >
+              <option value="date">Order Date</option>
+              <option value="order_number">Order Number</option>
+              <option value="customer">Customer Name</option>
+              <option value="total">Total Amount</option>
+              <option value="status">Order Status</option>
+              <option value="payment_status">Payment Status</option>
+              <option value="order_type">Order Type</option>
+            </select>
+            <button
+              type="button"
+              onClick={() => setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')}
+              className="p-2.5 bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl text-[var(--text-muted)] hover:text-white hover:border-[var(--gold-primary)]/50 transition-colors"
+              title={sortDirection === 'asc' ? 'Sort Ascending' : 'Sort Descending'}
+            >
+              {sortDirection === 'asc' ? <ArrowUp className="w-4 h-4 text-[var(--gold-primary)]" /> : <ArrowDown className="w-4 h-4 text-[var(--gold-primary)]" />}
+            </button>
+          </div>
+        </div>
+
+        {/* Second Row: Detailed Filter Dropdowns */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 pt-3 border-t border-[var(--border)]/50">
+          {/* Order Type Filter */}
+          <div className="space-y-1">
+            <label className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Order Type</label>
+            <select
+              value={orderTypeFilter}
+              onChange={(e) => { setOrderTypeFilter(e.target.value); setPage(1) }}
+              className="w-full bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]/50 focus:border-[var(--gold-primary)] transition-all cursor-pointer"
+            >
+              <option value="all">All Order Types</option>
+              <option value="product">Standard Products</option>
+              <option value="customization">Custom Guitars</option>
+              <option value="service">Service Orders</option>
+            </select>
+          </div>
+
+          {/* Payment Status Filter */}
+          <div className="space-y-1">
+            <label className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Payment Status</label>
+            <select
+              value={paymentStatusFilter}
+              onChange={(e) => { setPaymentStatusFilter(e.target.value); setPage(1) }}
+              className="w-full bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]/50 focus:border-[var(--gold-primary)] transition-all cursor-pointer"
+            >
+              <option value="all">All Payment Statuses</option>
+              <option value="pending">Pending Payment</option>
+              <option value="proof_submitted">Proof Submitted</option>
+              <option value="under_review">Under Review</option>
+              <option value="approved">Approved / Paid</option>
+              <option value="rejected">Payment Rejected</option>
+              <option value="failed">Payment Failed</option>
+            </select>
+          </div>
+
+          {/* Payment Method Filter */}
+          <div className="space-y-1">
+            <label className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Payment Method</label>
+            <select
+              value={paymentMethodFilter}
+              onChange={(e) => { setPaymentMethodFilter(e.target.value); setPage(1) }}
+              className="w-full bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]/50 focus:border-[var(--gold-primary)] transition-all cursor-pointer"
+            >
+              <option value="all">All Payment Methods</option>
+              <option value="gcash">GCash</option>
+              <option value="bank_transfer">Bank Transfer</option>
+              <option value="cash">Cash on Delivery (COD)</option>
+            </select>
+          </div>
+
+          {/* Date Range Group */}
+          <div className="space-y-1">
+            <label className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Date Range</label>
+            <div className="grid grid-cols-2 gap-2">
+              <input
+                type="date"
+                value={dateFrom}
+                onChange={(e) => { setDateFrom(e.target.value); setPage(1) }}
+                className="w-full bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl px-2.5 py-2 text-white text-xs focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]/50 transition-all cursor-pointer"
+                title="Date From"
+              />
+              <input
+                type="date"
+                value={dateTo}
+                onChange={(e) => { setDateTo(e.target.value); setPage(1) }}
+                className="w-full bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl px-2.5 py-2 text-white text-xs focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]/50 transition-all cursor-pointer"
+                title="Date To"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Active Filters Badges */}
+        {hasActiveFilters && (
+          <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-[var(--border)]/40">
+            <span className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mr-1">Active:</span>
+
+            {searchQuery && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[var(--gold-primary)]/10 text-[var(--gold-primary)] border border-[var(--gold-primary)]/30 text-xs font-medium">
+                Search: "{searchQuery}"
+                <button type="button" onClick={() => { setSearchQuery(''); setPage(1) }} className="hover:text-white">
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+
+            {statusFilter !== 'all' && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[var(--surface-dark)] text-white border border-[var(--border)] text-xs font-medium">
+                Status: {ORDER_STATUS_MAP[statusFilter]?.label || statusFilter}
+                <button type="button" onClick={() => { setStatusFilter('all'); setPage(1) }} className="hover:text-red-400">
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+
+            {orderTypeFilter !== 'all' && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[var(--surface-dark)] text-white border border-[var(--border)] text-xs font-medium capitalize">
+                Type: {orderTypeFilter}
+                <button type="button" onClick={() => { setOrderTypeFilter('all'); setPage(1) }} className="hover:text-red-400">
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+
+            {paymentStatusFilter !== 'all' && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[var(--surface-dark)] text-white border border-[var(--border)] text-xs font-medium capitalize">
+                Payment: {paymentStatusFilter.replace(/_/g, ' ')}
+                <button type="button" onClick={() => { setPaymentStatusFilter('all'); setPage(1) }} className="hover:text-red-400">
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+
+            {paymentMethodFilter !== 'all' && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[var(--surface-dark)] text-white border border-[var(--border)] text-xs font-medium capitalize">
+                Method: {paymentMethodFilter.replace(/_/g, ' ')}
+                <button type="button" onClick={() => { setPaymentMethodFilter('all'); setPage(1) }} className="hover:text-red-400">
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+
+            {(dateFrom || dateTo) && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[var(--surface-dark)] text-white border border-[var(--border)] text-xs font-medium">
+                Date: {dateFrom || 'Start'} → {dateTo || 'Present'}
+                <button type="button" onClick={() => { setDateFrom(''); setDateTo(''); setPage(1) }} className="hover:text-red-400">
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+
+            <button
+              type="button"
+              onClick={handleClearAllFilters}
+              className="inline-flex items-center gap-1 ml-auto px-2.5 py-1 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20 text-xs font-semibold hover:bg-red-500/20 transition-colors"
+            >
+              <X className="w-3 h-3" /> Reset All
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Orders Table & Pagination Content */}
+      {!isDataLoading && orders.length === 0 ? (
+        <div className="bg-[var(--surface-dark)]/80 border border-[var(--border)] rounded-2xl p-12 text-center flex flex-col items-center justify-center">
+          <div className="w-16 h-16 rounded-2xl bg-[var(--gold-primary)]/10 border border-[var(--gold-primary)]/20 flex items-center justify-center text-[var(--gold-primary)] mb-4">
+            <ShoppingBag className="w-8 h-8" />
+          </div>
+          <h3 className="text-lg font-bold text-white">No orders found</h3>
+          <p className="text-sm text-[var(--text-muted)] mt-1 max-w-sm text-center">
+            {hasActiveFilters
+              ? 'No orders match your current search and filter criteria. Try adjusting or resetting filters.'
+              : 'There are currently no orders registered in the system.'}
+          </p>
+          {hasActiveFilters && (
+            <button
+              type="button"
+              onClick={handleClearAllFilters}
+              className="mt-4 px-4 py-2 rounded-xl bg-[var(--gold-primary)] text-black text-sm font-semibold hover:shadow-lg hover:shadow-[var(--gold-primary)]/20 transition-all"
+            >
+              Clear All Filters
+            </button>
+          )}
         </div>
       ) : (
-        <>
-          <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl overflow-hidden">
+        <div className="space-y-4">
+          <div className="bg-[var(--surface-dark)]/90 border border-[var(--border)] rounded-2xl overflow-hidden shadow-2xl backdrop-blur-sm relative">
+            {/* Top subtle progress bar during background loading */}
+            {showBackgroundProgress && (
+              <div className="absolute top-0 left-0 right-0 h-0.5 bg-[var(--gold-primary)]/30 overflow-hidden z-20">
+                <div className="h-full bg-[var(--gold-primary)] animate-[shimmer_1.5s_infinite_linear] w-1/3" />
+              </div>
+            )}
+
             <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-[var(--bg-primary)]/50 border-b border-[var(--border)]">
+              <table className="w-full text-left">
+                <thead className="bg-[var(--bg-primary)]/60 border-b border-[var(--border)]">
                   <tr>
-                    <th className="p-4 text-left text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold">Order ID</th>
-                    <th className="p-4 text-left text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold">Date</th>
-                    <th className="p-4 text-left text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold">Customer</th>
-                    <th className="p-4 text-right text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold">Total</th>
-                    <th className="p-4 text-left text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold">Payment</th>
-                    <th className="p-4 text-center text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold">Items</th>
-                    <th className="p-4 text-left text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold">Status</th>
-                    <th className="p-4 text-center text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold">Actions</th>
+                    <th className="py-3.5 px-4 text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold">Order</th>
+                    <th className="py-3.5 px-4 text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold">Date</th>
+                    <th className="py-3.5 px-4 text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold">Customer</th>
+                    <th className="py-3.5 px-4 text-right text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold">Total Amount</th>
+                    <th className="py-3.5 px-4 text-left text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold">Payment Status</th>
+                    <th className="py-3.5 px-4 text-center text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold">Items</th>
+                    <th className="py-3.5 px-4 text-left text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold">Fulfillment Status</th>
+                    <th className="py-3.5 px-4 text-center text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold">Actions</th>
                   </tr>
                 </thead>
-                <tbody>
-                  {orders.map((order) => {
-                    const orderStatus = order.status || 'pending'
-                    const statusConfig = getOrderStatusConfig(orderStatus)
-                    const paymentConfig = getPaymentStatusConfig(order.payment_status || 'pending', order)
-                    const itemCount = order.items?.length || 0
-
-                    const rowHighlight = {
-                      shipped: 'bg-sky-500/5 border-l-2 border-l-sky-400',
-                      out_for_delivery: 'bg-indigo-500/10 border-l-2 border-l-indigo-400',
-                      delivered: 'bg-green-500/5 opacity-60',
-                    }
-                    const highlightClass = rowHighlight[orderStatus] || ''
-
-                    return (
-                      <tr key={order.order_id} className={`border-b border-[var(--border)]/30 hover:bg-white/5 transition-colors ${highlightClass}`}>
-                        <td className="p-4">
-                          <p className="text-white font-mono text-sm font-semibold">#{order.order_number || order.order_id?.slice(0, 8)}</p>
+                <tbody className="divide-y divide-[var(--border)]/40">
+                  {showInitialSkeleton ? (
+                    [...Array(6)].map((_, i) => (
+                      <tr key={`orders-skeleton-${i}`} className="animate-pulse border-b border-[var(--border)]/30">
+                        <td className="py-4 px-4">
+                          <div className="h-4 w-20 bg-white/10 rounded mb-1.5" />
+                          <div className="h-3 w-16 bg-white/5 rounded" />
                         </td>
-                        <td className="p-4 text-[var(--text-muted)] text-sm">
-                          {order.created_at ? new Date(order.created_at).toLocaleDateString() : '—'}
+                        <td className="py-4 px-4">
+                          <div className="h-4 w-24 bg-white/10 rounded mb-1.5" />
+                          <div className="h-3 w-14 bg-white/5 rounded" />
                         </td>
-                        <td className="p-4">
-                          <p className="text-white text-sm font-medium">{order.first_name && order.last_name ? `${order.first_name} ${order.last_name}` : order.customer_name || order.user_name || 'N/A'}</p>
-                          <p className="text-[var(--text-muted)] text-xs">{order.email || order.customer_email || 'N/A'}</p>
+                        <td className="py-4 px-4">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-8 h-8 rounded-full bg-white/10 flex-shrink-0" />
+                            <div className="space-y-1.5 flex-1">
+                              <div className="h-3.5 w-28 bg-white/10 rounded" />
+                              <div className="h-3 w-36 bg-white/5 rounded" />
+                            </div>
+                          </div>
                         </td>
-                        <td className="p-4 text-right font-bold text-[var(--gold-primary)]">
-                          {formatCurrency(getOrderTotal(order))}
+                        <td className="py-4 px-4 text-right">
+                          <div className="h-4 w-20 bg-white/10 rounded ml-auto" />
                         </td>
-                        <td className="p-4">
-                          <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold border ${paymentConfig.bgColor} ${paymentConfig.textColor} ${paymentConfig.borderColor}`}>
-                            {paymentConfig.label}
-                          </span>
+                        <td className="py-4 px-4">
+                          <div className="h-5 w-24 bg-white/10 rounded-full mb-1" />
+                          <div className="h-3 w-20 bg-white/5 rounded" />
                         </td>
-                        <td className="p-4 text-center text-[var(--text-muted)] text-sm">{itemCount}</td>
-                        <td className="p-4">
-                          <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-semibold border bg-[var(--gold-primary)]/20 text-[var(--gold-primary)] border-[var(--gold-primary)]/30">
-                            {statusConfig.label}
-                          </span>
+                        <td className="py-4 px-4 text-center">
+                          <div className="h-5 w-6 bg-white/10 rounded-full mx-auto" />
                         </td>
-                        <td className="p-4 text-center">
-                          <div className="flex items-center justify-center gap-1">
-                            <button
-                              onClick={() => {
-                                setSelectedSection('details')
-                                setSelectedOrder(order)
-                              }}
-                              className="p-2 hover:bg-[var(--gold-primary)]/10 rounded-lg transition-colors"
-                              title="View Details"
-                            >
-                              <Eye className="w-4 h-4 text-[var(--text-muted)]" />
-                            </button>
-                            <button
-                              onClick={() => {
-                                setSelectedSection('receipt')
-                                setSelectedOrder(order)
-                              }}
-                              className="p-2 hover:bg-[var(--gold-primary)]/10 rounded-lg transition-colors"
-                              title="View Receipt"
-                            >
-                              <Printer className="w-4 h-4 text-[var(--text-muted)]" />
-                            </button>
+                        <td className="py-4 px-4">
+                          <div className="h-5 w-24 bg-white/10 rounded-full" />
+                        </td>
+                        <td className="py-4 px-4 text-center">
+                          <div className="flex items-center justify-center gap-1.5">
+                            <div className="w-7 h-7 bg-white/10 rounded-lg" />
+                            <div className="w-7 h-7 bg-white/10 rounded-lg" />
                           </div>
                         </td>
                       </tr>
-                    )
-                  })}
+                    ))
+                  ) : (
+                    orders.map((order) => {
+                      const orderStatus = order.status || 'pending'
+                      const statusConfig = getOrderStatusConfig(orderStatus)
+                      const isCustomization = order.order_type === 'customization'
+                      const customizationStatus = String(order.customization_status || 'active').replace(/_/g, ' ')
+                      const paymentConfig = getPaymentStatusConfig(order.payment_status || 'pending', order)
+                      const itemCount = order.items?.length || 0
+                      const customerName = getOrderCustomerName(order)
+                      const paymentMethod = getOrderPaymentMethodLabel(order)
+
+                      const rowHighlight = {
+                        shipped: 'bg-sky-500/5',
+                        out_for_delivery: 'bg-indigo-500/5',
+                        delivered: 'bg-green-500/5',
+                      }
+                      const highlightClass = rowHighlight[orderStatus] || ''
+
+                      return (
+                        <tr key={order.order_id} className={`hover:bg-white/5 transition-colors ${highlightClass}`}>
+                          <td className="py-4 px-4">
+                            <div className="flex items-center gap-2">
+                              <span className="text-white font-mono text-sm font-bold">
+                                #{order.order_number || order.order_id?.slice(0, 8)}
+                              </span>
+                            </div>
+                            <div className="mt-1">
+                              <span className={`inline-flex rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                                isCustomization
+                                  ? 'bg-violet-500/15 text-violet-300 border border-violet-500/30'
+                                  : 'bg-sky-500/15 text-sky-300 border border-sky-500/30'
+                              }`}>
+                                {isCustomization ? 'Custom Guitar' : 'Standard Product'}
+                              </span>
+                            </div>
+                          </td>
+
+                          <td className="py-4 px-4 text-[var(--text-muted)] text-sm whitespace-nowrap">
+                            {order.created_at ? (
+                              <div>
+                                <p className="text-white font-medium">{new Date(order.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+                                <p className="text-[11px] text-[var(--text-muted)]">{new Date(order.created_at).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' })}</p>
+                              </div>
+                            ) : '—'}
+                          </td>
+
+                          <td className="py-4 px-4">
+                            <div className="flex items-center gap-2.5">
+                              <div className="w-8 h-8 rounded-full bg-[var(--gold-primary)]/10 border border-[var(--gold-primary)]/30 text-[var(--gold-primary)] flex items-center justify-center text-xs font-bold flex-shrink-0">
+                                {customerName.charAt(0).toUpperCase() || 'U'}
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-white text-sm font-semibold truncate">{customerName}</p>
+                                <p className="text-[var(--text-muted)] text-xs truncate">{order.email || order.customer_email || 'No email'}</p>
+                              </div>
+                            </div>
+                          </td>
+
+                          <td className="py-4 px-4 text-right font-bold text-[var(--gold-primary)] text-sm whitespace-nowrap">
+                            {formatCurrency(getOrderTotal(order))}
+                          </td>
+
+                          <td className="py-4 px-4">
+                            <div className="space-y-1">
+                              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${paymentConfig.bgColor} ${paymentConfig.textColor} ${paymentConfig.borderColor}`}>
+                                <span className="w-1.5 h-1.5 rounded-full bg-current" />
+                                {paymentConfig.label}
+                              </span>
+                              <p className="text-[11px] text-[var(--text-muted)]">Method: {paymentMethod}</p>
+                            </div>
+                          </td>
+
+                          <td className="py-4 px-4 text-center">
+                            <span className="inline-flex items-center justify-center min-w-[24px] h-6 px-2 rounded-full bg-[var(--bg-primary)] border border-[var(--border)] text-xs font-bold text-white">
+                              {itemCount}
+                            </span>
+                          </td>
+
+                          <td className="py-4 px-4">
+                            {isCustomization ? (
+                              <div className="space-y-1.5">
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold border bg-violet-500/10 text-violet-300 border-violet-500/30 capitalize">
+                                  {customizationStatus}
+                                </span>
+                                <p className="text-xs text-[var(--text-muted)]">
+                                  Progress: {Number(order.project_progress || 0)}%
+                                </p>
+                                {order.project_fulfillment_status && (
+                                  <p className="text-xs text-[var(--gold-primary)] font-medium capitalize">
+                                    {String(order.project_fulfillment_status).replace(/_/g, ' ')}
+                                  </p>
+                                )}
+                              </div>
+                            ) : (
+                              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${statusConfig.bgColor} ${statusConfig.textColor} ${statusConfig.borderColor}`}>
+                                <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: statusConfig.color }} />
+                                {statusConfig.label}
+                              </span>
+                            )}
+                          </td>
+
+                          <td className="py-4 px-4 text-center">
+                            <div className="flex items-center justify-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedSection('details')
+                                  setSelectedOrder(order)
+                                }}
+                                className="p-2 hover:bg-[var(--gold-primary)]/15 text-[var(--text-muted)] hover:text-[var(--gold-primary)] rounded-xl transition-all border border-transparent hover:border-[var(--gold-primary)]/30"
+                                title="View Order Details"
+                              >
+                                <Eye className="w-4 h-4" />
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedSection('receipt')
+                                  setSelectedOrder(order)
+                                }}
+                                className="p-2 hover:bg-white/10 text-[var(--text-muted)] hover:text-white rounded-xl transition-all"
+                                title="View & Print Invoice"
+                              >
+                                <Printer className="w-4 h-4" />
+                              </button>
+
+                              {(isCustomization || order.project_id) && (
+                                <button
+                                  type="button"
+                                  onClick={() => onManageProject?.(order)}
+                                  className="p-2 hover:bg-violet-500/15 text-violet-400 hover:text-violet-300 rounded-xl transition-all border border-transparent hover:border-violet-500/30 cursor-pointer"
+                                  title="Project Shortcut: Go to Project Tab & Show Progress Modal"
+                                >
+                                  <BriefcaseBusiness className="w-4 h-4" />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })
+                  )}
                 </tbody>
               </table>
             </div>
           </div>
 
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between mt-4">
+          {/* Pagination Controls */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-2 py-2">
+            <div className="flex items-center gap-2">
               <p className="text-[var(--text-muted)] text-sm">
-                Showing {(page - 1) * PAGE_SIZE + 1} to {Math.min(page * PAGE_SIZE, pagination.total || 0)} of {pagination.total || 0} orders
+                Showing{' '}
+                <span className="font-semibold text-white">
+                  {(pagination?.total || orders.length) === 0 ? 0 : (page - 1) * PAGE_SIZE + 1}
+                </span>{' '}
+                to{' '}
+                <span className="font-semibold text-white">
+                  {Math.min(page * PAGE_SIZE, pagination?.total ?? orders.length)}
+                </span>{' '}
+                of{' '}
+                <span className="font-semibold text-white">{pagination?.total ?? orders.length}</span> orders
               </p>
-              <div className="flex items-center gap-2">
+              {showBackgroundProgress && (
+                <div className="flex items-center gap-1.5 text-xs text-[var(--gold-primary)] bg-[var(--gold-primary)]/10 px-2.5 py-0.5 rounded-full border border-[var(--gold-primary)]/20">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  <span>Refreshing...</span>
+                </div>
+              )}
+            </div>
+
+            {totalPages > 1 && (
+              <div className="flex items-center gap-1.5">
+                {/* Previous Button */}
                 <button
+                  type="button"
                   onClick={() => requestOrdersPage(Math.max(1, page - 1))}
-                  disabled={page === 1}
-                  className="p-2 hover:bg-[var(--surface-dark)] rounded-lg transition-colors disabled:opacity-50"
+                  disabled={page <= 1 || isDataLoading}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 bg-[var(--surface-dark)] border border-[var(--border)] hover:border-[var(--gold-primary)]/50 rounded-xl text-xs font-semibold text-white transition-all disabled:opacity-40 disabled:hover:border-[var(--border)] disabled:cursor-not-allowed"
                 >
-                  <ChevronLeft className="w-4 h-4 text-white" />
+                  <ChevronLeft className="w-3.5 h-3.5" /> Prev
                 </button>
-                <span className="text-white text-sm">
-                  Page {page} of {totalPages}
-                </span>
+
+                {/* Page Number Buttons */}
+                {(() => {
+                  const pages = []
+                  const maxButtons = 5
+                  let start = Math.max(1, page - 2)
+                  let end = Math.min(totalPages, start + maxButtons - 1)
+                  if (end - start < maxButtons - 1) {
+                    start = Math.max(1, end - maxButtons + 1)
+                  }
+
+                  if (start > 1) {
+                    pages.push(
+                      <button
+                        key="page-1"
+                        type="button"
+                        onClick={() => requestOrdersPage(1)}
+                        disabled={isDataLoading}
+                        className="w-8 h-8 rounded-lg bg-[var(--surface-dark)] border border-[var(--border)] text-xs font-semibold text-white hover:border-[var(--gold-primary)]/50 transition-all disabled:opacity-40"
+                      >
+                        1
+                      </button>
+                    )
+                    if (start > 2) {
+                      pages.push(
+                        <span key="dots-start" className="text-[var(--text-muted)] text-xs px-1">...</span>
+                      )
+                    }
+                  }
+
+                  for (let p = start; p <= end; p++) {
+                    const isActive = p === page
+                    pages.push(
+                      <button
+                        key={`page-${p}`}
+                        type="button"
+                        onClick={() => requestOrdersPage(p)}
+                        disabled={isActive || isDataLoading}
+                        className={`w-8 h-8 rounded-lg text-xs font-bold transition-all ${
+                          isActive
+                            ? 'bg-[var(--gold-primary)] text-black shadow-md shadow-[var(--gold-primary)]/20'
+                            : 'bg-[var(--surface-dark)] border border-[var(--border)] text-white hover:border-[var(--gold-primary)]/50 disabled:opacity-50'
+                        }`}
+                      >
+                        {p}
+                      </button>
+                    )
+                  }
+
+                  if (end < totalPages) {
+                    if (end < totalPages - 1) {
+                      pages.push(
+                        <span key="dots-end" className="text-[var(--text-muted)] text-xs px-1">...</span>
+                      )
+                    }
+                    pages.push(
+                      <button
+                        key={`page-${totalPages}`}
+                        type="button"
+                        onClick={() => requestOrdersPage(totalPages)}
+                        disabled={isDataLoading}
+                        className="w-8 h-8 rounded-lg bg-[var(--surface-dark)] border border-[var(--border)] text-xs font-semibold text-white hover:border-[var(--gold-primary)]/50 transition-all disabled:opacity-40"
+                      >
+                        {totalPages}
+                      </button>
+                    )
+                  }
+
+                  return pages
+                })()}
+
+                {/* Next Button */}
                 <button
+                  type="button"
                   onClick={() => requestOrdersPage(Math.min(totalPages, page + 1))}
-                  disabled={page === totalPages}
-                  className="p-2 hover:bg-[var(--surface-dark)] rounded-lg transition-colors disabled:opacity-50"
+                  disabled={page >= totalPages || isDataLoading}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 bg-[var(--surface-dark)] border border-[var(--border)] hover:border-[var(--gold-primary)]/50 rounded-xl text-xs font-semibold text-white transition-all disabled:opacity-40 disabled:hover:border-[var(--border)] disabled:cursor-not-allowed"
                 >
-                  <ChevronRight className="w-4 h-4 text-white" />
+                  Next <ChevronRight className="w-3.5 h-3.5" />
                 </button>
               </div>
-            </div>
-          )}
-        </>
+            )}
+          </div>
+        </div>
       )}
 
+      {/* Modal View */}
       <AnimatePresence>
         {selectedOrder && (
           <OrderDetailsModal
@@ -1491,6 +1972,7 @@ export function OrderManagement({ orders, onRefresh, user, pagination }) {
             onUpdatePaymentStatus={handleUpdatePaymentStatus}
             onUpdateOrderStatus={handleUpdateOrderStatus}
             onVerifyPayment={handleVerifyPayment}
+            onManageProject={onManageProject}
             user={user}
             initialSection={selectedSection}
           />

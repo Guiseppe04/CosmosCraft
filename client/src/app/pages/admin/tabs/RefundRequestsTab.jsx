@@ -378,7 +378,10 @@ export function RefundRequestsTab({ showToast, user }) {
     setUpdatingStatus(true)
     try {
       if (selectedRequest.project_id) {
-        await adminApi.updateProjectRefundStatus(selectedRequest.refund_request_id, newStatus, { adminNotes: adminNotes || undefined })
+        await adminApi.updateProjectRefundStatus(selectedRequest.refund_request_id, {
+          status: newStatus,
+          adminNotes: adminNotes || undefined,
+        })
       } else {
         await adminApi.updateRefundStatus(selectedRequest.refund_request_id, newStatus, { adminNotes: adminNotes || undefined })
       }

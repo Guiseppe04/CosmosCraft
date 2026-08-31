@@ -1327,8 +1327,8 @@ export function DashboardPage() {
                 key={label}
                 onClick={() => setActivePurchaseTab(label)}
                 className={`pb-2 transition-colors duration-200 whitespace-nowrap ${label === activePurchaseTab
-                    ? 'border-b-2 border-[var(--gold-primary)] text-[var(--gold-primary)]'
-                    : 'border-transparent text-[var(--text-muted)] hover:text-white border-b-2'
+                  ? 'border-b-2 border-[var(--gold-primary)] text-[var(--gold-primary)]'
+                  : 'border-transparent text-[var(--text-muted)] hover:text-white border-b-2'
                   }`}
                 type="button"
               >
@@ -1390,8 +1390,8 @@ export function DashboardPage() {
                         <div className="flex items-center gap-2">
                           <span className="text-[11px] uppercase tracking-wider text-[var(--text-muted)]">Payment Status</span>
                           <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold capitalize border ${['approved', 'paid', 'verified'].includes(String(order.payment_status || '').toLowerCase())
-                              ? 'bg-green-500/10 text-green-400 border-green-500/30'
-                              : 'bg-yellow-500/10 text-yellow-500 border-yellow-500/30'
+                            ? 'bg-green-500/10 text-green-400 border-green-500/30'
+                            : 'bg-yellow-500/10 text-yellow-500 border-yellow-500/30'
                             }`}>
                             {formatStatus(order.payment_status)}
                           </span>
@@ -1651,9 +1651,9 @@ export function DashboardPage() {
                     </p>
                   </div>
                   <span className={`px-3 py-1 rounded-full text-xs font-semibold capitalize border ${apt.status === 'approved' ? 'bg-green-500/10 text-green-400 border-green-500/30' :
-                      apt.status === 'completed' ? 'bg-blue-500/10 text-blue-400 border-blue-500/30' :
-                        apt.status === 'cancelled' ? 'bg-red-500/10 text-red-500 border-red-500/30' :
-                          'bg-yellow-500/10 text-yellow-500 border-yellow-500/30'
+                    apt.status === 'completed' ? 'bg-blue-500/10 text-blue-400 border-blue-500/30' :
+                      apt.status === 'cancelled' ? 'bg-red-500/10 text-red-500 border-red-500/30' :
+                        'bg-yellow-500/10 text-yellow-500 border-yellow-500/30'
                     }`}>
                     {apt.status || 'Pending'}
                   </span>
@@ -1914,15 +1914,15 @@ export function DashboardPage() {
                       <div className="mt-4 flex flex-wrap items-center gap-2 sm:gap-4">
                         {String(project.status || '').toLowerCase() === 'cancelled' ? (
                           <span className={`px-2.5 py-1 border rounded-full text-xs font-bold ${project.refund_status === 'refunded' ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300' :
-                              project.refund_status === 'processing' ? 'border-sky-500/40 bg-sky-500/10 text-sky-300' :
-                                project.refund_status === 'approved' ? 'border-green-500/40 bg-green-500/10 text-green-300' :
-                                  project.refund_status === 'pending_payment_verification' ? 'border-violet-500/40 bg-violet-500/10 text-violet-300' :
-                                    project.cancel_resolution === 'partial_refund_and_build' ? 'border-cyan-500/40 bg-cyan-500/10 text-cyan-300' :
-                                      project.cancel_resolution === 'partial_refund_and_parts' ? 'border-cyan-500/40 bg-cyan-500/10 text-cyan-300' :
-                                        project.cancel_resolution === 'current_build_released' ? 'border-amber-500/40 bg-amber-500/10 text-amber-300' :
-                                          project.cancel_resolution === 'parts_returned' ? 'border-amber-500/40 bg-amber-500/10 text-amber-300' :
-                                            project.refund_status === 'pending' || project.cancel_resolution === 'full_refund' ? 'border-blue-500/40 bg-blue-500/10 text-blue-300' :
-                                              'border-red-500/40 bg-red-500/10 text-red-300'
+                            project.refund_status === 'processing' ? 'border-sky-500/40 bg-sky-500/10 text-sky-300' :
+                              project.refund_status === 'approved' ? 'border-green-500/40 bg-green-500/10 text-green-300' :
+                                project.refund_status === 'pending_payment_verification' ? 'border-violet-500/40 bg-violet-500/10 text-violet-300' :
+                                  project.cancel_resolution === 'partial_refund_and_build' ? 'border-cyan-500/40 bg-cyan-500/10 text-cyan-300' :
+                                    project.cancel_resolution === 'partial_refund_and_parts' ? 'border-cyan-500/40 bg-cyan-500/10 text-cyan-300' :
+                                      project.cancel_resolution === 'current_build_released' ? 'border-amber-500/40 bg-amber-500/10 text-amber-300' :
+                                        project.cancel_resolution === 'parts_returned' ? 'border-amber-500/40 bg-amber-500/10 text-amber-300' :
+                                          project.refund_status === 'pending' || project.cancel_resolution === 'full_refund' ? 'border-blue-500/40 bg-blue-500/10 text-blue-300' :
+                                            'border-red-500/40 bg-red-500/10 text-red-300'
                             }`}>
                             {project.refund_status === 'refunded' ? `Cancelled — Refunded (${formatCurrency(project.refunded_amount || project.refund_approved_amount || project.refund_amount_requested)})` :
                               project.refund_status === 'processing' ? `Cancelled — Refund Processing (${formatCurrency(project.refund_approved_amount || project.refund_amount_requested)})` :
@@ -2113,8 +2113,8 @@ export function DashboardPage() {
                   }}
                   disabled={isBuildLimitReached}
                   className={`px-4 py-2 rounded-lg font-semibold text-sm transition-all flex items-center gap-2 ${isBuildLimitReached
-                      ? 'bg-[var(--surface-light)] text-[var(--text-muted)] cursor-not-allowed'
-                      : 'bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] hover:shadow-[0_0_15px_rgba(212,175,55,0.4)]'
+                    ? 'bg-[var(--surface-light)] text-[var(--text-muted)] cursor-not-allowed'
+                    : 'bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] hover:shadow-[0_0_15px_rgba(212,175,55,0.4)]'
                     }`}
                 >
                   <Guitar className="w-4 h-4" />
@@ -2194,8 +2194,8 @@ export function DashboardPage() {
                               navigate('/shop');
                             }}
                             className={`flex-1 py-1.5 px-2 rounded-lg border text-[var(--text-light)] text-xs transition-all text-center font-medium ${buildLockState.isLocked
-                                ? 'border-[var(--border)] opacity-40 cursor-not-allowed'
-                                : 'border-[var(--border)] hover:bg-white/5'
+                              ? 'border-[var(--border)] opacity-40 cursor-not-allowed'
+                              : 'border-[var(--border)] hover:bg-white/5'
                               }`}
                           >
                             Add Parts
@@ -2213,8 +2213,8 @@ export function DashboardPage() {
                             disabled={buildLockState.isLocked}
                             onClick={() => navigate(build.isBass ? `/customize-bass?edit=${build.id}` : `/customize?edit=${build.id}`)}
                             className={`flex-1 py-1.5 px-2 rounded-lg border text-xs transition-all text-center font-medium ${buildLockState.isLocked
-                                ? 'border-blue-500/20 text-blue-200/40 cursor-not-allowed'
-                                : 'border-blue-500/30 text-blue-400 hover:bg-blue-500/10'
+                              ? 'border-blue-500/20 text-blue-200/40 cursor-not-allowed'
+                              : 'border-blue-500/30 text-blue-400 hover:bg-blue-500/10'
                               }`}
                           >
                             Edit Build
@@ -2999,7 +2999,7 @@ export function DashboardPage() {
                       <div className="h-2 w-full bg-[var(--surface-dark)] rounded-full overflow-hidden border border-white/5">
                         <div
                           className="h-full bg-gradient-to-r from-red-500 via-amber-500 to-[var(--gold-primary)] transition-all duration-300"
-                          style={{ width: `${Math.max(5, cancelProjectTarget.progress || 0)}%` }}
+                          style={{ width: `${Math.max(0, Math.min(100, Number(cancelProjectTarget.progress) || 0))}%` }}
                         />
                       </div>
                     </div>
@@ -3037,9 +3037,9 @@ export function DashboardPage() {
                         <div className="flex items-center justify-between">
                           <span className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)] font-medium">Payment Status</span>
                           <span className={`text-xs font-semibold capitalize ${cancelProjectPayment.status === 'verified' ? 'text-green-400' :
-                              cancelProjectPayment.status === 'for_verification' || cancelProjectPayment.status === 'pending' ? 'text-amber-400' :
-                                cancelProjectPayment.status === 'rejected' ? 'text-red-400' :
-                                  'text-white'
+                            cancelProjectPayment.status === 'for_verification' || cancelProjectPayment.status === 'pending' ? 'text-amber-400' :
+                              cancelProjectPayment.status === 'rejected' ? 'text-red-400' :
+                                'text-white'
                             }`}>{formatStatus(cancelProjectPayment.status)}</span>
                         </div>
                       </>
@@ -3152,11 +3152,10 @@ export function DashboardPage() {
                               return (
                                 <label
                                   key={opt.value}
-                                  className={`flex cursor-pointer items-start gap-3 rounded-2xl border p-3.5 transition-all ${
-                                    isSelected
+                                  className={`flex cursor-pointer items-start gap-3 rounded-2xl border p-3.5 transition-all ${isSelected
                                       ? 'border-amber-500/70 bg-gradient-to-br from-amber-500/15 to-amber-500/5 shadow-[0_0_15px_rgba(245,158,11,0.1)] ring-1 ring-amber-500/40'
                                       : 'border-[var(--border)] bg-[var(--bg-primary)] hover:border-amber-500/40 hover:bg-white/[0.02]'
-                                  }`}
+                                    }`}
                                 >
                                   <input
                                     type="radio"
@@ -3380,8 +3379,8 @@ export function DashboardPage() {
                           {(() => {
                             const snap = cancelWithOptionsTarget.cancel_address_snapshot
                               ? (typeof cancelWithOptionsTarget.cancel_address_snapshot === 'string'
-                                  ? JSON.parse(cancelWithOptionsTarget.cancel_address_snapshot)
-                                  : cancelWithOptionsTarget.cancel_address_snapshot)
+                                ? JSON.parse(cancelWithOptionsTarget.cancel_address_snapshot)
+                                : cancelWithOptionsTarget.cancel_address_snapshot)
                               : null
                             const recipient = snap?.recipient_name || cancelWithOptionsTarget.customer_name || 'Customer'
                             const phone = snap?.phone || cancelWithOptionsTarget.customer_phone
@@ -3396,14 +3395,14 @@ export function DashboardPage() {
                             ].filter(Boolean).join(', ') : (
                               cancelWithOptionsTarget.cancel_address_line1
                                 ? [
-                                    cancelWithOptionsTarget.cancel_address_line1,
-                                    cancelWithOptionsTarget.cancel_address_line2,
-                                    cancelWithOptionsTarget.cancel_address_barangay,
-                                    cancelWithOptionsTarget.cancel_address_city,
-                                    cancelWithOptionsTarget.cancel_address_province,
-                                    cancelWithOptionsTarget.cancel_address_postal_code,
-                                    cancelWithOptionsTarget.cancel_address_country
-                                  ].filter(Boolean).join(', ')
+                                  cancelWithOptionsTarget.cancel_address_line1,
+                                  cancelWithOptionsTarget.cancel_address_line2,
+                                  cancelWithOptionsTarget.cancel_address_barangay,
+                                  cancelWithOptionsTarget.cancel_address_city,
+                                  cancelWithOptionsTarget.cancel_address_province,
+                                  cancelWithOptionsTarget.cancel_address_postal_code,
+                                  cancelWithOptionsTarget.cancel_address_country
+                                ].filter(Boolean).join(', ')
                                 : 'No delivery address recorded'
                             )
 
@@ -3460,32 +3459,36 @@ export function DashboardPage() {
                   <div className="space-y-4">
                     {/* Project Overview Card */}
                     {cancelWithOptionsTarget && (
-                      <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] p-4 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)] font-medium">Build Reference</span>
-                          <span className="text-xs font-mono font-semibold text-white bg-white/5 px-2 py-0.5 rounded-md border border-white/10">
-                            {cancelWithOptionsTarget.custom_build_id || cancelWithOptionsTarget.project_id?.slice(0, 8)}
+
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="uppercase tracking-[0.14em] text-[var(--text-muted)] font-medium">
+                            Manufacturing Progress
+                          </span>
+
+                          <span className="font-bold text-[var(--gold-primary)]">
+                            {Math.min(
+                              100,
+                              Math.max(0, Number(cancelWithOptionsTarget.progress) || 0)
+                            )}
+                            %
                           </span>
                         </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)] font-medium">Current Status</span>
-                          <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full border border-amber-500/30 bg-amber-500/10 text-amber-400 capitalize">
-                            {formatStatus(cancelWithOptionsTarget.status)}
-                          </span>
-                        </div>
-                        <div className="space-y-1.5">
-                          <div className="flex items-center justify-between text-xs">
-                            <span className="uppercase tracking-[0.14em] text-[var(--text-muted)] font-medium">Manufacturing Progress</span>
-                            <span className="font-bold text-[var(--gold-primary)]">{cancelWithOptionsTarget.progress || 0}%</span>
-                          </div>
-                          <div className="h-2 w-full bg-[var(--surface-dark)] rounded-full overflow-hidden border border-white/5">
-                            <div
-                              className="h-full bg-gradient-to-r from-amber-500 to-[var(--gold-primary)] transition-all duration-300"
-                              style={{ width: `${Math.max(5, cancelWithOptionsTarget.progress || 0)}%` }}
-                            />
-                          </div>
+
+                        <div className="h-2 w-full bg-[var(--surface-dark)] rounded-full overflow-hidden border border-white/5">
+                          <div
+                            className="h-full bg-gradient-to-r from-amber-500 to-[var(--gold-primary)] transition-all duration-300"
+                            style={{
+                              width: `${Math.min(
+                                100,
+                                Math.max(0, Number(cancelWithOptionsTarget.progress) || 0)
+                              )}%`,
+                            }}
+                          />
                         </div>
                       </div>
+
+
                     )}
 
                     {/* Policy & Material Notice */}
@@ -3527,8 +3530,8 @@ export function DashboardPage() {
                             <label
                               key={opt.value}
                               className={`flex cursor-pointer items-start gap-3 rounded-2xl border p-3.5 transition-all ${isSelected
-                                  ? 'border-amber-500/70 bg-gradient-to-br from-amber-500/15 to-amber-500/5 shadow-[0_0_15px_rgba(245,158,11,0.1)] ring-1 ring-amber-500/40'
-                                  : 'border-[var(--border)] bg-[var(--bg-primary)] hover:border-amber-500/40 hover:bg-white/[0.02]'
+                                ? 'border-amber-500/70 bg-gradient-to-br from-amber-500/15 to-amber-500/5 shadow-[0_0_15px_rgba(245,158,11,0.1)] ring-1 ring-amber-500/40'
+                                : 'border-[var(--border)] bg-[var(--bg-primary)] hover:border-amber-500/40 hover:bg-white/[0.02]'
                                 }`}
                             >
                               <input
@@ -3619,11 +3622,10 @@ export function DashboardPage() {
                                       <label
                                         key={addr.address_id}
                                         onClick={() => setSelectedCancelAddressId(addr.address_id)}
-                                        className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
-                                          isAddrSelected
+                                        className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${isAddrSelected
                                             ? 'border-amber-500/70 bg-amber-500/10 ring-1 ring-amber-500/40 shadow-sm'
                                             : 'border-[var(--border)] bg-[var(--surface-dark)] hover:border-amber-500/40 hover:bg-white/[0.02]'
-                                        }`}
+                                          }`}
                                       >
                                         <input
                                           type="radio"
@@ -3704,8 +3706,8 @@ export function DashboardPage() {
                             type="button"
                             onClick={() => setCancelWithOptionsReason(tag)}
                             className={`text-[11px] px-2.5 py-1 rounded-lg border transition-colors ${cancelWithOptionsReason === tag
-                                ? 'border-amber-500/60 bg-amber-500/20 text-amber-200'
-                                : 'border-[var(--border)] bg-[var(--bg-primary)] text-[var(--text-muted)] hover:text-white hover:border-amber-500/30'
+                              ? 'border-amber-500/60 bg-amber-500/20 text-amber-200'
+                              : 'border-[var(--border)] bg-[var(--bg-primary)] text-[var(--text-muted)] hover:text-white hover:border-amber-500/30'
                               }`}
                           >
                             {tag}
@@ -3832,8 +3834,8 @@ export function DashboardPage() {
                       <label
                         key={opt.value}
                         className={`flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3 transition-colors ${holdOption === opt.value
-                            ? 'border-amber-500/50 bg-amber-500/10'
-                            : 'border-[var(--border)] hover:border-amber-500/30'
+                          ? 'border-amber-500/50 bg-amber-500/10'
+                          : 'border-[var(--border)] hover:border-amber-500/30'
                           }`}
                       >
                         <input
@@ -3864,8 +3866,8 @@ export function DashboardPage() {
                         <label
                           key={reason}
                           className={`flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3 transition-colors ${isSelected
-                              ? 'border-amber-500/50 bg-amber-500/10'
-                              : 'border-[var(--border)] hover:border-amber-500/30'
+                            ? 'border-amber-500/50 bg-amber-500/10'
+                            : 'border-[var(--border)] hover:border-amber-500/30'
                             }`}
                         >
                           <input
@@ -4031,8 +4033,8 @@ export function DashboardPage() {
                     <label
                       key={reason}
                       className={`flex cursor-pointer items-center gap-3 rounded-xl border px-4 py-3 transition-colors ${isSelected
-                          ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)]/10'
-                          : 'border-[var(--border)] hover:border-[var(--gold-primary)]/40'
+                        ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)]/10'
+                        : 'border-[var(--border)] hover:border-[var(--gold-primary)]/40'
                         }`}
                     >
                       <input
@@ -4133,8 +4135,8 @@ export function DashboardPage() {
                       <label
                         key={reason}
                         className={`flex cursor-pointer items-center gap-3 rounded-xl border px-4 py-3 transition-colors ${isSelected
-                            ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)]/10'
-                            : 'border-[var(--border)] hover:border-[var(--gold-primary)]/40'
+                          ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)]/10'
+                          : 'border-[var(--border)] hover:border-[var(--gold-primary)]/40'
                           }`}
                       >
                         <input
@@ -4351,8 +4353,8 @@ export function DashboardPage() {
                           type="button"
                           onClick={() => setActiveSection(item.id)}
                           className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 ${active
-                              ? 'bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-medium border-2 border-[var(--gold-primary)] shadow-[0_0_15px_rgba(212,175,55,0.3)]'
-                              : 'text-[var(--text-muted)] hover:bg-[var(--bg-primary)] hover:text-white border-2 border-transparent'
+                            ? 'bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-medium border-2 border-[var(--gold-primary)] shadow-[0_0_15px_rgba(212,175,55,0.3)]'
+                            : 'text-[var(--text-muted)] hover:bg-[var(--bg-primary)] hover:text-white border-2 border-transparent'
                             }`}
                         >
                           <Icon className="w-4 h-4" />
@@ -4380,8 +4382,8 @@ export function DashboardPage() {
                           type="button"
                           onClick={() => setActiveSection(item.id)}
                           className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 ${active
-                              ? 'bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-medium border-2 border-[var(--gold-primary)] shadow-[0_0_15px_rgba(212,175,55,0.3)]'
-                              : 'text-[var(--text-muted)] hover:bg-[var(--bg-primary)] hover:text-white border-2 border-transparent'
+                            ? 'bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-medium border-2 border-[var(--gold-primary)] shadow-[0_0_15px_rgba(212,175,55,0.3)]'
+                            : 'text-[var(--text-muted)] hover:bg-[var(--bg-primary)] hover:text-white border-2 border-transparent'
                             }`}
                         >
                           <Icon className="w-4 h-4" />
@@ -4418,8 +4420,8 @@ export function DashboardPage() {
                         type="button"
                         onClick={() => setActiveSection(item.id)}
                         className={`inline-flex shrink-0 items-center gap-2 rounded-full border px-3 py-2 text-xs font-medium transition-colors ${active
-                            ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)] text-[var(--text-dark)]'
-                            : 'border-[var(--border)] bg-[var(--bg-primary)] text-[var(--text-muted)]'
+                          ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)] text-[var(--text-dark)]'
+                          : 'border-[var(--border)] bg-[var(--bg-primary)] text-[var(--text-muted)]'
                           }`}
                       >
                         <Icon className="h-3.5 w-3.5" />
@@ -4594,8 +4596,8 @@ export function DashboardPage() {
                 onClick={submitRating}
                 disabled={rating === 0}
                 className={`flex-1 py-2.5 rounded-xl text-[var(--text-dark)] transition-all font-bold text-sm ${rating === 0
-                    ? 'bg-[var(--surface-light)] text-[var(--text-muted)] cursor-not-allowed'
-                    : 'bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] hover:shadow-[0_0_15px_rgba(212,175,55,0.4)]'
+                  ? 'bg-[var(--surface-light)] text-[var(--text-muted)] cursor-not-allowed'
+                  : 'bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] hover:shadow-[0_0_15px_rgba(212,175,55,0.4)]'
                   }`}
               >
                 Submit Rating

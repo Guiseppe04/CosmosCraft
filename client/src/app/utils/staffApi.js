@@ -39,6 +39,7 @@ export const staffApi = {
     const qs = new URLSearchParams(params).toString()
     return request(`/api/projects${qs ? `?${qs}` : ''}`)
   },
+  getProject: (id) => request(`/api/projects/${id}`),
   getProjectHierarchy: (id) => request(`/api/projects/${id}/hierarchy`),
   getProjectRequiredParts: (id) => request(`/api/projects/${id}/required-parts`),
   getProjectActivity: (id) => request(`/api/projects/${id}/activity`),

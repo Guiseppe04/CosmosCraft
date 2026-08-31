@@ -573,6 +573,12 @@ export default function CustomerProjectTracker({ projectId, projectName, project
   const [buildClaim, setBuildClaim] = useState(null);
   const [buildClaimLoading, setBuildClaimLoading] = useState(false);
   const [markReceivedLoading, setMarkReceivedLoading] = useState(false);
+  const [fulfillmentMethod, setFulfillmentMethod] = useState('pickup_appointment');
+  const [pickupDate, setPickupDate] = useState('');
+  const [pickupTime, setPickupTime] = useState('');
+  const [fulfillmentNotes, setFulfillmentNotes] = useState('');
+  const [fulfillmentSaving, setFulfillmentSaving] = useState(false);
+  const [fulfillmentMessage, setFulfillmentMessage] = useState(null);
 
   useEffect(() => {
     if (projectId) {
@@ -686,6 +692,29 @@ export default function CustomerProjectTracker({ projectId, projectName, project
     }
   };
 
+  const handleFulfillmentChoice = async () => {
+    if (!projectId) return;
+    if (fulfillmentMethod === 'pickup_appointment' && (!pickupDate || !pickupTime)) {
+      setFulfillmentMessage({ type: 'error', text: 'Choose both a pickup date and time.' });
+      return;
+    }
+    try {
+      setFulfillmentSaving(true);
+      setFulfillmentMessage(null);
+      await adminApi.submitProjectFulfillment(projectId, {
+        method: fulfillmentMethod,
+        notes: fulfillmentNotes,
+        ...(fulfillmentMethod === 'pickup_appointment' ? { scheduled_at: `${pickupDate}T${pickupTime}:00` } : {}),
+      });
+      setFulfillmentMessage({ type: 'success', text: 'Your fulfillment choice has been saved.' });
+      await loadData();
+    } catch (err) {
+      setFulfillmentMessage({ type: 'error', text: err.message || 'Unable to save fulfillment choice.' });
+    } finally {
+      setFulfillmentSaving(false);
+    }
+  };
+
   const taskSummary = hierarchy?.task_summary || { total: 0, completed: 0, pending: 0 };
   const clampedProgress = Math.min(Math.max(Number(hierarchy?.progress) || 0, 0), 100);
   const milestones = Array.isArray(hierarchy?.milestones) ? hierarchy.milestones : [];
@@ -737,6 +766,8 @@ export default function CustomerProjectTracker({ projectId, projectName, project
   const lastCompletedStageAt = hierarchy?.cancelled_stage_snapshot_at || hierarchy?.last_completed_stage_at || null;
 
   const isCancelled = String(hierarchy?.status || '').toLowerCase() === 'cancelled';
+  const customizationStatus = hierarchy?.customization_status || null;
+  const isOrderOnHold = customizationStatus === 'on_hold';
   const compoundCancellation = isCancelled ? getCompoundCancellationInfo(hierarchy, settlementData) : null;
   const qa = settlementData?.qa;
   const fin = settlementData?.financials;
@@ -866,6 +897,42 @@ export default function CustomerProjectTracker({ projectId, projectName, project
         </motion.div>
       )}
 
+      {customizationStatus === 'fulfillment_pending' && (
+        <div className="rounded-2xl border border-[var(--gold-primary)]/40 bg-[var(--gold-primary)]/5 p-6">
+          <div className="flex items-start gap-3">
+            <Truck className="mt-0.5 h-5 w-5 text-[var(--gold-primary)]" />
+            <div>
+              <p className="font-bold text-white">Your custom build is complete</p>
+              <p className="mt-1 text-sm text-[var(--text-muted)]">Choose how you would like to receive it. You can update your choice until the shop starts fulfillment.</p>
+            </div>
+          </div>
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            <button type="button" onClick={() => setFulfillmentMethod('pickup_appointment')} className={`rounded-xl border p-4 text-left ${fulfillmentMethod === 'pickup_appointment' ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)]/10' : 'border-[var(--border)]'}`}>
+              <Calendar className="h-5 w-5 text-[var(--gold-primary)]" />
+              <p className="mt-2 font-semibold text-white">Pick up at shop</p>
+              <p className="mt-1 text-xs text-[var(--text-muted)]">Book an available date and time.</p>
+            </button>
+            <button type="button" onClick={() => setFulfillmentMethod('shop_delivery')} className={`rounded-xl border p-4 text-left ${fulfillmentMethod === 'shop_delivery' ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)]/10' : 'border-[var(--border)]'}`}>
+              <Truck className="h-5 w-5 text-[var(--gold-primary)]" />
+              <p className="mt-2 font-semibold text-white">Delivery</p>
+              <p className="mt-1 text-xs text-[var(--text-muted)]">The shop will arrange delivery to your saved checkout address.</p>
+            </button>
+          </div>
+          {fulfillmentMethod === 'pickup_appointment' && (
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <input type="date" value={pickupDate} onChange={(event) => setPickupDate(event.target.value)} className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-white" />
+              <input type="time" value={pickupTime} onChange={(event) => setPickupTime(event.target.value)} className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-white" />
+            </div>
+          )}
+          <textarea value={fulfillmentNotes} onChange={(event) => setFulfillmentNotes(event.target.value)} rows={2} placeholder="Optional delivery or pickup notes" className="mt-3 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-white" />
+          {fulfillmentMessage && <p className={`mt-3 text-sm ${fulfillmentMessage.type === 'error' ? 'text-red-300' : 'text-emerald-300'}`}>{fulfillmentMessage.text}</p>}
+          <button type="button" onClick={handleFulfillmentChoice} disabled={fulfillmentSaving} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] px-4 py-2.5 text-sm font-bold text-black disabled:opacity-50">
+            {fulfillmentSaving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
+            {fulfillmentSaving ? 'Saving...' : 'Confirm fulfillment choice'}
+          </button>
+        </div>
+      )}
+
       {/* Progress Header */}
       <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6">
         <div className="mb-6">
@@ -879,7 +946,7 @@ export default function CustomerProjectTracker({ projectId, projectName, project
 
         {/* Status & Progress */}
         <div className="grid gap-4 sm:grid-cols-2 mb-6">
-          {String(hierarchy.status || '').toLowerCase() === 'on_hold' ? (
+          {isOrderOnHold ? (
             <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 sm:col-span-2">
               <div className="flex items-center gap-3 mb-2">
                 <div className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-500/20">
@@ -890,14 +957,14 @@ export default function CustomerProjectTracker({ projectId, projectName, project
                   <p className="text-lg font-bold text-amber-300">On Hold</p>
                 </div>
               </div>
-              {hierarchy.hold_reason && (
+              {hierarchy.customization_hold_reason && (
                 <p className="mt-2 text-sm text-amber-200/80 pl-11">
-                  Reason: {hierarchy.hold_reason}
+                  Reason: {hierarchy.customization_hold_reason}
                 </p>
               )}
-              {hierarchy.hold_requested_at && (
+              {hierarchy.customization_hold_requested_at && (
                 <p className="mt-1 text-xs text-amber-300/60 pl-11">
-                  Placed on hold: {formatDate(hierarchy.hold_requested_at)}
+                  Placed on hold: {formatDate(hierarchy.customization_hold_requested_at)}
                 </p>
               )}
               {hierarchy.hold_at_step && (

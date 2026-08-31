@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import {
   Users, Package, ShoppingBag, Calendar, Search,
@@ -223,7 +223,7 @@ export function AdminPage() {
 
   const { categories, fetchCategories } = useCategoriesAdmin({ showToast })
   const { users, fetchUsers } = useUsersAdmin({ debouncedSearch, showToast })
-  const { orders, ordersPagination, fetchOrders, setOrdersPagination } = useOrdersAdmin({ debouncedSearch, showToast })
+  const { orders, ordersLoading, ordersPagination, fetchOrders, setOrdersPagination } = useOrdersAdmin({ debouncedSearch, showToast })
   const { projects, projectsPagination, fetchProjects, setProjects, setProjectsPagination } = useProjectsAdmin({ debouncedSearch, showToast })
   const { appointments, appointmentPagination, setAppointmentPagination, appointmentLoading, unavailableDates, availableDates, fetchAppointments, fetchUnavailableDates, fetchAvailableDates } = useAppointmentsAdmin({ debouncedSearch, showToast })
   const { services, servicesLoading, servicesPagination, serviceQuery, setServiceQuery, setServices, setServicesPagination, fetchServices } = useServicesAdmin({ debouncedSearch, showToast })
@@ -850,6 +850,39 @@ export function AdminPage() {
      setFormErrors({})
      setModal({ open: true, type, data })
    }
+
+  const handleManageCustomizationProject = async (order) => {
+    setActiveTab('projects')
+    let project = null
+    const projectId = order?.project_id || order?.project?.project_id || (typeof order === 'string' ? order : null)
+
+    if (projectId) {
+      try {
+        const response = await adminApi.getProject(projectId)
+        project = response?.data || response
+      } catch (error) {
+        console.error('Failed to get project by projectId:', error)
+      }
+    }
+
+    if (!project && (order?.order_id || order?.order_number)) {
+      try {
+        const searchVal = order.order_number || order.order_id
+        const response = await adminApi.getProjects({ search: searchVal, page: 1, page_size: 10 })
+        const list = response?.data?.projects || response?.projects || response?.data || []
+        project = list.find((p) => String(p.order_id) === String(order.order_id) || String(p.order_number) === String(order.order_number)) || list[0]
+      } catch (error) {
+        console.error('Failed to find project by order info:', error)
+      }
+    }
+
+    if (project?.project_id) {
+      openModal('project_tasks', project)
+    } else if (order) {
+      showToast('This customization order does not have an associated project yet.', 'error')
+    }
+  }
+
   const closeModal = () => {
     const shouldRefreshProjects = modal.type === 'project_tasks'
     setModal({ open: false, type: null, data: null })
@@ -2386,6 +2419,9 @@ export function AdminPage() {
               user={user}
               pagination={ordersPagination}
               showToast={showToast}
+              onManageProject={handleManageCustomizationProject}
+              onGoToProjects={() => handleManageCustomizationProject()}
+              ordersLoading={ordersLoading}
             />
           )}
 

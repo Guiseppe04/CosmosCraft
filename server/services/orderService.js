@@ -891,9 +891,6 @@ exports.getAllOrders = async (params = {}) => {
     queryParams.push(payment_method)
   }
 
-  const whereClause = where.length ? `WHERE ${where.join(' AND ')}` : ''
-
-  let searchClause = ''
   if (search && String(search).trim()) {
     const term = `%${String(search).trim().toLowerCase()}%`
     const searchFilters = [
@@ -907,12 +904,16 @@ exports.getAllOrders = async (params = {}) => {
       `p.reference_number ILIKE $${idx++}`,
       `o.status::TEXT ILIKE $${idx++}`,
       `o.payment_status::TEXT ILIKE $${idx++}`,
+      `o.tracking_number ILIKE $${idx++}`,
+      `o.rider_name ILIKE $${idx++}`,
     ]
-    searchClause = `AND (${searchFilters.join(' OR ')})`
+    where.push(`(${searchFilters.join(' OR ')})`)
     for (let i = 0; i < searchFilters.length; i++) {
       queryParams.push(term)
     }
   }
+
+  const whereClause = where.length ? `WHERE ${where.join(' AND ')}` : ''
 
   const totalQuery = `
     SELECT COUNT(DISTINCT o.order_id)::int AS total
@@ -922,7 +923,6 @@ exports.getAllOrders = async (params = {}) => {
     LEFT JOIN customizations c ON c.customization_id = oi.customization_id
     LEFT JOIN payments p ON p.order_id = o.order_id
     ${whereClause}
-    ${searchClause}
   `
 
   const totalResult = await pool.query(totalQuery, queryParams)
@@ -964,7 +964,6 @@ exports.getAllOrders = async (params = {}) => {
     LEFT JOIN customizations c ON c.customization_id = oi.customization_id
     LEFT JOIN payments p ON p.order_id = o.order_id
     ${whereClause}
-    ${searchClause}
     GROUP BY o.order_id, a.address_id, u.user_id
     ORDER BY ${sortColumn}
     LIMIT $${idx++} OFFSET $${idx++}
@@ -1005,10 +1004,30 @@ exports.getAllOrders = async (params = {}) => {
     }
   }
 
+  let projectsByOrder = {}
+  if (orderIds.length > 0) {
+    const projectsRes = await pool.query(
+      `SELECT DISTINCT ON (order_id) *
+       FROM projects
+       WHERE order_id = ANY($1) AND deleted_at IS NULL
+       ORDER BY order_id, created_at DESC`,
+      [orderIds]
+    )
+    projectsByOrder = projectsRes.rows.reduce((acc, project) => {
+      acc[project.order_id] = project
+      return acc
+    }, {})
+  }
+
   const orders = dataResult.rows.map((order) => {
     const payment = paymentsByOrder[order.order_id] || null
+    const project = projectsByOrder[order.order_id] || null
     return {
       ...order,
+      project_id: project?.project_id || order.project_id || null,
+      project_progress: project ? Number(project.progress || 0) : Number(order.project_progress || 0),
+      project_fulfillment_status: project?.fulfillment_status || order.project_fulfillment_status || null,
+      project: project || null,
       items: itemsByOrder[order.order_id] || [],
       payment,
       payment_method: resolveOrderPaymentMethod(order, payment),
