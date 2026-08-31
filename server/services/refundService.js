@@ -3,6 +3,9 @@ const { AppError } = require('../middleware/errorHandler');
 const notificationService = require('./notificationService');
 const inventoryService = require('./inventoryService');
 
+// Lazy require to avoid circular dependency (projectService requires refundService indirectly)
+const getProjectService = () => require('./projectService');
+
 /**
  * SHARED REFUND SERVICE
  *
@@ -333,6 +336,18 @@ exports.applyTransition = async (refundId, newStatus, actorId, actorRole, data =
       // Restock returned physical items (idempotent).
       if (refund.return_status === 'return_confirmed' || !refund.project_id) {
         await restockRefundedItems(client, refund, actorId);
+      }
+
+      // If this refund belongs to a project, mark the project fulfillment as complete.
+      // This is the terminal event for Scenario A (cancelled before work, refund done).
+      if (refund.project_id) {
+        await getProjectService().syncFulfillmentCompletion(
+          client,
+          refund.project_id,
+          refund.order_id,
+          actorId,
+          'refund_completed'
+        );
       }
     }
 

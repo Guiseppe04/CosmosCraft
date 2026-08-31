@@ -2,6 +2,9 @@ const { pool } = require('../config/database');
 const { AppError } = require('../middleware/errorHandler');
 const notificationService = require('./notificationService');
 
+// Lazy require to avoid circular dependency
+const getProjectService = () => require('./projectService');
+
 // ─── TABLE ENSURANCE ──────────────────────────────────────────────────────────
 
 let tableReady = false;
@@ -731,9 +734,9 @@ exports.updateClaimStatus = async (projectId, adminId, newStatus, data = {}) => 
     });
 
     const statusMessages = {
-      out_for_delivery: 'Your guitar is out for delivery!',
-      delivered: 'Your guitar has been delivered. Please confirm receipt.',
-      ready_for_pickup: 'Your guitar is ready for pickup at the shop.',
+      out_for_delivery: 'Your build/parts are now out for delivery.',
+      delivered: 'Your build/parts have been delivered successfully. Please confirm receipt.',
+      ready_for_pickup: 'Your build/parts are ready for pickup at the shop.',
     };
 
     if (statusMessages[newStatus]) {
@@ -805,6 +808,14 @@ exports.markAsReceived = async (projectId, userId, userRole) => {
       claim_method: claim.claim_method,
     });
 
+    await getProjectService().syncFulfillmentCompletion(
+      client,
+      projectId,
+      claim.order_id,
+      userId,
+      'build_received'
+    );
+
     await client.query('COMMIT');
     return res.rows[0];
   } catch (err) {
@@ -866,8 +877,8 @@ exports.markAsPickedUp = async (projectId, adminId, data = {}) => {
     try {
       await notificationService.createNotification({
         user_id: claim.customer_id,
-        title: 'Guitar Picked Up',
-        message: 'Your guitar has been picked up. Thank you!',
+        title: 'Build/Parts Picked Up',
+        message: 'Your build/parts have been picked up. Please confirm receipt to finalize fulfillment.',
         type: 'order_update',
         related_entity_id: projectId,
         related_entity_type: 'project',

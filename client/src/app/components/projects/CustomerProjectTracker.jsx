@@ -87,6 +87,29 @@ const getCompoundCancellationInfo = (project, settlement) => {
   const resolution = project.cancel_resolution || settlement?.resolution?.actual || settlement?.resolution?.recommended || 'no_refund';
   const refundStatus = project.refund_status || settlement?.refund_status;
   const refundAmount = settlement?.qa?.how_much_refund ?? settlement?.financials?.refundable_amount ?? project.refund_approved_amount ?? project.refund_amount_requested ?? 0;
+  const isFulfillmentCompleted = project.fulfillment_status === 'completed' || project.customization_status === 'fulfilled';
+
+  if (isFulfillmentCompleted && (resolution === 'current_build_released' || resolution === 'parts_released' || resolution === 'parts_returned' || resolution === 'partial_refund_and_build' || resolution === 'partial_refund_and_parts')) {
+    return {
+      title: 'Project Cancelled — Build/Parts Handover Completed',
+      subtitle: 'Your build/parts have been released and handover is complete. Fulfillment has finished.',
+      badgeClass: 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300',
+    };
+  }
+  if (isFulfillmentCompleted && (resolution === 'full_refund' || refundStatus === 'refunded')) {
+    return {
+      title: `Project Cancelled — Refund & Fulfillment Completed (${formatCurrency(refundAmount)})`,
+      subtitle: 'Your refund has been disbursed and project fulfillment is complete. Thank you for choosing CosmosCraft.',
+      badgeClass: 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300',
+    };
+  }
+  if (isFulfillmentCompleted) {
+    return {
+      title: 'Project Cancelled — Fulfillment Completed',
+      subtitle: 'All cancellation and fulfillment resolutions have been finalized.',
+      badgeClass: 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300',
+    };
+  }
 
   if (refundStatus === 'refunded') {
     return {
@@ -883,15 +906,36 @@ export default function CustomerProjectTracker({ projectId, projectName, project
               </div>
 
               {/* Step 4: Fulfillment / Completion */}
-              <div className={`p-3 rounded-xl border ${buildClaim?.claim_status === 'received' || refundStatus === 'refunded' || hierarchy.cancel_resolution === 'no_refund' ? 'bg-black/30 border-white/20 text-white' : 'bg-black/10 border-white/5 text-white/40'}`}>
-                <div className="flex items-center gap-2 mb-1">
-                  <CheckCircle className={`w-4 h-4 ${buildClaim?.claim_status === 'received' || refundStatus === 'refunded' ? 'text-emerald-400' : 'text-white/30'}`} />
-                  <span className="text-xs font-bold">4. Final Handover</span>
-                </div>
-                <p className="text-[11px] text-white/70 capitalize">
-                  {buildClaim?.claim_status ? formatStatus(buildClaim.claim_status) : (refundStatus === 'refunded' ? 'Complete' : 'Pending Action')}
-                </p>
-              </div>
+              {(() => {
+                const isCompleted =
+                  hierarchy.fulfillment_status === 'completed' ||
+                  hierarchy.customization_status === 'fulfilled' ||
+                  ['received', 'picked_up', 'delivered'].includes(buildClaim?.claim_status) ||
+                  refundStatus === 'refunded' ||
+                  hierarchy.cancel_resolution === 'no_refund';
+
+                return (
+                  <div className={`p-3 rounded-xl border ${isCompleted ? 'bg-black/30 border-white/20 text-white' : 'bg-black/10 border-white/5 text-white/40'}`}>
+                    <div className="flex items-center gap-2 mb-1">
+                      <CheckCircle className={`w-4 h-4 ${isCompleted ? 'text-emerald-400' : 'text-white/30'}`} />
+                      <span className="text-xs font-bold">4. Final Handover</span>
+                    </div>
+                    <p className="text-[11px] text-white/70 capitalize">
+                      {isCompleted
+                        ? (buildClaim?.claim_status === 'received'
+                            ? 'Received by Customer'
+                            : buildClaim?.claim_status === 'picked_up'
+                            ? 'Picked Up'
+                            : buildClaim?.claim_status === 'delivered'
+                            ? 'Delivered'
+                            : refundStatus === 'refunded'
+                            ? 'Refund Disbursed'
+                            : 'Fulfillment Completed')
+                        : (buildClaim?.claim_status ? formatStatus(buildClaim.claim_status) : 'Pending Action')}
+                    </p>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </motion.div>
@@ -1410,16 +1454,28 @@ export default function CustomerProjectTracker({ projectId, projectName, project
               </div>
             )}
 
-            {/* Mark as Received button */}
+            {/* Mark as Received button - Customer finalizes fulfillment */}
             {['delivered', 'picked_up'].includes(buildClaim.claim_status) && (
-              <button
-                onClick={handleMarkReceived}
-                disabled={markReceivedLoading}
-                className="mt-4 w-full inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-green-500 px-4 py-2.5 text-sm font-semibold text-white transition-all hover:shadow-[0_0_20px_rgba(16,185,129,0.35)] disabled:opacity-50"
-              >
-                {markReceivedLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
-                {markReceivedLoading ? 'Confirming...' : 'Confirm Guitar Received'}
-              </button>
+              <div className="mt-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 space-y-3">
+                <div>
+                  <p className="text-sm font-bold text-emerald-300">
+                    {buildClaim.claim_status === 'picked_up'
+                      ? 'Your guitar has been released for pickup'
+                      : 'Your guitar has been delivered'}
+                  </p>
+                  <p className="mt-0.5 text-xs text-emerald-200/80">
+                    Please confirm that you have received your build/parts to complete and finalize project fulfillment.
+                  </p>
+                </div>
+                <button
+                  onClick={handleMarkReceived}
+                  disabled={markReceivedLoading}
+                  className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-green-500 px-4 py-2.5 text-sm font-bold text-black transition-all hover:shadow-[0_0_20px_rgba(16,185,129,0.35)] disabled:opacity-50"
+                >
+                  {markReceivedLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                  {markReceivedLoading ? 'Finalizing Fulfillment...' : 'Confirm Receipt & Finalize Fulfillment'}
+                </button>
+              </div>
             )}
 
             {buildClaim.claim_status === 'received' && buildClaim.received_at && (

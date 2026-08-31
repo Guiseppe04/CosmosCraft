@@ -112,6 +112,120 @@ const notifyCustomizationCustomer = async (order, title, message) => {
   }
 };
 
+/**
+ * FULFILLMENT LIFECYCLE — SINGLE SOURCE OF TRUTH
+ *
+ * Mark the fulfillment for a cancelled-project resolution as fully completed.
+ * Called when:
+ *   - A refund reaches 'refunded'           (reason = 'refund_completed')
+ *   - A build claim reaches 'received'      (reason = 'build_received')
+ *   - A build claim is marked 'picked_up'   (reason = 'build_picked_up')
+ *   - A build claim reaches 'delivered'     (reason = 'build_delivered')
+ *
+ * Idempotent: if both statuses are already at terminal values this is a no-op.
+ */
+const syncFulfillmentCompletion = async (db, projectId, orderId, actorId, reason) => {
+  try {
+    // Fetch current state to avoid redundant writes
+    const stateRes = await db.query(
+      `SELECT p.fulfillment_status, o.customization_status, o.user_id AS customer_user_id
+       FROM projects p
+       JOIN orders o ON o.order_id = p.order_id
+       WHERE p.project_id = $1`,
+      [projectId]
+    );
+    if (stateRes.rows.length === 0) return;
+    const current = stateRes.rows[0];
+
+    const alreadyDone =
+      current.fulfillment_status === 'completed' &&
+      current.customization_status === 'fulfilled';
+    if (alreadyDone) return;
+
+    // Update project fulfillment_status → completed
+    await db.query(
+      `UPDATE projects
+       SET fulfillment_status = 'completed',
+           updated_at = CURRENT_TIMESTAMP
+       WHERE project_id = $1`,
+      [projectId]
+    );
+
+    // Update order customization_status → fulfilled (only for customization orders)
+    await db.query(
+      `UPDATE orders
+       SET customization_status = 'fulfilled',
+           updated_at = CURRENT_TIMESTAMP
+       WHERE order_id = $1 AND order_type = 'customization'`,
+      [orderId]
+    );
+
+    // Audit log
+    await db.query(
+      `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, details)
+       VALUES ($1, 'UPDATE', 'project', $2, $3)`,
+      [
+        actorId,
+        projectId,
+        JSON.stringify({
+          reason,
+          previous_fulfillment_status: current.fulfillment_status,
+          previous_customization_status: current.customization_status,
+          new_fulfillment_status: 'completed',
+          new_customization_status: 'fulfilled',
+        }),
+      ]
+    );
+
+    // Customer notification
+    try {
+      await notificationService.createNotification({
+        user_id: current.customer_user_id,
+        title: 'Fulfillment Completed',
+        message: 'Your project fulfillment has been completed. All outstanding items have been resolved.',
+        type: notificationService.NOTIFICATION_TYPES.ORDER,
+        related_entity_id: orderId,
+        related_entity_type: 'orders',
+      });
+    } catch (notifErr) {
+      console.warn('syncFulfillmentCompletion: notification failed:', notifErr.message);
+    }
+  } catch (err) {
+    // Log but do not throw — completion sync must not roll back the parent transaction.
+    console.error('syncFulfillmentCompletion failed:', err.message);
+  }
+};
+
+/**
+ * Detect impossible / stuck fulfillment states on a fully-loaded project object.
+ * Returns true when the state combination shows fulfillment is actually complete
+ * but the stored statuses have not been updated yet (legacy records).
+ */
+const detectStuckFulfillment = (project) => {
+  if (!project) return false;
+  const fs = project.fulfillment_status;
+  const cs = project.customization_status;
+  const rs = project.refund_status;
+  const claimStatus = project.build_claim?.claim_status;
+
+  // Already correct — nothing to fix
+  if (fs === 'completed' && cs === 'fulfilled') return false;
+
+  // Only applies to cancelled customization projects still in an active-looking state
+  if (project.status !== 'cancelled') return false;
+  if (!['resolution_in_progress', 'cancelled'].includes(cs)) return false;
+
+  // Rule: refund completed → fulfillment must be completed
+  if (rs === 'refunded') return true;
+
+  // Rule: build claim received by customer → fulfillment must be completed
+  if (claimStatus === 'received') return true;
+
+  return false;
+};
+
+exports.syncFulfillmentCompletion = syncFulfillmentCompletion;
+
 const hasBlockingInstallment = async (db, projectId) => {
   const result = await db.query(
     `SELECT EXISTS (
@@ -2312,7 +2426,23 @@ exports.getProjectHierarchy = async (projectId) => {
       }
     );
     const withFulfillment = attachFulfillmentDetails(trackedProject, pickupAppointment);
-    return getClaimService().attachClaimToProject(withFulfillment);
+    const withClaim = await getClaimService().attachClaimToProject(withFulfillment);
+
+    // Auto-repair: silently fix any stuck fulfillment state at read-time.
+    // This corrects legacy records created before the lifecycle fix was deployed.
+    if (detectStuckFulfillment(withClaim) && withClaim.order_id) {
+      await syncFulfillmentCompletion(
+        client,
+        withClaim.project_id,
+        withClaim.order_id,
+        null, // system-initiated
+        'auto_repair'
+      );
+      withClaim.fulfillment_status = 'completed';
+      withClaim.customization_status = 'fulfilled';
+    }
+
+    return withClaim;
   } finally {
     client.release();
   }
@@ -3765,8 +3895,14 @@ exports.approveProjectCancel = async (projectId, userId, data = {}) => {
         [userId, resolutionType, settlement ? JSON.stringify(settlement) : null, projectFulfillmentMethod, fulfillmentStatus, projectId]
       );
 
-      // Keep the generic product status untouched for customization orders.
-      await updateCustomizationOrderStatus(client, project.order_id, 'resolution_in_progress');
+      // Set customization_status to resolution_in_progress only when a physical
+      // handover is still pending. Pure refund cancellations go straight to 'cancelled'
+      // since there is nothing left to hand over — marking them resolution_in_progress
+      // was causing the "stuck" fulfillment status bug.
+      const needsPhysicalHandover = ['parts_returned', 'current_build_released',
+        'partial_refund_and_parts', 'partial_refund_and_build'].includes(resolutionType);
+      const orderCancellationStatus = needsPhysicalHandover ? 'resolution_in_progress' : 'cancelled';
+      await updateCustomizationOrderStatus(client, project.order_id, orderCancellationStatus);
 
       const stats = await getProjectTaskStats(client, projectId);
       const hasBuildProgress = stats.completed > 0 || stats.total > 0;

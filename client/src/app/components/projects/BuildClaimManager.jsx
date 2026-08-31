@@ -13,9 +13,9 @@ const CLAIM_STATUS_CONFIG = {
   courier_arranged: { label: 'Courier Arranged', color: 'blue', icon: Truck },
   out_for_delivery: { label: 'Out for Delivery', color: 'blue', icon: Truck },
   ready_for_pickup: { label: 'Ready for Pickup', color: 'cyan', icon: MapPin },
-  picked_up: { label: 'Picked Up', color: 'sky', icon: CheckCircle },
-  delivered: { label: 'Delivered', color: 'sky', icon: CheckCircle },
-  received: { label: 'Received', color: 'emerald', icon: CheckCircle },
+  picked_up: { label: 'Picked Up (Awaiting Confirmation)', color: 'sky', icon: MapPin },
+  delivered: { label: 'Delivered (Awaiting Confirmation)', color: 'sky', icon: Truck },
+  received: { label: 'Received — Fulfillment Completed', color: 'emerald', icon: CheckCircle },
   not_required: { label: 'Not Required', color: 'gray', icon: null },
 }
 
@@ -109,7 +109,7 @@ export default function BuildClaimManager({ projectId, projectData }) {
     try {
       setActionLoading(true)
       await adminApi.updateBuildClaimStatus(projectId, { status: newStatus })
-      showFeedback(`Status updated to ${formatStatus(newStatus)}`)
+      showFeedback(newStatus === 'delivered' ? 'Marked as delivered — fulfillment completed' : `Status updated to ${formatStatus(newStatus)}`)
       await loadClaim()
     } catch (err) {
       showFeedback(err.message, 'error')
@@ -122,7 +122,7 @@ export default function BuildClaimManager({ projectId, projectData }) {
     try {
       setActionLoading(true)
       await adminApi.markBuildClaimPickedUp(projectId, {})
-      showFeedback('Marked as picked up')
+      showFeedback('Marked as picked up — fulfillment completed')
       await loadClaim()
     } catch (err) {
       showFeedback(err.message, 'error')
@@ -410,19 +410,32 @@ export default function BuildClaimManager({ projectId, projectData }) {
                 </button>
               )}
 
-              {/* Completed states */}
+              {/* Completed state */}
               {claim.claim_status === 'received' && (
-                <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/30 px-4 py-3 flex items-center gap-2">
-                  <CheckCircle className="w-4 h-4 text-emerald-400" />
-                  <span className="text-sm text-emerald-300 font-medium">
-                    Customer confirmed receipt{claim.received_at ? ` on ${new Date(claim.received_at).toLocaleDateString()}` : ''}
-                  </span>
+                <div className="rounded-xl bg-emerald-500/10 border border-emerald-500/30 p-4 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle className="w-5 h-5 text-emerald-400" />
+                    <span className="text-sm text-emerald-300 font-bold">
+                      Fulfillment Completed
+                    </span>
+                  </div>
+                  <p className="text-xs text-emerald-200/80">
+                    Customer confirmed receipt{claim.received_at ? ` on ${new Date(claim.received_at).toLocaleDateString()}` : ''}. All accounts and items have been finalized.
+                  </p>
                 </div>
               )}
 
               {['delivered', 'picked_up'].includes(claim.claim_status) && (
-                <div className="rounded-lg bg-sky-500/10 border border-sky-500/30 px-4 py-3 text-xs text-sky-300/80">
-                  Waiting for customer to confirm receipt.
+                <div className="rounded-xl bg-sky-500/10 border border-sky-500/30 p-4 space-y-1 text-xs text-sky-300">
+                  <p className="font-semibold flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-sky-400" />
+                    Awaiting Customer Confirmation
+                  </p>
+                  <p className="text-sky-200/70">
+                    {claim.claim_status === 'picked_up'
+                      ? 'Guitar has been picked up from the workshop. The customer can now confirm receipt to finalize fulfillment.'
+                      : 'Guitar has been marked as delivered. The customer can now confirm receipt to finalize fulfillment.'}
+                  </p>
                 </div>
               )}
 

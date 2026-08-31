@@ -505,7 +505,7 @@ export default function ProjectTaskTracker({ projectId, projectName, showTracker
         </div>
 
         {/* Finished Notification */}
-        {hierarchy.progress === 100 && (
+        {hierarchy.progress === 100 && hierarchy.status !== 'cancelled' && (
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -525,7 +525,13 @@ export default function ProjectTaskTracker({ projectId, projectName, showTracker
               <div>
                 <p className="text-xs uppercase tracking-[0.2em] text-cyan-300/70">Fulfillment</p>
                 <h3 className="mt-1 text-lg font-bold text-white">{formatFulfillmentLabel(hierarchy.fulfillment_method)}</h3>
-                <p className="mt-1 text-sm text-cyan-100/80">Status: {formatStatusLabel(hierarchy.fulfillment_status)}</p>
+                {hierarchy.fulfillment_status === 'completed' ? (
+                  <span className="mt-1 inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                    <CheckCircle className="w-3 h-3 text-emerald-400" /> Fulfillment Completed
+                  </span>
+                ) : (
+                  <p className="mt-1 text-sm text-cyan-100/80">Status: {formatStatusLabel(hierarchy.fulfillment_status)}</p>
+                )}
                 {hierarchy.fulfillment_notes && (
                   <p className="mt-3 text-sm text-cyan-50/85">{hierarchy.fulfillment_notes}</p>
                 )}
@@ -543,7 +549,7 @@ export default function ProjectTaskTracker({ projectId, projectName, showTracker
           </div>
         )}
 
-        {hierarchy.progress === 100 && (
+        {hierarchy.progress === 100 && hierarchy.status !== 'cancelled' && (
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6 space-y-5">
             <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
               <div>
