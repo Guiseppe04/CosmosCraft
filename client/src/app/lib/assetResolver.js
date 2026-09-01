@@ -22,20 +22,11 @@ const USE_CLOUDINARY = Boolean(CLOUD_NAME)
 /**
  * Resolve an asset path using either Cloudinary or local files
  */
+// After
 export function resolveAssetPath(subPath) {
   if (USE_CLOUDINARY) {
-    // Local files live under electric_assets/builder/{dc|delos|all-models}/...,
-    // but Cloudinary stores them under the legacy
-    // electric_assets/{dc_assets|delos_assets}/models/{dc|delos|all-models}/...
-    const m = subPath.match(/^electric_assets\/builder\/(dc|delos|all-models)\/(.*)$/)
-    if (m) {
-      const modelKey = m[1]
-      const rest = m[2]
-      if (modelKey === 'delos') {
-        return `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/cosmoscraft_assets/electric_assets/delos_assets/models/delos/${rest}`
-      }
-      return `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/cosmoscraft_assets/electric_assets/dc_assets/models/${modelKey}/${rest}`
-    }
+    // Cloudinary mirrors the local folder structure exactly:
+    // cosmoscraft_assets/electric_assets/builder/{dc|delos|all-models}/...
     if (subPath.startsWith('electric_assets/')) {
       return `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/cosmoscraft_assets/${subPath}`
     }
@@ -174,8 +165,9 @@ export function resolveBurstMask(category, model, burstKey) {
   }
   
   const modelMap = burstMaskMap[model]
+  // After
   if (modelMap && modelMap[burstKey]) {
-    return `/builder/${category}_assets/builder/${modelMap[burstKey]}`
+    return asset(`${category}_assets/builder/${modelMap[burstKey]}`)
   }
   
   // Fallback to default resolution

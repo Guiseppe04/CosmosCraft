@@ -11,38 +11,14 @@ export const cloudImage = (root, path) => {
   return `/builder/${path}`
 }
 
+// After
 export const asset = (path) => {
   if (USE_CLOUDINARY) {
-    // Cloudinary stores assets under the legacy structure:
-    // electric_assets/{dc_assets|delos_assets}/models/{dc|delos|all-models}/...
-    if (path.startsWith('dc_assets/') || path.startsWith('delos_assets/')) {
-      return `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/cosmoscraft_assets/electric_assets/${path}`
-    }
-    if (path.startsWith('delos/')) {
-      return `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/cosmoscraft_assets/electric_assets/delos_assets/models/${path}`
-    }
-    if (path.startsWith('dc/') || path.startsWith('rs/') || path.startsWith('solo/')) {
-      return `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/cosmoscraft_assets/electric_assets/dc_assets/models/${path}`
-    }
-    // Shared assets (all-models/...) live under dc_assets/models/
-    if (path.startsWith('all-models/')) {
-      return `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/cosmoscraft_assets/electric_assets/dc_assets/models/${path}`
-    }
-    return `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/cosmoscraft_assets/electric_assets/${path}`
+    // Cloudinary mirrors the local folder structure exactly:
+    // cosmoscraft_assets/electric_assets/builder/{dc|delos|all-models}/...
+    return `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/cosmoscraft_assets/electric_assets/builder/${path}`
   }
-  // Local fallback - serve from public/builder/
-  // If path starts with a model prefix that already includes the `_assets` directory, use as-is.
-  if (path.startsWith('dc/') || path.startsWith('delos/')) {
-    return `/builder/electric_assets/builder/${path}`
-  }
-  // Model-specific paths without _assets should map to their actual local model directories.
-  if (path.startsWith('delos/')) {
-    return `/builder/electric_assets/builder/delos/${path}`
-  }
-  if (path.startsWith('dc/') || path.startsWith('rs/') || path.startsWith('solo/')) {
-    return `/builder/electric_assets/builder/delos/${path}`
-  }
-  // Shared assets (all-models/...) live under dc_assets/models/
+  // Local fallback - serve from public/builder/electric_assets/builder/
   return `/builder/electric_assets/builder/${path}`
 }
 
@@ -478,9 +454,9 @@ export const BRIDGE_OPTIONS = {
     label: 'Gotoh',
     note: 'Precision Gotoh bridge',
     assets: {
-      chrome: asset('delos_assets/models/all-models/bridges/6/standard/gotoh/chrome.png'),
-      black: asset('delos_assets/models/all-models/bridges/6/standard/gotoh/black.png'),
-      gold: asset('delos_assets/models/all-models/bridges/6/standard/gotoh/gold.png'),
+      chrome: asset('all-models/bridges/6/standard/gotoh/chrome.png'),
+      black: asset('all-models/bridges/6/standard/gotoh/black.png'),
+      gold: asset('all-models/bridges/6/standard/gotoh/gold.png'),
     },
     price: 85, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
@@ -488,7 +464,7 @@ export const BRIDGE_OPTIONS = {
     label: 'Evertune',
     note: 'Automatic tuning bridge',
     assets: {
-      black: asset('delos_assets/models/all-models/bridges/6/standard/evertune/evertune-black.png'),
+      black: asset('all-models/bridges/6/standard/evertune/evertune-black.png'),
     },
     price: 150, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
