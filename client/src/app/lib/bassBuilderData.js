@@ -1,44 +1,48 @@
-// Repointed to Cloudinary collection: cosmoscraft_assets/bass_assets
+// Repointed to Cloudinary collection: cosmoscraft_assets/customization_assets/builder
 // (local /builder/bass_models/* files no longer exist)
 const CLOUD_NAME = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_CLOUDINARY_CLOUD_NAME) ? import.meta.env.VITE_CLOUDINARY_CLOUD_NAME : ''
-const USE_CLOUDINARY = Boolean(CLOUD_NAME) && !import.meta.env.DEV
+const USE_CLOUDINARY = Boolean(CLOUD_NAME)
 
 export const cloudImage = (root, path) => {
   if (!USE_CLOUDINARY) {
-    return `/builder/bass_assets/${String(path || '').replace(/^\/+/, '')}`
+    return `/builder/customization_assets/${String(path || '').replace(/^\/+/, '')}`
   }
   return `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/${root}/${path}`
 }
 
 export const bassAsset = (path) => {
   if (!USE_CLOUDINARY) {
-    return `/builder/bass_assets/${String(path || '').replace(/^\/+/, '')}`
+    return `/builder/customization_assets/${String(path || '').replace(/^\/+/, '')}`
   }
-  return cloudImage('cosmoscraft_assets/bass_assets', String(path || '').replace(/^\/+/, ''))
+  return cloudImage('cosmoscraft_assets/customization_assets/builder', String(path || '').replace(/^\/+/, ''))
 }
 
 export const bassWoodAsset = (path) => {
   if (!USE_CLOUDINARY) {
-    return `/builder/bass_assets/${String(path || '').replace(/^\/+/, '')}`
+    return `/builder/customization_assets/${String(path || '').replace(/^\/+/, '')}`
   }
-  return cloudImage('cosmoscraft_assets/bass_assets', String(path || '').replace(/^\/+/, ''))
+  return cloudImage('cosmoscraft_assets/customization_assets/builder', String(path || '').replace(/^\/+/, ''))
+}
+// Resolve a model-specific bass asset under customization_assets/builder/bass/{model}/
+export const bassModelAsset = (model, ...subPaths) => {
+  const tail = subPaths.filter(Boolean).join('/')
+  return bassAsset(`bass/${model}/${tail}`)
 }
 
+const specs = () => ({ size: '', dimensions: '', material: '', notes: '' })
 // Reuse the new customization schema from the electric builder.
 // Bass-conditional: STRING_COUNT_OPTIONS (6/7/8) is omitted (bass uses 4/5/6).
 import {
   DEXTERITY_OPTIONS,
+  STRING_COUNT_OPTIONS,
   MULTISCALE_OPTIONS,
   SCALE_LENGTH_OPTIONS,
   CASE_OPTIONS,
-  BEVEL_OPTIONS,
   TOP_WOOD_OPTIONS,
   FINISH_TYPE_OPTIONS,
   TOP_COAT_OPTIONS,
   BURST_FINISH_OPTIONS,
   NECK_CONSTRUCTION_OPTIONS,
-  INLAY_SHAPE_OPTIONS,
-  INLAY_MATERIAL_OPTIONS,
   FRET_OPTIONS,
   NECK_REAR_FINISH_OPTIONS,
   HEADSTOCK_SHAPE_OPTIONS,
@@ -48,19 +52,64 @@ import {
   PICKUP_MODEL_BRIDGE_OPTIONS,
   PICKUP_MODEL_MIDDLE_OPTIONS,
   PICKUP_MODEL_NECK_OPTIONS,
-  PICKUP_BOBBIN_OPTIONS,
+  PICKUP_COLOR_OPTIONS,
   PICKUP_POLE_COLOR_OPTIONS,
   CONTROLS_OPTIONS,
   SADDLE_OPTIONS,
   NUT_OPTIONS,
   TUNING_OPTIONS,
+  TUNING_DISCLAIMER,
   STRING_BRAND_OPTIONS,
   OUTPUT_JACK_OPTIONS,
   STRAP_BUTTON_OPTIONS,
   TUNER_BUTTON_OPTIONS,
    ELECTRONICS_CAVITY_COVER_OPTIONS,
    TREMOLO_COVER_OPTIONS_BY_BRIDGE,
+   KNOB_STYLE_OPTIONS,
 } from './guitarBuilderData.js'
+
+export {
+  DEXTERITY_OPTIONS,
+  MULTISCALE_OPTIONS,
+  STRING_COUNT_OPTIONS,
+  SCALE_LENGTH_OPTIONS,
+  CASE_OPTIONS,
+  TOP_WOOD_OPTIONS,
+  FINISH_TYPE_OPTIONS,
+  TOP_COAT_OPTIONS,
+  BURST_FINISH_OPTIONS,
+  NECK_CONSTRUCTION_OPTIONS,
+  FRET_OPTIONS,
+  NECK_REAR_FINISH_OPTIONS,
+  HEADSTOCK_SHAPE_OPTIONS,
+  TRUSS_ROD_COVER_OPTIONS,
+  ELECTRONICS_TYPE_OPTIONS,
+  PICKUP_CONFIGURATION_OPTIONS,
+  PICKUP_MODEL_BRIDGE_OPTIONS,
+  PICKUP_MODEL_MIDDLE_OPTIONS,
+  PICKUP_MODEL_NECK_OPTIONS,
+  PICKUP_COLOR_OPTIONS,
+  PICKUP_POLE_COLOR_OPTIONS,
+  CONTROLS_OPTIONS,
+  SADDLE_OPTIONS,
+  NUT_OPTIONS,
+  TUNING_OPTIONS,
+  TUNING_DISCLAIMER,
+  STRING_BRAND_OPTIONS,
+  OUTPUT_JACK_OPTIONS,
+  STRAP_BUTTON_OPTIONS,
+  TUNER_BUTTON_OPTIONS,
+  ELECTRONICS_CAVITY_COVER_OPTIONS,
+  TREMOLO_COVER_OPTIONS_BY_BRIDGE,
+  KNOB_STYLE_OPTIONS,
+}
+
+export const BASS_SCALE_LENGTH_OPTIONS = {
+  '34': { label: '34"', note: 'Standard bass scale', price: 0, specs: specs() },
+  '35': { label: '35"', note: 'Extended scale (5-string)', price: 0, specs: specs() },
+  '30': { label: '30"', note: 'Short scale', price: 0, specs: specs() },
+  '32': { label: '32"', note: 'Short scale', price: 0, specs: specs() },
+}
 
 // Keep catalog logic optional: core rendering uses static `bassAsset(...)` paths
 // so bass previews work even if no external builder folder exists.
@@ -291,14 +340,17 @@ function pickColorVariants(model, view, category = '', strings) {
 
 export const BASS_DEFAULT_CONFIG = {
   bassType: 'vader',
-  bodyWood: 'maple',
+  bodyWood: 'alder',
   bodyFinish: 'none',
-  neck: 'maple',
+  neck: 'plainMaple',
+  fingerboardRadius: 'bass14inch',
   fretboard: 'rosewood',
   headstockWood: 'maple',
   headstockStyle: 'ch',
   neckStyle: 'roundBottom',
   inlays: 'whiteDots',
+  frets: 'stainlessMedJumbo',
+  neckRearFinish: 'tungOilNeck',
   bridge: 'standard',
   pickguard: 'none',
   knobs: 'black',
@@ -322,28 +374,37 @@ export const BASS_DEFAULT_CONFIG = {
   burstFinish: 'none',
   neckConstruction: '1piece',
   inlayShape: 'dots',
-  inlayMaterial: 'pearl',
-  frets: 'stainlessRegular',
-  neckRearFinish: 'none',
-  headstockShape: 'inlineGT',
+  inlayMaterial: 'motherOfPearl',
+   headstockShape: '6in',
   trussRodCover: 'black',
   electronicsType: 'passive',
-  pickupConfiguration: 'hss',
+   pickupConfiguration: 'hh',
   bridgePickupModel: 'beryllium',
   middlePickupModel: 'none',
   neckPickupModel: 'beryllium',
-  pickupBobbin: 'standard',
-   pickupPoleColor: 'black',
-   controls: 'off',
-  saddle: 'chrome',
-  nut: 'blackGraphTech',
-  tuning: 'eStandard',
-  stringBrand: 'elixir1046',
-  outputJack: 'none',
-  strapButtons: 'off',
-  tunerButtons: 'off',
-  cavityCover: 'none',
-  tremoloCover: 'none',
+    pickupColor: 'bobbins',
+    pickupColorVariant: 'black',
+    pickupPaintedColor: '#000000',
+    pickupWoodType: 'black',
+    pickupPoleColor: 'black',
+    vaderBridgePickup: 'radiumHumbucker',
+    vaderNeckPickup: 'radiumHumbucker',
+    vaderPickupColor: 'none',
+    vaderPickupColorRgb: '#000000',
+    controls: 'off',
+    saddle: 'chrome',
+    nut: 'blackGraphTech',
+    tuning: 'eStandard',
+    stringBrand: 'elixir1046',
+    outputJack: 'off',
+    strapButtons: 'standard',
+    tunerButtons: 'none',
+    electronicsCavityCover: 'black',
+    tremoloCover: null,
+    // Vader-specific finish/wood options
+    finishColor: 'none',
+    threePieceBody: 'off',
+    burstEdges: 'none',
 }
 
 export const BASS_TYPE_OPTIONS = [
@@ -359,78 +420,116 @@ export const BASS_BODY_OPTIONS = {
   vader: {
     label: 'Vader',
     note: 'Modern aggressive bass shape',
-    bodySrc: resolveBassCatalogAsset('vader', 'front', 'masks', { strings: '4', preferTokens: ['bodymask'] }) ?? bassAsset('bass/vader/front/masks/bodymask.png'),
+    bodySrc: resolveBassCatalogAsset('vader', 'front', 'masks', { strings: '4', preferTokens: ['bodymask'] }) ?? bassModelAsset('vader', 'front/masks/bodymask.png'),
     price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
   pb: {
     label: 'Precision',
     note: 'Classic precision shape',
-    bodySrc: resolveBassCatalogAsset('pb', 'front', 'masks', { strings: '4', preferTokens: ['bodymask'] }) ?? bassAsset('bass/pb/front/masks/bodymask.png'),
+    bodySrc: resolveBassCatalogAsset('pb', 'front', 'masks', { strings: '4', preferTokens: ['bodymask'] }) ?? bassModelAsset('pb', 'front/masks/bodymask.png'),
     price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
   jb: {
     label: 'Jazz',
     note: 'Modern jazz shape',
-    bodySrc: resolveBassCatalogAsset('jb', 'front', 'masks', { strings: '4', preferTokens: ['bodymask'] }) ?? bassAsset('bass/jb/front/masks/bodymask.png'),
+    bodySrc: resolveBassCatalogAsset('jb', 'front', 'masks', { strings: '4', preferTokens: ['bodymask'] }) ?? bassModelAsset('jb', 'front/masks/bodymask.png'),
     price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
 }
 
 
 export const BASS_BODY_WOOD_OPTIONS = {
-  maple: {
-    label: 'Maple',
+  alder: {
+    label: 'Alder',
     note: 'Bright even grain',
-    texture: bassAsset('all-models/woods-colors/body-woods/maple.png'),
+    texture: bassAsset('all-models/woods-colors/bass/body-woods/ald.png'),
     price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
-  ash: {
-    label: 'Ash',
+  blackLimba: {
+    label: 'Black Limba',
     note: 'Warm resonant grain',
-    texture: bassAsset('all-models/woods-colors/body-woods/ash1.png'),
-    price: 4499, specs: { size: '', dimensions: '', material: '', notes: '' }
-  },
-  ash2: {
-    label: 'Ash 2',
-    note: 'Alt ash grain pattern',
-    texture: bassAsset('all-models/woods-colors/body-woods/ash2.png'),
+    texture: bassAsset('all-models/woods-colors/bass/body-woods/lmb.png'),
     price: 4499, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
   mahogany: {
     label: 'Mahogany',
+    note: 'Alt ash grain pattern',
+    texture: bassAsset('all-models/woods-colors/bass/body-woods/mah.png'),
+    price: 4499, specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+  swampAsh: {
+    label: 'Swamp Ash',
     note: 'Rich warm tone',
-    texture: bassAsset('all-models/woods-colors/body-woods/mah.png'),
+    texture: bassAsset('all-models/woods-colors/bass/body-woods/ash2.png'),
     price: 7199, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
   walnut: {
     label: 'Walnut',
     note: 'Deep dark wood',
-    texture: bassAsset('all-models/woods-colors/body-woods/wal.png'),
+    texture: bassAsset('all-models/woods-colors/bass/body-woods/wal.png'),
     price: 6599, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
-  roastedAsh: {
-    label: 'Roasted Ash',
+  roastedSwampAsh: {
+    label: 'Roasted Swamp Ash',
     note: 'Dark roasted finish',
-    texture: bassAsset('all-models/woods-colors/body-woods/roasted-ash.png'),
+    texture: bassAsset('all-models/woods-colors/bass/body-woods/ash1.png'),
     price: 7799, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
-  roastedAsh1: {
-    label: 'Roasted Ash Alt',
-    note: 'Alt roasted ash',
-    texture: bassAsset('all-models/woods-colors/body-woods/roasted-ash1.png'),
-    price: 7799, specs: { size: '', dimensions: '', material: '', notes: '' }
+}
+
+export const BASS_TOP_WOOD_OPTIONS = {
+  none: {
+    label: 'None',
+    note: 'No top wood',
+    price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
-  lmb: {
-    label: 'Laminated',
-    note: 'Laminated wood body',
-    texture: bassAsset('all-models/woods-colors/body-woods/lmb.png'),
-    price: 5699, specs: { size: '', dimensions: '', material: '', notes: '' }
+  'antique-ash': {
+    label: 'Antique Ash',
+    note: 'Vintage ash top',
+    texture: bassAsset('all-models/woods-colors/top-woods/antique-ash.png'),
+    price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
-  ald: {
-    label: 'Alder',
-    note: 'Classic alder wood',
-    texture: bassAsset('all-models/woods-colors/body-woods/ald.png'),
-    price: 5099, specs: { size: '', dimensions: '', material: '', notes: '' }
+  'blacked-out-ash': {
+    label: 'Blacked Out Ash',
+    note: 'Dark ash top',
+    texture: bassAsset('all-models/woods-colors/top-woods/blacked-out-ash.png'),
+    price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+  kalantas: {
+    label: 'Kalantas',
+    note: 'Exotic kalantas top',
+    texture: bassAsset('all-models/woods-colors/top-woods/kalantas-wood.png'),
+    price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+  kamagong: {
+    label: 'Kamagong',
+    note: 'Dense kamagong top',
+    texture: bassAsset('all-models/woods-colors/top-woods/kamagong-wood.png'),
+    price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+  mango: {
+    label: 'Mango Wood',
+    note: 'Tropical mango top',
+    texture: bassAsset('all-models/woods-colors/top-woods/mango-wood.png'),
+    price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+  narra: {
+    label: 'Narra',
+    note: 'Premium narra top',
+    texture: bassAsset('all-models/woods-colors/top-woods/narra-wood.png'),
+    price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+  'ph-mahogany': {
+    label: 'Philippine Mahogany',
+    note: 'Classic mahogany top',
+    texture: bassAsset('all-models/woods-colors/top-woods/ph-mahogany.jpg'),
+    price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+  'swamp-ash': {
+    label: 'Swamp Ash',
+    note: 'Light swamp ash top',
+    texture: bassAsset('all-models/woods-colors/top-woods/swamp-ash.png'),
+    price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
 }
 
@@ -594,27 +693,142 @@ export const BASS_BODY_FINISH_OPTIONS = {
 }
 
 export const BASS_NECK_OPTIONS = {
-  maple: {
-    label: 'Maple',
-    note: 'Bright neck feel',
+  lmbn: {
+    label: 'Limbano',
+    note: 'Bright limbano neck',
+    group: '1piece',
+    src: bassAsset('all-models/woods-colors/bass/neck-woods/lmbn.png'),
+    price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+  mahn: {
+    label: 'Mahogany',
+    note: 'Warm mahogany neck',
+    group: '1piece',
+    src: bassAsset('all-models/woods-colors/bass/neck-woods/mahn.png'),
+    price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+  plainMaple: {
+    label: 'Plain Maple',
+    note: 'Bright plain maple',
+    group: '1piece',
     src: bassAsset('all-models/woods-colors/bass/neck-woods/plain-maple.png'),
     price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
-  roasted: {
-    label: 'Roasted',
-    note: 'Dark roasted finish',
-    src: bassAsset('all-models/woods-colors/bass/neck-woods/roasted-maple.png'),
-    price: 5099,
-    specs: { size: '', dimensions: '', material: '', notes: '' },
-    filter: 'sepia(0.65) saturate(1.15) brightness(0.82) contrast(1.05)',
-  },
-  walnut: {
+  waln: {
     label: 'Walnut',
-    note: 'Warm darker neck',
+    note: 'Warm walnut neck',
+    group: '1piece',
     src: bassAsset('all-models/woods-colors/bass/neck-woods/waln.png'),
-    price: 5999,
-    specs: { size: '', dimensions: '', material: '', notes: '' },
-    filter: 'sepia(0.9) saturate(1.15) brightness(0.55) contrast(1.08)',
+    price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+  '3mm': {
+    label: '3 Piece Maple',
+    note: 'Three piece all-maple',
+    group: '3piece',
+    src: bassAsset('all-models/woods-colors/bass/neck-woods/3mm.png'),
+    price: 800, specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+  '3mp': {
+    label: '3 Piece Maple w/ Purple Heart',
+    note: 'Maple with one purple heart stripe',
+    group: '3piece',
+    src: bassAsset('all-models/woods-colors/bass/neck-woods/3mp.png'),
+    price: 1100, specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+  '3mw': {
+    label: '3 Piece Maple w/ Walnut',
+    note: 'Maple with one walnut stripe',
+    group: '3piece',
+    src: bassAsset('all-models/woods-colors/bass/neck-woods/3mw.png'),
+    price: 1100, specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+  '3wp': {
+    label: '3 Piece Walnut w/ Purple Heart',
+    note: 'Walnut with one purple heart stripe',
+    group: '3piece',
+    src: bassAsset('all-models/woods-colors/bass/neck-woods/3wp.png'),
+    price: 1100, specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+  '5lm': {
+    label: '5 Piece Black Limba w/ 2 Maple',
+    note: 'Black limba with two maple stripes',
+    group: '5piece',
+    src: bassAsset('all-models/woods-colors/bass/neck-woods/5lm.png'),
+    price: 1800, specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+  '5h': {
+    label: '5 Piece Mahogany w/ 2 Maple',
+    note: 'Mahogany with two maple stripes',
+    group: '5piece',
+    src: bassAsset('all-models/woods-colors/bass/neck-woods/5h.png'),
+    price: 1800, specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+  '5ml': {
+    label: '5 Piece Maple w/ 2 Black Limba',
+    note: 'Maple with two black limba stripes',
+    group: '5piece',
+    src: bassAsset('all-models/woods-colors/bass/neck-woods/5ml.png'),
+    price: 1800, specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+  '5mp': {
+    label: '5 Piece Maple w/ 2 Purple Heart',
+    note: 'Maple with two purple heart stripes',
+    group: '5piece',
+    src: bassAsset('all-models/woods-colors/bass/neck-woods/5mp.png'),
+    price: 2100, specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+  '5mw': {
+    label: '5 Piece Maple w/ 2 Walnut',
+    note: 'Maple with two walnut stripes',
+    group: '5piece',
+    src: bassAsset('all-models/woods-colors/bass/neck-woods/5mw.png'),
+    price: 2100, specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+  '5wm': {
+    label: '5 Piece Walnut w/ 2 Maple',
+    note: 'Walnut with two maple stripes',
+    group: '5piece',
+    src: bassAsset('all-models/woods-colors/bass/neck-woods/5wm.png'),
+    price: 2100, specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+  '5wp': {
+    label: '5 Piece Walnut w/ 2 Purple Heart',
+    note: 'Walnut with two purple heart stripes',
+    group: '5piece',
+    src: bassAsset('all-models/woods-colors/bass/neck-woods/5wp.png'),
+    price: 2400, specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+  '7mwh': {
+    label: '7 Piece Maple / Walnut / Mahogany',
+    note: 'Maple with walnut, mahogany and maple stripes',
+    group: '7piece',
+    src: bassAsset('all-models/woods-colors/bass/neck-woods/7mwh.png'),
+    price: 2900, specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+  '7wpm': {
+    label: '7 Piece Walnut / Purple Heart / Maple',
+    note: 'Walnut with purple heart, maple and walnut stripes',
+    group: '7piece',
+    src: bassAsset('all-models/woods-colors/bass/neck-woods/7wpm.png'),
+    price: 3100, specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+}
+
+export const BASS_FINGERBOARD_RADIUS_OPTIONS = {
+  bass14inch: {
+    label: 'Bass 14"',
+    note: 'Standard bass fingerboard radius (default)',
+    price: 0, specs: { size: '14"', dimensions: '', material: '', notes: '' }
+  },
+  bass16inch: {
+    label: 'Bass 16"',
+    note: 'Slightly flatter feel',
+    price: 0, specs: { size: '16"', dimensions: '', material: '', notes: '' }
+  },
+  bass20inch: {
+    label: 'Bass 20"',
+    note: 'Flatter modern radius',
+    price: 0, specs: { size: '20"', dimensions: '', material: '', notes: '' }
   },
 }
 
@@ -697,6 +911,62 @@ export const BASS_NECK_NUT = {
   black: bassAsset('all-models/necks/bass/4-string/front/20-fret/round-bottom/nut/black.png'),
 }
 
+export const BASS_FRET_OPTIONS = {
+  stainlessMedJumbo: {
+    label: 'Stainless Med-Jumbo',
+    note: '0.48" H × 0.103" W (default)',
+    price: 0, specs: { size: '0.48" H × 0.103" W', dimensions: '', material: 'Stainless', notes: 'Med-Jumbo' }
+  },
+  stainlessRegular: {
+    label: 'Stainless Regular',
+    note: '0.043" H × 0.080" W',
+    price: 0, specs: { size: '0.043" H × 0.080" W', dimensions: '', material: 'Stainless', notes: 'Regular' }
+  },
+  stainlessJumbo: {
+    label: 'Stainless Jumbo',
+    note: '0.055" H × 0.110" W',
+    price: 0, specs: { size: '0.055" H × 0.110" W', dimensions: '', material: 'Stainless', notes: 'Jumbo' }
+  },
+  fretless: {
+    label: 'Fretless Fingerboard',
+    note: 'No frets — smooth playing surface',
+    price: 1200, specs: { size: '', dimensions: '', material: '', notes: 'Fretless' }
+  },
+}
+
+export const BASS_NECK_REAR_FINISH_OPTIONS = {
+  // Clear Gloss Top Coat
+  clearGlossNeck: {
+    label: 'Clear Gloss Neck',
+    note: 'Glossy clear coat on neck rear',
+    visibleTopCoats: ['clearGloss', 'rawTone'],
+    assetGroup: 'gloss', price: 0,
+    specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+  tungOilNeck: {
+    label: 'Tung Oil Neck',
+    note: 'Tung oil finish on neck rear',
+    visibleTopCoats: ['clearGloss', 'rawTone', 'satinMatte'],
+    assetGroup: 'tungOil', price: 0,
+    specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+  satinMatteNeck: {
+    label: 'Satin Matte Neck',
+    note: 'Matte satin finish on neck rear',
+    visibleTopCoats: ['clearGloss', 'satinMatte'],
+    assetGroup: 'satin', price: 0,
+    specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+  // Satin Matte Top Coat only
+  matteTungOilNeck: {
+    label: 'Matte Tung Oil Neck',
+    note: 'Matte tung oil finish on neck rear',
+    visibleTopCoats: ['satinMatte'],
+    assetGroup: 'matteTungOil', price: 0,
+    specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+}
+
 export const BASS_HEADSTOCK_WOOD_OPTIONS = {
   maple: {
     label: 'Maple',
@@ -716,6 +986,23 @@ export const BASS_HEADSTOCK_WOOD_OPTIONS = {
     texture: bassAsset('all-models/woods-colors/bass/neck-woods/rfmn.png'),
     price: 2100, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
+}
+
+export const BASS_INLAY_SHAPE_OPTIONS = {
+  dots: { folder: 'id', label: 'Dots', note: 'Classic dot inlays', price: 0, specs: { size: '', dimensions: '', material: '', notes: '' } },
+  diamonds: { folder: 'idia', label: 'Diamonds', note: 'Diamond inlays', price: 30, specs: { size: '', dimensions: '', material: '', notes: '' } },
+  blocks: { folder: 'ib', label: 'Blocks', note: 'Block inlays', price: 30, specs: { size: '', dimensions: '', material: '', notes: '' } },
+}
+
+export const BASS_INLAY_MATERIAL_OPTIONS = {
+  motherOfPearl: { code: 'imp', label: 'Mother of Pearl', note: 'Classic mother of pearl', price: 0, specs: { size: '', dimensions: '', material: '', notes: '' } },
+  green: { code: 'iag', label: 'Green Acrylic', note: 'Green acrylic inlay', price: 35, specs: { size: '', dimensions: '', material: '', notes: '' } },
+  pink: { code: 'iap', label: 'Pink', note: 'Pink acrylic inlay', price: 35, specs: { size: '', dimensions: '', material: '', notes: '' } },
+  red: { code: 'iar', label: 'Red', note: 'Red acrylic inlay', price: 35, specs: { size: '', dimensions: '', material: '', notes: '' } },
+  white: { code: 'iaw', label: 'White', note: 'White inlay', price: 35, specs: { size: '', dimensions: '', material: '', notes: '' } },
+  black: { code: 'iab', label: 'Black', note: 'Black inlay', price: 0, specs: { size: '', dimensions: '', material: '', notes: '' } },
+  abalone: { code: 'ia', label: 'Abalone', note: 'Shell-like abalone material', price: 35, specs: { size: '', dimensions: '', material: '', notes: '' } },
+  luminlay: { code: 'iaw', label: 'Luminlay', note: 'Glow-in-the-dark material', price: 35, specs: { size: '', dimensions: '', material: '', notes: '' } },
 }
 
 export const BASS_INLAY_OPTIONS = {
@@ -823,49 +1110,13 @@ export const BASS_PICKUP_TYPE_STYLE_OPTIONS = {
   },
 }
 
-
-// Logo Options - Vader specific
-// Logo Options - Only available for Vader body
-export const BASS_LOGO_OPTIONS = {
-  vader: {
-    standard: {
-      label: 'Standard Logo',
-      note: 'Standard bass logo',
-      src: bassAsset('bass/vader/front/logos/bl.png'),
-      price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
-    },
-    extended: {
-      label: 'Extended Logo',
-      note: 'Extended 5-string logo',
-      src: bassAsset('bass/vader/front/logos/bl-5.png'),
-      price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
-    },
-  },
-  jb: {
-    standard: {
-      label: 'Standard Logo',
-      note: 'Standard bass logo',
-      src: null,
-      price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
-    },
-  },
-  pb: {
-    standard: {
-      label: 'Standard Logo',
-      note: 'Standard bass logo',
-      src: null,
-      price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
-    },
-  },
-}
-
 // Backplate Options - Back customization
 export const BASS_BACKPLATE_OPTIONS = {
   vader: {
     standard: {
       label: 'Standard',
       note: 'Standard back panel',
-      src: resolveBassCatalogAsset('vader', 'back', 'backplates', { strings: '4', preferTokens: ['battery', 'compartment'] }) ?? bassAsset('bass/vader/back/backplates/battery-compartment.png'),
+      src: resolveBassCatalogAsset('vader', 'back', 'backplates', { strings: '4', preferTokens: ['battery', 'compartment'] }) ?? bassModelAsset('vader', 'back/backplates/battery-compartment.png'),
       price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     acf: {
@@ -897,13 +1148,13 @@ export const BASS_BACKPLATE_OPTIONS = {
     standard: {
       label: 'Standard',
       note: 'Standard back panel',
-      src: resolveBassCatalogAsset('pb', 'back', 'backplates', { strings: '4', preferTokens: ['battery', 'compartment'] }) ?? bassAsset('bass/pb/back/backplates/battery-compartment.png'),
+      src: resolveBassCatalogAsset('pb', 'back', 'backplates', { strings: '4', preferTokens: ['battery', 'compartment'] }) ?? bassModelAsset('pb', 'back/backplates/battery-compartment.png'),
       price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     extended: {
       label: 'Extended 5-String',
       note: 'Extended 5-string back panel',
-      src: resolveBassCatalogAsset('pb', 'back', 'backplates', { strings: '5', preferTokens: ['battery', 'compartment'] }) ?? bassAsset('bass/pb/back/backplates/battery-compartment-5.png'),
+      src: resolveBassCatalogAsset('pb', 'back', 'backplates', { strings: '5', preferTokens: ['battery', 'compartment'] }) ?? bassModelAsset('pb', 'back/backplates/battery-compartment-5.png'),
       price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
   },
@@ -911,13 +1162,13 @@ export const BASS_BACKPLATE_OPTIONS = {
     standard: {
       label: 'Standard',
       note: 'Standard back panel',
-      src: resolveBassCatalogAsset('jb', 'back', 'backplates', { strings: '4', preferTokens: ['battery', 'compartment'] }) ?? bassAsset('bass/jb/back/backplates/battery-compartment.png'),
+      src: resolveBassCatalogAsset('jb', 'back', 'backplates', { strings: '4', preferTokens: ['battery', 'compartment'] }) ?? bassModelAsset('jb', 'back/backplates/battery-compartment.png'),
       price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     extended: {
       label: 'Extended 5-String',
       note: 'Extended 5-string back panel',
-      src: resolveBassCatalogAsset('jb', 'back', 'backplates', { strings: '5', preferTokens: ['battery', 'compartment'] }) ?? bassAsset('bass/jb/back/backplates/battery-compartment-5.png'),
+      src: resolveBassCatalogAsset('jb', 'back', 'backplates', { strings: '5', preferTokens: ['battery', 'compartment'] }) ?? bassModelAsset('jb', 'back/backplates/battery-compartment-5.png'),
       price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
   }
@@ -934,19 +1185,19 @@ export const BASS_PICKUP_SCREW_OPTIONS = {
     black: {
       label: 'Black Screws',
       note: 'Black pickup mounting screws',
-      src: bassAsset('bass/pb/front/pickguard/screws-black.png'),
+      src: bassModelAsset('pb', 'front/pickguard/screws-black.png'),
       price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     chrome: {
       label: 'Chrome Screws',
       note: 'Chrome pickup mounting screws',
-      src: bassAsset('bass/pb/front/pickguard/screws-chrome.png'),
+      src: bassModelAsset('pb', 'front/pickguard/screws-chrome.png'),
       price: 10, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     gold: {
       label: 'Gold Screws',
       note: 'Gold pickup mounting screws',
-      src: bassAsset('bass/pb/front/pickguard/screws-gold.png'),
+      src: bassModelAsset('pb', 'front/pickguard/screws-gold.png'),
       price: 15, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
   },
@@ -954,19 +1205,19 @@ export const BASS_PICKUP_SCREW_OPTIONS = {
     black: {
       label: 'Black Screws',
       note: 'Black pickup mounting screws',
-      src: bassAsset('bass/jb/front/pickguard/screws-black.png'),
+      src: bassModelAsset('jb', 'front/pickguard/screws-black.png'),
       price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     chrome: {
       label: 'Chrome Screws',
       note: 'Chrome pickup mounting screws',
-      src: bassAsset('bass/jb/front/pickguard/screws-chrome.png'),
+      src: bassModelAsset('jb', 'front/pickguard/screws-chrome.png'),
       price: 10, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     gold: {
       label: 'Gold Screws',
       note: 'Gold pickup mounting screws',
-      src: bassAsset('bass/jb/front/pickguard/screws-gold.png'),
+      src: bassModelAsset('jb', 'front/pickguard/screws-gold.png'),
       price: 15, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
   }
@@ -977,19 +1228,19 @@ export const BASS_CONTROL_PLATE_OPTIONS = {
   black: {
     label: 'Black Control Plate',
     note: 'Black control plate',
-    src: bassAsset('bass/jb/front/pickguard/control-black.png'),
+    src: bassModelAsset('jb', 'front/pickguard/control-black.png'),
     price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
   chrome: {
     label: 'Chrome Control Plate',
     note: 'Chrome control plate',
-    src: bassAsset('bass/jb/front/pickguard/control-chrome.png'),
+    src: bassModelAsset('jb', 'front/pickguard/control-chrome.png'),
     price: 20, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
   gold: {
     label: 'Gold Control Plate',
     note: 'Gold control plate',
-    src: bassAsset('bass/jb/front/pickguard/control-gold.png'),
+    src: bassModelAsset('jb', 'front/pickguard/control-gold.png'),
     price: 25, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
 }
@@ -1000,9 +1251,9 @@ export const BASS_BRIDGE_OPTIONS = {
       label: 'Standard',
       note: 'Standard bridge',
       assets: {
-        chrome: resolveBassCatalogVariant('vader', 'front', 'bridges', '4', 'chrome', ['bridge']) ?? bassAsset('bass/vader/front/bridges/bridge.png'),
-        black: resolveBassCatalogVariant('vader', 'front', 'bridges', '4', 'black', ['bridge']) ?? bassAsset('bass/vader/front/bridges/bridge.png'),
-        gold: resolveBassCatalogVariant('vader', 'front', 'bridges', '4', 'gold', ['bridge']) ?? bassAsset('bass/vader/front/bridges/bridge.png'),
+        chrome: resolveBassCatalogVariant('vader', 'front', 'bridges', '4', 'chrome', ['bridge']) ?? bassModelAsset('vader', 'front/bridges/bridge.png'),
+        black: resolveBassCatalogVariant('vader', 'front', 'bridges', '4', 'black', ['bridge']) ?? bassModelAsset('vader', 'front/bridges/bridge.png'),
+        gold: resolveBassCatalogVariant('vader', 'front', 'bridges', '4', 'gold', ['bridge']) ?? bassModelAsset('vader', 'front/bridges/bridge.png'),
       },
       price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
@@ -1010,9 +1261,9 @@ export const BASS_BRIDGE_OPTIONS = {
       label: 'Extended 5-String',
       note: '5-string bridge',
       assets: {
-        chrome: resolveBassCatalogVariant('vader', 'front', 'bridges', '5', 'chrome', ['bridge']) ?? bassAsset('bass/vader/front/bridges/bridge-5.png'),
-        black: resolveBassCatalogVariant('vader', 'front', 'bridges', '5', 'black', ['bridge']) ?? bassAsset('bass/vader/front/bridges/bridge-5.png'),
-        gold: resolveBassCatalogVariant('vader', 'front', 'bridges', '5', 'gold', ['bridge']) ?? bassAsset('bass/vader/front/bridges/bridge-5.png'),
+        chrome: resolveBassCatalogVariant('vader', 'front', 'bridges', '5', 'chrome', ['bridge']) ?? bassModelAsset('vader', 'front/bridges/bridge-5.png'),
+        black: resolveBassCatalogVariant('vader', 'front', 'bridges', '5', 'black', ['bridge']) ?? bassModelAsset('vader', 'front/bridges/bridge-5.png'),
+        gold: resolveBassCatalogVariant('vader', 'front', 'bridges', '5', 'gold', ['bridge']) ?? bassModelAsset('vader', 'front/bridges/bridge-5.png'),
       },
       price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
@@ -1020,9 +1271,9 @@ export const BASS_BRIDGE_OPTIONS = {
       label: 'Extended 300',
       note: 'Extended 300 bridge variant',
       assets: {
-        chrome: resolveBassCatalogAsset('vader', 'front', 'bridges', { strings: '4', preferTokens: ['300'] }) ?? bassAsset('bass/vader/front/bridges/bridge-300.png'),
-        black: resolveBassCatalogAsset('vader', 'front', 'bridges', { strings: '4', preferTokens: ['300'] }) ?? bassAsset('bass/vader/front/bridges/bridge-300.png'),
-        gold: resolveBassCatalogAsset('vader', 'front', 'bridges', { strings: '4', preferTokens: ['300'] }) ?? bassAsset('bass/vader/front/bridges/bridge-300.png'),
+        chrome: resolveBassCatalogAsset('vader', 'front', 'bridges', { strings: '4', preferTokens: ['300'] }) ?? bassModelAsset('vader', 'front/bridges/bridge-300.png'),
+        black: resolveBassCatalogAsset('vader', 'front', 'bridges', { strings: '4', preferTokens: ['300'] }) ?? bassModelAsset('vader', 'front/bridges/bridge-300.png'),
+        gold: resolveBassCatalogAsset('vader', 'front', 'bridges', { strings: '4', preferTokens: ['300'] }) ?? bassModelAsset('vader', 'front/bridges/bridge-300.png'),
       },
       price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
@@ -1032,9 +1283,9 @@ export const BASS_BRIDGE_OPTIONS = {
       label: 'Standard 4-String',
       note: 'Kiesel 4-string bridge',
       assets: {
-        chrome: resolveBassCatalogVariant('jb', 'front', 'bridges/kiesel/4', '4', 'chrome') ?? bassAsset('bass/jb/front/bridges/kiesel/4/chrome.png'),
-        black: resolveBassCatalogVariant('jb', 'front', 'bridges/kiesel/4', '4', 'black') ?? bassAsset('bass/jb/front/bridges/kiesel/4/black.png'),
-        gold: resolveBassCatalogVariant('jb', 'front', 'bridges/kiesel/4', '4', 'gold') ?? bassAsset('bass/jb/front/bridges/kiesel/4/gold.png'),
+        chrome: resolveBassCatalogVariant('jb', 'front', 'bridges/kiesel/4', '4', 'chrome') ?? bassModelAsset('jb', 'front/bridges/kiesel/4/chrome.png'),
+        black: resolveBassCatalogVariant('jb', 'front', 'bridges/kiesel/4', '4', 'black') ?? bassModelAsset('jb', 'front/bridges/kiesel/4/black.png'),
+        gold: resolveBassCatalogVariant('jb', 'front', 'bridges/kiesel/4', '4', 'gold') ?? bassModelAsset('jb', 'front/bridges/kiesel/4/gold.png'),
       },
       price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
@@ -1042,9 +1293,9 @@ export const BASS_BRIDGE_OPTIONS = {
       label: 'Standard 5-String',
       note: 'Kiesel 5-string bridge',
       assets: {
-        chrome: resolveBassCatalogVariant('jb', 'front', 'bridges/kiesel/5', '5', 'chrome') ?? bassAsset('bass/jb/front/bridges/kiesel/5/chrome.png'),
-        black: resolveBassCatalogVariant('jb', 'front', 'bridges/kiesel/5', '5', 'black') ?? bassAsset('bass/jb/front/bridges/kiesel/5/black.png'),
-        gold: resolveBassCatalogVariant('jb', 'front', 'bridges/kiesel/5', '5', 'gold') ?? bassAsset('bass/jb/front/bridges/kiesel/5/gold.png'),
+        chrome: resolveBassCatalogVariant('jb', 'front', 'bridges/kiesel/5', '5', 'chrome') ?? bassModelAsset('jb', 'front/bridges/kiesel/5/chrome.png'),
+        black: resolveBassCatalogVariant('jb', 'front', 'bridges/kiesel/5', '5', 'black') ?? bassModelAsset('jb', 'front/bridges/kiesel/5/black.png'),
+        gold: resolveBassCatalogVariant('jb', 'front', 'bridges/kiesel/5', '5', 'gold') ?? bassModelAsset('jb', 'front/bridges/kiesel/5/gold.png'),
       },
       price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
@@ -1052,9 +1303,9 @@ export const BASS_BRIDGE_OPTIONS = {
       label: 'Cosmos',
       note: 'Custom Cosmos bridge',
       assets: {
-        chrome: resolveBassCatalogVariant('jb', 'front', 'bridges/kiesel/4', '4', 'chrome') ?? bassAsset('bass/jb/front/bridges/kiesel/4/chrome.png'),
-        black: resolveBassCatalogVariant('jb', 'front', 'bridges/kiesel/4', '4', 'black') ?? bassAsset('bass/jb/front/bridges/kiesel/4/black.png'),
-        gold: resolveBassCatalogVariant('jb', 'front', 'bridges/kiesel/4', '4', 'gold') ?? bassAsset('bass/jb/front/bridges/kiesel/4/gold.png'),
+        chrome: resolveBassCatalogVariant('jb', 'front', 'bridges/kiesel/4', '4', 'chrome') ?? bassModelAsset('jb', 'front/bridges/kiesel/4/chrome.png'),
+        black: resolveBassCatalogVariant('jb', 'front', 'bridges/kiesel/4', '4', 'black') ?? bassModelAsset('jb', 'front/bridges/kiesel/4/black.png'),
+        gold: resolveBassCatalogVariant('jb', 'front', 'bridges/kiesel/4', '4', 'gold') ?? bassModelAsset('jb', 'front/bridges/kiesel/4/gold.png'),
       },
       price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
@@ -1064,9 +1315,9 @@ export const BASS_BRIDGE_OPTIONS = {
       label: 'Standard 4-String',
       note: 'Classic 4-string bridge',
       assets: {
-        chrome: resolveBassCatalogVariant('pb', 'front', 'bridges/4', '4', 'chrome') ?? bassAsset('bass/pb/front/bridges/4/chrome.png'),
-        black: resolveBassCatalogVariant('pb', 'front', 'bridges/4', '4', 'black') ?? bassAsset('bass/pb/front/bridges/4/black.png'),
-        gold: resolveBassCatalogVariant('pb', 'front', 'bridges/4', '4', 'gold') ?? bassAsset('bass/pb/front/bridges/4/gold.png'),
+        chrome: resolveBassCatalogVariant('pb', 'front', 'bridges/4', '4', 'chrome') ?? bassModelAsset('pb', 'front/bridges/4/chrome.png'),
+        black: resolveBassCatalogVariant('pb', 'front', 'bridges/4', '4', 'black') ?? bassModelAsset('pb', 'front/bridges/4/black.png'),
+        gold: resolveBassCatalogVariant('pb', 'front', 'bridges/4', '4', 'gold') ?? bassModelAsset('pb', 'front/bridges/4/gold.png'),
       },
       price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
@@ -1074,9 +1325,9 @@ export const BASS_BRIDGE_OPTIONS = {
       label: 'Standard 4-String',
       note: 'Classic 4-string bridge',
       assets: {
-        chrome: resolveBassCatalogVariant('pb', 'front', 'bridges/4', '4', 'chrome') ?? bassAsset('bass/pb/front/bridges/4/chrome.png'),
-        black: resolveBassCatalogVariant('pb', 'front', 'bridges/4', '4', 'black') ?? bassAsset('bass/pb/front/bridges/4/black.png'),
-        gold: resolveBassCatalogVariant('pb', 'front', 'bridges/4', '4', 'gold') ?? bassAsset('bass/pb/front/bridges/4/gold.png'),
+        chrome: resolveBassCatalogVariant('pb', 'front', 'bridges/4', '4', 'chrome') ?? bassModelAsset('pb', 'front/bridges/4/chrome.png'),
+        black: resolveBassCatalogVariant('pb', 'front', 'bridges/4', '4', 'black') ?? bassModelAsset('pb', 'front/bridges/4/black.png'),
+        gold: resolveBassCatalogVariant('pb', 'front', 'bridges/4', '4', 'gold') ?? bassModelAsset('pb', 'front/bridges/4/gold.png'),
       },
       price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
@@ -1084,9 +1335,9 @@ export const BASS_BRIDGE_OPTIONS = {
       label: 'Standard 5-String',
       note: 'Extended 5-string bridge',
       assets: {
-        chrome: resolveBassCatalogVariant('pb', 'front', 'bridges/5', '5', 'chrome') ?? bassAsset('bass/pb/front/bridges/5/chrome.png'),
-        black: resolveBassCatalogVariant('pb', 'front', 'bridges/5', '5', 'black') ?? bassAsset('bass/pb/front/bridges/5/black.png'),
-        gold: resolveBassCatalogVariant('pb', 'front', 'bridges/5', '5', 'gold') ?? bassAsset('bass/pb/front/bridges/5/gold.png'),
+        chrome: resolveBassCatalogVariant('pb', 'front', 'bridges/5', '5', 'chrome') ?? bassModelAsset('pb', 'front/bridges/5/chrome.png'),
+        black: resolveBassCatalogVariant('pb', 'front', 'bridges/5', '5', 'black') ?? bassModelAsset('pb', 'front/bridges/5/black.png'),
+        gold: resolveBassCatalogVariant('pb', 'front', 'bridges/5', '5', 'gold') ?? bassModelAsset('pb', 'front/bridges/5/gold.png'),
       },
       price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
@@ -1094,9 +1345,9 @@ export const BASS_BRIDGE_OPTIONS = {
       label: 'Standard 5-String',
       note: 'Extended 5-string bridge',
       assets: {
-        chrome: resolveBassCatalogVariant('pb', 'front', 'bridges/5', '5', 'chrome') ?? bassAsset('bass/pb/front/bridges/5/chrome.png'),
-        black: resolveBassCatalogVariant('pb', 'front', 'bridges/5', '5', 'black') ?? bassAsset('bass/pb/front/bridges/5/black.png'),
-        gold: resolveBassCatalogVariant('pb', 'front', 'bridges/5', '5', 'gold') ?? bassAsset('bass/pb/front/bridges/5/gold.png'),
+        chrome: resolveBassCatalogVariant('pb', 'front', 'bridges/5', '5', 'chrome') ?? bassModelAsset('pb', 'front/bridges/5/chrome.png'),
+        black: resolveBassCatalogVariant('pb', 'front', 'bridges/5', '5', 'black') ?? bassModelAsset('pb', 'front/bridges/5/black.png'),
+        gold: resolveBassCatalogVariant('pb', 'front', 'bridges/5', '5', 'gold') ?? bassModelAsset('pb', 'front/bridges/5/gold.png'),
       },
       price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
@@ -1114,25 +1365,25 @@ export const BASS_PICKGUARD_OPTIONS = {
     black: {
       label: 'Black',
       note: 'Classic black guard',
-      src: bassAsset('bass/pb/front/pickguard/black.png'),
+      src: bassModelAsset('pb', 'front/pickguard/black.png'),
       price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     white: {
       label: 'White',
       note: 'Clean white guard',
-      src: bassAsset('bass/pb/front/pickguard/white.png'),
+      src: bassModelAsset('pb', 'front/pickguard/white.png'),
       price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     tortoise: {
       label: 'Tortoise',
       note: 'Red tortoise shell',
-      src: bassAsset('bass/pb/front/pickguard/red-tortoise.png'),
+      src: bassModelAsset('pb', 'front/pickguard/red-tortoise.png'),
       price: 30, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     pearloid: {
       label: 'Pearloid',
       note: 'Bright pearloid finish',
-      src: bassAsset('bass/pb/front/pickguard/white-pearloid.png'),
+      src: bassModelAsset('pb', 'front/pickguard/white-pearloid.png'),
       price: 25, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
   },
@@ -1141,31 +1392,31 @@ export const BASS_PICKGUARD_OPTIONS = {
     black: {
       label: 'Black',
       note: 'Black pickguard',
-      src: bassAsset('bass/jb/front/pickguard/black.png'),
+      src: bassModelAsset('jb', 'front/pickguard/black.png'),
       price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     white: {
       label: 'White',
       note: 'Clean white guard',
-      src: bassAsset('bass/jb/front/pickguard/white.png'),
+      src: bassModelAsset('jb', 'front/pickguard/white.png'),
       price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     tortoise: {
       label: 'Tortoise',
       note: 'Red tortoise shell',
-      src: bassAsset('bass/jb/front/pickguard/red-tortoise.png'),
+      src: bassModelAsset('jb', 'front/pickguard/red-tortoise.png'),
       price: 30, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     satinBlack: {
       label: 'Satin Black',
       note: 'Matte black guard',
-      src: bassAsset('bass/jb/front/pickguard/satin-black.png'),
+      src: bassModelAsset('jb', 'front/pickguard/satin-black.png'),
       price: 25, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     pearloid: {
       label: 'Pearloid',
       note: 'Bright pearloid finish',
-      src: bassAsset('bass/jb/front/pickguard/white-pearloid.png'),
+      src: bassModelAsset('jb', 'front/pickguard/white-pearloid.png'),
       price: 25, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
   },
@@ -1176,31 +1427,31 @@ export const BASS_KNOB_OPTIONS = {
     black: {
       label: 'Black',
       note: 'Standard black knobs',
-      src: bassAsset('bass/vader/front/knobs/black.png'),
+      src: bassModelAsset('vader', 'front/knobs/black.png'),
       price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     chrome: {
       label: 'Chrome',
       note: 'Shiny chrome finish',
-      src: bassAsset('bass/vader/front/knobs/chrome.png'),
+      src: bassModelAsset('vader', 'front/knobs/chrome.png'),
       price: 15, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     tamarind: {
       label: 'Tamarind',
       note: 'Warm wood-look knobs',
-      src: bassAsset('bass/vader/front/knobs/tamarind.png'),
+      src: bassModelAsset('vader', 'front/knobs/tamarind.png'),
       price: 20, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     pearl: {
       label: 'Pearl Inlay',
       note: 'White pearl inlay knobs',
-      src: bassAsset('bass/vader/front/knobs/white-pearl-inlay.png'),
+      src: bassModelAsset('vader', 'front/knobs/white-pearl-inlay.png'),
       price: 25, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     abalone: {
       label: 'Abalone Inlay',
       note: 'Premium abalone inlay',
-      src: bassAsset('bass/vader/front/knobs/abalone-inlay.png'),
+      src: bassModelAsset('vader', 'front/knobs/abalone-inlay.png'),
       price: 40, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
   },
@@ -1208,103 +1459,103 @@ export const BASS_KNOB_OPTIONS = {
     black: {
       label: 'Black',
       note: 'Standard black knobs',
-      src: bassAsset('bass/pb/front/knobs/black.png'),
+      src: bassModelAsset('pb', 'front/knobs/black.png'),
       price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     blackActive: {
       label: 'Black With Active',
       note: 'Black knobs with active electronics',
-      src: bassAsset('bass/pb/front/knobs/black-active.png'),
+      src: bassModelAsset('pb', 'front/knobs/black-active.png'),
       price: 10, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     blackThree: {
       label: 'Black Three String',
       note: 'Black knobs for 3-string config',
-      src: bassAsset('bass/pb/front/knobs/black-three.png'),
+      src: bassModelAsset('pb', 'front/knobs/black-three.png'),
       price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     chrome: {
       label: 'Chrome',
       note: 'Shiny chrome finish',
-      src: bassAsset('bass/pb/front/knobs/chrome.png'),
+      src: bassModelAsset('pb', 'front/knobs/chrome.png'),
       price: 15, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     chromeActive: {
       label: 'Chrome With Active',
       note: 'Chrome knobs with active electronics',
-      src: bassAsset('bass/pb/front/knobs/chrome-active.png'),
+      src: bassModelAsset('pb', 'front/knobs/chrome-active.png'),
       price: 25, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     chromeThree: {
       label: 'Chrome Three String',
       note: 'Chrome knobs for 3-string config',
-      src: bassAsset('bass/pb/front/knobs/chrome-three.png'),
+      src: bassModelAsset('pb', 'front/knobs/chrome-three.png'),
       price: 15, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     tamarind: {
       label: 'Tamarind',
       note: 'Warm wood-look knobs',
-      src: bassAsset('bass/pb/front/knobs/tamarind.png'),
+      src: bassModelAsset('pb', 'front/knobs/tamarind.png'),
       price: 20, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     tamarindActive: {
       label: 'Tamarind With Active',
       note: 'Tamarind knobs with active electronics',
-      src: bassAsset('bass/pb/front/knobs/tamarind-active.png'),
+      src: bassModelAsset('pb', 'front/knobs/tamarind-active.png'),
       price: 30, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     tamarindThree: {
       label: 'Tamarind Three String',
       note: 'Tamarind knobs for 3-string config',
-      src: bassAsset('bass/pb/front/knobs/tamarind-three.png'),
+      src: bassModelAsset('pb', 'front/knobs/tamarind-three.png'),
       price: 20, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     gold: {
       label: 'Gold',
       note: 'Premium gold knobs',
-      src: bassAsset('bass/pb/front/knobs/gold.png'),
+      src: bassModelAsset('pb', 'front/knobs/gold.png'),
       price: 30, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     goldActive: {
       label: 'Gold With Active',
       note: 'Gold knobs with active electronics',
-      src: bassAsset('bass/pb/front/knobs/gold-active.png'),
+      src: bassModelAsset('pb', 'front/knobs/gold-active.png'),
       price: 40, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     goldThree: {
       label: 'Gold Three String',
       note: 'Gold knobs for 3-string config',
-      src: bassAsset('bass/pb/front/knobs/gold-three.png'),
+      src: bassModelAsset('pb', 'front/knobs/gold-three.png'),
       price: 30, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     pearl: {
       label: 'Pearl Inlay',
       note: 'White pearl inlay knobs',
-      src: bassAsset('bass/pb/front/knobs/white-pearl-inlay.png'),
+      src: bassModelAsset('pb', 'front/knobs/white-pearl-inlay.png'),
       price: 25, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     pearlActive: {
       label: 'Pearl Inlay With Active',
       note: 'Pearl inlay knobs with active electronics',
-      src: bassAsset('bass/pb/front/knobs/white-pearl-inlay-active.png'),
+      src: bassModelAsset('pb', 'front/knobs/white-pearl-inlay-active.png'),
       price: 35, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     pearlThree: {
       label: 'Pearl Inlay Three String',
       note: 'Pearl inlay knobs for 3-string config',
-      src: bassAsset('bass/pb/front/knobs/white-pearl-inlay-three.png'),
+      src: bassModelAsset('pb', 'front/knobs/white-pearl-inlay-three.png'),
       price: 25, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     abaloneInlay: {
       label: 'Abalone Inlay',
       note: 'Premium abalone inlay knobs',
-      src: bassAsset('bass/pb/front/knobs/abalone-inlay.png'),
+      src: bassModelAsset('pb', 'front/knobs/abalone-inlay.png'),
       price: 40, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     abaloneInlayThree: {
       label: 'Abalone Inlay Three String',
       note: 'Abalone inlay knobs for 3-string config',
-      src: bassAsset('bass/pb/front/knobs/abalone-inlay-three.png'),
+      src: bassModelAsset('pb', 'front/knobs/abalone-inlay-three.png'),
       price: 40, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
   },
@@ -1312,37 +1563,37 @@ export const BASS_KNOB_OPTIONS = {
     black: {
       label: 'Black',
       note: 'Standard black knobs',
-      src: bassAsset('bass/jb/front/knobs/black.png'),
+      src: bassModelAsset('jb', 'front/knobs/black.png'),
       price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     chrome: {
       label: 'Chrome',
       note: 'Shiny chrome finish',
-      src: bassAsset('bass/jb/front/knobs/chrome.png'),
+      src: bassModelAsset('jb', 'front/knobs/chrome.png'),
       price: 15, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     tamarind: {
       label: 'Tamarind',
       note: 'Warm wood-look knobs',
-      src: bassAsset('bass/jb/front/knobs/tamarind.png'),
+      src: bassModelAsset('jb', 'front/knobs/tamarind.png'),
       price: 20, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     gold: {
       label: 'Gold',
       note: 'Premium gold knobs',
-      src: bassAsset('bass/jb/front/knobs/gold.png'),
+      src: bassModelAsset('jb', 'front/knobs/gold.png'),
       price: 30, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     pearl: {
       label: 'Pearl Inlay',
       note: 'White pearl inlay knobs',
-      src: bassAsset('bass/jb/front/knobs/white-pearl-inlay.png'),
+      src: bassModelAsset('jb', 'front/knobs/white-pearl-inlay.png'),
       price: 25, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     abalone: {
       label: 'Abalone Inlay',
       note: 'Premium abalone inlay',
-      src: bassAsset('bass/jb/front/knobs/abalone-inlay.png'),
+      src: bassModelAsset('jb', 'front/knobs/abalone-inlay.png'),
       price: 40, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
   },
@@ -1414,6 +1665,98 @@ export const BASS_PICKUP_CONFIG_OPTIONS = {
   },
 }
 
+export const VADER_PICKUP_OPTIONS = {
+  radiumHumbucker: {
+    label: 'Radium Radiused Humbucker',
+    note: 'Radium radiused humbucker pickup',
+    price: 0,
+    specs: specs(),
+    bridgeAsset: 'bass/vader/front/pickups/k/standard/4/bridge-black.png',
+    neckAsset: 'bass/vader/front/pickups/k/standard/4/neck-black.png',
+    bridgeMask: 'bass/vader/front/pickups/k/standard/4/bridge-black.png',
+    neckMask: 'bass/vader/front/pickups/k/standard/4/neck-black.png',
+    supportsColor: true,
+  },
+  radiumSingle: {
+    label: 'Radium Radiused Single Coil',
+    note: 'Radium radiused single coil pickup',
+    price: 0,
+    specs: specs(),
+    bridgeAsset: 'bass/vader/front/pickups/k/standard/4/bridge-black.png',
+    neckAsset: 'bass/vader/front/pickups/k/standard/4/neck-black.png',
+    bridgeMask: 'bass/vader/front/pickups/k/standard/4/bridge-black.png',
+    neckMask: 'bass/vader/front/pickups/k/standard/4/neck-black.png',
+    supportsColor: true,
+  },
+  singleHbSweetSpot: {
+    label: 'Single HB Alnico Humbucker In Sweet Spot',
+    note: 'Single HB Alnico humbucker in sweet spot position',
+    price: 0,
+    specs: specs(),
+    bridgeAsset: 'bass/vader/front/pickups/hb/standard/4/bridge-black.png',
+    neckAsset: null,
+    bridgeMask: null,
+    neckMask: null,
+    supportsColor: false,
+    positionOffset: 'translateX(3%)', // TODO: tune by eye against the real body art
+  },
+  hbAlnico: {
+    label: 'HB Alnico Humbucker',
+    note: 'HB Alnico humbucker pickup',
+    price: 0,
+    specs: specs(),
+    bridgeAsset: 'bass/vader/front/pickups/hb/standard/4/bridge-black.png',
+    neckAsset: 'all-models/pickups/bass/j/4/neck-black.png',
+    bridgeMask: null,
+    neckMask: null,
+    supportsColor: false,
+  },
+  fishmanFluence: {
+    label: 'Fishman Fluence',
+    note: 'Fishman Fluence pickup',
+    price: 0,
+    specs: specs(),
+    bridgeAsset: 'all-models/pickups/bass/acf/bridge.png',
+    neckAsset: 'all-models/pickups/bass/acf/neck.png',
+    bridgeMask: null,
+    neckMask: null,
+    supportsColor: false,
+  },
+  scpSplitCoil: {
+    label: 'SCP Split-Coil Alnico',
+    note: 'SCP split-coil Alnico neck pickup',
+    price: 0,
+    specs: specs(),
+    bridgeAsset: null,
+    neckAsset: 'all-models/pickups/bass/p/neck-black.png',
+    bridgeMask: null,
+    neckMask: 'all-models/pickups/bass/p/neck-black.png',
+    supportsColor: true,
+  },
+  jvaSingleCoil: {
+    label: 'JVA Single Coil',
+    note: 'JVA single coil neck pickup',
+    price: 0,
+    specs: specs(),
+    bridgeAsset: null,
+    neckAsset: 'all-models/pickups/bass/j/4/neck-black.png',
+    bridgeMask: null,
+    neckMask: 'all-models/pickups/bass/j/4/neck-black.png',
+    supportsColor: true,
+  },
+  none: {
+    label: 'No Neck Pickup',
+    note: 'Remove neck pickup',
+    price: 0,
+    specs: specs(),
+    bridgeAsset: null,
+    neckAsset: null,
+    bridgeMask: null,
+    neckMask: null,
+    supportsColor: false,
+  },
+}
+
 export const BASS_STRING_OPTIONS = {
   '4': {
     label: '4 Strings',
@@ -1437,70 +1780,70 @@ export const BASS_BODY_LAYER_ASSETS = {
   vader: {
     allAssets: BASS_MODEL_CATALOG.vader.all,
     front: {
-      mask: resolveBassCatalogAsset('vader', 'front', 'masks', { strings: '4', preferTokens: ['bodymask'] }) ?? bassAsset('bass/vader/front/masks/bodymask.png'),
+      mask: resolveBassCatalogAsset('vader', 'front', 'masks', { strings: '4', preferTokens: ['bodymask'] }) ?? bassModelAsset('vader', 'front/masks/bodymask.png'),
       bridge: BASS_BRIDGE_OPTIONS.vader.standard.assets,
       strap: pickColorVariants('vader', 'front', 'strap buttons/standard', '4'),
       straplocks: pickColorVariants('vader', 'front', 'strap buttons/straplocks', '4'),
-      pickups: resolveBassCatalogAsset('vader', 'front', 'pickups', { strings: '4', preferTokens: ['bridge', 'black'] }) ?? bassAsset('bass/vader/front/pickups/hb/standard/4/bridge-black.png'),
+      pickups: resolveBassCatalogAsset('vader', 'front', 'pickups', { strings: '4', preferTokens: ['bridge', 'black'] }) ?? bassModelAsset('vader', 'front/pickups/hb/standard/4/bridge-black.png'),
       pickupCatalog: mapCatalogByStem('vader', 'front', 'pickups'),
-      shadows: resolveBassCatalogAsset('vader', 'front', 'shadows_highlights', { strings: '4', preferTokens: ['edge', 'shadow'] }) ?? bassAsset('bass/vader/front/shadows_highlights/edge-shadow.png'),
-      gloss: resolveBassCatalogAsset('vader', 'front', 'shadows_highlights', { strings: '4', preferTokens: ['gloss'] }) ?? bassAsset('bass/vader/front/shadows_highlights/gloss.png'),
+      shadows: resolveBassCatalogAsset('vader', 'front', 'shadows_highlights', { strings: '4', preferTokens: ['edge', 'shadow'] }) ?? bassModelAsset('vader', 'front/shadows_highlights/edge-shadow.png'),
+      gloss: resolveBassCatalogAsset('vader', 'front', 'shadows_highlights', { strings: '4', preferTokens: ['gloss'] }) ?? bassModelAsset('vader', 'front/shadows_highlights/gloss.png'),
     },
     back: {
-      mask: resolveBassCatalogAsset('vader', 'back', 'masks', { strings: '4', preferTokens: ['bodymask'] }) ?? bassAsset('bass/vader/back/masks/bodymask.png'),
+      mask: resolveBassCatalogAsset('vader', 'back', 'masks', { strings: '4', preferTokens: ['bodymask'] }) ?? bassModelAsset('vader', 'back/masks/bodymask.png'),
       backplate: BASS_BACKPLATE_OPTIONS.vader.standard.src,
       bridge: resolveBassCatalogAsset('vader', 'back', 'bridges', { strings: '4', preferTokens: ['standard'] }),
       strap: pickColorVariants('vader', 'back', 'strap buttons/standard', '4'),
       straplocks: pickColorVariants('vader', 'back', 'strap buttons/straplocks', '4'),
-      neckCap: resolveBassCatalogAsset('vader', 'back', '', { strings: '4', preferTokens: ['neck', 'cap'] }) ?? bassAsset('bass/vader/back/neck-cap.png'),
-      shadows: resolveBassCatalogAsset('vader', 'back', 'shadows_highlights', { strings: '4', preferTokens: ['multiply'] }) ?? bassAsset('bass/vader/back/shadows_highlights/multiply.png'),
-      gloss: resolveBassCatalogAsset('vader', 'back', 'shadows_highlights', { strings: '4', preferTokens: ['gloss'] }) ?? bassAsset('bass/vader/back/shadows_highlights/gloss.png'),
+      neckCap: resolveBassCatalogAsset('vader', 'back', '', { strings: '4', preferTokens: ['neck', 'cap'] }) ?? bassModelAsset('vader', 'back/neck-cap.png'),
+      shadows: resolveBassCatalogAsset('vader', 'back', 'shadows_highlights', { strings: '4', preferTokens: ['edge', 'shadow'] }) ?? bassModelAsset('vader', 'back/shadows_highlights/edge-shadow.png'),
+      gloss: resolveBassCatalogAsset('vader', 'back', 'shadows_highlights', { strings: '4', preferTokens: ['gloss'] }) ?? bassModelAsset('vader', 'back/shadows_highlights/gloss.png'),
     },
   },
   pb: {
     allAssets: BASS_MODEL_CATALOG.pb.all,
     front: {
-      mask: resolveBassCatalogAsset('pb', 'front', 'masks', { strings: '4', preferTokens: ['bodymask'] }) ?? bassAsset('bass/pb/front/masks/bodymask.png'),
+      mask: resolveBassCatalogAsset('pb', 'front', 'masks', { strings: '4', preferTokens: ['bodymask'] }) ?? bassModelAsset('pb', 'front/masks/bodymask.png'),
       bridge: BASS_BRIDGE_OPTIONS.pb.standard.assets,
       strap: pickColorVariants('pb', 'front', 'strap buttons/standard', '4'),
       straplocks: pickColorVariants('pb', 'front', 'strap buttons/straplocks', '4'),
-      pickups: resolveBassCatalogAsset('pb', 'front', 'pickups', { strings: '4', preferTokens: ['bridge', 'black'] }) ?? bassAsset('bass/pb/front/pickups/4/bridge-black.png'),
+      pickups: resolveBassCatalogAsset('pb', 'front', 'pickups', { strings: '4', preferTokens: ['bridge', 'black'] }) ?? bassModelAsset('pb', 'front/pickups/4/bridge-black.png'),
       pickupCatalog: mapCatalogByStem('pb', 'front', 'pickups'),
-      shadows: resolveBassCatalogAsset('pb', 'front', 'shadows_highlights', { strings: '4', preferTokens: ['edge', 'shadow'] }) ?? bassAsset('bass/pb/front/shadows_highlights/edge-shadow.png'),
-      gloss: resolveBassCatalogAsset('pb', 'front', 'shadows_highlights', { strings: '4', preferTokens: ['gloss'] }) ?? bassAsset('bass/pb/front/shadows_highlights/gloss.png'),
+      shadows: resolveBassCatalogAsset('pb', 'front', 'shadows_highlights', { strings: '4', preferTokens: ['edge', 'shadow'] }) ?? bassModelAsset('pb', 'front/shadows_highlights/edge-shadow.png'),
+      gloss: resolveBassCatalogAsset('pb', 'front', 'shadows_highlights', { strings: '4', preferTokens: ['gloss'] }) ?? bassModelAsset('pb', 'front/shadows_highlights/gloss.png'),
     },
     back: {
-      mask: resolveBassCatalogAsset('pb', 'back', 'masks', { strings: '4', preferTokens: ['bodymask'] }) ?? bassAsset('bass/pb/back/masks/bodymask.png'),
+      mask: resolveBassCatalogAsset('pb', 'back', 'masks', { strings: '4', preferTokens: ['bodymask'] }) ?? bassModelAsset('pb', 'back/masks/bodymask.png'),
       backplate: BASS_BACKPLATE_OPTIONS.pb.standard.src,
       neckBolts: resolveBassCatalogAsset('pb', 'back', 'neck bolts', { strings: '4', preferTokens: ['neck', 'bolts'] }),
       ferrules: pickColorVariants('pb', 'back', 'string ferrules/standard', '4'),
       strap: pickColorVariants('pb', 'back', 'strap buttons/standard', '4'),
       straplocks: pickColorVariants('pb', 'back', 'strap buttons/straplocks', '4'),
-      shadows: resolveBassCatalogAsset('pb', 'back', 'shadows_highlights', { strings: '4', preferTokens: ['multiply'] }) ?? bassAsset('bass/pb/back/shadows_highlights/multiply.png'),
-      gloss: resolveBassCatalogAsset('pb', 'back', 'shadows_highlights', { strings: '4', preferTokens: ['gloss'] }) ?? bassAsset('bass/pb/back/shadows_highlights/gloss.png'),
+      shadows: resolveBassCatalogAsset('pb', 'back', 'shadows_highlights', { strings: '4', preferTokens: ['multiply'] }) ?? bassModelAsset('pb', 'back/shadows_highlights/multiply.png'),
+      gloss: resolveBassCatalogAsset('pb', 'back', 'shadows_highlights', { strings: '4', preferTokens: ['gloss'] }) ?? bassModelAsset('pb', 'back/shadows_highlights/gloss.png'),
     },
   },
   jb: {
     allAssets: BASS_MODEL_CATALOG.jb.all,
     front: {
-      mask: resolveBassCatalogAsset('jb', 'front', 'masks', { strings: '4', preferTokens: ['bodymask'] }) ?? bassAsset('bass/jb/front/masks/bodymask.png'),
+      mask: resolveBassCatalogAsset('jb', 'front', 'masks', { strings: '4', preferTokens: ['bodymask'] }) ?? bassModelAsset('jb', 'front/masks/bodymask.png'),
       bridge: BASS_BRIDGE_OPTIONS.jb.standard.assets,
       strap: pickColorVariants('jb', 'front', 'strap buttons/standard', '4'),
       straplocks: pickColorVariants('jb', 'front', 'strap buttons/straplocks', '4'),
-      pickups: resolveBassCatalogAsset('jb', 'front', 'pickups', { strings: '4', preferTokens: ['bridge', 'black'] }) ?? bassAsset('bass/jb/front/pickups/4/j/bridge-black.png'),
+      pickups: resolveBassCatalogAsset('jb', 'front', 'pickups', { strings: '4', preferTokens: ['bridge', 'black'] }) ?? bassModelAsset('jb', 'front/pickups/4/j/bridge-black.png'),
       pickupCatalog: mapCatalogByStem('jb', 'front', 'pickups'),
-      shadows: resolveBassCatalogAsset('jb', 'front', 'shadows_highlights', { strings: '4', preferTokens: ['edge', 'shadow'] }) ?? bassAsset('bass/jb/front/shadows_highlights/edge-shadow.png'),
-      gloss: resolveBassCatalogAsset('jb', 'front', 'shadows_highlights', { strings: '4', preferTokens: ['gloss'] }) ?? bassAsset('bass/jb/front/shadows_highlights/gloss.png'),
+      shadows: resolveBassCatalogAsset('jb', 'front', 'shadows_highlights', { strings: '4', preferTokens: ['edge', 'shadow'] }) ?? bassModelAsset('jb', 'front/shadows_highlights/edge-shadow.png'),
+      gloss: resolveBassCatalogAsset('jb', 'front', 'shadows_highlights', { strings: '4', preferTokens: ['gloss'] }) ?? bassModelAsset('jb', 'front/shadows_highlights/gloss.png'),
     },
     back: {
-      mask: resolveBassCatalogAsset('jb', 'back', 'masks', { strings: '4', preferTokens: ['bodymask'] }) ?? bassAsset('bass/jb/back/masks/bodymask.png'),
+      mask: resolveBassCatalogAsset('jb', 'back', 'masks', { strings: '4', preferTokens: ['bodymask'] }) ?? bassModelAsset('jb', 'back/masks/bodymask.png'),
       backplate: BASS_BACKPLATE_OPTIONS.jb.standard.src,
       neckBolts: resolveBassCatalogAsset('jb', 'back', 'neck bolts', { strings: '4', preferTokens: ['neck', 'bolts'] }),
       ferrules: pickColorVariants('jb', 'back', 'string ferrules/standard', '4'),
       strap: pickColorVariants('jb', 'back', 'strap buttons/standard', '4'),
       straplocks: pickColorVariants('jb', 'back', 'strap buttons/straplocks', '4'),
-      shadows: resolveBassCatalogAsset('jb', 'back', 'shadows_highlights', { strings: '4', preferTokens: ['multiply'] }) ?? bassAsset('bass/jb/back/shadows_highlights/multiply.png'),
-      gloss: resolveBassCatalogAsset('jb', 'back', 'shadows_highlights', { strings: '4', preferTokens: ['gloss'] }) ?? bassAsset('bass/jb/back/shadows_highlights/gloss.png'),
+      shadows: resolveBassCatalogAsset('jb', 'back', 'shadows_highlights', { strings: '4', preferTokens: ['multiply'] }) ?? bassModelAsset('jb', 'back/shadows_highlights/multiply.png'),
+      gloss: resolveBassCatalogAsset('jb', 'back', 'shadows_highlights', { strings: '4', preferTokens: ['gloss'] }) ?? bassModelAsset('jb', 'back/shadows_highlights/gloss.png'),
     },
   },
 }
@@ -1516,17 +1859,22 @@ export const bassBuilder = {
   BASE_PRICE: BASS_BASE_PRICE,
   BODY_OPTIONS: BASS_BODY_OPTIONS,
   BODY_WOOD_OPTIONS: BASS_BODY_WOOD_OPTIONS,
+  TOP_WOOD_OPTIONS: BASS_TOP_WOOD_OPTIONS,
   BODY_FINISH_OPTIONS: BASS_BODY_FINISH_OPTIONS,
   NECK_OPTIONS: BASS_NECK_OPTIONS,
+  FINGERBOARD_RADIUS_OPTIONS: BASS_FINGERBOARD_RADIUS_OPTIONS,
   FRETBOARD_OPTIONS: BASS_FRETBOARD_OPTIONS,
   NECK_MASK: BASS_NECK_MASK,
   NECK_FRETS: BASS_NECK_FRETS,
   NECK_NUT: BASS_NECK_NUT,
+  FRET_OPTIONS: BASS_FRET_OPTIONS,
+  NECK_REAR_FINISH_OPTIONS: BASS_NECK_REAR_FINISH_OPTIONS,
   HEADSTOCK_WOOD_OPTIONS: BASS_HEADSTOCK_WOOD_OPTIONS,
   HEADSTOCK_STYLE_OPTIONS: BASS_HEADSTOCK_STYLE_OPTIONS,
   NECK_STYLE_OPTIONS: BASS_NECK_STYLE_OPTIONS,
   INLAY_OPTIONS: BASS_INLAY_OPTIONS,
-  LOGO_OPTIONS: BASS_LOGO_OPTIONS,
+  INLAY_SHAPE_OPTIONS: BASS_INLAY_SHAPE_OPTIONS,
+  INLAY_MATERIAL_OPTIONS: BASS_INLAY_MATERIAL_OPTIONS,
   BACKPLATE_OPTIONS: BASS_BACKPLATE_OPTIONS,
   PICKUP_SCREW_OPTIONS: BASS_PICKUP_SCREW_OPTIONS,
   CONTROL_PLATE_OPTIONS: BASS_CONTROL_PLATE_OPTIONS,
@@ -1537,25 +1885,25 @@ export const bassBuilder = {
   PICKUP_OPTIONS: BASS_PICKUP_OPTIONS,
   PICKUP_TYPE_STYLE_OPTIONS: BASS_PICKUP_TYPE_STYLE_OPTIONS,
   PICKUP_CONFIG_OPTIONS: BASS_PICKUP_CONFIG_OPTIONS,
+  VADER_PICKUP_OPTIONS: VADER_PICKUP_OPTIONS,
   STRING_OPTIONS: BASS_STRING_OPTIONS,
   PREVIEW_LAYOUTS: BASS_PREVIEW_LAYOUTS,
   BODY_LAYER_ASSETS: BASS_BODY_LAYER_ASSETS,
   MODEL_ASSET_CATALOG: BASS_MODEL_CATALOG,
   SHARED_ASSET_CATALOG: BASS_SHARED_ASSET_CATALOG,
   resolveVariant: resolveBassVariant,
-  // new schema (bass-conditional: STRING_COUNT_OPTIONS omitted)
+  // new schema (bass-conditional: STRING_COUNT_OPTIONS uses 4/5/6 strings for bass)
   DEXTERITY_OPTIONS,
+  STRING_COUNT_OPTIONS,
+  BASS_SCALE_LENGTH_OPTIONS,
   MULTISCALE_OPTIONS,
   SCALE_LENGTH_OPTIONS,
   CASE_OPTIONS,
-  BEVEL_OPTIONS,
   TOP_WOOD_OPTIONS,
   FINISH_TYPE_OPTIONS,
   TOP_COAT_OPTIONS,
   BURST_FINISH_OPTIONS,
   NECK_CONSTRUCTION_OPTIONS,
-  INLAY_SHAPE_OPTIONS,
-  INLAY_MATERIAL_OPTIONS,
   FRET_OPTIONS,
   NECK_REAR_FINISH_OPTIONS,
   HEADSTOCK_SHAPE_OPTIONS,
@@ -1565,18 +1913,20 @@ export const bassBuilder = {
   PICKUP_MODEL_BRIDGE_OPTIONS,
   PICKUP_MODEL_MIDDLE_OPTIONS,
   PICKUP_MODEL_NECK_OPTIONS,
-  PICKUP_BOBBIN_OPTIONS,
+  PICKUP_COLOR_OPTIONS,
   PICKUP_POLE_COLOR_OPTIONS,
   CONTROLS_OPTIONS,
   SADDLE_OPTIONS,
   NUT_OPTIONS,
   TUNING_OPTIONS,
+  TUNING_DISCLAIMER,
   STRING_BRAND_OPTIONS,
   OUTPUT_JACK_OPTIONS,
   STRAP_BUTTON_OPTIONS,
   TUNER_BUTTON_OPTIONS,
    ELECTRONICS_CAVITY_COVER_OPTIONS,
    TREMOLO_COVER_OPTIONS_BY_BRIDGE,
+   KNOB_STYLE_OPTIONS,
   resolveCatalogAsset: resolveBassCatalogAsset,
   resolveCatalogVariant: resolveBassCatalogVariant,
   resolveSharedAsset: resolveSharedBassAsset,

@@ -5,12 +5,12 @@
  * Supports both Cloudinary CDN and local file fallback.
  * 
  * Local folder structure (public/builder/):
- *   electric_assets/builder/all-models/{shared-asset-type}/
- *   electric_assets/builder/{model}/bodies|back|shadows_highlights/...
- *   electric_assets/builder/{model}/buttons/{option-type}-buttons/
+ *   customization_assets/builder/all-models/{shared-asset-type}/
+ *   customization_assets/builder/{category}/{model}/bodies|back|shadows_highlights/...
+ *   customization_assets/builder/{category}/{model}/buttons/{option-type}-buttons/
  * 
  * When VITE_CLOUDINARY_CLOUD_NAME is set, assets are served from Cloudinary.
- * Otherwise, assets are served from the local /builder/electric_assets/builder/ directory.
+ * Otherwise, assets are served from the local /builder/customization_assets/builder/ directory.
  */
 import { NECK_REAR_FINISH_OPTIONS } from './guitarBuilderData.js'
 const CLOUD_NAME = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_CLOUDINARY_CLOUD_NAME) 
@@ -26,13 +26,13 @@ const USE_CLOUDINARY = Boolean(CLOUD_NAME)
 export function resolveAssetPath(subPath) {
   if (USE_CLOUDINARY) {
     // Cloudinary mirrors the local folder structure exactly:
-    // cosmoscraft_assets/electric_assets/builder/{dc|delos|all-models}/...
-    if (subPath.startsWith('electric_assets/')) {
+    // cosmoscraft_assets/customization_assets/builder/{dc|delos|all-models}/...
+    if (subPath.startsWith('customization_assets/')) {
       return `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/cosmoscraft_assets/${subPath}`
     }
-    return `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/cosmoscraft_assets/electric_assets/builder/${subPath}`
+    return `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/cosmoscraft_assets/customization_assets/builder/${subPath}`
   }
-  // Local fallback - serve from public/builder/electric_assets/builder/
+  // Local fallback - serve from public/builder/customization_assets/builder/
   return `/builder/${subPath}`
 }
 
@@ -50,7 +50,7 @@ export const asset = path => resolveAssetPath(path)
  * Get the base asset path for a given category and model
  */
 export function getModelAssetPath(category, model) {
-  return `${category}_assets/builder/${model}`
+  return `customization_assets/builder/${category}/${model}`
 }
 
 /**
@@ -61,7 +61,7 @@ export function getModelAssetPath(category, model) {
  * visually aligned with the DC reference preview.
  */
 export function resolveSharedAsset(category, model, assetType, ...subPaths) {
-  const base = `${category}_assets/builder/all-models`
+  const base = `customization_assets/builder/all-models`
   const path = [base, assetType, ...subPaths]
     .filter(Boolean)
     .join('/')
@@ -124,7 +124,7 @@ export function resolveHeadstockWoodAsset(category, model, woodKey) {
 
 /**
  * Resolve a top wood texture path
- * Loads from: electric_assets/dc_assets/models/all-models/woods-colors/top-woods/{woodKey}.png
+ * Loads from: customization_assets/builder/all-models/woods-colors/top-woods/{woodKey}.png
  */
 export function resolveTopWoodAsset(category, model, woodKey) {
   return resolveSharedAsset(category, model, 'woods-colors', 'top-woods', `${toKebab(woodKey)}.png`)
@@ -167,7 +167,7 @@ export function resolveBurstMask(category, model, burstKey) {
   const modelMap = burstMaskMap[model]
   // After
   if (modelMap && modelMap[burstKey]) {
-    return asset(`${category}_assets/builder/${modelMap[burstKey]}`)
+      return asset(`customization_assets/builder/${category}/${modelMap[burstKey]}`)
   }
   
   // Fallback to default resolution
@@ -203,7 +203,7 @@ export function resolveGloss(category, model) {
  * Top coat overlays are loaded from the back/shadows_highlights/ folder
  * and rendered above the finish layer.
  * 
- * Path: {category}_assets/{model}_assets/models/{model}/back/shadows_highlights/{topCoatKey}.png
+ * Path: customization_assets/builder/{category}/{model}/back/shadows_highlights/{topCoatKey}.png
  */
 export function resolveTopCoatAsset(category, model, topCoatKey, neckRearFinish) {
   const neckFinish = neckRearFinish || 'tungOil'

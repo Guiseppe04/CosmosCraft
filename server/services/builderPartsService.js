@@ -21,12 +21,12 @@ const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.avif', '.g
 const IMPORT_CONFIG = {
   electric: {
     sourceDir: path.resolve(__dirname, '../../builder/electric_models'),
-    cloudinaryFolder: 'cosmoscraft_assets/electric_assets',
+    cloudinaryFolder: 'cosmoscraft_assets/customization_assets',
     importCategory: 'electric_guitar',
   },
   bass: {
     sourceDir: path.resolve(__dirname, '../../builder/bass_models'),
-    cloudinaryFolder: 'cosmoscraft_assets/bass_assets',
+    cloudinaryFolder: 'cosmoscraft_assets/customization_assets',
     importCategory: 'bass_guitar',
   },
 };
@@ -234,6 +234,7 @@ const resolveBuilderAssetRoot = (guitarType = 'electric') => {
 
 const resolveSharedModelRoot = async (guitarType = 'electric') => {
   const root = resolveBuilderAssetRoot(guitarType)
+  if (!fs.existsSync(root)) return null
   const entries = await fs.promises.readdir(root, { withFileTypes: true })
   const modelDirs = entries.filter(e => e.isDirectory() && e.name.endsWith('_assets'))
     .map(e => e.name)

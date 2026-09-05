@@ -44,6 +44,10 @@ import {
   BRIDGE_OPTIONS,
 } from './guitarBuilderData'
 
+import {
+  VADER_PICKUP_OPTIONS,
+} from './bassBuilderData'
+
 // ============================================================
 // CATEGORY & MODEL DEFINITIONS
 // ============================================================
@@ -195,6 +199,205 @@ export const CATEGORIES = {
              tunerButtons: 'none',
             electronicsCavityCover: 'black',
             tremoloCover: null,
+        },
+      },
+    },
+  },
+  bass: {
+    label: 'Bass Guitar',
+    icon: 'Bass',
+    models: {
+      vader: {
+        label: 'Vader',
+        note: 'Modern aggressive bass shape',
+        defaultConfig: {
+          bassType: 'vader',
+          bodyWood: 'alder',
+          bodyFinish: 'none',
+          neck: 'maple',
+          fretboard: 'rosewood',
+          headstockWood: 'maple',
+          headstockStyle: 'ch',
+          neckStyle: 'roundBottom',
+          inlays: 'whiteDots',
+          bridge: 'standard',
+          pickguard: 'none',
+          knobs: 'black',
+          pickups: 'standard',
+          pickupTypeStyle: 'j',
+          hardware: 'chrome',
+          strings: '4',
+          pickupConfig: 'j',
+          logo: 'standard',
+          backplate: 'standard',
+          pickupScrews: 'black',
+          controlPlate: 'black',
+          dexterity: 'right',
+          multiscale: 'off',
+          scaleLength: '34',
+          case: 'none',
+          bevel: 'off',
+          topWood: 'none',
+          topCoat: 'clearGloss',
+          finishType: 'solid',
+          burstFinish: 'none',
+          neckConstruction: '1piece',
+          inlayShape: 'dots',
+          inlayMaterial: 'pearl',
+          frets: 'stainlessRegular',
+          neckRearFinish: 'tungOil',
+          headstockShape: '6in',
+          trussRodCover: 'black',
+          electronicsType: 'passive',
+          pickupConfiguration: 'hh',
+          bridgePickupModel: 'beryllium',
+          middlePickupModel: 'none',
+          neckPickupModel: 'beryllium',
+          pickupColor: 'bobbins',
+          pickupColorVariant: 'black',
+          pickupPaintedColor: '#000000',
+          pickupWoodType: 'black',
+          pickupPoleColor: 'black',
+          vaderBridgePickup: 'radiumHumbucker',
+          vaderNeckPickup: 'radiumHumbucker',
+          vaderPickupColor: 'none',
+          vaderPickupColorRgb: '#000000',
+          controls: 'off',
+          saddle: 'chrome',
+          nut: 'blackGraphTech',
+          tuning: 'eStandard',
+          stringBrand: 'elixir1046',
+          outputJack: 'off',
+          strapButtons: 'standard',
+          tunerButtons: 'none',
+          electronicsCavityCover: 'black',
+          tremoloCover: null,
+        },
+      },
+      pb: {
+        label: 'Precision',
+        note: 'Classic P-bass style',
+        defaultConfig: {
+          bassType: 'pb',
+          bodyWood: 'alder',
+          bodyFinish: 'none',
+          neck: 'maple',
+          fretboard: 'rosewood',
+          headstockWood: 'maple',
+          headstockStyle: 'ch',
+          neckStyle: 'roundBottom',
+          inlays: 'whiteDots',
+          bridge: 'standard',
+          pickguard: 'none',
+          knobs: 'black',
+          pickups: 'standard',
+          pickupTypeStyle: 'p',
+          hardware: 'chrome',
+          strings: '4',
+          pickupConfig: 'p',
+          logo: 'standard',
+          backplate: 'standard',
+          pickupScrews: 'black',
+          controlPlate: 'black',
+          dexterity: 'right',
+          multiscale: 'off',
+          scaleLength: '34',
+          case: 'none',
+          bevel: 'off',
+          topWood: 'none',
+          topCoat: 'clearGloss',
+          finishType: 'solid',
+          burstFinish: 'none',
+          neckConstruction: '1piece',
+          inlayShape: 'dots',
+          inlayMaterial: 'pearl',
+          frets: 'stainlessRegular',
+          neckRearFinish: 'tungOil',
+          headstockShape: '6in',
+          trussRodCover: 'black',
+          electronicsType: 'passive',
+          pickupConfiguration: 'hh',
+          bridgePickupModel: 'beryllium',
+          middlePickupModel: 'none',
+          neckPickupModel: 'beryllium',
+          pickupColor: 'bobbins',
+          pickupColorVariant: 'black',
+          pickupPaintedColor: '#000000',
+          pickupWoodType: 'black',
+          pickupPoleColor: 'black',
+          controls: 'off',
+          saddle: 'chrome',
+          nut: 'blackGraphTech',
+          tuning: 'eStandard',
+          stringBrand: 'elixir1046',
+          outputJack: 'off',
+          strapButtons: 'standard',
+          tunerButtons: 'none',
+          electronicsCavityCover: 'black',
+          tremoloCover: null,
+        },
+      },
+      jb: {
+        label: 'Jazz',
+        note: 'Modern J-bass style',
+        defaultConfig: {
+          bassType: 'jb',
+          bodyWood: 'alder',
+          bodyFinish: 'none',
+          neck: 'maple',
+          fretboard: 'rosewood',
+          headstockWood: 'maple',
+          headstockStyle: 'ch',
+          neckStyle: 'roundBottom',
+          inlays: 'whiteDots',
+          bridge: 'standard',
+          pickguard: 'none',
+          knobs: 'black',
+          pickups: 'standard',
+          pickupTypeStyle: 'j',
+          hardware: 'chrome',
+          strings: '4',
+          pickupConfig: 'j',
+          logo: 'standard',
+          backplate: 'standard',
+          pickupScrews: 'black',
+          controlPlate: 'black',
+          dexterity: 'right',
+          multiscale: 'off',
+          scaleLength: '34',
+          case: 'none',
+          bevel: 'off',
+          topWood: 'none',
+          topCoat: 'clearGloss',
+          finishType: 'solid',
+          burstFinish: 'none',
+          neckConstruction: '1piece',
+          inlayShape: 'dots',
+          inlayMaterial: 'pearl',
+          frets: 'stainlessRegular',
+          neckRearFinish: 'tungOil',
+          headstockShape: '6in',
+          trussRodCover: 'black',
+          electronicsType: 'passive',
+          pickupConfiguration: 'hh',
+          bridgePickupModel: 'beryllium',
+          middlePickupModel: 'none',
+          neckPickupModel: 'beryllium',
+          pickupColor: 'bobbins',
+          pickupColorVariant: 'black',
+          pickupPaintedColor: '#000000',
+          pickupWoodType: 'black',
+          pickupPoleColor: 'black',
+          controls: 'off',
+          saddle: 'chrome',
+          nut: 'blackGraphTech',
+          tuning: 'eStandard',
+          stringBrand: 'elixir1046',
+          outputJack: 'off',
+          strapButtons: 'standard',
+          tunerButtons: 'none',
+          electronicsCavityCover: 'black',
+          tremoloCover: null,
         },
       },
     },
@@ -501,9 +704,9 @@ export const OPTION_FIELDS = [
     type: 'image-select',
     previewResolver: (category, model, value) => getButtonPreview(category, model, 'inlay-shape', value),
     options: [
-      { value: 'dots', label: 'Dots', note: 'Classic dot inlays', price: 0 },
-      { value: 'diamonds', label: 'Diamonds', note: 'Diamond inlays', price: 30 },
-      { value: 'blocks', label: 'Blocks', note: 'Block inlays', price: 30 },
+      { value: 'dots', label: 'Dots', note: 'Classic dot inlays (id)', price: 0 },
+      { value: 'diamonds', label: 'Diamonds', note: 'Diamond inlays (idia)', price: 30 },
+      { value: 'blocks', label: 'Blocks', note: 'Block inlays (ib)', price: 30 },
     ],
   },
   {
@@ -513,9 +716,13 @@ export const OPTION_FIELDS = [
     type: 'image-select',
     previewResolver: (category, model, value) => getButtonPreview(category, model, 'inlay-material', value),
     options: [
-      { value: 'pearl', label: 'Pearl', note: 'White pearl material', price: 0 },
+      { value: 'motherOfPearl', label: 'Mother of Pearl', note: 'Classic mother of pearl', price: 0 },
+      { value: 'green', label: 'Green Acrylic', note: 'Green acrylic inlay', price: 35 },
+      { value: 'pink', label: 'Pink', note: 'Pink acrylic inlay', price: 35 },
+      { value: 'red', label: 'Red', note: 'Red acrylic inlay', price: 35 },
+      { value: 'white', label: 'White', note: 'White inlay', price: 35 },
+      { value: 'black', label: 'Black', note: 'Black inlay', price: 0 },
       { value: 'abalone', label: 'Abalone', note: 'Shell-like abalone material', price: 35 },
-      { value: 'black', label: 'Black', note: 'Black onyx material', price: 0 },
       { value: 'luminlay', label: 'Luminlay', note: 'Glow-in-the-dark material', price: 35 },
     ],
   },
@@ -583,6 +790,7 @@ export const OPTION_FIELDS = [
     key: 'electronicsType',
     label: 'Electronics Type',
     type: 'select',
+    condition: (config) => config.bassType !== 'vader',
     options: [
       { value: 'passive', label: 'Passive', note: 'Standard passive electronics', price: 0 },
       { value: 'active', label: 'Active', note: 'Active preamp electronics', price: 80 },
@@ -593,6 +801,7 @@ export const OPTION_FIELDS = [
     key: 'pickupConfiguration',
     label: 'Pickup Configuration',
     type: 'select',
+    condition: (config) => config.bassType !== 'vader',
     // Responsible for defining available pickup configuration layouts (HH / H-S-H)
     options: [
       { value: 'hh', label: 'HH (Dual Humbuckers)', note: 'Two humbuckers', price: 135 },
@@ -604,9 +813,11 @@ export const OPTION_FIELDS = [
     key: 'bridgePickupModel',
     label: 'Bridge Pickup',
     type: 'select',
+    
     // Responsible for defining bridge humbucker pickup model options
     dependency: 'pickupConfiguration',
     condition: (config) => {
+      if (config.bassType === 'vader') return false
       const cfg = config.pickupConfiguration || 'hh'
       if (cfg === 'hh') return true
       if (cfg === 'hss') return true
@@ -628,6 +839,7 @@ export const OPTION_FIELDS = [
     type: 'select',
     // Responsible for defining middle single coil pickup model options
     condition: (config) => {
+      if (config.bassType === 'vader') return false
       const cfg = config.pickupConfiguration || 'hh'
       return cfg === 'hss'
     },
@@ -641,6 +853,7 @@ export const OPTION_FIELDS = [
     key: 'neckPickupModel',
     label: 'Neck Pickup',
     type: 'select',
+    condition: (config) => config.bassType !== 'vader',
     // Responsible for defining neck humbucker pickup model options
     options: [
       { value: 'beryllium', label: 'Beryllium', note: 'Beryllium neck pickup', price: 0 },
@@ -653,9 +866,91 @@ export const OPTION_FIELDS = [
   },
   {
     section: 'Electronics',
+    key: 'vaderBridgePickup',
+    label: 'Pickup Model',
+    type: 'select',
+    condition: (config) => config.bassType === 'vader',
+    options: [
+      { value: 'radiumHumbucker', label: 'Radium Radiused Humbucker', note: 'Radium radiused humbucker', price: 0 },
+      { value: 'radiumSingle', label: 'Radium Radiused Single Coil', note: 'Radium radiused single coil', price: 0 },
+      { value: 'singleHbSweetSpot', label: 'Single HB Alnico Humbucker In Sweet Spot', note: 'Single HB Alnico in sweet spot', price: 0 },
+      { value: 'hbAlnico', label: 'HB Alnico Humbucker', note: 'HB Alnico humbucker', price: 0 },
+      { value: 'fishmanFluence', label: 'Fishman Fluence', note: 'Fishman Fluence pickup', price: 0 },
+    ],
+  },
+  {
+    section: 'Electronics',
+    key: 'vaderNeckPickup',
+    label: 'Neck Pickup',
+    type: 'select',
+    condition: (config) => {
+      if (config.bassType !== 'vader') return false
+      const bridge = config.vaderBridgePickup || 'radiumHumbucker'
+      if (bridge === 'singleHbSweetSpot') return false
+      return true
+    },
+    getOptions: (config) => {
+      const bridge = config.vaderBridgePickup || 'radiumHumbucker'
+      if (bridge === 'radiumHumbucker') {
+        return [
+          { value: 'radiumHumbucker', label: 'Radium Radiused Humbucker', note: 'Radium radiused humbucker', price: 0 },
+        ]
+      }
+      if (bridge === 'radiumSingle') {
+        return [
+          { value: 'radiumHumbucker', label: 'Radium Radiused Humbucker', note: 'Radium radiused humbucker', price: 0 },
+          { value: 'scpSplitCoil', label: 'SCP Split-Coil Alnico', note: 'SCP split-coil Alnico', price: 0 },
+        ]
+      }
+      if (bridge === 'hbAlnico') {
+        return [
+          { value: 'jvaSingleCoil', label: 'JVA Single Coil', note: 'JVA single coil', price: 0 },
+        ]
+      }
+      if (bridge === 'fishmanFluence') {
+        return [
+          { value: 'fishmanFluence', label: 'Fishman Fluence', note: 'Fishman Fluence neck', price: 0 },
+        ]
+      }
+      return []
+    },
+  },
+  {
+    section: 'Electronics',
+    key: 'vaderPickupColor',
+    label: 'Pickup Color',
+    type: 'select',
+    condition: (config) => {
+      if (config.bassType !== 'vader') return false
+      const bridge = config.vaderBridgePickup || 'radiumHumbucker'
+      const neck = config.vaderNeckPickup || 'none'
+      const bridgeOpts = VADER_PICKUP_OPTIONS[bridge]
+      const neckOpts = VADER_PICKUP_OPTIONS[neck]
+      const colorPickups = ['radiumHumbucker', 'radiumSingle', 'jvaSingleCoil', 'scpSplitCoil']
+      const hasColor = colorPickups.includes(bridge) || colorPickups.includes(neck)
+      return hasColor || (bridgeOpts?.supportsColor || neckOpts?.supportsColor || false)
+    },
+    options: [
+      { value: 'none', label: 'None (Stock)', note: 'No color customization', price: 0 },
+      { value: 'custom', label: 'Custom RGB Color', note: 'Apply custom RGB color shift', price: 10 },
+    ],
+  },
+  {
+    section: 'Electronics',
+    key: 'vaderPickupColorRgb',
+    label: 'Pickup RGB Color',
+    type: 'color',
+    condition: (config) => {
+      if (config.bassType !== 'vader') return false
+      return config.vaderPickupColor === 'custom'
+    },
+  },
+  {
+    section: 'Electronics',
     key: 'pickupColor',
     label: 'Pickup Color',
     type: 'select',
+    condition: (config) => config.bassType !== 'vader',
     // Responsible for defining pickup color/style type options (bobbins, painted, wooden, covers)
     options: [
       { value: 'bobbins', label: 'Bobbin Colors', note: 'Open coil bobbins', price: 0 },
@@ -671,7 +966,7 @@ export const OPTION_FIELDS = [
     type: 'select',
     // Responsible for defining specific color variants within each pickup color type
     dependency: 'pickupColor',
-    condition: (config) => !!config.pickupColor && config.pickupColor !== 'none',
+    condition: (config) => config.bassType !== 'vader' && !!config.pickupColor && config.pickupColor !== 'none',
     getOptions: (config) => {
       const type = config.pickupColor || 'bobbins'
       if (type === 'bobbins') {
@@ -701,7 +996,7 @@ export const OPTION_FIELDS = [
     label: 'Painted Color (RGB)',
     type: 'color',
     // Responsible for defining RGB color input for painted bobbins
-    condition: (config) => config.pickupColor === 'painted',
+    condition: (config) => config.bassType !== 'vader' && config.pickupColor === 'painted',
   },
   {
     section: 'Electronics',
@@ -710,7 +1005,7 @@ export const OPTION_FIELDS = [
     type: 'image-select',
     // Responsible for defining wood type options for wooden bobbins
     previewResolver: (category, model, value) => resolveBodyWoodAsset(category, model, value),
-    condition: (config) => config.pickupColor === 'wooden',
+    condition: (config) => config.bassType !== 'vader' && config.pickupColor === 'wooden',
     options: [
       { value: 'black', label: 'Black', note: 'Dark wood grain', price: 0 },
       { value: 'white', label: 'White', note: 'Light wood grain', price: 0 },
@@ -725,6 +1020,7 @@ export const OPTION_FIELDS = [
     type: 'image-select',
     // Responsible for defining pole piece color options (black, silver, gold)
     previewResolver: (category, model, value) => getButtonPreview(category, model, 'pole-pieces', value),
+    condition: (config) => config.bassType !== 'vader',
     options: [
       { value: 'black', label: 'Black', note: 'Black pole pieces', price: 0 },
       { value: 'silver', label: 'Silver', note: 'Silver pole pieces', price: 10 },
@@ -736,6 +1032,7 @@ export const OPTION_FIELDS = [
     key: 'controls',
     label: 'Controls',
     type: 'select',
+    condition: (config) => config.bassType !== 'vader',
     // Responsible for defining controls layout options (Off, DTC, DTMV)
     options: [
       { value: 'off', label: 'Off', note: 'Standard control layout', price: 0 },

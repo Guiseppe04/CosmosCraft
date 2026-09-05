@@ -1,4 +1,4 @@
-// Repointed to Cloudinary collection: cosmoscraft_assets/electric_assets
+// Repointed to Cloudinary collection: cosmoscraft_assets/customization_assets
 // Falls back to local /builder/ directory when Cloudinary is not configured.
 const CLOUD_NAME = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_CLOUDINARY_CLOUD_NAME) ? import.meta.env.VITE_CLOUDINARY_CLOUD_NAME : ''
 const USE_CLOUDINARY = Boolean(CLOUD_NAME) 
@@ -15,12 +15,20 @@ export const cloudImage = (root, path) => {
 export const asset = (path) => {
   if (USE_CLOUDINARY) {
     // Cloudinary mirrors the local folder structure exactly:
-    // cosmoscraft_assets/electric_assets/builder/{dc|delos|all-models}/...
-    return `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/cosmoscraft_assets/electric_assets/builder/${path}`
+    // cosmoscraft_assets/customization_assets/builder/{dc|delos|all-models}/...
+    return `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/cosmoscraft_assets/customization_assets/builder/${path}`
   }
-  // Local fallback - serve from public/builder/electric_assets/builder/
-  return `/builder/electric_assets/builder/${path}`
+  // Local fallback - serve from public/builder/customization_assets/builder/
+  return `/builder/${path}`
 }
+
+// Resolve a model-specific asset path under customization_assets/builder/{category}/{model}/
+export const modelAsset = (category, model, ...subPaths) => {
+  const tail = subPaths.filter(Boolean).join('/')
+  return asset(`${category}/${model}/${tail}`)
+}
+
+const specs = () => ({ size: '', dimensions: '', material: '', notes: '' })
 
 export const DEFAULT_CONFIG = {
   guitarType: 'electric',
@@ -88,7 +96,7 @@ export const BODY_OPTIONS = {
   strat: {
     label: 'Strat',
     note: 'Balanced bolt-on body',
-    bodySrc: asset('rs/bodies/front/masks/bodymask.png'),
+    bodySrc: modelAsset('electric', 'rs', 'bodies/front/masks/bodymask.png'),
     price: 0,
     specs: { size: '', dimensions: '', material: '', notes: '' },
     types: ['electric'],
@@ -96,7 +104,7 @@ export const BODY_OPTIONS = {
   solo: {
     label: 'Solo',
     note: 'Modern singlecut body',
-    bodySrc: asset('solo/bodies/front/masks/bv-bodymask.png'),
+    bodySrc:  modelAsset('electric', 'solo', 'bodies/front/masks/bv-bodymask.png'),
     price: 150,
     specs: { size: '', dimensions: '', material: '', notes: '' },
     types: ['electric'],
@@ -104,7 +112,7 @@ export const BODY_OPTIONS = {
   dc: {
     label: 'DC',
     note: 'Double-cut access',
-    bodySrc: asset('dc/bodies/front/masks/bodymask.png'),
+    bodySrc: modelAsset('electric', 'dc', 'bodies/front/masks/bodymask.png'),
     price: 180,
     specs: { size: '', dimensions: '', material: '', notes: '' },
     types: ['electric'],
@@ -112,7 +120,7 @@ export const BODY_OPTIONS = {
   delos: {
     label: 'Delos',
     note: 'Contoured body build',
-    bodySrc: asset('delos/bodies/front/masks/bodymask.png'),
+    bodySrc: modelAsset('electric', 'delos', 'bodies/front/masks/bodymask.png'),
     price: 220,
     specs: { size: '', dimensions: '', material: '', notes: '' },
     types: ['electric'],
@@ -120,7 +128,7 @@ export const BODY_OPTIONS = {
   precision: {
     label: 'Precision',
     note: 'Classic precision bass',
-    bodySrc: asset('rs/bodies/front/masks/bodymask.png'),
+    bodySrc: modelAsset('electric', 'rs', 'bodies/front/masks/bodymask.png'),
     price: 0,
     specs: { size: '', dimensions: '', material: '', notes: '' },
     types: ['bass'],
@@ -128,7 +136,7 @@ export const BODY_OPTIONS = {
   jazz: {
     label: 'Jazz',
     note: 'Modern jazz bass',
-    bodySrc: asset('solo/bodies/front/masks/bv-bodymask.png'),
+    bodySrc:  modelAsset('electric', 'solo', 'bodies/front/masks/bv-bodymask.png'),
     price: 150,
     specs: { size: '', dimensions: '', material: '', notes: '' },
     types: ['bass'],
@@ -419,6 +427,23 @@ export const INLAY_OPTIONS = {
   },
 }
 
+export const INLAY_SHAPE_OPTIONS = {
+  dots: { label: 'Dots', note: 'Classic dot inlays', src: null, price: 0, specs: specs() },
+  diamonds: { label: 'Diamonds', note: 'Diamond inlays', src: null, price: 30, specs: specs() },
+  blocks: { label: 'Blocks', note: 'Block inlays', src: null, price: 30, specs: specs() },
+}
+
+export const INLAY_MATERIAL_OPTIONS = {
+  pearl: { label: 'White Pearl', note: 'Pearl inlay material', src: null, price: 0, specs: specs() },
+  abalone: { label: 'Abalone', note: 'Abalone inlay material', src: null, price: 35, specs: specs() },
+  black: { label: 'Black', note: 'Black inlay material', src: null, price: 0, specs: specs() },
+  luminlay: { label: 'Luminlay', note: 'Glow-in-the-dark material', src: null, price: 35, specs: specs() },
+  white: { label: 'White', note: 'White inlay material', src: null, price: 35, specs: specs() },
+  red: { label: 'Red', note: 'Red inlay material', src: null, price: 35, specs: specs() },
+  greenAcrylic: { label: 'Green Acrylic', note: 'Green acrylic inlay material', src: null, price: 35, specs: specs() },
+  pink: { label: 'Pink', note: 'Pink inlay material', src: null, price: 35, specs: specs() },
+}
+
 export const BRIDGE_OPTIONS = {
   hipshotFixed: {
     label: 'Hipshot Fixed',
@@ -482,25 +507,25 @@ export const PICKGUARD_OPTIONS_BY_BODY = {
     white: {
       label: 'White',
       note: 'Classic white guard',
-      src: asset('rs/bodies/front/pickguard/white.png'),
+      src: modelAsset('electric', 'rs', 'bodies/front/pickguard/white.png'),
       price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     pearloid: {
       label: 'White Pearl',
       note: 'Bright pearloid finish',
-      src: asset('rs/bodies/front/pickguard/white-pearloid.png'),
+      src: modelAsset('electric', 'rs', 'bodies/front/pickguard/white-pearloid.png'),
       price: 20, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     black: {
       label: 'Black',
       note: 'Dark contrasting guard',
-      src: asset('rs/bodies/front/pickguard/black.png'),
+      src: modelAsset('electric', 'rs', 'bodies/front/pickguard/black.png'),
       price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     tortoise: {
       label: 'Tortoise',
       note: 'Red tortoise shell',
-      src: asset('rs/bodies/front/pickguard/red-tortoise.png'),
+      src: modelAsset('electric', 'rs', 'bodies/front/pickguard/red-tortoise.png'),
       price: 25, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
   },
@@ -508,25 +533,25 @@ export const PICKGUARD_OPTIONS_BY_BODY = {
     white: {
       label: 'White',
       note: 'Clean white guard',
-      src: asset('delos/bodies/front/pickguard/white.png'),
+      src: modelAsset('electric', 'delos', 'bodies/front/pickguard/white.png'),
       price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     pearloid: {
       label: 'White Pearl',
       note: 'White pearloid guard',
-      src: asset('delos/bodies/front/pickguard/white-pearloid.png'),
+      src: modelAsset('electric', 'delos', 'bodies/front/pickguard/white-pearloid.png'),
       price: 20, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     black: {
       label: 'Black',
       note: 'Satin black guard',
-      src: asset('delos/bodies/front/pickguard/black.png'),
+      src: modelAsset('electric', 'delos', 'bodies/front/pickguard/black.png'),
       price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     satinBlack: {
       label: 'Satin Black',
       note: 'Low-key satin finish',
-      src: asset('delos/bodies/front/pickguard/satin-black.png'),
+      src: modelAsset('electric', 'delos', 'bodies/front/pickguard/satin-black.png'),
       price: 15, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
   },
@@ -539,25 +564,25 @@ export const KNOB_OPTIONS_BY_BODY = {
     black: {
       label: 'Black',
       note: 'Standard black knobs',
-      src: asset('rs/bodies/front/knobs/black.png'),
+      src: modelAsset('electric', 'rs', 'bodies/front/knobs/black.png'),
       price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     tamarind: {
       label: 'Tamarind',
       note: 'Warm wood-look knobs',
-      src: asset('rs/bodies/front/knobs/tamarind.png'),
+      src: modelAsset('electric', 'rs', 'bodies/front/knobs/tamarind.png'),
       price: 15, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     pearl: {
       label: 'Pearl Inlay',
       note: 'White pearl inlay knobs',
-      src: asset('rs/bodies/front/knobs/white-pearl-inlay.png'),
+      src: modelAsset('electric', 'rs', 'bodies/front/knobs/white-pearl-inlay.png'),
       price: 20, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     abalone: {
       label: 'Abalone',
       note: 'Premium abalone inlay',
-      src: asset('rs/bodies/front/knobs/abalone-inlay.png'),
+      src: modelAsset('electric', 'rs', 'bodies/front/knobs/abalone-inlay.png'),
       price: 30, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
   },
@@ -565,25 +590,25 @@ export const KNOB_OPTIONS_BY_BODY = {
     black: {
       label: 'Black',
       note: 'Standard black knobs',
-      src: asset('solo/bodies/front/knobs/black.png'),
+      src:  modelAsset('electric', 'solo', 'bodies/front/knobs/black.png'),
       price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     blackPlastic: {
       label: 'Black Plastic',
       note: 'Smooth black plastic',
-      src: asset('solo/bodies/front/knobs/black-plastic.png'),
+      src:  modelAsset('electric', 'solo', 'bodies/front/knobs/black-plastic.png'),
       price: 10, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     whitePlastic: {
       label: 'White Plastic',
       note: 'Bright white plastic',
-      src: asset('solo/bodies/front/knobs/white-plastic.png'),
+      src:  modelAsset('electric', 'solo', 'bodies/front/knobs/white-plastic.png'),
       price: 10, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     chrome: {
       label: 'Chrome',
       note: 'Shiny chrome finish',
-      src: asset('solo/bodies/front/knobs/chrome.png'),
+      src:  modelAsset('electric', 'solo', 'bodies/front/knobs/chrome.png'),
       price: 20, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
   },
@@ -591,31 +616,31 @@ export const KNOB_OPTIONS_BY_BODY = {
     black: {
       label: 'Black',
       note: 'Standard black knobs',
-      src: asset('dc/bodies/front/knobs/black.png'),
+      src: modelAsset('electric', 'dc', 'bodies/front/knobs/black.png'),
       price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     dtmv: {
       label: 'Black DTMV',
       note: 'Modern black DTMV',
-      src: asset('dc/bodies/front/knobs/black-dtmv.png'),
+      src:  modelAsset('electric', 'dc', 'bodies/front/knobs/black-dtmv.png'),
       price: 15, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     dtc: {
       label: 'Black DTC',
       note: 'Modern black DTC',
-      src: asset('dc/bodies/front/knobs/black-dtc.png'),
+      src:  modelAsset('electric', 'dc', 'bodies/front/knobs/black-dtc.png'),
       price: 15, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     plasticBlack: {
       label: 'Plastic Black',
       note: 'Plain black plastic',
-      src: asset('dc/bodies/front/knobs/plasticblack.png'),
+      src:  modelAsset('electric', 'dc', 'bodies/front/knobs/plasticblack.png'),
       price: 10, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     plasticWhite: {
       label: 'Plastic White',
       note: 'Plain white plastic',
-      src: asset('dc/bodies/front/knobs/plasticwhite.png'),
+      src:  modelAsset('electric', 'dc', 'bodies/front/knobs/plasticwhite.png'),
       price: 10, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
   },
@@ -623,25 +648,25 @@ export const KNOB_OPTIONS_BY_BODY = {
     black: {
       label: 'Black',
       note: 'Standard black knobs',
-      src: asset('delos/bodies/front/knobs/black-dtmv.png'),
+      src: modelAsset('electric', 'delos', 'bodies/front/knobs/black-dtmv.png'),
       price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     blackPlastic: {
       label: 'Black Plastic',
       note: 'Black plastic DTMV',
-      src: asset('delos/bodies/front/knobs/black-plastic-dtmv.png'),
+      src: modelAsset('electric', 'delos', 'bodies/front/knobs/black-plastic-dtmv.png'),
       price: 10, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     whitePlastic: {
       label: 'White Plastic',
       note: 'White plastic DTMV',
-      src: asset('delos/bodies/front/knobs/white-plastic-dtmv.png'),
+      src: modelAsset('electric', 'delos', 'bodies/front/knobs/white-plastic-dtmv.png'),
       price: 10, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     pearl: {
       label: 'Pearl Inlay',
       note: 'White pearl inlay DTMV',
-      src: asset('delos/bodies/front/knobs/white-pearl-inlay-dtmv.png'),
+      src: modelAsset('electric', 'delos', 'bodies/front/knobs/white-pearl-inlay-dtmv.png'),
       price: 20, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
   },
@@ -815,74 +840,74 @@ export const BODY_LAYER_ASSETS = {
   strat: {
     bridge: BRIDGE_OPTIONS.hipshotFixed.assets,
     knobs: {
-      chrome: asset('rs/bodies/front/knobs/black.png'),
-      black: asset('rs/bodies/front/knobs/black.png'),
-      gold: asset('rs/bodies/front/knobs/tamarind.png'),
+      chrome: modelAsset('electric', 'rs', 'bodies/front/knobs/black.png'),
+      black: modelAsset('electric', 'rs', 'bodies/front/knobs/black.png'),
+      gold: modelAsset('electric', 'rs', 'bodies/front/knobs/tamarind.png'),
     },
     strap: {
-      chrome: asset('rs/bodies/front/strap buttons/standard/chrome.png'),
-      black: asset('rs/bodies/front/strap buttons/standard/black.png'),
-      gold: asset('rs/bodies/front/strap buttons/standard/gold.png'),
+      chrome: modelAsset('electric', 'rs', 'bodies/front/strap buttons/standard/chrome.png'),
+      black: modelAsset('electric', 'rs', 'bodies/front/strap buttons/standard/black.png'),
+      gold: modelAsset('electric', 'rs', 'bodies/front/strap buttons/standard/gold.png'),
     },
-    switch: asset('rs/bodies/front/switches/blade/black.png'),
+    switch: modelAsset('electric', 'rs', 'bodies/front/switches/blade/black.png'),
     pickguard: {
-      chrome: asset('rs/bodies/front/pickguard/white.png'),
-      black: asset('rs/bodies/front/pickguard/black.png'),
-      gold: asset('rs/bodies/front/pickguard/red-tortoise.png'),
+      chrome: modelAsset('electric', 'rs', 'bodies/front/pickguard/white.png'),
+      black: modelAsset('electric', 'rs', 'bodies/front/pickguard/black.png'),
+      gold: modelAsset('electric', 'rs', 'bodies/front/pickguard/red-tortoise.png'),
     },
-    shadows: asset('rs/shadows_highlights/edge-shadow.png'),
-    gloss: asset('rs/shadows_highlights/gloss.png'),
+    shadows: modelAsset('electric', 'rs', 'shadows_highlights/edge-shadow.png'),
+    gloss: modelAsset('electric', 'rs', 'shadows_highlights/gloss.png'),
   },
   solo: {
     bridge: BRIDGE_OPTIONS.hipshotFixed.assets,
     knobs: {
-      chrome: asset('solo/bodies/front/knobs/chrome.png'),
-      black: asset('solo/bodies/front/knobs/black.png'),
-      gold: asset('solo/bodies/front/knobs/tamarind.png'),
+      chrome:  modelAsset('electric', 'solo', 'bodies/front/knobs/chrome.png'),
+      black:  modelAsset('electric', 'solo', 'bodies/front/knobs/black.png'),
+      gold:  modelAsset('electric', 'solo', 'bodies/front/knobs/tamarind.png'),
     },
     strap: {
-      chrome: asset('solo/bodies/front/strap buttons/standard/chrome.png'),
-      black: asset('solo/bodies/front/strap buttons/standard/black.png'),
-      gold: asset('solo/bodies/front/strap buttons/standard/gold.png'),
+      chrome:  modelAsset('electric', 'solo', 'bodies/front/strap buttons/standard/chrome.png'),
+      black:  modelAsset('electric', 'solo', 'bodies/front/strap buttons/standard/black.png'),
+      gold:  modelAsset('electric', 'solo', 'bodies/front/strap buttons/standard/gold.png'),
     },
-    switch: asset('solo/bodies/front/switches/blade/black.png'),
+    switch:  modelAsset('electric', 'solo', 'bodies/front/switches/blade/black.png'),
     pickguard: null,
-    shadows: asset('solo/shadows_highlights/edge-shadow.png'),
-    gloss: asset('solo/shadows_highlights/gloss.png'),
+    shadows:  modelAsset('electric', 'solo', 'shadows_highlights/edge-shadow.png'),
+    gloss:  modelAsset('electric', 'solo', 'shadows_highlights/gloss.png'),
   },
   dc: {
     bridge: BRIDGE_OPTIONS.floydRoseTremolo.assets,
     knobs: {
-      chrome: asset('dc/bodies/front/knobs/white-pearl-dtmv.png'),
-      black: asset('dc/bodies/front/knobs/black-dtmv.png'),
-      gold: asset('dc/bodies/front/knobs/white-pearl-inlay.png'),
+      chrome:  modelAsset('electric', 'dc', 'bodies/front/knobs/white-pearl-dtmv.png'),
+      black:  modelAsset('electric', 'dc', 'bodies/front/knobs/black-dtmv.png'),
+      gold:  modelAsset('electric', 'dc', 'bodies/front/knobs/white-pearl-inlay.png'),
     },
     strap: {
-      chrome: asset('dc/bodies/front/strap buttons/standard/chrome.png'),
-      black: asset('dc/bodies/front/strap buttons/standard/black.png'),
-      gold: asset('dc/bodies/front/strap buttons/standard/chrome.png'),
+      chrome:  modelAsset('electric', 'dc', 'bodies/front/strap buttons/standard/chrome.png'),
+      black:  modelAsset('electric', 'dc', 'bodies/front/strap buttons/standard/black.png'),
+      gold:  modelAsset('electric', 'dc', 'bodies/front/strap buttons/standard/chrome.png'),
     },
-    switch: asset('dc/bodies/front/switches/blade/black.png'),
+    switch:  modelAsset('electric', 'dc', 'bodies/front/switches/blade/black.png'),
     pickguard: null,
-    shadows: asset('dc/shadows_highlights/edge-shadow.png'),
-    gloss: asset('dc/shadows_highlights/gloss.png'),
+    shadows:  modelAsset('electric', 'dc', 'shadows_highlights/edge-shadow.png'),
+    gloss:  modelAsset('electric', 'dc', 'shadows_highlights/gloss.png'),
   },
   delos: {
     bridge: BRIDGE_OPTIONS.hipshotTremolo.assets,
     knobs: {
-      chrome: asset('delos/bodies/front/knobs/white-plastic-dtmv.png'),
-      black: asset('delos/bodies/front/knobs/black-dtmv.png'),
-      gold: asset('delos/bodies/front/knobs/white-pearl-inlay-dtmv.png'),
+      chrome: modelAsset('electric', 'delos', 'bodies/front/knobs/white-plastic-dtmv.png'),
+      black: modelAsset('electric', 'delos', 'bodies/front/knobs/black-dtmv.png'),
+      gold: modelAsset('electric', 'delos', 'bodies/front/knobs/white-pearl-inlay-dtmv.png'),
     },
     strap: {
-      chrome: asset('delos/bodies/front/strap buttons/standard/chrome.png'),
-      black: asset('delos/bodies/front/strap buttons/standard/black.png'),
-      gold: asset('delos/bodies/front/strap buttons/standard/chrome.png'),
+      chrome: modelAsset('electric', 'delos', 'bodies/front/strap buttons/standard/chrome.png'),
+      black: modelAsset('electric', 'delos', 'bodies/front/strap buttons/standard/black.png'),
+      gold: modelAsset('electric', 'delos', 'bodies/front/strap buttons/standard/chrome.png'),
     },
-    switch: asset('delos/bodies/front/switches/blade/black.png'),
-    pickguard: asset('delos/bodies/front/pickguard/white.png'),
-    shadows: asset('delos/shadows_highlights/edge-shadow.png'),
-    gloss: asset('delos/shadows_highlights/gloss.png'),
+    switch: modelAsset('electric', 'delos', 'bodies/front/switches/blade/black.png'),
+    pickguard: modelAsset('electric', 'delos', 'bodies/front/pickguard/white.png'),
+    shadows: modelAsset('electric', 'delos', 'shadows_highlights/edge-shadow.png'),
+    gloss: modelAsset('electric', 'delos', 'shadows_highlights/gloss.png'),
   },
 }
 
@@ -1041,8 +1066,6 @@ PUPPY.fluence = {
 // Images are left null where no Cloudinary asset is mapped yet.
 // ============================================================
 
-const specs = () => ({ size: '', dimensions: '', material: '', notes: '' })
-
 export const DEXTERITY_OPTIONS = {
   right: { label: 'Right Handed', note: 'Standard orientation', price: 0, specs: specs() },
   left: { label: 'Left Handed', note: 'Reversed orientation', price: 0, specs: specs() },
@@ -1104,12 +1127,12 @@ export const TOP_COAT_OPTIONS = {
 
 export const BURST_FINISH_OPTIONS = {
   none: { label: 'None', note: 'No burst', price: 0, specs: specs() },
-  blackBurst: { label: 'Black Burst Edges', note: 'Black burst edges', texture: asset('dc/bodies/front/masks/bvdmask.png'), color: '#000000', price: 45, specs: specs() },
-  whiteBurst: { label: 'White Burst Edges', note: 'White burst edges', texture: asset('dc/bodies/front/masks/bvdmask.png'), color: '#ffffff', price: 45, specs: specs() },
+  blackBurst: { label: 'Black Burst Edges', note: 'Black burst edges', texture: modelAsset('electric', 'dc', 'bodies/front/masks/bvdmask.png'), color: '#000000', price: 45, specs: specs() },
+  whiteBurst: { label: 'White Burst Edges', note: 'White burst edges', texture: modelAsset('electric', 'dc', 'bodies/front/masks/bvdmask.png'), color: '#ffffff', price: 45, specs: specs() },
   translucentBlackBurst: { label: 'Translucent Black Burst Edges', note: 'Translucent black burst', texture: null, color: '#1a1a1a', price: 50, specs: specs() },
   reverseTranslucentBlackBurst: { label: 'Reverse Translucent Black Burst', note: 'Reverse translucent black burst', texture: null, color: '#1a1a1a', price: 55, specs: specs() },
   blackBackSides: { label: 'Black Back & Sides', note: 'Black rear finish', texture: null, color: '#000000', price: 55, specs: specs(), rearOnly: true },
-  blackSidesBlackBurstBack: { label: 'Black Sides w/ Black Burst Back (Clear Center)', note: 'Black sides with black burst back', texture: asset('dc/back/masks/burstmask.png'), color: '#000000', price: 65, specs: specs(), rearOnly: true },
+  blackSidesBlackBurstBack: { label: 'Black Sides w/ Black Burst Back (Clear Center)', note: 'Black sides with black burst back', texture: modelAsset('electric', 'dc', 'back/masks/burstmask.png'), color: '#000000', price: 65, specs: specs(), rearOnly: true },
 }
 
 // --- Neck ---
@@ -1117,19 +1140,6 @@ export const NECK_CONSTRUCTION_OPTIONS = {
   '1piece': { label: '1-Piece', note: 'Single-piece neck', price: 0, specs: specs() },
   '3piece': { label: '3-Piece', note: 'Three-piece neck', price: 0, specs: specs() },
   '5piece': { label: '5-Piece', note: 'Five-piece neck', price: 0, specs: specs() },
-}
-
-export const INLAY_SHAPE_OPTIONS = {
-  dots: { label: 'Dots', note: 'Classic dot inlays', src: null, price: 0, specs: specs() },
-  diamonds: { label: 'Diamonds', note: 'Diamond inlays', src: null, price: 30, specs: specs() },
-  blocks: { label: 'Blocks', note: 'Block inlays', src: null, price: 30, specs: specs() },
-}
-
-export const INLAY_MATERIAL_OPTIONS = {
-  pearl: { label: 'White Pearl', note: 'Pearl inlay material', src: null, price: 0, specs: specs() },
-  abalone: { label: 'Abalone', note: 'Abalone inlay material', src: null, price: 35, specs: specs() },
-  black: { label: 'Black', note: 'Black inlay material', src: null, price: 0, specs: specs() },
-  luminlay: { label: 'Luminlay', note: 'Glow-in-the-dark material', src: null, price: 35, specs: specs() },
 }
 
 export const FRET_OPTIONS = {
@@ -1310,6 +1320,8 @@ export function resolveVariant(source, colorKey) {
   if (typeof source === 'string') return source
   return source[colorKey] ?? source.chrome ?? source.black ?? source.gold ?? null
 }
+
+
 
 export const guitarBuilder = {
   DEFAULT_CONFIG,
