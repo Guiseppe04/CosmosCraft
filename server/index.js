@@ -30,6 +30,7 @@ const paymentSettingsRoutes = require('./routes/paymentSettingsRoutes');
 const installmentRoutes = require('./routes/installmentRoutes');
 const addressRoutes = require('./routes/addressRoutes.js');
 const fulfillmentRoutes = require('./routes/fulfillmentRoutes');
+const reviewRoutes = require('./routes/reviewRoutes');
 const { errorHandler, notFound } = require('./middleware/errorHandler.js');
 const { createRateLimiter } = require('./middleware/rateLimitMiddleware.js');
 
@@ -120,6 +121,7 @@ app.use('/api/payment-settings', paymentSettingsRoutes);
 app.use('/api/installments', installmentRoutes);
 app.use('/api/address', addressRoutes);
 app.use('/api/fulfillment', fulfillmentRoutes);
+app.use('/api/reviews', reviewRoutes);
 app.use('/user', userRoutes);
 
 const path = require('path');

@@ -348,4 +348,28 @@ export const adminApi = {
   updateAddress: (addressId, body) => request(`/api/users/me/addresses/${addressId}`, { method: 'PUT', body }),
   addAddress: (body) => request('/api/users/me/addresses', { method: 'POST', body }),
   deleteAddress: (addressId) => request(`/api/users/me/addresses/${addressId}`, { method: 'DELETE' }),
+
+  // Ratings & Feedback
+  getProductReviewEligibility: () => request('/api/reviews/product-eligibility'),
+  getCustomizationFeedbackEligibility: () => request('/api/reviews/customization-eligibility'),
+  createProductReview: (body) => request('/api/reviews/products', { method: 'POST', body }),
+  updateProductReview: (reviewId, body) => request(`/api/reviews/products/${reviewId}`, { method: 'PUT', body }),
+  createCustomizationFeedback: (body) => request('/api/reviews/customizations', { method: 'POST', body }),
+  updateCustomizationFeedback: (feedbackId, body) => request(`/api/reviews/customizations/${feedbackId}`, { method: 'PUT', body }),
+  getPublicProductReviews: (productId) => request(`/api/reviews/products/${productId}/public`),
+  getAdminReviews: (params = {}) => {
+    const cleanParams = Object.entries(params).reduce((acc, [k, v]) => {
+      if (v !== undefined && v !== null && v !== '' && v !== 'undefined') {
+        acc[k] = v
+      }
+      return acc
+    }, {})
+    const qs = new URLSearchParams(cleanParams).toString()
+    return request(`/api/reviews/admin${qs ? '?' + qs : ''}`)
+  },
+  updateAdminProductReviewStatus: (reviewId, body) => request(`/api/reviews/admin/product/${reviewId}/status`, { method: 'PUT', body }),
+  updateAdminCustomizationFeedbackStatus: (feedbackId, body) => request(`/api/reviews/admin/customization/${feedbackId}/status`, { method: 'PUT', body }),
+  deleteAdminProductReview: (reviewId) => request(`/api/reviews/admin/product/${reviewId}`, { method: 'DELETE' }),
+  deleteAdminCustomizationFeedback: (feedbackId) => request(`/api/reviews/admin/customization/${feedbackId}`, { method: 'DELETE' }),
 }
+

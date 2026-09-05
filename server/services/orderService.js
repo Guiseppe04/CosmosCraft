@@ -758,15 +758,50 @@ exports.getUserOrders = async (userId) => {
     return acc
   }, {})
 
+  const reviewsRes = await pool.query(
+    `SELECT * FROM product_reviews WHERE order_id = ANY($1) AND deleted_at IS NULL`,
+    [orderIds]
+  )
+  const reviewsByItemId = reviewsRes.rows.reduce((acc, rev) => {
+    acc[rev.order_item_id] = rev
+    return acc
+  }, {})
+
+  const feedbackRes = await pool.query(
+    `SELECT * FROM customization_feedback WHERE order_id = ANY($1) AND deleted_at IS NULL`,
+    [orderIds]
+  )
+  const feedbackByOrder = feedbackRes.rows.reduce((acc, fb) => {
+    acc[fb.order_id] = fb
+    return acc
+  }, {})
+
+  const projectsRes = await pool.query(
+    `SELECT project_id, order_id, title, status, fulfillment_status FROM projects WHERE order_id = ANY($1) AND deleted_at IS NULL`,
+    [orderIds]
+  )
+  const projectByOrder = projectsRes.rows.reduce((acc, proj) => {
+    acc[proj.order_id] = proj
+    return acc
+  }, {})
+
   return res.rows.map((order) => {
-    const items = itemsByOrder[order.order_id] || []
+    const rawItems = itemsByOrder[order.order_id] || []
+    const items = rawItems.map(item => ({
+      ...item,
+      review: reviewsByItemId[item.order_item_id] || null,
+    }))
     const payment = paymentsByOrder[order.order_id] || null
     const refund = refundByOrder[order.order_id] || null
+    const customization_feedback = feedbackByOrder[order.order_id] || null
+    const project = projectByOrder[order.order_id] || null
 
     return {
       ...order,
       items,
       payment,
+      project,
+      customization_feedback,
       payment_method: resolveOrderPaymentMethod(order, payment),
       customization_ids: items
         .map((item) => item.customization_id)

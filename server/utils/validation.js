@@ -1329,3 +1329,93 @@ exports.updateBuildClaimStatusSchema = Joi.object({
     'any.required': 'Status is required',
   }),
 }).unknown(true);
+
+// ============================================================================
+// RATINGS & FEEDBACK SCHEMAS
+// ============================================================================
+
+exports.createProductReviewSchema = Joi.object({
+  order_id: Joi.string().uuid().required().messages({
+    'string.guid': 'Order ID must be a valid UUID',
+    'any.required': 'Order ID is required',
+  }),
+  order_item_id: Joi.alternatives().try(Joi.number().integer().positive(), Joi.string()).required().messages({
+    'any.required': 'Order item ID is required',
+  }),
+  rating: Joi.number().integer().min(1).max(5).required().messages({
+    'number.min': 'Rating must be at least 1 star',
+    'number.max': 'Rating must not exceed 5 stars',
+    'any.required': 'Rating is required',
+  }),
+  title: Joi.string().max(150).optional().allow('').trim(),
+  comment: Joi.string().min(3).max(2000).required().trim().messages({
+    'string.min': 'Review comment must be at least 3 characters',
+    'string.max': 'Review comment must not exceed 2000 characters',
+    'any.required': 'Review comment is required',
+  }),
+  images: Joi.array().items(Joi.string().uri().max(500)).max(10).optional(),
+}).unknown(true);
+
+exports.updateProductReviewSchema = Joi.object({
+  rating: Joi.number().integer().min(1).max(5).optional().messages({
+    'number.min': 'Rating must be at least 1 star',
+    'number.max': 'Rating must not exceed 5 stars',
+  }),
+  title: Joi.string().max(150).optional().allow('').trim(),
+  comment: Joi.string().min(3).max(2000).optional().trim().messages({
+    'string.min': 'Review comment must be at least 3 characters',
+    'string.max': 'Review comment must not exceed 2000 characters',
+  }),
+  images: Joi.array().items(Joi.string().uri().max(500)).max(10).optional(),
+}).unknown(true);
+
+exports.createCustomizationFeedbackSchema = Joi.object({
+  order_id: Joi.string().uuid().required().messages({
+    'string.guid': 'Order ID must be a valid UUID',
+    'any.required': 'Order ID is required',
+  }),
+  overall_rating: Joi.number().integer().min(1).max(5).required().messages({
+    'number.min': 'Overall rating must be between 1 and 5',
+    'number.max': 'Overall rating must be between 1 and 5',
+    'any.required': 'Overall rating is required',
+  }),
+  build_quality_rating: Joi.number().integer().min(1).max(5).required().messages({
+    'number.min': 'Build quality rating must be between 1 and 5',
+    'number.max': 'Build quality rating must be between 1 and 5',
+    'any.required': 'Build quality rating is required',
+  }),
+  communication_rating: Joi.number().integer().min(1).max(5).required().messages({
+    'number.min': 'Communication rating must be between 1 and 5',
+    'number.max': 'Communication rating must be between 1 and 5',
+    'any.required': 'Communication rating is required',
+  }),
+  accuracy_rating: Joi.number().integer().min(1).max(5).required().messages({
+    'number.min': 'Customization accuracy rating must be between 1 and 5',
+    'number.max': 'Customization accuracy rating must be between 1 and 5',
+    'any.required': 'Customization accuracy rating is required',
+  }),
+  comment: Joi.string().min(3).max(2000).required().trim().messages({
+    'string.min': 'Feedback comment must be at least 3 characters',
+    'string.max': 'Feedback comment must not exceed 2000 characters',
+    'any.required': 'Feedback comment is required',
+  }),
+  images: Joi.array().items(Joi.string().uri().max(500)).max(10).optional(),
+}).unknown(true);
+
+exports.updateCustomizationFeedbackSchema = Joi.object({
+  overall_rating: Joi.number().integer().min(1).max(5).optional(),
+  build_quality_rating: Joi.number().integer().min(1).max(5).optional(),
+  communication_rating: Joi.number().integer().min(1).max(5).optional(),
+  accuracy_rating: Joi.number().integer().min(1).max(5).optional(),
+  comment: Joi.string().min(3).max(2000).optional().trim(),
+  images: Joi.array().items(Joi.string().uri().max(500)).max(10).optional(),
+}).unknown(true);
+
+exports.updateReviewStatusSchema = Joi.object({
+  status: Joi.string().valid('pending', 'approved', 'rejected', 'flagged').required().messages({
+    'any.only': 'Status must be one of: pending, approved, rejected, flagged',
+    'any.required': 'Status is required',
+  }),
+  admin_notes: Joi.string().max(1000).optional().allow('').trim(),
+}).unknown(true);
+

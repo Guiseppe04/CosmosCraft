@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 import { motion, AnimatePresence } from 'motion/react'
-import { User, CreditCard, MapPin, Lock, Package, Calendar, ChevronRight, ChevronLeft, Search, Upload, Save, Wallet, ShoppingBag, ShoppingCart, Trash2, Minus, Plus, MessageSquare, Send, Guitar, Clock, Truck, CheckCircle, XCircle, Briefcase, Activity, Star, Loader2, Edit, AlertCircle, AlertTriangle, X, Banknote, Smartphone, Landmark, CreditCard as CreditCardIcon, Check, RefreshCw, Printer, Info } from 'lucide-react'
+import { User, CreditCard, MapPin, Lock, Package, Calendar, ChevronRight, ChevronLeft, Search, Upload, Save, Wallet, ShoppingBag, ShoppingCart, Trash2, Minus, Plus, MessageSquare, Send, Guitar, Clock, Truck, CheckCircle, XCircle, Briefcase, Activity, Star, Loader2, Edit, AlertCircle, AlertTriangle, X, Banknote, Smartphone, Landmark, CreditCard as CreditCardIcon, Check, RefreshCw, Printer, Info, Camera } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useCart } from '../context/CartContext.jsx'
 import { BASE_PRICE, BODY_OPTIONS, BODY_WOOD_OPTIONS, BODY_FINISH_OPTIONS, NECK_OPTIONS, FRETBOARD_OPTIONS, HEADSTOCK_OPTIONS, HEADSTOCK_WOOD_OPTIONS, INLAY_OPTIONS, BRIDGE_OPTIONS, PICKGUARD_OPTIONS_BY_BODY, KNOB_OPTIONS_BY_BODY, HARDWARE_OPTIONS, PICKUP_OPTIONS } from '../lib/guitarBuilderData.js'
@@ -206,6 +206,60 @@ const formatEstimatedCompletionDate = (project) => {
   return parsed.toLocaleDateString()
 }
 
+function DashboardStarRatingDisplay({ rating, maxStars = 5, size = 'w-4 h-4' }) {
+  return (
+    <div className="flex items-center gap-1">
+      {Array.from({ length: maxStars }).map((_, idx) => {
+        const starNum = idx + 1
+        return (
+          <Star
+            key={starNum}
+            className={`${size} ${
+              starNum <= rating
+                ? 'fill-[var(--gold-primary)] text-[var(--gold-primary)]'
+                : 'text-zinc-600 fill-zinc-800'
+            }`}
+          />
+        )
+      })}
+    </div>
+  )
+}
+
+function DashboardStarPicker({ rating, onChange, maxStars = 5, size = 'w-7 h-7' }) {
+  const [hovered, setHovered] = useState(0)
+
+  return (
+    <div className="flex items-center gap-1.5">
+      {Array.from({ length: maxStars }).map((_, idx) => {
+        const starNum = idx + 1
+        const active = hovered ? starNum <= hovered : starNum <= rating
+        return (
+          <button
+            key={starNum}
+            type="button"
+            onClick={() => onChange(starNum)}
+            onMouseEnter={() => setHovered(starNum)}
+            onMouseLeave={() => setHovered(0)}
+            className="p-1 transition-transform hover:scale-115 focus:outline-none cursor-pointer"
+          >
+            <Star
+              className={`${size} transition-colors ${
+                active
+                  ? 'fill-[var(--gold-primary)] text-[var(--gold-primary)] drop-shadow-[0_0_8px_rgba(212,175,55,0.4)]'
+                  : 'text-zinc-600 fill-zinc-800 hover:text-zinc-400'
+              }`}
+            />
+          </button>
+        )
+      })}
+      <span className="ml-2 text-sm font-semibold text-[var(--gold-primary)]">
+        {(hovered || rating) > 0 ? `${hovered || rating} / 5` : ''}
+      </span>
+    </div>
+  )
+}
+
 export function DashboardPage() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -221,9 +275,31 @@ export function DashboardPage() {
     toggleSelectAllItems,
     getSelectedItemIds,
   } = useCart()
-  const initialSection = location.state?.section || 'profile'
+  const queryParams = useMemo(() => new URLSearchParams(location.search), [location.search])
+  const tabFromQuery = queryParams.get('tab') || queryParams.get('orderTab')
+  const sectionFromQuery = queryParams.get('section')
+  const initialSection = (tabFromQuery && ['ratings', 'ratings-feedback', 'refunds'].includes(tabFromQuery))
+    ? 'purchases'
+    : (sectionFromQuery === 'orders' ? 'purchases' : (location.state?.section || 'profile'))
   const VALID_SECTIONS = new Set(['profile', 'my-guitar', 'appointments', 'cart', 'purchases', 'addresses', 'password'])
   const [activeSection, setActiveSection] = useState(initialSection)
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search)
+    const tabParam = params.get('tab') || params.get('orderTab')
+    const secParam = params.get('section')
+    if (secParam && VALID_SECTIONS.has(secParam)) {
+      setActiveSection(secParam)
+    } else if (secParam === 'orders') {
+      setActiveSection('purchases')
+    }
+    if (tabParam === 'refunds') {
+      setActiveSection('purchases')
+      setActivePurchaseTab('Refund')
+    } else if (tabParam === 'ratings' || tabParam === 'ratings-feedback') {
+      setActiveSection('purchases')
+    }
+  }, [location.search])
   const [profileImage, setProfileImage] = useState('')
   const [showSelectInstrumentModal, setShowSelectInstrumentModal] = useState(false)
   const [viewingBuild, setViewingBuild] = useState(null)
@@ -260,6 +336,14 @@ export function DashboardPage() {
   const [isSubmittingRefund, setIsSubmittingRefund] = useState(false)
   const [isMarkingReceived, setIsMarkingReceived] = useState(false)
   const [printingOrderId, setPrintingOrderId] = useState(null)
+
+  // Inline Review / Feedback modal state
+  const [reviewModal, setReviewModal] = useState(null) // { mode: 'rate'|'edit'|'view', order, item, review }
+  const [feedbackModal, setFeedbackModal] = useState(null) // { mode: 'leave'|'edit'|'view', order, feedback }
+  const [reviewForm, setReviewForm] = useState({ rating: 5, title: '', comment: '', images: [] })
+  const [feedbackForm, setFeedbackForm] = useState({ overall_rating: 5, build_quality_rating: 5, communication_rating: 5, accuracy_rating: 5, comment: '', images: [] })
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false)
+  const [uploadingReviewImage, setUploadingReviewImage] = useState(false)
   const [isCancelProjectModalOpen, setIsCancelProjectModalOpen] = useState(false)
   const [cancelProjectTarget, setCancelProjectTarget] = useState(null)
   const [cancelProjectPayment, setCancelProjectPayment] = useState(null)
@@ -673,6 +757,141 @@ export function DashboardPage() {
       setToastMessage(`Failed to submit refund request: ${err.message}`)
     } finally {
       setIsSubmittingRefund(false)
+    }
+  }
+
+  // Handle Photo Upload for Product Review / Customization Feedback
+  const handleReviewImageUpload = async (e, type) => {
+    const files = Array.from(e.target.files || [])
+    if (!files.length) return
+    const maxSize = 5 * 1024 * 1024
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp']
+
+    setUploadingReviewImage(true)
+    try {
+      const uploadedUrls = []
+      for (const file of files.slice(0, 3)) {
+        if (!allowedTypes.includes(file.type)) {
+          setToastMessage('Only JPG, PNG, and WebP images are allowed')
+          continue
+        }
+        if (file.size > maxSize) {
+          setToastMessage('Each image must be less than 5MB')
+          continue
+        }
+        const url = await uploadToCloudinary(file, { folder: 'cosmoscraft_reviews' })
+        uploadedUrls.push(url)
+      }
+
+      if (type === 'product') {
+        setReviewForm(prev => ({
+          ...prev,
+          images: [...prev.images, ...uploadedUrls].slice(0, 5),
+        }))
+      } else {
+        setFeedbackForm(prev => ({
+          ...prev,
+          images: [...prev.images, ...uploadedUrls].slice(0, 5),
+        }))
+      }
+      if (uploadedUrls.length > 0) {
+        setToastMessage('Photo uploaded successfully!')
+      }
+    } catch (err) {
+      console.error('Image upload failed:', err)
+      setToastMessage('Failed to upload image. Please try again.')
+    } finally {
+      setUploadingReviewImage(false)
+      e.target.value = ''
+    }
+  }
+
+  const removeReviewImage = (index, type) => {
+    if (type === 'product') {
+      setReviewForm(prev => ({ ...prev, images: prev.images.filter((_, i) => i !== index) }))
+    } else {
+      setFeedbackForm(prev => ({ ...prev, images: prev.images.filter((_, i) => i !== index) }))
+    }
+  }
+
+  const handleSubmitProductReview = async (e) => {
+    if (e?.preventDefault) e.preventDefault()
+    if (!reviewForm.comment.trim()) {
+      setToastMessage('Please provide a review comment.')
+      return
+    }
+    if (!reviewModal) return
+
+    setIsSubmittingReview(true)
+    try {
+      if (reviewModal.mode === 'edit' && reviewModal.review?.review_id) {
+        await adminApi.updateProductReview(reviewModal.review.review_id, {
+          rating: reviewForm.rating,
+          title: reviewForm.title.trim(),
+          comment: reviewForm.comment.trim(),
+          images: reviewForm.images,
+        })
+        setToastMessage('Review updated successfully!')
+      } else {
+        await adminApi.createProductReview({
+          order_id: reviewModal.order?.order_id,
+          order_item_id: reviewModal.item?.order_item_id,
+          rating: reviewForm.rating,
+          title: reviewForm.title.trim(),
+          comment: reviewForm.comment.trim(),
+          images: reviewForm.images,
+        })
+        setToastMessage('Thank you! Your review was submitted successfully.')
+      }
+      setReviewModal(null)
+      fetchMyOrders()
+    } catch (err) {
+      console.error('Failed to submit product review:', err)
+      setToastMessage(err.message || 'Failed to submit review.')
+    } finally {
+      setIsSubmittingReview(false)
+    }
+  }
+
+  const handleSubmitCustomFeedback = async (e) => {
+    if (e?.preventDefault) e.preventDefault()
+    if (!feedbackForm.comment.trim()) {
+      setToastMessage('Please provide your feedback comments.')
+      return
+    }
+    if (!feedbackModal) return
+
+    setIsSubmittingReview(true)
+    try {
+      if (feedbackModal.mode === 'edit' && feedbackModal.feedback?.feedback_id) {
+        await adminApi.updateCustomizationFeedback(feedbackModal.feedback.feedback_id, {
+          overall_rating: feedbackForm.overall_rating,
+          build_quality_rating: feedbackForm.build_quality_rating,
+          communication_rating: feedbackForm.communication_rating,
+          accuracy_rating: feedbackForm.accuracy_rating,
+          comment: feedbackForm.comment.trim(),
+          images: feedbackForm.images,
+        })
+        setToastMessage('Customization feedback updated!')
+      } else {
+        await adminApi.createCustomizationFeedback({
+          order_id: feedbackModal.order?.order_id,
+          overall_rating: feedbackForm.overall_rating,
+          build_quality_rating: feedbackForm.build_quality_rating,
+          communication_rating: feedbackForm.communication_rating,
+          accuracy_rating: feedbackForm.accuracy_rating,
+          comment: feedbackForm.comment.trim(),
+          images: feedbackForm.images,
+        })
+        setToastMessage('Thank you! Your customization feedback was submitted successfully.')
+      }
+      setFeedbackModal(null)
+      fetchMyOrders()
+    } catch (err) {
+      console.error('Failed to submit custom feedback:', err)
+      setToastMessage(err.message || 'Failed to submit feedback.')
+    } finally {
+      setIsSubmittingReview(false)
     }
   }
 
@@ -1299,7 +1518,6 @@ export function DashboardPage() {
     { id: 'cart', label: 'My Cart', icon: ShoppingBag, group: 'orders' },
     { id: 'purchases', label: 'My Purchase', icon: Package, group: 'orders' },
   ]
-
   const renderPurchasesContent = () => {
     const filteredOrders = myOrders.filter(order => {
       if (activePurchaseTab === 'All') return true;
@@ -1308,26 +1526,32 @@ export function DashboardPage() {
       if (activePurchaseTab === 'To Receive' && ['shipped', 'out_for_delivery'].includes(order.status)) return true;
       if (activePurchaseTab === 'Completed' && ['delivered', 'received', 'completed'].includes(order.status)) return true;
       if (activePurchaseTab === 'Cancelled' && order.status === 'cancelled') return true;
-      if (activePurchaseTab === 'Refund' && order.refund_request_status === 'refunded') return true;
+      if (activePurchaseTab === 'Refund') {
+        return Boolean(order.has_refund_request || order.refund_request_status || order.payment_status === 'refunded')
+      }
       return false;
     });
+
+    const isFulfilled = (status) => ['received', 'delivered', 'completed'].includes(status)
 
     return (
       <div className="space-y-8">
         {/* {renderProjectsContent()} */}
 
         <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-5 sm:p-8">
-          <h2 className="text-2xl font-bold text-white mb-1">My Purchase</h2>
-          <p className="text-sm text-[var(--text-muted)] mb-8">Track and manage your orders</p>
+          <div className="mb-6">
+            <h2 className="text-2xl font-bold text-white mb-1">Orders & Purchases</h2>
+            <p className="text-sm text-[var(--text-muted)]">Track and manage your orders, refunds, and feedback</p>
+          </div>
 
-          {/* Tabs */}
+          {/* Order Status Filters */}
           <div className="flex flex-wrap gap-4 text-sm font-medium border-b border-[var(--border)] pb-3 mb-10 overflow-x-auto">
             {['All', 'To Pay', 'To Ship', 'To Receive', 'Completed', 'Cancelled', 'Refund'].map(label => (
               <button
                 key={label}
                 onClick={() => setActivePurchaseTab(label)}
                 className={`pb-2 transition-colors duration-200 whitespace-nowrap ${label === activePurchaseTab
-                  ? 'border-b-2 border-[var(--gold-primary)] text-[var(--gold-primary)]'
+                  ? 'border-b-2 border-[var(--gold-primary)] text-[var(--gold-primary)] font-semibold'
                   : 'border-transparent text-[var(--text-muted)] hover:text-white border-b-2'
                   }`}
                 type="button"
@@ -1356,10 +1580,24 @@ export function DashboardPage() {
             </div>
           ) : filteredOrders.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-10">
-              <p className="text-white font-medium mb-1">No orders found</p>
-              <p className="text-sm text-[var(--text-muted)]">
-                You don't have any orders with this status.
-              </p>
+              {activePurchaseTab === 'Refund' ? (
+                <>
+                  <div className="w-16 h-16 rounded-full border-2 border-[var(--border)] flex items-center justify-center mb-4">
+                    <RefreshCw className="w-8 h-8 text-[var(--text-muted)]" />
+                  </div>
+                  <p className="text-white font-medium mb-1">No refund requests found</p>
+                  <p className="text-sm text-[var(--text-muted)]">
+                    You do not have any orders with active refund requests or refunds.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-white font-medium mb-1">No orders found</p>
+                  <p className="text-sm text-[var(--text-muted)]">
+                    You don't have any orders with this status.
+                  </p>
+                </>
+              )}
             </div>
           ) : (
             <div className="space-y-6">
@@ -1372,6 +1610,8 @@ export function DashboardPage() {
                   ? Math.max(totalAmount - taxAmount, 0)
                   : subtotalAmount + shippingAmount
                 const orderItems = Array.isArray(order.items) ? order.items : []
+                const orderIsFulfilled = isFulfilled(order.status)
+                const hasCustomItems = orderItems.some(i => i.customization_id)
 
                 return (
                   <div key={order.order_id} className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl p-5 hover:border-[var(--gold-primary)]/40 transition-colors">
@@ -1408,20 +1648,156 @@ export function DashboardPage() {
                             const itemName = item.product_name || customization?.name || item.product_sku || 'Custom Item'
                             const quantity = Number(item.quantity || 1)
                             const unitPrice = Number(item.unit_price || 0)
+                            const hasReview = Boolean(item.review)
+                            const canReview = orderIsFulfilled && !item.customization_id && order.payment_status !== 'refunded'
 
                             return (
-                              <div key={item.order_item_id || `${order.order_id}-${index}`} className="flex items-start justify-between gap-4 rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] px-4 py-3">
-                                <div className="min-w-0">
-                                  <p className="text-sm font-semibold text-white">{itemName}</p>
-                                  <p className="text-xs text-[var(--text-muted)] mt-1">
-                                    Qty: {quantity}{item.customization_id ? ' • Custom Build' : ''}
-                                  </p>
+                              <div key={item.order_item_id || `${order.order_id}-${index}`} className="rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] px-4 py-3">
+                                <div className="flex items-start justify-between gap-4">
+                                  <div className="min-w-0">
+                                    <p className="text-sm font-semibold text-white">{itemName}</p>
+                                    <p className="text-xs text-[var(--text-muted)] mt-1">
+                                      Qty: {quantity}{item.customization_id ? ' • Custom Build' : ''}
+                                    </p>
+                                  </div>
+                                  <span className="text-sm font-semibold text-white whitespace-nowrap">PHP {unitPrice.toLocaleString('en-PH')}</span>
                                 </div>
-                                <span className="text-sm font-semibold text-white whitespace-nowrap">PHP {unitPrice.toLocaleString('en-PH')}</span>
+                                {/* Inline review badge for product items */}
+                                {!item.customization_id && hasReview && (
+                                  <div className="mt-2.5 pt-2.5 border-t border-[var(--border)]/50 flex items-center justify-between gap-3 flex-wrap">
+                                    <div className="flex items-center gap-2">
+                                      <CheckCircle className="w-3.5 h-3.5 text-green-400" />
+                                      <span className="text-xs font-medium text-green-400">Reviewed</span>
+                                      <div className="flex items-center gap-0.5 ml-1">
+                                        {Array.from({ length: 5 }).map((_, si) => (
+                                          <Star key={si} className={`w-3 h-3 ${si < (item.review.rating || 0) ? 'fill-[var(--gold-primary)] text-[var(--gold-primary)]' : 'text-zinc-600 fill-zinc-800'}`} />
+                                        ))}
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setReviewModal({ mode: 'view', order, item, review: item.review })
+                                        }}
+                                        className="text-xs text-[var(--gold-primary)] hover:underline font-medium"
+                                      >
+                                        View
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setReviewForm({
+                                            rating: item.review.rating || 5,
+                                            title: item.review.title || '',
+                                            comment: item.review.comment || '',
+                                            images: Array.isArray(item.review.images) ? item.review.images : [],
+                                          })
+                                          setReviewModal({ mode: 'edit', order, item, review: item.review })
+                                        }}
+                                        className="text-xs text-white/70 hover:text-white hover:underline font-medium"
+                                      >
+                                        Edit
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
+                                {/* Rate product button for unreviewed fulfilled product items */}
+                                {canReview && !hasReview && (
+                                  <div className="mt-2.5 pt-2.5 border-t border-[var(--border)]/50 flex justify-end">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setReviewForm({ rating: 5, title: '', comment: '', images: [] })
+                                        setReviewModal({ mode: 'rate', order, item, review: null })
+                                      }}
+                                      className="text-xs px-3 py-1.5 border border-[var(--gold-primary)]/40 text-[var(--gold-primary)] hover:bg-[var(--gold-primary)]/10 transition-colors rounded-lg font-semibold flex items-center gap-1.5"
+                                    >
+                                      <Star className="w-3 h-3" />
+                                      Rate Product
+                                    </button>
+                                  </div>
+                                )}
                               </div>
                             )
                           })}
                         </div>
+                      </div>
+                    )}
+
+                    {/* Customization Feedback Section (per-order, not per-item) */}
+                    {hasCustomItems && orderIsFulfilled && order.payment_status !== 'refunded' && (
+                      <div className="mt-3">
+                        {order.customization_feedback ? (
+                          <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] px-4 py-3">
+                            <div className="flex items-center justify-between gap-3 flex-wrap">
+                              <div className="flex items-center gap-2">
+                                <CheckCircle className="w-3.5 h-3.5 text-green-400" />
+                                <span className="text-xs font-medium text-green-400">Customization Feedback Submitted</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setFeedbackModal({ mode: 'view', order, feedback: order.customization_feedback })
+                                  }}
+                                  className="text-xs text-[var(--gold-primary)] hover:underline font-medium"
+                                >
+                                  View
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const fb = order.customization_feedback
+                                    setFeedbackForm({
+                                      overall_rating: fb.overall_rating || 5,
+                                      build_quality_rating: fb.build_quality_rating || 5,
+                                      communication_rating: fb.communication_rating || 5,
+                                      accuracy_rating: fb.accuracy_rating || 5,
+                                      comment: fb.comment || '',
+                                      images: Array.isArray(fb.images) ? fb.images : [],
+                                    })
+                                    setFeedbackModal({ mode: 'edit', order, feedback: fb })
+                                  }}
+                                  className="text-xs text-white/70 hover:text-white hover:underline font-medium"
+                                >
+                                  Edit
+                                </button>
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-2">
+                              {[
+                                { label: 'Overall', key: 'overall_rating' },
+                                { label: 'Quality', key: 'build_quality_rating' },
+                                { label: 'Communication', key: 'communication_rating' },
+                                { label: 'Accuracy', key: 'accuracy_rating' },
+                              ].map(dim => (
+                                <div key={dim.key} className="text-center">
+                                  <p className="text-[10px] uppercase tracking-wider text-[var(--text-muted)] mb-0.5">{dim.label}</p>
+                                  <div className="flex items-center justify-center gap-0.5">
+                                    {Array.from({ length: 5 }).map((_, si) => (
+                                      <Star key={si} className={`w-2.5 h-2.5 ${si < (order.customization_feedback[dim.key] || 0) ? 'fill-[var(--gold-primary)] text-[var(--gold-primary)]' : 'text-zinc-600 fill-zinc-800'}`} />
+                                    ))}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex justify-end">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setFeedbackForm({ overall_rating: 5, build_quality_rating: 5, communication_rating: 5, accuracy_rating: 5, comment: '', images: [] })
+                                setFeedbackModal({ mode: 'leave', order, feedback: null })
+                              }}
+                              className="text-xs px-3 py-1.5 border border-[var(--gold-primary)]/40 text-[var(--gold-primary)] hover:bg-[var(--gold-primary)]/10 transition-colors rounded-lg font-semibold flex items-center gap-1.5"
+                            >
+                              <MessageSquare className="w-3 h-3" />
+                              Leave Customization Feedback
+                            </button>
+                          </div>
+                        )}
                       </div>
                     )}
 
@@ -1434,11 +1810,11 @@ export function DashboardPage() {
                       <div className="text-right items-end flex flex-col [&>span:not(:first-child)]:hidden">
                         <span className="text-sm text-[var(--text-muted)] mb-1">Total Amount</span>
                         <div className="text-xl font-bold text-[var(--gold-primary)] block">PHP {displayTotalAmount.toLocaleString('en-PH')}</div>
-                        <span className="text-xl font-bold text-[var(--gold-primary)] block">â‚±{displayTotalAmount.toLocaleString('en-PH')}</span>
+                        <span className="text-xl font-bold text-[var(--gold-primary)] block">₱{displayTotalAmount.toLocaleString('en-PH')}</span>
                         <span className="text-xl font-bold text-[var(--gold-primary)] block">₱{Number(order.total_amount || 0).toLocaleString('en-PH')}</span>
                       </div>
                     </div>
-                    <div className="mt-4 pt-4 border-t border-[var(--border)] flex justify-end">
+                    <div className="mt-4 pt-4 border-t border-[var(--border)] flex justify-end flex-wrap gap-3">
                       <button
                         onClick={() => printCustomerInvoice(order)}
                         disabled={printingOrderId === order.order_id}
@@ -1447,19 +1823,15 @@ export function DashboardPage() {
                         {printingOrderId === order.order_id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Printer className="w-4 h-4" />}
                         Print Invoice
                       </button>
-                    </div>
-                    {order.status === 'pending' && (
-                      <div className="mt-4 pt-4 border-t border-[var(--border)] flex justify-end">
+                      {order.status === 'pending' && (
                         <button
                           onClick={() => openCancelOrderModal(order)}
                           className="px-4 py-2 border border-red-500/30 text-red-500 hover:bg-red-500/10 transition-colors rounded-lg text-sm font-semibold"
                         >
                           Cancel Order
                         </button>
-                      </div>
-                    )}
-                    {['shipped', 'out_for_delivery', 'delivered'].includes(order.status) && order.status !== 'received' && (
-                      <div className="mt-4 pt-4 border-t border-[var(--border)] flex justify-end gap-3">
+                      )}
+                      {['shipped', 'out_for_delivery', 'delivered'].includes(order.status) && order.status !== 'received' && (
                         <button
                           onClick={() => handleMarkAsReceived(order)}
                           disabled={isMarkingReceived}
@@ -1468,10 +1840,8 @@ export function DashboardPage() {
                           {isMarkingReceived ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
                           Received
                         </button>
-                      </div>
-                    )}
-                    {(order.status === 'received' || order.status === 'delivered') && order.payment_status !== 'refunded' && !order.has_refund_request && (
-                      <div className="mt-4 pt-4 border-t border-[var(--border)] flex justify-end gap-3">
+                      )}
+                      {(order.status === 'received' || order.status === 'delivered') && order.payment_status !== 'refunded' && !order.has_refund_request && (
                         <button
                           onClick={() => openRefundModal(order)}
                           className="px-4 py-2 border border-[var(--border)] text-white hover:bg-white/5 transition-colors rounded-lg text-sm font-semibold flex items-center gap-2"
@@ -1479,10 +1849,19 @@ export function DashboardPage() {
                           <RefreshCw className="w-4 h-4 text-[var(--gold-primary)]" />
                           Refund
                         </button>
-                      </div>
-                    )}
+                      )}
+                      {orderIsFulfilled && (
+                        <button
+                          onClick={() => handleBuyAgain(order.order_id)}
+                          className="px-4 py-2 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] hover:shadow-[0_0_15px_rgba(212,175,55,0.4)] transition-all rounded-lg text-sm font-bold flex items-center gap-2"
+                        >
+                          <ShoppingBag className="w-4 h-4" />
+                          Buy Again
+                        </button>
+                      )}
+                    </div>
                     {(order.status === 'received' || order.status === 'delivered') && order.has_refund_request && (
-                      <div className="mt-4 pt-4 border-t border-[var(--border)] flex justify-end items-center gap-3">
+                      <div className="mt-3 flex justify-end items-center gap-3 flex-wrap">
                         {(() => {
                           const refundConfig = getRefundStatusConfig(order.refund_request_status)
                           const RefundIcon = refundConfig.icon
@@ -1509,24 +1888,6 @@ export function DashboardPage() {
                             Withdraw Refund
                           </button>
                         )}
-                      </div>
-                    )}
-                    {(order.status === 'received' || order.status === 'delivered' || order.status === 'completed') && (
-                      <div className="mt-4 pt-4 border-t border-[var(--border)] flex justify-end gap-3">
-                        <button
-                          onClick={() => setRatingModalOrderId(order.order_id)}
-                          className="px-4 py-2 border border-[var(--border)] text-white hover:bg-white/5 transition-colors rounded-lg text-sm font-semibold flex items-center gap-2"
-                        >
-                          <Star className="w-4 h-4 text-[var(--gold-primary)]" />
-                          Rate Product
-                        </button>
-                        <button
-                          onClick={() => handleBuyAgain(order.order_id)}
-                          className="px-4 py-2 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] hover:shadow-[0_0_15px_rgba(212,175,55,0.4)] transition-all rounded-lg text-sm font-bold flex items-center gap-2"
-                        >
-                          <ShoppingBag className="w-4 h-4" />
-                          Buy Again
-                        </button>
                       </div>
                     )}
                   </div>
@@ -4896,6 +5257,449 @@ export function DashboardPage() {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Product Review Modal */}
+      {reviewModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm px-4 py-8">
+          <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6 sm:p-7 w-full max-w-lg max-h-[90vh] overflow-y-auto relative shadow-2xl">
+            <button
+              type="button"
+              onClick={() => setReviewModal(null)}
+              className="absolute top-4 right-4 text-[var(--text-muted)] hover:text-white transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-2.5 mb-1">
+              <Star className="w-5 h-5 text-[var(--gold-primary)]" />
+              <h2 className="text-xl font-bold text-white">
+                {reviewModal.mode === 'view'
+                  ? 'Product Review'
+                  : reviewModal.mode === 'edit'
+                    ? 'Edit Product Review'
+                    : 'Rate Product'}
+              </h2>
+            </div>
+            <p className="text-xs text-[var(--text-muted)] mb-5 truncate">
+              {reviewModal.item?.product_name || 'Product'} • Order #{reviewModal.order?.order_number}
+            </p>
+
+            {reviewModal.mode === 'view' ? (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <DashboardStarRatingDisplay rating={reviewModal.review?.rating || 5} size="w-5 h-5" />
+                  <span className="text-sm font-bold text-[var(--gold-primary)]">
+                    {reviewModal.review?.rating || 5} / 5
+                  </span>
+                </div>
+
+                {reviewModal.review?.title && (
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-1">Title</p>
+                    <p className="text-sm font-semibold text-white">{reviewModal.review.title}</p>
+                  </div>
+                )}
+
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-1">Comment</p>
+                  <div className="text-sm text-zinc-300 whitespace-pre-line bg-[var(--bg-primary)] p-4 rounded-xl border border-[var(--border)]">
+                    {reviewModal.review?.comment || 'No comment provided.'}
+                  </div>
+                </div>
+
+                {Array.isArray(reviewModal.review?.images) && reviewModal.review.images.length > 0 && (
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-2">Photos</p>
+                    <div className="flex flex-wrap gap-2.5">
+                      {reviewModal.review.images.map((url, idx) => (
+                        <a
+                          key={idx}
+                          href={url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="relative w-20 h-20 rounded-lg overflow-hidden border border-[var(--border)] group block"
+                        >
+                          <img src={url} alt={`Review photo ${idx + 1}`} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex gap-3 pt-3 border-t border-[var(--border)]">
+                  <button
+                    type="button"
+                    onClick={() => setReviewModal(null)}
+                    className="flex-1 py-2.5 rounded-xl border border-[var(--border)] text-white hover:bg-white/5 transition-colors font-medium text-sm"
+                  >
+                    Close
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setReviewForm({
+                        rating: reviewModal.review?.rating || 5,
+                        title: reviewModal.review?.title || '',
+                        comment: reviewModal.review?.comment || '',
+                        images: Array.isArray(reviewModal.review?.images) ? reviewModal.review.images : [],
+                      })
+                      setReviewModal(prev => ({ ...prev, mode: 'edit' }))
+                    }}
+                    className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-bold text-sm hover:shadow-[0_0_15px_rgba(212,175,55,0.4)] transition-all flex items-center justify-center gap-2"
+                  >
+                    <Edit className="w-4 h-4" />
+                    Edit Review
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={handleSubmitProductReview} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-2">
+                    Rating *
+                  </label>
+                  <DashboardStarPicker
+                    rating={reviewForm.rating}
+                    onChange={r => setReviewForm(prev => ({ ...prev, rating: r }))}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-2">
+                    Title (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={reviewForm.title}
+                    onChange={e => setReviewForm(prev => ({ ...prev, title: e.target.value }))}
+                    placeholder="Summarize your review or highlight key details"
+                    className="w-full px-4 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] text-sm text-white placeholder-[var(--text-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--gold-primary)]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-2">
+                    Review Comment *
+                  </label>
+                  <textarea
+                    rows={4}
+                    value={reviewForm.comment}
+                    onChange={e => setReviewForm(prev => ({ ...prev, comment: e.target.value }))}
+                    placeholder="What did you like or dislike about this product? How is the sound, feel, and quality?"
+                    className="w-full px-4 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] text-sm text-white placeholder-[var(--text-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--gold-primary)] resize-none"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-2">
+                    Photos (Optional, max 5)
+                  </label>
+                  <div className="flex flex-wrap gap-2.5 mb-2">
+                    {reviewForm.images.map((url, idx) => (
+                      <div key={idx} className="relative w-16 h-16 rounded-lg overflow-hidden border border-[var(--border)]">
+                        <img src={url} alt={`Upload ${idx + 1}`} className="w-full h-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => removeReviewImage(idx, 'product')}
+                          className="absolute top-1 right-1 w-4 h-4 rounded-full bg-black/70 text-white flex items-center justify-center hover:bg-red-500 transition-colors"
+                        >
+                          <X className="w-2.5 h-2.5" />
+                        </button>
+                      </div>
+                    ))}
+                    {reviewForm.images.length < 5 && (
+                      <label className="w-16 h-16 rounded-lg border border-dashed border-[var(--border)] flex flex-col items-center justify-center cursor-pointer hover:border-[var(--gold-primary)] transition-colors">
+                        {uploadingReviewImage ? (
+                          <Loader2 className="w-4 h-4 text-[var(--gold-primary)] animate-spin" />
+                        ) : (
+                          <>
+                            <Camera className="w-4 h-4 text-[var(--text-muted)]" />
+                            <span className="text-[9px] text-[var(--text-muted)] mt-0.5">Add</span>
+                          </>
+                        )}
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          multiple
+                          disabled={uploadingReviewImage}
+                          onChange={e => handleReviewImageUpload(e, 'product')}
+                          className="hidden"
+                        />
+                      </label>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-[var(--text-muted)]">JPG, PNG, or WebP. Max 5MB each.</p>
+                </div>
+
+                <div className="flex gap-3 pt-3 border-t border-[var(--border)]">
+                  <button
+                    type="button"
+                    onClick={() => setReviewModal(null)}
+                    disabled={isSubmittingReview}
+                    className="flex-1 py-2.5 rounded-xl border border-[var(--border)] text-white hover:bg-white/5 transition-colors font-medium text-sm disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmittingReview || uploadingReviewImage}
+                    className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-bold text-sm hover:shadow-[0_0_15px_rgba(212,175,55,0.4)] transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {isSubmittingReview ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Saving...
+                      </>
+                    ) : reviewModal.mode === 'edit' ? (
+                      'Update Review'
+                    ) : (
+                      'Submit Review'
+                    )}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Customization Feedback Modal */}
+      {feedbackModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm px-4 py-8">
+          <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6 sm:p-7 w-full max-w-xl max-h-[90vh] overflow-y-auto relative shadow-2xl">
+            <button
+              type="button"
+              onClick={() => setFeedbackModal(null)}
+              className="absolute top-4 right-4 text-[var(--text-muted)] hover:text-white transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-2.5 mb-1">
+              <MessageSquare className="w-5 h-5 text-[var(--gold-primary)]" />
+              <h2 className="text-xl font-bold text-white">
+                {feedbackModal.mode === 'view'
+                  ? 'Customization Feedback'
+                  : feedbackModal.mode === 'edit'
+                    ? 'Edit Customization Feedback'
+                    : 'Customization Feedback'}
+              </h2>
+            </div>
+            <p className="text-xs text-[var(--text-muted)] mb-5">
+              Order #{feedbackModal.order?.order_number} • Custom Instrument Build
+            </p>
+
+            {feedbackModal.mode === 'view' ? (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    { label: 'Overall Experience', key: 'overall_rating' },
+                    { label: 'Build Quality', key: 'build_quality_rating' },
+                    { label: 'Communication', key: 'communication_rating' },
+                    { label: 'Design Accuracy', key: 'accuracy_rating' },
+                  ].map(dim => (
+                    <div key={dim.key} className="p-3 bg-[var(--bg-primary)] rounded-xl border border-[var(--border)]">
+                      <p className="text-xs text-[var(--text-muted)] mb-1 font-medium">{dim.label}</p>
+                      <div className="flex items-center gap-2">
+                        <DashboardStarRatingDisplay rating={feedbackModal.feedback?.[dim.key] || 5} size="w-3.5 h-3.5" />
+                        <span className="text-xs font-bold text-[var(--gold-primary)]">
+                          {feedbackModal.feedback?.[dim.key] || 5} / 5
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-1">Feedback Comments</p>
+                  <div className="text-sm text-zinc-300 whitespace-pre-line bg-[var(--bg-primary)] p-4 rounded-xl border border-[var(--border)]">
+                    {feedbackModal.feedback?.comment || 'No comment provided.'}
+                  </div>
+                </div>
+
+                {Array.isArray(feedbackModal.feedback?.images) && feedbackModal.feedback.images.length > 0 && (
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-2">Photos</p>
+                    <div className="flex flex-wrap gap-2.5">
+                      {feedbackModal.feedback.images.map((url, idx) => (
+                        <a
+                          key={idx}
+                          href={url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="relative w-20 h-20 rounded-lg overflow-hidden border border-[var(--border)] group block"
+                        >
+                          <img src={url} alt={`Feedback photo ${idx + 1}`} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex gap-3 pt-3 border-t border-[var(--border)]">
+                  <button
+                    type="button"
+                    onClick={() => setFeedbackModal(null)}
+                    className="flex-1 py-2.5 rounded-xl border border-[var(--border)] text-white hover:bg-white/5 transition-colors font-medium text-sm"
+                  >
+                    Close
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const fb = feedbackModal.feedback
+                      setFeedbackForm({
+                        overall_rating: fb?.overall_rating || 5,
+                        build_quality_rating: fb?.build_quality_rating || 5,
+                        communication_rating: fb?.communication_rating || 5,
+                        accuracy_rating: fb?.accuracy_rating || 5,
+                        comment: fb?.comment || '',
+                        images: Array.isArray(fb?.images) ? fb.images : [],
+                      })
+                      setFeedbackModal(prev => ({ ...prev, mode: 'edit' }))
+                    }}
+                    className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-bold text-sm hover:shadow-[0_0_15px_rgba(212,175,55,0.4)] transition-all flex items-center justify-center gap-2"
+                  >
+                    <Edit className="w-4 h-4" />
+                    Edit Feedback
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={handleSubmitCustomFeedback} className="space-y-4">
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-1">
+                      1. Overall Experience *
+                    </label>
+                    <DashboardStarPicker
+                      rating={feedbackForm.overall_rating}
+                      onChange={r => setFeedbackForm(prev => ({ ...prev, overall_rating: r }))}
+                      size="w-6 h-6"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-1">
+                      2. Build Quality & Craftsmanship *
+                    </label>
+                    <DashboardStarPicker
+                      rating={feedbackForm.build_quality_rating}
+                      onChange={r => setFeedbackForm(prev => ({ ...prev, build_quality_rating: r }))}
+                      size="w-6 h-6"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-1">
+                      3. Communication & Progress Updates *
+                    </label>
+                    <DashboardStarPicker
+                      rating={feedbackForm.communication_rating}
+                      onChange={r => setFeedbackForm(prev => ({ ...prev, communication_rating: r }))}
+                      size="w-6 h-6"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-1">
+                      4. Accuracy to Custom Design *
+                    </label>
+                    <DashboardStarPicker
+                      rating={feedbackForm.accuracy_rating}
+                      onChange={r => setFeedbackForm(prev => ({ ...prev, accuracy_rating: r }))}
+                      size="w-6 h-6"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-2">
+                    Feedback Comments *
+                  </label>
+                  <textarea
+                    rows={4}
+                    value={feedbackForm.comment}
+                    onChange={e => setFeedbackForm(prev => ({ ...prev, comment: e.target.value }))}
+                    placeholder="Tell us about the craftsmanship, tone, feel, or your overall collaboration with our luthiers..."
+                    className="w-full px-4 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] text-sm text-white placeholder-[var(--text-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--gold-primary)] resize-none"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mb-2">
+                    Photos of your build (Optional, max 5)
+                  </label>
+                  <div className="flex flex-wrap gap-2.5 mb-2">
+                    {feedbackForm.images.map((url, idx) => (
+                      <div key={idx} className="relative w-16 h-16 rounded-lg overflow-hidden border border-[var(--border)]">
+                        <img src={url} alt={`Upload ${idx + 1}`} className="w-full h-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => removeReviewImage(idx, 'feedback')}
+                          className="absolute top-1 right-1 w-4 h-4 rounded-full bg-black/70 text-white flex items-center justify-center hover:bg-red-500 transition-colors"
+                        >
+                          <X className="w-2.5 h-2.5" />
+                        </button>
+                      </div>
+                    ))}
+                    {feedbackForm.images.length < 5 && (
+                      <label className="w-16 h-16 rounded-lg border border-dashed border-[var(--border)] flex flex-col items-center justify-center cursor-pointer hover:border-[var(--gold-primary)] transition-colors">
+                        {uploadingReviewImage ? (
+                          <Loader2 className="w-4 h-4 text-[var(--gold-primary)] animate-spin" />
+                        ) : (
+                          <>
+                            <Camera className="w-4 h-4 text-[var(--text-muted)]" />
+                            <span className="text-[9px] text-[var(--text-muted)] mt-0.5">Add</span>
+                          </>
+                        )}
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          multiple
+                          disabled={uploadingReviewImage}
+                          onChange={e => handleReviewImageUpload(e, 'feedback')}
+                          className="hidden"
+                        />
+                      </label>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-[var(--text-muted)]">JPG, PNG, or WebP. Max 5MB each.</p>
+                </div>
+
+                <div className="flex gap-3 pt-3 border-t border-[var(--border)]">
+                  <button
+                    type="button"
+                    onClick={() => setFeedbackModal(null)}
+                    disabled={isSubmittingReview}
+                    className="flex-1 py-2.5 rounded-xl border border-[var(--border)] text-white hover:bg-white/5 transition-colors font-medium text-sm disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmittingReview || uploadingReviewImage}
+                    className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-bold text-sm hover:shadow-[0_0_15px_rgba(212,175,55,0.4)] transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {isSubmittingReview ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Saving...
+                      </>
+                    ) : feedbackModal.mode === 'edit' ? (
+                      'Update Feedback'
+                    ) : (
+                      'Submit Feedback'
+                    )}
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}

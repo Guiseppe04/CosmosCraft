@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
-import { RefreshCw, ShoppingBag, RotateCcw } from 'lucide-react'
+import { RefreshCw, ShoppingBag, RotateCcw, Star } from 'lucide-react'
 import { OrderManagement } from '../../../components/admin/OrderManagement'
 import { RefundRequestsTab } from './RefundRequestsTab'
+import ReviewModerationTab from './ReviewModerationTab'
 import { adminApi } from '../../../utils/adminApi'
 
 export function OrdersTab({ orders, fetchOrders, user, pagination, showToast, onManageProject, ordersLoading = false }) {
@@ -52,6 +53,11 @@ export function OrdersTab({ orders, fetchOrders, user, pagination, showToast, on
       icon: RotateCcw,
       badge: newRefundCount > 0 ? newRefundCount : null,
       badgeColor: 'bg-red-500 text-white',
+    },
+    {
+      id: 'ratings',
+      label: 'Ratings & Feedback',
+      icon: Star,
     },
   ]
 
@@ -163,6 +169,18 @@ export function OrdersTab({ orders, fetchOrders, user, pagination, showToast, on
             transition={{ duration: 0.2 }}
           >
             <RefundRequestsTab showToast={showToast} user={user} />
+          </motion.div>
+        )}
+
+        {view === 'ratings' && (
+          <motion.div
+            key="ratings-view"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.2 }}
+          >
+            <ReviewModerationTab showToast={showToast} user={user} />
           </motion.div>
         )}
       </AnimatePresence>
