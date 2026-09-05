@@ -60,7 +60,15 @@ export function DashboardTab({
   isLoading,
   setActiveTab,
   lastRefreshed,
+  showProductsQuickNav = true,
+  hideProductsQuickNav = false,
+  showViewProducts = true,
+  hideViewProducts = false,
 }) {
+  const shouldShowProducts = showProductsQuickNav && showViewProducts && !hideProductsQuickNav && !hideViewProducts
+  const quickActions = useMemo(() => {
+    return QUICK_ACTIONS.filter(action => shouldShowProducts || action.tab !== 'products')
+  }, [shouldShowProducts])
   const orderStatusData = useMemo(() => {
     const counts = {}
     visibleOrders.forEach(o => {
@@ -123,8 +131,8 @@ export function DashboardTab({
           </div>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {QUICK_ACTIONS.map((action) => (
+        <div className={`grid gap-3 ${quickActions.length === 3 ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-2 sm:grid-cols-4'}`}>
+          {quickActions.map((action) => (
             <button
               key={action.label}
               onClick={() => setActiveTab(action.tab)}

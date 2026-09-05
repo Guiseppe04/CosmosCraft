@@ -1190,6 +1190,7 @@ export function StaffDashboard() {
               isLoading={isLoading}
               setActiveTab={setActiveTab}
               lastRefreshed={lastRefreshed}
+              showProductsQuickNav={false}
             />
           )}
 
@@ -1272,7 +1273,8 @@ export function StaffDashboard() {
               setPartsInventoryFilter={setPartsInventoryFilter}
               resolveInventoryImage={resolveInventoryImage}
               openModal={openModal}
-              isSuperAdmin={isSuperAdmin}
+              isSuperAdmin={false}
+              canAddProduct={false}
               categoryTree={categoryTree}
             />
           )}

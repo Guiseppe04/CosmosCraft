@@ -21,8 +21,13 @@ export function InventoryTab({
   resolveInventoryImage,
   openModal,
   isSuperAdmin,
+  canAddProduct,
+  showAddProduct,
+  hideAddProduct = false,
   categoryTree,
 }) {
+  const allowAddProduct = !hideAddProduct && (showAddProduct !== undefined ? showAddProduct : (canAddProduct !== undefined ? canAddProduct : Boolean(isSuperAdmin)))
+
   return (
     <motion.div key="inventory" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
       <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-6">
@@ -31,7 +36,7 @@ export function InventoryTab({
             <h2 className="text-xl font-semibold text-white">Inventory</h2>
             <p className="mt-1 text-sm text-[var(--text-muted)]">Manage your product inventory and listings.</p>
           </div>
-          {isSuperAdmin && inventoryIsProducts && (
+          {allowAddProduct && inventoryIsProducts && (
             <button
               onClick={() => openModal('product')}
               className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] px-4 py-2 text-sm font-semibold text-black"
