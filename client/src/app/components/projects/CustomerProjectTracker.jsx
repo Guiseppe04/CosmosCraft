@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   CheckCircle, Clock, AlertCircle, Guitar, DollarSign, Calendar,
@@ -57,6 +57,18 @@ const formatShortDate = (value) => {
 const formatCurrency = (value) => {
   if (value === null || value === undefined) return '—';
   return new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(value);
+};
+
+const formatAddress = (addr) => {
+  if (!addr) return '';
+  const parts = [
+    addr.street_line1,
+    addr.street_line2,
+    addr.barangay ? `Brgy. ${addr.barangay}` : null,
+    addr.city,
+    addr.province,
+  ];
+  return parts.filter(Boolean).join(', ');
 };
 
 const REFUND_STATUS_CONFIG = {
@@ -608,6 +620,10 @@ export default function CustomerProjectTracker({ projectId, projectName, project
   const [fulfillmentNotes, setFulfillmentNotes] = useState('');
   const [fulfillmentSaving, setFulfillmentSaving] = useState(false);
   const [fulfillmentMessage, setFulfillmentMessage] = useState(null);
+
+  const handleSelectAddress = useCallback((addressId) => {
+    setSelectedAddressId(addressId);
+  }, []);
 
   useEffect(() => {
     if (projectId) {
@@ -1187,8 +1203,8 @@ export default function CustomerProjectTracker({ projectId, projectName, project
                     <p className="font-semibold text-white">Delivery Address:</p>
                     {selectedAddress ? (
                       <p>
-                        {selectedAddress.line1}
-                        {selectedAddress.line2 ? `, ${selectedAddress.line2}` : ''}
+                        {selectedAddress.street_line1}
+                        {selectedAddress.street_line2 ? `, ${selectedAddress.street_line2}` : ''}
                         {selectedAddress.barangay ? `, Brgy. ${selectedAddress.barangay}` : ''}
                         {selectedAddress.city ? `, ${selectedAddress.city}` : ''}
                         {selectedAddress.province ? `, ${selectedAddress.province}` : ''}
@@ -1272,7 +1288,7 @@ export default function CustomerProjectTracker({ projectId, projectName, project
                       <span className="text-xs uppercase tracking-wider font-bold text-[var(--text-muted)]">
                         Delivery Address
                       </span>
-                      <span className="text-[11px] text-[var(--gold-primary)]">Luzon Addresses Only</span>
+                     
                     </div>
 
                     {userAddresses.length > 0 ? (
@@ -1282,7 +1298,6 @@ export default function CustomerProjectTracker({ projectId, projectName, project
                           return (
                             <label
                               key={addr.address_id}
-                              onClick={() => setSelectedAddressId(addr.address_id)}
                               className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
                                 isSelected
                                   ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)]/10 text-white'
@@ -1293,7 +1308,7 @@ export default function CustomerProjectTracker({ projectId, projectName, project
                                 type="radio"
                                 name="fulfillment_address"
                                 checked={isSelected}
-                                onChange={() => setSelectedAddressId(addr.address_id)}
+                                onChange={() => handleSelectAddress(addr.address_id)}
                                 className="mt-1 accent-[var(--gold-primary)]"
                               />
                               <div className="text-xs min-w-0 flex-1">
@@ -1301,9 +1316,7 @@ export default function CustomerProjectTracker({ projectId, projectName, project
                                   {addr.label || 'Home'} {addr.is_default && '(Default)'}
                                 </span>
                                 <p className="text-[var(--text-muted)] mt-0.5">
-                                  {addr.line1}
-                                  {addr.line2 ? `, ${addr.line2}` : ''}
-                                  {addr.barangay ? `, Brgy. ${addr.barangay}` : ''}, {addr.city}, {addr.province}
+                                  {formatAddress(addr)}
                                 </p>
                               </div>
                             </label>
