@@ -257,7 +257,14 @@ export const adminApi = {
   receiveProjectRequiredPart: (id, partKey, body = {}) => request(`/api/projects/${id}/required-parts/${encodeURIComponent(partKey)}/receive`, { method: 'POST', body }),
   toggleProjectRequiredPart: (id, partKey, received) => request(`/api/projects/${id}/required-parts/${encodeURIComponent(partKey)}/toggle-receive`, { method: 'PATCH', body: { received } }),
   getProjectActivity: (id) => request(`/api/projects/${id}/activity`),
-  submitProjectFulfillment: (id, body) => request(`/api/projects/${id}/fulfillment`, { method: 'POST', body }),
+  getProjectFulfillment: (id) => request(`/api/fulfillment/project/${id}`),
+  submitProjectFulfillment: (id, body) => request(`/api/fulfillment/project/${id}`, { method: 'POST', body }),
+  getFulfillmentRequests: (params = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return request(`/api/fulfillment/requests${qs ? '?' + qs : ''}`);
+  },
+  getFulfillmentRequest: (id) => request(`/api/fulfillment/requests/${id}`),
+  updateFulfillmentStatus: (id, body) => request(`/api/fulfillment/requests/${id}/status`, { method: 'PATCH', body }),
   addInventoryStock: (productId, quantity, notes) => request('/api/inventory/stock-in', { method: 'PATCH', body: { productId, quantity, notes } }),
 
   // Claim / Unclaim / Reassign

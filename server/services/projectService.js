@@ -160,6 +160,17 @@ const syncFulfillmentCompletion = async (db, projectId, orderId, actorId, reason
       [orderId]
     );
 
+    // Update fulfillment_requests table if exists
+    await db.query(
+      `UPDATE fulfillment_requests
+       SET status = 'completed',
+           completed_at = COALESCE(completed_at, now()),
+           updated_at = now()
+       WHERE (order_id = $1 OR project_id = $2)
+         AND status NOT IN ('completed', 'cancelled')`,
+      [orderId, projectId]
+    );
+
     // Audit log
     await db.query(
       `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, details)

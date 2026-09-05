@@ -140,4 +140,15 @@ export const staffApi = {
     const qs = new URLSearchParams(params).toString()
     return request(`/api/guitars/customizations${qs ? `?${qs}` : ''}`)
   },
+
+  // Fulfillment Lifecycle
+  getProjectFulfillment: (id) => request(`/api/fulfillment/project/${id}`),
+  submitProjectFulfillment: (id, body) => request(`/api/fulfillment/project/${id}`, { method: 'POST', body }),
+  getFulfillmentRequests: (params = {}) => {
+    const qs = new URLSearchParams(params).toString()
+    return request(`/api/fulfillment/requests${qs ? `?${qs}` : ''}`)
+  },
+  getFulfillmentRequest: (id) => request(`/api/fulfillment/requests/${id}`),
+  updateFulfillmentStatus: (id, body) => request(`/api/fulfillment/requests/${id}/status`, { method: 'PATCH', body }),
 }
+

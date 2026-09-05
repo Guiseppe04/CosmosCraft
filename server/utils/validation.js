@@ -698,7 +698,7 @@ exports.namedUuidParamSchema = (paramName) =>
 const paymentMethodEnum = ['gcash', 'bank_transfer', 'cash'];
 const orderStatusEnum = ['pending', 'processing', 'shipped', 'out_for_delivery', 'delivered', 'received', 'cancelled'];
 const orderPaymentStatusEnum = ['pending', 'proof_submitted', 'under_review', 'approved', 'rejected', 'failed'];
-const fulfillmentMethods = ['pickup_appointment', 'external_delivery', 'shop_delivery'];
+const fulfillmentMethods = ['pickup', 'delivery', 'pickup_appointment', 'external_delivery', 'shop_delivery'];
 const notificationTypeEnum = ['order_update', 'appointment_reminder', 'system', 'promotional', 'low_stock'];
 const refundStatusEnum = ['pending', 'approved', 'processing', 'rejected', 'refunded', 'pending_payment_verification'];
 
@@ -975,8 +975,19 @@ exports.submitFulfillmentSchema = Joi.object({
   method: Joi.string().valid(...fulfillmentMethods).optional(),
   notes: Joi.string().max(500).optional().allow('').trim(),
   address_id: Joi.string().uuid().optional(),
+  delivery_address_id: Joi.string().uuid().optional(),
   scheduled_at: Joi.date().iso().optional(),
+  pickup_scheduled_at: Joi.date().iso().optional(),
 }).or('fulfillment_method', 'method');
+
+exports.updateFulfillmentStatusSchema = Joi.object({
+  status: Joi.string().valid('requested', 'processing', 'ready_for_pickup', 'out_for_delivery', 'completed', 'cancelled').required().messages({
+    'any.only': 'Status must be one of: requested, processing, ready_for_pickup, out_for_delivery, completed, cancelled',
+    'any.required': 'Status is required',
+  }),
+  admin_notes: Joi.string().max(500).optional().allow('').trim(),
+});
+
 
 exports.requestProjectCancelSchema = Joi.object({
   cancel_option: Joi.string().valid('ship_to_address', 'pickup_at_shop', 'ship_unfinished', 'pickup_unfinished').required().messages({

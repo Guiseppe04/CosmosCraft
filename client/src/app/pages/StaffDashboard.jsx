@@ -15,6 +15,7 @@ import {
   ShoppingBag,
   Wallet,
   X,
+  Truck,
 } from 'lucide-react'
 import { Topbar } from '../components/admin/Topbar'
 import { useAuth } from '../context/AuthContext'

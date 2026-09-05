@@ -74,6 +74,7 @@ router.use(authenticateToken);
 router.get('/my', validate(listProjectsSchema, 'query'), ctrl.getMyProjects);
 router.get('/:id/hierarchy', ctrl.getProjectHierarchy);
 router.post('/:id/cancel', ctrl.cancelProject);
+router.get('/:id/fulfillment', ctrl.getProjectFulfillment);
 router.post('/:id/fulfillment', validate(submitFulfillmentSchema), ctrl.submitFulfillmentChoice);
 router.patch('/subtasks/:subtaskId', validateParams(namedUuidParamSchema('subtaskId')), validate(updateSubtaskSchema), ctrl.updateSubtask);
 router.get('/:id/activity', ctrl.getActivityLogs);

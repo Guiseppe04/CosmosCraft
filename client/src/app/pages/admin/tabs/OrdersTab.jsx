@@ -30,7 +30,7 @@ export function OrdersTab({ orders, fetchOrders, user, pagination, showToast, on
     try {
       await Promise.all([
         fetchOrders ? fetchOrders() : Promise.resolve(),
-        fetchNewRefundCount()
+        fetchNewRefundCount(),
       ])
     } catch {
       // The individual request helpers already retain data and report failures.
@@ -54,6 +54,7 @@ export function OrdersTab({ orders, fetchOrders, user, pagination, showToast, on
       badgeColor: 'bg-red-500 text-white',
     },
   ]
+
 
   return (
     <motion.div key="orders" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
@@ -134,7 +135,7 @@ export function OrdersTab({ orders, fetchOrders, user, pagination, showToast, on
 
       {/* Main Content Area */}
       <AnimatePresence mode="wait">
-        {view === 'orders' ? (
+        {view === 'orders' && (
           <motion.div
             key="orders-view"
             initial={{ opacity: 0, y: 10 }}
@@ -151,7 +152,9 @@ export function OrdersTab({ orders, fetchOrders, user, pagination, showToast, on
               loading={ordersLoading}
             />
           </motion.div>
-        ) : (
+        )}
+
+        {view === 'refunds' && (
           <motion.div
             key="refunds-view"
             initial={{ opacity: 0, y: 10 }}

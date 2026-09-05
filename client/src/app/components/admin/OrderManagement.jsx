@@ -6,7 +6,7 @@ import {
   CheckCircle, XCircle, Clock, AlertCircle, Loader2, BriefcaseBusiness,
   FileText, Image as ImageIcon, ExternalLink, Save, User,
   History, DollarSign, Trash2, Check, X, Printer, Calendar,
-  ArrowUp, ArrowDown, ArrowUpRight,
+  ArrowUp, ArrowDown, ArrowUpRight, Truck, MapPin, ArrowRight,
 } from 'lucide-react'
 import { formatCurrency } from '../../utils/formatCurrency'
 import { adminApi } from '../../utils/adminApi'
@@ -452,6 +452,387 @@ function ReceiptPanel({ order }) {
   )
 }
 
+function OrderFulfillmentPanel({ order, onUpdateOrder, onManageProject }) {
+  const [fulfillmentData, setFulfillmentData] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [updating, setUpdating] = useState(false)
+  const [adminNotes, setAdminNotes] = useState('')
+  const [notesSaving, setNotesSaving] = useState(false)
+  const [error, setError] = useState(null)
+  const [successMessage, setSuccessMessage] = useState(null)
+
+  const loadFulfillment = useCallback(async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      let data = null
+
+      if (order.project_id) {
+        try {
+          const res = await adminApi.getProjectFulfillment(order.project_id)
+          data = res?.data || null
+        } catch {
+          // fall through to search by order_number
+        }
+      }
+
+      if (!data && (order.order_number || order.order_id)) {
+        const res = await adminApi.getFulfillmentRequests({ search: order.order_number || order.order_id })
+        data = res?.data?.[0] || null
+      }
+
+      setFulfillmentData(data)
+      if (data?.admin_notes) {
+        setAdminNotes(data.admin_notes)
+      }
+    } catch (err) {
+      console.error('Failed to load fulfillment data:', err)
+      setError(err.message || 'Failed to load fulfillment details')
+    } finally {
+      setLoading(false)
+    }
+  }, [order.project_id, order.order_number, order.order_id])
+
+  useEffect(() => {
+    loadFulfillment()
+  }, [loadFulfillment])
+
+  const handleAdvanceStatus = async (targetStatus) => {
+    if (!fulfillmentData?.id) return
+    try {
+      setUpdating(true)
+      setError(null)
+      setSuccessMessage(null)
+
+      await adminApi.updateFulfillmentStatus(fulfillmentData.id, {
+        status: targetStatus,
+        admin_notes: adminNotes.trim() || undefined,
+      })
+
+      setSuccessMessage(`Fulfillment stage advanced to ${targetStatus.replace(/_/g, ' ')}.`)
+      await loadFulfillment()
+      onUpdateOrder?.()
+    } catch (err) {
+      console.error('Failed to update fulfillment status:', err)
+      setError(err.message || 'Failed to advance fulfillment stage')
+    } finally {
+      setUpdating(false)
+    }
+  }
+
+  const handleSaveNotes = async () => {
+    if (!fulfillmentData?.id) return
+    try {
+      setNotesSaving(true)
+      await adminApi.updateFulfillmentStatus(fulfillmentData.id, {
+        status: fulfillmentData.status,
+        admin_notes: adminNotes.trim() || '',
+      })
+      setSuccessMessage('Staff notes saved.')
+      setTimeout(() => setSuccessMessage(null), 3000)
+    } catch (err) {
+      setError(err.message || 'Failed to save staff notes')
+    } finally {
+      setNotesSaving(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="py-12 text-center text-[var(--text-muted)] space-y-2">
+        <RefreshCw className="w-6 h-6 animate-spin mx-auto text-[var(--gold-primary)]" />
+        <p className="text-xs">Loading fulfillment details...</p>
+      </div>
+    )
+  }
+
+  const isCompletedBuild =
+    Number(order.project_progress || 0) >= 100 ||
+    ['fulfillment_pending', 'fulfillment_in_progress', 'fulfilled'].includes(order.customization_status) ||
+    fulfillmentData?.status !== 'not_requested'
+
+  const method = fulfillmentData?.fulfillment_method?.includes('delivery') ? 'delivery' : 'pickup'
+  const fStatus = fulfillmentData?.status || 'not_requested'
+  const addr = fulfillmentData?.delivery_address_snapshot
+
+  // Determine next stage
+  let nextStatus = null
+  let nextLabel = null
+
+  if (method === 'pickup') {
+    if (fStatus === 'requested') {
+      nextStatus = 'processing'
+      nextLabel = 'Start Processing'
+    } else if (fStatus === 'processing') {
+      nextStatus = 'ready_for_pickup'
+      nextLabel = 'Mark Ready for Pickup'
+    } else if (fStatus === 'ready_for_pickup') {
+      nextStatus = 'completed'
+      nextLabel = 'Confirm Picked Up / Completed'
+    }
+  } else {
+    if (fStatus === 'requested') {
+      nextStatus = 'processing'
+      nextLabel = 'Start Processing'
+    } else if (fStatus === 'processing') {
+      nextStatus = 'out_for_delivery'
+      nextLabel = 'Mark Out for Delivery'
+    } else if (fStatus === 'out_for_delivery') {
+      nextStatus = 'completed'
+      nextLabel = 'Confirm Delivered / Completed'
+    }
+  }
+
+  const deliverySteps = [
+    { key: 'build', label: 'Build Completed', done: true },
+    { key: 'requested', label: 'Requested', done: fStatus !== 'not_requested' },
+    { key: 'processing', label: 'Processing', done: ['out_for_delivery', 'completed'].includes(fStatus), active: fStatus === 'processing' },
+    { key: 'out_for_delivery', label: 'Out for Delivery', done: fStatus === 'completed', active: fStatus === 'out_for_delivery' },
+    { key: 'completed', label: 'Delivered', done: fStatus === 'completed' },
+  ]
+
+  const pickupSteps = [
+    { key: 'build', label: 'Build Completed', done: true },
+    { key: 'requested', label: 'Requested', done: fStatus !== 'not_requested' },
+    { key: 'processing', label: 'Processing', done: ['ready_for_pickup', 'completed'].includes(fStatus), active: fStatus === 'processing' },
+    { key: 'ready_for_pickup', label: 'Ready for Pickup', done: fStatus === 'completed', active: fStatus === 'ready_for_pickup' },
+    { key: 'completed', label: 'Picked Up', done: fStatus === 'completed' },
+  ]
+
+  const activeSteps = method === 'delivery' ? deliverySteps : pickupSteps
+
+  return (
+    <div className="space-y-4">
+      {error && (
+        <div className="p-3 rounded-2xl border border-red-500/30 bg-red-500/10 text-xs text-red-300 flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {successMessage && (
+        <div className="p-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 text-xs text-emerald-300 flex items-center gap-2">
+          <CheckCircle className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+          <span>{successMessage}</span>
+        </div>
+      )}
+
+      {/* Case 1: Build in progress (<100%) */}
+      {!isCompletedBuild && (
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)]/50 p-5 space-y-3">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-violet-500/10 border border-violet-500/30 text-violet-400">
+              <BriefcaseBusiness className="w-5 h-5" />
+            </div>
+            <div>
+              <h4 className="text-sm font-bold text-white">Custom Build In Progress</h4>
+              <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                Current progress: {Number(order.project_progress || 0)}%
+              </p>
+            </div>
+          </div>
+          <p className="text-xs text-[var(--text-muted)] leading-relaxed">
+            Fulfillment method selection and fulfillment stages unlock once this custom guitar reaches 100% completion in the project workshop.
+          </p>
+          {onManageProject && (
+            <button
+              type="button"
+              onClick={() => onManageProject(order)}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-violet-500/20 border border-violet-500/40 text-xs font-bold text-violet-300 hover:bg-violet-500/30 hover:text-white transition-all cursor-pointer"
+            >
+              <BriefcaseBusiness className="w-4 h-4" />
+              View Project Workshop Tasks
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Case 2: Build Complete & Awaiting Customer Selection */}
+      {isCompletedBuild && fStatus === 'not_requested' && (
+        <div className="rounded-2xl border border-[var(--gold-primary)]/30 bg-[var(--gold-primary)]/5 p-5 space-y-3">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-[var(--gold-primary)]/20 text-[var(--gold-primary)]">
+              <CheckCircle className="w-5 h-5" />
+            </div>
+            <div>
+              <h4 className="text-sm font-bold text-white">Custom Build Complete</h4>
+              <p className="text-xs text-[var(--gold-primary)] mt-0.5">Awaiting customer fulfillment request</p>
+            </div>
+          </div>
+          <p className="text-xs text-[var(--text-muted)] leading-relaxed">
+            The customer has reached 100% build completion and has been prompted to choose between <strong className="text-white">Pickup at Shop</strong> or <strong className="text-white">Shop Delivery</strong>. Once submitted, staff can begin processing the fulfillment.
+          </p>
+        </div>
+      )}
+
+      {/* Case 3: Active Fulfillment Request */}
+      {fStatus !== 'not_requested' && fulfillmentData && (
+        <div className="space-y-4">
+          {/* Method & Status Header Card */}
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)]/50 p-4 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className={`p-2.5 rounded-xl ${
+                  method === 'delivery'
+                    ? 'bg-blue-500/10 border border-blue-500/30 text-blue-400'
+                    : 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400'
+                }`}>
+                  {method === 'delivery' ? <Truck className="w-5 h-5" /> : <MapPin className="w-5 h-5" />}
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-[var(--text-muted)] tracking-wider block">
+                    Fulfillment Method
+                  </span>
+                  <h4 className="text-sm font-bold text-white">
+                    {method === 'delivery' ? 'Shop Delivery' : 'Pickup at Shop'}
+                  </h4>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-bold border ${
+                  fStatus === 'completed'
+                    ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40'
+                    : fStatus === 'requested'
+                    ? 'bg-amber-500/20 text-amber-400 border-amber-500/40'
+                    : 'bg-sky-500/20 text-sky-400 border-sky-500/40'
+                }`}>
+                  <span className={`w-2 h-2 rounded-full ${
+                    fStatus === 'completed' ? 'bg-emerald-400' : fStatus === 'requested' ? 'bg-amber-400' : 'bg-sky-400 animate-pulse'
+                  }`} />
+                  {fStatus.replace(/_/g, ' ').toUpperCase()}
+                </span>
+              </div>
+            </div>
+
+            {/* Stepper */}
+            <div className="pt-2">
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                {activeSteps.map((step, idx) => (
+                  <div
+                    key={step.key}
+                    className={`p-2 rounded-xl border flex flex-col justify-between text-xs transition-all ${
+                      step.done
+                        ? 'bg-emerald-950/30 border-emerald-500/30 text-emerald-300'
+                        : step.active
+                        ? 'bg-sky-950/30 border-sky-500/40 text-sky-200 ring-1 ring-sky-400/40'
+                        : 'bg-white/[0.02] border-white/5 text-white/40'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[9px] font-mono opacity-60">0{idx + 1}</span>
+                      {step.done ? (
+                        <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
+                      ) : step.active ? (
+                        <span className="w-2 h-2 rounded-full bg-sky-400 animate-ping" />
+                      ) : (
+                        <span className="w-1.5 h-1.5 rounded-full bg-white/20" />
+                      )}
+                    </div>
+                    <span className="text-[11px] font-bold leading-tight truncate">{step.label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Details Card */}
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)]/50 p-4 space-y-3">
+            <h5 className="text-xs uppercase font-bold tracking-wider text-[var(--text-muted)]">
+              {method === 'delivery' ? 'Delivery Destination' : 'Workshop Pickup Details'}
+            </h5>
+
+            {method === 'delivery' ? (
+              addr ? (
+                <div className="text-xs text-white/90 space-y-0.5">
+                  <p className="font-semibold text-white">{addr.label || 'Customer Delivery Address'}</p>
+                  <p>{addr.line1}{addr.line2 ? `, ${addr.line2}` : ''}</p>
+                  {addr.barangay && <p>Brgy. {addr.barangay}</p>}
+                  <p>{addr.city}, {addr.province} {addr.postal_code || ''}</p>
+                  <p className="text-[var(--text-muted)]">{addr.country || 'Philippines'}</p>
+                </div>
+              ) : (
+                <p className="text-xs text-[var(--text-muted)]">
+                  Address snapshot not present. Using order shipping address.
+                </p>
+              )
+            ) : (
+              <div className="text-xs text-white/90 space-y-1">
+                <p className="font-semibold text-white">CosmosCraft Custom Shop Workshop</p>
+                <p className="text-[var(--text-muted)]">123 Guitar Artisan Way, Quezon City, Metro Manila</p>
+                {fulfillmentData.pickup_scheduled_at && (
+                  <p className="text-[var(--gold-primary)] font-semibold mt-1">
+                    Scheduled Pickup: {new Date(fulfillmentData.pickup_scheduled_at).toLocaleString('en-PH', {
+                      month: 'short',
+                      day: 'numeric',
+                      year: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {fulfillmentData.notes && (
+              <div className="pt-2 border-t border-[var(--border)] text-xs text-[var(--text-muted)]">
+                <span className="font-semibold text-white">Customer Request Notes: </span>
+                {fulfillmentData.notes}
+              </div>
+            )}
+          </div>
+
+          {/* Staff Notes */}
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)]/50 p-4 space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs uppercase font-bold tracking-wider text-[var(--text-muted)]">
+                Internal Staff / Admin Notes
+              </label>
+              <button
+                type="button"
+                onClick={handleSaveNotes}
+                disabled={notesSaving}
+                className="text-[11px] font-bold text-[var(--gold-primary)] hover:underline cursor-pointer disabled:opacity-50"
+              >
+                {notesSaving ? 'Saving...' : 'Save Notes'}
+              </button>
+            </div>
+            <textarea
+              value={adminNotes}
+              onChange={(e) => setAdminNotes(e.target.value)}
+              rows={2}
+              placeholder="Add courier tracking #, rider details, or pickup inspection notes..."
+              className="w-full px-3 py-2 bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl text-xs text-white placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--gold-primary)] resize-none"
+            />
+          </div>
+
+          {/* Next Stage Action */}
+          {nextStatus && (
+            <div className="pt-2">
+              <button
+                type="button"
+                disabled={updating}
+                onClick={() => handleAdvanceStatus(nextStatus)}
+                className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] px-5 py-3 text-sm font-bold text-black shadow-lg shadow-[var(--gold-primary)]/20 hover:opacity-95 disabled:opacity-50 transition-all cursor-pointer"
+              >
+                {updating ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
+                {updating ? 'Updating Status...' : nextLabel}
+              </button>
+            </div>
+          )}
+
+          {fStatus === 'completed' && (
+            <div className="p-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-center text-xs font-bold text-emerald-400">
+              <CheckCircle className="w-4 h-4 inline mr-1.5" />
+              Fulfillment Complete & Order Synchronized
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function OrderDetailsModal({ order, onClose, onUpdatePaymentStatus, onUpdateOrderStatus, onVerifyPayment, onManageProject, user, initialSection = 'details' }) {
   const [activeSection, setActiveSection] = useState(initialSection)
   const isCODOrder = isCashOnDeliveryOrder(order)
@@ -555,6 +936,19 @@ function OrderDetailsModal({ order, onClose, onUpdatePaymentStatus, onUpdateOrde
             >
               <BriefcaseBusiness className="w-4 h-4" />
               Project Progress
+            </button>
+          )}
+          {(order.order_type === 'customization' || order.project_id) && (
+            <button
+              onClick={() => setActiveSection('fulfillment')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all inline-flex items-center gap-2 cursor-pointer ${
+                activeSection === 'fulfillment'
+                  ? 'bg-[var(--gold-primary)] text-black'
+                  : 'text-[var(--text-muted)] hover:text-white'
+              }`}
+            >
+              <Truck className="w-4 h-4" />
+              Fulfillment
             </button>
           )}
           {order.order_type === 'customization' && (
@@ -734,6 +1128,16 @@ function OrderDetailsModal({ order, onClose, onUpdatePaymentStatus, onUpdateOrde
             <InstallmentTracking
               orderId={order.order_id}
               order={order}
+            />
+          )}
+
+          {activeSection === 'fulfillment' && (
+            <OrderFulfillmentPanel
+              order={order}
+              onUpdateOrder={() => {
+                if (onUpdateOrderStatus) onUpdateOrderStatus()
+              }}
+              onManageProject={onManageProject}
             />
           )}
         </div>
@@ -1821,6 +2225,20 @@ export function OrderManagement({ orders, onRefresh, user, pagination, onManageP
                               >
                                 <Printer className="w-4 h-4" />
                               </button>
+
+                              {(isCustomization || order.project_id) && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedSection('fulfillment')
+                                    setSelectedOrder(order)
+                                  }}
+                                  className="p-2 hover:bg-amber-500/15 text-amber-400 hover:text-amber-300 rounded-xl transition-all border border-transparent hover:border-amber-500/30 cursor-pointer"
+                                  title="Custom Build Fulfillment: Manage Method & Advance Stage"
+                                >
+                                  <Truck className="w-4 h-4" />
+                                </button>
+                              )}
 
                               {(isCustomization || order.project_id) && (
                                 <button

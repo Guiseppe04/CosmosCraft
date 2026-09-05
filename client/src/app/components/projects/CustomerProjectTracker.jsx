@@ -4,10 +4,10 @@ import {
   CheckCircle, Clock, AlertCircle, Guitar, DollarSign, Calendar,
   CreditCard, RefreshCw, HelpCircle, Info, Layers, Hammer,
   CheckSquare, FileText, ChevronDown, ChevronUp, Package, Truck, ShieldCheck,
-  X, Upload, QrCode, Eye, Loader2, Check
+  X, Upload, QrCode, Eye, Loader2, Check, MapPin, Edit2
 } from 'lucide-react';
 import { adminApi } from '../../utils/adminApi';
-import { resolveImageUrl } from '../../utils/apiConfig';
+import { resolveImageUrl, API } from '../../utils/apiConfig';
 
 const formatLabel = (value) => {
   if (!value) return '';
@@ -596,7 +596,13 @@ export default function CustomerProjectTracker({ projectId, projectName, project
   const [buildClaim, setBuildClaim] = useState(null);
   const [buildClaimLoading, setBuildClaimLoading] = useState(false);
   const [markReceivedLoading, setMarkReceivedLoading] = useState(false);
-  const [fulfillmentMethod, setFulfillmentMethod] = useState('pickup_appointment');
+  // Fulfillment state
+  const [fulfillmentData, setFulfillmentData] = useState(null);
+  const [fulfillmentLoading, setFulfillmentLoading] = useState(false);
+  const [isEditingMethod, setIsEditingMethod] = useState(false);
+  const [userAddresses, setUserAddresses] = useState([]);
+  const [selectedAddressId, setSelectedAddressId] = useState(null);
+  const [fulfillmentMethod, setFulfillmentMethod] = useState('pickup');
   const [pickupDate, setPickupDate] = useState('');
   const [pickupTime, setPickupTime] = useState('');
   const [fulfillmentNotes, setFulfillmentNotes] = useState('');
@@ -610,8 +616,53 @@ export default function CustomerProjectTracker({ projectId, projectName, project
       loadRefundEligibility();
       loadBuildClaim();
       loadSettlement();
+      loadFulfillment();
+      loadAddresses();
     }
   }, [projectId]);
+
+  const loadFulfillment = async () => {
+    if (!projectId) return;
+    try {
+      setFulfillmentLoading(true);
+      const res = await adminApi.getProjectFulfillment(projectId);
+      if (res?.data) {
+        setFulfillmentData(res.data);
+        if (res.data.fulfillment_method) {
+          const norm = res.data.fulfillment_method.includes('delivery') ? 'delivery' : 'pickup';
+          setFulfillmentMethod(norm);
+        }
+        if (res.data.delivery_address_id) {
+          setSelectedAddressId(res.data.delivery_address_id);
+        }
+        if (res.data.notes) {
+          setFulfillmentNotes(res.data.notes);
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to load fulfillment data:', err);
+    } finally {
+      setFulfillmentLoading(false);
+    }
+  };
+
+  const loadAddresses = async () => {
+    try {
+      const res = await fetch(`${API}/api/users/me`, { credentials: 'include' });
+      if (res.ok) {
+        const json = await res.json();
+        const addrs = json?.data?.user?.addresses || [];
+        setUserAddresses(addrs);
+        if (addrs.length > 0) {
+          const def = addrs.find((a) => a.is_default) || addrs[0];
+          setSelectedAddressId((prev) => prev || def.address_id);
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to load user addresses:', err);
+    }
+  };
+
 
   const loadData = async () => {
     try {
@@ -717,26 +768,45 @@ export default function CustomerProjectTracker({ projectId, projectName, project
 
   const handleFulfillmentChoice = async () => {
     if (!projectId) return;
-    if (fulfillmentMethod === 'pickup_appointment' && (!pickupDate || !pickupTime)) {
-      setFulfillmentMessage({ type: 'error', text: 'Choose both a pickup date and time.' });
+    if (fulfillmentSaving) return; // Prevent double-clicks
+    
+    if (fulfillmentMethod === 'delivery') {
+      const activeAddress = userAddresses.find((a) => a.address_id === selectedAddressId) || userAddresses[0];
+      if (!activeAddress && !hierarchy?.fulfillment_address_id && !fulfillmentData?.delivery_address_id) {
+        setFulfillmentMessage({ type: 'error', text: 'Please add or select a delivery address before requesting Shop Delivery.' });
+        return;
+      }
+    }
+
+    if (fulfillmentMethod === 'pickup' && (pickupDate || pickupTime) && (!pickupDate || !pickupTime)) {
+      setFulfillmentMessage({ type: 'error', text: 'Choose both a pickup date and time if scheduling an appointment.' });
       return;
     }
+
     try {
       setFulfillmentSaving(true);
       setFulfillmentMessage(null);
       await adminApi.submitProjectFulfillment(projectId, {
         method: fulfillmentMethod,
         notes: fulfillmentNotes,
-        ...(fulfillmentMethod === 'pickup_appointment' ? { scheduled_at: `${pickupDate}T${pickupTime}:00` } : {}),
+        delivery_address_id: selectedAddressId || undefined,
+        ...(fulfillmentMethod === 'pickup' && pickupDate && pickupTime ? { scheduled_at: `${pickupDate}T${pickupTime}:00` } : {}),
       });
-      setFulfillmentMessage({ type: 'success', text: 'Your fulfillment choice has been saved.' });
-      await loadData();
+      setFulfillmentMessage({
+        type: 'success',
+        text: isEditingMethod
+          ? 'Fulfillment preference updated successfully.'
+          : 'Fulfillment request submitted. Your request has been sent to the shop.',
+      });
+      setIsEditingMethod(false);
+      await Promise.all([loadData(), loadFulfillment()]);
     } catch (err) {
       setFulfillmentMessage({ type: 'error', text: err.message || 'Unable to save fulfillment choice.' });
     } finally {
       setFulfillmentSaving(false);
     }
   };
+
 
   const taskSummary = hierarchy?.task_summary || { total: 0, completed: 0, pending: 0 };
   const clampedProgress = Math.min(Math.max(Number(hierarchy?.progress) || 0, 0), 100);
@@ -941,41 +1011,390 @@ export default function CustomerProjectTracker({ projectId, projectName, project
         </motion.div>
       )}
 
-      {customizationStatus === 'fulfillment_pending' && (
-        <div className="rounded-2xl border border-[var(--gold-primary)]/40 bg-[var(--gold-primary)]/5 p-6">
-          <div className="flex items-start gap-3">
-            <Truck className="mt-0.5 h-5 w-5 text-[var(--gold-primary)]" />
-            <div>
-              <p className="font-bold text-white">Your custom build is complete</p>
-              <p className="mt-1 text-sm text-[var(--text-muted)]">Choose how you would like to receive it. You can update your choice until the shop starts fulfillment.</p>
+      {/* ── CUSTOM BUILD FULFILLMENT LIFECYCLE ── */}
+      {(() => {
+        const isBuildComplete =
+          (clampedProgress >= 100 ||
+            hierarchy?.status === 'completed' ||
+            ['fulfillment_pending', 'fulfillment_in_progress', 'fulfilled'].includes(customizationStatus)) &&
+          !isCancelled;
+
+        if (!isBuildComplete) return null;
+
+        const fStatus = fulfillmentData?.status || (customizationStatus === 'fulfillment_pending' ? 'not_requested' : (hierarchy?.fulfillment_status || 'not_requested'));
+        const hasRequested = fStatus !== 'not_requested' && !!fulfillmentData?.id;
+        const isFulfillmentActive = ['processing', 'ready_for_pickup', 'out_for_delivery', 'completed'].includes(fStatus);
+        const activeMethod = (fulfillmentData?.fulfillment_method?.includes('delivery') ? 'delivery' : (fulfillmentData?.fulfillment_method?.includes('pickup') ? 'pickup' : fulfillmentMethod)) || 'pickup';
+
+        const deliverySteps = [
+          { key: 'build_completed', label: 'Build Completed', done: true, active: false },
+          { key: 'requested', label: 'Fulfillment Requested', done: true, active: false },
+          { key: 'processing', label: 'Processing', done: ['out_for_delivery', 'completed'].includes(fStatus), active: fStatus === 'processing' },
+          { key: 'out_for_delivery', label: 'Out for Delivery', done: fStatus === 'completed', active: fStatus === 'out_for_delivery' },
+          { key: 'completed', label: 'Delivered', done: fStatus === 'completed', active: false },
+        ];
+
+        const pickupSteps = [
+          { key: 'build_completed', label: 'Build Completed', done: true, active: false },
+          { key: 'requested', label: 'Pickup Requested', done: true, active: false },
+          { key: 'processing', label: 'Processing', done: ['ready_for_pickup', 'completed'].includes(fStatus), active: fStatus === 'processing' },
+          { key: 'ready_for_pickup', label: 'Ready for Pickup', done: fStatus === 'completed', active: fStatus === 'ready_for_pickup' },
+          { key: 'completed', label: 'Picked Up', done: fStatus === 'completed', active: false },
+        ];
+
+        const activeSteps = activeMethod === 'delivery' ? deliverySteps : pickupSteps;
+        const selectedAddress = userAddresses.find((a) => a.address_id === selectedAddressId) || userAddresses[0] || fulfillmentData?.delivery_address_snapshot || null;
+
+        return (
+          <div className="rounded-3xl border border-[var(--gold-primary)]/40 bg-[var(--surface-dark)] p-6 shadow-2xl space-y-6">
+            {/* Header / Title Card */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-[var(--border)] pb-5">
+              <div className="flex items-start gap-3.5">
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[var(--gold-primary)]/20 text-[var(--gold-primary)] flex-shrink-0">
+                  <CheckCircle className="h-6 w-6" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-white tracking-tight">Your custom build is complete</h3>
+                  <p className="mt-1 text-sm text-[var(--text-muted)]">
+                    Choose how you would like to receive it. You can update your choice until the shop starts fulfillment.
+                  </p>
+                </div>
+              </div>
+
+              {/* Status Badge */}
+              <div className="flex items-center gap-2">
+                <span className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold border ${
+                  fStatus === 'completed'
+                    ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40'
+                    : isFulfillmentActive
+                    ? 'bg-sky-500/20 text-sky-400 border-sky-500/40'
+                    : hasRequested
+                    ? 'bg-amber-500/20 text-amber-400 border-amber-500/40'
+                    : 'bg-[var(--gold-primary)]/20 text-[var(--gold-primary)] border-[var(--gold-primary)]/40'
+                }`}>
+                  <span className={`h-2 w-2 rounded-full ${
+                    fStatus === 'completed' ? 'bg-emerald-400' : isFulfillmentActive ? 'bg-sky-400 animate-pulse' : hasRequested ? 'bg-amber-400' : 'bg-[var(--gold-primary)]'
+                  }`} />
+                  {fStatus === 'not_requested'
+                    ? 'Awaiting Selection'
+                    : fStatus === 'requested'
+                    ? (activeMethod === 'delivery' ? 'Shop Delivery Requested' : 'Pickup at Shop Requested')
+                    : formatLabel(fStatus)}
+                </span>
+              </div>
             </div>
+
+            {/* LOCKED NOTICE when fulfillment has started */}
+            {isFulfillmentActive && (
+              <div className="rounded-2xl border border-sky-500/40 bg-sky-500/10 p-4 flex items-center gap-3">
+                <Clock className="h-5 w-5 text-sky-400 flex-shrink-0" />
+                <div>
+                  <p className="text-sm font-bold text-sky-200">
+                    Fulfillment has started. Your delivery method can no longer be changed.
+                  </p>
+                  <p className="text-xs text-sky-300/80 mt-0.5">
+                    {fStatus === 'processing' && 'Your custom build is being prepared for fulfillment.'}
+                    {fStatus === 'ready_for_pickup' && 'Your custom guitar is ready for pickup at the workshop.'}
+                    {fStatus === 'out_for_delivery' && 'Your custom guitar is out for delivery with our courier.'}
+                    {fStatus === 'completed' && 'Your custom build has been successfully fulfilled.'}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* LIFECYCLE PROGRESS STEPPER */}
+            {hasRequested && (
+              <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] p-5 space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs uppercase tracking-wider font-bold text-[var(--text-muted)]">
+                    Fulfillment Progress
+                  </span>
+                  <span className="text-xs font-semibold text-[var(--gold-primary)]">
+                    Method: {activeMethod === 'delivery' ? 'Shop Delivery' : 'Pickup at Shop'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 pt-2">
+                  {activeSteps.map((step, idx) => (
+                    <div
+                      key={step.key}
+                      className={`p-3 rounded-xl border flex flex-col justify-between transition-all ${
+                        step.done
+                          ? 'bg-emerald-950/40 border-emerald-500/30 text-emerald-200'
+                          : step.active
+                          ? 'bg-sky-950/40 border-sky-500/40 text-sky-200 ring-1 ring-sky-400/40'
+                          : 'bg-white/[0.02] border-white/5 text-white/40'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-[10px] font-mono opacity-60">0{idx + 1}</span>
+                        {step.done ? (
+                          <CheckCircle className="h-4 w-4 text-emerald-400" />
+                        ) : step.active ? (
+                          <span className="h-3 w-3 rounded-full bg-sky-400 animate-ping" />
+                        ) : (
+                          <span className="h-2 w-2 rounded-full bg-white/20" />
+                        )}
+                      </div>
+                      <p className="text-xs font-bold leading-tight">{step.label}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* STATE A: REQUEST SUBMITTED & NOT LOCKED (Customer can view preference or toggle change) */}
+            {hasRequested && !isFulfillmentActive && !isEditingMethod && (
+              <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] p-5 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div>
+                    <span className="text-xs uppercase tracking-wider text-[var(--text-muted)] font-bold block mb-1">
+                      Fulfillment Method
+                    </span>
+                    <p className="text-base font-bold text-white flex items-center gap-2">
+                      {activeMethod === 'delivery' ? (
+                        <>
+                          <Truck className="h-5 w-5 text-[var(--gold-primary)]" />
+                          Shop Delivery
+                        </>
+                      ) : (
+                        <>
+                          <MapPin className="h-5 w-5 text-[var(--gold-primary)]" />
+                          Pickup at Shop
+                        </>
+                      )}
+                    </p>
+                  </div>
+
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsEditingMethod(true);
+                        setFulfillmentMessage(null);
+                      }}
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-[var(--gold-primary)] text-sm font-bold text-[var(--gold-primary)] hover:bg-[var(--gold-primary)]/10 transition-all cursor-pointer"
+                    >
+                      <Edit2 className="h-4 w-4" />
+                      Change Fulfillment Method
+                    </button>
+                  </div>
+                </div>
+
+                {/* Details summary */}
+                {activeMethod === 'delivery' && (
+                  <div className="pt-3 border-t border-[var(--border)] text-xs text-[var(--text-muted)] space-y-1">
+                    <p className="font-semibold text-white">Delivery Address:</p>
+                    {selectedAddress ? (
+                      <p>
+                        {selectedAddress.line1}
+                        {selectedAddress.line2 ? `, ${selectedAddress.line2}` : ''}
+                        {selectedAddress.barangay ? `, Brgy. ${selectedAddress.barangay}` : ''}
+                        {selectedAddress.city ? `, ${selectedAddress.city}` : ''}
+                        {selectedAddress.province ? `, ${selectedAddress.province}` : ''}
+                      </p>
+                    ) : (
+                      <p className="text-amber-400">Checkout saved delivery address will be used.</p>
+                    )}
+                  </div>
+                )}
+
+                {activeMethod === 'pickup' && (
+                  <div className="pt-3 border-t border-[var(--border)] text-xs text-[var(--text-muted)] space-y-1">
+                    <p className="font-semibold text-white">Pickup Location:</p>
+                    <p>CosmosCraft Workshop & Custom Shop, Luzon</p>
+                    {pickupDate && (
+                      <p className="text-[var(--gold-primary)] font-semibold mt-1">
+                        Scheduled: {pickupDate} {pickupTime ? `at ${pickupTime}` : ''}
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {fulfillmentNotes && (
+                  <div className="pt-2 text-xs text-[var(--text-muted)]">
+                    <span className="font-semibold text-white">Notes: </span>
+                    {fulfillmentNotes}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* STATE B: SELECTION FORM (shown when not yet requested OR when customer clicked [Change Fulfillment Method]) */}
+            {(!hasRequested || isEditingMethod) && !isFulfillmentActive && (
+              <div className="space-y-4">
+                <p className="text-xs uppercase tracking-wider font-bold text-[var(--text-muted)]">
+                  {isEditingMethod ? 'Update Your Fulfillment Method' : 'Select Fulfillment Method'}
+                </p>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={() => setFulfillmentMethod('pickup')}
+                    className={`rounded-2xl border p-4 text-left transition-all cursor-pointer ${
+                      fulfillmentMethod === 'pickup'
+                        ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)]/10 ring-1 ring-[var(--gold-primary)]/50'
+                        : 'border-[var(--border)] bg-[var(--bg-primary)] hover:border-white/20'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <MapPin className="h-5 w-5 text-[var(--gold-primary)]" />
+                      <p className="font-bold text-white">Pickup at Shop</p>
+                    </div>
+                    <p className="mt-2 text-xs text-[var(--text-muted)] leading-relaxed">
+                      Collect your custom guitar directly from our workshop. Book an optional pickup time.
+                    </p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setFulfillmentMethod('delivery')}
+                    className={`rounded-2xl border p-4 text-left transition-all cursor-pointer ${
+                      fulfillmentMethod === 'delivery'
+                        ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)]/10 ring-1 ring-[var(--gold-primary)]/50'
+                        : 'border-[var(--border)] bg-[var(--bg-primary)] hover:border-white/20'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Truck className="h-5 w-5 text-[var(--gold-primary)]" />
+                      <p className="font-bold text-white">Shop Delivery</p>
+                    </div>
+                    <p className="mt-2 text-xs text-[var(--text-muted)] leading-relaxed">
+                      We will safely ship your custom guitar to your saved Luzon delivery address.
+                    </p>
+                  </button>
+                </div>
+
+                {/* Delivery Address Selector */}
+                {fulfillmentMethod === 'delivery' && (
+                  <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs uppercase tracking-wider font-bold text-[var(--text-muted)]">
+                        Delivery Address
+                      </span>
+                      <span className="text-[11px] text-[var(--gold-primary)]">Luzon Addresses Only</span>
+                    </div>
+
+                    {userAddresses.length > 0 ? (
+                      <div className="space-y-2">
+                        {userAddresses.map((addr) => {
+                          const isSelected = selectedAddressId === addr.address_id;
+                          return (
+                            <label
+                              key={addr.address_id}
+                              onClick={() => setSelectedAddressId(addr.address_id)}
+                              className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                                isSelected
+                                  ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)]/10 text-white'
+                                  : 'border-[var(--border)] text-white/80 hover:bg-white/5'
+                              }`}
+                            >
+                              <input
+                                type="radio"
+                                name="fulfillment_address"
+                                checked={isSelected}
+                                onChange={() => setSelectedAddressId(addr.address_id)}
+                                className="mt-1 accent-[var(--gold-primary)]"
+                              />
+                              <div className="text-xs min-w-0 flex-1">
+                                <span className="font-bold text-white block">
+                                  {addr.label || 'Home'} {addr.is_default && '(Default)'}
+                                </span>
+                                <p className="text-[var(--text-muted)] mt-0.5">
+                                  {addr.line1}
+                                  {addr.line2 ? `, ${addr.line2}` : ''}
+                                  {addr.barangay ? `, Brgy. ${addr.barangay}` : ''}, {addr.city}, {addr.province}
+                                </p>
+                              </div>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="p-3 rounded-xl border border-amber-500/30 bg-amber-500/10 text-xs text-amber-300">
+                        <AlertCircle className="h-4 w-4 inline mr-1.5 text-amber-400" />
+                        Please add or select a delivery address before requesting Shop Delivery.
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Optional pickup scheduling */}
+                {fulfillmentMethod === 'pickup' && (
+                  <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] p-4 space-y-2">
+                    <span className="text-xs uppercase tracking-wider font-bold text-[var(--text-muted)]">
+                      Preferred Pickup Schedule (Optional)
+                    </span>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <input
+                        type="date"
+                        value={pickupDate}
+                        onChange={(e) => setPickupDate(e.target.value)}
+                        className="rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-[var(--gold-primary)]"
+                      />
+                      <input
+                        type="time"
+                        value={pickupTime}
+                        onChange={(e) => setPickupTime(e.target.value)}
+                        className="rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-1 focus:ring-[var(--gold-primary)]"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Optional notes */}
+                <textarea
+                  value={fulfillmentNotes}
+                  onChange={(e) => setFulfillmentNotes(e.target.value)}
+                  rows={2}
+                  placeholder="Optional delivery or pickup notes for our luthier team"
+                  className="w-full rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-2.5 text-sm text-white placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--gold-primary)]"
+                />
+
+                {fulfillmentMessage && (
+                  <p className={`text-sm font-semibold ${fulfillmentMessage.type === 'error' ? 'text-red-400' : 'text-emerald-400'}`}>
+                    {fulfillmentMessage.text}
+                  </p>
+                )}
+
+                <div className="flex items-center gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={handleFulfillmentChoice}
+                    disabled={fulfillmentSaving}
+                    className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] px-5 py-3 text-sm font-bold text-black shadow-lg shadow-[var(--gold-primary)]/20 hover:opacity-95 disabled:opacity-50 transition-all cursor-pointer"
+                  >
+                    {fulfillmentSaving ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <CheckCircle className="h-4 w-4" />
+                    )}
+                    {fulfillmentSaving
+                      ? 'Submitting...'
+                      : isEditingMethod
+                      ? 'Update Fulfillment Preference'
+                      : 'Submit Fulfillment Request'}
+                  </button>
+
+                  {isEditingMethod && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsEditingMethod(false);
+                        setFulfillmentMessage(null);
+                      }}
+                      className="px-4 py-3 rounded-xl border border-[var(--border)] text-sm font-semibold text-white/70 hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
-          <div className="mt-5 grid gap-3 sm:grid-cols-2">
-            <button type="button" onClick={() => setFulfillmentMethod('pickup_appointment')} className={`rounded-xl border p-4 text-left ${fulfillmentMethod === 'pickup_appointment' ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)]/10' : 'border-[var(--border)]'}`}>
-              <Calendar className="h-5 w-5 text-[var(--gold-primary)]" />
-              <p className="mt-2 font-semibold text-white">Pick up at shop</p>
-              <p className="mt-1 text-xs text-[var(--text-muted)]">Book an available date and time.</p>
-            </button>
-            <button type="button" onClick={() => setFulfillmentMethod('shop_delivery')} className={`rounded-xl border p-4 text-left ${fulfillmentMethod === 'shop_delivery' ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)]/10' : 'border-[var(--border)]'}`}>
-              <Truck className="h-5 w-5 text-[var(--gold-primary)]" />
-              <p className="mt-2 font-semibold text-white">Delivery</p>
-              <p className="mt-1 text-xs text-[var(--text-muted)]">The shop will arrange delivery to your saved checkout address.</p>
-            </button>
-          </div>
-          {fulfillmentMethod === 'pickup_appointment' && (
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <input type="date" value={pickupDate} onChange={(event) => setPickupDate(event.target.value)} className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-white" />
-              <input type="time" value={pickupTime} onChange={(event) => setPickupTime(event.target.value)} className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-white" />
-            </div>
-          )}
-          <textarea value={fulfillmentNotes} onChange={(event) => setFulfillmentNotes(event.target.value)} rows={2} placeholder="Optional delivery or pickup notes" className="mt-3 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-white" />
-          {fulfillmentMessage && <p className={`mt-3 text-sm ${fulfillmentMessage.type === 'error' ? 'text-red-300' : 'text-emerald-300'}`}>{fulfillmentMessage.text}</p>}
-          <button type="button" onClick={handleFulfillmentChoice} disabled={fulfillmentSaving} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] px-4 py-2.5 text-sm font-bold text-black disabled:opacity-50">
-            {fulfillmentSaving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
-            {fulfillmentSaving ? 'Saving...' : 'Confirm fulfillment choice'}
-          </button>
-        </div>
-      )}
+        );
+      })()}
+
 
       {/* Progress Header */}
       <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6">

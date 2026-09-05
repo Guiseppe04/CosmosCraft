@@ -29,6 +29,7 @@ const cloudinaryRoutes = require('./routes/cloudinaryRoutes');
 const paymentSettingsRoutes = require('./routes/paymentSettingsRoutes');
 const installmentRoutes = require('./routes/installmentRoutes');
 const addressRoutes = require('./routes/addressRoutes.js');
+const fulfillmentRoutes = require('./routes/fulfillmentRoutes');
 const { errorHandler, notFound } = require('./middleware/errorHandler.js');
 const { createRateLimiter } = require('./middleware/rateLimitMiddleware.js');
 
@@ -118,6 +119,7 @@ app.use('/api/cloudinary', cloudinaryRoutes);
 app.use('/api/payment-settings', paymentSettingsRoutes);
 app.use('/api/installments', installmentRoutes);
 app.use('/api/address', addressRoutes);
+app.use('/api/fulfillment', fulfillmentRoutes);
 app.use('/user', userRoutes);
 
 const path = require('path');
