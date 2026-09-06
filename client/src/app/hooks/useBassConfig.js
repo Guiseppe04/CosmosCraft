@@ -36,6 +36,8 @@ import {
   bassAsset,
   bassBuilder,
   VADER_PICKUP_OPTIONS,
+  VADER_STRAP_BUTTON_OPTIONS,
+  VADER_ELECTRONICS_CAVITY_COVER_OPTIONS,
   // New schema option constants (reused from guitar builder)
   DEXTERITY_OPTIONS,
   STRING_COUNT_OPTIONS,
@@ -1109,7 +1111,7 @@ const mergedInlayMaterialOptions = useMemo(() => {
   )
   const knobOptions = useMemo(
     () =>
-      Object.entries(mergedKnobOptions[config.bassType] ?? mergedKnobOptions.vader).map(([value, option]) => ({
+      config.bassType === 'vader' ? [] : Object.entries(mergedKnobOptions[config.bassType] ?? mergedKnobOptions.vader).map(([value, option]) => ({
         value,
         ...option,
         preview: option.src,
@@ -1166,20 +1168,27 @@ const mergedInlayMaterialOptions = useMemo(() => {
     [config.bassType, mergedPickupTypeStyleOptions],
   )
   const hardwareOptions = useMemo(
-    () => Object.entries(mergedHardwareOptions).map(([value, option]) => ({ value, ...option })),
-    [mergedHardwareOptions],
+    () => config.bassType === 'vader' ? [] : Object.entries(mergedHardwareOptions).map(([value, option]) => ({ value, ...option })),
+    [config.bassType, mergedHardwareOptions],
+  )
+  const vaderHardwareOptions = useMemo(
+    () => config.bassType === 'vader' ? [
+      { value: 'chrome', label: 'Chrome', note: 'Standard bright hardware', price: 0 },
+      { value: 'black', label: 'Black', note: 'Stealth hardware', price: 45 },
+    ] : [],
+    [config.bassType],
   )
   const backplateOptions = useMemo(
-    () => Object.entries(mergedBackplateOptions[config.bassType] ?? mergedBackplateOptions.vader).map(([value, option]) => ({ value, ...option })),
+    () => config.bassType === 'vader' ? [] : Object.entries(mergedBackplateOptions[config.bassType] ?? mergedBackplateOptions.vader).map(([value, option]) => ({ value, ...option })),
     [config.bassType, mergedBackplateOptions],
   )
   const pickupScrewOptions = useMemo(
-    () => Object.entries(mergedPickupScrewOptions[config.bassType] ?? mergedPickupScrewOptions.vader).map(([value, option]) => ({ value, ...option })),
+    () => config.bassType === 'vader' ? [] : Object.entries(mergedPickupScrewOptions[config.bassType] ?? mergedPickupScrewOptions.vader).map(([value, option]) => ({ value, ...option })),
     [config.bassType, mergedPickupScrewOptions],
   )
   const controlPlateOptions = useMemo(
-    () => Object.entries(mergedControlPlateOptions).map(([value, option]) => ({ value, ...option })),
-    [mergedControlPlateOptions],
+    () => config.bassType === 'vader' ? [] : Object.entries(mergedControlPlateOptions).map(([value, option]) => ({ value, ...option })),
+    [config.bassType, mergedControlPlateOptions],
   )
 
   const dexterityOptions = useMemo(
@@ -1396,16 +1405,16 @@ const mergedInlayMaterialOptions = useMemo(() => {
     [mergedOutputJackOptions],
   )
   const strapButtonOptions = useMemo(
-    () => Object.entries(mergedStrapButtonOptions).map(([value, option]) => ({ value, ...option })),
-    [mergedStrapButtonOptions],
+    () => config.bassType === 'vader' ? [] : Object.entries(mergedStrapButtonOptions).map(([value, option]) => ({ value, ...option })),
+    [config.bassType, mergedStrapButtonOptions],
   )
   const tunerButtonOptions = useMemo(
     () => Object.entries(mergedTunerButtonOptions).map(([value, option]) => ({ value, ...option })),
     [mergedTunerButtonOptions],
   )
   const electronicsCavityCoverOptions = useMemo(
-    () => Object.entries(mergedElectronicsCavityCoverOptions).map(([value, option]) => ({ value, ...option })),
-    [mergedElectronicsCavityCoverOptions],
+    () => config.bassType === 'vader' ? [] : Object.entries(mergedElectronicsCavityCoverOptions).map(([value, option]) => ({ value, ...option })),
+    [config.bassType, mergedElectronicsCavityCoverOptions],
   )
   const tremoloCoverOptionList = useMemo(
     () => Object.entries(tremoloCoverOptions || {}).map(([value, option]) => ({ value, ...option })),
@@ -1604,6 +1613,19 @@ const mergedInlayMaterialOptions = useMemo(() => {
         { value: 'none', label: 'None (Stock)', note: 'No color customization', price: 0 },
         { value: 'custom', label: 'Custom RGB Color', note: 'Apply custom RGB color shift', price: 10 },
       ],
+      // Vader-specific hardware options
+      vaderHardwareOptions: [
+        { value: 'chrome', label: 'Chrome', note: 'Standard bright hardware', price: 0 },
+        { value: 'black', label: 'Black', note: 'Stealth hardware', price: 45 },
+      ],
+      vaderKnobsOptions: [
+        { value: 'hardwareColor', label: 'Hardware Color Knobs', note: 'Knobs matched to hardware color', price: 0 },
+        { value: 'abalone', label: 'Metal Knobs w/ Abalone Inlays', note: 'Chrome knobs with abalone inlay', price: 0 },
+        { value: 'pearl', label: 'Metal Knobs w/ White Pearl Inlays', note: 'Chrome knobs with white pearl inlay', price: 0 },
+        { value: 'tamarind', label: 'Tamarind Wood', note: 'Warm wood-look knobs', price: 0 },
+      ],
+      vaderStrapButtonOptions: Object.entries(VADER_STRAP_BUTTON_OPTIONS).map(([value, option]) => ({ value, ...option })),
+      vaderElectronicsCavityCoverOptions: Object.entries(VADER_ELECTRONICS_CAVITY_COVER_OPTIONS).map(([value, option]) => ({ value, ...option })),
       // New Hardware options
       saddleOptions,
       nutOptions,

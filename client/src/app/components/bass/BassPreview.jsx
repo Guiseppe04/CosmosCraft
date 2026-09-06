@@ -8,6 +8,9 @@ import {
   BASS_NECK_NUT,
   resolveBassVariant,
   VADER_PICKUP_OPTIONS,
+  VADER_STRAP_BUTTON_OPTIONS,
+  VADER_ELECTRONICS_CAVITY_COVER_OPTIONS,
+  BASS_KNOB_OPTIONS,
 } from '../../lib/bassBuilderData.js'
 
 const DEBUG = Boolean(import.meta.env.DEV)
@@ -275,6 +278,9 @@ function BassPreview({ config, view, onViewChange, modelImageSrc, stickerOverlay
       vaderNeckPickup: config.vaderNeckPickup ?? 'radiumHumbucker',
       vaderPickupColor: config.vaderPickupColor ?? 'none',
       vaderPickupColorRgb: config.vaderPickupColorRgb ?? '#000000',
+      vaderKnobs: config.vaderKnobs ?? 'hardwareColor',
+      vaderStrapButtons: config.vaderStrapButtons ?? 'standard',
+      vaderElectronicsCavityCover: config.vaderElectronicsCavityCover ?? 'black',
      }
      if (DEBUG) console.log('[RESOLVED CONFIG]', resolved)
      return resolved
@@ -560,7 +566,9 @@ const inlay = {
       inlay,
       backplate: getBackplateByStrings(
         bassBuilder.BACKPLATE_OPTIONS[resolvedConfig.bassType],
-        resolvedConfig.backplate,
+        resolvedConfig.bassType === 'vader'
+          ? (resolvedConfig.vaderBridgePickup === 'fishmanFluence' ? 'acf' : 'standard')
+          : resolvedConfig.backplate,
         resolvedConfig.strings,
       ),
       controlPlate: bassBuilder.CONTROL_PLATE_OPTIONS[resolvedConfig.controlPlate],
@@ -661,6 +669,19 @@ const inlay = {
 
     const knobsByModel = bassBuilder.KNOB_OPTIONS[resolvedConfig.bassType]
     if (knobsByModel) resolvedAssets.knobs = knobsByModel[resolvedConfig.knobs]
+
+    if (resolvedConfig.bassType === 'vader') {
+      const vaderKnobEntry = BASS_KNOB_OPTIONS.vader[resolvedConfig.vaderKnobs]
+      if (vaderKnobEntry) resolvedAssets.knobs = vaderKnobEntry
+
+      const strapOpt = VADER_STRAP_BUTTON_OPTIONS[resolvedConfig.vaderStrapButtons]
+      if (strapOpt) {
+        resolvedAssets.strapButtons = strapOpt
+      }
+
+      const cavityOpt = VADER_ELECTRONICS_CAVITY_COVER_OPTIONS[resolvedConfig.vaderElectronicsCavityCover]
+      if (cavityOpt) resolvedAssets.electronicsCavityCover = cavityOpt
+    }
 
     const pickupScrewsByModel = bassBuilder.PICKUP_SCREW_OPTIONS[resolvedConfig.bassType]
     if (pickupScrewsByModel) resolvedAssets.pickupScrews = pickupScrewsByModel[resolvedConfig.pickupScrews]
@@ -771,16 +792,39 @@ const inlay = {
     if (resolvedConfig.bassType === 'jb' && assets.controlPlate?.src) {
       layers.push({ name: 'control-plate', src: assets.controlPlate.src, style: { zIndex: 123 }, protectedLayer: true })
     }
-    if (assets.knobs?.src) {
-      layers.push({ name: 'knobs', src: assets.knobs.src, style: { zIndex: 124 }, protectedLayer: true })
+        if (resolvedConfig.bassType === 'vader' && assets.knobs) {
+      const knobType = assets.knobs.type
+      if (knobType === 'hardwareColor' && assets.knobs.src) {
+        layers.push({
+          name: 'knobs',
+          src: assets.knobs.src,
+          style: {
+            zIndex: 124,
+            filter:
+              colorKey === 'black' ? 'brightness(0.35) saturate(0)' :
+              colorKey === 'gold' ? 'sepia(1) saturate(3) hue-rotate(-15deg) brightness(1.05)' :
+              'none', // chrome — no filter, use the photo as-is
+          },
+          protectedLayer: true,
+        })
+      } else if (knobType === 'overlay' && assets.knobs.src) {
+        layers.push({ name: 'knobs', src: assets.knobs.src, style: { zIndex: 124 }, protectedLayer: true })
+        if (assets.knobs.overlaySrc) {
+          layers.push({ name: 'knobs-overlay', src: assets.knobs.overlaySrc, style: { zIndex: 125 }, protectedLayer: true })
+        }
+      } else if (knobType === 'solid' && assets.knobs.src) {
+        layers.push({ name: 'knobs', src: assets.knobs.src, style: { zIndex: 124 }, protectedLayer: true })
+      }
     }
     const bridgeSrc = resolveBassVariant(assets.bridge?.assets, colorKey)
     if (bridgeSrc) {
       layers.push({ name: 'bridge', src: bridgeSrc, style: { zIndex: 125 }, protectedLayer: true })
     }
-    const strapSrc = bassBuilder.resolveCatalogVariant(resolvedConfig.bassType, 'front', 'strap buttons/standard', resolvedConfig.strings, colorKey)
-      || assets.bodyAssets?.front?.strap?.[colorKey]
-      || assets.bodyAssets?.front?.strap?.chrome
+    const strapSrc = resolvedConfig.bassType === 'vader'
+      ? assets.strapButtons?.frontSrc?.(colorKey)
+      : (bassBuilder.resolveCatalogVariant(resolvedConfig.bassType, 'front', 'strap buttons/standard', resolvedConfig.strings, colorKey)
+        || assets.bodyAssets?.front?.strap?.[colorKey]
+        || assets.bodyAssets?.front?.strap?.chrome)
     if (strapSrc) {
       layers.push({ name: 'strap', src: strapSrc, style: { zIndex: 126 }, protectedLayer: true })
     }
@@ -788,22 +832,28 @@ const inlay = {
     // Vader top coat layers (composited from the three-layer gloss/raw-tone/matte stack)
     if (resolvedConfig.bassType === 'vader') {
       const topCoatBaseMap = {
-        clearGloss: { file: 'gloss'},
-        tungOil: { file: 'raw-tone'},
-        satinMatte: { file: 'matte'},
+        clearGloss: { file: 'gloss' },
+        tungOil: { file: 'raw-tone' },
+        satinMatte: { file: 'matte' },
       }
       const topCoatSpec = topCoatBaseMap[resolvedConfig.topCoat] || topCoatBaseMap.clearGloss
       const topCoatBaseSrc = bassAsset(`bass/vader/front/shadows_highlights/${topCoatSpec.file}.png`)
       const edgeShadowSrc = bassAsset('bass/vader/front/shadows_highlights/edge-shadow.png')
       const multiplySrc = bassAsset('bass/vader/front/shadows_highlights/multiply.png')
+      const coatMask = bodyMask
+
+      // Sits ABOVE body wood/finish but BELOW all hardware (neck starts at 100,
+      // pickguard at 9, bridge/strap/knobs up to 126). This is a wood-finish
+      // effect, not a "varnish over the hardware" effect — it must render
+      // before anything that's mounted on top of the body.
       if (topCoatBaseSrc) {
-        layers.push({ name: 'top-coat-base', src: topCoatBaseSrc, style: { zIndex: 200} })
+        layers.push({ name: 'top-coat-base', maskSrc: coatMask, style: { backgroundImage: `url(${topCoatBaseSrc})`, zIndex: 7 } })
       }
       if (edgeShadowSrc) {
-        layers.push({ name: 'top-coat-edge', src: edgeShadowSrc, style: { zIndex: 200} })
+        layers.push({ name: 'top-coat-edge', maskSrc: coatMask, style: { backgroundImage: `url(${edgeShadowSrc})`, zIndex: 7 } })
       }
       if (multiplySrc) {
-        layers.push({ name: 'top-coat-multiply', src: multiplySrc, style: { zIndex: 200} })
+        layers.push({ name: 'top-coat-multiply', maskSrc: coatMask, style: { backgroundImage: `url(${multiplySrc})`, zIndex: 7 } })
       }
     }
 
@@ -842,7 +892,7 @@ const inlay = {
     const orderedLayers = sortLayersByZIndex(layers)
     if (DEBUG) console.log('[FRONT LAYERS]', orderedLayers.map(l => l.name))
     return orderedLayers
-  }, [assets, colorKey, resolvedConfig.pickguard, resolvedConfig.topCoat, resolvedConfig.burstEdges, resolvedConfig.threePieceBody, resolvedConfig.vaderBridgePickup, resolvedConfig.vaderNeckPickup, resolvedConfig.vaderPickupColor, resolvedConfig.vaderPickupColorRgb])
+  }, [assets, colorKey, resolvedConfig.pickguard, resolvedConfig.topCoat, resolvedConfig.burstEdges, resolvedConfig.threePieceBody, resolvedConfig.vaderBridgePickup, resolvedConfig.vaderNeckPickup, resolvedConfig.vaderPickupColor, resolvedConfig.vaderPickupColorRgb, resolvedConfig.vaderKnobs, resolvedConfig.vaderStrapButtons, resolvedConfig.hardware])
 
   const rearLayers = useMemo(() => {
     const layers = []
@@ -902,51 +952,38 @@ const inlay = {
     if (assets.backplate?.src) {
       layers.push({ name: 'backplate', src: assets.backplate.src, style: { zIndex: 108, opacity: 0.95 }, protectedLayer: true })
     }
-    if (assets.rearStrap) {
-      layers.push({ name: 'rear-strap', src: assets.rearStrap, style: { zIndex: 109, opacity: 0.95 }, protectedLayer: true })
+    if (resolvedConfig.bassType === 'vader' && assets.electronicsCavityCover?.src) {
+      layers.push({ name: 'electronics-cavity-cover', src: assets.electronicsCavityCover.src, style: { zIndex: 109, opacity: 0.95 }, protectedLayer: true })
     }
-    if (assets.rearStrapLocks) {
-      layers.push({ name: 'rear-straplocks', src: assets.rearStrapLocks, style: { zIndex: 110, opacity: 0.95 }, protectedLayer: true })
+    if (resolvedConfig.bassType === 'vader' && assets.strapButtons?.backSrc?.(colorKey)) {
+      layers.push({ name: 'rear-strap', src: assets.strapButtons.backSrc(colorKey), style: { zIndex: 110, opacity: 0.95 }, protectedLayer: true })
     }
 
-// Vader top coat layers for rear view
-if (resolvedConfig.bassType === 'vader') {
-  const rearTopCoatBaseMap = {
-    clearGloss: { file: 'gloss-tung-oil' },
-    rawTone: { file: 'op' },
-    tungOil: { file: 'op' },
-    satinMatte: { file: 'matte-tung-oil' },
-  }
-  const topCoatSpec = rearTopCoatBaseMap[resolvedConfig.topCoat] || rearTopCoatBaseMap.clearGloss
-  const topCoatBaseSrc = bassAsset(`bass/vader/back/shadows_highlights/${topCoatSpec.file}.png`)
-  const edgeShadowSrc = bassAsset('bass/vader/back/shadows_highlights/edge-shadow.png')
-  const multiplySrc = bassAsset('bass/vader/back/shadows_highlights/multiply.png')
+    if (resolvedConfig.bassType === 'vader') {
+      const rearTopCoatBaseMap = {
+        clearGloss: { file: 'gloss-tung-oil' },
+        rawTone: { file: 'op' },
+        tungOil: { file: 'op' },
+        satinMatte: { file: 'matte-tung-oil' },
+      }
+      const topCoatSpec = rearTopCoatBaseMap[resolvedConfig.topCoat] || rearTopCoatBaseMap.clearGloss
+      const topCoatBaseSrc = bassAsset(`bass/vader/back/shadows_highlights/${topCoatSpec.file}.png`)
+      const edgeShadowSrc = bassAsset('bass/vader/back/shadows_highlights/edge-shadow.png')
+      const multiplySrc = bassAsset('bass/vader/back/shadows_highlights/multiply.png')
+      const coatMask = rearBodyMask
 
-  // Clip every coat layer to the real rear body silhouette
-  const coatMask = rearBodyMask
-
-  if (topCoatBaseSrc) {
-    layers.push({
-      name: 'rear-top-coat-base',
-      maskSrc: coatMask,
-      style: { backgroundImage: `url(${topCoatBaseSrc})`, zIndex: 200 },
-    })
-  }
-  if (edgeShadowSrc) {
-    layers.push({
-      name: 'rear-top-coat-edge',
-      maskSrc: coatMask,
-      style: { backgroundImage: `url(${edgeShadowSrc})`, zIndex: 201 },
-    })
-  }
-  if (multiplySrc) {
-    layers.push({
-      name: 'rear-top-coat-multiply',
-      maskSrc: coatMask,
-      style: { backgroundImage: `url(${multiplySrc})`, zIndex: 202 },
-    })
-  }
-}
+      // Same reordering as front: below rear-strap (110), backplate (108),
+      // headstock finish (105-109), above body wood/finish (1-2).
+      if (topCoatBaseSrc) {
+        layers.push({ name: 'rear-top-coat-base', maskSrc: coatMask, style: { backgroundImage: `url(${topCoatBaseSrc})`, zIndex: 3 } })
+      }
+      if (edgeShadowSrc) {
+        layers.push({ name: 'rear-top-coat-edge', maskSrc: coatMask, style: { backgroundImage: `url(${edgeShadowSrc})`, zIndex: 3 } })
+      }
+      if (multiplySrc) {
+        layers.push({ name: 'rear-top-coat-multiply', maskSrc: coatMask, style: { backgroundImage: `url(${multiplySrc})`, zIndex: 3 } })
+      }
+    }
 
     // Vader burst edges for rear (skip reverse — front only)
     if (resolvedConfig.bassType === 'vader' && resolvedConfig.burstEdges && resolvedConfig.burstEdges !== 'none' && resolvedConfig.burstEdges !== 'reverseTranslucentBlackBurst') {
@@ -979,7 +1016,7 @@ if (resolvedConfig.bassType === 'vader') {
     const orderedLayers = sortLayersByZIndex(layers)
     if (DEBUG) console.log('[REAR LAYERS]', orderedLayers.map(l => l.name))
     return orderedLayers
-  }, [assets, resolvedConfig.topCoat, resolvedConfig.burstEdges, resolvedConfig.threePieceBody])
+  }, [assets, resolvedConfig.topCoat, resolvedConfig.burstEdges, resolvedConfig.threePieceBody, resolvedConfig.vaderBridgePickup, resolvedConfig.vaderElectronicsCavityCover, resolvedConfig.vaderStrapButtons])
 
   const previewLayout = bassBuilder.PREVIEW_LAYOUTS[resolvedConfig.bassType] ?? { scale: 0.93, x: 0, y: 26 }
   const previewScale = view === 'rear' ? previewLayout.scale * 0.98 : previewLayout.scale

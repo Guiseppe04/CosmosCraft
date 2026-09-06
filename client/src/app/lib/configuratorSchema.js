@@ -46,6 +46,8 @@ import {
 
 import {
   VADER_PICKUP_OPTIONS,
+  VADER_STRAP_BUTTON_OPTIONS,
+  VADER_ELECTRONICS_CAVITY_COVER_OPTIONS,
 } from './bassBuilderData'
 
 // ============================================================
@@ -262,6 +264,9 @@ export const CATEGORIES = {
           vaderNeckPickup: 'radiumHumbucker',
           vaderPickupColor: 'none',
           vaderPickupColorRgb: '#000000',
+           vaderKnobs: 'hardwareColor',
+           vaderStrapButtons: 'standard',
+           vaderElectronicsCavityCover: 'black',
           controls: 'off',
           saddle: 'chrome',
           nut: 'blackGraphTech',
@@ -946,6 +951,54 @@ export const OPTION_FIELDS = [
     },
   },
   {
+    section: 'Hardware',
+    key: 'hardware',
+    label: 'Hardware Color',
+    type: 'select',
+    condition: (config) => config.bassType === 'vader',
+    options: [
+      { value: 'chrome', label: 'Chrome', note: 'Standard bright hardware', price: 0 },
+      { value: 'black', label: 'Black', note: 'Stealth hardware', price: 45 },
+    ],
+  },
+  {
+    section: 'Hardware',
+    key: 'knobs',
+    label: 'Knobs',
+    type: 'select',
+    condition: (config) => config.bassType === 'pb' || config.bassType === 'jb',
+    options: [
+      { value: 'black', label: 'Black', note: 'Standard black knobs', price: 0 },
+      { value: 'chrome', label: 'Chrome', note: 'Shiny chrome finish', price: 15 },
+      { value: 'tamarind', label: 'Tamarind', note: 'Warm wood-look knobs', price: 20 },
+      { value: 'pearl', label: 'Pearl Inlay', note: 'White pearl inlay knobs', price: 25 },
+      { value: 'abalone', label: 'Abalone Inlay', note: 'Premium abalone inlay', price: 40 },
+    ],
+  },
+  {
+    section: 'Hardware',
+    key: 'vaderStrapButtons',
+    label: 'Strap Buttons',
+    type: 'select',
+    condition: (config) => config.bassType === 'vader',
+    options: [
+      { value: 'standard', label: 'Standard Straplocks', note: 'Standard strap buttons front and rear', price: 0 },
+      { value: 'straplocks', label: 'Dunlop Straplocks', note: 'Dunlop straplocks front and rear', price: 50 },
+    ],
+  },
+  {
+    section: 'Hardware',
+    key: 'vaderElectronicsCavityCover',
+    label: 'Electronics Cavity Cover',
+    type: 'select',
+    condition: (config) => config.bassType === 'vader',
+    options: [
+      { value: 'black', label: 'Black', note: 'Black rear plate', price: 0 },
+      { value: 'ebony', label: 'Ebony', note: 'Ebony rear plate', price: 15 },
+      { value: 'purpleheart', label: 'Purpleheart', note: 'Purpleheart rear plate', price: 20 },
+    ],
+  },
+  {
     section: 'Electronics',
     key: 'pickupColor',
     label: 'Pickup Color',
@@ -1071,6 +1124,7 @@ export const OPTION_FIELDS = [
     label: 'Hardware Color',
     type: 'image-select',
     previewResolver: (category, model, value) => getButtonPreview(category, model, 'hardware-color', value),
+    condition: (config) => config.bassType !== 'vader',
     options: [
       { value: 'chrome', label: 'Chrome', note: 'Standard bright hardware', price: 0 },
       { value: 'black', label: 'Black', note: 'Stealth hardware', price: 35 },
@@ -1105,6 +1159,7 @@ export const OPTION_FIELDS = [
         { value: 'tamarind', label: 'Tamarind', note: 'Warm wood-look knobs', price: 15 },
       ]
     },
+    condition: (config) => ['dc', 'solo', 'delos'].includes(config.body),
   },
   {
     section: 'Hardware',
@@ -1155,6 +1210,7 @@ export const OPTION_FIELDS = [
     key: 'strapButtons',
     label: 'Strap Buttons',
     type: 'select',
+    condition: (config) => config.bassType !== 'vader',
     options: [
       { value: 'none', label: 'None', note: 'No strap buttons', price: 0 },
       { value: 'standard', label: 'Standard', note: 'Standard strap buttons', price: 10 },
@@ -1177,6 +1233,7 @@ export const OPTION_FIELDS = [
     key: 'electronicsCavityCover',
     label: 'Electronics Cavity Cover',
     type: 'select',
+    condition: (config) => config.bassType !== 'vader',
     options: [
       { value: 'black', label: 'Black', note: 'Default cover, includes backplate screws', price: 0 },
       { value: 'ebony', label: 'Ebony', note: 'Ebony cover, includes backplate screws', price: 15 },

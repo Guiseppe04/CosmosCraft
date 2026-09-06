@@ -1835,227 +1835,291 @@ export function BassCustomizePage() {
               </div>
             )}
 
-             {/* HARDWARE OPTIONS */}
-              {activeCategory === 'hardware' && (
-                <div className="p-4 space-y-5">
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Hardware Color</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.hardwareOptions?.map((opt) => (
-                        <OptionButton
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.hardware === opt.value}
-                          onClick={() => updateConfig({ hardware: opt.value })}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                  
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Bridge</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.bridgeOptions?.map((opt) => (
-                        <OptionButton
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.bridge === opt.value}
-                          onClick={() => updateConfig({ bridge: opt.value })}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                  
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Control Knobs</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {knobOptions.map((opt) => (
-                        <OptionButton
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.knobs === opt.value}
-                          onClick={() => updateConfig({ knobs: opt.value })}
-                        />
-                      ))}
-                    </div>
-                  </div>
-
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Back Plate</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.backplateOptions?.map((opt) => (
-                        <OptionButton
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.backplate === opt.value}
-                          onClick={() => updateConfig({ backplate: opt.value })}
-                        />
-                      ))}
-                    </div>
-                  </div>
-
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Pickup Screws</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.pickupScrewOptions?.map((opt) => (
-                        <OptionButton
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.pickupScrews === opt.value}
-                          onClick={() => updateConfig({ pickupScrews: opt.value })}
-                        />
-                      ))}
-                    </div>
-                  </div>
+              {/* HARDWARE OPTIONS */}
+               {activeCategory === 'hardware' && (
+                 <div className="p-4 space-y-5">
+                   {config.bassType !== 'vader' && (
+                   <>
+                   <div>
+                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Hardware Color</h3>
+                     <div className="grid grid-cols-2 gap-2">
+                       {options.hardwareOptions?.map((opt) => (
+                         <OptionButton
+                           key={opt.value}
+                           option={opt}
+                           isSelected={config.hardware === opt.value}
+                           onClick={() => updateConfig({ hardware: opt.value })}
+                         />
+                       ))}
+                     </div>
+                   </div>
+                   
+                   <div>
+                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Bridge</h3>
+                     <div className="grid grid-cols-2 gap-2">
+                       {options.bridgeOptions?.map((opt) => (
+                         <OptionButton
+                           key={opt.value}
+                           option={opt}
+                           isSelected={config.bridge === opt.value}
+                           onClick={() => updateConfig({ bridge: opt.value })}
+                         />
+                       ))}
+                     </div>
+                   </div>
+                   
+                   <div>
+                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Control Knobs</h3>
+                     <div className="grid grid-cols-2 gap-2">
+                       {knobOptions.map((opt) => (
+                         <OptionButton
+                           key={opt.value}
+                           option={opt}
+                           isSelected={config.knobs === opt.value}
+                           onClick={() => updateConfig({ knobs: opt.value })}
+                         />
+                       ))}
+                     </div>
+                   </div>
 
                    <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Control Plate</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.controlPlateOptions?.map((opt) => (
-                        <OptionButton
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.controlPlate === opt.value}
-                          onClick={() => updateConfig({ controlPlate: opt.value })}
-                        />
-                      ))}
-                    </div>
-                  </div>
+                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Back Plate</h3>
+                     <div className="grid grid-cols-2 gap-2">
+                       {options.backplateOptions?.map((opt) => (
+                         <OptionButton
+                           key={opt.value}
+                           option={opt}
+                           isSelected={config.backplate === opt.value}
+                           onClick={() => updateConfig({ backplate: opt.value })}
+                         />
+                       ))}
+                     </div>
+                   </div>
 
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Saddle</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.saddleOptions?.map((opt) => (
-                        <OptionButton
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.saddle === opt.value}
-                          onClick={() => updateConfig({ saddle: opt.value })}
-                        />
-                      ))}
-                    </div>
-                  </div>
+                   <div>
+                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Pickup Screws</h3>
+                     <div className="grid grid-cols-2 gap-2">
+                       {options.pickupScrewOptions?.map((opt) => (
+                         <OptionButton
+                           key={opt.value}
+                           option={opt}
+                           isSelected={config.pickupScrews === opt.value}
+                           onClick={() => updateConfig({ pickupScrews: opt.value })}
+                         />
+                       ))}
+                     </div>
+                   </div>
 
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Nut</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.nutOptions?.map((opt) => (
-                        <OptionButton
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.nut === opt.value}
-                          onClick={() => updateConfig({ nut: opt.value })}
-                        />
-                      ))}
-                    </div>
-                  </div>
-
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Tuning</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.tuningOptions?.map((opt) => (
-                        <OptionButton
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.tuning === opt.value}
-                          onClick={() => updateConfig({ tuning: opt.value })}
-                        />
-                      ))}
-                    </div>
-                    {options.tuningDisclaimer && config.tuning === 'custom' && (
-                      <p className="text-[10px] leading-relaxed text-[var(--text-muted)] mt-2">
-                        {options.tuningDisclaimer}
-                      </p>
-                    )}
-                  </div>
-
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">String Brand</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.stringBrandOptions?.map((opt) => (
-                        <OptionButton
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.stringBrand === opt.value}
-                          onClick={() => updateConfig({ stringBrand: opt.value })}
-                        />
-                      ))}
-                    </div>
-                  </div>
-
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Output Jack</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.outputJackOptions?.map((opt) => (
-                        <OptionButton
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.outputJack === opt.value}
-                          onClick={() => updateConfig({ outputJack: opt.value })}
-                        />
-                      ))}
-                    </div>
-                  </div>
-
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Strap Buttons</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.strapButtonOptions?.map((opt) => (
-                        <OptionButton
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.strapButtons === opt.value}
-                          onClick={() => updateConfig({ strapButtons: opt.value })}
-                        />
-                      ))}
-                    </div>
-                  </div>
-
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Tuner Buttons</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.tunerButtonOptions?.map((opt) => (
-                        <OptionButton
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.tunerButtons === opt.value}
-                          onClick={() => updateConfig({ tunerButtons: opt.value })}
-                        />
-                      ))}
-                    </div>
-                  </div>
-
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Electronics Cavity Cover</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.electronicsCavityCoverOptions?.map((opt) => (
-                        <OptionButton
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.electronicsCavityCover === opt.value}
-                          onClick={() => updateConfig({ electronicsCavityCover: opt.value })}
-                        />
-                      ))}
-                    </div>
-                  </div>
-
-                  {options.tremoloCoverOptions?.length > 0 && (
                     <div>
-                      <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Tremolo Cover</h3>
+                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Control Plate</h3>
+                     <div className="grid grid-cols-2 gap-2">
+                       {options.controlPlateOptions?.map((opt) => (
+                         <OptionButton
+                           key={opt.value}
+                           option={opt}
+                           isSelected={config.controlPlate === opt.value}
+                           onClick={() => updateConfig({ controlPlate: opt.value })}
+                         />
+                       ))}
+                     </div>
+                   </div>
+
+                   <div>
+                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Saddle</h3>
+                     <div className="grid grid-cols-2 gap-2">
+                       {options.saddleOptions?.map((opt) => (
+                         <OptionButton
+                           key={opt.value}
+                           option={opt}
+                           isSelected={config.saddle === opt.value}
+                           onClick={() => updateConfig({ saddle: opt.value })}
+                         />
+                       ))}
+                     </div>
+                   </div>
+
+                   <div>
+                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Nut</h3>
+                     <div className="grid grid-cols-2 gap-2">
+                       {options.nutOptions?.map((opt) => (
+                         <OptionButton
+                           key={opt.value}
+                           option={opt}
+                           isSelected={config.nut === opt.value}
+                           onClick={() => updateConfig({ nut: opt.value })}
+                         />
+                       ))}
+                     </div>
+                   </div>
+
+                   <div>
+                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Tuning</h3>
+                     <div className="grid grid-cols-2 gap-2">
+                       {options.tuningOptions?.map((opt) => (
+                         <OptionButton
+                           key={opt.value}
+                           option={opt}
+                           isSelected={config.tuning === opt.value}
+                           onClick={() => updateConfig({ tuning: opt.value })}
+                         />
+                       ))}
+                     </div>
+                     {options.tuningDisclaimer && config.tuning === 'custom' && (
+                       <p className="text-[10px] leading-relaxed text-[var(--text-muted)] mt-2">
+                         {options.tuningDisclaimer}
+                       </p>
+                     )}
+                   </div>
+
+                   <div>
+                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">String Brand</h3>
+                     <div className="grid grid-cols-2 gap-2">
+                       {options.stringBrandOptions?.map((opt) => (
+                         <OptionButton
+                           key={opt.value}
+                           option={opt}
+                           isSelected={config.stringBrand === opt.value}
+                           onClick={() => updateConfig({ stringBrand: opt.value })}
+                         />
+                       ))}
+                     </div>
+                   </div>
+
+                   <div>
+                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Output Jack</h3>
+                     <div className="grid grid-cols-2 gap-2">
+                       {options.outputJackOptions?.map((opt) => (
+                         <OptionButton
+                           key={opt.value}
+                           option={opt}
+                           isSelected={config.outputJack === opt.value}
+                           onClick={() => updateConfig({ outputJack: opt.value })}
+                         />
+                       ))}
+                     </div>
+                   </div>
+
+                   <div>
+                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Strap Buttons</h3>
+                     <div className="grid grid-cols-2 gap-2">
+                       {options.strapButtonOptions?.map((opt) => (
+                         <OptionButton
+                           key={opt.value}
+                           option={opt}
+                           isSelected={config.strapButtons === opt.value}
+                           onClick={() => updateConfig({ strapButtons: opt.value })}
+                         />
+                       ))}
+                     </div>
+                   </div>
+
+                   <div>
+                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Tuner Buttons</h3>
+                     <div className="grid grid-cols-2 gap-2">
+                       {options.tunerButtonOptions?.map((opt) => (
+                         <OptionButton
+                           key={opt.value}
+                           option={opt}
+                           isSelected={config.tunerButtons === opt.value}
+                           onClick={() => updateConfig({ tunerButtons: opt.value })}
+                         />
+                       ))}
+                     </div>
+                   </div>
+
+                   <div>
+                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Electronics Cavity Cover</h3>
+                     <div className="grid grid-cols-2 gap-2">
+                       {options.electronicsCavityCoverOptions?.map((opt) => (
+                         <OptionButton
+                           key={opt.value}
+                           option={opt}
+                           isSelected={config.electronicsCavityCover === opt.value}
+                           onClick={() => updateConfig({ electronicsCavityCover: opt.value })}
+                         />
+                       ))}
+                     </div>
+                   </div>
+
+                   {options.tremoloCoverOptions?.length > 0 && (
+                     <div>
+                       <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Tremolo Cover</h3>
+                       <div className="grid grid-cols-2 gap-2">
+                         {options.tremoloCoverOptions.map((opt) => (
+                           <OptionButton
+                             key={opt.value}
+                             option={opt}
+                             isSelected={config.tremoloCover === opt.value}
+                             onClick={() => updateConfig({ tremoloCover: opt.value })}
+                           />
+                         ))}
+                      </div>
+                    </div>
+                   )}
+                   </>
+                   )}
+
+                   {config.bassType === 'vader' && (
+                   <>
+                    <div>
+                      <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Hardware Color</h3>
                       <div className="grid grid-cols-2 gap-2">
-                        {options.tremoloCoverOptions.map((opt) => (
+                        {options.vaderHardwareOptions?.map((opt) => (
                           <OptionButton
                             key={opt.value}
                             option={opt}
-                            isSelected={config.tremoloCover === opt.value}
-                            onClick={() => updateConfig({ tremoloCover: opt.value })}
+                            isSelected={config.hardware === opt.value}
+                            onClick={() => updateConfig({ hardware: opt.value })}
                           />
                         ))}
+                      </div>
+                    </div>
+
+                   <div>
+                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Knobs</h3>
+                     <div className="grid grid-cols-2 gap-2">
+                       {options.vaderKnobsOptions?.map((opt) => (
+                         <OptionButton
+                           key={opt.value}
+                           option={opt}
+                           isSelected={config.vaderKnobs === opt.value}
+                           onClick={() => updateConfig({ vaderKnobs: opt.value })}
+                         />
+                       ))}
                      </div>
                    </div>
-                  )}
-                </div>
-              )}
+
+                   <div>
+                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Strap Buttons</h3>
+                     <div className="grid grid-cols-2 gap-2">
+                       {options.vaderStrapButtonOptions?.map((opt) => (
+                         <OptionButton
+                           key={opt.value}
+                           option={opt}
+                           isSelected={config.vaderStrapButtons === opt.value}
+                           onClick={() => updateConfig({ vaderStrapButtons: opt.value })}
+                         />
+                       ))}
+                     </div>
+                   </div>
+
+                   <div>
+                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Electronics Cavity Cover</h3>
+                     <div className="grid grid-cols-2 gap-2">
+                       {options.vaderElectronicsCavityCoverOptions?.map((opt) => (
+                         <OptionButton
+                           key={opt.value}
+                           option={opt}
+                           isSelected={config.vaderElectronicsCavityCover === opt.value}
+                           onClick={() => updateConfig({ vaderElectronicsCavityCover: opt.value })}
+                         />
+                       ))}
+                     </div>
+                   </div>
+                   </>
+                   )}
+                 </div>
+               )}
 
                 {/* ELECTRONICS OPTIONS */}
                {activeCategory === 'electronics' && (

@@ -11,17 +11,21 @@ export const cloudImage = (root, path) => {
 }
 
 export const bassAsset = (path) => {
+  const cleanPath = String(path || '').replace(/^\/+/, '')
+  const encodedPath = encodeURI(cleanPath) // encodeURI preserves '/', encodes spaces and other unsafe chars
   if (!USE_CLOUDINARY) {
-    return `/builder/customization_assets/${String(path || '').replace(/^\/+/, '')}`
+    return `/builder/customization_assets/${encodedPath}`
   }
-  return cloudImage('cosmoscraft_assets/customization_assets/builder', String(path || '').replace(/^\/+/, ''))
+  return cloudImage('cosmoscraft_assets/customization_assets/builder', encodedPath)
 }
 
 export const bassWoodAsset = (path) => {
+  const cleanPath = String(path || '').replace(/^\/+/, '')
+  const encodedPath = encodeURI(cleanPath)
   if (!USE_CLOUDINARY) {
-    return `/builder/customization_assets/${String(path || '').replace(/^\/+/, '')}`
+    return `/builder/customization_assets/${encodedPath}`
   }
-  return cloudImage('cosmoscraft_assets/customization_assets/builder', String(path || '').replace(/^\/+/, ''))
+  return cloudImage('cosmoscraft_assets/customization_assets/builder', encodedPath)
 }
 // Resolve a model-specific bass asset under customization_assets/builder/bass/{model}/
 export const bassModelAsset = (model, ...subPaths) => {
@@ -391,6 +395,9 @@ export const BASS_DEFAULT_CONFIG = {
     vaderNeckPickup: 'radiumHumbucker',
     vaderPickupColor: 'none',
     vaderPickupColorRgb: '#000000',
+    vaderKnobs: 'hardwareColor',
+    vaderStrapButtons: 'standard',
+    vaderElectronicsCavityCover: 'black',
     controls: 'off',
     saddle: 'chrome',
     nut: 'blackGraphTech',
@@ -1122,25 +1129,7 @@ export const BASS_BACKPLATE_OPTIONS = {
     acf: {
       label: 'ACF Battery Plate',
       note: 'ACF rear battery compartment',
-      src: mapCatalogByStem('vader', 'back', 'backplates')['battery-compartment-acf'],
-      price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
-    },
-    black: {
-      label: 'Black Plate',
-      note: 'Black rear plate',
-      src: mapCatalogByStem('vader', 'back', 'backplates').black,
-      price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
-    },
-    ebony: {
-      label: 'Ebony Plate',
-      note: 'Ebony rear plate',
-      src: mapCatalogByStem('vader', 'back', 'backplates').ebony,
-      price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
-    },
-    purpleheart: {
-      label: 'Purpleheart Plate',
-      note: 'Purpleheart rear plate',
-      src: mapCatalogByStem('vader', 'back', 'backplates').purpleheart,
+      src: resolveBassCatalogAsset('vader', 'back', 'backplates', { strings: '4', preferTokens: ['battery', 'compartment'] }) ?? bassModelAsset('vader', 'back/backplates/battery-compartment-acf.png'),
       price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
   },
@@ -1424,35 +1413,40 @@ export const BASS_PICKGUARD_OPTIONS = {
 
 export const BASS_KNOB_OPTIONS = {
   vader: {
-    black: {
-      label: 'Black',
-      note: 'Standard black knobs',
-      src: bassModelAsset('vader', 'front/knobs/black.png'),
-      price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
-    },
-    chrome: {
-      label: 'Chrome',
-      note: 'Shiny chrome finish',
+    hardwareColor: {
+      label: 'Hardware Color Knobs',
+      note: 'Knobs matched to hardware color',
+      price: 0,
+      specs: specs(),
       src: bassModelAsset('vader', 'front/knobs/chrome.png'),
-      price: 15, specs: { size: '', dimensions: '', material: '', notes: '' }
-    },
-    tamarind: {
-      label: 'Tamarind',
-      note: 'Warm wood-look knobs',
-      src: bassModelAsset('vader', 'front/knobs/tamarind.png'),
-      price: 20, specs: { size: '', dimensions: '', material: '', notes: '' }
-    },
-    pearl: {
-      label: 'Pearl Inlay',
-      note: 'White pearl inlay knobs',
-      src: bassModelAsset('vader', 'front/knobs/white-pearl-inlay.png'),
-      price: 25, specs: { size: '', dimensions: '', material: '', notes: '' }
+      maskSrc: bassModelAsset('vader', 'front/knobs/chrome.png'),
+      type: 'hardwareColor',
     },
     abalone: {
-      label: 'Abalone Inlay',
-      note: 'Premium abalone inlay',
-      src: bassModelAsset('vader', 'front/knobs/abalone-inlay.png'),
-      price: 40, specs: { size: '', dimensions: '', material: '', notes: '' }
+      label: 'Metal Knobs w/ Abalone Inlays',
+      note: 'Chrome knobs with abalone inlay',
+      price: 0,
+      specs: specs(),
+      src: bassModelAsset('vader', 'front/knobs/chrome.png'),
+      overlaySrc: bassModelAsset('vader', 'front/knobs/abalone-inlay.png'),
+      type: 'overlay',
+    },
+    pearl: {
+      label: 'Metal Knobs w/ White Pearl Inlays',
+      note: 'Chrome knobs with white pearl inlay',
+      price: 0,
+      specs: specs(),
+      src: bassModelAsset('vader', 'front/knobs/chrome.png'),
+      overlaySrc: bassModelAsset('vader', 'front/knobs/white-pearl-inlay.png'),
+      type: 'overlay',
+    },
+    tamarind: {
+      label: 'Tamarind Wood',
+      note: 'Warm wood-look knobs',
+      price: 0,
+      specs: specs(),
+      src: bassModelAsset('vader', 'front/knobs/tamarind.png'),
+      type: 'solid',
     },
   },
   pb: {
@@ -1614,13 +1608,6 @@ export const BASS_HARDWARE_OPTIONS = {
     specs: { size: '', dimensions: '', material: '', notes: '' },
     color: 'black',
   },
-  gold: {
-    label: 'Gold',
-    note: 'Premium gold finish',
-    price: 75,
-    specs: { size: '', dimensions: '', material: '', notes: '' },
-    color: 'gold',
-  },
 }
 
 export const BASS_PICKUP_OPTIONS = {
@@ -1767,6 +1754,49 @@ export const BASS_STRING_OPTIONS = {
     label: '5 Strings',
     note: 'Extended range',
     price: 50, specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
+}
+
+export const VADER_STRAP_BUTTON_OPTIONS = {
+  standard: {
+    label: 'Standard Straplocks',
+    note: 'Standard strap buttons front and rear',
+    price: 0,
+    specs: specs(),
+    frontSrc: (color) => bassAsset(`bass/vader/front/strap buttons/standard/${color}.png`),
+    backSrc: (color) => bassAsset(`bass/vader/back/strap buttons/standard/${color}.png`),
+  },
+  straplocks: {
+    label: 'Dunlop Straplocks',
+    note: 'Dunlop straplocks front and rear',
+    price: 50,
+    specs: specs(),
+    frontSrc: (color) => bassAsset(`bass/vader/front/strap buttons/straplocks/${color}.png`),
+    backSrc: (color) => bassAsset(`bass/vader/back/strap buttons/straplocks/${color}.png`),
+  },
+}
+
+export const VADER_ELECTRONICS_CAVITY_COVER_OPTIONS = {
+  black: {
+    label: 'Black',
+    note: 'Black rear plate',
+    src: bassAsset('bass/vader/back/backplates/black.png'),
+    price: 0,
+    specs: specs(),
+  },
+  ebony: {
+    label: 'Ebony',
+    note: 'Ebony rear plate',
+    src: bassAsset('bass/vader/back/backplates/ebony.png'),
+    price: 15,
+    specs: specs(),
+  },
+  purpleheart: {
+    label: 'Purpleheart',
+    note: 'Purpleheart rear plate',
+    src: bassAsset('bass/vader/back/backplates/purpleheart.png'),
+    price: 20,
+    specs: specs(),
   },
 }
 
