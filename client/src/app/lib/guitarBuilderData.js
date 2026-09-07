@@ -499,7 +499,7 @@ export const BRIDGE_OPTIONS_BY_BODY = {
   strat: ['hipshotFixed', 'hipshotTremolo', 'floydRoseTremolo'],
   solo: ['hipshotFixed', 'hipshotTremolo', 'floydRoseTremolo'],
   dc: ['hipshotFixed', 'hipshotTremolo', 'floydRoseTremolo'],
-  delos: ['hipshotFixed', 'hipshotTremolo', 'floydRoseTremolo', 'gotoh', 'evertune'],
+  delos: ['hipshotFixed', 'hipshotTremolo', 'floydRoseTremolo', 'gotoh'],
 }
 
 export const PICKGUARD_OPTIONS_BY_BODY = {
@@ -1305,13 +1305,17 @@ export const ELECTRONICS_CAVITY_COVER_OPTIONS = {
 
 export const TREMOLO_COVER_OPTIONS_BY_BRIDGE = {
   hipshotTremolo: {
-     ebony: { label: 'Ebony', note: 'Ebony tremolo cover', fileKey: 'ebony-trem-cover', price: 15, specs: specs() },
+    ebony: { label: 'Ebony', note: 'Ebony tremolo cover', fileKey: 'ebony-trem-cover', price: 15, specs: specs() },
     black: { label: 'Black', note: 'Black tremolo cover', fileKey: 'trem-cover', price: 0, specs: specs() },
   },
   floydRoseTremolo: {
     black: { label: 'Black', note: 'Black Floyd Rose cover', fileKey: 'floyd', price: 0, specs: specs() },
     ebony: { label: 'Ebony', note: 'Ebony Floyd Rose cover', fileKey: 'floyd-ebony', price: 15, specs: specs() },
     roastedFlameMaple: { label: 'Roasted Flame Maple', note: 'Roasted flame maple cover', fileKey: 'floyd-rfm', price: 25, specs: specs() },
+  },
+    gotoh: {
+    ebony: { label: 'Ebony', note: 'Ebony tremolo cover', fileKey: 'ebony-trem-cover', price: 15, specs: specs() },
+    black: { label: 'Black', note: 'Black tremolo cover', fileKey: 'trem-cover', price: 0, specs: specs() },
   },
 }
 

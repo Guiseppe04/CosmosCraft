@@ -1244,7 +1244,7 @@ export const OPTION_FIELDS = [
     key: 'tremoloCover',
     label: 'Tremolo Cover',
     type: 'image-select',
-    condition: (config) => config.bridge === 'hipshotTremolo' || config.bridge === 'floydRoseTremolo',
+    condition: (config) => ['hipshotTremolo', 'floydRoseTremolo', 'gotoh'].includes(config.bridge),
     previewResolver: (category, model, value, config) => {
       const byBridge = TREMOLO_COVER_OPTIONS_BY_BRIDGE[config.bridge]
       const opt = byBridge?.[value]

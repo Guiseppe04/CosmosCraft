@@ -38,6 +38,9 @@ import {
   resolvePickupBobbinMask,
   resolveFluenceMask,
   resolveSingleCoilBody,
+  resolveNeckBoltsAsset,
+  resolveRearTopCoatAsset,
+  resolveStringFerrulesAsset,
 } from '../../lib/assetResolver.js'
 
 const layerStyle = (src, extra = {}) => ({
@@ -207,6 +210,21 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
     () => resolveRearBodyMask('electric', config.body || 'dc'),
     [config.body],
   )
+
+    const neckBoltsAsset = useMemo(
+    () => resolveNeckBoltsAsset('electric', config.body || 'dc'),
+    [config.body],
+  )
+
+  const rearTopCoatAsset = useMemo(
+    () => resolveRearTopCoatAsset('electric', config.body || 'dc', config.topCoat),
+    [config.body, config.topCoat],
+  )
+
+  const stringFerrulesAsset = useMemo(() => {
+    if (config.bridge !== 'hipshotFixed') return null
+    return resolveStringFerrulesAsset('electric', config.body || 'dc', colorKey)
+  }, [config.bridge, config.body, colorKey])
 
   const cavityOption = guitarBuilder.ELECTRONICS_CAVITY_COVER_OPTIONS[config.electronicsCavityCover]
     ?? guitarBuilder.ELECTRONICS_CAVITY_COVER_OPTIONS.black
@@ -858,6 +876,44 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
                     )}
                     {strapBack && (
                       <GuitarLayer src={strapBack} className="opacity-100" style={{ zIndex: 203, transform: 'scaleX(-1)' }} layerName="strap-button-rear" protectedLayer />
+                    )}
+                    {neckBoltsAsset && (
+                      <GuitarLayer
+                        src={neckBoltsAsset}
+                        style={{ zIndex: 139, transform: 'scaleX(-1)' }}
+                        layerName="neck-bolts"
+                        protectedLayer
+                      />
+                    )}
+                    {rearTopCoatAsset && (
+                      <GuitarLayer
+                        maskSrc={rearBodyMask}
+                        style={{
+                          backgroundImage: `url(${rearTopCoatAsset})`,
+                          zIndex: 138,
+                          mixBlendMode: 'screen',
+                          backgroundRepeat: 'no-repeat',
+                          backgroundPosition: 'center',
+                          backgroundSize: 'contain',
+                          transform: 'scaleX(-1)',
+                        }}
+                        layerName="rear-top-coat"
+                      />
+                    )}
+                    {stringFerrulesAsset && (
+                      <GuitarLayer
+                        maskSrc={rearBodyMask}
+                        style={{
+                          backgroundImage: `url(${encodeURI(stringFerrulesAsset)})`,
+                          zIndex: 139,
+                          backgroundRepeat: 'no-repeat',
+                          backgroundPosition: 'center',
+                          backgroundSize: 'contain',
+                          transform: 'scaleX(-1)',
+                        }}
+                        layerName="string-ferrules"
+                        protectedLayer
+                      />
                     )}
                 </>
               )}

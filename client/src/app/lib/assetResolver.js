@@ -399,13 +399,6 @@ export function resolveBackStrapButtonAsset(category, model, buttonKey) {
 }
 
 /**
- * Resolve string ferrule assets
- */
-export function resolveStringFerrulesAsset(category, model, ferruleKey) {
-  return resolveModelAsset(category, model, 'back', 'string ferrules', `${ferruleKey}.png`)
-}
-
-/**
  * Resolve front body knob assets
  */
 export function resolveKnobAsset(category, model, knobKey) {
@@ -493,6 +486,31 @@ export function resolveRearBodyMask(category, model) {
   }
   return resolveModelAsset(category, model, 'back', 'masks', 'bodymask.png')
 }
+
+// --- Rear: neck bolts (static overlay, per model) ---
+export const resolveNeckBoltsAsset = (category, model) =>
+  resolveModelAsset(category, model, 'back/neck bolts/neck-bolt.png')
+
+// --- Rear: top coat sheen (shadows_highlights), keyed off config.topCoat ---
+const REAR_TOP_COAT_FILE_MAP = {
+  // schema-driven values (configuratorSchema.js OPTION_FIELDS)
+  gloss: 'gloss',
+  'open-pore': 'op',
+  matte: 'matte',
+  // hook-driven values (guitarBuilderData.js TOP_COAT_OPTIONS / DEFAULT_CONFIG)
+  clearGloss: 'gloss',
+  tungOil: 'op',
+  satinMatte: 'matte',
+}
+export const resolveRearTopCoatAsset = (category, model, topCoatKey) => {
+  const fileKey = REAR_TOP_COAT_FILE_MAP[topCoatKey]
+  if (!fileKey) return null
+  return resolveModelAsset(category, model, `back/shadows_highlights/${fileKey}.png`)
+}
+
+// --- Rear: string ferrules, only for Hipshot Fixed bridge, colored by hardware ---
+export const resolveStringFerrulesAsset = (category, model, hardwareColor) =>
+  resolveModelAsset(category, model, `back/string ferrules/standard/${hardwareColor}.png`)
 
 /**
  * Resolve output jack asset by hardware color (spec keys it by hardware color, not a jack "type").
