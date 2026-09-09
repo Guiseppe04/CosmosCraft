@@ -878,16 +878,27 @@ const inlay = {
 
     // Vader uses the new explicit top coat stack — skip the legacy dynamic gloss/shadow
     // so changing Top Coat in the UI actually changes the visual.
-    if (resolvedConfig.bassType !== 'vader') {
-      const frontShadow = bassBuilder.resolveCatalogAsset(resolvedConfig.bassType, 'front', 'shadows_highlights', { strings: resolvedConfig.strings, preferTokens: ['edge', 'shadow'] }) || assets.bodyAssets?.front?.shadows
-      if (frontShadow) {
-        layers.push({ name: 'shadows', src: frontShadow, style: { zIndex: 200 } })
+      if (resolvedConfig.bassType !== 'vader') {
+        // P-bass / J-bass explicit top-coat stack, mirroring Vader's approach.
+        const topCoatBaseMap = {
+          clearGloss: { file: 'gloss' },
+          tungOil: { file: 'raw-tone' },
+          satinMatte: { file: 'matte' },
+        }
+        const topCoatSpec = topCoatBaseMap[resolvedConfig.topCoat] || topCoatBaseMap.clearGloss
+        const topCoatBaseSrc = bassAsset(`bass/${resolvedConfig.bassType}/front/shadows_highlights/${topCoatSpec.file}.png`)
+        const edgeShadowSrc = bassAsset(`bass/${resolvedConfig.bassType}/front/shadows_highlights/edge-shadow.png`)
+        const coatMask = bodyMask
+
+        // Same layering rule as Vader: below neck (100) and pickguard (9),
+        // above body wood/finish (1-4) — a wood-finish effect, not a hardware overlay.
+        if (topCoatBaseSrc) {
+          layers.push({ name: 'top-coat-base', maskSrc: coatMask, style: { backgroundImage: `url(${topCoatBaseSrc})`, zIndex: 7 } })
+        }
+        if (edgeShadowSrc) {
+          layers.push({ name: 'top-coat-edge', maskSrc: coatMask, style: { backgroundImage: `url(${edgeShadowSrc})`, zIndex: 7 } })
+        }
       }
-      const frontGloss = bassBuilder.resolveCatalogAsset(resolvedConfig.bassType, 'front', 'shadows_highlights', { strings: resolvedConfig.strings, preferTokens: ['gloss'] }) || assets.bodyAssets?.front?.gloss
-      if (frontGloss) {
-        layers.push({ name: 'gloss', src: frontGloss, style: { zIndex: 201, opacity: 0.9, mixBlendMode: 'screen' } })
-      }
-    }
 
     const orderedLayers = sortLayersByZIndex(layers)
     if (DEBUG) console.log('[FRONT LAYERS]', orderedLayers.map(l => l.name))
@@ -1003,15 +1014,26 @@ const inlay = {
       }
     }
 
-    // Vader uses the new explicit top coat stack — skip the legacy dynamic rear gloss/shadow
-    if (resolvedConfig.bassType !== 'vader') {
-      if (assets.rearNeckFinish || assets.bodyAssets?.back?.shadows) {
-        layers.push({ name: 'rear-shadows', src: assets.rearNeckFinish || assets.bodyAssets?.back?.shadows, style: { zIndex: 200, opacity: 0.85, mixBlendMode: 'multiply' } })
+      if (resolvedConfig.bassType !== 'vader') {
+        const rearTopCoatBaseMap = {
+          clearGloss: { file: 'gloss' },
+          tungOil: { file: 'op' },
+          satinMatte: { file: 'matte' },
+        }
+        const topCoatSpec = rearTopCoatBaseMap[resolvedConfig.topCoat] || rearTopCoatBaseMap.clearGloss
+        const topCoatBaseSrc = bassAsset(`bass/${resolvedConfig.bassType}/back/shadows_highlights/${topCoatSpec.file}.png`)
+        const multiplySrc = bassAsset(`bass/${resolvedConfig.bassType}/back/shadows_highlights/multiply.png`)
+        const coatMask = rearBodyMask
+
+        // Same zIndex band as Vader's rear stack: below rear-strap/backplate/
+        // headstock finish (104+), above body wood/finish (1-2).
+        if (topCoatBaseSrc) {
+          layers.push({ name: 'rear-top-coat-base', maskSrc: coatMask, style: { backgroundImage: `url(${topCoatBaseSrc})`, zIndex: 3 } })
+        }
+        if (multiplySrc) {
+          layers.push({ name: 'rear-top-coat-multiply', maskSrc: coatMask, style: { backgroundImage: `url(${multiplySrc})`, zIndex: 3 } })
+        }
       }
-      if (assets.rearGloss || assets.bodyAssets?.back?.gloss) {
-        layers.push({ name: 'rear-gloss', src: assets.rearGloss || assets.bodyAssets?.back?.gloss, style: { zIndex: 201, opacity: 0.8, mixBlendMode: 'screen' } })
-      }
-    }
 
     const orderedLayers = sortLayersByZIndex(layers)
     if (DEBUG) console.log('[REAR LAYERS]', orderedLayers.map(l => l.name))
