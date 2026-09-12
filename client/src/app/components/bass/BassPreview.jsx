@@ -15,6 +15,9 @@ import {
 
 const DEBUG = Boolean(import.meta.env.DEV)
 
+// Fixed fret count per bass model — drives neck/fretboard/inlay asset paths.
+const BASS_TYPE_FRET_COUNT = { vader: 24, pb: 20, jb: 22 }
+
 const layerStyle = (src, extra = {}) => {
   if (!src) return null
   return {
@@ -216,6 +219,7 @@ const resolveHeadstockStyleForStrings = (headstockStyle, strings = '4') => {
     gt4reverse: 'gt4r',
     hl: 'headless',
   }
+  
   const style = styleAliases[rawStyle] || rawStyle
   const wantsFive = String(strings) === '5'
   if (style === 'headless') return 'headless'
@@ -226,16 +230,41 @@ const resolveHeadstockStyleForStrings = (headstockStyle, strings = '4') => {
   return style
 }
 
+const resolveStrapButtonVariant = (strapButtons) => {
+  const raw = String(strapButtons || 'standard').trim().toLowerCase()
+  const aliases = {
+    standard: 'standard',
+    dunlop: 'straplocks',
+    dunlopstraplocks: 'straplocks',
+    straplock: 'straplocks',
+    straplocks: 'straplocks',
+  }
+  return aliases[raw] || 'standard'
+}
+
+const resolveNutColor = (nut) => {
+  const raw = String(nut || 'blackGraphTech').trim().toLowerCase()
+  const aliases = {
+    blackgraphtech: 'black',
+    black: 'black',
+    ivorygraphtech: 'white',
+    ivory: 'white',
+    white: 'white',
+  }
+  return aliases[raw] || 'black'
+}
+
 function BassPreview({ config, view, onViewChange, modelImageSrc, stickerOverlay = null, stickerMaskSrc = null, stageRef = null }) {
   const previewRef = useRef(null)
 
   const resolvedConfig = useMemo(() => {
-    const resolved = {
-     bassType: config.bassType ?? 'vader',
+const resolved = {
+      bassType: config.bassType ?? 'vader',
       bodyWood: config.bodyWood ?? 'maple',
       bodyFinish: config.bodyFinish ?? 'none',
       neck: config.neck ?? 'maple',
       fretboard: config.fretboard ?? 'rosewood',
+      frets: config.frets ?? 'stainlessMedJumbo',
       headstockWood: config.headstockWood ?? 'maple',
       hardware: config.hardware ?? 'chrome',
       strings: config.strings ?? '4',
@@ -298,7 +327,8 @@ function BassPreview({ config, view, onViewChange, modelImageSrc, stickerOverlay
     const preferredRearNeckMaskToken = isFiveString ? '22f' : '20f'
     const effectiveHeadstockStyle = resolveHeadstockStyleForStrings(normalizedHeadstockStyle, resolvedConfig.strings)
     const isHeadless = effectiveHeadstockStyle === 'headless' || resolvedConfig.bassType === 'vader'
-    const preferredFrontFretToken = isHeadless ? '24-fret' : (isFiveString ? '22-fret' : '20-fret')
+    // Fret count is fixed per bass model, not per string count.
+    const preferredFrontFretToken = `${BASS_TYPE_FRET_COUNT[resolvedConfig.bassType] ?? 20}-fret`
     const preferredFrontProfileToken = isHeadless ? 'flat-bottom' : 'round-bottom'
     const stringCountToken = `${resolvedConfig.strings}-string`
     const headstockBasePath = `all-models/headstocks/bass/${stringCountToken}`
@@ -399,9 +429,6 @@ function BassPreview({ config, view, onViewChange, modelImageSrc, stickerOverlay
     const headstockStaticStrings = !isHeadless && canUseDirectHeadstockPaths
       ? bassAsset(`${headstockBasePath}/string-overlays/${effectiveHeadstockStyle}.png`)
       : null
-    const headstockStaticTrussCover = !isHeadless
-      ? bassAsset(`${headstockBasePath}/truss-cover/black.png`)
-      : null
     const rearNeckStaticMask = bassAsset(`${rearMaskBasePath}/${isFiveString ? 'neck-mask-22f.png' : 'neck-mask-20f.png'}`)
     const rearNeckStaticMaskGeneric = bassAsset(`${rearMaskBasePath}/neck-mask.png`)
     const rearHeadstockStaticMask = !isHeadless && canUseDirectHeadstockPaths
@@ -418,34 +445,25 @@ function BassPreview({ config, view, onViewChange, modelImageSrc, stickerOverlay
     const inlayShapeConfig = bassBuilder.INLAY_SHAPE_OPTIONS?.[resolvedConfig.inlayShape]
     const inlayMaterialConfig = bassBuilder.INLAY_MATERIAL_OPTIONS?.[resolvedConfig.inlayMaterial]
     const inlayShapeFolder = inlayShapeConfig?.folder || 'id'
-    const inlayMaterialCode = inlayMaterialConfig?.code || 'id'
+    const inlayMaterialCode = inlayMaterialConfig?.code || 'imp'
 
-// Confirmed suffixes so far — extend this once you check the other material folders
-const INLAY_MATERIAL_SUFFIX = {
-  motherOfPearl: 'white-pearl',
-  luminlay: 'luminlay',
-  green: 'white-pearl',   // TODO: confirm real suffix
-  pink: 'white-pearl',    // TODO: confirm real suffix
-  red: 'white-pearl',     // TODO: confirm real suffix
-  white: 'white-pearl',   // TODO: confirm real suffix
-  black: 'white-pearl',   // TODO: confirm real suffix
-  abalone: 'white-pearl', // TODO: confirm real suffix
-}
-const materialSuffix = INLAY_MATERIAL_SUFFIX[resolvedConfig.inlayMaterial] || 'white-pearl'
-
-const inlayMaskSrc = bassBuilder.resolveSharedAsset('necks/bass', {
-  strings: resolvedConfig.strings,
-  requiredTokens: ['front', 'inlays', inlayShapeFolder, materialSuffix],
-  preferTokens: [preferredFrontFretToken, preferredFrontProfileToken, 'standard', inlayShapeFolder, materialSuffix],
-}) || bassAsset(
-  `all-models/necks/bass/${stringCountToken}/front/${preferredFrontFretToken}/standard/${preferredFrontProfileToken}/inlays/${inlayShapeFolder}/${inlayShapeFolder}${materialSuffix}.png`
-)
-const inlayMaterialPath = bassAsset(`all-models/necks/bass/inlay-material/${inlayMaterialCode}.png`)
-const inlay = {
-  maskSrc: inlayMaskSrc,
-  materialSrc: inlayMaterialPath,
-  label: `${inlayShapeConfig?.label || 'Dots'} / ${inlayMaterialConfig?.label || 'Mother of Pearl'}`,
-}
+    // The inlay mask is always the shape's "white.png" cutout. The visible
+    // material (mother of pearl, abalone, etc.) is painted through that
+    // mask using the separate inlay-material texture below — the mask
+    // itself never changes per material.
+    const inlayMaskSrc = bassBuilder.resolveSharedAsset('necks/bass', {
+      strings: resolvedConfig.strings,
+      requiredTokens: ['front', 'inlays', inlayShapeFolder, 'white'],
+      preferTokens: [preferredFrontFretToken, 'round-bottom', inlayShapeFolder, 'white'],
+    }) || bassAsset(
+      `all-models/necks/bass/${stringCountToken}/front/${preferredFrontFretToken}/round-bottom/inlays/${inlayShapeFolder}/white.png`
+    )
+    const inlayMaterialPath = bassAsset(`all-models/necks/bass/inlay-material/${inlayMaterialCode}.png`)
+    const inlay = {
+      maskSrc: inlayMaskSrc,
+      materialSrc: inlayMaterialPath,
+      label: `${inlayShapeConfig?.label || 'Dots'} / ${inlayMaterialConfig?.label || 'Mother of Pearl'}`,
+    }
 
     const resolvedAssets = {
       bodyModel,
@@ -456,7 +474,7 @@ const inlay = {
       topWood: bassBuilder.TOP_WOOD_OPTIONS?.[resolvedConfig.topWood] || null,
       topWoodMask: resolvedConfig.bassType === 'vader'
         ? bassAsset('bass/vader/front/masks/topwoodmask.png')
-        : null,
+        : bodyModel.bodySrc,
       bodyMask: resolvedConfig.bassType === 'vader'
         ? bassAsset('bass/vader/front/masks/bodymask.png')
         : null,
@@ -510,15 +528,17 @@ const inlay = {
         white: bassBuilder.resolveSharedAsset('necks/bass', {
           strings: resolvedConfig.strings,
           requiredTokens: ['front', 'nut'],
-          preferTokens: [preferredFrontFretToken, 'white'],
+          preferTokens: [preferredFrontFretToken, preferredFrontProfileToken, 'white'],
         }) || BASS_NECK_NUT.white,
         black: bassBuilder.resolveSharedAsset('necks/bass', {
           strings: resolvedConfig.strings,
           requiredTokens: ['front', 'nut'],
-          preferTokens: [preferredFrontFretToken, 'black'],
+          preferTokens: [preferredFrontFretToken, preferredFrontProfileToken, 'black'],
         }) || BASS_NECK_NUT.black,
       },
-      headstockWood: bassBuilder.HEADSTOCK_WOOD_OPTIONS[resolvedConfig.headstockWood],
+      headstockWood: config.bassType === 'vader'
+        ? bassBuilder.HEADSTOCK_WOOD_OPTIONS[resolvedConfig.headstockWood]
+        : { texture: bassBuilder.NECK_OPTIONS[resolvedConfig.neck]?.src },
       headstockTuners: resolvedHeadstockTuners || (isHeadless ? null : (
         resolveHeadstockAssetWithFallback({
           requiredTokens: ['tuners', exactStyleFolderToken],
@@ -548,14 +568,14 @@ const inlay = {
           preferTokens: [effectiveHeadstockStyle, exactStyleFileToken],
         }) || headstockStaticStrings
       )),
-      headstockTrussCover: isHeadless ? null : (
+      headstockTrussCover: isHeadless || resolvedConfig.bassType === 'vader' ? null : (
         resolveHeadstockAssetWithFallback({
           requiredTokens: ['truss-cover'],
           preferTokens: ['black', 'truss-cover'],
         }) || resolveHeadstockAssetWithFallback({
           requiredTokens: ['truss-cover'],
           preferTokens: ['truss-cover'],
-        }) || headstockStaticTrussCover
+        }) || bassAsset(`all-models/headstocks/bass/4-string/truss-cover/${resolvedConfig.trussRodCover}.png`)
       ),
       hardware: bassBuilder.HARDWARE_OPTIONS[resolvedConfig.hardware],
       bridge: getBridgeByStrings(
@@ -703,8 +723,8 @@ const inlay = {
     if (assets.bodyModel?.bodySrc) {
       layers.push({ name: 'body-wood', maskSrc: bodyMask, style: { backgroundImage: assets.bodyWood?.texture ? `url(${assets.bodyWood.texture})` : undefined, opacity: 1, mixBlendMode: 'normal', zIndex: 1 } })
     }
-    if (resolvedConfig.bassType === 'vader' && resolvedConfig.threePieceBody === 'on') {
-      const threePieceMask = bassAsset('bass/vader/front/masks/three-piece-body-mask.png')
+    if (resolvedConfig.threePieceBody === 'on') {
+      const threePieceMask = bassAsset(`bass/${resolvedConfig.bassType}/front/masks/three-piece-body-mask.png`)
       if (threePieceMask) {
         layers.push({
           name: 'three-piece-body',
@@ -728,7 +748,8 @@ const inlay = {
     if (assets.fretboard?.src && (assets.frontFretboardMask || assets.frontNeckMask)) {
       layers.push({ name: 'fretboard', maskSrc: assets.frontFretboardMask || assets.frontNeckMask, style: { backgroundImage: `url(${assets.fretboard.src})`, zIndex: 101 }, protectedLayer: true })
     }
-    if (assets.frontFrets?.stainless) {
+    const isFretless = resolvedConfig.frets === 'fretless'
+    if (!isFretless && assets.frontFrets?.stainless) {
       layers.push({ name: 'frets', src: assets.frontFrets.stainless, style: { zIndex: 102 }, protectedLayer: true })
     }
     if (assets.inlay?.maskSrc && assets.inlay?.materialSrc) {
@@ -739,12 +760,12 @@ const inlay = {
         protectedLayer: true,
       })
     }
-    const nutColor = colorKey === 'black' ? 'black' : 'white'
+    const nutColor = resolveNutColor(resolvedConfig.nut)
     if (!assets.isHeadless && assets.frontNut?.[nutColor]) {
-      layers.push({ name: 'nut', src: assets.frontNut[nutColor], style: { zIndex: 104 }, protectedLayer: true })
+      layers.push({ name: 'nut', src: assets.frontNut[nutColor], style: { zIndex: 106 }, protectedLayer: true })
     }
     if (!assets.isHeadless && assets.headstockWood?.texture && (assets.frontHeadstockMask || assets.frontNeckMask)) {
-      layers.push({ name: 'headstock-wood', maskSrc: assets.frontHeadstockMask || assets.frontNeckMask, style: { backgroundImage: `url(${assets.headstockWood.texture})`, opacity: 0.95, zIndex: 105 }, protectedLayer: true })
+      layers.push({ name: 'headstock-wood', maskSrc: assets.frontHeadstockMask || assets.frontNeckMask, style: { backgroundImage: `url(${assets.headstockWood.texture})`, opacity: 0.95, zIndex: 99 }, protectedLayer: true })
     }
     if (!assets.isHeadless && assets.headstockStringOverlay) {
       layers.push({
@@ -758,14 +779,11 @@ const inlay = {
         protectedLayer: true,
       })
     }
-    if (!assets.isHeadless && assets.headstockLogo) {
-      layers.push({ name: 'headstock-logo', src: assets.headstockLogo, style: { zIndex: 107, opacity: 1, filter: 'brightness(1.12) contrast(1.18)' }, protectedLayer: true })
-    }
     if (!assets.isHeadless && assets.headstockTuners) {
       layers.push({ name: 'headstock-tuners', src: assets.headstockTuners, style: { zIndex: 108 }, protectedLayer: true })
     }
     if (!assets.isHeadless && assets.headstockTrussCover) {
-      layers.push({ name: 'headstock-truss-cover', src: assets.headstockTrussCover, style: { zIndex: 109, opacity: 1, filter: 'brightness(1.1) contrast(1.2)' }, protectedLayer: true })
+      layers.push({ name: 'headstock-truss-cover', src: assets.headstockTrussCover, style: { zIndex: 100, opacity: 1, filter: 'brightness(1.1) contrast(1.2)' }, protectedLayer: true })
     }
     if (resolvedConfig.pickguard !== 'none' && assets.pickguard?.src) {
       layers.push({ name: 'pickguard', src: assets.pickguard.src, style: { zIndex: 9 }, protectedLayer: true })
@@ -820,26 +838,26 @@ const inlay = {
     if (bridgeSrc) {
       layers.push({ name: 'bridge', src: bridgeSrc, style: { zIndex: 125 }, protectedLayer: true })
     }
+    const strapVariant = resolveStrapButtonVariant(resolvedConfig.strapButtons)
     const strapSrc = resolvedConfig.bassType === 'vader'
       ? assets.strapButtons?.frontSrc?.(colorKey)
-      : (bassBuilder.resolveCatalogVariant(resolvedConfig.bassType, 'front', 'strap buttons/standard', resolvedConfig.strings, colorKey)
-        || assets.bodyAssets?.front?.strap?.[colorKey]
-        || assets.bodyAssets?.front?.strap?.chrome)
+      : bassAsset(`bass/${resolvedConfig.bassType}/front/strap buttons/${strapVariant}/${colorKey}.png`)
     if (strapSrc) {
       layers.push({ name: 'strap', src: strapSrc, style: { zIndex: 126 }, protectedLayer: true })
     }
 
-    // Vader top coat layers (composited from the three-layer gloss/raw-tone/matte stack)
-    if (resolvedConfig.bassType === 'vader') {
+        // Top coat layers (composited from the three-layer gloss/raw-tone/matte stack)
+    // — same treatment for all body models now, not just Vader.
+    {
       const topCoatBaseMap = {
         clearGloss: { file: 'gloss' },
         tungOil: { file: 'raw-tone' },
         satinMatte: { file: 'matte' },
       }
       const topCoatSpec = topCoatBaseMap[resolvedConfig.topCoat] || topCoatBaseMap.clearGloss
-      const topCoatBaseSrc = bassAsset(`bass/vader/front/shadows_highlights/${topCoatSpec.file}.png`)
-      const edgeShadowSrc = bassAsset('bass/vader/front/shadows_highlights/edge-shadow.png')
-      const multiplySrc = bassAsset('bass/vader/front/shadows_highlights/multiply.png')
+      const topCoatBaseSrc = bassAsset(`bass/${resolvedConfig.bassType}/front/shadows_highlights/${topCoatSpec.file}.png`)
+      const edgeShadowSrc = bassAsset(`bass/${resolvedConfig.bassType}/front/shadows_highlights/edge-shadow.png`)
+      const multiplySrc = bassAsset(`bass/${resolvedConfig.bassType}/front/shadows_highlights/multiply.png`)
       const coatMask = bodyMask
 
       // Sits ABOVE body wood/finish but BELOW all hardware (neck starts at 100,
@@ -856,13 +874,12 @@ const inlay = {
         layers.push({ name: 'top-coat-multiply', maskSrc: coatMask, style: { backgroundImage: `url(${multiplySrc})`, zIndex: 7 } })
       }
     }
-
-    // Vader burst edges (front+rear effect, applied to both views)
-    if (resolvedConfig.bassType === 'vader' && resolvedConfig.burstEdges && resolvedConfig.burstEdges !== 'none') {
+    // Burst edges (front+rear effect, applied to both views) — extended to all models
+    if (resolvedConfig.burstEdges && resolvedConfig.burstEdges !== 'none') {
       const burstMap = {
-        blackBurst: { mask: bassAsset('bass/vader/front/masks/black-burst-mask.png'), color: 'rgb(0, 0, 0)' },
-        whiteBurst: { mask: bassAsset('bass/vader/front/masks/black-burst-mask.png'), color: 'rgb(255, 255, 255)' },
-        translucentBlackBurst: { mask: bassAsset('bass/vader/front/masks/burstmask.png'), color: 'rgba(0,0,0,0.65)' },
+        blackBurst: { mask: bassAsset(`bass/${resolvedConfig.bassType}/front/masks/black-burst-mask.png`), color: 'rgb(0, 0, 0)' },
+        whiteBurst: { mask: bassAsset(`bass/${resolvedConfig.bassType}/front/masks/black-burst-mask.png`), color: 'rgb(255, 255, 255)' },
+        translucentBlackBurst: { mask: bassAsset(`bass/${resolvedConfig.bassType}/front/masks/burstmask.png`), color: 'rgba(0,0,0,0.65)' },
         reverseTranslucentBlackBurst: null, // front only handled below; rear skips it
       }
       const burstSpec = burstMap[resolvedConfig.burstEdges]
@@ -876,34 +893,11 @@ const inlay = {
       }
     }
 
-    // Vader uses the new explicit top coat stack — skip the legacy dynamic gloss/shadow
-    // so changing Top Coat in the UI actually changes the visual.
-      if (resolvedConfig.bassType !== 'vader') {
-        // P-bass / J-bass explicit top-coat stack, mirroring Vader's approach.
-        const topCoatBaseMap = {
-          clearGloss: { file: 'gloss' },
-          tungOil: { file: 'raw-tone' },
-          satinMatte: { file: 'matte' },
-        }
-        const topCoatSpec = topCoatBaseMap[resolvedConfig.topCoat] || topCoatBaseMap.clearGloss
-        const topCoatBaseSrc = bassAsset(`bass/${resolvedConfig.bassType}/front/shadows_highlights/${topCoatSpec.file}.png`)
-        const edgeShadowSrc = bassAsset(`bass/${resolvedConfig.bassType}/front/shadows_highlights/edge-shadow.png`)
-        const coatMask = bodyMask
-
-        // Same layering rule as Vader: below neck (100) and pickguard (9),
-        // above body wood/finish (1-4) — a wood-finish effect, not a hardware overlay.
-        if (topCoatBaseSrc) {
-          layers.push({ name: 'top-coat-base', maskSrc: coatMask, style: { backgroundImage: `url(${topCoatBaseSrc})`, zIndex: 7 } })
-        }
-        if (edgeShadowSrc) {
-          layers.push({ name: 'top-coat-edge', maskSrc: coatMask, style: { backgroundImage: `url(${edgeShadowSrc})`, zIndex: 7 } })
-        }
-      }
-
     const orderedLayers = sortLayersByZIndex(layers)
     if (DEBUG) console.log('[FRONT LAYERS]', orderedLayers.map(l => l.name))
     return orderedLayers
-  }, [assets, colorKey, resolvedConfig.pickguard, resolvedConfig.topCoat, resolvedConfig.burstEdges, resolvedConfig.threePieceBody, resolvedConfig.vaderBridgePickup, resolvedConfig.vaderNeckPickup, resolvedConfig.vaderPickupColor, resolvedConfig.vaderPickupColorRgb, resolvedConfig.vaderKnobs, resolvedConfig.vaderStrapButtons, resolvedConfig.hardware])
+  // frontLayers should end with:
+}, [assets, colorKey, resolvedConfig.pickguard, resolvedConfig.topCoat, resolvedConfig.burstEdges, resolvedConfig.threePieceBody, resolvedConfig.vaderBridgePickup, resolvedConfig.vaderNeckPickup, resolvedConfig.vaderPickupColor, resolvedConfig.vaderPickupColorRgb, resolvedConfig.vaderKnobs, resolvedConfig.vaderStrapButtons, resolvedConfig.hardware, resolvedConfig.strapButtons, resolvedConfig.frets, resolvedConfig.nut])
 
   const rearLayers = useMemo(() => {
     const layers = []
@@ -920,8 +914,8 @@ const inlay = {
     if (rearBodyMask && assets.bodyWood?.texture) {
       layers.push({ name: 'rear-body-wood', maskSrc: rearBodyMask, style: { backgroundImage: `url(${assets.bodyWood.texture})`, opacity: 1, zIndex: 1 } })
     }
-    if (resolvedConfig.bassType === 'vader' && resolvedConfig.threePieceBody === 'on') {
-      const threePieceMask = bassAsset('bass/vader/back/masks/three-piece-body-mask.png')
+    if (resolvedConfig.threePieceBody === 'on') {
+      const threePieceMask = bassAsset(`bass/${resolvedConfig.bassType}/back/masks/three-piece-body-mask.png`)
       if (threePieceMask) {
         layers.push({
           name: 'rear-three-piece-body',
@@ -951,8 +945,15 @@ const inlay = {
     const isRearHeadless = assets.isHeadless || resolvedConfig.bassType === 'vader'
     if (isRearHeadless && assets.bodyAssets?.back?.neckCap) {
       layers.push({ name: 'rear-neck-cap', src: assets.bodyAssets.back.neckCap, style: { zIndex: 105, opacity: 0.95 }, protectedLayer: true })
-    } else if (assets.headstockWood?.texture && rearHeadstockMask) {
+    }else if (assets.headstockWood?.texture && rearHeadstockMask) {
       layers.push({ name: 'rear-headstock-wood', maskSrc: rearHeadstockMask, style: { backgroundImage: `url(${assets.headstockWood.texture})`, opacity: 0.95, zIndex: 105 }, protectedLayer: true })
+    }
+    if (resolvedConfig.bassType !== 'vader') {
+      const strapVariant = resolveStrapButtonVariant(resolvedConfig.strapButtons)
+      const rearStrapSrc = bassAsset(`bass/${resolvedConfig.bassType}/back/strap buttons/${strapVariant}/${colorKey}.png`)
+      if (rearStrapSrc) {
+        layers.push({ name: 'rear-strap', src: rearStrapSrc, style: { zIndex: 110, opacity: 0.95 }, protectedLayer: true })
+      }
     }
     if (!isRearHeadless && rearHeadstockMask && assets.rearHeadstockFinish) {
       layers.push({ name: 'rear-headstock-finish', maskSrc: rearHeadstockMask, style: { backgroundImage: `url(${assets.rearHeadstockFinish})`, opacity: 0.85, mixBlendMode: 'multiply', zIndex: 106 }, protectedLayer: true })
@@ -970,38 +971,54 @@ const inlay = {
       layers.push({ name: 'rear-strap', src: assets.strapButtons.backSrc(colorKey), style: { zIndex: 110, opacity: 0.95 }, protectedLayer: true })
     }
 
-    if (resolvedConfig.bassType === 'vader') {
-      const rearTopCoatBaseMap = {
-        clearGloss: { file: 'gloss-tung-oil' },
-        rawTone: { file: 'op' },
-        tungOil: { file: 'op' },
-        satinMatte: { file: 'matte-tung-oil' },
+    {
+      // Neck Rear Finish is a rear-only effect (never shown in front view).
+      // Which base texture renders depends on BOTH the selected Top Coat
+      // AND the selected Neck Rear Finish option. Top Coat = Tung Oil hides
+      // the option entirely (no entry below → nothing rendered).
+      const NECK_REAR_FINISH_FILE_MAP = {
+        clearGloss: {
+          clearGlossNeck: 'gloss',
+          tungOilNeck: 'gloss-tung-oil',
+          satinMatteNeck: 'gloss-matte',
+        },
+        rawTone: {
+          clearGlossNeck: 'gloss',
+          tungOilNeck: 'raw-tone',
+        },
+        satinMatte: {
+          tungOilNeck: 'matte-tung-oil',
+          satinMatteNeck: 'matte',
+        },
       }
-      const topCoatSpec = rearTopCoatBaseMap[resolvedConfig.topCoat] || rearTopCoatBaseMap.clearGloss
-      const topCoatBaseSrc = bassAsset(`bass/vader/back/shadows_highlights/${topCoatSpec.file}.png`)
-      const edgeShadowSrc = bassAsset('bass/vader/back/shadows_highlights/edge-shadow.png')
-      const multiplySrc = bassAsset('bass/vader/back/shadows_highlights/multiply.png')
-      const coatMask = rearBodyMask
+      const topCoatFile = NECK_REAR_FINISH_FILE_MAP[resolvedConfig.topCoat]?.[resolvedConfig.neckRearFinish]
 
-      // Same reordering as front: below rear-strap (110), backplate (108),
-      // headstock finish (105-109), above body wood/finish (1-2).
-      if (topCoatBaseSrc) {
-        layers.push({ name: 'rear-top-coat-base', maskSrc: coatMask, style: { backgroundImage: `url(${topCoatBaseSrc})`, zIndex: 3 } })
-      }
-      if (edgeShadowSrc) {
-        layers.push({ name: 'rear-top-coat-edge', maskSrc: coatMask, style: { backgroundImage: `url(${edgeShadowSrc})`, zIndex: 3 } })
-      }
-      if (multiplySrc) {
-        layers.push({ name: 'rear-top-coat-multiply', maskSrc: coatMask, style: { backgroundImage: `url(${multiplySrc})`, zIndex: 3 } })
+      if (topCoatFile) {
+        const topCoatBaseSrc = bassAsset(`bass/${resolvedConfig.bassType}/back/shadows_highlights/${topCoatFile}.png`)
+        const edgeShadowSrc = bassAsset(`bass/${resolvedConfig.bassType}/back/shadows_highlights/edge-shadow.png`)
+        const multiplySrc = bassAsset(`bass/${resolvedConfig.bassType}/back/shadows_highlights/multiply.png`)
+        const coatMask = rearBodyMask
+
+        // Same reordering as front: below rear-strap (110), backplate (108),
+        // headstock finish (105-109), above body wood/finish (1-2).
+        if (topCoatBaseSrc) {
+          layers.push({ name: 'rear-top-coat-base', maskSrc: coatMask, style: { backgroundImage: `url(${topCoatBaseSrc})`, zIndex: 3 } })
+        }
+        if (edgeShadowSrc) {
+          layers.push({ name: 'rear-top-coat-edge', maskSrc: coatMask, style: { backgroundImage: `url(${edgeShadowSrc})`, zIndex: 3 } })
+        }
+        if (multiplySrc) {
+          layers.push({ name: 'rear-top-coat-multiply', maskSrc: coatMask, style: { backgroundImage: `url(${multiplySrc})`, zIndex: 3 } })
+        }
       }
     }
 
-    // Vader burst edges for rear (skip reverse — front only)
-    if (resolvedConfig.bassType === 'vader' && resolvedConfig.burstEdges && resolvedConfig.burstEdges !== 'none' && resolvedConfig.burstEdges !== 'reverseTranslucentBlackBurst') {
+    // Burst edges for rear (skip reverse — front only) — extended to all models
+    if (resolvedConfig.burstEdges && resolvedConfig.burstEdges !== 'none' && resolvedConfig.burstEdges !== 'reverseTranslucentBlackBurst') {
       const burstMap = {
-        blackBurst: { mask: bassAsset('bass/vader/back/masks/black-burst-mask.png'), color: 'rgba(0,0,0,0.85)' },
-        whiteBurst: { mask: bassAsset('bass/vader/back/masks/black-burst-mask.png'), color: 'rgba(255,255,255,0.85)' },
-        translucentBlackBurst: { mask: bassAsset('bass/vader/back/masks/burstmask.png'), color: 'rgba(0,0,0,0.65)' },
+        blackBurst: { mask: bassAsset(`bass/${resolvedConfig.bassType}/back/masks/black-burst-mask.png`), color: 'rgba(0,0,0,0.85)' },
+        whiteBurst: { mask: bassAsset(`bass/${resolvedConfig.bassType}/back/masks/black-burst-mask.png`), color: 'rgba(255,255,255,0.85)' },
+        translucentBlackBurst: { mask: bassAsset(`bass/${resolvedConfig.bassType}/back/masks/burstmask.png`), color: 'rgba(0,0,0,0.65)' },
       }
       const burstSpec = burstMap[resolvedConfig.burstEdges]
       if (burstSpec?.mask) {
@@ -1014,31 +1031,11 @@ const inlay = {
       }
     }
 
-      if (resolvedConfig.bassType !== 'vader') {
-        const rearTopCoatBaseMap = {
-          clearGloss: { file: 'gloss' },
-          tungOil: { file: 'op' },
-          satinMatte: { file: 'matte' },
-        }
-        const topCoatSpec = rearTopCoatBaseMap[resolvedConfig.topCoat] || rearTopCoatBaseMap.clearGloss
-        const topCoatBaseSrc = bassAsset(`bass/${resolvedConfig.bassType}/back/shadows_highlights/${topCoatSpec.file}.png`)
-        const multiplySrc = bassAsset(`bass/${resolvedConfig.bassType}/back/shadows_highlights/multiply.png`)
-        const coatMask = rearBodyMask
-
-        // Same zIndex band as Vader's rear stack: below rear-strap/backplate/
-        // headstock finish (104+), above body wood/finish (1-2).
-        if (topCoatBaseSrc) {
-          layers.push({ name: 'rear-top-coat-base', maskSrc: coatMask, style: { backgroundImage: `url(${topCoatBaseSrc})`, zIndex: 3 } })
-        }
-        if (multiplySrc) {
-          layers.push({ name: 'rear-top-coat-multiply', maskSrc: coatMask, style: { backgroundImage: `url(${multiplySrc})`, zIndex: 3 } })
-        }
-      }
-
     const orderedLayers = sortLayersByZIndex(layers)
     if (DEBUG) console.log('[REAR LAYERS]', orderedLayers.map(l => l.name))
     return orderedLayers
-  }, [assets, resolvedConfig.topCoat, resolvedConfig.burstEdges, resolvedConfig.threePieceBody, resolvedConfig.vaderBridgePickup, resolvedConfig.vaderElectronicsCavityCover, resolvedConfig.vaderStrapButtons])
+  // rearLayers should end with:
+}, [assets, resolvedConfig.topCoat, resolvedConfig.neckRearFinish, resolvedConfig.burstEdges, resolvedConfig.threePieceBody, resolvedConfig.vaderBridgePickup, resolvedConfig.vaderElectronicsCavityCover, resolvedConfig.vaderStrapButtons, resolvedConfig.strapButtons])
 
   const previewLayout = bassBuilder.PREVIEW_LAYOUTS[resolvedConfig.bassType] ?? { scale: 0.93, x: 0, y: 26 }
   const previewScale = view === 'rear' ? previewLayout.scale * 0.98 : previewLayout.scale

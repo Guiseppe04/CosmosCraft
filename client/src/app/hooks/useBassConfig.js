@@ -43,9 +43,9 @@ import {
   STRING_COUNT_OPTIONS,
   MULTISCALE_OPTIONS,
   CASE_OPTIONS,
-  FINISH_TYPE_OPTIONS,
   TOP_COAT_OPTIONS,
   BURST_FINISH_OPTIONS,
+  FINISH_TYPE_OPTIONS,
   NECK_CONSTRUCTION_OPTIONS,
   FRET_OPTIONS,
   NECK_REAR_FINISH_OPTIONS,
@@ -322,15 +322,16 @@ export default function useBassConfig() {
     const topCoat = config.topCoat
     const merged = {}
     Object.entries(BASS_NECK_REAR_FINISH_OPTIONS).forEach(([key, opt]) => {
+      if (config.bassType !== 'vader' && key !== 'tungOilNeck') return
       if (!topCoat || opt.visibleTopCoats.includes(topCoat)) {
         merged[key] = opt
       }
     })
     return merged
-  }, [config.topCoat])
+  }, [config.topCoat, config.bassType])
 
   const mergedHeadstockWoodOptions = useMemo(() => {
-    if (config.bassType === 'vader') return {}
+    if (config.bassType !== 'vader') return {}
     const merged = { ...BASS_HEADSTOCK_WOOD_OPTIONS }
     Object.keys(merged).forEach(key => {
       if (priceOverrides[key] !== undefined) {
@@ -343,12 +344,13 @@ export default function useBassConfig() {
   const mergedHeadstockStyleOptions = useMemo(() => {
     const merged = { ...BASS_HEADSTOCK_STYLE_OPTIONS }
     Object.keys(merged).forEach(key => {
+      if (key === 'headless' && config.bassType !== 'vader') return
       if (priceOverrides[key] !== undefined) {
         merged[key] = { ...merged[key], price: priceOverrides[key].price }
       }
     })
     return merged
-  }, [priceOverrides])
+  }, [priceOverrides, config.bassType])
 
   const mergedNeckStyleOptions = useMemo(() => {
     const merged = { ...BASS_NECK_STYLE_OPTIONS }
@@ -900,7 +902,9 @@ const mergedInlayMaterialOptions = useMemo(() => {
       (mergedFretboardOptions[config.fretboard]?.price ?? BASS_FRETBOARD_OPTIONS[config.fretboard]?.price ?? 0) +
       (mergedFretOptions[config.frets]?.price ?? BASS_FRET_OPTIONS[config.frets]?.price ?? 0) +
       (BASS_NECK_REAR_FINISH_OPTIONS[config.neckRearFinish]?.price ?? 0) +
-      (mergedHeadstockWoodOptions[config.headstockWood]?.price ?? BASS_HEADSTOCK_WOOD_OPTIONS[config.headstockWood]?.price ?? 0) +
+      (config.bassType === 'vader'
+        ? mergedHeadstockWoodOptions[config.headstockWood]?.price ?? BASS_HEADSTOCK_WOOD_OPTIONS[config.headstockWood]?.price ?? 0
+        : 0) +
       (mergedHeadstockStyleOptions[config.headstockStyle]?.price ?? BASS_HEADSTOCK_STYLE_OPTIONS[config.headstockStyle]?.price ?? 0) +
       (mergedNeckStyleOptions[config.neckStyle]?.price ?? BASS_NECK_STYLE_OPTIONS[config.neckStyle]?.price ?? 0) +
       (mergedInlayShapeOptions[config.inlayShape]?.price ?? BASS_INLAY_SHAPE_OPTIONS[config.inlayShape]?.price ?? 0) +
@@ -989,7 +993,9 @@ const mergedInlayMaterialOptions = useMemo(() => {
       fretboard: BASS_FRETBOARD_OPTIONS[config.fretboard]?.label ?? config.fretboard,
       frets: BASS_FRET_OPTIONS[config.frets]?.label ?? config.frets,
       neckRearFinish: BASS_NECK_REAR_FINISH_OPTIONS[config.neckRearFinish]?.label ?? config.neckRearFinish,
-      headstockWood: BASS_HEADSTOCK_WOOD_OPTIONS[config.headstockWood]?.label ?? config.headstockWood,
+      headstockWood: config.bassType === 'vader'
+        ? BASS_HEADSTOCK_WOOD_OPTIONS[config.headstockWood]?.label ?? config.headstockWood
+        : BASS_NECK_OPTIONS[config.neck]?.label ?? config.neck,
       headstockStyle: BASS_HEADSTOCK_STYLE_OPTIONS[config.headstockStyle]?.label ?? config.headstockStyle,
       neckStyle: BASS_NECK_STYLE_OPTIONS[config.neckStyle]?.label ?? config.neckStyle,
       inlayShape: BASS_INLAY_SHAPE_OPTIONS[config.inlayShape]?.label ?? config.inlayShape,
@@ -1286,10 +1292,13 @@ const mergedInlayMaterialOptions = useMemo(() => {
     { value: 'translucentBlackBurst', label: 'Translucent Black Burst', note: 'Translucent black burst on both sides', price: 50 },
     { value: 'reverseTranslucentBlackBurst', label: 'Reverse Translucent Black Burst', note: 'Reverse translucent black burst (front only)', price: 55 },
   ]), [])
-  const threePieceBodyOptions = useMemo(() => ([
-    { value: 'off', label: 'Off', note: 'Standard 1-piece body', price: 0 },
-    { value: 'on', label: 'On', note: '3-piece body construction', price: 80 },
-  ]), [])
+  const threePieceBodyOptions = useMemo(() => {
+    if (config.bassType !== 'vader') return []
+    return [
+      { value: 'off', label: 'Off', note: 'Standard 1-piece body', price: 0 },
+      { value: 'on', label: 'On', note: '3-piece body construction', price: 80 },
+    ]
+  }, [config.bassType])
   const neckConstructionOptions = useMemo(
     () => Object.entries(mergedNeckConstructionOptions).map(([value, option]) => ({ value, ...option })),
     [mergedNeckConstructionOptions],
@@ -1446,7 +1455,9 @@ const mergedInlayMaterialOptions = useMemo(() => {
     fretboard: mergedFretboardOptions[config.fretboard]?.price ?? BASS_FRETBOARD_OPTIONS[config.fretboard]?.price ?? 0,
     frets: mergedFretOptions[config.frets]?.price ?? BASS_FRET_OPTIONS[config.frets]?.price ?? 0,
     neckRearFinish: BASS_NECK_REAR_FINISH_OPTIONS[config.neckRearFinish]?.price ?? 0,
-    headstockWood: mergedHeadstockWoodOptions[config.headstockWood]?.price ?? BASS_HEADSTOCK_WOOD_OPTIONS[config.headstockWood]?.price ?? 0,
+    headstockWood: config.bassType === 'vader'
+      ? mergedHeadstockWoodOptions[config.headstockWood]?.price ?? BASS_HEADSTOCK_WOOD_OPTIONS[config.headstockWood]?.price ?? 0
+      : 0,
     headstockStyle: mergedHeadstockStyleOptions[config.headstockStyle]?.price ?? BASS_HEADSTOCK_STYLE_OPTIONS[config.headstockStyle]?.price ?? 0,
     neckStyle: mergedNeckStyleOptions[config.neckStyle]?.price ?? BASS_NECK_STYLE_OPTIONS[config.neckStyle]?.price ?? 0,
     inlayShape: mergedInlayShapeOptions[config.inlayShape]?.price ?? BASS_INLAY_SHAPE_OPTIONS[config.inlayShape]?.price ?? 0,

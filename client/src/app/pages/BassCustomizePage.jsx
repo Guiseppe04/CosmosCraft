@@ -88,15 +88,18 @@ function Tooltip({ content, children }) {
   )
 }
 
-function OptionButton({ option, isSelected, onClick }) {
+function OptionButton({ option, isSelected, onClick, disabled = false }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      disabled={disabled}
       className={`group relative w-full rounded-xl border p-3.5 text-left transition-all duration-200 ${
-        isSelected
-          ? 'border-[#d4af37] bg-gradient-to-br from-[#d4af37]/20 to-[#d4af37]/5 shadow-lg shadow-[#d4af37]/10'
-          : 'border-[var(--border)] bg-[var(--surface-elevated)] hover:border-[var(--gold-primary)] hover:bg-[var(--surface-dark)]'
+        disabled
+          ? 'border-white/5 opacity-40 cursor-not-allowed'
+          : isSelected
+            ? 'border-[#d4af37] bg-gradient-to-br from-[#d4af37]/20 to-[#d4af37]/5 shadow-lg shadow-[#d4af37]/10'
+            : 'border-[var(--border)] bg-[var(--surface-elevated)] hover:border-[var(--gold-primary)] hover:bg-[var(--surface-dark)]'
       }`}
     >
       {isSelected && (
@@ -469,24 +472,26 @@ function VaderBodyAccordion({ config, updateConfig, options, isCustomBodyColor }
       </AccordionSection>
 
       {/* 3-PIECE BODY SECTION */}
-      <AccordionSection title="Additional Finish Options — 3-Piece Body" icon={ToggleRight} defaultOpen={true}>
-        <div>
-          <h3 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-white/70 mb-2">3-Piece Body</h3>
-          <div className="grid grid-cols-2 gap-2">
-            {options.threePieceBodyOptions?.map((opt) => (
-              <OptionButton
-                key={opt.value}
-                option={opt}
-                isSelected={config.threePieceBody === opt.value}
-                onClick={() => updateConfig({ threePieceBody: opt.value })}
-              />
-            ))}
+      {options.threePieceBodyOptions?.length > 0 && (
+        <AccordionSection title="Additional Finish Options — 3-Piece Body" icon={ToggleRight} defaultOpen={true}>
+          <div>
+            <h3 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-white/70 mb-2">3-Piece Body</h3>
+            <div className="grid grid-cols-2 gap-2">
+              {options.threePieceBodyOptions?.map((opt) => (
+                <OptionButton
+                  key={opt.value}
+                  option={opt}
+                  isSelected={config.threePieceBody === opt.value}
+                  onClick={() => updateConfig({ threePieceBody: opt.value })}
+                />
+              ))}
+            </div>
+            <p className="text-[10px] text-white/40 mt-2">
+              Toggle ON to render a 3-piece body striping layer over your bass body.
+            </p>
           </div>
-          <p className="text-[10px] text-white/40 mt-2">
-            Toggle ON to render a 3-piece body striping layer over your bass body.
-          </p>
-        </div>
-      </AccordionSection>
+        </AccordionSection>
+      )}
     </div>
   )
 }
@@ -1569,99 +1574,12 @@ export function BassCustomizePage() {
                     </div>
                   </div>
 
-                  {config.bassType === 'vader' ? (
-                    <VaderBodyAccordion
-                      config={config}
-                      updateConfig={updateConfig}
-                      options={options}
-                      isCustomBodyColor={isCustomBodyColor}
-                    />
-                  ) : (
-                    <>
-                      <div>
-                        <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Body Wood</h3>
-                        <div className="grid grid-cols-2 gap-2">
-                          {options.bodyWoodOptions?.map((opt) => (
-                            <VisualCard
-                              key={opt.value}
-                              option={opt}
-                              isSelected={config.bodyWood === opt.value}
-                              onClick={() => updateConfig({ bodyWood: opt.value })}
-                              previewImage={opt.texture}
-                            />
-                          ))}
-                        </div>
-                      </div>
-
-                      <div>
-                        <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-3">Body Finish Color</h3>
-                        <RGBColorPicker
-                          value={isCustomBodyColor ? config.bodyFinish : '#1A1A1A'}
-                          onChange={(color) => updateConfig({ bodyFinish: color })}
-                          label="Select Bass Body Color"
-                        />
-                        <p className="text-xs text-white/40 mt-3">
-                          Choose any custom color for your bass body using the RGB picker or enter a hex value.
-                        </p>
-                      </div>
-
-                      <div>
-                        <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Top Wood</h3>
-                        <div className="grid grid-cols-2 gap-2">
-                          {options.topWoodOptions?.map((opt) => (
-                            <OptionButton
-                              key={opt.value}
-                              option={opt}
-                              isSelected={config.topWood === opt.value}
-                              onClick={() => updateConfig({ topWood: opt.value })}
-                            />
-                          ))}
-                        </div>
-                      </div>
-
-                      <div>
-                        <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Finish Type</h3>
-                        <div className="grid grid-cols-2 gap-2">
-                          {options.finishTypeOptions?.map((opt) => (
-                            <OptionButton
-                              key={opt.value}
-                              option={opt}
-                              isSelected={config.finishType === opt.value}
-                              onClick={() => updateConfig({ finishType: opt.value })}
-                            />
-                          ))}
-                        </div>
-                      </div>
-
-                      <div>
-                        <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Top Coat</h3>
-                        <div className="grid grid-cols-2 gap-2">
-                          {options.topCoatOptions?.map((opt) => (
-                            <OptionButton
-                              key={opt.value}
-                              option={opt}
-                              isSelected={config.topCoat === opt.value}
-                              onClick={() => updateConfig({ topCoat: opt.value })}
-                            />
-                          ))}
-                        </div>
-                      </div>
-
-                      <div>
-                        <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Burst Finish</h3>
-                        <div className="grid grid-cols-2 gap-2">
-                          {options.burstFinishOptions?.map((opt) => (
-                            <OptionButton
-                              key={opt.value}
-                              option={opt}
-                              isSelected={config.burstFinish === opt.value}
-                              onClick={() => updateConfig({ burstFinish: opt.value })}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    </>
-                  )}
+                  <VaderBodyAccordion
+                    config={config}
+                    updateConfig={updateConfig}
+                    options={options}
+                    isCustomBodyColor={isCustomBodyColor}
+                  />
                 </div>
               )}
               
@@ -1690,37 +1608,36 @@ export function BassCustomizePage() {
                          </div>
                        </div>
                   
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Fretboard</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.fretboardOptions?.map((opt) => (
-                        <OptionButton
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.fretboard === opt.value}
-                          onClick={() => updateConfig({ fretboard: opt.value })}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                  
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Headstock Wood</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.headstockWoodOptions?.map((opt) => (
-                        <VisualCard
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.headstockWood === opt.value}
-                          onClick={() => updateConfig({ headstockWood: opt.value })}
-                          previewImage={opt.texture}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                   
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Headstock Style</h3>
+                   <div>
+                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Fretboard</h3>
+                     <div className="grid grid-cols-2 gap-2">
+                       {options.fretboardOptions?.map((opt) => (
+                         <OptionButton
+                           key={opt.value}
+                           option={opt}
+                           isSelected={config.fretboard === opt.value}
+                           onClick={() => updateConfig({ fretboard: opt.value })}
+                         />
+                       ))}
+                     </div>
+                   </div>
+
+                   <div>
+                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Fingerboard Radius</h3>
+                     <div className="grid grid-cols-2 gap-2">
+                       {options.fingerboardRadiusOptions?.map((opt) => (
+                         <OptionButton
+                           key={opt.value}
+                           option={opt}
+                           isSelected={config.fingerboardRadius === opt.value}
+                           onClick={() => updateConfig({ fingerboardRadius: opt.value })}
+                         />
+                       ))}
+                     </div>
+                   </div>
+                    
+                   <div>
+                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Headstock Style</h3>
                     <div className="grid grid-cols-2 gap-2">
                       {options.headstockStyleOptions?.map((opt) => (
                         <OptionButton
