@@ -591,7 +591,7 @@ const resolved = {
           : resolvedConfig.backplate,
         resolvedConfig.strings,
       ),
-      controlPlate: bassBuilder.CONTROL_PLATE_OPTIONS[resolvedConfig.controlPlate],
+     controlPlate: bassBuilder.CONTROL_PLATE_OPTIONS[resolvedConfig.hardware],
       bodyAssets: bassBuilder.BODY_LAYER_ASSETS[resolvedConfig.bassType],
       frontBodyMask: bassBuilder.resolveCatalogAsset(
         resolvedConfig.bassType, 'front', 'masks',
@@ -704,7 +704,7 @@ const resolved = {
     }
 
     const pickupScrewsByModel = bassBuilder.PICKUP_SCREW_OPTIONS[resolvedConfig.bassType]
-    if (pickupScrewsByModel) resolvedAssets.pickupScrews = pickupScrewsByModel[resolvedConfig.pickupScrews]
+    if (pickupScrewsByModel) resolvedAssets.pickupScrews = pickupScrewsByModel[resolvedConfig.hardware]
 
     resolvedAssets.pickupLayers = resolvedConfig.bassType === 'vader'
       ? resolveVaderPickupLayers(resolvedConfig)

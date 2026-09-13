@@ -1814,48 +1814,6 @@ export function BassCustomizePage() {
                    </div>
 
                    <div>
-                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Pickup Screws</h3>
-                     <div className="grid grid-cols-2 gap-2">
-                       {options.pickupScrewOptions?.map((opt) => (
-                         <OptionButton
-                           key={opt.value}
-                           option={opt}
-                           isSelected={config.pickupScrews === opt.value}
-                           onClick={() => updateConfig({ pickupScrews: opt.value })}
-                         />
-                       ))}
-                     </div>
-                   </div>
-
-                    <div>
-                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Control Plate</h3>
-                     <div className="grid grid-cols-2 gap-2">
-                       {options.controlPlateOptions?.map((opt) => (
-                         <OptionButton
-                           key={opt.value}
-                           option={opt}
-                           isSelected={config.controlPlate === opt.value}
-                           onClick={() => updateConfig({ controlPlate: opt.value })}
-                         />
-                       ))}
-                     </div>
-                   </div>
-
-                   <div>
-                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Saddle</h3>
-                     <div className="grid grid-cols-2 gap-2">
-                       {options.saddleOptions?.map((opt) => (
-                         <OptionButton
-                           key={opt.value}
-                           option={opt}
-                           isSelected={config.saddle === opt.value}
-                           onClick={() => updateConfig({ saddle: opt.value })}
-                         />
-                       ))}
-                     </div>
-                   </div>
-
-                   <div>
                      <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Nut</h3>
                      <div className="grid grid-cols-2 gap-2">
                        {options.nutOptions?.map((opt) => (
@@ -1870,53 +1828,6 @@ export function BassCustomizePage() {
                    </div>
 
                    <div>
-                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Tuning</h3>
-                     <div className="grid grid-cols-2 gap-2">
-                       {options.tuningOptions?.map((opt) => (
-                         <OptionButton
-                           key={opt.value}
-                           option={opt}
-                           isSelected={config.tuning === opt.value}
-                           onClick={() => updateConfig({ tuning: opt.value })}
-                         />
-                       ))}
-                     </div>
-                     {options.tuningDisclaimer && config.tuning === 'custom' && (
-                       <p className="text-[10px] leading-relaxed text-[var(--text-muted)] mt-2">
-                         {options.tuningDisclaimer}
-                       </p>
-                     )}
-                   </div>
-
-                   <div>
-                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">String Brand</h3>
-                     <div className="grid grid-cols-2 gap-2">
-                       {options.stringBrandOptions?.map((opt) => (
-                         <OptionButton
-                           key={opt.value}
-                           option={opt}
-                           isSelected={config.stringBrand === opt.value}
-                           onClick={() => updateConfig({ stringBrand: opt.value })}
-                         />
-                       ))}
-                     </div>
-                   </div>
-
-                   <div>
-                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Output Jack</h3>
-                     <div className="grid grid-cols-2 gap-2">
-                       {options.outputJackOptions?.map((opt) => (
-                         <OptionButton
-                           key={opt.value}
-                           option={opt}
-                           isSelected={config.outputJack === opt.value}
-                           onClick={() => updateConfig({ outputJack: opt.value })}
-                         />
-                       ))}
-                     </div>
-                   </div>
-
-                   <div>
                      <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Strap Buttons</h3>
                      <div className="grid grid-cols-2 gap-2">
                        {options.strapButtonOptions?.map((opt) => (
@@ -1925,34 +1836,6 @@ export function BassCustomizePage() {
                            option={opt}
                            isSelected={config.strapButtons === opt.value}
                            onClick={() => updateConfig({ strapButtons: opt.value })}
-                         />
-                       ))}
-                     </div>
-                   </div>
-
-                   <div>
-                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Tuner Buttons</h3>
-                     <div className="grid grid-cols-2 gap-2">
-                       {options.tunerButtonOptions?.map((opt) => (
-                         <OptionButton
-                           key={opt.value}
-                           option={opt}
-                           isSelected={config.tunerButtons === opt.value}
-                           onClick={() => updateConfig({ tunerButtons: opt.value })}
-                         />
-                       ))}
-                     </div>
-                   </div>
-
-                   <div>
-                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Electronics Cavity Cover</h3>
-                     <div className="grid grid-cols-2 gap-2">
-                       {options.electronicsCavityCoverOptions?.map((opt) => (
-                         <OptionButton
-                           key={opt.value}
-                           option={opt}
-                           isSelected={config.electronicsCavityCover === opt.value}
-                           onClick={() => updateConfig({ electronicsCavityCover: opt.value })}
                          />
                        ))}
                      </div>

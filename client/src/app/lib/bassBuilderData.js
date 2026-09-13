@@ -59,15 +59,15 @@ import {
   PICKUP_COLOR_OPTIONS,
   PICKUP_POLE_COLOR_OPTIONS,
   CONTROLS_OPTIONS,
-  SADDLE_OPTIONS,
+  
   NUT_OPTIONS,
-  TUNING_OPTIONS,
-  TUNING_DISCLAIMER,
-  STRING_BRAND_OPTIONS,
-  OUTPUT_JACK_OPTIONS,
+  
+  
+  
+  
   STRAP_BUTTON_OPTIONS,
-  TUNER_BUTTON_OPTIONS,
-   ELECTRONICS_CAVITY_COVER_OPTIONS,
+  
+   
    TREMOLO_COVER_OPTIONS_BY_BRIDGE,
    KNOB_STYLE_OPTIONS,
    FINISH_TYPE_OPTIONS,
@@ -96,15 +96,15 @@ export {
   PICKUP_COLOR_OPTIONS,
   PICKUP_POLE_COLOR_OPTIONS,
   CONTROLS_OPTIONS,
-  SADDLE_OPTIONS,
+  
   NUT_OPTIONS,
-  TUNING_OPTIONS,
-  TUNING_DISCLAIMER,
-  STRING_BRAND_OPTIONS,
-  OUTPUT_JACK_OPTIONS,
+  
+  
+  
+  
   STRAP_BUTTON_OPTIONS,
-  TUNER_BUTTON_OPTIONS,
-  ELECTRONICS_CAVITY_COVER_OPTIONS,
+  
+  
   TREMOLO_COVER_OPTIONS_BY_BRIDGE,
   KNOB_STYLE_OPTIONS,
   FINISH_TYPE_OPTIONS,
@@ -365,10 +365,7 @@ export const BASS_DEFAULT_CONFIG = {
   hardware: 'chrome',
   strings: '4',
   pickupConfig: 'j',
-  logo: 'standard',
   backplate: 'standard',
-  pickupScrews: 'black',
-  controlPlate: 'black',
   // --- New customization options ---
   dexterity: 'right',
   multiscale: 'off',
@@ -401,14 +398,8 @@ export const BASS_DEFAULT_CONFIG = {
     vaderStrapButtons: 'standard',
     vaderElectronicsCavityCover: 'black',
     controls: 'off',
-    saddle: 'chrome',
     nut: 'blackGraphTech',
-    tuning: 'eStandard',
-    stringBrand: 'elixir1046',
-    outputJack: 'off',
     strapButtons: 'standard',
-    tunerButtons: 'none',
-    electronicsCavityCover: 'black',
     tremoloCover: null,
     // Vader-specific finish/wood options
     finishColor: 'none',
@@ -1142,12 +1133,6 @@ export const BASS_BACKPLATE_OPTIONS = {
       src: resolveBassCatalogAsset('pb', 'back', 'backplates', { strings: '4', preferTokens: ['battery', 'compartment'] }) ?? bassModelAsset('pb', 'back/backplates/battery-compartment.png'),
       price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
-    extended: {
-      label: 'Extended 5-String',
-      note: 'Extended 5-string back panel',
-      src: resolveBassCatalogAsset('pb', 'back', 'backplates', { strings: '5', preferTokens: ['battery', 'compartment'] }) ?? bassModelAsset('pb', 'back/backplates/battery-compartment-5.png'),
-      price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
-    },
   },
   jb: {
     standard: {
@@ -1312,53 +1297,14 @@ export const BASS_BRIDGE_OPTIONS = {
       },
       price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
-    standard4: {
-      label: 'Standard 4-String',
-      note: 'Classic 4-string bridge',
-      assets: {
-        chrome: resolveBassCatalogVariant('pb', 'front', 'bridges/4', '4', 'chrome') ?? bassModelAsset('pb', 'front/bridges/4/chrome.png'),
-        black: resolveBassCatalogVariant('pb', 'front', 'bridges/4', '4', 'black') ?? bassModelAsset('pb', 'front/bridges/4/black.png'),
-        gold: resolveBassCatalogVariant('pb', 'front', 'bridges/4', '4', 'gold') ?? bassModelAsset('pb', 'front/bridges/4/gold.png'),
-      },
-      price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
-    },
-    extended5: {
-      label: 'Standard 5-String',
-      note: 'Extended 5-string bridge',
-      assets: {
-        chrome: resolveBassCatalogVariant('pb', 'front', 'bridges/5', '5', 'chrome') ?? bassModelAsset('pb', 'front/bridges/5/chrome.png'),
-        black: resolveBassCatalogVariant('pb', 'front', 'bridges/5', '5', 'black') ?? bassModelAsset('pb', 'front/bridges/5/black.png'),
-        gold: resolveBassCatalogVariant('pb', 'front', 'bridges/5', '5', 'gold') ?? bassModelAsset('pb', 'front/bridges/5/gold.png'),
-      },
-      price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
-    },
-    standard5: {
-      label: 'Standard 5-String',
-      note: 'Extended 5-string bridge',
-      assets: {
-        chrome: resolveBassCatalogVariant('pb', 'front', 'bridges/5', '5', 'chrome') ?? bassModelAsset('pb', 'front/bridges/5/chrome.png'),
-        black: resolveBassCatalogVariant('pb', 'front', 'bridges/5', '5', 'black') ?? bassModelAsset('pb', 'front/bridges/5/black.png'),
-        gold: resolveBassCatalogVariant('pb', 'front', 'bridges/5', '5', 'gold') ?? bassModelAsset('pb', 'front/bridges/5/gold.png'),
-      },
-      price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
-    },
   },
 }
-
-
 
 export const BASS_PICKGUARD_OPTIONS = {
   vader: {
     none: { label: 'None', note: 'No pickguard', src: null, price: 0, specs: { size: '', dimensions: '', material: '', notes: '' } },
   },
   pb: {
-    none: { label: 'None', note: 'No pickguard', src: null, price: 0, specs: { size: '', dimensions: '', material: '', notes: '' } },
-    black: {
-      label: 'Black',
-      note: 'Classic black guard',
-      src: bassModelAsset('pb', 'front/pickguard/black.png'),
-      price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
-    },
     white: {
       label: 'White',
       note: 'Clean white guard',
@@ -1610,6 +1556,13 @@ export const BASS_HARDWARE_OPTIONS = {
     specs: { size: '', dimensions: '', material: '', notes: '' },
     color: 'black',
   },
+  gold: {
+    label: 'Gold',
+    note: 'Premium gold hardware',
+    price: 60,
+    specs: { size: '', dimensions: '', material: '', notes: '' },
+    color: 'gold',
+  }
 }
 
 export const BASS_PICKUP_OPTIONS = {
@@ -1946,17 +1899,10 @@ export const bassBuilder = {
   PICKUP_COLOR_OPTIONS,
   PICKUP_POLE_COLOR_OPTIONS,
   CONTROLS_OPTIONS,
-  SADDLE_OPTIONS,
   NUT_OPTIONS,
-  TUNING_OPTIONS,
-  TUNING_DISCLAIMER,
-  STRING_BRAND_OPTIONS,
-  OUTPUT_JACK_OPTIONS,
   STRAP_BUTTON_OPTIONS,
-  TUNER_BUTTON_OPTIONS,
-   ELECTRONICS_CAVITY_COVER_OPTIONS,
-   TREMOLO_COVER_OPTIONS_BY_BRIDGE,
-   KNOB_STYLE_OPTIONS,
+  TREMOLO_COVER_OPTIONS_BY_BRIDGE,
+  KNOB_STYLE_OPTIONS,
   resolveCatalogAsset: resolveBassCatalogAsset,
   resolveCatalogVariant: resolveBassCatalogVariant,
   resolveSharedAsset: resolveSharedBassAsset,

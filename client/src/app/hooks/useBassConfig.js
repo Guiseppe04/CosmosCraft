@@ -24,9 +24,9 @@ import {
   BASS_INLAY_MATERIAL_OPTIONS,
   BASS_BACKPLATE_OPTIONS,
   BASS_PICKUP_SCREW_OPTIONS,
-  BASS_CONTROL_PLATE_OPTIONS,
   BASS_PICKGUARD_OPTIONS,
   BASS_KNOB_OPTIONS,
+  BASS_CONTROL_PLATE_OPTIONS,
   BASS_PICKUP_OPTIONS,
   BASS_PICKUP_TYPE_STYLE_OPTIONS,
   BASS_STRING_OPTIONS,
@@ -59,15 +59,8 @@ import {
   PICKUP_COLOR_OPTIONS,
   PICKUP_POLE_COLOR_OPTIONS,
   CONTROLS_OPTIONS,
-  SADDLE_OPTIONS,
   NUT_OPTIONS,
-  TUNING_OPTIONS,
-  TUNING_DISCLAIMER,
-  STRING_BRAND_OPTIONS,
-  OUTPUT_JACK_OPTIONS,
   STRAP_BUTTON_OPTIONS,
-  TUNER_BUTTON_OPTIONS,
-  ELECTRONICS_CAVITY_COVER_OPTIONS,
   TREMOLO_COVER_OPTIONS_BY_BRIDGE,
   KNOB_STYLE_OPTIONS,
 } from '../lib/bassBuilderData.js'
@@ -730,16 +723,6 @@ const mergedInlayMaterialOptions = useMemo(() => {
     return merged
   }, [mergeOptionsFromBuilderParts, priceOverrides])
 
-  const mergedSaddleOptions = useMemo(() => {
-    const merged = mergeOptionsFromBuilderParts(SADDLE_OPTIONS, { partCategory: 'misc', typeMappings: ['saddle'] })
-    Object.keys(merged).forEach(key => {
-      if (priceOverrides[key] !== undefined) {
-        merged[key] = { ...merged[key], price: priceOverrides[key].price }
-      }
-    })
-    return merged
-  }, [mergeOptionsFromBuilderParts, priceOverrides])
-
   const mergedNutOptions = useMemo(() => {
     const merged = mergeOptionsFromBuilderParts(NUT_OPTIONS, { partCategory: 'misc', typeMappings: ['nut'] })
     Object.keys(merged).forEach(key => {
@@ -750,58 +733,8 @@ const mergedInlayMaterialOptions = useMemo(() => {
     return merged
   }, [mergeOptionsFromBuilderParts, priceOverrides])
 
-  const mergedTuningOptions = useMemo(() => {
-    const merged = mergeOptionsFromBuilderParts(TUNING_OPTIONS, { partCategory: 'misc', typeMappings: ['tuning'] })
-    Object.keys(merged).forEach(key => {
-      if (priceOverrides[key] !== undefined) {
-        merged[key] = { ...merged[key], price: priceOverrides[key].price }
-      }
-    })
-    return merged
-  }, [mergeOptionsFromBuilderParts, priceOverrides])
-
-  const mergedStringBrandOptions = useMemo(() => {
-    const merged = mergeOptionsFromBuilderParts(STRING_BRAND_OPTIONS, { partCategory: 'misc', typeMappings: ['stringBrand'] })
-    Object.keys(merged).forEach(key => {
-      if (priceOverrides[key] !== undefined) {
-        merged[key] = { ...merged[key], price: priceOverrides[key].price }
-      }
-    })
-    return merged
-  }, [mergeOptionsFromBuilderParts, priceOverrides])
-
-  const mergedOutputJackOptions = useMemo(() => {
-    const merged = mergeOptionsFromBuilderParts(OUTPUT_JACK_OPTIONS, { partCategory: 'misc', typeMappings: ['outputJack'] })
-    Object.keys(merged).forEach(key => {
-      if (priceOverrides[key] !== undefined) {
-        merged[key] = { ...merged[key], price: priceOverrides[key].price }
-      }
-    })
-    return merged
-  }, [mergeOptionsFromBuilderParts, priceOverrides])
-
   const mergedStrapButtonOptions = useMemo(() => {
     const merged = mergeOptionsFromBuilderParts(STRAP_BUTTON_OPTIONS, { partCategory: 'misc', typeMappings: ['strapButtons'] })
-    Object.keys(merged).forEach(key => {
-      if (priceOverrides[key] !== undefined) {
-        merged[key] = { ...merged[key], price: priceOverrides[key].price }
-      }
-    })
-    return merged
-  }, [mergeOptionsFromBuilderParts, priceOverrides])
-
-  const mergedTunerButtonOptions = useMemo(() => {
-    const merged = mergeOptionsFromBuilderParts(TUNER_BUTTON_OPTIONS, { partCategory: 'misc', typeMappings: ['tunerButtons'] })
-    Object.keys(merged).forEach(key => {
-      if (priceOverrides[key] !== undefined) {
-        merged[key] = { ...merged[key], price: priceOverrides[key].price }
-      }
-    })
-    return merged
-  }, [mergeOptionsFromBuilderParts, priceOverrides])
-
-  const mergedElectronicsCavityCoverOptions = useMemo(() => {
-    const merged = mergeOptionsFromBuilderParts(ELECTRONICS_CAVITY_COVER_OPTIONS, { partCategory: 'misc', typeMappings: ['electronicsCavityCover'] })
     Object.keys(merged).forEach(key => {
       if (priceOverrides[key] !== undefined) {
         merged[key] = { ...merged[key], price: priceOverrides[key].price }
@@ -948,14 +881,8 @@ const mergedInlayMaterialOptions = useMemo(() => {
       (mergedPickupPoleColorOptions[config.pickupPoleColor]?.price ?? 0) +
       (mergedControlsOptions[config.controls]?.price ?? 0) +
       // Hardware new options
-      (mergedSaddleOptions[config.saddle]?.price ?? 0) +
       (mergedNutOptions[config.nut]?.price ?? 0) +
-      (mergedTuningOptions[config.tuning]?.price ?? 0) +
-      (mergedStringBrandOptions[config.stringBrand]?.price ?? 0) +
-      (mergedOutputJackOptions[config.outputJack]?.price ?? 0) +
       (mergedStrapButtonOptions[config.strapButtons]?.price ?? 0) +
-      (mergedTunerButtonOptions[config.tunerButtons]?.price ?? 0) +
-      (mergedElectronicsCavityCoverOptions[config.electronicsCavityCover]?.price ?? 0) +
       (tremoloCoverOptions[config.tremoloCover]?.price ?? 0)
     )
   }, [
@@ -977,10 +904,8 @@ const mergedInlayMaterialOptions = useMemo(() => {
     mergedPickupConfigurationOptions, mergedBridgePickupModelOptions,
     mergedMiddlePickupModelOptions, mergedNeckPickupModelOptions,
     mergedPickupColorOptions, mergedPickupPoleColorOptions,
-    mergedControlsOptions, mergedSaddleOptions, mergedNutOptions,
-    mergedTuningOptions, mergedStringBrandOptions, mergedOutputJackOptions,
-    mergedStrapButtonOptions, mergedTunerButtonOptions,
-    mergedElectronicsCavityCoverOptions, tremoloCoverOptions,
+    mergedControlsOptions, mergedNutOptions,
+    mergedStrapButtonOptions, tremoloCoverOptions,
   ])
 
   const summary = useMemo(
@@ -1044,15 +969,8 @@ const mergedInlayMaterialOptions = useMemo(() => {
       pickupWoodType: config.pickupWoodType,
       controls: CONTROLS_OPTIONS[config.controls]?.label ?? config.controls,
       // Hardware new options
-      saddle: SADDLE_OPTIONS[config.saddle]?.label ?? config.saddle,
       nut: NUT_OPTIONS[config.nut]?.label ?? config.nut,
-      tuning: TUNING_OPTIONS[config.tuning]?.label ?? config.tuning,
-      tuningDisclaimer: config.tuning === 'custom' ? TUNING_DISCLAIMER : '',
-      stringBrand: STRING_BRAND_OPTIONS[config.stringBrand]?.label ?? config.stringBrand,
-      outputJack: OUTPUT_JACK_OPTIONS[config.outputJack]?.label ?? config.outputJack,
       strapButtons: STRAP_BUTTON_OPTIONS[config.strapButtons]?.label ?? config.strapButtons,
-      tunerButtons: TUNER_BUTTON_OPTIONS[config.tunerButtons]?.label ?? config.tunerButtons,
-      electronicsCavityCover: ELECTRONICS_CAVITY_COVER_OPTIONS[config.electronicsCavityCover]?.label ?? config.electronicsCavityCover,
       tremoloCover: TREMOLO_COVER_OPTIONS_BY_BRIDGE[config.bridge]?.[config.tremoloCover]?.label ?? config.tremoloCover,
     }),
     [config],
@@ -1393,37 +1311,13 @@ const mergedInlayMaterialOptions = useMemo(() => {
     () => config.bassType === 'vader' ? [] : Object.entries(mergedControlsOptions).map(([value, option]) => ({ value, ...option })),
     [config.bassType, mergedControlsOptions],
   )
-  const saddleOptions = useMemo(
-    () => Object.entries(mergedSaddleOptions).map(([value, option]) => ({ value, ...option })),
-    [mergedSaddleOptions],
-  )
   const nutOptions = useMemo(
     () => Object.entries(mergedNutOptions).map(([value, option]) => ({ value, ...option })),
     [mergedNutOptions],
   )
-  const tuningOptions = useMemo(
-    () => Object.entries(mergedTuningOptions).map(([value, option]) => ({ value, ...option })),
-    [mergedTuningOptions],
-  )
-  const stringBrandOptions = useMemo(
-    () => Object.entries(mergedStringBrandOptions).map(([value, option]) => ({ value, ...option })),
-    [mergedStringBrandOptions],
-  )
-  const outputJackOptions = useMemo(
-    () => Object.entries(mergedOutputJackOptions).map(([value, option]) => ({ value, ...option })),
-    [mergedOutputJackOptions],
-  )
   const strapButtonOptions = useMemo(
     () => config.bassType === 'vader' ? [] : Object.entries(mergedStrapButtonOptions).map(([value, option]) => ({ value, ...option })),
     [config.bassType, mergedStrapButtonOptions],
-  )
-  const tunerButtonOptions = useMemo(
-    () => Object.entries(mergedTunerButtonOptions).map(([value, option]) => ({ value, ...option })),
-    [mergedTunerButtonOptions],
-  )
-  const electronicsCavityCoverOptions = useMemo(
-    () => config.bassType === 'vader' ? [] : Object.entries(mergedElectronicsCavityCoverOptions).map(([value, option]) => ({ value, ...option })),
-    [config.bassType, mergedElectronicsCavityCoverOptions],
   )
   const tremoloCoverOptionList = useMemo(
     () => Object.entries(tremoloCoverOptions || {}).map(([value, option]) => ({ value, ...option })),
@@ -1498,14 +1392,8 @@ const mergedInlayMaterialOptions = useMemo(() => {
     pickupColorVariant: 0,
     pickupPoleColor: mergedPickupPoleColorOptions[config.pickupPoleColor]?.price ?? 0,
     controls: mergedControlsOptions[config.controls]?.price ?? 0,
-    saddle: mergedSaddleOptions[config.saddle]?.price ?? 0,
     nut: mergedNutOptions[config.nut]?.price ?? 0,
-    tuning: mergedTuningOptions[config.tuning]?.price ?? 0,
-    stringBrand: mergedStringBrandOptions[config.stringBrand]?.price ?? 0,
-    outputJack: mergedOutputJackOptions[config.outputJack]?.price ?? 0,
     strapButtons: mergedStrapButtonOptions[config.strapButtons]?.price ?? 0,
-    tunerButtons: mergedTunerButtonOptions[config.tunerButtons]?.price ?? 0,
-    electronicsCavityCover: mergedElectronicsCavityCoverOptions[config.electronicsCavityCover]?.price ?? 0,
     tremoloCover: tremoloCoverOptions[config.tremoloCover]?.price ?? 0,
   }), [
     config, dynamicBasePrice,
@@ -1526,10 +1414,8 @@ const mergedInlayMaterialOptions = useMemo(() => {
     mergedPickupConfigurationOptions, mergedBridgePickupModelOptions,
     mergedMiddlePickupModelOptions, mergedNeckPickupModelOptions,
     mergedPickupColorOptions, mergedPickupPoleColorOptions,
-    mergedControlsOptions, mergedSaddleOptions, mergedNutOptions,
-    mergedTuningOptions, mergedStringBrandOptions, mergedOutputJackOptions,
-    mergedStrapButtonOptions, mergedTunerButtonOptions,
-    mergedElectronicsCavityCoverOptions, tremoloCoverOptions,
+    mergedControlsOptions, mergedNutOptions,
+    mergedStrapButtonOptions, tremoloCoverOptions,
   ])
 
   return {
@@ -1638,16 +1524,9 @@ const mergedInlayMaterialOptions = useMemo(() => {
       vaderStrapButtonOptions: Object.entries(VADER_STRAP_BUTTON_OPTIONS).map(([value, option]) => ({ value, ...option })),
       vaderElectronicsCavityCoverOptions: Object.entries(VADER_ELECTRONICS_CAVITY_COVER_OPTIONS).map(([value, option]) => ({ value, ...option })),
       // New Hardware options
-      saddleOptions,
       nutOptions,
-      tuningOptions,
-      stringBrandOptions,
-      outputJackOptions,
       strapButtonOptions,
-      tunerButtonOptions,
-      electronicsCavityCoverOptions,
       tremoloCoverOptions: tremoloCoverOptionList,
-      tuningDisclaimer: TUNING_DISCLAIMER,
       // Vader-specific finish/wood options
       finishColorOptions,
       burstEdgesOptions,
