@@ -359,7 +359,7 @@ export const BASS_DEFAULT_CONFIG = {
   neckRearFinish: 'tungOilNeck',
   bridge: 'standard',
   pickguard: 'none',
-  knobs: 'black',
+  knobs: 'hardwareColor',
   pickups: 'standard',
   pickupTypeStyle: 'j',
   hardware: 'chrome',
@@ -397,10 +397,13 @@ export const BASS_DEFAULT_CONFIG = {
     vaderKnobs: 'hardwareColor',
     vaderStrapButtons: 'standard',
     vaderElectronicsCavityCover: 'black',
+    pbBridgePickupModel: 'jvaSingleCoil',
+    pbNeckPickupModel: 'scpSplitCoil',
+    pbPickupColor: 'black',
+    pbPickupColorRgb: '#000000',
     controls: 'off',
     nut: 'blackGraphTech',
     strapButtons: 'standard',
-    tremoloCover: null,
     // Vader-specific finish/wood options
     finishColor: 'none',
     threePieceBody: 'off',
@@ -1397,108 +1400,34 @@ export const BASS_KNOB_OPTIONS = {
       type: 'solid',
     },
   },
-  pb: {
-    black: {
-      label: 'Black',
-      note: 'Standard black knobs',
-      src: bassModelAsset('pb', 'front/knobs/black.png'),
-      price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
+ pb: {
+    hardwareColor: {
+      label: 'Hardware Color Knobs',
+      note: 'Knobs matched to hardware color',
+      price: 0,
+      specs: { size: '', dimensions: '', material: '', notes: '' },
+      type: 'hardwareColor',
     },
-    blackActive: {
-      label: 'Black With Active',
-      note: 'Black knobs with active electronics',
-      src: bassModelAsset('pb', 'front/knobs/black-active.png'),
-      price: 10, specs: { size: '', dimensions: '', material: '', notes: '' }
-    },
-    blackThree: {
-      label: 'Black Three String',
-      note: 'Black knobs for 3-string config',
-      src: bassModelAsset('pb', 'front/knobs/black-three.png'),
-      price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
-    },
-    chrome: {
-      label: 'Chrome',
-      note: 'Shiny chrome finish',
-      src: bassModelAsset('pb', 'front/knobs/chrome.png'),
-      price: 15, specs: { size: '', dimensions: '', material: '', notes: '' }
-    },
-    chromeActive: {
-      label: 'Chrome With Active',
-      note: 'Chrome knobs with active electronics',
-      src: bassModelAsset('pb', 'front/knobs/chrome-active.png'),
-      price: 25, specs: { size: '', dimensions: '', material: '', notes: '' }
-    },
-    chromeThree: {
-      label: 'Chrome Three String',
-      note: 'Chrome knobs for 3-string config',
-      src: bassModelAsset('pb', 'front/knobs/chrome-three.png'),
-      price: 15, specs: { size: '', dimensions: '', material: '', notes: '' }
-    },
-    tamarind: {
-      label: 'Tamarind',
-      note: 'Warm wood-look knobs',
-      src: bassModelAsset('pb', 'front/knobs/tamarind.png'),
-      price: 20, specs: { size: '', dimensions: '', material: '', notes: '' }
-    },
-    tamarindActive: {
-      label: 'Tamarind With Active',
-      note: 'Tamarind knobs with active electronics',
-      src: bassModelAsset('pb', 'front/knobs/tamarind-active.png'),
-      price: 30, specs: { size: '', dimensions: '', material: '', notes: '' }
-    },
-    tamarindThree: {
-      label: 'Tamarind Three String',
-      note: 'Tamarind knobs for 3-string config',
-      src: bassModelAsset('pb', 'front/knobs/tamarind-three.png'),
-      price: 20, specs: { size: '', dimensions: '', material: '', notes: '' }
-    },
-    gold: {
-      label: 'Gold',
-      note: 'Premium gold knobs',
-      src: bassModelAsset('pb', 'front/knobs/gold.png'),
-      price: 30, specs: { size: '', dimensions: '', material: '', notes: '' }
-    },
-    goldActive: {
-      label: 'Gold With Active',
-      note: 'Gold knobs with active electronics',
-      src: bassModelAsset('pb', 'front/knobs/gold-active.png'),
-      price: 40, specs: { size: '', dimensions: '', material: '', notes: '' }
-    },
-    goldThree: {
-      label: 'Gold Three String',
-      note: 'Gold knobs for 3-string config',
-      src: bassModelAsset('pb', 'front/knobs/gold-three.png'),
-      price: 30, specs: { size: '', dimensions: '', material: '', notes: '' }
+    abalone: {
+      label: 'Metal Knobs w/ Abalone Inlays',
+      note: 'Chrome-base knobs with abalone inlay',
+      price: 40,
+      specs: { size: '', dimensions: '', material: '', notes: '' },
+      type: 'material',
     },
     pearl: {
-      label: 'Pearl Inlay',
-      note: 'White pearl inlay knobs',
-      src: bassModelAsset('pb', 'front/knobs/white-pearl-inlay.png'),
-      price: 25, specs: { size: '', dimensions: '', material: '', notes: '' }
+      label: 'Metal Knobs w/ White Pearl Inlays',
+      note: 'Chrome-base knobs with white pearl inlay',
+      price: 25,
+      specs: { size: '', dimensions: '', material: '', notes: '' },
+      type: 'material',
     },
-    pearlActive: {
-      label: 'Pearl Inlay With Active',
-      note: 'Pearl inlay knobs with active electronics',
-      src: bassModelAsset('pb', 'front/knobs/white-pearl-inlay-active.png'),
-      price: 35, specs: { size: '', dimensions: '', material: '', notes: '' }
-    },
-    pearlThree: {
-      label: 'Pearl Inlay Three String',
-      note: 'Pearl inlay knobs for 3-string config',
-      src: bassModelAsset('pb', 'front/knobs/white-pearl-inlay-three.png'),
-      price: 25, specs: { size: '', dimensions: '', material: '', notes: '' }
-    },
-    abaloneInlay: {
-      label: 'Abalone Inlay',
-      note: 'Premium abalone inlay knobs',
-      src: bassModelAsset('pb', 'front/knobs/abalone-inlay.png'),
-      price: 40, specs: { size: '', dimensions: '', material: '', notes: '' }
-    },
-    abaloneInlayThree: {
-      label: 'Abalone Inlay Three String',
-      note: 'Abalone inlay knobs for 3-string config',
-      src: bassModelAsset('pb', 'front/knobs/abalone-inlay-three.png'),
-      price: 40, specs: { size: '', dimensions: '', material: '', notes: '' }
+    tamarind: {
+      label: 'Tamarind Wood',
+      note: 'Warm wood-look knobs',
+      price: 20,
+      specs: { size: '', dimensions: '', material: '', notes: '' },
+      type: 'material',
     },
   },
   jb: {
@@ -1563,6 +1492,30 @@ export const BASS_HARDWARE_OPTIONS = {
     specs: { size: '', dimensions: '', material: '', notes: '' },
     color: 'gold',
   }
+}
+
+export const PB_KNOB_FILE_STEMS = {
+  abalone: 'abalone-inlay',
+  pearl: 'white-pearl-inlay',
+  tamarind: 'tamarind',
+}
+
+export function resolvePbKnobAssets(knobTypeKey, { hardware, bridgePickupModel, electronicsType } = {}) {
+  const stem = knobTypeKey === 'hardwareColor'
+    ? (hardware || 'chrome')
+    : (PB_KNOB_FILE_STEMS[knobTypeKey] || PB_KNOB_FILE_STEMS.tamarind)
+
+  const isActive = electronicsType === 'active'
+  const isJVA = bridgePickupModel === 'jvaSingleCoil'
+  const useThree = isActive || isJVA
+
+  const baseFile = `${stem}${useThree ? '-three' : ''}.png`
+  const src = bassModelAsset('pb', `front/knobs/${baseFile}`)
+  const overlaySrc = isActive
+    ? bassModelAsset('pb', `front/knobs/${stem}-active.png`)
+    : null
+
+  return { src, overlaySrc }
 }
 
 export const BASS_PICKUP_OPTIONS = {
@@ -1697,6 +1650,25 @@ export const VADER_PICKUP_OPTIONS = {
     neckMask: null,
     supportsColor: false,
   },
+}
+
+export const BASS_PICKUP_MODEL_BRIDGE_OPTIONS = {
+  pb: {
+    none: { label: 'None', note: 'No bridge pickup', price: 0, specs: specs() },
+    jvaSingleCoil: { label: 'JVA Single Coil', note: 'JVA single coil bridge pickup', price: 0, specs: specs() },
+  },
+}
+
+export const BASS_PICKUP_MODEL_NECK_OPTIONS = {
+  pb: {
+    scpSplitCoil: { label: 'SCP Split-Coil Alnico', note: 'SCP split-coil Alnico neck pickup', price: 0, specs: specs() },
+  },
+}
+
+export const BASS_PICKUP_COLOR_OPTIONS = {
+  black: { label: 'Black', note: 'Black pickup cover', price: 0, specs: specs() },
+  creme: { label: 'Creme', note: 'Creme pickup cover', price: 0, specs: specs() },
+  custom: { label: 'Custom RGB', note: 'Painted pickup, custom RGB color', price: 10, specs: specs() },
 }
 
 export const BASS_STRING_OPTIONS = {
@@ -1866,11 +1838,16 @@ export const bassBuilder = {
   BRIDGE_OPTIONS: BASS_BRIDGE_OPTIONS,
   PICKGUARD_OPTIONS: BASS_PICKGUARD_OPTIONS,
   KNOB_OPTIONS: BASS_KNOB_OPTIONS,
+  PB_KNOB_FILE_STEMS,
+  resolvePbKnobAssets,
   HARDWARE_OPTIONS: BASS_HARDWARE_OPTIONS,
   PICKUP_OPTIONS: BASS_PICKUP_OPTIONS,
   PICKUP_TYPE_STYLE_OPTIONS: BASS_PICKUP_TYPE_STYLE_OPTIONS,
   PICKUP_CONFIG_OPTIONS: BASS_PICKUP_CONFIG_OPTIONS,
   VADER_PICKUP_OPTIONS: VADER_PICKUP_OPTIONS,
+  PICKUP_MODEL_BRIDGE_OPTIONS_BASS: BASS_PICKUP_MODEL_BRIDGE_OPTIONS,
+  PICKUP_MODEL_NECK_OPTIONS_BASS: BASS_PICKUP_MODEL_NECK_OPTIONS,
+  PICKUP_COLOR_OPTIONS_BASS: BASS_PICKUP_COLOR_OPTIONS,
   STRING_OPTIONS: BASS_STRING_OPTIONS,
   PREVIEW_LAYOUTS: BASS_PREVIEW_LAYOUTS,
   BODY_LAYER_ASSETS: BASS_BODY_LAYER_ASSETS,

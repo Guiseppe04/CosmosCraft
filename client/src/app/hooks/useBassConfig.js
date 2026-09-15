@@ -38,6 +38,9 @@ import {
   VADER_PICKUP_OPTIONS,
   VADER_STRAP_BUTTON_OPTIONS,
   VADER_ELECTRONICS_CAVITY_COVER_OPTIONS,
+  BASS_PICKUP_MODEL_BRIDGE_OPTIONS,
+  BASS_PICKUP_MODEL_NECK_OPTIONS,
+  BASS_PICKUP_COLOR_OPTIONS,
   // New schema option constants (reused from guitar builder)
   DEXTERITY_OPTIONS,
   STRING_COUNT_OPTIONS,
@@ -883,7 +886,10 @@ const mergedInlayMaterialOptions = useMemo(() => {
       // Hardware new options
       (mergedNutOptions[config.nut]?.price ?? 0) +
       (mergedStrapButtonOptions[config.strapButtons]?.price ?? 0) +
-      (tremoloCoverOptions[config.tremoloCover]?.price ?? 0)
+      (tremoloCoverOptions[config.tremoloCover]?.price ?? 0) +
+      (BASS_PICKUP_MODEL_BRIDGE_OPTIONS[config.bassType]?.[config.pbBridgePickupModel]?.price ?? 0) +
+      (BASS_PICKUP_MODEL_NECK_OPTIONS[config.bassType]?.[config.pbNeckPickupModel]?.price ?? 0) +
+      (BASS_PICKUP_COLOR_OPTIONS[config.pbPickupColor]?.price ?? 0) 
     )
   }, [
     config, dynamicBasePrice,
@@ -1114,7 +1120,18 @@ const mergedInlayMaterialOptions = useMemo(() => {
     () => config.bassType === 'vader' ? [] : Object.entries(mergedControlPlateOptions).map(([value, option]) => ({ value, ...option })),
     [config.bassType, mergedControlPlateOptions],
   )
-
+  const pbBridgePickupModelOptions = useMemo(
+    () => config.bassType === 'pb' ? Object.entries(BASS_PICKUP_MODEL_BRIDGE_OPTIONS.pb ?? {}).map(([value, option]) => ({ value, ...option })) : [],
+    [config.bassType],
+  )
+  const pbNeckPickupModelOptions = useMemo(
+    () => config.bassType === 'pb' ? Object.entries(BASS_PICKUP_MODEL_NECK_OPTIONS.pb ?? {}).map(([value, option]) => ({ value, ...option })) : [],
+    [config.bassType],
+  )
+  const pbPickupColorOptions = useMemo(
+    () => config.bassType === 'pb' ? Object.entries(BASS_PICKUP_COLOR_OPTIONS).map(([value, option]) => ({ value, ...option })) : [],
+    [config.bassType],
+  )
   const dexterityOptions = useMemo(
     () => Object.entries(mergedDexterityOptions).map(([value, option]) => ({ value, ...option })),
     [mergedDexterityOptions],
@@ -1394,7 +1411,6 @@ const mergedInlayMaterialOptions = useMemo(() => {
     controls: mergedControlsOptions[config.controls]?.price ?? 0,
     nut: mergedNutOptions[config.nut]?.price ?? 0,
     strapButtons: mergedStrapButtonOptions[config.strapButtons]?.price ?? 0,
-    tremoloCover: tremoloCoverOptions[config.tremoloCover]?.price ?? 0,
   }), [
     config, dynamicBasePrice,
     mergedBodyOptions, mergedBodyWoodOptions, mergedBodyFinishOptions,
@@ -1526,7 +1542,9 @@ const mergedInlayMaterialOptions = useMemo(() => {
       // New Hardware options
       nutOptions,
       strapButtonOptions,
-      tremoloCoverOptions: tremoloCoverOptionList,
+      pbBridgePickupModelOptions,
+      pbNeckPickupModelOptions,
+      pbPickupColorOptions,
       // Vader-specific finish/wood options
       finishColorOptions,
       burstEdgesOptions,

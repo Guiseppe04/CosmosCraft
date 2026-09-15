@@ -10,7 +10,8 @@ import {
   VADER_PICKUP_OPTIONS,
   VADER_STRAP_BUTTON_OPTIONS,
   VADER_ELECTRONICS_CAVITY_COVER_OPTIONS,
-  BASS_KNOB_OPTIONS,
+  BASS_KNOB_OPTIONS,  
+  BASS_PICKUP_MODEL_BRIDGE_OPTIONS,
 } from '../../lib/bassBuilderData.js'
 
 const DEBUG = Boolean(import.meta.env.DEV)
@@ -166,6 +167,52 @@ const resolveVaderPickupLayers = (resolvedConfig) => {
   return layers
 }
 
+const resolvePbPickupLayers = (resolvedConfig) => {
+  const bridgeKey = resolvedConfig.pbBridgePickupModel || 'none'
+  const neckKey = resolvedConfig.pbNeckPickupModel || 'scpSplitCoil'
+  const colorMode = resolvedConfig.pbPickupColor || 'black'
+  const rgbColor = resolvedConfig.pbPickupColorRgb || '#000000'
+  const layers = []
+
+  if (bridgeKey === 'jvaSingleCoil') {
+    const bridgeSrc = bassAsset(`bass/${resolvedConfig.bassType}/front/pickups/4/bridge-black.png`)
+    layers.push({
+      name: 'pickup-bridge',
+      src: bridgeSrc,
+      style: { zIndex: 121 },
+      protectedLayer: true,
+    })
+    if (colorMode === 'custom') {
+      layers.push({
+        name: 'pickup-bridge-color',
+        maskSrc: bridgeSrc,
+        style: { zIndex: 122, backgroundColor: rgbColor, mixBlendMode: 'color' },
+        protectedLayer: true,
+      })
+    }
+  }
+
+  if (neckKey === 'scpSplitCoil') {
+    const colorToken = colorMode === 'custom' ? 'black' : colorMode
+    layers.push({
+      name: 'pickup-neck',
+      src: bassAsset(`all-models/pickups/bass/p/neck-${colorToken}.png`),
+      style: { zIndex: 123 },
+      protectedLayer: true,
+    })
+    if (colorMode === 'custom') {
+      layers.push({
+        name: 'pickup-neck-color',
+        maskSrc: bassAsset('all-models/pickups/bass/p/neck-mask.png'),
+        style: { zIndex: 124, backgroundColor: rgbColor, mixBlendMode: 'color' },
+        protectedLayer: true,
+      })
+    }
+  }
+
+  return layers
+}
+
 const resolvePickupLayers = (resolvedConfig) => {
   if (resolvedConfig.bassType === 'vader') {
     return resolveVaderPickupLayers(resolvedConfig)
@@ -269,7 +316,7 @@ const resolved = {
       hardware: config.hardware ?? 'chrome',
       strings: config.strings ?? '4',
       pickguard: config.pickguard ?? 'none',
-      knobs: config.knobs ?? 'black',
+      knobs: config.knobs ?? 'hardwareColor',
       pickups: config.pickups ?? 'standard',
       pickupTypeStyle: config.pickupTypeStyle ?? 'j',
       pickupConfig: config.pickupConfig ?? 'j',
@@ -310,6 +357,10 @@ const resolved = {
       vaderKnobs: config.vaderKnobs ?? 'hardwareColor',
       vaderStrapButtons: config.vaderStrapButtons ?? 'standard',
       vaderElectronicsCavityCover: config.vaderElectronicsCavityCover ?? 'black',
+      pbBridgePickupModel: config.pbBridgePickupModel ?? 'jvaSingleCoil',
+      pbNeckPickupModel: config.pbNeckPickupModel ?? 'scpSplitCoil',
+      pbPickupColor: config.pbPickupColor ?? 'black',
+      pbPickupColorRgb: config.pbPickupColorRgb ?? '#000000',
      }
      if (DEBUG) console.log('[RESOLVED CONFIG]', resolved)
      return resolved
@@ -690,6 +741,18 @@ const resolved = {
     const knobsByModel = bassBuilder.KNOB_OPTIONS[resolvedConfig.bassType]
     if (knobsByModel) resolvedAssets.knobs = knobsByModel[resolvedConfig.knobs]
 
+    if (resolvedConfig.bassType === 'pb') {
+      const { src, overlaySrc } = bassBuilder.resolvePbKnobAssets(resolvedConfig.knobs, {
+        hardware: resolvedConfig.hardware,
+        bridgePickupModel: resolvedConfig.pbBridgePickupModel,
+        electronicsType: resolvedConfig.electronicsType,
+      })
+      resolvedAssets.knobs = {
+        ...knobsByModel?.[resolvedConfig.knobs],
+        src,
+        overlaySrc,
+      }
+    }
     if (resolvedConfig.bassType === 'vader') {
       const vaderKnobEntry = BASS_KNOB_OPTIONS.vader[resolvedConfig.vaderKnobs]
       if (vaderKnobEntry) resolvedAssets.knobs = vaderKnobEntry
@@ -708,7 +771,9 @@ const resolved = {
 
     resolvedAssets.pickupLayers = resolvedConfig.bassType === 'vader'
       ? resolveVaderPickupLayers(resolvedConfig)
-      : resolvePickupLayers(resolvedConfig)
+      : resolvedConfig.bassType === 'pb'
+        ? resolvePbPickupLayers(resolvedConfig)
+        : resolvePickupLayers(resolvedConfig)
 
     if (DEBUG) console.log('[ASSET RESOLUTION]', resolvedAssets)
     return resolvedAssets
@@ -810,6 +875,12 @@ const resolved = {
     if (resolvedConfig.bassType === 'jb' && assets.controlPlate?.src) {
       layers.push({ name: 'control-plate', src: assets.controlPlate.src, style: { zIndex: 123 }, protectedLayer: true })
     }
+    if (resolvedConfig.bassType === 'pb' && assets.knobs?.src) {
+      layers.push({ name: 'knobs', src: assets.knobs.src, style: { zIndex: 124 }, protectedLayer: true })
+      if (assets.knobs.overlaySrc) {
+        layers.push({ name: 'knobs-active-overlay', src: assets.knobs.overlaySrc, style: { zIndex: 125 }, protectedLayer: true })
+      }
+    }
         if (resolvedConfig.bassType === 'vader' && assets.knobs) {
       const knobType = assets.knobs.type
       if (knobType === 'hardwareColor' && assets.knobs.src) {
@@ -897,7 +968,12 @@ const resolved = {
     if (DEBUG) console.log('[FRONT LAYERS]', orderedLayers.map(l => l.name))
     return orderedLayers
   // frontLayers should end with:
-}, [assets, colorKey, resolvedConfig.pickguard, resolvedConfig.topCoat, resolvedConfig.burstEdges, resolvedConfig.threePieceBody, resolvedConfig.vaderBridgePickup, resolvedConfig.vaderNeckPickup, resolvedConfig.vaderPickupColor, resolvedConfig.vaderPickupColorRgb, resolvedConfig.vaderKnobs, resolvedConfig.vaderStrapButtons, resolvedConfig.hardware, resolvedConfig.strapButtons, resolvedConfig.frets, resolvedConfig.nut])
+}, [assets, colorKey, resolvedConfig.pickguard, resolvedConfig.topCoat, resolvedConfig.burstEdges,
+    resolvedConfig.threePieceBody, resolvedConfig.vaderBridgePickup, resolvedConfig.vaderNeckPickup,
+    resolvedConfig.vaderPickupColor, resolvedConfig.vaderPickupColorRgb, resolvedConfig.vaderKnobs,
+    resolvedConfig.vaderStrapButtons, resolvedConfig.hardware, resolvedConfig.strapButtons,
+    resolvedConfig.frets, resolvedConfig.nut,
+    resolvedConfig.knobs, resolvedConfig.pbBridgePickupModel, resolvedConfig.electronicsType])
 
   const rearLayers = useMemo(() => {
     const layers = []
