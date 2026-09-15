@@ -64,14 +64,6 @@ const maskedLayerStyle = (maskSrc, extra = {}) => ({
   ...extra,
 })
 
-const gradientLayerStyle = (gradient, extra = {}) => ({
-  backgroundImage: gradient,
-  backgroundRepeat: 'no-repeat',
-  backgroundPosition: 'center',
-  backgroundSize: 'contain',
-  ...extra,
-})
-
 function GuitarLayer({ src, maskSrc, gradient, style, className = '', layerName = '', protectedLayer = false }) {
   if (!src && !maskSrc && !gradient) return null
   return (

@@ -213,6 +213,45 @@ const resolvePbPickupLayers = (resolvedConfig) => {
   return layers
 }
 
+const resolveJbPickupLayers = (resolvedConfig) => {
+  const colorMode = resolvedConfig.jbPickupColor || 'black'
+  const rgbColor  = resolvedConfig.jbPickupColorRgb || '#000000'
+  const colorToken = colorMode === 'custom' ? 'black' : colorMode
+  const layers = []
+
+  layers.push({
+    name: 'pickup-bridge',
+    src: bassAsset(`bass/jb/front/pickups/4/j/bridge-${colorToken}.png`),
+    style: { zIndex: 121 },
+    protectedLayer: true,
+  })
+  if (colorMode === 'custom') {
+    layers.push({
+      name: 'pickup-bridge-color',
+      maskSrc: bassAsset('all-models/pickups/bass/j/4/bridge-mask.png'),
+      style: { zIndex: 122, backgroundColor: rgbColor, mixBlendMode: 'color' },
+      protectedLayer: true,
+    })
+  }
+
+  layers.push({
+    name: 'pickup-neck',
+    src: bassAsset(`all-models/pickups/bass/j/4/neck-${colorToken}.png`),
+    style: { zIndex: 123 },
+    protectedLayer: true,
+  })
+  if (colorMode === 'custom') {
+    layers.push({
+      name: 'pickup-neck-color',
+      maskSrc: bassAsset('bass/jb/front/pickups/4/j/neck-mask.png'),
+      style: { zIndex: 124, backgroundColor: rgbColor, mixBlendMode: 'color' },
+      protectedLayer: true,
+    })
+  }
+
+  return layers
+}
+
 const resolvePickupLayers = (resolvedConfig) => {
   if (resolvedConfig.bassType === 'vader') {
     return resolveVaderPickupLayers(resolvedConfig)
@@ -309,13 +348,13 @@ const resolved = {
       bassType: config.bassType ?? 'vader',
       bodyWood: config.bodyWood ?? 'maple',
       bodyFinish: config.bodyFinish ?? 'none',
-      neck: config.neck ?? 'maple',
+      neck: config.neck ?? 'plainMaple',
       fretboard: config.fretboard ?? 'rosewood',
       frets: config.frets ?? 'stainlessMedJumbo',
       headstockWood: config.headstockWood ?? 'maple',
       hardware: config.hardware ?? 'chrome',
       strings: config.strings ?? '4',
-      pickguard: config.pickguard ?? 'none',
+      pickguard: config.pickguard ?? 'white',
       knobs: config.knobs ?? 'hardwareColor',
       pickups: config.pickups ?? 'standard',
       pickupTypeStyle: config.pickupTypeStyle ?? 'j',
@@ -361,6 +400,8 @@ const resolved = {
       pbNeckPickupModel: config.pbNeckPickupModel ?? 'scpSplitCoil',
       pbPickupColor: config.pbPickupColor ?? 'black',
       pbPickupColorRgb: config.pbPickupColorRgb ?? '#000000',
+      jbPickupColor: config.jbPickupColor ?? 'black',
+      jbPickupColorRgb: config.jbPickupColorRgb ?? '#000000',
      }
      if (DEBUG) console.log('[RESOLVED CONFIG]', resolved)
      return resolved
@@ -382,6 +423,19 @@ const resolved = {
     const preferredFrontFretToken = `${BASS_TYPE_FRET_COUNT[resolvedConfig.bassType] ?? 20}-fret`
     const preferredFrontProfileToken = isHeadless ? 'flat-bottom' : 'round-bottom'
     const stringCountToken = `${resolvedConfig.strings}-string`
+    const neckConstructionSegment = resolvedConfig.bassType === 'vader' ? 'standard' : null
+    const frontNeckDirPath = `all-models/necks/bass/${stringCountToken}/front/${preferredFrontFretToken}${
+      neckConstructionSegment ? `/${neckConstructionSegment}` : ''
+    }/${preferredFrontProfileToken}`
+    const neckBasePath = frontNeckDirPath
+    const neckStaticMask = bassAsset(`${neckBasePath}/masks/mask.png`)
+    const neckStaticFrets = {
+      stainless: bassAsset(`${neckBasePath}/frets/stainless.png`),
+    }
+    const neckStaticNut = {
+      white: bassAsset(`${neckBasePath}/nut/white.png`),
+      black: bassAsset(`${neckBasePath}/nut/black.png`),
+    }
     const headstockBasePath = `all-models/headstocks/bass/${stringCountToken}`
     const rearNeckBasePath = `all-models/necks/bass/${stringCountToken}/back`
     const rearMaskBasePath = `${rearNeckBasePath}/masks`
@@ -498,23 +552,27 @@ const resolved = {
     const inlayShapeFolder = inlayShapeConfig?.folder || 'id'
     const inlayMaterialCode = inlayMaterialConfig?.code || 'imp'
 
-    // The inlay mask is always the shape's "white.png" cutout. The visible
-    // material (mother of pearl, abalone, etc.) is painted through that
-    // mask using the separate inlay-material texture below — the mask
-    // itself never changes per material.
+    // Inlays live under the SAME neck-profile directory as the neck mask/frets/nut
+    // (frontNeckDirPath) — i.e. Vader gets the "standard/flat-bottom" segments,
+    // jb/pb get "round-bottom" with no "standard" segment. Inside that, there's a
+    // per-shape subfolder (id/, idia/, ib/), and the file inside is named by
+    // CONCATENATING the shape code and mask token — e.g. "id/idwhite-pearl.png",
+    // "idia/idiawhite-pearl.png".
+    const inlayMaskColorToken = (resolvedConfig.bassType === 'vader' || resolvedConfig.bassType === 'jb') ? 'white-pearl' : 'white'
+    const inlayMaskFileStem = `${inlayShapeFolder}${inlayMaskColorToken}`
+
     const inlayMaskSrc = bassBuilder.resolveSharedAsset('necks/bass', {
       strings: resolvedConfig.strings,
-      requiredTokens: ['front', 'inlays', inlayShapeFolder, 'white'],
-      preferTokens: [preferredFrontFretToken, 'round-bottom', inlayShapeFolder, 'white'],
-    }) || bassAsset(
-      `all-models/necks/bass/${stringCountToken}/front/${preferredFrontFretToken}/round-bottom/inlays/${inlayShapeFolder}/white.png`
-    )
+      requiredTokens: ['front', 'inlays', inlayShapeFolder, inlayMaskFileStem],
+      preferTokens: [preferredFrontFretToken, preferredFrontProfileToken, inlayShapeFolder, inlayMaskFileStem],
+    }) || bassAsset(`${frontNeckDirPath}/inlays/${inlayShapeFolder}/${inlayMaskFileStem}.png`)
     const inlayMaterialPath = bassAsset(`all-models/necks/bass/inlay-material/${inlayMaterialCode}.png`)
     const inlay = {
       maskSrc: inlayMaskSrc,
       materialSrc: inlayMaterialPath,
       label: `${inlayShapeConfig?.label || 'Dots'} / ${inlayMaterialConfig?.label || 'Mother of Pearl'}`,
     }
+    if (DEBUG) console.log('[INLAY]', { bassType: resolvedConfig.bassType, maskSrc: inlayMaskSrc, materialSrc: inlayMaterialPath })
 
     const resolvedAssets = {
       bodyModel,
@@ -543,7 +601,7 @@ const resolved = {
           requiredTokens: ['front', 'neck-thru-mask'],
           preferTokens: ['neck-thru-mask'],
         })
-        || bassAsset('all-models/necks/bass/4-string/front/neck-thru-mask.png')
+        || neckStaticMask
         || BASS_NECK_MASK
       ),
       frontFretboardMask: (
@@ -553,7 +611,7 @@ const resolved = {
           rejectTokens: ['neck-thru'],
           preferTokens: [preferredFrontFretToken, preferredFrontProfileToken, 'standard', 'mask'],
         })
-        || bassAsset('all-models/necks/bass/4-string/front/24-fret/standard/flat-bottom/masks/mask.png')
+        || neckStaticMask
         || BASS_NECK_MASK
       ),
       frontHeadstockMask: resolvedHeadstockMask || resolveHeadstockAssetWithFallback({
@@ -568,24 +626,19 @@ const resolved = {
           strings: resolvedConfig.strings,
           requiredTokens: ['front', 'frets'],
           preferTokens: [preferredFrontFretToken, 'stainless'],
-        }) || BASS_NECK_FRETS.stainless,
-        gold: bassBuilder.resolveSharedAsset('necks/bass', {
-          strings: resolvedConfig.strings,
-          requiredTokens: ['front', 'frets'],
-          preferTokens: [preferredFrontFretToken, 'gold'],
-        }) || BASS_NECK_FRETS.gold,
+        }) || neckStaticFrets.stainless || BASS_NECK_FRETS.stainless,
       },
       frontNut: {
         white: bassBuilder.resolveSharedAsset('necks/bass', {
           strings: resolvedConfig.strings,
           requiredTokens: ['front', 'nut'],
           preferTokens: [preferredFrontFretToken, preferredFrontProfileToken, 'white'],
-        }) || BASS_NECK_NUT.white,
+        }) || neckStaticNut.white || BASS_NECK_NUT.white,
         black: bassBuilder.resolveSharedAsset('necks/bass', {
           strings: resolvedConfig.strings,
           requiredTokens: ['front', 'nut'],
           preferTokens: [preferredFrontFretToken, preferredFrontProfileToken, 'black'],
-        }) || BASS_NECK_NUT.black,
+        }) || neckStaticNut.black || BASS_NECK_NUT.black,
       },
       headstockWood: config.bassType === 'vader'
         ? bassBuilder.HEADSTOCK_WOOD_OPTIONS[resolvedConfig.headstockWood]
@@ -723,11 +776,17 @@ const resolved = {
       rearNeckBolts: bassBuilder.resolveCatalogAsset(
         resolvedConfig.bassType, 'back', 'neck bolts',
         { strings: resolvedConfig.strings, preferTokens: ['neck', 'bolts'] },
-      ),
+      ) ?? (resolvedConfig.bassType === 'jb'
+        ? bassAsset('bass/jb/back/neck bolts/neck-bolts.png')
+        : null) ?? (resolvedConfig.bassType === 'pb'
+        ? bassAsset('bass/pb/back/neck bolts/neck-bolts.png')
+        : null),
       rearFerrules: bassBuilder.resolveCatalogVariant(
         resolvedConfig.bassType, 'back', 'string ferrules/standard',
         resolvedConfig.strings, resolvedConfig.hardware,
-      ),
+      ) ?? (resolvedConfig.bassType === 'jb'
+        ? bassAsset(`bass/jb/back/string ferrules/standard/${resolvedConfig.hardware}.png`)
+        : null),
       rearBridge: bassBuilder.resolveCatalogAsset(
         resolvedConfig.bassType, 'back', 'bridges',
         { strings: resolvedConfig.strings, preferTokens: ['standard'] },
@@ -736,7 +795,15 @@ const resolved = {
     }
 
     const pickguardsByModel = bassBuilder.PICKGUARD_OPTIONS[resolvedConfig.bassType]
-    if (pickguardsByModel) resolvedAssets.pickguard = pickguardsByModel[resolvedConfig.pickguard]
+    if (pickguardsByModel) {
+      resolvedAssets.pickguard = pickguardsByModel[resolvedConfig.pickguard]
+      if (DEBUG && resolvedConfig.pickguard !== 'none' && !resolvedAssets.pickguard) {
+        console.warn(
+          `[PICKGUARD] no entry "${resolvedConfig.pickguard}" for ${resolvedConfig.bassType}.`,
+          'valid:', Object.keys(pickguardsByModel),
+        )
+      }
+    }
 
     const knobsByModel = bassBuilder.KNOB_OPTIONS[resolvedConfig.bassType]
     if (knobsByModel) resolvedAssets.knobs = knobsByModel[resolvedConfig.knobs]
@@ -752,6 +819,14 @@ const resolved = {
         src,
         overlaySrc,
       }
+    }
+    if (resolvedConfig.bassType === 'jb') {
+      const jbKnobs = bassBuilder.KNOB_OPTIONS.jb
+      const knobKey = resolvedConfig.knobs === 'hardwareColor'
+        ? (jbKnobs[resolvedConfig.hardware] ? resolvedConfig.hardware : 'chrome')
+        : resolvedConfig.knobs
+      resolvedAssets.knobs = jbKnobs[knobKey]
+        || { src: bassAsset(`bass/jb/front/knobs/${resolvedConfig.hardware}.png`) }
     }
     if (resolvedConfig.bassType === 'vader') {
       const vaderKnobEntry = BASS_KNOB_OPTIONS.vader[resolvedConfig.vaderKnobs]
@@ -769,11 +844,11 @@ const resolved = {
     const pickupScrewsByModel = bassBuilder.PICKUP_SCREW_OPTIONS[resolvedConfig.bassType]
     if (pickupScrewsByModel) resolvedAssets.pickupScrews = pickupScrewsByModel[resolvedConfig.hardware]
 
-    resolvedAssets.pickupLayers = resolvedConfig.bassType === 'vader'
-      ? resolveVaderPickupLayers(resolvedConfig)
-      : resolvedConfig.bassType === 'pb'
-        ? resolvePbPickupLayers(resolvedConfig)
-        : resolvePickupLayers(resolvedConfig)
+    resolvedAssets.pickupLayers =
+      resolvedConfig.bassType === 'vader' ? resolveVaderPickupLayers(resolvedConfig)
+    : resolvedConfig.bassType === 'pb'    ? resolvePbPickupLayers(resolvedConfig)
+    : resolvedConfig.bassType === 'jb'    ? resolveJbPickupLayers(resolvedConfig)
+    : resolvePickupLayers(resolvedConfig)
 
     if (DEBUG) console.log('[ASSET RESOLUTION]', resolvedAssets)
     return resolvedAssets
@@ -814,8 +889,9 @@ const resolved = {
       layers.push({ name: 'fretboard', maskSrc: assets.frontFretboardMask || assets.frontNeckMask, style: { backgroundImage: `url(${assets.fretboard.src})`, zIndex: 101 }, protectedLayer: true })
     }
     const isFretless = resolvedConfig.frets === 'fretless'
-    if (!isFretless && assets.frontFrets?.stainless) {
-      layers.push({ name: 'frets', src: assets.frontFrets.stainless, style: { zIndex: 102 }, protectedLayer: true })
+    const fretSrc = assets.frontFrets?.[colorKey] || assets.frontFrets?.stainless
+    if (!isFretless && fretSrc) {
+      layers.push({ name: 'frets', src: fretSrc, style: { zIndex: 102 }, protectedLayer: true })
     }
     if (assets.inlay?.maskSrc && assets.inlay?.materialSrc) {
       layers.push({
@@ -881,6 +957,9 @@ const resolved = {
         layers.push({ name: 'knobs-active-overlay', src: assets.knobs.overlaySrc, style: { zIndex: 125 }, protectedLayer: true })
       }
     }
+    if (resolvedConfig.bassType === 'jb' && assets.knobs?.src) {
+      layers.push({ name: 'knobs', src: assets.knobs.src, style: { zIndex: 124 }, protectedLayer: true })
+    }
         if (resolvedConfig.bassType === 'vader' && assets.knobs) {
       const knobType = assets.knobs.type
       if (knobType === 'hardwareColor' && assets.knobs.src) {
@@ -922,7 +1001,7 @@ const resolved = {
     {
       const topCoatBaseMap = {
         clearGloss: { file: 'gloss' },
-        tungOil: { file: 'raw-tone' },
+        tungOil: { file: 'op' },
         satinMatte: { file: 'matte' },
       }
       const topCoatSpec = topCoatBaseMap[resolvedConfig.topCoat] || topCoatBaseMap.clearGloss
@@ -973,10 +1052,13 @@ const resolved = {
     resolvedConfig.vaderPickupColor, resolvedConfig.vaderPickupColorRgb, resolvedConfig.vaderKnobs,
     resolvedConfig.vaderStrapButtons, resolvedConfig.hardware, resolvedConfig.strapButtons,
     resolvedConfig.frets, resolvedConfig.nut,
-    resolvedConfig.knobs, resolvedConfig.pbBridgePickupModel, resolvedConfig.electronicsType])
+    resolvedConfig.knobs, resolvedConfig.pbBridgePickupModel, resolvedConfig.electronicsType,
+    resolvedConfig.jbPickupColor, resolvedConfig.jbPickupColorRgb])
 
   const rearLayers = useMemo(() => {
     const layers = []
+    const isFiveString = String(resolvedConfig.strings) === '5'
+    const stringCountToken = `${resolvedConfig.strings}-string`
     const rearBodyMask = assets.rearBodyMask || assets.bodyModel?.bodySrc
     const rearNeckMask = assets.rearNeckMask || BASS_NECK_MASK
     const rearHeadstockMask = assets.rearHeadstockMask || rearNeckMask
@@ -1067,13 +1149,25 @@ const resolved = {
           satinMatteNeck: 'matte',
         },
       }
-      const topCoatFile = NECK_REAR_FINISH_FILE_MAP[resolvedConfig.topCoat]?.[resolvedConfig.neckRearFinish]
 
-      if (topCoatFile) {
-        const topCoatBaseSrc = bassAsset(`bass/${resolvedConfig.bassType}/back/shadows_highlights/${topCoatFile}.png`)
-        const edgeShadowSrc = bassAsset(`bass/${resolvedConfig.bassType}/back/shadows_highlights/edge-shadow.png`)
-        const multiplySrc = bassAsset(`bass/${resolvedConfig.bassType}/back/shadows_highlights/multiply.png`)
-        const coatMask = rearBodyMask
+    const topCoatFile = NECK_REAR_FINISH_FILE_MAP[resolvedConfig.topCoat]?.[resolvedConfig.neckRearFinish]
+
+    if (topCoatFile) {
+      const fretToken = isFiveString ? '22f' : '20f'
+      const isPb = resolvedConfig.bassType === 'pb'
+      // p-bass's neck-rear-finish art lives under the SHARED "all-models" neck
+      // folder (not the per-model shadows_highlights folder like vader/jb use),
+      // and is a two-layer composite (base + multiply) rather than three.
+      const topCoatBaseSrc = isPb
+        ? bassAsset(`all-models/necks/bass/${stringCountToken}/back/neck finish/new-tung-oil-${fretToken}.png`)
+        : bassAsset(`bass/${resolvedConfig.bassType}/back/shadows_highlights/${topCoatFile}.png`)
+      const edgeShadowSrc = isPb
+        ? null
+        : bassAsset(`bass/${resolvedConfig.bassType}/back/shadows_highlights/edge-shadow.png`)
+      const multiplySrc = isPb
+        ? bassAsset(`all-models/necks/bass/${stringCountToken}/back/neck finish/new-multiply-${fretToken}.png`)
+        : bassAsset(`bass/${resolvedConfig.bassType}/back/shadows_highlights/multiply.png`)
+      const coatMask = rearBodyMask
 
         // Same reordering as front: below rear-strap (110), backplate (108),
         // headstock finish (105-109), above body wood/finish (1-2).

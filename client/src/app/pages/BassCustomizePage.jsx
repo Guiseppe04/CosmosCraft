@@ -1784,6 +1784,22 @@ export function BassCustomizePage() {
                        ))}
                      </div>
                    </div>
+
+                   {options.pickguardOptions?.length > 0 && (
+                    <div>
+                      <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Pickguard</h3>
+                      <div className="grid grid-cols-2 gap-2">
+                        {options.pickguardOptions.map((opt) => (
+                          <OptionButton
+                            key={opt.value}
+                            option={opt}
+                            isSelected={config.pickguard === opt.value}
+                            onClick={() => updateConfig({ pickguard: opt.value })}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
                    
                    <div>
                      <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Control Knobs</h3>

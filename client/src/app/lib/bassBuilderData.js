@@ -358,7 +358,7 @@ export const BASS_DEFAULT_CONFIG = {
   frets: 'stainlessMedJumbo',
   neckRearFinish: 'tungOilNeck',
   bridge: 'standard',
-  pickguard: 'none',
+  pickguard: 'white',
   knobs: 'hardwareColor',
   pickups: 'standard',
   pickupTypeStyle: 'j',
@@ -401,6 +401,8 @@ export const BASS_DEFAULT_CONFIG = {
     pbNeckPickupModel: 'scpSplitCoil',
     pbPickupColor: 'black',
     pbPickupColorRgb: '#000000',
+    jbPickupColor: 'black',
+    jbPickupColorRgb: '#000000',
     controls: 'off',
     nut: 'blackGraphTech',
     strapButtons: 'standard',
@@ -1278,16 +1280,6 @@ export const BASS_BRIDGE_OPTIONS = {
       },
       price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
-    cosmos: {
-      label: 'Cosmos',
-      note: 'Custom Cosmos bridge',
-      assets: {
-        chrome: resolveBassCatalogVariant('jb', 'front', 'bridges/kiesel/4', '4', 'chrome') ?? bassModelAsset('jb', 'front/bridges/kiesel/4/chrome.png'),
-        black: resolveBassCatalogVariant('jb', 'front', 'bridges/kiesel/4', '4', 'black') ?? bassModelAsset('jb', 'front/bridges/kiesel/4/black.png'),
-        gold: resolveBassCatalogVariant('jb', 'front', 'bridges/kiesel/4', '4', 'gold') ?? bassModelAsset('jb', 'front/bridges/kiesel/4/gold.png'),
-      },
-      price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
-    },
   },
   pb: {
     standard: {
@@ -1314,11 +1306,23 @@ export const BASS_PICKGUARD_OPTIONS = {
       src: bassModelAsset('pb', 'front/pickguard/white.png'),
       price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
+    black: {
+      label: 'Black',
+      note: 'Black pickguard',
+      src: bassModelAsset('pb', 'front/pickguard/black.png'),
+      price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
+    },
     tortoise: {
       label: 'Tortoise',
       note: 'Red tortoise shell',
       src: bassModelAsset('pb', 'front/pickguard/red-tortoise.png'),
       price: 30, specs: { size: '', dimensions: '', material: '', notes: '' }
+    },
+    satinBlack: {
+      label: 'Satin Black',
+      note: 'Matte black guard',
+      src: bassModelAsset('pb', 'front/pickguard/satin-black.png'),
+      price: 25, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
     pearloid: {
       label: 'Pearloid',
@@ -1328,7 +1332,6 @@ export const BASS_PICKGUARD_OPTIONS = {
     },
   },
   jb: {
-    none: { label: 'None', note: 'No pickguard', src: null, price: 0, specs: { size: '', dimensions: '', material: '', notes: '' } },
     black: {
       label: 'Black',
       note: 'Black pickguard',
