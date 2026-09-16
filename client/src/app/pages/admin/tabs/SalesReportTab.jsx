@@ -13,7 +13,7 @@ import {
   format, startOfWeek, startOfMonth, endOfMonth, subMonths,
   startOfDay, endOfDay,
 } from "date-fns";
-import { jsPDF } from "jspdf";
+import jsPDF from "jspdf";
 import * as XLSX from "xlsx";
 import { formatCurrency } from "../../../utils/formatCurrency";
 import { useAuth } from "../../../context/AuthContext";
