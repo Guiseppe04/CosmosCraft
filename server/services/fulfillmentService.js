@@ -367,6 +367,9 @@ exports.getFulfillmentRequestByProjectId = async (projectId, userId, userRole) =
       order_status: p.order_status,
       order_payment_status: p.order_payment_status,
       total_amount: p.total_amount,
+      delivered_at: p.delivered_at || null,
+      delivered_by_user_id: p.delivered_by_user_id || null,
+      delivery_confirmation_method: p.delivery_confirmation_method || null,
       first_name: p.first_name,
       last_name: p.last_name,
       email: p.email,
@@ -563,6 +566,10 @@ exports.updateFulfillmentStatus = async (requestId, newStatus, adminNotes, actor
     const readyForPickupAt = newStatus === 'ready_for_pickup' ? new Date() : currentReq.ready_for_pickup_at;
     const outForDeliveryAt = newStatus === 'out_for_delivery' ? new Date() : currentReq.out_for_delivery_at;
     const completedAt = newStatus === 'completed' ? new Date() : currentReq.completed_at;
+    const isDeliveryCompleted = newStatus === 'completed' && method === 'delivery';
+    const deliveredAt = isDeliveryCompleted ? (currentReq.delivered_at || new Date()) : currentReq.delivered_at;
+    const deliveredBy = isDeliveryCompleted ? (currentReq.delivered_by_user_id || actorId) : currentReq.delivered_by_user_id;
+    const confirmationMethod = isDeliveryCompleted ? (currentReq.delivery_confirmation_method || (actorRole === 'staff' ? 'staff' : 'admin')) : currentReq.delivery_confirmation_method;
 
     const updateRes = await client.query(
       `UPDATE fulfillment_requests
@@ -572,8 +579,11 @@ exports.updateFulfillmentStatus = async (requestId, newStatus, adminNotes, actor
            ready_for_pickup_at = COALESCE($4, ready_for_pickup_at),
            out_for_delivery_at = COALESCE($5, out_for_delivery_at),
            completed_at = COALESCE($6, completed_at),
+           delivered_at = COALESCE($7, delivered_at),
+           delivered_by_user_id = COALESCE($8, delivered_by_user_id),
+           delivery_confirmation_method = COALESCE($9, delivery_confirmation_method),
            updated_at = now()
-       WHERE id = $7
+       WHERE id = $10
        RETURNING *`,
       [
         newStatus,
@@ -582,6 +592,9 @@ exports.updateFulfillmentStatus = async (requestId, newStatus, adminNotes, actor
         readyForPickupAt,
         outForDeliveryAt,
         completedAt,
+        deliveredAt,
+        deliveredBy,
+        confirmationMethod,
         requestId
       ]
     );
@@ -593,13 +606,19 @@ exports.updateFulfillmentStatus = async (requestId, newStatus, adminNotes, actor
            ready_for_pickup_at = COALESCE($2, ready_for_pickup_at),
            shipped_at = COALESCE($3, shipped_at),
            picked_up_at = CASE WHEN $1::varchar = 'completed' AND $4::varchar = 'pickup' THEN now() ELSE picked_up_at END,
+           delivered_at = CASE WHEN $1::varchar = 'completed' AND $4::varchar = 'delivery' THEN COALESCE($5, delivered_at, now()) ELSE delivered_at END,
+           delivered_by_user_id = CASE WHEN $1::varchar = 'completed' THEN COALESCE($6, delivered_by_user_id) ELSE delivered_by_user_id END,
+           delivery_confirmation_method = CASE WHEN $1::varchar = 'completed' AND $4::varchar = 'delivery' THEN COALESCE($7, delivery_confirmation_method) ELSE delivery_confirmation_method END,
            updated_at = now()
-       WHERE project_id = $5`,
+       WHERE project_id = $8`,
       [
         newStatus,
         readyForPickupAt,
         outForDeliveryAt,
         method,
+        deliveredAt,
+        deliveredBy,
+        confirmationMethod,
         currentReq.project_id
       ]
     );
@@ -613,10 +632,18 @@ exports.updateFulfillmentStatus = async (requestId, newStatus, adminNotes, actor
                WHEN order_type = 'customization' AND status NOT IN ('delivered', 'received', 'cancelled') THEN 'delivered' 
                ELSE status 
              END,
-             delivered_at = COALESCE(delivered_at, now()),
+             delivered_at = COALESCE(delivered_at, $2, now()),
+             delivered_by_user_id = COALESCE(delivered_by_user_id, $3),
+             delivery_confirmation_method = CASE WHEN $4::varchar = 'delivery' THEN COALESCE(delivery_confirmation_method, $5) ELSE delivery_confirmation_method END,
              updated_at = now()
          WHERE order_id = $1`,
-        [currentReq.order_id]
+        [
+          currentReq.order_id,
+          deliveredAt,
+          deliveredBy,
+          method,
+          confirmationMethod
+        ]
       );
     }
 
@@ -638,7 +665,7 @@ exports.updateFulfillmentStatus = async (requestId, newStatus, adminNotes, actor
         notifMessage = 'Your custom guitar is out for delivery.';
       } else if (newStatus === 'completed') {
         notifTitle = 'Fulfillment Completed';
-        notifMessage = 'Your custom build has been successfully fulfilled.';
+        notifMessage = method === 'delivery' ? 'Your custom guitar has been marked as delivered.' : 'Your custom build has been successfully fulfilled.';
       }
 
       await notificationService.createNotification({
@@ -647,13 +674,236 @@ exports.updateFulfillmentStatus = async (requestId, newStatus, adminNotes, actor
         message: notifMessage,
         type: 'order_update',
         related_entity_id: currentReq.order_id,
-        related_entity_type: 'order',
+        related_entity_type: 'orders',
       });
     } catch (notifErr) {
       console.warn('updateFulfillmentStatus: notification error:', notifErr.message);
     }
 
     return updateRes.rows[0];
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+};
+
+/**
+ * Confirm delivery for a custom guitar build (customer or staff/admin)
+ */
+exports.confirmDelivery = async (identifier, actorId, actorRole) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // 1. Fetch fulfillment request with orders, projects, and users info with row locks
+    const reqRes = await client.query(
+      `SELECT fr.*,
+              o.order_id, o.order_number, o.user_id AS customer_id, o.status AS order_status,
+              o.order_type, o.customization_status, o.delivered_at AS order_delivered_at,
+              p.project_id, p.title AS project_title, p.status AS project_status,
+              p.fulfillment_status AS project_fulfillment_status,
+              u.first_name, u.last_name, u.email
+       FROM fulfillment_requests fr
+       JOIN orders o ON o.order_id = fr.order_id
+       JOIN projects p ON p.project_id = fr.project_id
+       JOIN users u ON u.user_id = o.user_id
+       WHERE (fr.id = $1::uuid OR fr.project_id = $1::uuid)
+       ORDER BY fr.created_at DESC
+       LIMIT 1
+       FOR UPDATE OF fr, p, o`,
+      [identifier]
+    );
+
+    if (reqRes.rows.length === 0) {
+      throw new AppError('Fulfillment request not found.', 404);
+    }
+
+    const currentReq = reqRes.rows[0];
+    const isPrivileged = ['staff', 'admin', 'super_admin'].includes(actorRole);
+
+    // 2. Customer ownership verification: customers can only confirm their own order
+    if (!isPrivileged && currentReq.customer_id !== actorId) {
+      throw new AppError('You are not authorized to confirm this delivery.', 403);
+    }
+
+    // 3. Verify fulfillment method is delivery
+    const method = normalizeMethod(currentReq.fulfillment_method);
+    if (method !== 'delivery') {
+      throw new AppError('Delivery confirmation is only valid for delivery orders.', 400);
+    }
+
+    // 4. Invalid terminal state verification
+    if (currentReq.status === 'cancelled' || currentReq.order_status === 'cancelled' || currentReq.project_status === 'cancelled') {
+      throw new AppError('Delivery cannot be confirmed for a cancelled order.', 409);
+    }
+
+    // 5. Already delivered verification
+    const isAlreadyDelivered =
+      currentReq.status === 'completed' ||
+      Boolean(currentReq.delivered_at) ||
+      currentReq.order_status === 'delivered' ||
+      currentReq.customization_status === 'fulfilled' ||
+      currentReq.project_fulfillment_status === 'completed';
+
+    if (isAlreadyDelivered) {
+      throw new AppError('Delivery has already been confirmed for this order.', 409);
+    }
+
+    // 6. Precondition verification: must be out_for_delivery
+    if (currentReq.status !== 'out_for_delivery') {
+      throw new AppError(
+        `Delivery cannot be confirmed from the current status ('${currentReq.status}'). Order must be 'out_for_delivery'.`,
+        409
+      );
+    }
+
+    const confirmationMethod = isPrivileged
+      ? (actorRole === 'staff' ? 'staff' : 'admin')
+      : 'customer';
+
+    // 7. Atomic conditional update on fulfillment_requests to prevent race condition
+    const updateRes = await client.query(
+      `UPDATE fulfillment_requests
+       SET status = 'completed',
+           completed_at = CURRENT_TIMESTAMP,
+           delivered_at = CURRENT_TIMESTAMP,
+           delivered_by_user_id = $1,
+           delivery_confirmation_method = $2,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $3
+         AND status = 'out_for_delivery'
+       RETURNING *`,
+      [actorId, confirmationMethod, currentReq.id]
+    );
+
+    if (updateRes.rowCount === 0) {
+      throw new AppError('Delivery has already been confirmed for this order.', 409);
+    }
+
+    // 8. Synchronize projects table
+    await client.query(
+      `UPDATE projects
+       SET fulfillment_status = 'completed',
+           delivered_at = CURRENT_TIMESTAMP,
+           delivered_by_user_id = $1,
+           delivery_confirmation_method = $2,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE project_id = $3`,
+      [actorId, confirmationMethod, currentReq.project_id]
+    );
+
+    // 9. Synchronize orders table
+    await client.query(
+      `UPDATE orders
+       SET customization_status = 'fulfilled',
+           status = CASE
+             WHEN order_type = 'customization' AND status NOT IN ('delivered', 'received', 'cancelled') THEN 'delivered'
+             ELSE status
+           END,
+           delivered_at = CURRENT_TIMESTAMP,
+           delivered_by_user_id = $1,
+           delivery_confirmation_method = $2,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE order_id = $3`,
+      [actorId, confirmationMethod, currentReq.order_id]
+    );
+
+    // 10. Audit log
+    await client.query(
+      `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, details)
+       VALUES ($1, 'CONFIRM_DELIVERY', 'fulfillment', $2, $3)`,
+      [
+        actorId,
+        currentReq.id,
+        JSON.stringify({
+          project_id: currentReq.project_id,
+          order_id: currentReq.order_id,
+          previous_status: currentReq.status,
+          new_status: 'completed',
+          confirmation_method: confirmationMethod,
+          confirmed_by: actorId,
+          role: actorRole,
+        }),
+      ]
+    );
+
+    await client.query('COMMIT');
+
+    const updatedRow = updateRes.rows[0];
+
+    // 11. Notifications with deduplication check
+    try {
+      const existingNotifs = await pool.query(
+        `SELECT 1 FROM notifications 
+         WHERE related_entity_id = $1 
+           AND title IN ('Custom Guitar Delivered', 'Delivery Confirmed')
+         LIMIT 1`,
+        [currentReq.order_id]
+      );
+
+      if (existingNotifs.rows.length === 0) {
+        if (confirmationMethod === 'customer') {
+          // Notify admin and staff
+          const customerName = `${currentReq.first_name || ''} ${currentReq.last_name || ''}`.trim() || 'Customer';
+          const orderNum = currentReq.order_number || currentReq.order_id;
+          const adminStaff = await pool.query(
+            `SELECT user_id FROM users WHERE role IN ('admin', 'super_admin', 'staff') AND deleted_at IS NULL`
+          );
+          for (const staffUser of adminStaff.rows) {
+            try {
+              await notificationService.createNotification({
+                user_id: staffUser.user_id,
+                title: 'Custom Guitar Delivered',
+                message: `Customer ${customerName} confirmed that custom order #${orderNum} was received.`,
+                type: 'order_update',
+                related_entity_id: currentReq.order_id,
+                related_entity_type: 'orders',
+              });
+            } catch (err) {
+              console.warn('confirmDelivery: admin notification failed:', err.message);
+            }
+          }
+
+          // Also notify customer
+          try {
+            await notificationService.createNotification({
+              user_id: currentReq.customer_id,
+              title: 'Delivery Confirmed',
+              message: 'Your custom guitar has been marked as delivered. Thank you for choosing CosmosCraft!',
+              type: 'order_update',
+              related_entity_id: currentReq.order_id,
+              related_entity_type: 'orders',
+            });
+          } catch (err) {
+            console.warn('confirmDelivery: customer notification failed:', err.message);
+          }
+        } else {
+          // Admin/staff confirmed: notify customer
+          try {
+            await notificationService.createNotification({
+              user_id: currentReq.customer_id,
+              title: 'Delivery Confirmed',
+              message: 'Your custom guitar has been marked as delivered by the shop.',
+              type: 'order_update',
+              related_entity_id: currentReq.order_id,
+              related_entity_type: 'orders',
+            });
+          } catch (err) {
+            console.warn('confirmDelivery: customer notification failed:', err.message);
+          }
+        }
+      }
+    } catch (notifErr) {
+      console.warn('confirmDelivery: notification error:', notifErr.message);
+    }
+
+    return {
+      ...updatedRow,
+      fulfillmentStatus: 'delivered',
+      deliveryConfirmationMethod: confirmationMethod,
+    };
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;

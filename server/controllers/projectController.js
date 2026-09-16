@@ -116,6 +116,31 @@ exports.getProjectFulfillment = asyncHandler(async (req, res, next) => {
   res.json({ status: 'success', data: result });
 });
 
+exports.confirmDelivery = asyncHandler(async (req, res, next) => {
+  const result = await fulfillmentService.confirmDelivery(
+    req.params.id,
+    req.user.id,
+    req.user.role
+  );
+  res.json({
+    status: 'success',
+    success: true,
+    message: 'Delivery confirmed successfully.',
+    data: {
+      id: result.id,
+      order_id: result.order_id,
+      project_id: result.project_id,
+      fulfillmentStatus: 'delivered',
+      status: result.status,
+      deliveredAt: result.delivered_at,
+      delivered_at: result.delivered_at,
+      deliveryConfirmationMethod: result.delivery_confirmation_method || result.deliveryConfirmationMethod,
+      delivery_confirmation_method: result.delivery_confirmation_method || result.deliveryConfirmationMethod,
+      completed_at: result.completed_at,
+    },
+  });
+});
+
 
 // --- MILESTONES ---
 exports.createMilestone = asyncHandler(async (req, res, next) => {

@@ -265,6 +265,8 @@ export const adminApi = {
   },
   getFulfillmentRequest: (id) => request(`/api/fulfillment/requests/${id}`),
   updateFulfillmentStatus: (id, body) => request(`/api/fulfillment/requests/${id}/status`, { method: 'PATCH', body }),
+  confirmProjectDelivery: (id) => request(`/api/fulfillment/project/${id}/confirm-delivery`, { method: 'PATCH' }),
+  confirmFulfillmentDelivery: (id) => request(`/api/fulfillment/requests/${id}/confirm-delivery`, { method: 'PATCH' }),
   addInventoryStock: (productId, quantity, notes) => request('/api/inventory/stock-in', { method: 'PATCH', body: { productId, quantity, notes } }),
 
   // Claim / Unclaim / Reassign

@@ -222,20 +222,35 @@ const detectStuckFulfillment = (project) => {
   // Already correct — nothing to fix
   if (fs === 'completed' && cs === 'fulfilled') return false;
 
-  // Only applies to cancelled customization projects still in an active-looking state
-  if (project.status !== 'cancelled') return false;
-  if (!['resolution_in_progress', 'cancelled'].includes(cs)) return false;
+  // If order status or customization status is already fulfilled/delivered, project fulfillment must match
+  if (fs !== 'completed' && (cs === 'fulfilled' || project.order_status === 'delivered' || project.order_status === 'received')) {
+    return true;
+  }
 
-  // Rule: refund completed → fulfillment must be completed
-  if (rs === 'refunded') return true;
+  // If delivered_at or picked_up_at is set, fulfillment must be completed
+  if (fs !== 'completed' && (project.delivered_at || project.picked_up_at)) {
+    return true;
+  }
 
-  // Rule: build claim received by customer → fulfillment must be completed
-  if (claimStatus === 'received') return true;
+  // Cancelled customization projects with physical handover or refund completed
+  if (project.status === 'cancelled') {
+    // Rule: refund completed → fulfillment must be completed
+    if (rs === 'refunded') return true;
+
+    // Rule: build claim handed over (delivered, picked up, received) → fulfillment must be completed
+    if (['received', 'delivered', 'picked_up'].includes(claimStatus)) return true;
+
+    // If cancel resolution does not require handover (e.g. no_refund or full_refund without parts)
+    if (['full_refund', 'no_refund'].includes(project.cancel_resolution) && !project.build_claim) {
+      if (cs === 'resolution_in_progress') return true;
+    }
+  }
 
   return false;
 };
 
 exports.syncFulfillmentCompletion = syncFulfillmentCompletion;
+exports.detectStuckFulfillment = detectStuckFulfillment;
 
 const hasBlockingInstallment = async (db, projectId) => {
   const result = await db.query(

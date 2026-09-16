@@ -727,6 +727,32 @@ exports.updateClaimStatus = async (projectId, adminId, newStatus, data = {}) => 
       [newStatus, claim.claim_id]
     );
 
+    if (['delivered', 'picked_up', 'received'].includes(newStatus)) {
+      await client.query(
+        `UPDATE projects
+         SET fulfillment_status = 'completed',
+             delivered_at = CASE WHEN $1 = 'delivered' THEN COALESCE(delivered_at, CURRENT_TIMESTAMP) ELSE delivered_at END,
+             picked_up_at = CASE WHEN $1 = 'picked_up' THEN COALESCE(picked_up_at, CURRENT_TIMESTAMP) ELSE picked_up_at END,
+             delivered_by_user_id = COALESCE(delivered_by_user_id, $2),
+             delivery_confirmation_method = CASE WHEN $1 = 'delivered' THEN COALESCE(delivery_confirmation_method, 'admin') ELSE delivery_confirmation_method END,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE project_id = $3`,
+        [newStatus, adminId, projectId]
+      );
+
+      await client.query(
+        `UPDATE orders
+         SET customization_status = 'fulfilled',
+             status = CASE WHEN status NOT IN ('delivered', 'received', 'cancelled') THEN 'delivered' ELSE status END,
+             delivered_at = CASE WHEN $1 = 'delivered' THEN COALESCE(delivered_at, CURRENT_TIMESTAMP) ELSE delivered_at END,
+             delivered_by_user_id = COALESCE(delivered_by_user_id, $2),
+             delivery_confirmation_method = CASE WHEN $1 = 'delivered' THEN COALESCE(delivery_confirmation_method, 'admin') ELSE delivery_confirmation_method END,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE order_id = $3`,
+        [newStatus, adminId, claim.order_id]
+      );
+    }
+
     await logClaimActivity(client, projectId, adminId, 'build_claim_status_updated', {
       claim_id: claim.claim_id,
       from: claim.claim_status,

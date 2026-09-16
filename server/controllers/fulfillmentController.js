@@ -83,3 +83,32 @@ exports.updateFulfillmentStatus = asyncHandler(async (req, res) => {
     message: `Fulfillment status updated to ${status.replace(/_/g, ' ')}`,
   });
 });
+
+// Customer or Admin/Staff: Confirm delivery of customized guitar
+exports.confirmDelivery = asyncHandler(async (req, res) => {
+  const identifier = req.params.projectId || req.params.requestId || req.params.id;
+  const result = await fulfillmentService.confirmDelivery(
+    identifier,
+    req.user.id,
+    req.user.role
+  );
+
+  res.json({
+    status: 'success',
+    success: true,
+    message: 'Delivery confirmed successfully.',
+    data: {
+      id: result.id,
+      order_id: result.order_id,
+      project_id: result.project_id,
+      fulfillmentStatus: 'delivered',
+      status: result.status,
+      deliveredAt: result.delivered_at,
+      delivered_at: result.delivered_at,
+      deliveryConfirmationMethod: result.delivery_confirmation_method || result.deliveryConfirmationMethod,
+      delivery_confirmation_method: result.delivery_confirmation_method || result.deliveryConfirmationMethod,
+      completed_at: result.completed_at,
+    },
+  });
+});
+
