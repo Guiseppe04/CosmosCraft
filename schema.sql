@@ -227,7 +227,8 @@ CREATE TABLE inventory (
     product_id UUID NOT NULL UNIQUE,
     cost_price NUMERIC(12, 2) NOT NULL DEFAULT 0 CHECK (cost_price >= 0),
     stock INT NOT NULL DEFAULT 0 CHECK (stock >= 0),
-    low_stock_threshold INT NOT NULL DEFAULT 10 CHECK (low_stock_threshold >= 0),
+    low_stock_threshold NUMERIC(5,2) NOT NULL DEFAULT 10 CHECK (low_stock_threshold >= 0 AND low_stock_threshold <= 100),
+    max_stock INT NULL CHECK (max_stock IS NULL OR max_stock > 0),
     deleted_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -394,13 +395,21 @@ CREATE TABLE orders (
     received_at TIMESTAMPTZ,
     rider_name VARCHAR(100),
     rider_contact VARCHAR(50),
+    -- Customization-only lifecycle; product/service orders continue using status.
+    customization_status VARCHAR(50),
+    customization_hold_reason TEXT,
+    customization_hold_requested_at TIMESTAMPTZ,
+    customization_hold_approved_by UUID,
+    customization_hold_approved_at TIMESTAMPTZ,
+    customization_resumed_at TIMESTAMPTZ,
     deleted_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE SET NULL,
     FOREIGN KEY (shipping_address_id) REFERENCES addresses(address_id) ON DELETE SET NULL,
-    FOREIGN KEY (reviewed_by) REFERENCES users(user_id) ON DELETE SET NULL
+    FOREIGN KEY (reviewed_by) REFERENCES users(user_id) ON DELETE SET NULL,
+    FOREIGN KEY (customization_hold_approved_by) REFERENCES users(user_id) ON DELETE SET NULL
 );
 
 CREATE INDEX idx_orders_order_number ON orders(order_number);
@@ -423,9 +432,17 @@ CREATE INDEX idx_orders_payment_review ON orders(payment_status, reviewed_at) WH
 
 -- Check constraint for order_type
 ALTER TABLE orders ADD CONSTRAINT chk_orders_order_type CHECK (order_type IN ('product', 'customization', 'service'));
+ALTER TABLE orders ADD CONSTRAINT chk_orders_customization_status CHECK (
+  customization_status IS NULL OR customization_status IN (
+    'payment_pending', 'active', 'on_hold', 'payment_required',
+    'fulfillment_pending', 'fulfillment_in_progress', 'fulfilled',
+    'cancellation_requested', 'resolution_in_progress', 'cancelled'
+  )
+);
 
 -- Index on order_type
 CREATE INDEX idx_orders_order_type ON orders(order_type);
+CREATE INDEX idx_orders_customization_status ON orders(customization_status) WHERE order_type = 'customization';
 
 -- Composite indexes for optimized search, filter, and sort
 CREATE INDEX idx_orders_type_status_created ON orders(order_type, status, created_at DESC);
@@ -711,6 +728,8 @@ CREATE TABLE projects (
     fulfillment_status VARCHAR(50),
     fulfillment_notes TEXT,
     fulfillment_selected_at TIMESTAMPTZ,
+    fulfillment_address_id UUID,
+    fulfillment_address_snapshot JSONB,
     pickup_appointment_id UUID,
     -- Hold columns
     hold_reason TEXT,
@@ -721,8 +740,10 @@ CREATE TABLE projects (
     hold_approved_at TIMESTAMPTZ,
     resumed_at TIMESTAMPTZ,
     -- Cancel columns
-    cancel_option VARCHAR(50) CHECK (cancel_option IN ('ship_unfinished', 'pickup_unfinished')),
+    cancel_option VARCHAR(50) CHECK (cancel_option IN ('ship_to_address', 'pickup_at_shop', 'ship_unfinished', 'pickup_unfinished')),
     cancel_reason TEXT,
+    cancel_address_id UUID REFERENCES addresses(address_id) ON DELETE SET NULL,
+    cancel_address_snapshot JSONB,
     cancel_requested_at TIMESTAMPTZ,
     cancel_approved_by UUID REFERENCES users(user_id) ON DELETE SET NULL,
     cancel_approved_at TIMESTAMPTZ,
@@ -742,6 +763,7 @@ CREATE TABLE projects (
 
     FOREIGN KEY (order_id) REFERENCES orders(order_id) ON DELETE CASCADE,
     FOREIGN KEY (pickup_appointment_id) REFERENCES appointments(appointment_id) ON DELETE SET NULL,
+    FOREIGN KEY (fulfillment_address_id) REFERENCES addresses(address_id) ON DELETE SET NULL,
     FOREIGN KEY (deleted_by) REFERENCES users(user_id) ON DELETE SET NULL
 );
 

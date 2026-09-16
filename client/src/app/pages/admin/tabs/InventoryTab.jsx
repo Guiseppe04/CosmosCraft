@@ -1,6 +1,7 @@
 import { motion } from 'motion/react'
 import { Search, Filter, ChevronLeft, ChevronRight, Package, MoreHorizontal, Guitar, Plus } from 'lucide-react'
 import { formatCurrency } from '../../../utils/formatCurrency'
+import { getStockStatusInfo } from '../../../utils/stockUtils'
 
 export function InventoryTab({
   inventoryIsProducts,
@@ -20,8 +21,13 @@ export function InventoryTab({
   resolveInventoryImage,
   openModal,
   isSuperAdmin,
+  canAddProduct,
+  showAddProduct,
+  hideAddProduct = false,
   categoryTree,
 }) {
+  const allowAddProduct = !hideAddProduct && (showAddProduct !== undefined ? showAddProduct : (canAddProduct !== undefined ? canAddProduct : Boolean(isSuperAdmin)))
+
   return (
     <motion.div key="inventory" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
       <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-6">
@@ -30,7 +36,7 @@ export function InventoryTab({
             <h2 className="text-xl font-semibold text-white">Inventory</h2>
             <p className="mt-1 text-sm text-[var(--text-muted)]">Manage your product inventory and listings.</p>
           </div>
-          {isSuperAdmin && inventoryIsProducts && (
+          {allowAddProduct && inventoryIsProducts && (
             <button
               onClick={() => openModal('product')}
               className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] px-4 py-2 text-sm font-semibold text-black"
@@ -217,13 +223,13 @@ export function InventoryTab({
                   const item = row.item
                   const stock = Number(item.stock ?? 0)
                   const threshold = Number(item.low_stock_threshold ?? 10)
-                  const isOutOfStock = stock <= 0
-                  const isCritical = !isOutOfStock && stock <= threshold
-                  const isLowStock = stock > threshold && stock <= threshold * 2
-                  const statusLabel = isOutOfStock ? 'Out of Stock' : isCritical ? 'Critical' : isLowStock ? 'Low Stock' : 'Healthy'
-                  const statusClass = isOutOfStock || isCritical
+                  const maxStock = Number(item.max_stock ?? 0)
+                  const isProduct = inventoryIsProducts
+                  const statusInfo = getStockStatusInfo(stock, threshold, isProduct ? maxStock : 0)
+                  const statusLabel = statusInfo.label
+                  const statusClass = statusInfo.status === 'out_of_stock'
                     ? 'bg-red-500/15 text-red-400 border-red-500/25'
-                    : isLowStock
+                    : statusInfo.status === 'low_stock'
                     ? 'bg-amber-500/15 text-amber-300 border-amber-500/25'
                     : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/25'
                   const rowId = item.product_id || item.part_id || item.id

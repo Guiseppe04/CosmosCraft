@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState, useRef } from 'react'
-import { Package, Search, X, Printer, Download, ArrowUpDown, Grid3X3, List, Plus } from 'lucide-react'
+import { Package, Search, X, Printer, Download, ArrowUpDown, Grid3X3, List, Plus, RotateCcw, AlertTriangle } from 'lucide-react'
 import { posApi } from '../../utils/posApi'
 import { formatCurrency } from '../../utils/formatCurrency'
 import { useSmartPolling } from '../../hooks/useSmartPolling'
+import { useAuth } from '../../context/AuthContext'
+import { hasRole } from '../../utils/roles'
 
 function EmptyState({ icon: Icon, label, description }) {
   return (
@@ -71,8 +73,17 @@ function formatStatusLabel(status) {
     paid: 'Paid',
     void: 'Void',
     voided: 'Voided',
+    returned: 'Returned',
   }
   return labels[String(status || '').toLowerCase()] || String(status || 'pending').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
+function getStatusVariant(status) {
+  const value = String(status || '').toLowerCase()
+  if (value === 'completed') return 'success'
+  if (value === 'voided' || value === 'returned') return 'warning'
+  if (value === 'cancelled' || value === 'canceled') return 'default'
+  return 'warning'
 }
 
 function buildPosReceiptHtml(sale) {
@@ -106,194 +117,370 @@ function buildPosReceiptHtml(sale) {
   }
 
   const rows = items.map((item) => {
-    const name = formatItemName(item?.item_name || item?.name)
-    const qty = Number(item?.quantity || 0)
-    const unitPrice = Number(item?.unit_price || item?.price || 0)
-    const lineTotal = Number(item?.subtotal || (qty * unitPrice))
-    return `
-      <tr>
-        <td class="num qty">${qty}</td>
-        <td>${name}</td>
-        <td class="num">${escapeHtml(formatCurrency(unitPrice))}</td>
-        <td class="num">${escapeHtml(formatCurrency(lineTotal))}</td>
-      </tr>
-    `
-  }).join('')
+  const name = formatItemName(item?.item_name || item?.name)
+  const qty = Number(item?.quantity || 0)
+  const unitPrice = Number(item?.unit_price || item?.price || 0)
+  const lineTotal = Number(item?.subtotal || (qty * unitPrice))
 
   return `
-    <!doctype html>
-    <html>
-      <head>
-        <meta charset="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>POS Receipt ${saleNumber}</title>
-        <style>
-          :root { color-scheme: light; }
-          * { box-sizing: border-box; }
-          body {
-            margin: 0;
-            padding: 20px;
-            background: #f3f4f6;
-            color: #111827;
-            font-family: 'Courier New', Courier, monospace;
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
-          }
-          .sheet {
-            max-width: 320px;
-            margin: 0 auto;
-            background: #ffffff;
-            border: 1px solid #e5e7eb;
-            border-radius: 8px;
-            padding: 18px;
-            font-size: 12px;
-            line-height: 1.5;
-          }
-          .header {
-            text-align: center;
-            margin-bottom: 14px;
-            border-bottom: 1px dashed #111827;
-            padding-bottom: 10px;
-          }
-          .brand {
-            font-weight: 700;
-            font-size: 14px;
-            letter-spacing: 0.15em;
-            text-transform: uppercase;
-            margin-bottom: 4px;
-          }
-          .invoice-title {
-            font-size: 12px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-            margin-bottom: 6px;
-          }
-          .meta {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 4px 12px;
-            font-size: 11px;
-            margin-bottom: 10px;
-          }
-          .meta-label {
-            color: #6b7280;
-            font-size: 10px;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-          }
-          table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 4px;
-            font-size: 11px;
-          }
-          thead th {
-            text-align: left;
-            font-size: 10px;
-            letter-spacing: 0.05em;
-            text-transform: uppercase;
-            color: #6b7280;
-            border-bottom: 1px solid #111827;
-            padding: 4px 0;
-          }
-          tbody td {
-            border-bottom: 1px solid #e5e7eb;
-            padding: 4px 0;
-            vertical-align: top;
-          }
-          .num { text-align: right; }
-          .qty { padding-right: 8px; }
-          .summary {
-            margin-top: 10px;
-            font-size: 11px;
-          }
-          .summary-row {
-            display: flex;
-            justify-content: space-between;
-            padding: 2px 0;
-          }
-          .summary-total {
-            font-weight: 700;
-            font-size: 13px;
-            border-top: 1px solid #111827;
-            margin-top: 4px;
-            padding-top: 4px;
-          }
-          .payment-info {
-            margin-top: 10px;
-            font-size: 11px;
-          }
-          .payment-row {
-            display: flex;
-            justify-content: space-between;
-            padding: 2px 0;
-          }
-          .footer {
-            margin-top: 14px;
-            text-align: center;
-            font-size: 10px;
-            color: #6b7280;
-            border-top: 1px dashed #111827;
-            padding-top: 8px;
-          }
-          @media print {
-            body { background: #fff; padding: 0; }
-            .sheet { max-width: none; border: 0; border-radius: 0; padding: 14px 16px; }
-          }
-        </style>
-      </head>
-      <body>
-        <main class="sheet">
-          <section class="header">
-            <div class="brand">Cosmos Craft</div>
-            <div class="invoice-title">Invoice</div>
-            <div>${saleNumber}</div>
-          </section>
-
-          <section class="meta">
-            <div><span class="meta-label">Date</span><br/>${createdAt || ''}</div>
-            <div><span class="meta-label">Payment</span><br/>${paymentMethod}</div>
-            <div><span class="meta-label">Customer</span><br/>${customerName}</div>
-            <div><span class="meta-label">Phone</span><br/>${customerPhone}</div>
-          </section>
-
-          ${isGcashPayment ? `
-          <section class="payment-info">
-            <div class="payment-row"><span>Reference No.</span><span>${referenceNumber}</span></div>
-            <div class="payment-row"><span>Cellphone No.</span><span>${customerPhone}</span></div>
-          </section>
-          ` : ''}
-
-          <table>
-            <thead>
-              <tr>
-                <th class="num">Qty</th>
-                <th>Item</th>
-                <th class="num">Price</th>
-                <th class="num">Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${rows || '<tr><td colspan="4" style="text-align:center;">No items</td></tr>'}
-            </tbody>
-          </table>
-
-          <section class="summary">
-            <div class="summary-row"><span>Subtotal</span><span>${escapeHtml(formatCurrency(subtotal))}</span></div>
-            <div class="summary-row"><span>Tax</span><span>${escapeHtml(formatCurrency(taxAmount))}</span></div>
-            <div class="summary-row summary-total"><span>Total</span><span>${escapeHtml(formatCurrency(totalAmount))}</span></div>
-            ${isCashPayment && cashReceived != null ? `<div class="payment-row"><span>Cash Received</span><span>${escapeHtml(formatCurrency(cashReceived))}</span></div>` : ''}
-            ${isCashPayment && changeAmount != null ? `<div class="payment-row"><span>Change</span><span>${escapeHtml(formatCurrency(changeAmount))}</span></div>` : ''}
-          </section>
-
-          <div class="footer">
-            Thank you for your purchase!
-          </div>
-        </main>
-      </body>
-    </html>
+    <tr>
+      <td class="item">${name}</td>
+      <td class="qty">${qty}</td>
+      <td class="price">${escapeHtml(formatCurrency(unitPrice))}</td>
+      <td class="total">${escapeHtml(formatCurrency(lineTotal))}</td>
+    </tr>
   `
+}).join('')
+
+return `
+  <!doctype html>
+  <html>
+    <head>
+      <meta charset="utf-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1" />
+      <title>POS Receipt ${saleNumber}</title>
+
+      <style>
+        :root {
+          color-scheme: light;
+        }
+
+        * {
+          box-sizing: border-box;
+        }
+
+        body {
+          margin: 0;
+          padding: 20px;
+          background: #f3f4f6;
+          color: #111827;
+          font-family: 'Courier New', Courier, monospace;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
+
+        .sheet {
+          width: 100%;
+          max-width: 320px;
+          margin: 0 auto;
+          background: #ffffff;
+          border: 1px solid #e5e7eb;
+          border-radius: 8px;
+          padding: 18px;
+          font-size: 12px;
+          line-height: 1.5;
+        }
+
+        /* =========================
+           HEADER
+        ========================= */
+
+        .header {
+          text-align: center;
+          margin-bottom: 14px;
+          border-bottom: 1px dashed #111827;
+          padding-bottom: 10px;
+        }
+
+        .brand {
+          font-weight: 700;
+          font-size: 14px;
+          letter-spacing: 0.15em;
+          text-transform: uppercase;
+          margin-bottom: 4px;
+        }
+
+        .invoice-title {
+          font-size: 12px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.08em;
+          margin-bottom: 6px;
+        }
+
+        /* =========================
+           CUSTOMER / SALE INFO
+        ========================= */
+
+        .meta {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 4px 12px;
+          font-size: 11px;
+          margin-bottom: 10px;
+        }
+
+        .meta-label {
+          color: #6b7280;
+          font-size: 10px;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+        }
+
+        /* =========================
+           PAYMENT INFO
+        ========================= */
+
+        .payment-info {
+          margin-top: 10px;
+          font-size: 11px;
+        }
+
+        .payment-row {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 12px;
+          padding: 2px 0;
+        }
+
+        /* =========================
+           ITEMS TABLE
+        ========================= */
+
+        table {
+          width: 100%;
+          border-collapse: collapse;
+          table-layout: fixed;
+          margin-top: 4px;
+          font-size: 11px;
+        }
+
+        thead th {
+          text-align: left;
+          font-size: 10px;
+          letter-spacing: 0.05em;
+          text-transform: uppercase;
+          color: #6b7280;
+          border-bottom: 1px solid #111827;
+          padding: 4px 0;
+          vertical-align: middle;
+        }
+
+        tbody td {
+          border-bottom: 1px solid #e5e7eb;
+          padding: 5px 0;
+          vertical-align: middle;
+          line-height: 1.4;
+          overflow-wrap: break-word;
+        }
+
+        /* Item column */
+        th.item,
+        td.item {
+          width: 44%;
+          text-align: left;
+          padding-right: 8px;
+          vertical-align: middle;
+        }
+
+        /* Quantity column */
+        th.qty,
+        td.qty {
+          width: 12%;
+          text-align: right;
+          padding: 5px 6px 5px 2px;
+          white-space: nowrap;
+          vertical-align: middle;
+        }
+
+        /* Price column */
+        th.price,
+        td.price {
+          width: 22%;
+          text-align: right;
+          padding-left: 4px;
+          white-space: nowrap;
+          vertical-align: middle;
+        }
+
+        /* Total column */
+        th.total,
+        td.total {
+          width: 22%;
+          text-align: right;
+          padding-left: 4px;
+          white-space: nowrap;
+          vertical-align: middle;
+        }
+
+        /* =========================
+           SUMMARY
+        ========================= */
+
+        .summary {
+          margin-top: 10px;
+          font-size: 11px;
+        }
+
+        .summary-row {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 12px;
+          padding: 2px 0;
+        }
+
+        .summary-total {
+          font-weight: 700;
+          font-size: 13px;
+          border-top: 1px solid #111827;
+          margin-top: 4px;
+          padding-top: 4px;
+        }
+
+        /* =========================
+           FOOTER
+        ========================= */
+
+        .footer {
+          margin-top: 14px;
+          text-align: center;
+          font-size: 10px;
+          color: #6b7280;
+          border-top: 1px dashed #111827;
+          padding-top: 8px;
+        }
+
+        /* =========================
+           PRINT
+        ========================= */
+
+        @media print {
+          body {
+            background: #fff;
+            padding: 0;
+          }
+
+          .sheet {
+            width: 100%;
+            max-width: none;
+            border: 0;
+            border-radius: 0;
+            padding: 14px 16px;
+          }
+        }
+      </style>
+    </head>
+
+    <body>
+      <main class="sheet">
+
+        <!-- HEADER -->
+        <section class="header">
+          <div class="brand">Cosmos Craft</div>
+          <div class="invoice-title">Invoice</div>
+          <div>${saleNumber}</div>
+        </section>
+
+        <!-- SALE INFORMATION -->
+        <section class="meta">
+          <div>
+            <span class="meta-label">Date</span><br />
+            ${createdAt || ''}
+          </div>
+
+          <div>
+            <span class="meta-label">Payment</span><br />
+            ${paymentMethod}
+          </div>
+
+        </section>
+
+        
+
+        <!-- ITEMS -->
+        <table>
+          <thead>
+            <tr>
+              <th class="item">Item</th>
+              <th class="qty">Qty</th>
+              <th class="price">Price</th>
+              <th class="total">Total</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            ${
+              rows ||
+              `
+                <tr>
+                  <td
+                    colspan="4"
+                    style="
+                      text-align: center;
+                      padding: 8px 0;
+                    "
+                  >
+                    No items
+                  </td>
+                </tr>
+              `
+            }
+          </tbody>
+        </table>
+
+        <!-- SUMMARY -->
+        <section class="summary">
+
+          <div class="summary-row">
+            <span>Subtotal</span>
+            <span>
+              ${escapeHtml(formatCurrency(subtotal))}
+            </span>
+          </div>
+
+          <div class="summary-row">
+            <span>Tax</span>
+            <span>
+              ${escapeHtml(formatCurrency(taxAmount))}
+            </span>
+          </div>
+
+          <div class="summary-row summary-total">
+            <span>Total</span>
+            <span>
+              ${escapeHtml(formatCurrency(totalAmount))}
+            </span>
+          </div>
+
+          ${
+            isCashPayment && cashReceived != null
+              ? `
+                <div class="payment-row">
+                  <span>Cash Received</span>
+                  <span>
+                    ${escapeHtml(formatCurrency(cashReceived))}
+                  </span>
+                </div>
+              `
+              : ''
+          }
+
+          ${
+            isCashPayment && changeAmount != null
+              ? `
+                <div class="payment-row">
+                  <span>Change</span>
+                  <span>
+                    ${escapeHtml(formatCurrency(changeAmount))}
+                  </span>
+                </div>
+              `
+              : ''
+          }
+
+        </section>
+
+        <!-- FOOTER -->
+        <div class="footer">
+          Thank you for your purchase!
+        </div>
+
+      </main>
+    </body>
+  </html>
+`;
 }
 
 export function PosWorkspace({
@@ -302,7 +489,13 @@ export function PosWorkspace({
   heading = 'Point of Sale',
   description = 'Create and record walk-in sales.',
 }) {
+  const { user } = useAuth()
+  const isAdmin = hasRole(user?.role, 'admin')
   const [searchQuery, setSearchQuery] = useState('')
+  const [voidReturnModal, setVoidReturnModal] = useState({ open: false, mode: null, sale: null })
+  const [voidReturnReason, setVoidReturnReason] = useState('')
+  const [voidReturnConditions, setVoidReturnConditions] = useState({})
+  const [voidReturnSubmitting, setVoidReturnSubmitting] = useState(false)
   const [paymentMethod, setPaymentMethod] = useState('cash')
   const [catalogSort, setCatalogSort] = useState('name_asc')
   const [categoryFilter, setCategoryFilter] = useState('all')
@@ -318,6 +511,13 @@ export function PosWorkspace({
   const [submitting, setSubmitting] = useState(false)
   const [selectedSale, setSelectedSale] = useState(null)
   const [loadingSaleDetails, setLoadingSaleDetails] = useState(false)
+  const [showHistoryModal, setShowHistoryModal] = useState(false)
+  const [historySales, setHistorySales] = useState([])
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [historyLoadingMore, setHistoryLoadingMore] = useState(false)
+  const [historyOffset, setHistoryOffset] = useState(0)
+  const [historyTotal, setHistoryTotal] = useState(0)
+  const [historyHasMore, setHistoryHasMore] = useState(false)
 
   const prevSalesRef = useRef(null)
   const prevSummaryRef = useRef(null)
@@ -449,6 +649,36 @@ export function PosWorkspace({
     }
   }, [showToast])
 
+  const loadHistorySales = useCallback(async (options = {}) => {
+    const { reset = false } = options
+    if (reset) {
+      setHistoryLoading(true)
+    } else {
+      setHistoryLoadingMore(true)
+    }
+    try {
+      const nextOffset = reset ? 0 : historyOffset
+      const res = await posApi.listSales({ limit: 20, offset: nextOffset })
+      const nextSales = normalizeSales(res)
+      const total = Number(res?.pagination?.total || 0)
+      const loadedCount = reset ? nextSales.length : historySales.length + nextSales.length
+      setHistorySales((prev) => (reset ? nextSales : [...prev, ...nextSales]))
+      setHistoryOffset(nextOffset + nextSales.length)
+      setHistoryTotal(total)
+      setHistoryHasMore(loadedCount < total)
+    } catch (error) {
+      showToast?.(error.message, 'error')
+    } finally {
+      setHistoryLoading(false)
+      setHistoryLoadingMore(false)
+    }
+  }, [historyOffset, historySales.length, showToast])
+
+  const openHistoryModal = useCallback(() => {
+    setShowHistoryModal(true)
+    loadHistorySales({ reset: true })
+  }, [loadHistorySales])
+
   const lastSaleTimestampRef = useRef(null)
   const latestSalesRef = useRef(null)
 
@@ -570,6 +800,85 @@ export function PosWorkspace({
       printWindow.print()
     }, 150)
   }, [showToast])
+
+  const openVoidReturnModal = useCallback((sale, mode) => {
+    if (!isAdmin) {
+      showToast?.('Only admins can void or return sales', 'error')
+      return
+    }
+    if (String(sale?.status || '').toLowerCase() !== 'completed') {
+      showToast?.('Only completed sales can be voided or returned', 'error')
+      return
+    }
+    setVoidReturnModal({ open: true, mode, sale })
+    setVoidReturnReason('')
+    setVoidReturnConditions({})
+  }, [isAdmin, showToast])
+
+  const closeVoidReturnModal = useCallback(() => {
+    setVoidReturnModal({ open: false, mode: null, sale: null })
+    setVoidReturnReason('')
+    setVoidReturnConditions({})
+  }, [])
+
+  const handleVoidReturn = useCallback(async () => {
+    const { mode, sale } = voidReturnModal
+    if (!sale) return
+
+    if (!voidReturnReason.trim()) {
+      showToast?.('A reason is required for void/return', 'error')
+      return
+    }
+
+    if (mode === 'return') {
+      const items = (sale.items || []).filter((item) => item.product_id)
+      if (items.length === 0) {
+        showToast?.('No returnable product items found', 'error')
+        return
+      }
+      for (const item of items) {
+        if (!voidReturnConditions[item.item_id]) {
+          showToast?.(`Select condition for ${item.item_name}`, 'error')
+          return
+        }
+      }
+    }
+
+    setVoidReturnSubmitting(true)
+    try {
+      if (mode === 'void') {
+        await posApi.voidSale(sale.sale_id, { reason: voidReturnReason.trim() })
+        showToast?.(`Sale ${sale.sale_number} voided`, 'success')
+      } else {
+        const items = (sale.items || [])
+          .filter((item) => item.product_id)
+          .map((item) => ({
+            item_id: item.item_id,
+            quantity: item.quantity,
+            item_condition: voidReturnConditions[item.item_id] || 'resalable',
+          }))
+        await posApi.returnSale(sale.sale_id, { reason: voidReturnReason.trim(), items })
+        showToast?.(`Sale ${sale.sale_number} returned`, 'success')
+      }
+      closeVoidReturnModal()
+      setSelectedSale(null)
+      await loadRecentSales()
+    } catch (error) {
+      showToast?.(error.message, 'error')
+    } finally {
+      setVoidReturnSubmitting(false)
+    }
+  }, [closeVoidReturnModal, loadRecentSales, showToast, voidReturnConditions, voidReturnModal, voidReturnReason])
+
+  const expectedRestockCount = useMemo(() => {
+    if (!voidReturnModal.sale) return 0
+    if (voidReturnModal.mode === 'void') {
+      return (voidReturnModal.sale.items || []).filter((item) => item.product_id).reduce((sum, item) => sum + Number(item.quantity || 0), 0)
+    }
+    return (voidReturnModal.sale.items || [])
+      .filter((item) => item.product_id && voidReturnConditions[item.item_id] === 'resalable')
+      .reduce((sum, item) => sum + Number(item.quantity || 0), 0)
+  }, [voidReturnModal, voidReturnConditions])
 
   return (
     <div className="space-y-6">
@@ -877,13 +1186,22 @@ export function PosWorkspace({
                   <h4 className="font-semibold text-[var(--text-light)]">Recent Orders</h4>
                   <p className="text-xs text-[var(--text-muted)]">Latest POS transactions</p>
                 </div>
-                <button
-                  type="button"
-                  onClick={loadRecentSales}
-                  className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--text-light)]"
-                >
-                  Refresh
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={openHistoryModal}
+                    className="rounded-lg border border-[var(--gold-primary)]/40 bg-[var(--gold-primary)]/15 px-3 py-1.5 text-xs font-semibold text-[var(--gold-primary)] hover:bg-[var(--gold-primary)]/25"
+                  >
+                    View All History
+                  </button>
+                  <button
+                    type="button"
+                    onClick={loadRecentSales}
+                    className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--text-light)]"
+                  >
+                    Refresh
+                  </button>
+                </div>
               </div>
               <div className="space-y-2">
                 {loadingRecent ? (
@@ -908,7 +1226,7 @@ export function PosWorkspace({
                         </div>
                         <StatusBadge
                           label={formatStatusLabel(entry.status || 'pending')}
-                          variant={String(entry.status || '').toLowerCase() === 'completed' ? 'success' : 'warning'}
+                          variant={getStatusVariant(entry.status)}
                         />
                       </div>
                       <div className="mt-2 flex items-center justify-between text-xs">
@@ -922,6 +1240,79 @@ export function PosWorkspace({
             </div>
           </div>
         </div>
+
+      {showHistoryModal && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onClick={() => setShowHistoryModal(false)}
+        >
+          <div 
+            className="flex max-h-[85vh] w-full max-w-2xl flex-col rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-[var(--border)] p-5">
+              <div>
+                <h3 className="text-lg font-semibold text-[var(--text-light)]">Receipt History</h3>
+                <p className="text-xs text-[var(--text-muted)]">
+                  {historyTotal > 0 ? `${historyTotal} total transaction${historyTotal === 1 ? '' : 's'}` : 'All POS transactions'}
+                </p>
+              </div>
+              <button 
+                onClick={() => setShowHistoryModal(false)}
+                className="rounded-lg p-1 text-[var(--text-muted)] hover:bg-[var(--bg-primary)]"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-5">
+              {historyLoading ? (
+                <div className="py-10 text-center text-[var(--text-muted)]">Loading receipt history...</div>
+              ) : historySales.length === 0 ? (
+                <div className="py-10 text-center text-[var(--text-muted)]">No POS sales recorded yet.</div>
+              ) : (
+                <div className="space-y-2">
+                  {historySales.map((entry) => (
+                    <div
+                      key={entry.sale_id}
+                      onClick={() => loadSaleDetails(entry.sale_id)}
+                      className="cursor-pointer rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]/60 p-3 hover:border-[var(--gold-primary)]/50"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-[var(--text-light)]">{entry.sale_number}</p>
+                          <p className="text-xs text-[var(--text-muted)]">{entry.customer_name || 'N/A'} - {new Date(entry.created_at).toLocaleString()}</p>
+                        </div>
+                        <StatusBadge
+                          label={formatStatusLabel(entry.status || 'pending')}
+                          variant={getStatusVariant(entry.status)}
+                        />
+                      </div>
+                      <div className="mt-2 flex items-center justify-between text-xs">
+                        <span className="text-[var(--text-muted)]">{entry.item_count} items - {String(entry.payment_method || '').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}</span>
+                        <span className="font-semibold text-[var(--gold-primary)]">{formatCurrency(Number(entry.total_amount || 0))}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {historyHasMore && (
+              <div className="border-t border-[var(--border)] p-4">
+                <button
+                  type="button"
+                  onClick={() => loadHistorySales()}
+                  disabled={historyLoadingMore}
+                  className="w-full rounded-xl border border-[var(--border)] px-4 py-2 text-sm font-semibold text-[var(--text-muted)] hover:text-[var(--text-light)] disabled:opacity-60"
+                >
+                  {historyLoadingMore ? 'Loading more...' : 'Load More'}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {selectedSale && (
         <div 
@@ -1006,7 +1397,28 @@ export function PosWorkspace({
                   )}
                 </div>
 
-                <div className="mt-6 flex gap-3">
+                {isAdmin && String(selectedSale.status || '').toLowerCase() === 'completed' && (
+                  <div className="mt-4 flex gap-3">
+                    <button
+                      type="button"
+                      className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-2 text-sm font-semibold text-red-300 hover:bg-red-500/20"
+                      onClick={() => openVoidReturnModal(selectedSale, 'void')}
+                    >
+                      <RotateCcw className="h-4 w-4" />
+                      Void
+                    </button>
+                    <button
+                      type="button"
+                      className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-2 text-sm font-semibold text-amber-300 hover:bg-amber-500/20"
+                      onClick={() => openVoidReturnModal(selectedSale, 'return')}
+                    >
+                      <AlertTriangle className="h-4 w-4" />
+                      Return
+                    </button>
+                  </div>
+                )}
+
+                <div className="mt-4 flex gap-3">
                   <button
                     type="button"
                     className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-[var(--border)] px-4 py-2 text-sm font-semibold text-[var(--text-muted)] hover:text-[var(--text-light)]"
@@ -1026,6 +1438,120 @@ export function PosWorkspace({
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {voidReturnModal.open && voidReturnModal.sale && (
+        <div 
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4"
+          onClick={closeVoidReturnModal}
+        >
+          <div 
+            className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-[var(--text-light)]">
+                {voidReturnModal.mode === 'void' ? 'Void Transaction' : 'Return Items'}
+              </h3>
+              <button 
+                onClick={closeVoidReturnModal}
+                className="rounded-lg p-1 text-[var(--text-muted)] hover:bg-[var(--bg-primary)]"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-2 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]/50 p-4 text-sm">
+              <div className="flex justify-between">
+                <span className="text-[var(--text-muted)]">Receipt #</span>
+                <span className="font-semibold text-[var(--text-light)]">{voidReturnModal.sale.sale_number}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[var(--text-muted)]">Customer</span>
+                <span className="text-[var(--text-light)]">{voidReturnModal.sale.customer_name || 'N/A'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[var(--text-muted)]">Total</span>
+                <span className="font-semibold text-[var(--gold-primary)]">{formatCurrency(Number(voidReturnModal.sale.total_amount || 0))}</span>
+              </div>
+            </div>
+
+            <div className="mt-4">
+              <p className="text-sm font-semibold text-[var(--text-light)]">Items</p>
+              <div className="mt-2 space-y-2">
+                {(voidReturnModal.sale.items || []).filter((item) => item.product_id).map((item) => (
+                  <div key={item.item_id} className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]/50 p-3">
+                    <div className="flex items-center justify-between">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-[var(--text-light)]">{item.item_name}</p>
+                        <p className="text-xs text-[var(--text-muted)]">Qty: {item.quantity} - {formatCurrency(Number(item.unit_price || 0))} each</p>
+                      </div>
+                      <span className="text-sm font-semibold text-[var(--text-light)]">{formatCurrency(Number(item.subtotal || 0))}</span>
+                    </div>
+                    {voidReturnModal.mode === 'return' && (
+                      <div className="mt-2 flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setVoidReturnConditions((prev) => ({ ...prev, [item.item_id]: 'resalable' }))}
+                          className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-semibold ${voidReturnConditions[item.item_id] === 'resalable' ? 'bg-green-500/20 text-green-300 border border-green-500/40' : 'border border-[var(--border)] text-[var(--text-muted)]'}`}
+                        >
+                          Perfect / Resalable
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setVoidReturnConditions((prev) => ({ ...prev, [item.item_id]: 'damaged' }))}
+                          className={`flex-1 rounded-lg px-2 py-1.5 text-xs font-semibold ${voidReturnConditions[item.item_id] === 'damaged' ? 'bg-red-500/20 text-red-300 border border-red-500/40' : 'border border-[var(--border)] text-[var(--text-muted)]'}`}
+                        >
+                          Damaged / Not Resalable
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-4">
+              <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)]">
+                Reason <span className="text-red-400">*</span>
+              </label>
+              <textarea
+                rows={3}
+                value={voidReturnReason}
+                onChange={(event) => setVoidReturnReason(event.target.value)}
+                placeholder={voidReturnModal.mode === 'void' ? 'Why is this transaction being voided?' : 'Why is this transaction being returned?'}
+                className="w-full resize-none rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-3 py-2.5 text-sm text-[var(--text-light)]"
+              />
+            </div>
+
+            <div className="mt-4 rounded-xl border border-[var(--gold-primary)]/30 bg-[var(--gold-primary)]/10 p-3 text-sm">
+              <p className="font-semibold text-[var(--gold-primary)]">Expected Inventory Adjustment</p>
+              <p className="mt-1 text-xs text-[var(--text-muted)]">
+                {expectedRestockCount > 0
+                  ? `${expectedRestockCount} unit${expectedRestockCount === 1 ? '' : 's'} will be added back to available inventory.`
+                  : 'No items will be restocked. All returned items will be recorded as damaged/not resalable.'}
+              </p>
+            </div>
+
+            <div className="mt-6 flex gap-3">
+              <button
+                type="button"
+                onClick={closeVoidReturnModal}
+                className="flex-1 rounded-xl border border-[var(--border)] px-4 py-2 text-sm font-semibold text-[var(--text-muted)] hover:text-[var(--text-light)]"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleVoidReturn}
+                disabled={voidReturnSubmitting}
+                className={`flex-1 rounded-xl px-4 py-2 text-sm font-semibold text-white disabled:opacity-60 ${voidReturnModal.mode === 'void' ? 'bg-red-500/80 hover:bg-red-500' : 'bg-amber-500/80 hover:bg-amber-500'}`}
+              >
+                {voidReturnSubmitting ? 'Processing...' : voidReturnModal.mode === 'void' ? 'Confirm Void' : 'Confirm Return'}
+              </button>
+            </div>
           </div>
         </div>
       )}

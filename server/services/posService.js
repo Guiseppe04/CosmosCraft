@@ -722,6 +722,317 @@ exports.cancelSale = async (saleId, cancelledBy, reason = null) => {
   }
 };
 
+// ─── VOID & RETURN ──────────────────────────────────────────────────────────
+
+/**
+ * Void a completed POS sale.
+ * Restores inventory for all product items and marks the sale as voided.
+ * The original transaction is preserved for records.
+ */
+exports.voidSale = async (saleId, voidedBy, reason = null) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Get sale with row lock to prevent double-processing
+    const saleRes = await client.query(
+      `SELECT sale_id, sale_number, status, total_amount
+       FROM pos_sales
+       WHERE sale_id = $1 FOR UPDATE`,
+      [saleId]
+    );
+
+    if (!saleRes.rows[0]) {
+      throw new AppError('Sale not found', 404);
+    }
+
+    const sale = saleRes.rows[0];
+
+    // Only completed sales can be voided
+    if (sale.status !== 'completed') {
+      throw new AppError('Only completed sales can be voided', 400);
+    }
+
+    // Get product items for this sale
+    const itemsRes = await client.query(
+      `SELECT item_id, product_id, item_name, quantity
+       FROM pos_sale_items
+       WHERE sale_id = $1 AND product_id IS NOT NULL`,
+      [saleId]
+    );
+
+    const items = itemsRes.rows;
+
+    // Restore inventory for each product item
+    const returnRecords = [];
+    for (const item of items) {
+      const invRes = await client.query(
+        'SELECT stock FROM inventory WHERE product_id = $1 FOR UPDATE',
+        [item.product_id]
+      );
+
+      if (!invRes.rows[0]) {
+        throw new AppError(`Product inventory not found for ${item.item_name}`, 404);
+      }
+
+      const inventoryBefore = Number(invRes.rows[0].stock);
+      const inventoryAfter = inventoryBefore + Number(item.quantity);
+
+      // Restore stock
+      await client.query(
+        'UPDATE inventory SET stock = stock + $1, updated_at = now() WHERE product_id = $2',
+        [item.quantity, item.product_id]
+      );
+
+      await syncStockToBuilderParts(item.product_id, item.quantity);
+
+      // Create inventory log
+      await client.query(
+        `INSERT INTO inventory_logs (product_id, change_type, quantity, reference_type, reference_id, notes, created_by)
+         VALUES ($1, 'return', $2, 'pos_void', $3, $4, $5)`,
+        [item.product_id, item.quantity, saleId, `POS Void ${sale.sale_number}`, voidedBy]
+      );
+
+      // Record return detail
+      const returnRes = await client.query(
+        `INSERT INTO pos_returns (
+          sale_id, item_id, product_id, quantity, item_condition,
+          inventory_before, inventory_after, restocked, reason, processed_by
+        ) VALUES ($1, $2, $3, $4, 'resalable', $5, $6, true, $7, $8)
+        RETURNING *`,
+        [saleId, item.item_id, item.product_id, item.quantity, inventoryBefore, inventoryAfter, reason, voidedBy]
+      );
+
+      returnRecords.push(returnRes.rows[0]);
+    }
+
+    // Update sale status to voided
+    const updateRes = await client.query(
+      `UPDATE pos_sales SET
+        status = 'voided', voided_at = now(), voided_by = $1, void_reason = $2,
+        refund_amount = total_amount, updated_at = now()
+       WHERE sale_id = $3
+       RETURNING sale_id, sale_number, status, voided_at, voided_by, void_reason, refund_amount`,
+      [voidedBy, reason, saleId]
+    );
+
+    // Create audit log
+    await client.query(
+      `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, previous_status, new_status, details)
+       VALUES ($1, 'VOID', 'pos', $2, 'completed', 'voided', $3)`,
+      [
+        voidedBy,
+        saleId,
+        JSON.stringify({
+          sale_number: sale.sale_number,
+          reason,
+          total_amount: sale.total_amount,
+          refund_amount: sale.total_amount,
+          items: items.map((i) => ({ item_name: i.item_name, quantity: i.quantity, restocked: true })),
+        })
+      ]
+    );
+
+    await client.query('COMMIT');
+
+    return {
+      sale: updateRes.rows[0],
+      returns: returnRecords,
+      itemsProcessed: items.length
+    };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+};
+
+/**
+ * Return items from a completed POS sale.
+ * Accepts per-item condition (resalable or damaged).
+ * Resalable items are restocked; damaged items are tracked but not restocked.
+ * The original transaction is preserved for records.
+ */
+exports.returnSale = async (saleId, returnedBy, { reason = null, items = [] } = {}) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Get sale with row lock to prevent double-processing
+    const saleRes = await client.query(
+      `SELECT sale_id, sale_number, status, total_amount
+       FROM pos_sales
+       WHERE sale_id = $1 FOR UPDATE`,
+      [saleId]
+    );
+
+    if (!saleRes.rows[0]) {
+      throw new AppError('Sale not found', 404);
+    }
+
+    const sale = saleRes.rows[0];
+
+    // Only completed sales can be returned
+    if (sale.status !== 'completed') {
+      throw new AppError('Only completed sales can be returned', 400);
+    }
+
+    if (!Array.isArray(items) || items.length === 0) {
+      throw new AppError('At least one returned item is required', 400);
+    }
+
+    // Get all product items for this sale
+    const saleItemsRes = await client.query(
+      `SELECT item_id, product_id, item_name, quantity
+       FROM pos_sale_items
+       WHERE sale_id = $1 AND product_id IS NOT NULL`,
+      [saleId]
+    );
+
+    const saleItems = saleItemsRes.rows;
+    const saleItemsById = new Map(saleItems.map((item) => [String(item.item_id), item]));
+
+    // Validate requested items
+    for (const req of items) {
+      const saleItem = saleItemsById.get(String(req.item_id));
+      if (!saleItem) {
+        throw new AppError(`Item ${req.item_id} not found in this sale`, 404);
+      }
+      if (!['resalable', 'damaged'].includes(req.item_condition)) {
+        throw new AppError('Item condition must be resalable or damaged', 400);
+      }
+      const qty = Number(req.quantity || 0);
+      if (qty <= 0 || qty > Number(saleItem.quantity)) {
+        throw new AppError(`Invalid quantity for ${saleItem.item_name}`, 400);
+      }
+    }
+
+    // Process each returned item
+    const returnRecords = [];
+    let totalRefund = 0;
+
+    for (const req of items) {
+      const saleItem = saleItemsById.get(String(req.item_id));
+      const qty = Number(req.quantity);
+      const isResalable = req.item_condition === 'resalable';
+
+      // Get unit price for refund calculation
+      const priceRes = await client.query(
+        'SELECT unit_price FROM pos_sale_items WHERE item_id = $1',
+        [req.item_id]
+      );
+      const unitPrice = Number(priceRes.rows[0]?.unit_price || 0);
+      totalRefund += unitPrice * qty;
+
+      let inventoryBefore = null;
+      let inventoryAfter = null;
+      let restocked = false;
+
+      if (isResalable && saleItem.product_id) {
+        const invRes = await client.query(
+          'SELECT stock FROM inventory WHERE product_id = $1 FOR UPDATE',
+          [saleItem.product_id]
+        );
+
+        if (!invRes.rows[0]) {
+          throw new AppError(`Product inventory not found for ${saleItem.item_name}`, 404);
+        }
+
+        inventoryBefore = Number(invRes.rows[0].stock);
+        inventoryAfter = inventoryBefore + qty;
+
+        // Restore stock
+        await client.query(
+          'UPDATE inventory SET stock = stock + $1, updated_at = now() WHERE product_id = $2',
+          [qty, saleItem.product_id]
+        );
+
+        await syncStockToBuilderParts(saleItem.product_id, qty);
+
+        // Create inventory log
+        await client.query(
+          `INSERT INTO inventory_logs (product_id, change_type, quantity, reference_type, reference_id, notes, created_by)
+           VALUES ($1, 'return', $2, 'pos_return', $3, $4, $5)`,
+          [saleItem.product_id, qty, saleId, `POS Return ${sale.sale_number} - ${req.item_condition}`, returnedBy]
+        );
+
+        restocked = true;
+      }
+
+      // Record return detail
+      const returnRes = await client.query(
+        `INSERT INTO pos_returns (
+          sale_id, item_id, product_id, quantity, item_condition,
+          inventory_before, inventory_after, restocked, reason, processed_by
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        RETURNING *`,
+        [
+          saleId,
+          saleItem.item_id,
+          saleItem.product_id,
+          qty,
+          req.item_condition,
+          inventoryBefore,
+          inventoryAfter,
+          restocked,
+          reason,
+          returnedBy
+        ]
+      );
+
+      returnRecords.push(returnRes.rows[0]);
+    }
+
+    // Update sale status to returned
+    const updateRes = await client.query(
+      `UPDATE pos_sales SET
+        status = 'returned', returned_at = now(), returned_by = $1, return_reason = $2,
+        refund_amount = $3, updated_at = now()
+       WHERE sale_id = $4
+       RETURNING sale_id, sale_number, status, returned_at, returned_by, return_reason, refund_amount`,
+      [returnedBy, reason, totalRefund, saleId]
+    );
+
+    // Create audit log
+    await client.query(
+      `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, previous_status, new_status, details)
+       VALUES ($1, 'RETURN', 'pos', $2, 'completed', 'returned', $3)`,
+      [
+        returnedBy,
+        saleId,
+        JSON.stringify({
+          sale_number: sale.sale_number,
+          reason,
+          refund_amount: totalRefund,
+          items: returnRecords.map((r) => ({
+            item_name: saleItemsById.get(String(r.item_id))?.item_name || 'Item',
+            quantity: r.quantity,
+            item_condition: r.item_condition,
+            restocked: r.restocked,
+            inventory_before: r.inventory_before,
+            inventory_after: r.inventory_after,
+          })),
+        })
+      ]
+    );
+
+    await client.query('COMMIT');
+
+    return {
+      sale: updateRes.rows[0],
+      returns: returnRecords,
+      itemsProcessed: items.length,
+      refundAmount: totalRefund
+    };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+};
+
 // ─── HELPER FUNCTIONS ────────────────────────────────────────────────────────
 
 /**

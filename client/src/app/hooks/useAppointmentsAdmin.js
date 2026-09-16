@@ -12,6 +12,7 @@ export function useAppointmentsAdmin({ debouncedSearch, showToast }) {
   const unavailableDatesRef = useRef(unavailableDates)
   const availableDatesRef = useRef(availableDates)
   const inFlightRequestRef = useRef(null)
+  const latestRequestIdRef = useRef(0)
 
   useEffect(() => {
     appointmentsRef.current = appointments
@@ -34,6 +35,7 @@ export function useAppointmentsAdmin({ debouncedSearch, showToast }) {
     }
 
     inFlightRequestRef.current = requestKey
+    const requestId = ++latestRequestIdRef.current
     if (!silent) setAppointmentLoading(true)
     try {
       const params = {
@@ -42,6 +44,7 @@ export function useAppointmentsAdmin({ debouncedSearch, showToast }) {
         offset: (appointmentPagination.page - 1) * appointmentPagination.limit,
       }
       const res = await adminApi.getAppointments(params)
+      if (latestRequestIdRef.current !== requestId) return appointmentsRef.current
       const newData = Array.isArray(res.data) ? res.data : res.data?.appointments || []
       const total = res.data?.pagination?.total || newData.length
       const pages = res.data?.pagination?.pages || Math.ceil(total / appointmentPagination.limit)
@@ -55,10 +58,10 @@ export function useAppointmentsAdmin({ debouncedSearch, showToast }) {
       }
       return newData
     } catch (e) {
-      if (!silent) showToast(e.message, 'error')
+      if (!silent && latestRequestIdRef.current === requestId) showToast(e.message, 'error')
       throw e
     } finally {
-      if (!silent) setAppointmentLoading(false)
+      if (!silent && latestRequestIdRef.current === requestId) setAppointmentLoading(false)
       if (inFlightRequestRef.current === requestKey) {
         inFlightRequestRef.current = null
       }

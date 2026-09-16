@@ -1,9 +1,10 @@
 const { pool } = require('../config/database');
 const { AppError } = require('../middleware/errorHandler');
 
-const syncStockToBuilderParts = async (productId, delta) => {
+const syncStockToBuilderParts = async (productId, delta, client = null) => {
   if (!productId || delta === 0) return;
-  await pool.query(
+  const query = client || pool;
+  await query.query(
     `UPDATE guitar_builder_parts SET stock = stock + $1, updated_at = now() WHERE product_id = $2`,
     [delta, productId]
   );
@@ -21,7 +22,7 @@ const syncStockToBuilderParts = async (productId, delta) => {
  */
 exports.getProductStock = async (productId) => {
   const res = await pool.query(
-    `SELECT p.product_id, p.name, p.is_active, i.stock, i.low_stock_threshold, i.cost_price
+    `SELECT        p.product_id, p.name, p.is_active, i.stock, i.low_stock_threshold, i.max_stock, i.cost_price
      FROM products p
      LEFT JOIN inventory i ON p.product_id = i.product_id
      WHERE p.product_id = $1`,
@@ -49,7 +50,7 @@ exports.getProductsWithStock = async ({ search, category_id, low_stock_only } = 
     idx++;
   }
   if (low_stock_only === true || low_stock_only === 'true') {
-    where.push(`i.stock <= COALESCE(i.low_stock_threshold, 10)`);
+    where.push(`i.stock <= COALESCE(i.max_stock * (i.low_stock_threshold / 100.0), i.max_stock * 0.10)`);
   }
   where.push(`p.is_active = true`);
 
@@ -58,9 +59,9 @@ exports.getProductsWithStock = async ({ search, category_id, low_stock_only } = 
   const res = await pool.query(
     `SELECT 
       p.product_id, p.name, p.description, p.price, p.sku, p.updated_at, p.category_id,
-      i.cost_price, i.stock, i.low_stock_threshold, i.inventory_id,
+      i.cost_price, i.stock, i.low_stock_threshold, i.max_stock, i.inventory_id,
       c.name AS category_name,
-      (i.stock <= COALESCE(i.low_stock_threshold, 10)) AS is_low_stock,
+      (i.stock <= COALESCE(i.max_stock * (i.low_stock_threshold / 100.0), i.max_stock * 0.10)) AS is_low_stock,
       (SELECT COUNT(*) FROM inventory_logs WHERE product_id = p.product_id) AS total_movements
      FROM products p
      LEFT JOIN categories c ON p.category_id = c.category_id
@@ -78,14 +79,15 @@ exports.getProductsWithStock = async ({ search, category_id, low_stock_only } = 
  * @param {number} quantity - Amount to add
  * @param {object} options - { notes, createdBy }
  */
-exports.addStock = async (productId, quantity, { notes = null, createdBy = null } = {}) => {
+exports.addStock = async (productId, quantity, { notes = null, createdBy = null, client: providedClient = null } = {}) => {
   if (quantity <= 0) {
     throw new AppError('Quantity must be greater than 0', 400);
   }
 
-  const client = await pool.connect();
+  const ownClient = !providedClient;
+  const client = providedClient || await pool.connect();
   try {
-    await client.query('BEGIN');
+    if (ownClient) await client.query('BEGIN');
 
     // Get inventory lock for atomicity
     const inventoryRes = await client.query(
@@ -125,19 +127,19 @@ exports.addStock = async (productId, quantity, { notes = null, createdBy = null 
       [productId, 'stock_in', quantity, 'manual_stocking', notes, createdBy]
     );
 
-    await client.query('COMMIT');
+    if (ownClient) await client.query('COMMIT');
 
-    await syncStockToBuilderParts(productId, quantity);
+    await syncStockToBuilderParts(productId, quantity, client);
 
     return {
       product: { ...productRes.rows[0], stock: updateRes.rows[0].stock },
       log: logRes.rows[0]
     };
   } catch (err) {
-    await client.query('ROLLBACK');
+    if (ownClient) await client.query('ROLLBACK');
     throw err;
   } finally {
-    client.release();
+    if (ownClient) client.release();
   }
 };
 
@@ -154,15 +156,16 @@ exports.deductStock = async (
   quantity,
   referenceType,
   referenceId,
-  { notes = null, createdBy = null } = {}
+  { notes = null, createdBy = null, client: providedClient = null } = {}
 ) => {
   if (quantity <= 0) {
     throw new AppError('Quantity must be greater than 0', 400);
   }
 
-  const client = await pool.connect();
+  const ownClient = !providedClient;
+  const client = providedClient || await pool.connect();
   try {
-    await client.query('BEGIN');
+    if (ownClient) await client.query('BEGIN');
 
     // Get inventory and validate sufficient stock
     const inventoryRes = await client.query(
@@ -203,32 +206,34 @@ exports.deductStock = async (
     // Check for low stock alert
     const newStock = updateRes.rows[0].stock;
     const thresholdRes = await client.query(
-      'SELECT low_stock_threshold FROM inventory WHERE product_id = $1',
+      'SELECT low_stock_threshold, max_stock FROM inventory WHERE product_id = $1',
       [productId]
     );
-    const threshold = thresholdRes.rows[0]?.low_stock_threshold || 10;
+    const pct = Number(thresholdRes.rows[0]?.low_stock_threshold) || 10;
+    const maxStock = Number(thresholdRes.rows[0]?.max_stock) || 0;
+    const lowStockLimit = maxStock > 0 ? maxStock * (pct / 100) : 0;
 
-    if (newStock <= threshold && newStock > 0) {
+    if (newStock <= lowStockLimit && newStock > 0) {
       await client.query(
         `INSERT INTO low_stock_alerts (product_id, current_stock, threshold)
          VALUES ($1, $2, $3)`,
-        [productId, newStock, threshold]
+        [productId, newStock, Math.round(lowStockLimit)]
       );
     }
 
-    await client.query('COMMIT');
+    if (ownClient) await client.query('COMMIT');
 
-    await syncStockToBuilderParts(productId, -quantity);
+    await syncStockToBuilderParts(productId, -quantity, client);
 
     return {
       product: { ...productRes.rows[0], stock: updateRes.rows[0].stock },
       log: logRes.rows[0]
     };
   } catch (err) {
-    await client.query('ROLLBACK');
+    if (ownClient) await client.query('ROLLBACK');
     throw err;
   } finally {
-    client.release();
+    if (ownClient) client.release();
   }
 };
 
@@ -238,14 +243,15 @@ exports.deductStock = async (
  * @param {number} quantity - Positive or negative adjustment
  * @param {object} options - { notes, createdBy }
  */
-exports.adjustStock = async (productId, quantity, { notes = null, createdBy = null } = {}) => {
+exports.adjustStock = async (productId, quantity, { notes = null, createdBy = null, client: providedClient = null } = {}) => {
   if (quantity === 0) {
     throw new AppError('Adjustment quantity cannot be zero', 400);
   }
 
-  const client = await pool.connect();
+  const ownClient = !providedClient;
+  const client = providedClient || await pool.connect();
   try {
-    await client.query('BEGIN');
+    if (ownClient) await client.query('BEGIN');
 
     // Get inventory
     const inventoryRes = await client.query(
@@ -300,19 +306,19 @@ exports.adjustStock = async (productId, quantity, { notes = null, createdBy = nu
       [productId, 'adjustment', quantity, 'manual_adjustment', notes, createdBy]
     );
 
-    await client.query('COMMIT');
+    if (ownClient) await client.query('COMMIT');
 
-    await syncStockToBuilderParts(productId, quantity);
+    await syncStockToBuilderParts(productId, quantity, client);
 
     return {
       product: { ...productRes.rows[0], stock: updateRes.rows[0].stock },
       log: logRes.rows[0]
     };
   } catch (err) {
-    await client.query('ROLLBACK');
+    if (ownClient) await client.query('ROLLBACK');
     throw err;
   } finally {
-    client.release();
+    if (ownClient) client.release();
   }
 };
 
@@ -472,7 +478,7 @@ exports.getInventorySummary = async () => {
     `SELECT 
       COUNT(DISTINCT p.product_id) as total_products,
       SUM(i.stock) as total_units,
-      COUNT(DISTINCT CASE WHEN i.stock <= i.low_stock_threshold THEN p.product_id END) as low_stock_count,
+       COUNT(DISTINCT CASE WHEN i.stock <= COALESCE(i.max_stock * (i.low_stock_threshold / 100.0), i.max_stock * 0.10) THEN p.product_id END) as low_stock_count,
       COUNT(DISTINCT CASE WHEN i.stock = 0 THEN p.product_id END) as out_of_stock_count,
       SUM(i.stock * p.price) as total_inventory_value
      FROM products p

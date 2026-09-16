@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { CheckCircle, Circle, ChevronDown, ChevronRight, Plus, Trash2, User, Clock, AlertCircle, Calendar, Truck, Store, ShieldCheck, Flag, Loader2 } from 'lucide-react';
+import { CheckCircle, Circle, ChevronDown, ChevronRight, Plus, Trash2, User, Clock, AlertCircle, Calendar, Truck, Store, ShieldCheck, Flag, Loader2, MapPin, Package } from 'lucide-react';
 import { adminApi } from '../../utils/adminApi';
 import { staffApi } from '../../utils/staffApi';
-import { formatCurrency } from '../../utils/formatCurrency';
+
 import { useAuth } from '../../context/AuthContext';
 import BuildClaimManager from './BuildClaimManager';
 
@@ -81,7 +81,6 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
   const { user } = useAuth();
   const [hierarchy, setHierarchy] = useState(null);
   const [requiredParts, setRequiredParts] = useState([]);
-  const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -92,19 +91,26 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
   const [isAddingMilestone, setIsAddingMilestone] = useState(false);
   const [addingSubtaskTo, setAddingSubtaskTo] = useState(null); // tracking milestone_id
   const [form, setForm] = useState({});
-  const [selectedFulfillmentMethod, setSelectedFulfillmentMethod] = useState('pickup_appointment');
+  const [selectedFulfillmentMethod, setSelectedFulfillmentMethod] = useState('pickup');
   const [pickupDate, setPickupDate] = useState('');
   const [pickupTime, setPickupTime] = useState('');
   const [fulfillmentNotes, setFulfillmentNotes] = useState('');
   const [fulfillmentSaving, setFulfillmentSaving] = useState(false);
   const [fulfillmentFeedback, setFulfillmentFeedback] = useState(null);
-  const [receivingPartKey, setReceivingPartKey] = useState(null);
   const [togglingPartKey, setTogglingPartKey] = useState(null);
   const [togglingSaving, setTogglingSaving] = useState(false);
   const [togglingFeedback, setTogglingFeedback] = useState(null);
+  const [togglingSubtaskId, setTogglingSubtaskId] = useState(null);
   const [pendingUncheckSubtask, setPendingUncheckSubtask] = useState(null);
+  const [pendingUncheckPart, setPendingUncheckPart] = useState(null);
   const [isEditingCompletion, setIsEditingCompletion] = useState(false);
   const [editCompletionValue, setEditCompletionValue] = useState('');
+
+  const [restockingPartKey, setRestockingPartKey] = useState(null);
+  const [restockQuantity, setRestockQuantity] = useState('1');
+  const [restockNotes, setRestockNotes] = useState('');
+  const [restockSaving, setRestockSaving] = useState(false);
+  const [restockFeedback, setRestockFeedback] = useState(null);
 
   // Cancellation request review (admin only)
   const [cancelReviewLoading, setCancelReviewLoading] = useState(false);
@@ -121,19 +127,22 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
     try {
       setLoading(true);
       const projectApi = isAdmin ? adminApi : staffApi;
-      const [hierarchyRes, requiredPartsRes, logsRes] = await Promise.all([
+      const [hierarchyRes, requiredPartsRes] = await Promise.all([
         projectApi.getProjectHierarchy(projectId),
         projectApi.getProjectRequiredParts(projectId),
-        projectApi.getProjectActivity(projectId),
       ]);
       setHierarchy(hierarchyRes.data);
       setRequiredParts(Array.isArray(requiredPartsRes.data) ? requiredPartsRes.data : []);
       
-      setLogs(logsRes.data || []);
-      
-      // Auto-expand all milestones
+      // Auto-expand all milestones on first load only
       if (hierarchyRes.data?.milestones) {
-        setExpandedMilestones(new Set(hierarchyRes.data.milestones.map(m => m.milestone_id)));
+        setExpandedMilestones(prev => {
+          if (prev.size > 0) return prev;
+          return new Set(hierarchyRes.data.milestones.map(m => m.milestone_id));
+        });
+      }
+      if (hierarchyRes.data?.fulfillment_method) {
+        setSelectedFulfillmentMethod(hierarchyRes.data.fulfillment_method.includes('delivery') ? 'delivery' : 'pickup');
       }
       setError(null);
     } catch (err) {
@@ -201,12 +210,6 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
   };
 
   const pickupTimeSlots = useMemo(() => buildPickupTimeSlots(pickupDate), [pickupDate]);
-  const requiredPartSummary = useMemo(() => {
-    const configuredCount = requiredParts.filter((part) => part.source === 'configuration').length;
-    const additionalCount = requiredParts.filter((part) => part.source === 'additional_parts').length;
-    const needsPurchase = requiredParts.filter((part) => part.needs_purchase).length;
-    return { configuredCount, additionalCount, needsPurchase };
-  }, [requiredParts]);
   const taskSummary = hierarchy?.task_summary || { total: 0, completed: 0, pending: 0 };
 
   const getStockBadgeStyle = (stockStatus) => {
@@ -302,32 +305,104 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
 
   // User Actions
   const toggleSubtaskStatus = async (subtask) => {
-    // If not admin, check if updatable
     if (!isAdmin && !subtask.is_customer_updatable) return;
-    // Block admin actions when project is on hold
     if (isAdmin && isOnHold) return;
+    if (togglingSubtaskId === subtask.subtask_id) return;
 
     try {
       if (subtask.status === 'completed') {
         setPendingUncheckSubtask(subtask);
         return;
       }
-      const newStatus = subtask.status === 'completed' ? 'pending' : 'completed';
-      await (isAdmin ? adminApi : staffApi).updateSubtask(subtask.subtask_id, { status: newStatus });
-      loadData(); // Re-fetch to get new progress %
+
+      setTogglingSubtaskId(subtask.subtask_id);
+      const result = await (isAdmin ? adminApi : staffApi).updateSubtask(subtask.subtask_id, { status: 'completed' });
+      const updatedSubtask = result?.data?.subtask || {};
+      const taskSummary = result?.data?.task_summary;
+      const progress = result?.data?.progress;
+
+      if (updatedSubtask.subtask_id) {
+        setHierarchy((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            progress: progress != null ? progress : prev.progress,
+            task_summary: taskSummary || prev.task_summary,
+            milestones: prev.milestones.map((milestone) => {
+              const milestoneSubtaskCount = milestone.subtasks?.length || 0;
+              const updatedSubtasks = milestone.subtasks?.map((s) =>
+                s.subtask_id === updatedSubtask.subtask_id ? { ...s, ...updatedSubtask } : s
+              );
+              const completedCount = updatedSubtasks.filter((s) => s.status === 'completed').length;
+              const milestoneStatus = milestoneSubtaskCount > 0 && completedCount === milestoneSubtaskCount
+                ? 'completed'
+                : completedCount > 0
+                  ? 'in_progress'
+                  : 'not_started';
+              return {
+                ...milestone,
+                status: milestoneStatus,
+                subtasks: updatedSubtasks,
+              };
+            }),
+          };
+        });
+      } else {
+        await loadData();
+      }
     } catch (err) {
       alert("Failed to update task: " + err.message);
+    } finally {
+      setTogglingSubtaskId(null);
     }
   };
 
   const handleConfirmUncheckSubtask = async () => {
     if (!pendingUncheckSubtask) return;
+    const subtask = pendingUncheckSubtask;
+
     try {
-      await adminApi.updateSubtask(pendingUncheckSubtask.subtask_id, { status: 'pending' });
+      setTogglingSubtaskId(subtask.subtask_id);
+      const result = await adminApi.updateSubtask(subtask.subtask_id, { status: 'pending' });
+      const updatedSubtask = result?.data?.subtask || {};
+      const taskSummary = result?.data?.task_summary;
+      const progress = result?.data?.progress;
+
       setPendingUncheckSubtask(null);
-      loadData();
+
+      if (updatedSubtask.subtask_id) {
+        setHierarchy((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            progress: progress != null ? progress : prev.progress,
+            task_summary: taskSummary || prev.task_summary,
+            milestones: prev.milestones.map((milestone) => {
+              const milestoneSubtaskCount = milestone.subtasks?.length || 0;
+              const updatedSubtasks = milestone.subtasks?.map((s) =>
+                s.subtask_id === updatedSubtask.subtask_id ? { ...s, ...updatedSubtask } : s
+              );
+              const completedCount = updatedSubtasks.filter((s) => s.status === 'completed').length;
+              const milestoneStatus = milestoneSubtaskCount > 0 && completedCount === milestoneSubtaskCount
+                ? 'completed'
+                : completedCount > 0
+                  ? 'in_progress'
+                  : 'not_started';
+              return {
+                ...milestone,
+                status: milestoneStatus,
+                subtasks: updatedSubtasks,
+              };
+            }),
+          };
+        });
+      } else {
+        await loadData();
+      }
     } catch (err) {
       alert("Failed to update task: " + err.message);
+    } finally {
+      setTogglingSubtaskId(null);
     }
   };
 
@@ -409,15 +484,13 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
       setFulfillmentSaving(true);
       setFulfillmentFeedback(null);
 
+      const method = selectedFulfillmentMethod === 'delivery' ? 'delivery' : 'pickup';
       const payload = {
-        method: selectedFulfillmentMethod,
+        method,
         notes: fulfillmentNotes,
       };
 
-      if (selectedFulfillmentMethod === 'pickup_appointment') {
-        if (!pickupDate || !pickupTime) {
-          throw new Error('Please choose a pickup date and time.');
-        }
+      if (method === 'pickup' && pickupDate && pickupTime) {
         payload.scheduled_at = new Date(`${pickupDate}T${pickupTime}:00`).toISOString();
       }
 
@@ -425,9 +498,7 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
       await loadData();
       setFulfillmentFeedback({
         type: 'success',
-        message: selectedFulfillmentMethod === 'pickup_appointment'
-          ? 'Pickup appointment saved.'
-          : 'Fulfillment preference saved.',
+        message: 'Fulfillment preference saved. You can update your choice until the shop starts fulfillment.',
       });
     } catch (err) {
       setFulfillmentFeedback({
@@ -439,50 +510,37 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
     }
   };
 
-  const handleReceivePart = async (part) => {
-    try {
-      setReceivingSaving(true);
-      setReceivingFeedback(null);
-      setReceivingPartKey(part.part_key);
-
-      const quantity = Number(receivingQuantity) || Number(part.quantity) || 1;
-      const payload = {
-        quantity,
-      };
-
-      const result = await adminApi.receiveProjectRequiredPart(projectId, part.part_key, payload);
-      await loadData();
-      setReceivingFeedback({
-        type: 'success',
-        message: `${part.name} marked as received with ${result.quantity_received || quantity} unit(s).`,
-      });
-      setReceivingQuantity('1');
-      setReceivingPartKey(null);
-    } catch (err) {
-      setReceivingFeedback({
-        type: 'error',
-        message: err.message || 'Failed to mark part as received.',
-      });
-    } finally {
-      setReceivingSaving(false);
-      setReceivingPartKey(null);
-    }
-  };
 
   const handleToggleReceive = async (part) => {
+    if (isAdmin && isOnHold) return;
+
+    if (part.is_received) {
+      setPendingUncheckPart(part);
+      return;
+    }
+
     try {
       setTogglingSaving(true);
       setTogglingFeedback(null);
       setTogglingPartKey(part.part_key);
 
-      const newReceivedState = !part.is_received;
-      const result = await adminApi.toggleProjectRequiredPart(projectId, part.part_key, newReceivedState);
-      await loadData();
+      const result = await adminApi.toggleProjectRequiredPart(projectId, part.part_key, true);
+      const partData = result?.data?.part || {};
+      const received = result?.data?.received ?? true;
+      if (partData.part_key && (partData.stock !== undefined || partData.is_received !== undefined)) {
+        setRequiredParts(prev =>
+          prev.map(item =>
+            item.part_key === part.part_key
+              ? { ...item, ...partData, is_received: received }
+              : item
+          )
+        );
+      } else {
+        await loadData();
+      }
       setTogglingFeedback({
         type: 'success',
-        message: newReceivedState
-          ? `${result.part?.name || part.name} marked as received.`
-          : `${result.part?.name || part.name} unmarked.`,
+        message: `${partData.name || part.name} marked as received.`,
       });
     } catch (err) {
       setTogglingFeedback({
@@ -493,6 +551,100 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
       setTogglingSaving(false);
       setTogglingPartKey(null);
     }
+  };
+
+  const handleConfirmUncheckPart = async () => {
+    if (!pendingUncheckPart) return;
+    const part = pendingUncheckPart;
+    setPendingUncheckPart(null);
+
+    try {
+      setTogglingSaving(true);
+      setTogglingFeedback(null);
+      setTogglingPartKey(part.part_key);
+
+      const result = await adminApi.toggleProjectRequiredPart(projectId, part.part_key, false);
+      const partData = result?.data?.part || {};
+      const received = result?.data?.received ?? false;
+      if (partData.part_key && (partData.stock !== undefined || partData.is_received !== undefined)) {
+        setRequiredParts(prev =>
+          prev.map(item =>
+            item.part_key === part.part_key
+              ? { ...item, ...partData, is_received: received }
+              : item
+          )
+        );
+      } else {
+        await loadData();
+      }
+      setTogglingFeedback({
+        type: 'success',
+        message: `${partData.name || part.name} returned to inventory.`,
+      });
+    } catch (err) {
+      setTogglingFeedback({
+        type: 'error',
+        message: err.message || 'Failed to return part to inventory.',
+      });
+    } finally {
+      setTogglingSaving(false);
+      setTogglingPartKey(null);
+    }
+  };
+
+  const handleCancelUncheckPart = () => {
+    setPendingUncheckPart(null);
+  };
+
+  const getStockStatus = (stock, quantity) => {
+    const s = Number(stock);
+    const q = Number(quantity) || 1;
+    if (!Number.isFinite(s)) return 'unknown';
+    if (s <= 0) return 'out_of_stock';
+    if (s < q) return 'low_stock';
+    return 'in_stock';
+  };
+
+  const handleRestockPart = async (part) => {
+    if (!part.product_id) return;
+    try {
+      setRestockSaving(true);
+      setRestockFeedback(null);
+      setRestockingPartKey(part.part_key);
+
+      const quantity = Number(restockQuantity) || 1;
+      const result = await adminApi.addInventoryStock(part.product_id, quantity, restockNotes || `Restocked for project ${projectId}`);
+      const newStock = result.data?.product?.stock;
+      const newStatus = getStockStatus(newStock, part.quantity);
+
+      setRequiredParts(prev =>
+        prev.map(item =>
+          item.part_key === part.part_key
+            ? { ...item, stock: newStock, stock_status: newStatus }
+            : item
+        )
+      );
+      setRestockFeedback({
+        type: 'success',
+        message: `${part.name} restocked with ${quantity} unit(s).`,
+      });
+      setRestockingPartKey(null);
+      setRestockQuantity('1');
+      setRestockNotes('');
+    } catch (err) {
+      setRestockFeedback({
+        type: 'error',
+        message: err.message || 'Failed to restock part.',
+      });
+    } finally {
+      setRestockSaving(false);
+    }
+  };
+
+  const handleCancelRestock = () => {
+    setRestockingPartKey(null);
+    setRestockQuantity('1');
+    setRestockNotes('');
   };
 
 
@@ -690,85 +842,115 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
 
         {requiredParts.length > 0 && (
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)]/60 p-5">
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
               <div>
-                <p className="text-xs uppercase tracking-[0.2em] text-[var(--text-muted)]">Procurement snapshot</p>
-                <h3 className="mt-1 text-lg font-bold text-white">Required parts for build execution</h3>
+                <h3 className="text-lg font-bold text-white">Parts Needed</h3>
+                <p className="text-sm text-[var(--text-muted)]">Parts required to complete this build.</p>
               </div>
-              <div className="flex flex-wrap gap-2">
-                <span className="rounded-full border border-[var(--gold-primary)]/30 bg-[var(--gold-primary)]/10 px-3 py-1 text-xs font-semibold text-[var(--gold-primary)]">
-                  {requiredParts.length} required items
-                </span>
-                <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-300">
-                  {requiredPartSummary.configuredCount} configured
-                </span>
-                <span className="rounded-full border border-sky-500/30 bg-sky-500/10 px-3 py-1 text-xs font-semibold text-sky-300">
-                  {requiredPartSummary.additionalCount} additional
-                </span>
+              <div className="flex flex-wrap items-center gap-3 text-xs">
+                <span className="text-[var(--text-muted)]">{requiredParts.length} Parts</span>
+                <span className="text-emerald-400">{requiredParts.filter(p => p.is_received).length} Received</span>
+                <span className="text-[var(--text-muted)]">{requiredParts.filter(p => !p.is_received).length} Pending</span>
               </div>
             </div>
-            <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-              <span className="rounded-full border border-sky-500/30 bg-sky-500/10 px-3 py-1 text-xs font-semibold text-sky-300">
-                {requiredPartSummary.needsPurchase} needs purchase
-              </span>
-            </div>
-            <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-4">
-              <div className="flex items-center justify-between mb-3">
-                <div>
-                  <p className="text-sm font-semibold text-white">Required part details</p>
-                  <p className="text-xs text-[var(--text-muted)]">Showing up to 8 items for quick review.</p>
-                </div>
-              </div>
-              <div className="grid gap-3">
-                {requiredParts.slice(0, 8).map((part, idx) => (
-                  <div key={`${part.part_key || `${part.category}-${part.name}-${part.source}-${part.product_id || 'anon'}`}-${idx}`} className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold text-white truncate">{part.name}</p>
-                        <p className="mt-1 text-xs text-[var(--text-muted)] truncate">
-                          {part.category || 'Other'} • {part.source === 'configuration' ? 'Configured' : 'Additional part'}
-                        </p>
+            <div className="mt-5 border border-[var(--border)] rounded-2xl overflow-hidden bg-[var(--bg-primary)]/40">
+              <div className="divide-y divide-[var(--border)]">
+                {requiredParts.slice(0, 8).map((part, idx) => {
+                  const isReceived = Boolean(part.is_received);
+                  const stockLabel = part.stock_status === 'unknown' || !part.stock_status
+                    ? 'Not Linked'
+                    : formatStatusLabel(part.stock_status);
+                  const isOutOfStock = (part.stock_status === 'out_of_stock' || (Number(part.stock) || 0) === 0) && !isReceived;
+                  const isRestocking = restockingPartKey === part.part_key;
+                  return (
+                    <div key={`${part.part_key || `${part.category}-${part.name}-${part.source}-${part.product_id || 'anon'}`}-${idx}`} className={`p-4 transition-colors hover:bg-white/[0.02] ${isReceived ? 'opacity-60' : ''}`}>
+                      <div className="flex items-center gap-4">
+                        <label className="flex items-center gap-3 cursor-pointer flex-1 min-w-0">
+                          <input
+                            type="checkbox"
+                            checked={isReceived}
+                            onChange={() => handleToggleReceive(part)}
+                            disabled={togglingSaving && togglingPartKey === part.part_key}
+                            className="w-4 h-4 rounded border-[var(--border)] bg-[var(--surface-dark)] text-[var(--gold-primary)] focus:ring-[var(--gold-primary)] shrink-0"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-white truncate">{part.name}</p>
+                            <p className="text-xs text-[var(--text-muted)]">
+                              {formatStatusLabel(part.category || 'Other')} • Qty: {part.quantity} • Stock: {part.stock !== null && part.stock !== undefined ? part.stock : 'Not Linked'}
+                            </p>
+                          </div>
+                        </label>
+                        <span className={`rounded-full px-2 py-1 text-[10px] font-semibold shrink-0 ${getStockBadgeStyle(part.stock_status)}`}>
+                          {stockLabel}
+                        </span>
+                        {isAdmin && isOutOfStock && !isRestocking && (
+                          <button
+                            type="button"
+                            onClick={() => setRestockingPartKey(part.part_key)}
+                            className="text-[10px] font-semibold rounded-full border border-[var(--gold-primary)]/30 bg-[var(--gold-primary)]/10 px-2 py-1 text-[var(--gold-primary)] hover:bg-[var(--gold-primary)]/20 transition-colors shrink-0"
+                          >
+                            Restock
+                          </button>
+                        )}
+                        {togglingFeedback && togglingPartKey === part.part_key && (
+                          <p className={`text-[11px] shrink-0 ${togglingFeedback.type === 'error' ? 'text-red-400' : 'text-emerald-300'}`}>
+                            {togglingFeedback.message}
+                          </p>
+                        )}
                       </div>
-                      <span className={`rounded-full px-2 py-1 text-[10px] font-semibold ${getStockBadgeStyle(part.stock_status)}`}>
-                        {part.stock_status === 'unknown' || !part.stock_status ? 'Not Linked' : part.stock_status.replace('_', ' ')}
-                      </span>
+                      {isRestocking && (
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                          <input
+                            type="number"
+                            min="1"
+                            value={restockQuantity}
+                            onChange={(e) => setRestockQuantity(e.target.value)}
+                            className="w-20 rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] px-2 py-1 text-xs text-white focus:border-[var(--gold-primary)] focus:outline-none"
+                          />
+                          <input
+                            type="text"
+                            value={restockNotes}
+                            onChange={(e) => setRestockNotes(e.target.value)}
+                            placeholder="Notes (optional)"
+                            className="flex-1 min-w-[120px] rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] px-2 py-1 text-xs text-white placeholder:text-[var(--text-muted)] focus:border-[var(--gold-primary)] focus:outline-none"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleRestockPart(part)}
+                            disabled={restockSaving}
+                            className="rounded-lg bg-[var(--gold-primary)] px-3 py-1 text-xs font-bold text-black hover:bg-[var(--gold-secondary)] disabled:opacity-60"
+                          >
+                            {restockSaving ? 'Saving...' : 'Save'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleCancelRestock}
+                            className="rounded-lg border border-[var(--border)] px-3 py-1 text-xs font-semibold text-[var(--text-muted)] hover:text-white hover:bg-white/5 transition-colors"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      )}
+                      {restockFeedback && restockingPartKey === part.part_key && (
+                        <p className={`mt-2 text-[11px] ${restockFeedback.type === 'error' ? 'text-red-400' : 'text-emerald-300'}`}>
+                          {restockFeedback.message}
+                        </p>
+                      )}
                     </div>
-                     <div className="mt-3 grid gap-2 sm:grid-cols-3 text-[0.75rem] text-[var(--text-muted)]">
-                       <span>Qty: {part.quantity}</span>
-                       <span>Stock: {part.stock !== null && part.stock !== undefined ? part.stock : 'Not Linked'}</span>
-                       <span>Price: {part.price || part.price === 0 ? formatCurrency(part.price) : 'Not Linked'}</span>
-                     </div>
-                     <div className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]/70 p-3">
-                       <label className="flex items-center gap-2 cursor-pointer">
-                         <input
-                           type="checkbox"
-                           checked={part.is_received}
-                           onChange={() => handleToggleReceive(part)}
-                           disabled={togglingSaving && togglingPartKey === part.part_key}
-                           className="w-4 h-4 rounded border-[var(--border)] bg-[var(--surface-dark)] text-[var(--gold-primary)] focus:ring-[var(--gold-primary)]"
-                         />
-                         <span className="text-xs font-semibold text-white">
-                           {part.is_received ? 'Received' : 'Not Received'}
-                         </span>
-                       </label>
-                       {togglingFeedback && togglingPartKey === part.part_key && (
-                         <p className={`mt-2 text-[11px] ${togglingFeedback.type === 'error' ? 'text-red-400' : 'text-emerald-300'}`}>
-                           {togglingFeedback.message}
-                         </p>
-                       )}
-                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
               {requiredParts.length > 8 && (
-                <p className="mt-3 text-xs text-[var(--text-muted)]">Showing 8 of {requiredParts.length} required parts. View more in the full project details.</p>
+                <div className="p-3 border-t border-[var(--border)] text-xs text-[var(--text-muted)] text-center">
+                  Showing 8 of {requiredParts.length} required parts. View more in the full project details.
+                </div>
               )}
             </div>
           </div>
         )}
 
         {/* Finished Notification */}
-        {!isAdmin && hierarchy.progress === 100 && (
+        {!isAdmin && hierarchy.progress === 100 && hierarchy.status !== 'cancelled' && (
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -788,7 +970,13 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
               <div>
                 <p className="text-xs uppercase tracking-[0.2em] text-cyan-300/70">Fulfillment</p>
                 <h3 className="mt-1 text-lg font-bold text-white">{formatFulfillmentLabel(hierarchy.fulfillment_method)}</h3>
-                <p className="mt-1 text-sm text-cyan-100/80">Status: {formatStatusLabel(hierarchy.fulfillment_status)}</p>
+                {hierarchy.fulfillment_status === 'completed' ? (
+                  <span className="mt-1 inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                    <CheckCircle className="w-3 h-3 text-emerald-400" /> Fulfillment Completed
+                  </span>
+                ) : (
+                  <p className="mt-1 text-sm text-cyan-100/80">Status: {formatStatusLabel(hierarchy.fulfillment_status)}</p>
+                )}
                 {hierarchy.fulfillment_notes && (
                   <p className="mt-3 text-sm text-cyan-50/85">{hierarchy.fulfillment_notes}</p>
                 )}
@@ -817,18 +1005,70 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-xs mt-3">
-              <div className="flex"><span className="text-[var(--text-muted)]">Requested</span><span className="text-white ml-auto">{formatDisplayDate(hierarchy.cancel_requested_at) || '—'}</span></div>
-              <div className="flex"><span className="text-[var(--text-muted)]">Option</span><span className="text-white ml-auto capitalize">{String(hierarchy.cancel_option || '—').replace(/_/g, ' ')}</span></div>
-              <div className="flex"><span className="text-[var(--text-muted)]">Progress</span><span className="text-white ml-auto">{hierarchy.progress || 0}%</span></div>
-              <div className="flex"><span className="text-[var(--text-muted)]">Status</span><span className="text-white ml-auto capitalize">{formatStatusLabel(hierarchy.status)}</span></div>
-            </div>
-            {hierarchy.cancel_reason && (
-              <div className="mt-3">
-                <p className="text-xs uppercase tracking-[0.1em] text-[var(--text-muted)]">Reason</p>
-                <p className="mt-1 text-sm text-white break-words">{hierarchy.cancel_reason}</p>
+            <div className="space-y-3 mt-3 text-xs">
+              <div className="grid grid-cols-2 gap-x-6 gap-y-2">
+                <div className="flex"><span className="text-[var(--text-muted)]">Progress</span><span className="text-white ml-auto font-semibold">{hierarchy.progress || 0}%</span></div>
+                <div className="flex"><span className="text-[var(--text-muted)]">Status</span><span className="text-amber-400 ml-auto font-semibold">Pending Approval</span></div>
+                <div className="flex"><span className="text-[var(--text-muted)]">Requested</span><span className="text-white ml-auto">{formatDisplayDate(hierarchy.cancel_requested_at) || '—'}</span></div>
+                <div className="flex">
+                  <span className="text-[var(--text-muted)]">Fulfillment</span>
+                  <span className="text-white ml-auto font-medium">
+                    {hierarchy.cancel_option === 'ship_to_address' || hierarchy.cancel_option === 'ship_unfinished'
+                      ? 'Ship to Address'
+                      : 'Pick Up at Shop'}
+                  </span>
+                </div>
               </div>
-            )}
+
+              {/* Reason */}
+              {hierarchy.cancel_reason && (
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] p-3">
+                  <p className="text-[11px] uppercase tracking-[0.1em] text-[var(--text-muted)] font-semibold mb-1">Reason</p>
+                  <p className="text-sm text-white break-words">{hierarchy.cancel_reason}</p>
+                </div>
+              )}
+
+              {/* Delivery Address */}
+              {(hierarchy.cancel_option === 'ship_to_address' || hierarchy.cancel_option === 'ship_unfinished') ? (
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] p-3 space-y-1">
+                  <p className="text-[11px] uppercase tracking-[0.1em] text-[var(--text-muted)] font-semibold flex items-center gap-1.5">
+                    <MapPin className="w-3.5 h-3.5 text-amber-400" /> Delivery Address
+                  </p>
+                  {(() => {
+                    const snap = hierarchy.cancel_address_snapshot
+                      ? (typeof hierarchy.cancel_address_snapshot === 'string'
+                          ? JSON.parse(hierarchy.cancel_address_snapshot)
+                          : hierarchy.cancel_address_snapshot)
+                      : null;
+                    const recipient = snap?.recipient_name || hierarchy.customer_name || 'Customer';
+                    const phone = snap?.phone || hierarchy.customer_phone;
+                    const line1 = snap?.line1 || hierarchy.cancel_address_line1;
+                    const line2 = snap?.line2 || hierarchy.cancel_address_line2;
+                    const barangay = snap?.barangay || hierarchy.cancel_address_barangay;
+                    const city = snap?.city || hierarchy.cancel_address_city;
+                    const province = snap?.province || hierarchy.cancel_address_province;
+                    const postalCode = snap?.postal_code || hierarchy.cancel_address_postal_code;
+
+                    return (
+                      <div className="text-xs text-white/90 space-y-0.5 mt-1">
+                        <p className="font-semibold text-white">{recipient}</p>
+                        {phone && <p className="text-[var(--text-muted)]">{phone}</p>}
+                        {line1 && <p>{line1}</p>}
+                        {line2 && <p>{line2}</p>}
+                        {barangay && <p>{barangay}</p>}
+                        {(city || province) && <p>{[city, province].filter(Boolean).join(', ')}</p>}
+                        {postalCode && <p className="text-[var(--text-muted)]">{postalCode}</p>}
+                      </div>
+                    );
+                  })()}
+                </div>
+              ) : (
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] p-3 text-xs text-[var(--text-muted)] flex items-center gap-2">
+                  <Package className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>No delivery address required.</span>
+                </div>
+              )}
+            </div>
 
             {cancelReviewFeedback && (
               <p className={`mt-3 text-xs font-medium ${cancelReviewFeedback.type === 'error' ? 'text-red-400' : 'text-emerald-300'}`}>{cancelReviewFeedback.message}</p>
@@ -869,179 +1109,275 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
           </div>
         )}
 
+        {/* Shop Fulfillment Section for Approved Cancellations */}
+        {isAdmin && String(hierarchy.status || '').toLowerCase() === 'cancelled' && (
+          <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-5 mb-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                {hierarchy.cancel_option === 'ship_to_address' || hierarchy.cancel_option === 'ship_unfinished' ? (
+                  <Truck className="w-5 h-5 text-amber-400" />
+                ) : (
+                  <Package className="w-5 h-5 text-amber-400" />
+                )}
+                <div>
+                  <h4 className="text-amber-300 font-semibold text-sm">
+                    {hierarchy.cancel_option === 'ship_to_address' || hierarchy.cancel_option === 'ship_unfinished'
+                      ? 'Shop-Managed Delivery'
+                      : 'Pick Up at Shop'}
+                  </h4>
+                  <p className="text-xs text-[var(--text-muted)]">
+                    {hierarchy.cancel_option === 'ship_to_address' || hierarchy.cancel_option === 'ship_unfinished'
+                      ? 'Owner/admin manually arranges courier delivery for unfinished build and parts.'
+                      : 'Customer will collect unfinished build and parts in person from workshop.'}
+                  </p>
+                </div>
+              </div>
+              <span className="px-2.5 py-1 rounded-full border border-amber-500/30 bg-amber-500/10 text-xs font-semibold text-amber-400">
+                {hierarchy.cancel_option === 'ship_to_address' || hierarchy.cancel_option === 'ship_unfinished'
+                  ? 'Ready for Delivery'
+                  : 'Ready for Pickup'}
+              </span>
+            </div>
+
+            {(hierarchy.cancel_option === 'ship_to_address' || hierarchy.cancel_option === 'ship_unfinished') && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs bg-[var(--surface-dark)] p-3.5 rounded-xl border border-[var(--border)]">
+                <div>
+                  <span className="text-[11px] uppercase tracking-wider text-[var(--text-muted)] block font-medium mb-0.5">Customer / Recipient</span>
+                  <p className="font-semibold text-white">
+                    {(() => {
+                      const snap = hierarchy.cancel_address_snapshot
+                        ? (typeof hierarchy.cancel_address_snapshot === 'string'
+                            ? JSON.parse(hierarchy.cancel_address_snapshot)
+                            : hierarchy.cancel_address_snapshot)
+                        : null;
+                      return snap?.recipient_name || hierarchy.customer_name || 'Customer';
+                    })()}
+                  </p>
+                  <span className="text-[11px] uppercase tracking-wider text-[var(--text-muted)] block font-medium mt-2 mb-0.5">Contact</span>
+                  <p className="text-white">
+                    {(() => {
+                      const snap = hierarchy.cancel_address_snapshot
+                        ? (typeof hierarchy.cancel_address_snapshot === 'string'
+                            ? JSON.parse(hierarchy.cancel_address_snapshot)
+                            : hierarchy.cancel_address_snapshot)
+                        : null;
+                      return snap?.phone || hierarchy.customer_phone || '—';
+                    })()}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-[11px] uppercase tracking-wider text-[var(--text-muted)] block font-medium mb-0.5">Delivery Address</span>
+                  <div className="text-white/90 space-y-0.5">
+                    {(() => {
+                      const snap = hierarchy.cancel_address_snapshot
+                        ? (typeof hierarchy.cancel_address_snapshot === 'string'
+                            ? JSON.parse(hierarchy.cancel_address_snapshot)
+                            : hierarchy.cancel_address_snapshot)
+                        : null;
+                      const line1 = snap?.line1 || hierarchy.cancel_address_line1;
+                      const line2 = snap?.line2 || hierarchy.cancel_address_line2;
+                      const barangay = snap?.barangay || hierarchy.cancel_address_barangay;
+                      const city = snap?.city || hierarchy.cancel_address_city;
+                      const province = snap?.province || hierarchy.cancel_address_province;
+                      const postalCode = snap?.postal_code || hierarchy.cancel_address_postal_code;
+
+                      return (
+                        <>
+                          {line1 && <p>{line1}</p>}
+                          {line2 && <p>{line2}</p>}
+                          {barangay && <p>{barangay}</p>}
+                          {(city || province) && <p>{[city, province].filter(Boolean).join(', ')}</p>}
+                          {postalCode && <p className="text-[var(--text-muted)]">{postalCode}</p>}
+                        </>
+                      );
+                    })()}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Build Claim Manager — admin only, for cancelled projects */}
         {isAdmin && String(hierarchy.status || '').toLowerCase() === 'cancelled' && (
           <BuildClaimManager projectId={projectId} projectData={projectData} />
         )}
 
-        {!isAdmin && hierarchy.progress === 100 && (
-          <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6 space-y-5">
-            <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-              <div>
-                <p className="text-xs uppercase tracking-[0.2em] text-[var(--text-muted)]">Release Options</p>
-                <h3 className="mt-1 text-xl font-bold text-white">Choose How You Want To Receive Your Build</h3>
-                <p className="mt-2 text-sm text-[var(--text-muted)]">
-                  Pickup creates a shop appointment. Delivery requests are saved directly on your project for the team to process.
-                </p>
-              </div>
-              <div className={`rounded-xl px-3 py-2 text-xs font-semibold ${hierarchy.shop_delivery_eligible ? 'border border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : 'border border-amber-500/30 bg-amber-500/10 text-amber-300'}`}>
-                {hierarchy.shop_delivery_eligible ? 'Free shop delivery available for this address' : 'Shop delivery is limited to Luzon addresses'}
-              </div>
-            </div>
+        {!isAdmin && hierarchy.progress === 100 && hierarchy.status !== 'cancelled' && (() => {
+          const isLocked = ['processing', 'ready_for_pickup', 'out_for_delivery', 'completed'].includes(hierarchy?.fulfillment_status);
+          const currentMethod = hierarchy?.fulfillment_method ? (hierarchy.fulfillment_method.includes('delivery') ? 'delivery' : 'pickup') : null;
+          const currentStatus = hierarchy?.fulfillment_status || 'requested';
 
-            <div className="grid gap-3 md:grid-cols-3">
-              {[
-                {
-                  id: 'pickup_appointment',
-                  icon: Store,
-                  title: 'Pickup Through Appointment',
-                  description: 'Schedule a release visit at the shop so the team can hand over the finished build.',
-                  disabled: false,
-                },
-                {
-                  id: 'external_delivery',
-                  icon: Truck,
-                  title: 'My Own Courier',
-                  description: 'You will arrange an external rider or courier to pick up the guitar from the shop.',
-                  disabled: false,
-                },
-                {
-                  id: 'shop_delivery',
-                  icon: ShieldCheck,
-                  title: 'Shop Delivery',
-                  description: hierarchy.shop_delivery_eligible ? 'Free delivery is available because your address is in Luzon.' : 'This option unlocks only for Luzon delivery addresses.',
-                  disabled: !hierarchy.shop_delivery_eligible,
-                },
-              ].map((option) => {
-                const Icon = option.icon;
-                const isSelected = selectedFulfillmentMethod === option.id;
-
-                return (
-                  <button
-                    key={option.id}
-                    type="button"
-                    disabled={option.disabled}
-                    onClick={() => setSelectedFulfillmentMethod(option.id)}
-                    className={`rounded-2xl border p-4 text-left transition-all ${
-                      option.disabled
-                        ? 'cursor-not-allowed border-[var(--border)] bg-[var(--bg-primary)] opacity-50'
-                        : isSelected
-                        ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)]/10 shadow-[0_0_20px_rgba(212,175,55,0.12)]'
-                        : 'border-[var(--border)] bg-[var(--bg-primary)] hover:border-[var(--gold-primary)]/40'
-                    }`}
-                  >
-                    <Icon className={`mb-3 h-5 w-5 ${isSelected ? 'text-[var(--gold-primary)]' : 'text-[var(--text-muted)]'}`} />
-                    <p className="text-sm font-bold text-white">{option.title}</p>
-                    <p className="mt-2 text-xs leading-relaxed text-[var(--text-muted)]">{option.description}</p>
-                  </button>
-                );
-              })}
-            </div>
-
-            {fulfillmentFeedback && (
-              <div className={`rounded-xl border px-4 py-3 text-sm ${
-                fulfillmentFeedback.type === 'success'
-                  ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
-                  : 'border-red-500/30 bg-red-500/10 text-red-300'
-              }`}>
-                {fulfillmentFeedback.message}
-              </div>
-            )}
-
-            <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] p-5 space-y-4">
-              {selectedFulfillmentMethod === 'pickup_appointment' ? (
-                <>
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <label className="space-y-2 text-sm">
-                      <span className="font-semibold text-white">Pickup Date</span>
-                      <input
-                        type="date"
-                        min={formatInputDate(new Date())}
-                        value={pickupDate}
-                        onChange={(e) => setPickupDate(e.target.value)}
-                        className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] px-4 py-3 text-white focus:border-[var(--gold-primary)] focus:outline-none"
-                      />
-                    </label>
-                    <label className="space-y-2 text-sm">
-                      <span className="font-semibold text-white">Pickup Time</span>
-                      <select
-                        value={pickupTime}
-                        onChange={(e) => setPickupTime(e.target.value)}
-                        className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] px-4 py-3 text-white focus:border-[var(--gold-primary)] focus:outline-none"
-                      >
-                        <option value="" disabled>Select a time</option>
-                        {pickupTimeSlots.map((slot) => (
-                          <option key={slot.value} value={slot.value}>{slot.label}</option>
-                        ))}
-                      </select>
-                    </label>
-                  </div>
-                  <p className="text-xs text-[var(--text-muted)]">
-                    The appointment will be tagged to this project so the team can prepare your finished instrument for release.
+          return (
+            <div className="rounded-2xl border border-[var(--gold-primary)]/30 bg-[var(--surface-dark)] p-6 space-y-5 shadow-2xl">
+              <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.2em] text-[var(--gold-primary)] font-bold">CosmosCraft Custom Shop</p>
+                  <h3 className="mt-1 text-2xl font-black text-white">Your custom build is complete</h3>
+                  <p className="mt-2 text-sm text-[var(--text-muted)]">
+                    Choose how you would like to receive it. You can update your choice until the shop starts fulfillment.
                   </p>
-                </>
-              ) : (
-                <div className="space-y-2">
-                  <p className="text-sm font-semibold text-white">
-                    {selectedFulfillmentMethod === 'external_delivery'
-                      ? 'Courier Instructions'
-                      : 'Delivery Notes'}
-                  </p>
-                  <p className="text-xs text-[var(--text-muted)]">
-                    {selectedFulfillmentMethod === 'external_delivery'
-                      ? 'Add courier, rider, or coordination instructions so the team knows who will pick up the project.'
-                      : 'Add landmarks, preferred contact details, or any special delivery instructions for the shop team.'}
-                  </p>
+                </div>
+                <div className={`rounded-xl px-3 py-2 text-xs font-semibold ${hierarchy.shop_delivery_eligible ? 'border border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : 'border border-amber-500/30 bg-amber-500/10 text-amber-300'}`}>
+                  {hierarchy.shop_delivery_eligible ? 'Free shop delivery available for this address' : 'Shop delivery is limited to Luzon addresses'}
+                </div>
+              </div>
+
+              {/* Locked Notice */}
+              {isLocked && (
+                <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 flex items-center gap-3 text-amber-300 text-sm font-semibold">
+                  <AlertCircle className="w-5 h-5 text-amber-400 flex-shrink-0" />
+                  <span>Fulfillment has started. Your delivery method can no longer be changed.</span>
                 </div>
               )}
 
-              <label className="space-y-2 text-sm block">
-                <span className="font-semibold text-white">Notes</span>
-                <textarea
-                  value={fulfillmentNotes}
-                  onChange={(e) => setFulfillmentNotes(e.target.value)}
-                  placeholder={selectedFulfillmentMethod === 'external_delivery'
-                    ? 'Example: Lalamove booked under Juan Dela Cruz, call before handoff.'
-                    : selectedFulfillmentMethod === 'shop_delivery'
-                    ? 'Example: Gate code, landmark, or preferred delivery contact.'
-                    : 'Add any preferred pickup instructions.'}
-                  className="min-h-[110px] w-full rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] px-4 py-3 text-white placeholder:text-[var(--text-muted)] focus:border-[var(--gold-primary)] focus:outline-none"
-                />
-              </label>
+              {/* Method Selection Cards */}
+              <div className="grid gap-4 md:grid-cols-2">
+                {[
+                  {
+                    id: 'pickup',
+                    icon: Store,
+                    title: 'Pickup at Shop',
+                    description: 'Pick up your completed guitar at the CosmosCraft workshop. We inspect and hand over the instrument in person.',
+                    disabled: isLocked,
+                  },
+                  {
+                    id: 'delivery',
+                    icon: Truck,
+                    title: 'Shop Delivery',
+                    description: hierarchy.shop_delivery_eligible
+                      ? 'Free doorstep delivery to your Luzon address, handled securely by our team.'
+                      : 'Delivery is available for verified Luzon addresses. Please verify your address.',
+                    disabled: isLocked || !hierarchy.shop_delivery_eligible,
+                  },
+                ].map((option) => {
+                  const Icon = option.icon;
+                  const isSelected = selectedFulfillmentMethod === option.id;
 
-              <div className="rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-[var(--text-muted)]">
-                <p className="font-semibold text-white">Delivery Address on File</p>
-                <p className="mt-1">{shippingAddressLabel}</p>
-                {selectedFulfillmentMethod === 'shop_delivery' && !shippingAddress?.line1 && (
-                  <p className="mt-2 text-amber-300">Add a saved address to your profile if you want the shop to deliver your build.</p>
-                )}
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      disabled={option.disabled}
+                      onClick={() => !isLocked && setSelectedFulfillmentMethod(option.id)}
+                      className={`rounded-2xl border p-5 text-left transition-all ${
+                        option.disabled
+                          ? 'cursor-not-allowed border-[var(--border)] bg-[var(--bg-primary)] opacity-60'
+                          : isSelected
+                          ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)]/10 shadow-[0_0_25px_rgba(212,175,55,0.15)] ring-1 ring-[var(--gold-primary)]'
+                          : 'border-[var(--border)] bg-[var(--bg-primary)] hover:border-[var(--gold-primary)]/40'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-3">
+                        <Icon className={`h-6 w-6 ${isSelected ? 'text-[var(--gold-primary)]' : 'text-[var(--text-muted)]'}`} />
+                        {isSelected && (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[var(--gold-primary)] text-black uppercase tracking-wider">
+                            Selected
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-base font-bold text-white">{option.title}</p>
+                      <p className="mt-2 text-xs leading-relaxed text-[var(--text-muted)]">{option.description}</p>
+                    </button>
+                  );
+                })}
               </div>
-            </div>
 
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-xs text-[var(--text-muted)]">
-                {hasSavedFulfillment
-                  ? 'You can update this preference any time before the team dispatches the project.'
-                  : 'Your selection will be attached to the finished project for staff follow-up.'}
-              </p>
-              <button
-                type="button"
-                onClick={handleSubmitFulfillment}
-                disabled={fulfillmentSaving || (selectedFulfillmentMethod === 'shop_delivery' && !hierarchy.shop_delivery_eligible)}
-                className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] px-5 py-3 text-sm font-bold text-black disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <CheckCircle className="h-4 w-4" />
-                {fulfillmentSaving
-                  ? 'Saving...'
-                  : selectedFulfillmentMethod === 'pickup_appointment'
-                  ? (hierarchy.pickup_appointment ? 'Update Pickup Appointment' : 'Schedule Pickup Appointment')
-                  : hasSavedFulfillment
-                  ? 'Update Fulfillment Choice'
-                  : 'Save Fulfillment Choice'}
-              </button>
+              {fulfillmentFeedback && (
+                <div className={`rounded-xl border px-4 py-3 text-sm flex items-center gap-2 ${
+                  fulfillmentFeedback.type === 'success'
+                    ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+                    : 'border-red-500/30 bg-red-500/10 text-red-300'
+                }`}>
+                  {fulfillmentFeedback.type === 'success' ? <CheckCircle className="w-4 h-4 text-emerald-400" /> : <AlertCircle className="w-4 h-4 text-red-400" />}
+                  <span>{fulfillmentFeedback.message}</span>
+                </div>
+              )}
+
+              <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] p-5 space-y-4">
+                {selectedFulfillmentMethod === 'pickup' ? (
+                  <>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <label className="space-y-2 text-sm">
+                        <span className="font-semibold text-white">Preferred Pickup Date (Optional)</span>
+                        <input
+                          type="date"
+                          disabled={isLocked}
+                          min={formatInputDate(new Date())}
+                          value={pickupDate}
+                          onChange={(e) => setPickupDate(e.target.value)}
+                          className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] px-4 py-3 text-white focus:border-[var(--gold-primary)] focus:outline-none disabled:opacity-50"
+                        />
+                      </label>
+                      <label className="space-y-2 text-sm">
+                        <span className="font-semibold text-white">Preferred Pickup Time</span>
+                        <select
+                          disabled={isLocked}
+                          value={pickupTime}
+                          onChange={(e) => setPickupTime(e.target.value)}
+                          className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] px-4 py-3 text-white focus:border-[var(--gold-primary)] focus:outline-none disabled:opacity-50"
+                        >
+                          <option value="">Any Workshop Hours (10 AM - 6 PM)</option>
+                          {pickupTimeSlots.map((slot) => (
+                            <option key={slot.value} value={slot.value}>{slot.label}</option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+                    <p className="text-xs text-[var(--text-muted)]">
+                      Pickup location: CosmosCraft Custom Shop, 123 Guitar Artisan Way, Quezon City, Metro Manila.
+                    </p>
+                  </>
+                ) : (
+                  <div className="rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-[var(--text-muted)] space-y-1">
+                    <p className="font-semibold text-white">Delivery Address on File</p>
+                    <p className="text-xs text-white/90">{shippingAddressLabel}</p>
+                    {!shippingAddress?.line1 && (
+                      <p className="text-xs text-amber-300">Please add or select a delivery address before requesting Shop Delivery.</p>
+                    )}
+                  </div>
+                )}
+
+                <label className="space-y-2 text-sm block">
+                  <span className="font-semibold text-white">Fulfillment Notes & Instructions</span>
+                  <textarea
+                    disabled={isLocked}
+                    value={fulfillmentNotes}
+                    onChange={(e) => setFulfillmentNotes(e.target.value)}
+                    placeholder={selectedFulfillmentMethod === 'delivery'
+                      ? 'Add landmarks, gate codes, or preferred delivery hours.'
+                      : 'Add any special pickup instructions or notes for the team.'}
+                    rows={2}
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] px-4 py-3 text-white placeholder:text-[var(--text-muted)] focus:border-[var(--gold-primary)] focus:outline-none disabled:opacity-50 resize-none"
+                  />
+                </label>
+              </div>
+
+              {!isLocked && (
+                <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+                  <p className="text-xs text-[var(--text-muted)]">
+                    {hasSavedFulfillment
+                      ? 'You can update this preference until the shop starts processing your fulfillment.'
+                      : 'Your selection will be sent directly to the workshop team to start fulfillment.'}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleSubmitFulfillment}
+                    disabled={fulfillmentSaving || (selectedFulfillmentMethod === 'delivery' && !hierarchy.shop_delivery_eligible)}
+                    className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] px-6 py-3 text-sm font-bold text-black disabled:cursor-not-allowed disabled:opacity-60 shadow-lg shadow-[var(--gold-primary)]/20 hover:opacity-95 transition-all cursor-pointer"
+                  >
+                    <CheckCircle className="h-4 w-4" />
+                    {fulfillmentSaving
+                      ? 'Saving Choice...'
+                      : hasSavedFulfillment
+                      ? 'Update Fulfillment Method'
+                      : 'Confirm Fulfillment Choice'}
+                  </button>
+                </div>
+              )}
             </div>
-          </div>
-)}
+          );
+        })()}
 
         {/* Milestones Accordion - Only show when showTracker is true (My Guitar section) */}
         {showTracker && (
@@ -1141,12 +1477,14 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
 
                               return (
                                 <div key={subtask.subtask_id} className={`flex items-start gap-4 p-4 rounded-xl border transition-all ${isCompleted ? 'bg-green-500/5 border-green-500/30' : 'bg-[var(--surface-dark)] border-[var(--border)] hover:border-[var(--gold-primary)]/50'}`}>
-                                  <button 
+                                  <button
                                     onClick={() => toggleSubtaskStatus(subtask)}
-                                    disabled={!canUserUpdate}
-                                    className={`mt-0.5 rounded-full outline-none focus:ring-2 focus:ring-[var(--gold-primary)] transition-all ${canUserUpdate && !isCompleted ? 'hover:scale-110' : ''}`}
+                                    disabled={!canUserUpdate || togglingSubtaskId === subtask.subtask_id}
+                                    className={`mt-0.5 rounded-full outline-none focus:ring-2 focus:ring-[var(--gold-primary)] transition-all ${canUserUpdate && !isCompleted && togglingSubtaskId !== subtask.subtask_id ? 'hover:scale-110' : ''}`}
                                   >
-                                    {isCompleted ? (
+                                    {togglingSubtaskId === subtask.subtask_id ? (
+                                      <Loader2 className="w-6 h-6 animate-spin text-[var(--gold-primary)]" />
+                                    ) : isCompleted ? (
                                       <CheckCircle className="w-6 h-6 text-green-400" />
                                     ) : (
                                       <Circle className={`w-6 h-6 ${canUserUpdate ? 'text-[var(--text-muted)] hover:text-[var(--gold-primary)]' : 'text-gray-600 cursor-not-allowed'}`} />
@@ -1267,6 +1605,47 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
                   className="flex-1 rounded-lg bg-[var(--gold-primary)] px-3 py-2 text-sm font-semibold text-black hover:bg-[var(--gold-secondary)]"
                 >
                   Yes, Uncheck
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {pendingUncheckPart && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-5"
+            >
+              <h3 className="text-lg font-semibold text-white">Return this part to inventory?</h3>
+              <p className="mt-2 text-sm text-[var(--text-muted)]">
+                Unchecking will return the deducted quantity back to inventory for{' '}
+                <span className="text-white font-medium">{pendingUncheckPart.name}</span>.
+              </p>
+              <div className="mt-5 flex gap-2">
+                <button
+                  type="button"
+                  onClick={handleCancelUncheckPart}
+                  className="flex-1 rounded-lg border border-[var(--border)] px-3 py-2 text-sm font-semibold text-[var(--text-light)] hover:bg-[var(--bg-primary)]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmUncheckPart}
+                  disabled={togglingSaving}
+                  className="flex-1 rounded-lg bg-[var(--gold-primary)] px-3 py-2 text-sm font-semibold text-black hover:bg-[var(--gold-secondary)] disabled:opacity-60"
+                >
+                  {togglingSaving ? 'Returning...' : 'Confirm Return'}
                 </button>
               </div>
             </motion.div>

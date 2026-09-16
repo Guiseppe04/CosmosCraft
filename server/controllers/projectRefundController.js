@@ -10,6 +10,15 @@ exports.getRefundEligibility = asyncHandler(async (req, res, next) => {
   res.json({ status: 'success', data: result });
 });
 
+exports.getCancellationSettlement = asyncHandler(async (req, res, next) => {
+  const result = await refundService.calculateProjectCancellationSettlement(
+    req.params.id,
+    req.user?.id,
+    req.user?.role
+  );
+  res.json({ status: 'success', data: result });
+});
+
 exports.createRefundRequest = asyncHandler(async (req, res, next) => {
   const refund = await refundService.createProjectRefundRequest(
     req.params.id,

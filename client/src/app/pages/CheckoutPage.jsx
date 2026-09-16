@@ -486,7 +486,7 @@ function CheckoutSummaryCard({
             <div className="flex justify-between text-sm">
               <span className="text-[var(--text-muted)]">Estimated Monthly Payment</span>
               <span className="text-[var(--text-light)] font-medium">
-                PHP {safeMonthlyPayment.toLocaleString('en-PH', { maximumFractionDigits: 2 })}/month
+                PHP {safeMonthlyPayment.toLocaleString('en-PH', { maximumFractionDigits: 2 })}/month for 6 months
               </span>
             </div>
             {estimatedCompletion && (
@@ -497,9 +497,9 @@ function CheckoutSummaryCard({
                 </span>
               </div>
             )}
-            <p className="text-xs text-[var(--text-muted)] italic">
+            {/* <p className="text-xs text-[var(--text-muted)] italic">
               Monthly payment is estimated based on a 6-month installment plan with applicable interest. Actual terms may vary.
-            </p>
+            </p> */}
           </div>
         )}
       </div>
@@ -1009,7 +1009,7 @@ export function CheckoutPage() {
         ? paymentPlan === 'full' ? 'full' : 'down_payment'
         : 'full'
       const paymentAmount = selectedPaymentTerms === 'full' ? fullPaymentTotal : total
-      const paymentAmountLabel = selectedPaymentTerms === 'full' ? 'Full payment submitted' : 'Down payment submitted'
+      const paymentAmountLabel = selectedPaymentTerms === 'full' ? 'Full payment amount' : 'Down payment amount'
       const outstandingBalance = Math.max(0, fullPaymentTotal - paymentAmount)
 
       if (hasSelectedCustomBuild) {
@@ -1057,7 +1057,7 @@ export function CheckoutPage() {
           shippingMethod,
           paymentMethod: mappedPaymentMethod,
           termsAccepted: acceptedTerms,
-          shippingAddressId: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(selectedAddressId) ? selectedAddressId : null,
+          shippingAddressId: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(selectedAddressId) ? selectedAddressId : undefined,
           billingAddress: {
             street: finalAddress.street,
             street2: finalAddress.street2,

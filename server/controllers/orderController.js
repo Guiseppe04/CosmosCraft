@@ -261,3 +261,33 @@ exports.updateRefundStatus = asyncHandler(async (req, res, next) => {
   if (!refundRequest) throw new AppError('Refund request not found', 404)
   res.status(200).json({ status: 'success', data: refundRequest })
 })
+
+exports.withdrawRefund = asyncHandler(async (req, res, next) => {
+  const userId = req.user?.id
+  if (!userId) {
+    throw new AppError('You must be logged in to withdraw a refund request', 401)
+  }
+  const refundService = require('../services/refundService')
+  const refundRequest = await refundService.withdrawRefund(req.params.refundId, userId)
+  res.status(200).json({ status: 'success', data: refundRequest })
+})
+
+exports.adjustRefundAmount = asyncHandler(async (req, res, next) => {
+  const adminUserId = req.user?.user_id || req.user?.id
+  const { approvedAmount, adjustmentReason } = req.validatedData || req.body
+  if (!approvedAmount || Number(approvedAmount) <= 0) {
+    throw new AppError('Approved amount must be greater than 0', 400)
+  }
+  const refundService = require('../services/refundService')
+  const refundRequest = await refundService.applyTransition(
+    req.params.refundId,
+    'approved',
+    adminUserId,
+    req.user?.role || 'admin',
+    {
+      approvedAmount: Number(approvedAmount),
+      adjustmentReason: adjustmentReason ? String(adjustmentReason).trim() : null,
+    }
+  )
+  res.status(200).json({ status: 'success', data: refundRequest })
+})

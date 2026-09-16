@@ -6,13 +6,19 @@ const currentBgColors = {
   critical: 'bg-red-500/20 text-red-400',
 }
 
-export function StockVisualizer({ currentStock, newStock, threshold = 10, showDelta = true }) {
+export function StockVisualizer({ currentStock, newStock, threshold = 10, maxStock: maxStockProp = 0, showDelta = true }) {
+  const hasMaxStock = Number(maxStockProp ?? 0) > 0
+  const pct = Number(threshold) || 10
+  // For products (hasMaxStock): threshold is a percentage → lowStockLimit = maxStock * (pct / 100)
+  // For parts (no maxStock): threshold is absolute units → lowStockLimit = threshold * 2
+  const lowStockLimit = hasMaxStock ? Number(maxStockProp) * (pct / 100) : threshold * 2
+
   const delta = newStock - currentStock
   const isIncrease = delta > 0
   const isDecrease = delta < 0
-  const isNormal = currentStock > threshold * 2
-  const isWarning = currentStock > 0 && currentStock <= threshold * 2
   const isCritical = currentStock === 0
+  const isWarning = currentStock > 0 && currentStock <= lowStockLimit
+  const isNormal = !isCritical && !isWarning
 
   const currentColor = isCritical ? 'bg-red-500' : isWarning ? 'bg-amber-500' : 'bg-green-500'
   const currentTextColor = isCritical ? 'text-red-400' : isWarning ? 'text-amber-400' : 'text-green-400'
@@ -20,9 +26,11 @@ export function StockVisualizer({ currentStock, newStock, threshold = 10, showDe
   const newColor = isIncrease ? 'bg-green-500' : isDecrease ? 'bg-red-500' : currentColor
   const deltaColor = isIncrease ? 'text-green-400' : isDecrease ? 'text-red-400' : 'text-white'
 
-  const maxStock = Math.max(currentStock, newStock, threshold * 3, 50)
-  const currentPct = Math.min((currentStock / maxStock) * 100, 100)
-  const newPct = Math.min((newStock / maxStock) * 100, 100)
+  const visualMax = hasMaxStock
+    ? Math.max(Number(maxStockProp), currentStock, newStock, 50)
+    : Math.max(currentStock, newStock, threshold * 3, 50)
+  const currentPct = Math.min((currentStock / visualMax) * 100, 100)
+  const newPct = Math.min((newStock / visualMax) * 100, 100)
 
   return (
     <div className="grid grid-cols-2 gap-4">

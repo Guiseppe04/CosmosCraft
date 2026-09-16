@@ -2,6 +2,9 @@ const { pool } = require('../config/database');
 const { AppError } = require('../middleware/errorHandler');
 const notificationService = require('./notificationService');
 
+// Lazy require to avoid circular dependency
+const getProjectService = () => require('./projectService');
+
 // ─── TABLE ENSURANCE ──────────────────────────────────────────────────────────
 
 let tableReady = false;
@@ -284,7 +287,7 @@ exports.getBuildStatePreview = async (projectId, userId, userRole) => {
  * Create a current build claim when a project with progress is cancelled.
  * Called inside a transaction from the cancel flow.
  */
-exports.createClaimForCancelledProject = async (db, projectId, customerId, orderId) => {
+exports.createClaimForCancelledProject = async (db, projectId, customerId, orderId, options = {}) => {
   await ensureCurrentBuildClaimsTable();
 
   // Check for existing claim
@@ -317,19 +320,28 @@ exports.createClaimForCancelledProject = async (db, projectId, customerId, order
   const amountPaid = await getVerifiedPaymentTotal(db, orderId);
   const estimatedBuildValue = amountPaid;
 
+  const claimMethod = options.claim_method || null;
+  const deliveryAddress = options.delivery_address ? JSON.stringify(options.delivery_address) : null;
+  const initialStatus = claimMethod
+    ? (claimMethod === 'courier' ? 'ready_for_delivery' : 'ready_for_pickup')
+    : 'pending_customer_selection';
+
   const insertRes = await db.query(
     `INSERT INTO current_build_claims (
        project_id, customer_id, order_id,
        progress_at_cancellation, current_build_stage, build_state_snapshot,
        amount_paid, estimated_build_value,
+       claim_method, delivery_address,
        claim_status
      )
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending_customer_selection')
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
      RETURNING *`,
     [
       projectId, customerId, orderId,
       progress, current_stage, JSON.stringify(stages),
       amountPaid, estimatedBuildValue,
+      claimMethod, deliveryAddress,
+      initialStatus,
     ]
   );
 
@@ -338,6 +350,7 @@ exports.createClaimForCancelledProject = async (db, projectId, customerId, order
     progress_at_cancellation: progress,
     current_build_stage: current_stage,
     amount_paid: amountPaid,
+    claim_method: claimMethod,
   });
 
   return insertRes.rows[0];
@@ -721,9 +734,9 @@ exports.updateClaimStatus = async (projectId, adminId, newStatus, data = {}) => 
     });
 
     const statusMessages = {
-      out_for_delivery: 'Your guitar is out for delivery!',
-      delivered: 'Your guitar has been delivered. Please confirm receipt.',
-      ready_for_pickup: 'Your guitar is ready for pickup at the shop.',
+      out_for_delivery: 'Your build/parts are now out for delivery.',
+      delivered: 'Your build/parts have been delivered successfully. Please confirm receipt.',
+      ready_for_pickup: 'Your build/parts are ready for pickup at the shop.',
     };
 
     if (statusMessages[newStatus]) {
@@ -795,6 +808,14 @@ exports.markAsReceived = async (projectId, userId, userRole) => {
       claim_method: claim.claim_method,
     });
 
+    await getProjectService().syncFulfillmentCompletion(
+      client,
+      projectId,
+      claim.order_id,
+      userId,
+      'build_received'
+    );
+
     await client.query('COMMIT');
     return res.rows[0];
   } catch (err) {
@@ -856,8 +877,8 @@ exports.markAsPickedUp = async (projectId, adminId, data = {}) => {
     try {
       await notificationService.createNotification({
         user_id: claim.customer_id,
-        title: 'Guitar Picked Up',
-        message: 'Your guitar has been picked up. Thank you!',
+        title: 'Build/Parts Picked Up',
+        message: 'Your build/parts have been picked up. Please confirm receipt to finalize fulfillment.',
         type: 'order_update',
         related_entity_id: projectId,
         related_entity_type: 'project',

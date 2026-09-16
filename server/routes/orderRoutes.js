@@ -30,6 +30,8 @@ router.get('/my-orders', authenticateToken, orderController.getUserOrders)
 router.get('/refund-requests', authenticateToken, authorize('staff', 'admin', 'super_admin'), validateQuery(listRefundRequestsSchema), orderController.getRefundRequests)
 router.get('/refund-requests/:refundId', authenticateToken, authorize('staff', 'admin', 'super_admin'), validateParams(namedUuidParamSchema('refundId')), orderController.getRefundRequest)
 router.put('/refund-requests/:refundId/status', authenticateToken, authorize('staff', 'admin', 'super_admin'), validateParams(namedUuidParamSchema('refundId')), validate(updateRefundStatusSchema), orderController.updateRefundStatus)
+router.post('/refund-requests/:refundId/withdraw', authenticateToken, validateParams(namedUuidParamSchema('refundId')), orderController.withdrawRefund)
+router.patch('/refund-requests/:refundId/adjust', authenticateToken, authorize('staff', 'admin', 'super_admin'), validateParams(namedUuidParamSchema('refundId')), orderController.adjustRefundAmount)
 
 // --- ADMIN ROUTES ---
 router.get('/', authenticateToken, authorize('staff', 'admin', 'super_admin'), validate(listOrdersSchema, 'query'), orderController.getAllOrders)

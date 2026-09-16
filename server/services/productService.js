@@ -122,8 +122,8 @@ exports.getAllProducts = async ({
   const total = countRes.rows[0]?.total || 0;
 
   const res = await pool.query(
-    `SELECT p.*, c.name AS category_name,
-            i.cost_price, i.stock, i.low_stock_threshold,
+    `      SELECT p.*, c.name AS category_name,
+            i.cost_price, i.stock, i.low_stock_threshold, i.max_stock,
             (SELECT image_url FROM product_images WHERE product_id = p.product_id AND is_primary = true LIMIT 1) AS primary_image
      FROM products p
      LEFT JOIN categories c ON p.category_id = c.category_id
@@ -148,7 +148,7 @@ exports.getAllProducts = async ({
 exports.getProductById = async (id) => {
   const res = await pool.query(
     `SELECT p.*, c.name AS category_name,
-            i.cost_price, i.stock, i.low_stock_threshold, i.inventory_id,
+            i.cost_price, i.stock, i.low_stock_threshold, i.max_stock, i.inventory_id,
             (SELECT image_url
              FROM product_images
              WHERE product_id = p.product_id AND is_primary = true
@@ -168,7 +168,7 @@ exports.getProductById = async (id) => {
   return { ...res.rows[0], images: images.rows };
 };
 
-exports.createProduct = async ({ name, description, price, brand, sku, category_id, is_active, cost_price, stock, low_stock_threshold }) => {
+exports.createProduct = async ({ name, description, price, brand, sku, category_id, is_active, cost_price, low_stock_threshold, max_stock }) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -185,10 +185,12 @@ exports.createProduct = async ({ name, description, price, brand, sku, category_
     const product = productRes.rows[0];
     
     // Create inventory record
+    // On creation, initialize stock to max_stock (full capacity).
+    const initialStock = max_stock != null && max_stock > 0 ? max_stock : 0;
     await client.query(
-      `INSERT INTO inventory (product_id, cost_price, stock, low_stock_threshold)
-       VALUES ($1, $2, $3, $4)`,
-      [product.product_id, cost_price != null ? cost_price : 0, stock ?? 0, low_stock_threshold ?? 10]
+      `INSERT INTO inventory (product_id, cost_price, stock, low_stock_threshold, max_stock)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [product.product_id, cost_price != null ? cost_price : 0, initialStock, low_stock_threshold ?? 10, max_stock != null && max_stock > 0 ? max_stock : null]
     );
     
     await client.query('COMMIT');
@@ -197,8 +199,9 @@ exports.createProduct = async ({ name, description, price, brand, sku, category_
     return {
       ...product,
       cost_price: cost_price || null,
-      stock: stock ?? 0,
-      low_stock_threshold: low_stock_threshold ?? 10
+      stock: initialStock,
+      low_stock_threshold: low_stock_threshold ?? 10,
+      max_stock: max_stock != null && max_stock > 0 ? max_stock : null
     };
   } catch (err) {
     await client.query('ROLLBACK');
@@ -208,7 +211,7 @@ exports.createProduct = async ({ name, description, price, brand, sku, category_
   }
 };
 
-exports.updateProduct = async (id, { name, description, price, brand, sku, category_id, is_active, cost_price, stock, low_stock_threshold }) => {
+exports.updateProduct = async (id, { name, description, price, brand, sku, category_id, is_active, cost_price, low_stock_threshold, max_stock }) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -242,32 +245,42 @@ exports.updateProduct = async (id, { name, description, price, brand, sku, categ
     
     if (inventoryRes.rows.length > 0) {
       // Update existing inventory record
+      // NOTE: stock is intentionally NOT updated here — it is managed by
+      // inventory/sales transactions (addStock, deductStock, adjustStock).
       await client.query(
         `UPDATE inventory SET
            cost_price           = COALESCE($1, cost_price),
-           stock                = COALESCE($2, stock),
-           low_stock_threshold  = COALESCE($3, low_stock_threshold),
+           low_stock_threshold  = COALESCE($2, low_stock_threshold),
+           max_stock            = CASE WHEN $3::int IS NULL THEN max_stock ELSE $3::int END,
            updated_at           = now()
          WHERE product_id = $4`,
-        [cost_price, stock, low_stock_threshold, id]
+        [cost_price, low_stock_threshold, max_stock != null && max_stock > 0 ? max_stock : null, id]
       );
     } else {
       // Create new inventory record if it doesn't exist
       await client.query(
-        `INSERT INTO inventory (product_id, cost_price, stock, low_stock_threshold)
-         VALUES ($1, $2, $3, $4)`,
-        [id, cost_price != null ? cost_price : 0, stock ?? 0, low_stock_threshold ?? 10]
+        `INSERT INTO inventory (product_id, cost_price, stock, low_stock_threshold, max_stock)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [id, cost_price != null ? cost_price : 0, 0, low_stock_threshold ?? 10, max_stock != null && max_stock > 0 ? max_stock : null]
       );
     }
     
-    await client.query('COMMIT');
+     await client.query('COMMIT');
     
     const product = productRes.rows[0];
+    // Fetch the current stock from inventory (not from form, since stock is
+    // managed by transactions)
+    const currentStockRes = await client.query(
+      `SELECT stock FROM inventory WHERE product_id = $1`,
+      [id]
+    );
+    const currentStock = currentStockRes.rows[0]?.stock ?? 0;
     return {
       ...product,
       cost_price,
-      stock,
-      low_stock_threshold
+      stock: currentStock,
+      low_stock_threshold,
+      max_stock: max_stock != null && max_stock > 0 ? max_stock : null
     };
   } catch (err) {
     await client.query('ROLLBACK');

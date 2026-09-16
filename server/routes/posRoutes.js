@@ -96,6 +96,22 @@ router.patch(
   ctrl.cancelSale
 );
 
+// Void a completed sale (admin only)
+router.post(
+  '/sales/:id/void',
+  authenticateToken,
+  authorize('admin', 'super_admin'),
+  ctrl.voidSale
+);
+
+// Return items from a completed sale (admin only)
+router.post(
+  '/sales/:id/return',
+  authenticateToken,
+  authorize('admin', 'super_admin'),
+  ctrl.returnSale
+);
+
 // Verify payment (for non-cash payments)
 router.patch(
   '/payments/:paymentId/verify',

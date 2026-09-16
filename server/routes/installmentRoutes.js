@@ -16,8 +16,14 @@ router.get('/project/:projectId', ctrl.getOrderInstallmentTracking);
 // Get all overdue installments
 router.get('/overdue', ctrl.getOverdueInstallments);
 
-// Mark an installment as paid
+// Mark an installment as paid (manually)
 router.patch('/:scheduleId/pay', ctrl.markInstallmentPaid);
+
+// Verify an installment payment
+router.patch('/:scheduleId/verify', ctrl.verifyInstallmentPayment);
+
+// Reject an installment payment
+router.patch('/:scheduleId/reject', ctrl.rejectInstallmentPayment);
 
 // Manually run overdue check
 router.post('/check-overdue', ctrl.runOverdueCheck);

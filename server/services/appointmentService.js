@@ -780,13 +780,32 @@ exports.getDailyAppointmentLoad = async (date, excludeAppointmentId = null) => {
 // ─── REFUND REQUESTS ──────────────────────────────────────────────────────────
 
 exports.createRefundRequest = async ({ appointment_id, user_id, payment_method, payment_reference, amount, reason }) => {
+  // The deployed refund_requests table stores refunds by order_id (no appointment_id column).
+  // Appointments link to orders via appointments.order_id, so resolve the order first.
+  const appointmentRes = await pool.query(
+    `SELECT order_id FROM appointments WHERE appointment_id = $1`,
+    [appointment_id]
+  );
+  if (appointmentRes.rows.length === 0) {
+    throw new AppError('Appointment not found', 404);
+  }
+
+  // Store the amount in amount_requested (the only amount column on the deployed table).
+  // payment_method / payment_reference are not persisted as columns on refund_requests,
+  // but are captured as notes for record-keeping.
+  const notes = [
+    payment_method ? `Payment Method: ${payment_method}` : null,
+    payment_reference ? `Payment Reference: ${payment_reference}` : null,
+    reason ? `Reason: ${reason}` : null,
+  ].filter(Boolean).join('\n');
+
   const result = await pool.query(
     `INSERT INTO refund_requests (
-      appointment_id, user_id, payment_method, payment_reference, amount, reason, status
+      order_id, user_id, reason, customer_notes, amount_requested
     ) VALUES (
-      $1, $2, $3, $4, $5, $6, 'pending'
+      $1, $2, $3, $4, $5
     ) RETURNING *`,
-    [appointment_id, user_id, payment_method, payment_reference || null, amount || null, reason || null]
+    [appointmentRes.rows[0].order_id, user_id, reason || 'Refund request', notes || null, amount || null]
   );
   return result.rows[0];
 };
@@ -796,7 +815,8 @@ exports.getRefundRequestsByAppointment = async (appointmentId) => {
     `SELECT r.*, u.first_name, u.last_name, u.email
      FROM refund_requests r
      JOIN users u ON r.user_id = u.user_id
-     WHERE r.appointment_id = $1
+     JOIN appointments a ON a.order_id = r.order_id
+     WHERE a.appointment_id = $1
      ORDER BY r.created_at DESC`,
     [appointmentId]
   );
@@ -804,7 +824,7 @@ exports.getRefundRequestsByAppointment = async (appointmentId) => {
 };
 
 exports.getRefundRequestById = async (refundId) => {
-  const result = await pool.query('SELECT * FROM refund_requests WHERE refund_id = $1', [refundId]);
+  const result = await pool.query('SELECT * FROM refund_requests WHERE refund_request_id = $1', [refundId]);
   return result.rows[0] || null;
 };
 

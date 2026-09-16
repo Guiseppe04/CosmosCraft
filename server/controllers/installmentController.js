@@ -104,6 +104,81 @@ exports.getOverdueInstallments = asyncHandler(async (req, res, next) => {
 });
 
 /**
+ * Customer submits payment for an installment with proof.
+ */
+exports.submitCustomerInstallmentPayment = asyncHandler(async (req, res, next) => {
+  const scheduleId = req.params.scheduleId || req.body.scheduleId;
+  const projectId = req.params.id || req.params.projectId || req.body.projectId;
+  const referenceNumber = req.body.reference_number || req.body.referenceNumber || req.body.reference || null;
+  const method = req.body.method || req.body.payment_method || req.body.paymentMethod || 'gcash';
+  const proofUrl = req.file ? `/uploads/proofs/${req.file.filename}` : (req.body.proof_url || req.body.proofUrl || null);
+
+  if (!scheduleId) throw new AppError('Schedule ID is required', 400);
+  if (!projectId) throw new AppError('Project ID is required', 400);
+
+  const result = await installmentService.submitCustomerInstallmentPayment({
+    projectId,
+    scheduleId,
+    userId: req.user.user_id || req.user.id,
+    userRole: req.user.role,
+    method,
+    referenceNumber: referenceNumber ? String(referenceNumber).trim() : null,
+    proofUrl,
+  });
+
+  res.status(201).json({
+    status: 'success',
+    data: result,
+    message: 'Payment for installment submitted successfully and is waiting for verification.',
+  });
+});
+
+/**
+ * Admin verifies an installment payment.
+ */
+exports.verifyInstallmentPayment = asyncHandler(async (req, res, next) => {
+  const { scheduleId } = req.params;
+  const { notes } = req.body;
+
+  if (!scheduleId) throw new AppError('Schedule ID is required', 400);
+
+  const installment = await installmentService.verifyInstallmentPayment({
+    scheduleId,
+    adminUserId: req.user.user_id || req.user.id,
+    notes: notes || null,
+  });
+
+  res.json({
+    status: 'success',
+    data: installment,
+    message: 'Installment payment verified successfully',
+  });
+});
+
+/**
+ * Admin rejects an installment payment.
+ */
+exports.rejectInstallmentPayment = asyncHandler(async (req, res, next) => {
+  const { scheduleId } = req.params;
+  const { reason, notes } = req.body;
+
+  if (!scheduleId) throw new AppError('Schedule ID is required', 400);
+
+  const installment = await installmentService.rejectInstallmentPayment({
+    scheduleId,
+    adminUserId: req.user.user_id || req.user.id,
+    reason: reason || 'Payment verification failed',
+    notes: notes || null,
+  });
+
+  res.json({
+    status: 'success',
+    data: installment,
+    message: 'Installment payment rejected',
+  });
+});
+
+/**
  * Admin manually marks an installment as paid.
  */
 exports.markInstallmentPaid = asyncHandler(async (req, res, next) => {
@@ -126,7 +201,7 @@ exports.markInstallmentPaid = asyncHandler(async (req, res, next) => {
     method: method || null,
     notes: notes || null,
     amount: amount || null,
-    adminUserId: admin_user_id || null,
+    adminUserId: admin_user_id || req.user?.user_id || req.user?.id || null,
   });
 
   res.json({ status: 'success', data: installment, message: 'Installment marked as paid' });

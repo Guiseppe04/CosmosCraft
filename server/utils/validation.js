@@ -474,12 +474,22 @@ exports.createProductSchema = Joi.object({
       'number.min': 'Stock must be at least 0',
     }),
   low_stock_threshold: Joi.number()
-    .integer()
+    .precision(2)
     .min(0)
+    .max(100)
     .optional()
     .messages({
-      'number.base': 'Low stock threshold must be a number',
+      'number.base': 'Low stock threshold must be a number between 0 and 100',
       'number.min': 'Low stock threshold must be at least 0',
+      'number.max': 'Low stock threshold must not exceed 100',
+    }),
+  max_stock: Joi.number()
+    .integer()
+    .min(1)
+    .optional()
+    .messages({
+      'number.base': 'Max stock must be a number',
+      'number.min': 'Max stock must be at least 1',
     }),
   image_url: Joi.string()
     .uri()
@@ -554,12 +564,22 @@ exports.updateProductSchema = Joi.object({
       'number.min': 'Stock must be at least 0',
     }),
   low_stock_threshold: Joi.number()
-    .integer()
+    .precision(2)
     .min(0)
+    .max(100)
     .optional()
     .messages({
-      'number.base': 'Low stock threshold must be a number',
+      'number.base': 'Low stock threshold must be a number between 0 and 100',
       'number.min': 'Low stock threshold must be at least 0',
+      'number.max': 'Low stock threshold must not exceed 100',
+    }),
+  max_stock: Joi.number()
+    .integer()
+    .min(1)
+    .optional()
+    .messages({
+      'number.base': 'Max stock must be a number',
+      'number.min': 'Max stock must be at least 1',
     }),
   image_url: Joi.string()
     .uri()
@@ -678,7 +698,7 @@ exports.namedUuidParamSchema = (paramName) =>
 const paymentMethodEnum = ['gcash', 'bank_transfer', 'cash'];
 const orderStatusEnum = ['pending', 'processing', 'shipped', 'out_for_delivery', 'delivered', 'received', 'cancelled'];
 const orderPaymentStatusEnum = ['pending', 'proof_submitted', 'under_review', 'approved', 'rejected', 'failed'];
-const fulfillmentMethods = ['pickup_appointment', 'home_delivery', 'store_pickup', 'courier'];
+const fulfillmentMethods = ['pickup', 'delivery', 'pickup_appointment', 'external_delivery', 'shop_delivery'];
 const notificationTypeEnum = ['order_update', 'appointment_reminder', 'system', 'promotional', 'low_stock'];
 const refundStatusEnum = ['pending', 'approved', 'processing', 'rejected', 'refunded', 'pending_payment_verification'];
 
@@ -715,7 +735,7 @@ exports.createOrderSchema = Joi.object({
       'any.only': 'Payment method must be gcash or bank_transfer',
       'any.required': 'Payment method is required',
     }),
-  shippingAddressId: Joi.string().uuid().optional(),
+  shippingAddressId: Joi.string().uuid().optional().allow(null),
   billingAddress: Joi.object({
     street: Joi.string().min(5).max(100).required().trim().messages({
       'string.min': 'Address street must be at least 5 characters',
@@ -948,11 +968,45 @@ exports.assignTeamSchema = Joi.object({
 });
 
 exports.submitFulfillmentSchema = Joi.object({
-  fulfillment_method: Joi.string().valid(...fulfillmentMethods).required().messages({
+  fulfillment_method: Joi.string().valid(...fulfillmentMethods).optional().messages({
     'any.only': `Fulfillment method must be one of: ${fulfillmentMethods.join(', ')}`,
     'any.required': 'Fulfillment method is required',
   }),
+  method: Joi.string().valid(...fulfillmentMethods).optional(),
   notes: Joi.string().max(500).optional().allow('').trim(),
+  address_id: Joi.string().uuid().optional(),
+  delivery_address_id: Joi.string().uuid().optional(),
+  scheduled_at: Joi.date().iso().optional(),
+  pickup_scheduled_at: Joi.date().iso().optional(),
+}).or('fulfillment_method', 'method');
+
+exports.updateFulfillmentStatusSchema = Joi.object({
+  status: Joi.string().valid('requested', 'processing', 'ready_for_pickup', 'out_for_delivery', 'completed', 'cancelled').required().messages({
+    'any.only': 'Status must be one of: requested, processing, ready_for_pickup, out_for_delivery, completed, cancelled',
+    'any.required': 'Status is required',
+  }),
+  admin_notes: Joi.string().max(500).optional().allow('').trim(),
+});
+
+
+exports.requestProjectCancelSchema = Joi.object({
+  cancel_option: Joi.string().valid('ship_to_address', 'pickup_at_shop', 'ship_unfinished', 'pickup_unfinished').required().messages({
+    'any.only': 'Fulfillment method must be Ship to Address or Pick Up at Shop',
+    'any.required': 'Fulfillment method is required',
+  }),
+  cancel_reason: Joi.string().trim().min(5).max(500).required().messages({
+    'string.min': 'Cancellation reason must be at least 5 characters',
+    'string.max': 'Cancellation reason must not exceed 500 characters',
+    'any.required': 'Cancellation reason is required',
+  }),
+  address_id: Joi.when('cancel_option', {
+    is: Joi.string().valid('ship_to_address', 'ship_unfinished'),
+    then: Joi.string().uuid().required().messages({
+      'string.guid': 'Please select a valid delivery address',
+      'any.required': 'Please select a delivery address.',
+    }),
+    otherwise: Joi.string().uuid().optional().allow(null, ''),
+  }),
 });
 
 exports.createMilestoneSchema = Joi.object({
@@ -985,8 +1039,8 @@ exports.createSubtaskSchema = Joi.object({
 });
 
 exports.updateSubtaskSchema = Joi.object({
-  status: Joi.string().valid('not_started', 'in_progress', 'completed', 'cancelled').optional(),
-  notes: Joi.string().max(500).optional().allow('').trim(),
+  status: Joi.string().valid('not_started', 'in_progress', 'completed', 'cancelled', 'pending').optional(),
+  notes: Joi.string().max(500).optional().allow('', null),
 });
 
 const builderPartCommonFields = {
@@ -1148,7 +1202,7 @@ exports.saveDefaultWorkflowSchema = Joi.object({
 
 const listOrdersSchema = Joi.object({
   search: Joi.string().max(100).optional().allow('').trim(),
-  order_type: Joi.string().valid('product', 'customization', 'service').optional(),
+  order_type: Joi.string().valid('product', 'customization', 'service', 'all').optional().allow(''),
   status: Joi.string().valid(
     'pending',
     'processing',
@@ -1156,28 +1210,33 @@ const listOrdersSchema = Joi.object({
     'out_for_delivery',
     'delivered',
     'received',
-    'cancelled'
-  ).optional(),
+    'cancelled',
+    'all'
+  ).optional().allow(''),
   payment_status: Joi.string().valid(
     'pending',
     'proof_submitted',
     'under_review',
     'approved',
     'rejected',
-    'failed'
-  ).optional(),
-  date_from: Joi.string().isoDate().optional(),
-  date_to: Joi.string().isoDate().optional(),
-  payment_method: Joi.string().valid('gcash', 'bank_transfer', 'cash').optional(),
+    'failed',
+    'all'
+  ).optional().allow(''),
+  date_from: Joi.string().optional().allow(''),
+  date_to: Joi.string().optional().allow(''),
+  payment_method: Joi.string().valid('gcash', 'bank_transfer', 'cash', 'all').optional().allow(''),
   sort_by: Joi.string().valid(
     'created_at',
     'order_number',
     'total_amount',
     'status',
     'payment_status',
-    'customer_name'
-  ).optional(),
-  sort_dir: Joi.string().valid('asc', 'desc').optional(),
+    'customer_name',
+    'order_type',
+    'customization_name',
+    'date'
+  ).optional().allow(''),
+  sort_dir: Joi.string().valid('asc', 'desc').optional().allow(''),
   page: Joi.number().integer().min(1).optional(),
   page_size: Joi.number().integer().min(1).max(100).optional(),
   include_items: Joi.alternatives().try(Joi.string(), Joi.boolean()).optional(),
@@ -1270,3 +1329,93 @@ exports.updateBuildClaimStatusSchema = Joi.object({
     'any.required': 'Status is required',
   }),
 }).unknown(true);
+
+// ============================================================================
+// RATINGS & FEEDBACK SCHEMAS
+// ============================================================================
+
+exports.createProductReviewSchema = Joi.object({
+  order_id: Joi.string().uuid().required().messages({
+    'string.guid': 'Order ID must be a valid UUID',
+    'any.required': 'Order ID is required',
+  }),
+  order_item_id: Joi.alternatives().try(Joi.number().integer().positive(), Joi.string()).required().messages({
+    'any.required': 'Order item ID is required',
+  }),
+  rating: Joi.number().integer().min(1).max(5).required().messages({
+    'number.min': 'Rating must be at least 1 star',
+    'number.max': 'Rating must not exceed 5 stars',
+    'any.required': 'Rating is required',
+  }),
+  title: Joi.string().max(150).optional().allow('').trim(),
+  comment: Joi.string().min(3).max(2000).required().trim().messages({
+    'string.min': 'Review comment must be at least 3 characters',
+    'string.max': 'Review comment must not exceed 2000 characters',
+    'any.required': 'Review comment is required',
+  }),
+  images: Joi.array().items(Joi.string().uri().max(500)).max(10).optional(),
+}).unknown(true);
+
+exports.updateProductReviewSchema = Joi.object({
+  rating: Joi.number().integer().min(1).max(5).optional().messages({
+    'number.min': 'Rating must be at least 1 star',
+    'number.max': 'Rating must not exceed 5 stars',
+  }),
+  title: Joi.string().max(150).optional().allow('').trim(),
+  comment: Joi.string().min(3).max(2000).optional().trim().messages({
+    'string.min': 'Review comment must be at least 3 characters',
+    'string.max': 'Review comment must not exceed 2000 characters',
+  }),
+  images: Joi.array().items(Joi.string().uri().max(500)).max(10).optional(),
+}).unknown(true);
+
+exports.createCustomizationFeedbackSchema = Joi.object({
+  order_id: Joi.string().uuid().required().messages({
+    'string.guid': 'Order ID must be a valid UUID',
+    'any.required': 'Order ID is required',
+  }),
+  overall_rating: Joi.number().integer().min(1).max(5).required().messages({
+    'number.min': 'Overall rating must be between 1 and 5',
+    'number.max': 'Overall rating must be between 1 and 5',
+    'any.required': 'Overall rating is required',
+  }),
+  build_quality_rating: Joi.number().integer().min(1).max(5).required().messages({
+    'number.min': 'Build quality rating must be between 1 and 5',
+    'number.max': 'Build quality rating must be between 1 and 5',
+    'any.required': 'Build quality rating is required',
+  }),
+  communication_rating: Joi.number().integer().min(1).max(5).required().messages({
+    'number.min': 'Communication rating must be between 1 and 5',
+    'number.max': 'Communication rating must be between 1 and 5',
+    'any.required': 'Communication rating is required',
+  }),
+  accuracy_rating: Joi.number().integer().min(1).max(5).required().messages({
+    'number.min': 'Customization accuracy rating must be between 1 and 5',
+    'number.max': 'Customization accuracy rating must be between 1 and 5',
+    'any.required': 'Customization accuracy rating is required',
+  }),
+  comment: Joi.string().min(3).max(2000).required().trim().messages({
+    'string.min': 'Feedback comment must be at least 3 characters',
+    'string.max': 'Feedback comment must not exceed 2000 characters',
+    'any.required': 'Feedback comment is required',
+  }),
+  images: Joi.array().items(Joi.string().uri().max(500)).max(10).optional(),
+}).unknown(true);
+
+exports.updateCustomizationFeedbackSchema = Joi.object({
+  overall_rating: Joi.number().integer().min(1).max(5).optional(),
+  build_quality_rating: Joi.number().integer().min(1).max(5).optional(),
+  communication_rating: Joi.number().integer().min(1).max(5).optional(),
+  accuracy_rating: Joi.number().integer().min(1).max(5).optional(),
+  comment: Joi.string().min(3).max(2000).optional().trim(),
+  images: Joi.array().items(Joi.string().uri().max(500)).max(10).optional(),
+}).unknown(true);
+
+exports.updateReviewStatusSchema = Joi.object({
+  status: Joi.string().valid('pending', 'approved', 'rejected', 'flagged').required().messages({
+    'any.only': 'Status must be one of: pending, approved, rejected, flagged',
+    'any.required': 'Status is required',
+  }),
+  admin_notes: Joi.string().max(1000).optional().allow('').trim(),
+}).unknown(true);
+

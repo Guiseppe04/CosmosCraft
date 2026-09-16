@@ -377,7 +377,7 @@ const validateAndDeductInventory = async (client, reservations, orderId) => {
     const quantity = reservations.get(productId)
 
     const productRes = await client.query(
-      `SELECT p.product_id, p.name, p.is_active, i.stock, i.low_stock_threshold
+      `SELECT p.product_id, p.name, p.is_active, i.stock, i.low_stock_threshold, i.max_stock
        FROM products p
        LEFT JOIN inventory i ON p.product_id = i.product_id
        WHERE p.product_id = $1`,
@@ -395,7 +395,7 @@ const validateAndDeductInventory = async (client, reservations, orderId) => {
     }
 
     const inventoryRes = await client.query(
-      `SELECT stock, low_stock_threshold
+      `SELECT stock, low_stock_threshold, max_stock
        FROM inventory
        WHERE product_id = $1
        FOR UPDATE`,
@@ -408,6 +408,8 @@ const validateAndDeductInventory = async (client, reservations, orderId) => {
 
     const currentStock = Number(inventoryRes.rows[0].stock) || 0
     const lowStockThreshold = Number(inventoryRes.rows[0].low_stock_threshold) || 10
+    const maxStock = Number(inventoryRes.rows[0].max_stock) || 0
+    const lowStockLimit = maxStock > 0 ? maxStock * (lowStockThreshold / 100) : 0
 
     if (currentStock < quantity) {
       throw createValidationError(`Not enough stock for ${product.name}. Available stock: ${currentStock}.`, 400)
@@ -431,11 +433,11 @@ const validateAndDeductInventory = async (client, reservations, orderId) => {
 
     const newStock = Number(updateRes.rows[0]?.stock) || 0
 
-    if (newStock <= lowStockThreshold && newStock > 0) {
+    if (newStock <= lowStockLimit && newStock > 0) {
       await client.query(
         `INSERT INTO low_stock_alerts (product_id, current_stock, threshold)
          VALUES ($1, $2, $3)`,
-        [productId, newStock, lowStockThreshold]
+        [productId, newStock, Math.round(lowStockLimit)]
       )
     }
   }
@@ -738,7 +740,14 @@ exports.getUserOrders = async (userId) => {
        order_id,
        refund_request_id,
        status,
-       created_at
+       created_at,
+       refunded_amount,
+       approved_amount,
+       refund_reference,
+       refund_method,
+       rejection_reason,
+       refund_type,
+       request_number
      FROM refund_requests
      WHERE order_id = ANY($1) AND deleted_at IS NULL
      ORDER BY order_id, created_at DESC`,
@@ -749,15 +758,50 @@ exports.getUserOrders = async (userId) => {
     return acc
   }, {})
 
+  const reviewsRes = await pool.query(
+    `SELECT * FROM product_reviews WHERE order_id = ANY($1) AND deleted_at IS NULL`,
+    [orderIds]
+  )
+  const reviewsByItemId = reviewsRes.rows.reduce((acc, rev) => {
+    acc[rev.order_item_id] = rev
+    return acc
+  }, {})
+
+  const feedbackRes = await pool.query(
+    `SELECT * FROM customization_feedback WHERE order_id = ANY($1) AND deleted_at IS NULL`,
+    [orderIds]
+  )
+  const feedbackByOrder = feedbackRes.rows.reduce((acc, fb) => {
+    acc[fb.order_id] = fb
+    return acc
+  }, {})
+
+  const projectsRes = await pool.query(
+    `SELECT project_id, order_id, title, status, fulfillment_status FROM projects WHERE order_id = ANY($1) AND deleted_at IS NULL`,
+    [orderIds]
+  )
+  const projectByOrder = projectsRes.rows.reduce((acc, proj) => {
+    acc[proj.order_id] = proj
+    return acc
+  }, {})
+
   return res.rows.map((order) => {
-    const items = itemsByOrder[order.order_id] || []
+    const rawItems = itemsByOrder[order.order_id] || []
+    const items = rawItems.map(item => ({
+      ...item,
+      review: reviewsByItemId[item.order_item_id] || null,
+    }))
     const payment = paymentsByOrder[order.order_id] || null
     const refund = refundByOrder[order.order_id] || null
+    const customization_feedback = feedbackByOrder[order.order_id] || null
+    const project = projectByOrder[order.order_id] || null
 
     return {
       ...order,
       items,
       payment,
+      project,
+      customization_feedback,
       payment_method: resolveOrderPaymentMethod(order, payment),
       customization_ids: items
         .map((item) => item.customization_id)
@@ -766,6 +810,13 @@ exports.getUserOrders = async (userId) => {
       refund_request_id: refund?.refund_request_id || null,
       refund_request_status: refund?.status || null,
       refund_requested_at: refund?.created_at || null,
+      refund_refunded_amount: refund?.refunded_amount || null,
+      refund_approved_amount: refund?.approved_amount || null,
+      refund_reference: refund?.refund_reference || null,
+      refund_method: refund?.refund_method || null,
+      refund_rejection_reason: refund?.rejection_reason || null,
+      refund_type: refund?.refund_type || null,
+      refund_request_number: refund?.request_number || null,
     }
   })
 }
@@ -875,9 +926,6 @@ exports.getAllOrders = async (params = {}) => {
     queryParams.push(payment_method)
   }
 
-  const whereClause = where.length ? `WHERE ${where.join(' AND ')}` : ''
-
-  let searchClause = ''
   if (search && String(search).trim()) {
     const term = `%${String(search).trim().toLowerCase()}%`
     const searchFilters = [
@@ -891,12 +939,16 @@ exports.getAllOrders = async (params = {}) => {
       `p.reference_number ILIKE $${idx++}`,
       `o.status::TEXT ILIKE $${idx++}`,
       `o.payment_status::TEXT ILIKE $${idx++}`,
+      `o.tracking_number ILIKE $${idx++}`,
+      `o.rider_name ILIKE $${idx++}`,
     ]
-    searchClause = `AND (${searchFilters.join(' OR ')})`
+    where.push(`(${searchFilters.join(' OR ')})`)
     for (let i = 0; i < searchFilters.length; i++) {
       queryParams.push(term)
     }
   }
+
+  const whereClause = where.length ? `WHERE ${where.join(' AND ')}` : ''
 
   const totalQuery = `
     SELECT COUNT(DISTINCT o.order_id)::int AS total
@@ -906,7 +958,6 @@ exports.getAllOrders = async (params = {}) => {
     LEFT JOIN customizations c ON c.customization_id = oi.customization_id
     LEFT JOIN payments p ON p.order_id = o.order_id
     ${whereClause}
-    ${searchClause}
   `
 
   const totalResult = await pool.query(totalQuery, queryParams)
@@ -948,7 +999,6 @@ exports.getAllOrders = async (params = {}) => {
     LEFT JOIN customizations c ON c.customization_id = oi.customization_id
     LEFT JOIN payments p ON p.order_id = o.order_id
     ${whereClause}
-    ${searchClause}
     GROUP BY o.order_id, a.address_id, u.user_id
     ORDER BY ${sortColumn}
     LIMIT $${idx++} OFFSET $${idx++}
@@ -989,10 +1039,30 @@ exports.getAllOrders = async (params = {}) => {
     }
   }
 
+  let projectsByOrder = {}
+  if (orderIds.length > 0) {
+    const projectsRes = await pool.query(
+      `SELECT DISTINCT ON (order_id) *
+       FROM projects
+       WHERE order_id = ANY($1) AND deleted_at IS NULL
+       ORDER BY order_id, created_at DESC`,
+      [orderIds]
+    )
+    projectsByOrder = projectsRes.rows.reduce((acc, project) => {
+      acc[project.order_id] = project
+      return acc
+    }, {})
+  }
+
   const orders = dataResult.rows.map((order) => {
     const payment = paymentsByOrder[order.order_id] || null
+    const project = projectsByOrder[order.order_id] || null
     return {
       ...order,
+      project_id: project?.project_id || order.project_id || null,
+      project_progress: project ? Number(project.progress || 0) : Number(order.project_progress || 0),
+      project_fulfillment_status: project?.fulfillment_status || order.project_fulfillment_status || null,
+      project: project || null,
       items: itemsByOrder[order.order_id] || [],
       payment,
       payment_method: resolveOrderPaymentMethod(order, payment),
@@ -1463,33 +1533,123 @@ exports.cancelOrder = async (orderId) => {
   return res.rows[0];
 }
 
+const refundService = require('./refundService');
+
 exports.cancelMyOrder = async (orderId, userId, reason) => {
-  const checkRes = await pool.query(
-    `SELECT status, notes FROM orders WHERE order_id = $1 AND user_id = $2`,
-    [orderId, userId]
-  );
-  if (checkRes.rows.length === 0) {
-    throw new Error('Order not found');
-  }
-  const { status, notes } = checkRes.rows[0];
-  if (status !== 'pending') {
-    throw new Error('Only pending orders can be cancelled');
-  }
+  const client = await pool.connect();
+  
+  try {
+    await client.query('BEGIN');
 
-  const cancellationStamp = new Date().toISOString()
-  const cancellationNote = `Customer cancellation reason (${cancellationStamp}): ${reason}`
-  const nextNotes = [notes, cancellationNote].filter(Boolean).join('\n')
+    const checkRes = await client.query(
+      `SELECT status, notes FROM orders WHERE order_id = $1 AND user_id = $2`,
+      [orderId, userId]
+    );
+    if (checkRes.rows.length === 0) {
+      throw new Error('Order not found');
+    }
+    const { status, notes } = checkRes.rows[0];
+    if (status !== 'pending') {
+      throw new Error('Only pending orders can be cancelled');
+    }
 
-  const res = await pool.query(
-    `UPDATE orders
-     SET status = 'cancelled',
-         notes = $3,
-         updated_at = CURRENT_TIMESTAMP
-     WHERE order_id = $1 AND user_id = $2
-     RETURNING *`,
-    [orderId, userId, nextNotes]
-  );
-  return res.rows[0];
+    // Get the latest payment for this order
+    const paymentRes = await client.query(
+      `SELECT payment_id, amount, status FROM payments
+       WHERE order_id = $1 AND status NOT IN ('rejected', 'cancelled', 'refunded')
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [orderId]
+    );
+    const latestPayment = paymentRes.rows[0] || null;
+
+    const cancellationStamp = new Date().toISOString()
+    const cancellationNote = `Customer cancellation reason (${cancellationStamp}): ${reason}`
+    const nextNotes = [notes, cancellationNote].filter(Boolean).join('\n')
+
+    const res = await client.query(
+      `UPDATE orders
+       SET status = 'cancelled',
+           notes = $3,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE order_id = $1 AND user_id = $2
+       RETURNING *`,
+      [orderId, userId, nextNotes]
+    );
+
+    // Create refund request based on payment status
+    if (latestPayment) {
+      const existingRefundRes = await client.query(
+        `SELECT refund_request_id, status FROM refund_requests
+         WHERE order_id = $1
+           AND status IN ('pending', 'approved', 'pending_payment_verification')
+           AND deleted_at IS NULL
+         LIMIT 1`,
+        [orderId]
+      );
+
+      if (existingRefundRes.rows.length === 0) {
+        let refundStatus = 'pending';
+        let amountRequested = Number(latestPayment.amount);
+
+        if (latestPayment.status === 'verified') {
+          refundStatus = 'pending';
+        } else if (['pending', 'for_verification'].includes(latestPayment.status)) {
+          refundStatus = 'pending_payment_verification';
+        } else {
+          amountRequested = 0;
+          refundStatus = null;
+        }
+
+        if (refundStatus && amountRequested > 0) {
+          const requestNumber = await generateRefundRequestNumber(client, 'RF');
+
+          await client.query(
+            `INSERT INTO refund_requests (
+               order_id, user_id, payment_id, reason, customer_notes,
+               amount_requested, status, request_number, refund_type
+             )
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'money_refund')`,
+            [
+              orderId,
+              userId,
+              latestPayment.payment_id,
+              'Automatic refund request from order cancellation',
+              reason,
+              amountRequested,
+              refundStatus,
+              requestNumber,
+            ]
+          );
+
+          await client.query(
+            `INSERT INTO audit_logs (user_id, action, entity_type, entity_id, details)
+             VALUES ($1, $2, $3, $4, $5)`,
+            [
+              userId,
+              'refund_requested',
+              'order',
+              orderId,
+              JSON.stringify({
+                refund_request_reason: 'Automatic refund request from order cancellation',
+                amount_requested: amountRequested,
+                refund_status: refundStatus,
+                payment_status_at_cancel: latestPayment.status,
+              }),
+            ]
+          );
+        }
+      }
+    }
+
+    await client.query('COMMIT');
+    return res.rows[0];
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 exports.markAsReceived = async (orderId, userId) => {
@@ -1662,7 +1822,7 @@ exports.getRefundRequests = async (params = {}) => {
   const total = totalResult.rows[0]?.total || 0;
 
   const dataQuery = `
-    SELECT rr.*, o.order_number, u.first_name, u.last_name, u.email as customer_email
+    SELECT rr.*, o.order_number, o.payment_status, o.payment_status as order_payment_status, o.total_amount as order_total_amount, o.status as order_status, u.first_name, u.last_name, u.email as customer_email
     FROM refund_requests rr
     LEFT JOIN orders o ON rr.order_id = o.order_id
     LEFT JOIN users u ON rr.user_id = u.user_id
@@ -1718,7 +1878,7 @@ exports.getRefundRequests = async (params = {}) => {
 
 exports.getRefundRequestById = async (refundRequestId) => {
   const res = await pool.query(
-    `SELECT rr.*, o.order_number, u.first_name, u.last_name, u.email as customer_email
+    `SELECT rr.*, o.order_number, o.payment_status, o.payment_status as order_payment_status, o.total_amount as order_total_amount, o.status as order_status, u.first_name, u.last_name, u.email as customer_email
      FROM refund_requests rr
      LEFT JOIN orders o ON rr.order_id = o.order_id
      LEFT JOIN users u ON rr.user_id = u.user_id
@@ -1737,10 +1897,20 @@ exports.getRefundRequestById = async (refundRequestId) => {
     [refundRequestId]
   );
 
+  let payment = null;
+  if (request.order_id) {
+    const paymentRes = await pool.query(
+      `SELECT * FROM payments WHERE order_id = $1 ORDER BY created_at DESC LIMIT 1`,
+      [request.order_id]
+    );
+    payment = paymentRes.rows[0] || null;
+  }
+
   return {
     ...request,
     items: itemsRes.rows,
     images: imagesRes.rows,
+    payment,
   };
 }
 

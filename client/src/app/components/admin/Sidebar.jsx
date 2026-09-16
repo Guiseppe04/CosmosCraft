@@ -13,6 +13,7 @@ import {
   LogOut,
   Bell,
   User,
+  Truck,
 } from 'lucide-react'
 import { useState } from 'react'
 

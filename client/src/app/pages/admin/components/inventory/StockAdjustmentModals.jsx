@@ -312,6 +312,7 @@ export function AdjustStockModal({ visibleProducts, modal, form, setForm, formEr
               currentStock={selectedProduct.stock || 0}
               newStock={calculatedNewStock}
               threshold={selectedProduct.low_stock_threshold || 10}
+              maxStock={selectedProduct.max_stock || 0}
             />
             {calculatedNewStock !== null && calculatedNewStock !== undefined && (
               <div className="mt-2">
@@ -418,6 +419,7 @@ export function AdjustPartStockModal({ modal, form, setForm, formErrors, setForm
               currentStock={currentStock}
               newStock={calculatedNewStock}
               threshold={10}
+              maxStock={0}
             />
             {calculatedNewStock !== null && calculatedNewStock !== undefined && (
               <div className="mt-2">

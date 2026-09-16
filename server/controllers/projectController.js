@@ -1,6 +1,7 @@
 const { asyncHandler, AppError } = require('../middleware/errorHandler');
 const projectService = require('../services/projectService');
 const defaultWorkflowService = require('../services/defaultWorkflowService');
+const fulfillmentService = require('../services/fulfillmentService');
 
 // --- PROJECT BASE ---
 exports.getProjects = asyncHandler(async (req, res, next) => {
@@ -97,7 +98,7 @@ exports.requestProjectProcurement = asyncHandler(async (req, res, next) => {
 });
 
 exports.submitFulfillmentChoice = asyncHandler(async (req, res, next) => {
-  const result = await projectService.submitFulfillmentChoice(
+  const result = await fulfillmentService.submitFulfillmentRequest(
     req.params.id,
     req.user.id,
     req.user.role,
@@ -105,6 +106,16 @@ exports.submitFulfillmentChoice = asyncHandler(async (req, res, next) => {
   );
   res.json({ status: 'success', data: result, message: 'Fulfillment preference saved' });
 });
+
+exports.getProjectFulfillment = asyncHandler(async (req, res, next) => {
+  const result = await fulfillmentService.getFulfillmentRequestByProjectId(
+    req.params.id,
+    req.user.id,
+    req.user.role
+  );
+  res.json({ status: 'success', data: result });
+});
+
 
 // --- MILESTONES ---
 exports.createMilestone = asyncHandler(async (req, res, next) => {
