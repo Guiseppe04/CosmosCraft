@@ -5,6 +5,7 @@ import { useCart } from '../context/CartContext.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useNavigate } from 'react-router'
 import { ProductRatingModal } from '../components/ProductRatingModal.jsx'
+import { StarRating } from '../components/common/StarRating.jsx'
 import { API } from '../utils/apiConfig.js'
 
 async function fetchPublicJson(path) {
@@ -372,6 +373,7 @@ export function ShopPage() {
   const [categoryTree, setCategoryTree] = useState([])
   const [expandedCategories, setExpandedCategories] = useState(new Set())
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false)
+  const [productModalTab, setProductModalTab] = useState('details')
 
   const { cart, addToCart, isItemAtMaxQuantity, getItemAddedState } = useCart()
   const navigate = useNavigate()
@@ -437,6 +439,8 @@ export function ShopPage() {
           brand: p.brand,
           description: p.description,
           stock: p.stock || 0,
+          average_rating: Number(p.average_rating) || 0,
+          review_count: Number(p.review_count) || 0,
           is_active: p.is_active
         })).filter(p => p.is_active !== false)
 
@@ -718,7 +722,10 @@ export function ShopPage() {
                       initial={{ opacity: 0, y: 30 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: index * 0.05, duration: 0.5 }}
-                      onClick={() => setSelectedProduct(product)}
+                      onClick={() => {
+                        setSelectedProduct(product)
+                        setProductModalTab('details')
+                      }}
                       className={`group bg-[var(--surface-dark)] border border-white/5 rounded-[20px] rounded-br-[20px] overflow-hidden hover:border-white/20 transition-all duration-300 flex flex-col hover:shadow-2xl hover:-translate-y-1 cursor-pointer ${outOfStock ? 'opacity-60' : ''}`}
                     >
                       <div className="aspect-[4/3] bg-[var(--surface-elevated)] overflow-hidden relative flex flex-col justify-center items-center border border-white/5 rounded-[16px] m-2">
@@ -747,12 +754,27 @@ export function ShopPage() {
                         <h3 className="font-bold text-white text-[15px] leading-snug mb-2 group-hover:text-[var(--gold-primary)] transition-colors line-clamp-1">{product.name}</h3>
 
                         <div className="flex items-center gap-2 mb-2">
-                          <div className="flex gap-0.5">
-                            {[...Array(5)].map((_, i) => (
-                              <Star key={i} className="w-3.5 h-3.5 fill-[var(--gold-primary)] text-[var(--gold-primary)]" />
-                            ))}
-                          </div>
-                          <span className="text-[12px] text-[var(--text-muted)] font-semibold ml-1">5.0</span>
+                          {product.review_count > 0 ? (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setSelectedProduct(product)
+                                setProductModalTab('reviews')
+                              }}
+                              className="flex items-center gap-1.5 group/rev text-left hover:opacity-90 transition-opacity"
+                              title="View product reviews"
+                            >
+                              <StarRating rating={product.average_rating} size="w-3.5 h-3.5" showScore />
+                              <span className="text-[11px] text-[var(--gold-primary)] group-hover/rev:underline font-medium">
+                                ({product.review_count} {product.review_count === 1 ? 'review' : 'reviews'})
+                              </span>
+                            </button>
+                          ) : (
+                            <span className="text-[11px] text-[var(--text-muted)] italic font-light">
+                              No reviews yet
+                            </span>
+                          )}
                         </div>
 
                         <p className="text-[12px] text-[var(--text-muted)] font-medium mb-4">
@@ -865,8 +887,11 @@ export function ShopPage() {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: index * 0.03, duration: 0.3 }}
-                    onClick={() => setSelectedProduct(product)}
-                    className={`group bg-[var(--surface-dark)] border border-white/5 rounded-2xl overflow-hidden ${outOfStock ? 'opacity-60' : ''}`}
+                    onClick={() => {
+                      setSelectedProduct(product)
+                      setProductModalTab('details')
+                    }}
+                    className={`group bg-[var(--surface-dark)] border border-white/5 rounded-2xl overflow-hidden cursor-pointer ${outOfStock ? 'opacity-60' : ''}`}
                   >
                     <div className="aspect-square bg-[var(--surface-elevated)] relative">
                       <img
@@ -883,6 +908,25 @@ export function ShopPage() {
                     <div className="p-3">
                       <p className="text-[10px] text-[var(--text-muted)] truncate">{product.category}</p>
                       <h3 className="text-sm font-bold text-white truncate">{product.name}</h3>
+
+                      <div className="flex items-center gap-1 my-1">
+                        {product.review_count > 0 ? (
+                          <>
+                            <StarRating rating={product.average_rating} size="w-3 h-3" />
+                            <span className="text-[10px] font-bold text-[var(--gold-primary)] ml-0.5">
+                              {Number(product.average_rating).toFixed(1)}
+                            </span>
+                            <span className="text-[10px] text-[var(--text-muted)]">
+                              ({product.review_count})
+                            </span>
+                          </>
+                        ) : (
+                          <span className="text-[10px] text-[var(--text-muted)] italic">
+                            No reviews yet
+                          </span>
+                        )}
+                      </div>
+
                       <p className="text-sm font-bold text-[var(--gold-primary)] mt-1">
                         ₱{product.price.toLocaleString('en-PH')}
                       </p>
@@ -926,6 +970,7 @@ export function ShopPage() {
         onAddToCart={handleAddToCart}
         getAddButtonState={getAddButtonState}
         isAuthenticated={isAuthenticated}
+        defaultTab={productModalTab}
       />
     </div>
   )

@@ -392,6 +392,8 @@ CREATE TABLE orders (
     shipped_at TIMESTAMPTZ,
     out_for_delivery_at TIMESTAMPTZ,
     delivered_at TIMESTAMPTZ,
+    delivered_by_user_id UUID,
+    delivery_confirmation_method VARCHAR(20) CHECK (delivery_confirmation_method IS NULL OR delivery_confirmation_method IN ('customer', 'admin', 'staff')),
     received_at TIMESTAMPTZ,
     rider_name VARCHAR(100),
     rider_contact VARCHAR(50),
@@ -409,7 +411,8 @@ CREATE TABLE orders (
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE SET NULL,
     FOREIGN KEY (shipping_address_id) REFERENCES addresses(address_id) ON DELETE SET NULL,
     FOREIGN KEY (reviewed_by) REFERENCES users(user_id) ON DELETE SET NULL,
-    FOREIGN KEY (customization_hold_approved_by) REFERENCES users(user_id) ON DELETE SET NULL
+    FOREIGN KEY (customization_hold_approved_by) REFERENCES users(user_id) ON DELETE SET NULL,
+    FOREIGN KEY (delivered_by_user_id) REFERENCES users(user_id) ON DELETE SET NULL
 );
 
 CREATE INDEX idx_orders_order_number ON orders(order_number);
@@ -751,6 +754,9 @@ CREATE TABLE projects (
     shipped_at TIMESTAMPTZ,
     ready_for_pickup_at TIMESTAMPTZ,
     picked_up_at TIMESTAMPTZ,
+    delivered_at TIMESTAMPTZ,
+    delivered_by_user_id UUID REFERENCES users(user_id) ON DELETE SET NULL,
+    delivery_confirmation_method VARCHAR(20) CHECK (delivery_confirmation_method IS NULL OR delivery_confirmation_method IN ('customer', 'admin', 'staff')),
     -- Claim / Custom Build
     custom_build_id VARCHAR(30) UNIQUE,
     claimed_by UUID REFERENCES users(user_id) ON DELETE SET NULL,
@@ -1060,6 +1066,43 @@ CREATE TABLE project_installment_schedules (
 CREATE INDEX IF NOT EXISTS idx_project_installment_schedules_project ON project_installment_schedules(project_id);
 CREATE INDEX IF NOT EXISTS idx_project_installment_schedules_status ON project_installment_schedules(status);
 CREATE INDEX IF NOT EXISTS idx_project_installment_schedules_due_date ON project_installment_schedules(due_date);
+
+
+-- =============================================
+-- 27B. FULFILLMENT REQUESTS
+-- =============================================
+-- Tracks fulfillment lifecycle for custom builds (pickup or delivery)
+
+CREATE TABLE IF NOT EXISTS fulfillment_requests (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    order_id UUID NOT NULL REFERENCES orders(order_id) ON DELETE CASCADE,
+    project_id UUID NOT NULL REFERENCES projects(project_id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    fulfillment_method VARCHAR(50) NOT NULL,
+    status VARCHAR(50) NOT NULL DEFAULT 'requested',
+    delivery_address_id UUID REFERENCES addresses(address_id) ON DELETE SET NULL,
+    delivery_address_snapshot JSONB,
+    pickup_appointment_id UUID REFERENCES appointments(appointment_id) ON DELETE SET NULL,
+    pickup_scheduled_at TIMESTAMPTZ,
+    notes TEXT,
+    admin_notes TEXT,
+    requested_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    started_at TIMESTAMPTZ,
+    ready_for_pickup_at TIMESTAMPTZ,
+    out_for_delivery_at TIMESTAMPTZ,
+    delivered_at TIMESTAMPTZ,
+    delivered_by_user_id UUID REFERENCES users(user_id) ON DELETE SET NULL,
+    delivery_confirmation_method VARCHAR(20) CHECK (delivery_confirmation_method IS NULL OR delivery_confirmation_method IN ('customer', 'admin', 'staff')),
+    completed_at TIMESTAMPTZ,
+    cancelled_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_fulfillment_requests_order_id ON fulfillment_requests(order_id);
+CREATE INDEX IF NOT EXISTS idx_fulfillment_requests_project_id ON fulfillment_requests(project_id);
+CREATE INDEX IF NOT EXISTS idx_fulfillment_requests_user_id ON fulfillment_requests(user_id);
+CREATE INDEX IF NOT EXISTS idx_fulfillment_requests_status ON fulfillment_requests(status);
 
 
 -- =============================================

@@ -4,6 +4,7 @@
  */
 
 import { API } from './apiConfig'
+import { feedbackService } from '../services/feedbackService'
 
 const API_URL = API
 
@@ -265,6 +266,8 @@ export const adminApi = {
   },
   getFulfillmentRequest: (id) => request(`/api/fulfillment/requests/${id}`),
   updateFulfillmentStatus: (id, body) => request(`/api/fulfillment/requests/${id}/status`, { method: 'PATCH', body }),
+  confirmProjectDelivery: (id) => request(`/api/fulfillment/project/${id}/confirm-delivery`, { method: 'PATCH' }),
+  confirmFulfillmentDelivery: (id) => request(`/api/fulfillment/requests/${id}/confirm-delivery`, { method: 'PATCH' }),
   addInventoryStock: (productId, quantity, notes) => request('/api/inventory/stock-in', { method: 'PATCH', body: { productId, quantity, notes } }),
 
   // Claim / Unclaim / Reassign
@@ -349,27 +352,19 @@ export const adminApi = {
   addAddress: (body) => request('/api/users/me/addresses', { method: 'POST', body }),
   deleteAddress: (addressId) => request(`/api/users/me/addresses/${addressId}`, { method: 'DELETE' }),
 
-  // Ratings & Feedback
-  getProductReviewEligibility: () => request('/api/reviews/product-eligibility'),
-  getCustomizationFeedbackEligibility: () => request('/api/reviews/customization-eligibility'),
-  createProductReview: (body) => request('/api/reviews/products', { method: 'POST', body }),
-  updateProductReview: (reviewId, body) => request(`/api/reviews/products/${reviewId}`, { method: 'PUT', body }),
-  createCustomizationFeedback: (body) => request('/api/reviews/customizations', { method: 'POST', body }),
-  updateCustomizationFeedback: (feedbackId, body) => request(`/api/reviews/customizations/${feedbackId}`, { method: 'PUT', body }),
-  getPublicProductReviews: (productId) => request(`/api/reviews/products/${productId}/public`),
-  getAdminReviews: (params = {}) => {
-    const cleanParams = Object.entries(params).reduce((acc, [k, v]) => {
-      if (v !== undefined && v !== null && v !== '' && v !== 'undefined') {
-        acc[k] = v
-      }
-      return acc
-    }, {})
-    const qs = new URLSearchParams(cleanParams).toString()
-    return request(`/api/reviews/admin${qs ? '?' + qs : ''}`)
-  },
-  updateAdminProductReviewStatus: (reviewId, body) => request(`/api/reviews/admin/product/${reviewId}/status`, { method: 'PUT', body }),
-  updateAdminCustomizationFeedbackStatus: (feedbackId, body) => request(`/api/reviews/admin/customization/${feedbackId}/status`, { method: 'PUT', body }),
-  deleteAdminProductReview: (reviewId) => request(`/api/reviews/admin/product/${reviewId}`, { method: 'DELETE' }),
-  deleteAdminCustomizationFeedback: (feedbackId) => request(`/api/reviews/admin/customization/${feedbackId}`, { method: 'DELETE' }),
+  // Ratings & Feedback (Delegated to centralized feedbackService)
+  getProductReviewEligibility: feedbackService.getProductReviewEligibility,
+  getCustomizationFeedbackEligibility: feedbackService.getCustomizationFeedbackEligibility,
+  createProductReview: feedbackService.createProductReview,
+  updateProductReview: feedbackService.updateProductReview,
+  createCustomizationFeedback: feedbackService.createCustomizationFeedback,
+  updateCustomizationFeedback: feedbackService.updateCustomizationFeedback,
+  getPublicProductReviews: feedbackService.getPublicProductReviews,
+  getPublicTestimonials: feedbackService.getPublicTestimonials,
+  getAdminReviews: feedbackService.getAdminReviews,
+  updateAdminProductReviewStatus: feedbackService.updateAdminProductReviewStatus,
+  updateAdminCustomizationFeedbackStatus: feedbackService.updateAdminCustomizationFeedbackStatus,
+  deleteAdminProductReview: feedbackService.deleteAdminProductReview,
+  deleteAdminCustomizationFeedback: feedbackService.deleteAdminCustomizationFeedback,
 }
 

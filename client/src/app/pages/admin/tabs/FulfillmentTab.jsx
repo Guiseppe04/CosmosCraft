@@ -299,18 +299,25 @@ export function FulfillmentTab({ showToast }) {
 
                       {/* Status */}
                       <td className="py-4 px-4">
-                        <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${
-                          req.status === 'completed'
-                            ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
-                            : req.status === 'requested'
-                            ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
-                            : 'bg-sky-500/15 text-sky-400 border-sky-500/30'
-                        }`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${
-                            req.status === 'completed' ? 'bg-emerald-400' : req.status === 'requested' ? 'bg-amber-400' : 'bg-sky-400 animate-pulse'
-                          }`} />
-                          {formatLabel(req.status)}
-                        </span>
+                        <div className="flex flex-col gap-1">
+                          <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${
+                            req.status === 'completed'
+                              ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                              : req.status === 'requested'
+                              ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                              : 'bg-sky-500/15 text-sky-400 border-sky-500/30'
+                          }`}>
+                            <span className={`w-1.5 h-1.5 rounded-full ${
+                              req.status === 'completed' ? 'bg-emerald-400' : req.status === 'requested' ? 'bg-amber-400' : 'bg-sky-400 animate-pulse'
+                            }`} />
+                            {method === 'delivery' && req.status === 'completed' ? 'Delivered' : formatLabel(req.status)}
+                          </span>
+                          {req.status === 'completed' && method === 'delivery' && (
+                            <span className="text-[10px] font-medium text-emerald-300/80">
+                              {req.delivery_confirmation_method === 'customer' ? 'Confirmed by Customer' : 'Confirmed by Shop'}
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       {/* Actions */}
