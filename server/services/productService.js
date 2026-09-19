@@ -124,10 +124,21 @@ exports.getAllProducts = async ({
   const res = await pool.query(
     `      SELECT p.*, c.name AS category_name,
             i.cost_price, i.stock, i.low_stock_threshold, i.max_stock,
-            (SELECT image_url FROM product_images WHERE product_id = p.product_id AND is_primary = true LIMIT 1) AS primary_image
+            (SELECT image_url FROM product_images WHERE product_id = p.product_id AND is_primary = true LIMIT 1) AS primary_image,
+            COALESCE(ra.average_rating, 0)::float AS average_rating,
+            COALESCE(ra.review_count, 0)::int AS review_count
      FROM products p
      LEFT JOIN categories c ON p.category_id = c.category_id
      LEFT JOIN inventory i ON p.product_id = i.product_id
+     LEFT JOIN (
+       SELECT 
+         product_id,
+         ROUND(AVG(rating)::numeric, 1)::float AS average_rating,
+         COUNT(*)::int AS review_count
+       FROM product_reviews
+       WHERE status = 'approved' AND deleted_at IS NULL
+       GROUP BY product_id
+     ) ra ON ra.product_id = p.product_id
      ${condition}
      ORDER BY ${orderColumn} ${orderDirection}
      LIMIT $${idx} OFFSET $${idx + 1}`,
@@ -152,10 +163,21 @@ exports.getProductById = async (id) => {
             (SELECT image_url
              FROM product_images
              WHERE product_id = p.product_id AND is_primary = true
-             LIMIT 1) AS primary_image
+             LIMIT 1) AS primary_image,
+            COALESCE(ra.average_rating, 0)::float AS average_rating,
+            COALESCE(ra.review_count, 0)::int AS review_count
      FROM products p
      LEFT JOIN categories c ON p.category_id = c.category_id
      LEFT JOIN inventory i ON p.product_id = i.product_id
+     LEFT JOIN (
+       SELECT 
+         product_id,
+         ROUND(AVG(rating)::numeric, 1)::float AS average_rating,
+         COUNT(*)::int AS review_count
+       FROM product_reviews
+       WHERE status = 'approved' AND deleted_at IS NULL
+       GROUP BY product_id
+     ) ra ON ra.product_id = p.product_id
      WHERE p.product_id = $1`,
     [id]
   );

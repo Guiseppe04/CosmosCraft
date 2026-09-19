@@ -56,7 +56,12 @@ router.put(
   reviewController.updateCustomizationFeedback
 );
 
-// --- PUBLIC PRODUCT REVIEWS ---
+// --- PUBLIC REVIEWS & TESTIMONIALS ---
+router.get(
+  '/testimonials',
+  reviewController.getPublicTestimonials
+);
+
 router.get(
   '/products/:productId/public',
   validateParams(namedUuidParamSchema('productId')),

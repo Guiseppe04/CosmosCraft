@@ -4,6 +4,28 @@
 @tailwind components;
 @tailwind utilities;
 
+@keyframes scrollCustomizationMarquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+.customization-carousel-track {
+  display: flex;
+  flex-wrap: nowrap;
+  width: max-content;
+  gap: 1.5rem;
+  animation-name: scrollCustomizationMarquee;
+  animation-duration: 20s;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  animation-play-state: running;
+  will-change: transform;
+}
+
+.customization-carousel-track:hover {
+  animation-play-state: paused;
+}
+
 /* ===========================
  * CosmosCraft Global Styles
  * Color Palette:
