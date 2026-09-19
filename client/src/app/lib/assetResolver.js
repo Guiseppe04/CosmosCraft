@@ -152,26 +152,39 @@ export function resolveFinishAsset(category, model, finishType, finishKey) {
   const folder = folderMap[finishType] || finishType
   return resolveSharedAsset(category, model, 'woods-colors', 'colors', folder, `${finishKey}.png`)
 }
-export function resolveBurstMask(category, model, burstKey) {
+export function resolveBurstMask(category, model, burstKey, side = 'front') {
   const burstMaskMap = {
-    delos: {
-      blackBurst: 'delos/bodies/front/masks/black-burst-mask.png',
-      whiteBurst: 'delos/bodies/front/masks/burstmask.png',
+    front: {
+      delos: {
+        blackBurst: 'delos/bodies/front/masks/black-burst-mask.png',
+        whiteBurst: 'delos/bodies/front/masks/burstmask.png',
+        translucentBlackBurst: 'delos/bodies/front/masks/burstmask.png',
+      },
+      dc: {
+        blackBurst: 'dc/bodies/front/masks/bvdmask.png',
+        whiteBurst: 'dc/bodies/front/masks/bvdmask.png',
+      },
     },
-    dc: {
-      blackBurst: 'dc/bodies/front/masks/bvdmask.png',
-      whiteBurst: 'dc/bodies/front/masks/bvdmask.png',
+    rear: {
+      delos: {
+        blackBurst: 'delos/back/masks/burstmask.png',
+        whiteBurst: 'delos/back/masks/burstmask.png',
+        translucentBlackBurst: 'delos/back/masks/burstmask.png',
+        reverseTranslucentBlackBurst: 'delos/back/masks/burstmask.png',
+      },
     },
   }
-  
-  const modelMap = burstMaskMap[model]
-  // After
+
+  const modelMap = burstMaskMap[side]?.[model]
   if (modelMap && modelMap[burstKey]) {
-      return asset(`customization_assets/builder/${category}/${modelMap[burstKey]}`)
+    return asset(`customization_assets/builder/${category}/${modelMap[burstKey]}`)
   }
-  
+
   // Fallback to default resolution
-  return resolveModelAsset(category, model, 'bodies', 'front', 'masks', `${burstKey === 'blackBurst' || burstKey === 'whiteBurst' ? 'bvdmask' : 'burstmask'}.png`)
+  const fallbackFile = burstKey === 'blackBurst' || burstKey === 'whiteBurst' ? 'bvdmask' : 'burstmask'
+  return side === 'rear'
+    ? resolveModelAsset(category, model, 'back', 'masks', `${fallbackFile}.png`)
+    : resolveModelAsset(category, model, 'bodies', 'front', 'masks', `${fallbackFile}.png`)
 }
 /**
  * Resolve a body mask path
@@ -477,6 +490,17 @@ export function resolveRearHeadstockMask(category, model, frontHeadstockShape) {
   return resolveSharedAsset(category, model, 'back', 'necks', '6-string', 'back', '6-string-neck-thru-back', rearShape, 'mask.png')
 }
 
+export function resolveRearNeckThruShading(headstockShape, kind) {
+  const rearShape = FRONT_TO_REAR_HEADSTOCK_MAP[headstockShape]
+  if (!rearShape || !kind) return null
+  return resolveSharedAsset(
+    null, null,
+    'back', 'necks', '6-string', 'back', '6-string-neck-thru-back',
+    rearShape,
+    `${kind}.png`
+  )
+}
+
 export function resolveRearBodyMask(category, model) {
   if (model === 'delos') {
     return resolveModelAsset(category, model, 'back', 'masks', 'bodymask.png')
@@ -721,6 +745,7 @@ export default {
     resolveTunerButtonStyle,
     resolveRearTunerAsset,
     resolveRearHeadstockMask,
+    resolveRearNeckThruShading,
     resolveRearBodyMask,
    resolveBackplateScrews,
    resolveTremoloCoverAsset,

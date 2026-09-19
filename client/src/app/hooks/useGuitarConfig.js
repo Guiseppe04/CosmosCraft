@@ -59,7 +59,7 @@ import {
     TREMOLO_COVER_OPTIONS_BY_BRIDGE,
  } from '../lib/guitarBuilderData.js'
 
-import { resolveTopWoodAsset, resolveFinishAsset, resolveTopCoatAsset, resolveNeckWoodAsset, resolveHeadstockWoodAsset, resolveFingerboardWoodAsset, resolveInlay, resolveNeckRearFinishAsset, resolveBackNeckAsset, resolveBackplateAsset, resolveOutputJackAsset, resolveKnobAsset, resolveKnobStyleOverlay, resolveSwitchAsset } from '../lib/assetResolver.js'
+import { resolveTopWoodAsset, resolveFinishAsset, resolveTopCoatAsset, resolveNeckWoodAsset, resolveHeadstockWoodAsset, resolveFingerboardWoodAsset, resolveInlay, resolveNeckRearFinishAsset, resolveBackNeckAsset, resolveBackplateAsset, resolveOutputJackAsset, resolveKnobAsset, resolveKnobStyleOverlay, resolveSwitchAsset, getButtonPreview } from '../lib/assetResolver.js'
 import { listBuilderAssets } from '../utils/apiConfig.js'
 
 const phpFormatter = new Intl.NumberFormat('en-PH', {
@@ -625,8 +625,12 @@ export default function useGuitarConfig() {
   }, [dynamicInlayList, mergedInlayOptions, priceOverrides])
 
   const inlayShapeOptions = useMemo(
-    () => Object.entries(mergedInlayShapeOptions).map(([value, option]) => ({ value, ...option })),
-    [mergedInlayShapeOptions],
+    () => Object.entries(mergedInlayShapeOptions).map(([value, option]) => ({
+      value,
+      ...option,
+      preview: getButtonPreview('electric', config.body || 'dc', 'inlay-shape', value),
+    })),
+    [mergedInlayShapeOptions, config.body],
   )
 
   const inlayMaterialOptions = useMemo(() => {
@@ -634,8 +638,12 @@ export default function useGuitarConfig() {
     const allowed = INLAY_MATERIALS_BY_SHAPE[shape] || INLAY_MATERIALS_BY_SHAPE.dots
     return Object.entries(mergedInlayMaterialOptions)
       .filter(([value]) => allowed.includes(value))
-      .map(([value, option]) => ({ value, ...option }))
-  }, [mergedInlayMaterialOptions, config.inlayShape])
+      .map(([value, option]) => ({
+        value,
+        ...option,
+        preview: getButtonPreview('electric', config.body || 'dc', 'inlay-material', value),
+      }))
+  }, [mergedInlayMaterialOptions, config.inlayShape, config.body])
 
   const mergedBridgeOptions = useMemo(() => {
     const merged = mergeOptionsFromBuilderParts(BRIDGE_OPTIONS, { partCategory: 'bridge', typeMappings: ['bridge'] })
@@ -996,6 +1004,23 @@ export default function useGuitarConfig() {
           preview: option.fileKey ? resolveKnobAsset('electric', 'dc', option.fileKey) : null,
         }))
       }
+      if (config.body === 'delos') {
+        const delosKnobs = KNOB_OPTIONS_BY_BODY.delos || {}
+        return Object.entries(delosKnobs).map(([value, option]) => {
+          const isMetalKnob = option.isMetalKnob === true
+          const styleOption = isMetalKnob ? KNOB_STYLE_OPTIONS[value] : null
+          const specific = getOptionOverride('hardware', value, config.body) ?? getOptionOverride('knobs', value, config.body)
+          const catPrice = getCategoryPrice('knobs')
+          const finalPrice = specific !== undefined ? specific : catPrice
+          return {
+            value,
+            ...(finalPrice !== undefined ? { ...option, price: finalPrice } : option),
+            preview: isMetalKnob && styleOption?.fileKey
+              ? resolveKnobAsset('electric', 'delos', styleOption.fileKey)
+              : option.src,
+          }
+        })
+      }
       return Object.entries(KNOB_OPTIONS_BY_BODY[config.body] ?? KNOB_OPTIONS_BY_BODY.strat).map(([value, option]) => {
         const specific = getOptionOverride('hardware', value, config.body) ?? getOptionOverride('knobs', value, config.body)
         const catPrice = getCategoryPrice('knobs')
@@ -1240,17 +1265,17 @@ export default function useGuitarConfig() {
     () => GUITAR_TYPE_OPTIONS,
     [],
   )
-  const neckOptions = useMemo(
-    () => {
-      const base = dynamicNeckWoodList.length > 0 ? mergedDynamicNeckWoodOptions : mergedNeckOptions
-      return Object.entries(base).map(([value, option]) => ({
-        value,
-        ...option,
-        preview: option.texture || resolveNeckWoodAsset('electric', config.body || 'dc', value),
-      }))
-    },
-    [dynamicNeckWoodList, mergedDynamicNeckWoodOptions, mergedNeckOptions, config.body],
-  )
+    const neckOptions = useMemo(
+      () => {
+        const base = dynamicNeckWoodList.length > 0 ? mergedDynamicNeckWoodOptions : mergedNeckOptions
+        return Object.entries(base).map(([value, option]) => ({
+          value,
+          ...option,
+          preview: option.src || option.texture || resolveNeckWoodAsset('electric', config.body || 'dc', value),
+        }))
+      },
+      [dynamicNeckWoodList, mergedDynamicNeckWoodOptions, mergedNeckOptions, config.body],
+    )
   const fretboardOptions = useMemo(
     () => {
       const base = dynamicFingerboardWoodList.length > 0 ? mergedDynamicFingerboardWoodOptions : mergedFretboardOptions
@@ -1272,7 +1297,7 @@ export default function useGuitarConfig() {
       return Object.entries(base).map(([value, option]) => ({
         value,
         ...option,
-        preview: option.texture || resolveHeadstockWoodAsset('electric', config.body || 'dc', value),
+        preview: value === 'none' ? null : (option.texture || resolveHeadstockWoodAsset('electric', config.body || 'dc', value)),
       }))
     },
     [dynamicHeadstockWoodList, mergedDynamicHeadstockWoodOptions, mergedHeadstockWoodOptions, config.body],
@@ -1283,7 +1308,7 @@ export default function useGuitarConfig() {
       return Object.entries(base).map(([value, option]) => ({
         value,
         ...option,
-        preview: option.texture || resolveNeckWoodAsset('electric', config.body || 'dc', value),
+        preview: option.src || option.texture || resolveNeckWoodAsset('electric', config.body || 'dc', value),
       }))
     },
     [dynamicNeckWoodList, mergedDynamicNeckWoodOptions, mergedNeckOptions, config.body],
@@ -1325,12 +1350,20 @@ export default function useGuitarConfig() {
     [config.body, config.hardware, mergedBridgeOptions],
   )
   const pickupOptions = useMemo(
-    () => Object.entries(mergedPickupOptions).map(([value, option]) => ({ value, ...option })),
-    [mergedPickupOptions],
+    () => Object.entries(mergedPickupOptions).map(([value, option]) => ({
+      value,
+      ...option,
+      preview: getButtonPreview('electric', config.body || 'dc', 'pickups', value),
+    })),
+    [mergedPickupOptions, config.body],
   )
   const hardwareOptions = useMemo(
-    () => Object.entries(mergedHardwareOptions).map(([value, option]) => ({ value, ...option })),
-    [mergedHardwareOptions],
+    () => Object.entries(mergedHardwareOptions).map(([value, option]) => ({
+      value,
+      ...option,
+      preview: getButtonPreview('electric', config.body || 'dc', 'hardware-color', value),
+    })),
+    [mergedHardwareOptions, config.body],
   )
 
   // ---- New options arrays (for UI use) ----

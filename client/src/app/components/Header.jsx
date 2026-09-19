@@ -111,6 +111,7 @@ export function Header() {
     { label: 'Services', to: '/#services' },
     { label: 'About Us', to: '/#about' },
     { label: 'Contact Us', to: '/#contact' },
+    { label: 'Appointment', to: '/appointments' },
   ]
 
   const navLinkClasses = (isActive) =>

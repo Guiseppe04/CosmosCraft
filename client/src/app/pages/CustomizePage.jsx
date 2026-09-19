@@ -1420,35 +1420,39 @@ export function CustomizePage() {
                     </div>
                   </div>
                   
-                  {/* Neck */}
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Neck Wood</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.neckOptions?.filter(opt => opt.construction === config.neckConstruction).map((opt) => (
-                        <OptionButton
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.neck === opt.value}
-                          onClick={() => updateConfig({ neck: opt.value })}
-                        />
-                      ))}
+                    {/* Neck */}
+                    <div>
+                      <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Neck Wood</h3>
+                      <div className="grid grid-cols-2 gap-2">
+                        {options.neckOptions?.filter(opt => opt.construction === config.neckConstruction).map((opt) => (
+                          <VisualCard
+                            key={opt.value}
+                            option={opt}
+                            isSelected={config.neck === opt.value}
+                            onClick={() => updateConfig({ neck: opt.value })}
+                            previewImage={opt.preview}
+                            imageHeight="h-16"
+                          />
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                  
-                  {/* Fretboard */}
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Fingerboard Wood</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.fretboardOptions?.map((opt) => (
-                        <OptionButton
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.fretboard === opt.value}
-                          onClick={() => updateConfig({ fretboard: opt.value })}
-                        />
-                      ))}
+
+                    {/* Fretboard */}
+                    <div>
+                      <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Fingerboard Wood</h3>
+                      <div className="grid grid-cols-2 gap-2">
+                        {options.fretboardOptions?.map((opt) => (
+                          <VisualCard
+                            key={opt.value}
+                            option={opt}
+                            isSelected={config.fretboard === opt.value}
+                            onClick={() => updateConfig({ fretboard: opt.value })}
+                            previewImage={opt.preview}
+                            imageHeight="h-16"
+                          />
+                        ))}
+                      </div>
                     </div>
-                  </div>
                   
                   {/* Frets */}
                   <div>
@@ -1504,7 +1508,7 @@ export function CustomizePage() {
                   
                   {/* Headstock Wood */}
                   <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Headstock Wood</h3>
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Headstock Overlay</h3>
                     <div className="grid grid-cols-2 gap-2">
                       {options.headstockWoodOptions?.map((opt) => (
                         <OptionButton
