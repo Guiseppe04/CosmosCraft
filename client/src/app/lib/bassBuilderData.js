@@ -5,7 +5,7 @@ const USE_CLOUDINARY = Boolean(CLOUD_NAME)
 
 export const cloudImage = (root, path) => {
   if (!USE_CLOUDINARY) {
-    return `/builder/customization_assets/${String(path || '').replace(/^\/+/, '')}`
+    return `/builder/${String(path || '').replace(/^\/+/, '')}`
   }
   return `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/${root}/${path}`
 }
@@ -14,7 +14,7 @@ export const bassAsset = (path) => {
   const cleanPath = String(path || '').replace(/^\/+/, '')
   const encodedPath = encodeURI(cleanPath) // encodeURI preserves '/', encodes spaces and other unsafe chars
   if (!USE_CLOUDINARY) {
-    return `/builder/customization_assets/${encodedPath}`
+    return `/builder/${encodedPath}`
   }
   return cloudImage('cosmoscraft_assets/customization_assets/builder', encodedPath)
 }
@@ -23,7 +23,7 @@ export const bassWoodAsset = (path) => {
   const cleanPath = String(path || '').replace(/^\/+/, '')
   const encodedPath = encodeURI(cleanPath)
   if (!USE_CLOUDINARY) {
-    return `/builder/customization_assets/${encodedPath}`
+    return `/builder/${encodedPath}`
   }
   return cloudImage('cosmoscraft_assets/customization_assets/builder', encodedPath)
 }

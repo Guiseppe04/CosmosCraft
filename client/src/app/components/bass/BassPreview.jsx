@@ -13,6 +13,7 @@ import {
   BASS_KNOB_OPTIONS,  
   BASS_PICKUP_MODEL_BRIDGE_OPTIONS,
 } from '../../lib/bassBuilderData.js'
+import { resolveFinishAsset } from '../../lib/assetResolver.js'
 
 const DEBUG = Boolean(import.meta.env.DEV)
 
@@ -578,12 +579,22 @@ const resolved = {
     }
     if (DEBUG) console.log('[INLAY]', { bassType: resolvedConfig.bassType, maskSrc: inlayMaskSrc, materialSrc: inlayMaterialPath })
 
+    const finishTexture = resolvedConfig.finishType &&
+      resolvedConfig.finishType !== 'solid' &&
+      resolvedConfig.finishColor &&
+      resolvedConfig.finishColor !== 'none'
+      ? resolveFinishAsset('bass', resolvedConfig.bassType, resolvedConfig.finishType, resolvedConfig.finishColor)
+      : null
+
     const resolvedAssets = {
+      finishTexture,
       bodyModel,
       bodyWood: bassBuilder.BODY_WOOD_OPTIONS[resolvedConfig.bodyWood],
-      bodyFinish: resolvedConfig.bodyFinish && typeof resolvedConfig.bodyFinish === 'string' && resolvedConfig.bodyFinish.startsWith('#')
-        ? { color: resolvedConfig.bodyFinish, texture: null }
-        : bassBuilder.BODY_FINISH_OPTIONS[resolvedConfig.bodyFinish],
+      bodyFinish: finishTexture
+        ? { texture: finishTexture }
+        : resolvedConfig.bodyFinish && typeof resolvedConfig.bodyFinish === 'string' && resolvedConfig.bodyFinish.startsWith('#')
+          ? { color: resolvedConfig.bodyFinish, texture: null }
+          : bassBuilder.BODY_FINISH_OPTIONS[resolvedConfig.bodyFinish],
       topWood: bassBuilder.TOP_WOOD_OPTIONS?.[resolvedConfig.topWood] || null,
       topWoodMask: resolvedConfig.bassType === 'vader'
         ? bassAsset('bass/vader/front/masks/topwoodmask.png')
@@ -935,6 +946,9 @@ if (assets.bodyModel?.bodySrc) {
     if (!assets.isHeadless && assets.headstockWood?.texture && (assets.frontHeadstockMask || assets.frontNeckMask)) {
       layers.push({ name: 'headstock-wood', maskSrc: assets.frontHeadstockMask || assets.frontNeckMask, style: { backgroundImage: `url(${assets.headstockWood.texture})`, opacity: 0.95, zIndex: 99 }, protectedLayer: true })
     }
+    if (!assets.isHeadless && assets.finishTexture && (assets.frontHeadstockMask || assets.frontNeckMask)) {
+      layers.push({ name: 'headstock-finish', maskSrc: assets.frontHeadstockMask || assets.frontNeckMask, style: { backgroundImage: `url(${assets.finishTexture})`, opacity: resolvedConfig.finishType === 'translucent' ? 0.5 : 1, mixBlendMode: 'normal', zIndex: 100 }, protectedLayer: true })
+    }
     if (!assets.isHeadless && assets.headstockStringOverlay) {
       layers.push({
         name: 'headstock-strings',
@@ -1136,6 +1150,9 @@ if (resolvedConfig.bassType === 'jb' && assets.knobs?.src) {
       layers.push({ name: 'rear-neck-cap', src: assets.bodyAssets.back.neckCap, style: { zIndex: 105, opacity: 0.95 }, protectedLayer: true })
     }else if (assets.headstockWood?.texture && rearHeadstockMask) {
       layers.push({ name: 'rear-headstock-wood', maskSrc: rearHeadstockMask, style: { backgroundImage: `url(${assets.headstockWood.texture})`, opacity: 0.95, zIndex: 105 }, protectedLayer: true })
+    }
+    if (!assets.isHeadless && assets.finishTexture && rearHeadstockMask) {
+      layers.push({ name: 'rear-headstock-finish', maskSrc: rearHeadstockMask, style: { backgroundImage: `url(${assets.finishTexture})`, opacity: resolvedConfig.finishType === 'translucent' ? 0.5 : 1, mixBlendMode: 'normal', zIndex: 106 }, protectedLayer: true })
     }
     if (resolvedConfig.bassType !== 'vader') {
       const strapVariant = resolveStrapButtonVariant(resolvedConfig.strapButtons)

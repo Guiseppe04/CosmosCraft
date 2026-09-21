@@ -1176,6 +1176,45 @@ exports.seedCustomizeParts = async ({ guitarType }) => {
     existingByNameIdentity.set(nameIdentity, created);
   }
 
+  if (normalizedType === 'bass') {
+    const legacyBodyRes = await pool.query(
+      `UPDATE guitar_builder_parts
+       SET is_active = false,
+           deleted_at = COALESCE(deleted_at, now()),
+           metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('catalog_status', 'legacy_archived'),
+           updated_at = now()
+       WHERE guitar_type = 'bass'
+         AND type_mapping = 'body'
+         AND metadata->>'group' = 'BASS_TYPE_OPTIONS'
+         AND is_active = true
+       RETURNING part_id`
+    );
+    const duplicateBodyRes = await pool.query(
+      `WITH ranked_body_rows AS (
+         SELECT part_id,
+                ROW_NUMBER() OVER (
+                  PARTITION BY metadata->>'option_identity'
+                  ORDER BY updated_at DESC NULLS LAST, created_at DESC NULLS LAST, part_id
+                ) AS row_number
+         FROM guitar_builder_parts
+         WHERE guitar_type = 'bass'
+           AND type_mapping = 'body'
+           AND metadata->>'group' = 'BASS_BODY_OPTIONS'
+           AND is_active = true
+       )
+       UPDATE guitar_builder_parts AS parts
+       SET is_active = false,
+           deleted_at = COALESCE(parts.deleted_at, now()),
+           metadata = COALESCE(parts.metadata, '{}'::jsonb) || jsonb_build_object('catalog_status', 'duplicate_archived'),
+           updated_at = now()
+       FROM ranked_body_rows
+       WHERE parts.part_id = ranked_body_rows.part_id
+         AND ranked_body_rows.row_number > 1
+       RETURNING parts.part_id`
+    );
+    stats.archivedDuplicates = duplicateBodyRes.rowCount || 0;
+  }
+
   return {
     guitarType: normalizedType,
     source,
@@ -1345,7 +1384,7 @@ exports.getAllParts = async ({
   };
   const orderColumn = sortableColumns[sortBy] || sortableColumns.created_at;
   const orderDirection = String(sortDir).toLowerCase() === 'asc' ? 'ASC' : 'DESC';
-  const normalizedPageSize = Math.min(Math.max(Number(pageSize) || 10, 1), 500);
+  const normalizedPageSize = Math.min(Math.max(Number(pageSize) || 10, 1), 1000);
   const normalizedPage = Math.max(Number(page) || 1, 1);
   const offset = (normalizedPage - 1) * normalizedPageSize;
 

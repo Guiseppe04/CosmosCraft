@@ -76,6 +76,11 @@ const phpFormatter = new Intl.NumberFormat('en-PH', {
 })
 const API_URL = API
 
+const normalizeBassAssetUrl = (url) => {
+  if (typeof url !== 'string') return url
+  return url.replace('/builder/customization_assets/', '/builder/')
+}
+
 export function formatPricePHP(price) {
   return phpFormatter.format(price)
 }
@@ -253,8 +258,9 @@ export default function useBassConfig() {
       }
 
       if (part?.image_url) {
-        nextOption.src = part.image_url
-        nextOption.texture = part.image_url
+        const imageUrl = normalizeBassAssetUrl(part.image_url)
+        nextOption.src = imageUrl
+        nextOption.texture = imageUrl
       }
       if (variant) nextOption.variant = variant
       merged[normalizedOptionKey] = nextOption
@@ -284,7 +290,9 @@ export default function useBassConfig() {
         label: part.name || key,
         note: part.description || '',
         price: Number(part.price) || 0,
-        ...(part.image_url ? { src: part.image_url, preview: part.image_url } : {}),
+        ...(part.image_url
+          ? { src: normalizeBassAssetUrl(part.image_url), preview: normalizeBassAssetUrl(part.image_url) }
+          : {}),
       }
       return options
     }, {})
@@ -1062,7 +1070,11 @@ const mergedInlayMaterialOptions = useMemo(() => {
     [],
   )
   const bodyWoodOptions = useMemo(
-    () => Object.entries(mergedBodyWoodOptions).map(([value, option]) => ({ value, ...option, preview: option.texture })),
+    () => Object.entries(mergedBodyWoodOptions).map(([value, option]) => ({
+      value,
+      ...option,
+      preview: option.preview || option.texture || option.src,
+    })),
     [mergedBodyWoodOptions],
   )
   const bodyFinishOptions = useMemo(
@@ -1082,7 +1094,11 @@ const mergedInlayMaterialOptions = useMemo(() => {
     [mergedNeckOptions],
   )
   const fretboardOptions = useMemo(
-    () => Object.entries(mergedFretboardOptions).map(([value, option]) => ({ value, ...option })),
+    () => Object.entries(mergedFretboardOptions).map(([value, option]) => ({
+      value,
+      ...option,
+      preview: option.preview || option.texture || option.src,
+    })),
     [mergedFretboardOptions],
   )
   const headstockWoodOptions = useMemo(
@@ -1256,7 +1272,18 @@ const mergedInlayMaterialOptions = useMemo(() => {
     [mergedTopWoodOptions],
   )
   const finishTypeOptions = useMemo(
-    () => Object.entries(mergedFinishTypeOptions).map(([value, option]) => ({ value, ...option })),
+    () => {
+      const finishTypePreviews = {
+        metallic: bassAsset('all-models/woods-colors/colors/metallics/gold.png'),
+        translucent: bassAsset('all-models/woods-colors/colors/transluscents/trans-black.png'),
+        sparkle: bassAsset('all-models/woods-colors/colors/sparkle/silver.png'),
+      }
+      return Object.entries(mergedFinishTypeOptions).map(([value, option]) => ({
+        value,
+        ...option,
+        preview: option.preview || option.texture || option.src || finishTypePreviews[value],
+      }))
+    },
     [mergedFinishTypeOptions],
   )
   const topCoatOptions = useMemo(

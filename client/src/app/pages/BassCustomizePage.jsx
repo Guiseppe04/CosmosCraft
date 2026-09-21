@@ -304,14 +304,25 @@ function VaderFinishSubSection({ title, options, configKey, config, updateConfig
         <div className="border-t border-white/5 p-3">
           {optionsForKey?.length ? (
             <div className="grid grid-cols-2 gap-2">
-              {optionsForKey.map((opt) => (
-                <OptionButton
-                  key={opt.value}
-                  option={opt}
-                  isSelected={config[configKey] === opt.value}
-                  onClick={() => updateConfig({ [configKey]: opt.value })}
-                />
-              ))}
+              {optionsForKey.map((opt) => {
+                const previewImage = opt.preview || opt.texture || opt.src
+                return previewImage ? (
+                  <VisualCard
+                    key={opt.value}
+                    option={opt}
+                    isSelected={config[configKey] === opt.value}
+                    onClick={() => updateConfig({ [configKey]: opt.value })}
+                    previewImage={previewImage}
+                  />
+                ) : (
+                  <OptionButton
+                    key={opt.value}
+                    option={opt}
+                    isSelected={config[configKey] === opt.value}
+                    onClick={() => updateConfig({ [configKey]: opt.value })}
+                  />
+                )
+              })}
             </div>
           ) : (
             <p className="text-[11px] text-white/40">No choices available.</p>
@@ -347,7 +358,7 @@ function VaderBodyAccordion({ config, updateConfig, options, isCustomBodyColor }
               option={opt}
               isSelected={isSelected}
               onClick={onClick}
-              previewImage={opt.texture}
+              previewImage={opt.preview || opt.texture || opt.src}
             />
           )}
         />
@@ -554,7 +565,7 @@ function NeckAccordion({ config, updateConfig, options }) {
       option={opt}
       isSelected={isSelected}
       onClick={onClick}
-      previewImage={opt.src}
+      previewImage={opt.preview || opt.src || opt.texture}
     />
   )
   const renderOptionCard = (opt, isSelected, onClick) => (
@@ -1695,7 +1706,7 @@ export function BassCustomizePage() {
                             option={opt}
                             isSelected={config.pickguard === opt.value}
                             onClick={() => updateConfig({ pickguard: opt.value })}
-                            previewImage={opt.src}
+                            previewImage={opt.preview || opt.src || opt.texture}
                             fit="contain"
                           />
                         ))}

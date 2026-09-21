@@ -4,7 +4,7 @@ import { updateIfChanged } from '../pages/admin/utils/slug'
 
 const DEFAULT_PART_QUERY = {
   page: 1,
-  pageSize: 500,
+  pageSize: 1000,
   sortBy: 'created_at',
   sortDir: 'desc',
   guitar_type: '',
@@ -18,7 +18,7 @@ export function usePartsAdmin({ debouncedSearch, showToast, initialQuery = DEFAU
   const [partQuery, setPartQuery] = useState(initialQuery)
   const [parts, setParts] = useState([])
   const [partsLoading, setPartsLoading] = useState(false)
-  const [partsPagination, setPartsPagination] = useState({ page: 1, pageSize: 500, total: 0, totalPages: 1 })
+  const [partsPagination, setPartsPagination] = useState({ page: 1, pageSize: 1000, total: 0, totalPages: 1 })
   const partsRef = useRef(parts)
   const inFlightRequestRef = useRef(null)
   const latestRequestIdRef = useRef(0)

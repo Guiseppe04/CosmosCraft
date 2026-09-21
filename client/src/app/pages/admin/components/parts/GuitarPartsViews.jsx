@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, ChevronUp, Edit, Guitar, Layers, Plus, Trash2 } from 'lucide-react'
-import { BUILDER_CATEGORY_MAP, GUITAR_TYPE_LABELS } from '../../constants/adminOptions'
+import { BUILDER_CATEGORY_MAP, GUITAR_TYPE_LABELS, PART_CATEGORY_LABELS } from '../../constants/adminOptions'
 import { formatCurrency } from '../../../../utils/formatCurrency'
 
 export function GuitarPartAccordion({ parts, expandedGuitarTypes, onToggleGuitarType, expandedPartCategories, onTogglePartCategory, onEdit, onDelete, onQuickAdd, density }) {
