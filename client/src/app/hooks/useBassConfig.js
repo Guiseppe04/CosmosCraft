@@ -149,7 +149,13 @@ export default function useBassConfig() {
         const normalizedNameKey = typeof part.name === 'string' ? part.name.trim().toLowerCase().replace(/\s+/g, '') : ''
         const normalizedOptionKey = typeof metadata.option_key === 'string' ? metadata.option_key.trim().toLowerCase() : ''
         const normalizedVariant = typeof metadata.variant === 'string' ? metadata.variant.trim().toLowerCase() : ''
-        const overrideValue = { price: Number(part.price), partCategory: normalizedCategory || part.part_category }
+        const overrideValue = {
+          price: Number(part.price),
+          label: part.name,
+          note: part.description || '',
+          src: part.image_url || null,
+          partCategory: normalizedCategory || part.part_category,
+        }
 
         if (normalizedTypeMapping) {
           registerOverride(normalizedTypeMapping, overrideValue)
@@ -204,9 +210,21 @@ export default function useBassConfig() {
   }
 
   const mergeOptionsFromBuilderParts = useCallback((baseOptions, { partCategory, typeMappings = [] } = {}) => {
-    const merged = { ...baseOptions }
     const normalizedType = String(config.bassType || 'vader').trim().toLowerCase()
     const normalizedTypeMappings = typeMappings.map(mapping => String(mapping).trim().toLowerCase())
+    const matchingParts = builderParts.filter((part) => {
+      const instrumentType = typeof part.guitar_type === 'string' ? part.guitar_type.trim().toLowerCase() : ''
+      const modelType = typeof part.bass_type === 'string' ? part.bass_type.trim().toLowerCase() : ''
+      const normalizedCategory = typeof part.part_category === 'string' ? part.part_category.trim().toLowerCase() : ''
+      const normalizedMapping = typeof part.type_mapping === 'string' ? part.type_mapping.trim().toLowerCase() : ''
+      const optionKey = part?.metadata?.option_key
+      return (!instrumentType || instrumentType === 'bass') &&
+        (!modelType || modelType === normalizedType) &&
+        (!partCategory || normalizedCategory === String(partCategory).trim().toLowerCase()) &&
+        (!normalizedTypeMappings.length || normalizedTypeMappings.includes(normalizedMapping)) &&
+        typeof optionKey === 'string' && optionKey.trim()
+    })
+    const merged = matchingParts.length > 0 ? {} : { ...baseOptions }
 
     builderParts.forEach((part) => {
       const partType = typeof part.bass_type === 'string' ? part.bass_type.trim().toLowerCase() : ''
@@ -224,20 +242,52 @@ export default function useBassConfig() {
       if (normalizedTypeMappings.length > 0 && !normalizedTypeMappings.includes(normalizedTypeMapping)) return
 
       const normalizedOptionKey = String(optionKey).trim()
-      const existingOption = merged[normalizedOptionKey]
+      const existingOption = merged[normalizedOptionKey] || baseOptions[normalizedOptionKey]
       const nextOption = {
         ...(existingOption || {}),
-        label: existingOption?.label || part?.name || normalizedOptionKey,
+        label: part?.name || existingOption?.label || normalizedOptionKey,
         note: existingOption?.note || part?.description || '',
-        price: Number(part?.price) || existingOption?.price || 0,
+        price: part?.price !== undefined && part?.price !== null && !Number.isNaN(Number(part.price))
+          ? Number(part.price)
+          : existingOption?.price || 0,
       }
 
-      if (part?.image_url) nextOption.src = part.image_url
+      if (part?.image_url) {
+        nextOption.src = part.image_url
+        nextOption.texture = part.image_url
+      }
       if (variant) nextOption.variant = variant
       merged[normalizedOptionKey] = nextOption
     })
 
     return merged
+  }, [builderParts, config.bassType])
+
+  const getCatalogOptions = useCallback((typeMappings, variant = '') => {
+    const mappings = typeMappings.map((mapping) => String(mapping).trim().toLowerCase())
+    const normalizedVariant = String(variant || '').trim().toLowerCase()
+    const rows = builderParts.filter((part) => {
+      const instrumentType = String(part.guitar_type || '').trim().toLowerCase()
+      const modelType = String(part.bass_type || '').trim().toLowerCase()
+      const mapping = String(part.type_mapping || '').trim().toLowerCase()
+      const rowVariant = String(part?.metadata?.variant || '').trim().toLowerCase()
+      return (!instrumentType || instrumentType === 'bass') &&
+        (!modelType || modelType === String(config.bassType || '').trim().toLowerCase()) &&
+        mappings.includes(mapping) &&
+        (!normalizedVariant || !rowVariant || rowVariant === normalizedVariant) &&
+        String(part?.metadata?.option_key || '').trim()
+    })
+    if (!rows.length) return null
+    return rows.reduce((options, part) => {
+      const key = String(part.metadata.option_key).trim()
+      options[key] = {
+        label: part.name || key,
+        note: part.description || '',
+        price: Number(part.price) || 0,
+        ...(part.image_url ? { src: part.image_url, preview: part.image_url } : {}),
+      }
+      return options
+    }, {})
   }, [builderParts, config.bassType])
 
   const dynamicBasePrice = useMemo(() => {
@@ -253,92 +303,96 @@ export default function useBassConfig() {
   }, [priceOverrides])
 
   const mergedBodyOptions = useMemo(() => {
-    const merged = { ...BASS_BODY_OPTIONS }
+    const merged = mergeOptionsFromBuilderParts(BASS_BODY_OPTIONS, { partCategory: 'body', typeMappings: ['body'] })
     Object.keys(merged).forEach(key => {
       if (priceOverrides[key] !== undefined) {
         merged[key] = { ...merged[key], price: priceOverrides[key].price }
       }
     })
     return merged
-  }, [priceOverrides])
+  }, [mergeOptionsFromBuilderParts, priceOverrides])
 
   const mergedBodyWoodOptions = useMemo(() => {
-    const merged = { ...BASS_BODY_WOOD_OPTIONS }
+    const merged = mergeOptionsFromBuilderParts(BASS_BODY_WOOD_OPTIONS, { partCategory: 'wood_type', typeMappings: ['bodyWood'] })
     Object.keys(merged).forEach(key => {
       if (priceOverrides[key] !== undefined) {
         merged[key] = { ...merged[key], price: priceOverrides[key].price }
       }
     })
     return merged
-  }, [priceOverrides])
+  }, [mergeOptionsFromBuilderParts, priceOverrides])
 
   const mergedBodyFinishOptions = useMemo(() => {
-    const merged = { ...BASS_BODY_FINISH_OPTIONS }
+    const merged = mergeOptionsFromBuilderParts(BASS_BODY_FINISH_OPTIONS, { partCategory: 'finish', typeMappings: ['bodyFinish'] })
     Object.keys(merged).forEach(key => {
       if (priceOverrides[key] !== undefined) {
         merged[key] = { ...merged[key], price: priceOverrides[key].price }
       }
     })
     return merged
-  }, [priceOverrides])
+  }, [mergeOptionsFromBuilderParts, priceOverrides])
 
   const mergedNeckOptions = useMemo(() => {
-    const merged = { ...BASS_NECK_OPTIONS }
+    const merged = mergeOptionsFromBuilderParts(BASS_NECK_OPTIONS, { partCategory: 'neck', typeMappings: ['neck'] })
     Object.keys(merged).forEach(key => {
       if (priceOverrides[key] !== undefined) {
         merged[key] = { ...merged[key], price: priceOverrides[key].price }
       }
     })
     return merged
-  }, [priceOverrides])
+  }, [mergeOptionsFromBuilderParts, priceOverrides])
 
   const mergedFretboardOptions = useMemo(() => {
-    const merged = { ...BASS_FRETBOARD_OPTIONS }
+    const merged = mergeOptionsFromBuilderParts(BASS_FRETBOARD_OPTIONS, { partCategory: 'fretboard', typeMappings: ['fretboard'] })
     Object.keys(merged).forEach(key => {
       if (priceOverrides[key] !== undefined) {
         merged[key] = { ...merged[key], price: priceOverrides[key].price }
       }
     })
     return merged
-  }, [priceOverrides])
+  }, [mergeOptionsFromBuilderParts, priceOverrides])
 
   const mergedFingerboardRadiusOptions = useMemo(() => {
-    const merged = { ...BASS_FINGERBOARD_RADIUS_OPTIONS }
+    const merged = mergeOptionsFromBuilderParts(BASS_FINGERBOARD_RADIUS_OPTIONS, { partCategory: 'fretboard', typeMappings: ['fingerboardRadius'] })
     Object.keys(merged).forEach(key => {
       if (priceOverrides[key] !== undefined) {
         merged[key] = { ...merged[key], price: priceOverrides[key].price }
       }
     })
     return merged
-  }, [priceOverrides])
+  }, [mergeOptionsFromBuilderParts, priceOverrides])
 
-  const mergedFretOptions = useMemo(() => ({ ...BASS_FRET_OPTIONS }), [])
+  const mergedFretOptions = useMemo(
+    () => mergeOptionsFromBuilderParts(BASS_FRET_OPTIONS, { partCategory: 'neck', typeMappings: ['frets'] }),
+    [mergeOptionsFromBuilderParts],
+  )
 
   const mergedNeckRearFinishOptions = useMemo(() => {
     const topCoat = config.topCoat
+    const base = mergeOptionsFromBuilderParts(BASS_NECK_REAR_FINISH_OPTIONS, { partCategory: 'misc', typeMappings: ['neckRearFinish'] })
     const merged = {}
-    Object.entries(BASS_NECK_REAR_FINISH_OPTIONS).forEach(([key, opt]) => {
+    Object.entries(base).forEach(([key, opt]) => {
       if (config.bassType !== 'vader' && key !== 'tungOilNeck') return
-      if (!topCoat || opt.visibleTopCoats.includes(topCoat)) {
+      if (!topCoat || !Array.isArray(opt.visibleTopCoats) || opt.visibleTopCoats.includes(topCoat)) {
         merged[key] = opt
       }
     })
     return merged
-  }, [config.topCoat, config.bassType])
+  }, [mergeOptionsFromBuilderParts, config.topCoat, config.bassType])
 
   const mergedHeadstockWoodOptions = useMemo(() => {
     if (config.bassType !== 'vader') return {}
-    const merged = { ...BASS_HEADSTOCK_WOOD_OPTIONS }
+    const merged = mergeOptionsFromBuilderParts(BASS_HEADSTOCK_WOOD_OPTIONS, { partCategory: 'wood_type', typeMappings: ['headstockWood'] })
     Object.keys(merged).forEach(key => {
       if (priceOverrides[key] !== undefined) {
         merged[key] = { ...merged[key], price: priceOverrides[key].price }
       }
     })
     return merged
-  }, [priceOverrides, config.bassType])
+  }, [mergeOptionsFromBuilderParts, priceOverrides, config.bassType])
 
   const mergedHeadstockStyleOptions = useMemo(() => {
-    const merged = { ...BASS_HEADSTOCK_STYLE_OPTIONS }
+    const merged = mergeOptionsFromBuilderParts(BASS_HEADSTOCK_STYLE_OPTIONS, { partCategory: 'misc', typeMappings: ['headstock'] })
     Object.keys(merged).forEach(key => {
       if (key === 'headless' && config.bassType !== 'vader') return
       if (priceOverrides[key] !== undefined) {
@@ -346,29 +400,31 @@ export default function useBassConfig() {
       }
     })
     return merged
-  }, [priceOverrides, config.bassType])
+  }, [mergeOptionsFromBuilderParts, priceOverrides, config.bassType])
 
   const mergedNeckStyleOptions = useMemo(() => {
-    const merged = { ...BASS_NECK_STYLE_OPTIONS }
+    const merged = mergeOptionsFromBuilderParts(BASS_NECK_STYLE_OPTIONS, { partCategory: 'neck', typeMappings: ['neckStyle'] })
     Object.keys(merged).forEach(key => {
       if (priceOverrides[key] !== undefined) {
         merged[key] = { ...merged[key], price: priceOverrides[key].price }
       }
     })
     return merged
-  }, [priceOverrides])
+  }, [mergeOptionsFromBuilderParts, priceOverrides])
 
   const mergedInlayOptions = useMemo(() => {
-    const merged = { ...BASS_INLAY_OPTIONS }
+    const merged = mergeOptionsFromBuilderParts(BASS_INLAY_OPTIONS, { partCategory: 'misc', typeMappings: ['inlays', 'inlay'] })
     Object.keys(merged).forEach(key => {
       if (priceOverrides[key] !== undefined) {
         merged[key] = { ...merged[key], price: priceOverrides[key].price }
       }
     })
     return merged
-  }, [priceOverrides])
+  }, [mergeOptionsFromBuilderParts, priceOverrides])
 
   const mergedBackplateOptions = useMemo(() => {
+    const catalog = getCatalogOptions(['backplate'], config.bassType)
+    if (catalog) return { [config.bassType]: catalog }
     const merged = {}
     Object.keys(BASS_BACKPLATE_OPTIONS).forEach(bodyKey => {
       merged[bodyKey] = { ...BASS_BACKPLATE_OPTIONS[bodyKey] }
@@ -380,9 +436,11 @@ export default function useBassConfig() {
       })
     })
     return merged
-  }, [priceOverrides])
+  }, [getCatalogOptions, priceOverrides, config.bassType])
 
   const mergedPickupScrewOptions = useMemo(() => {
+    const catalog = getCatalogOptions(['pickupScrews'], config.bassType)
+    if (catalog) return { [config.bassType]: catalog }
     const merged = {}
     Object.keys(BASS_PICKUP_SCREW_OPTIONS).forEach(bodyKey => {
       merged[bodyKey] = { ...BASS_PICKUP_SCREW_OPTIONS[bodyKey] }
@@ -394,7 +452,7 @@ export default function useBassConfig() {
       })
     })
     return merged
-  }, [priceOverrides])
+  }, [getCatalogOptions, priceOverrides, config.bassType])
 
   const mergedControlPlateOptions = useMemo(() => {
     const merged = { ...BASS_CONTROL_PLATE_OPTIONS }
@@ -407,6 +465,8 @@ export default function useBassConfig() {
   }, [priceOverrides])
 
   const mergedBridgeOptions = useMemo(() => {
+    const catalog = getCatalogOptions(['bridge'], config.bassType)
+    if (catalog) return { [config.bassType]: catalog }
     const merged = {}
     const bridgeCatPrice = priceOverrides['cat:bridge']?.price
     Object.keys(BASS_BRIDGE_OPTIONS).forEach(bodyKey => {
@@ -420,9 +480,11 @@ export default function useBassConfig() {
       })
     })
     return merged
-  }, [priceOverrides])
+  }, [getCatalogOptions, priceOverrides, config.bassType])
 
   const mergedPickguardOptions = useMemo(() => {
+    const catalog = getCatalogOptions(['pickguard'], config.bassType)
+    if (catalog) return { [config.bassType]: catalog }
     const merged = {}
     const pickguardCatPrice = priceOverrides['cat:pickguard']?.price
     Object.keys(BASS_PICKGUARD_OPTIONS).forEach(bodyKey => {
@@ -436,9 +498,11 @@ export default function useBassConfig() {
       })
     })
     return merged
-  }, [priceOverrides])
+  }, [getCatalogOptions, priceOverrides, config.bassType])
 
   const mergedKnobOptions = useMemo(() => {
+    const catalog = getCatalogOptions(['knobs'], config.bassType)
+    if (catalog) return { [config.bassType]: catalog }
     const merged = {}
     const knobsCatPrice = priceOverrides['cat:knobs']?.price
     const hardwareCatPrice = priceOverrides['cat:hardware']?.price
@@ -453,7 +517,7 @@ export default function useBassConfig() {
       })
     })
     return merged
-  }, [priceOverrides])
+  }, [getCatalogOptions, priceOverrides, config.bassType])
 
   const mergedHardwareOptions = useMemo(() => {
     const merged = { ...BASS_HARDWARE_OPTIONS }
@@ -766,14 +830,17 @@ const mergedInlayMaterialOptions = useMemo(() => {
   }, [])
 
   useEffect(() => {
+    const effectiveStrings = config.bassType === 'jb' ? '4' : config.strings
+
     const pickguardKeys = Object.keys(BASS_PICKGUARD_OPTIONS[config.bassType] ?? BASS_PICKGUARD_OPTIONS.vader)
     const knobKeys = Object.keys(BASS_KNOB_OPTIONS[config.bassType] ?? BASS_KNOB_OPTIONS.vader)
-    const bridgeKeys = getBridgeKeysForStrings(config.bassType, config.strings)
+    const bridgeKeys = getBridgeKeysForStrings(config.bassType, effectiveStrings)
     const headstockWoodKeys = Object.keys(BASS_HEADSTOCK_WOOD_OPTIONS)
     const headstockShapeKeys = Object.keys(HEADSTOCK_SHAPE_OPTIONS)
 
     const isHeadless = config.bassType === 'vader'
-    
+
+    const nextStrings = effectiveStrings
     const nextPickguard = pickguardKeys.includes(config.pickguard) ? config.pickguard : pickguardKeys[0]
     const nextKnobs = knobKeys.includes(config.knobs) ? config.knobs : knobKeys[0]
     const nextBridge = bridgeKeys.includes(config.bridge) ? config.bridge : bridgeKeys[0]
@@ -781,6 +848,7 @@ const mergedInlayMaterialOptions = useMemo(() => {
     const nextHeadstockShape = isHeadless || !headstockShapeKeys.includes(config.headstockShape) ? headstockShapeKeys[0] : config.headstockShape
 
     if (
+      nextStrings !== config.strings ||
       nextPickguard !== config.pickguard ||
       nextKnobs !== config.knobs ||
       nextBridge !== config.bridge ||
@@ -789,6 +857,7 @@ const mergedInlayMaterialOptions = useMemo(() => {
     ) {
       setConfig(prev => ({
         ...prev,
+        strings: nextStrings,
         pickguard: nextPickguard,
         knobs: nextKnobs,
         bridge: nextBridge,
@@ -887,9 +956,15 @@ const mergedInlayMaterialOptions = useMemo(() => {
       (mergedNutOptions[config.nut]?.price ?? 0) +
       (mergedStrapButtonOptions[config.strapButtons]?.price ?? 0) +
       (tremoloCoverOptions[config.tremoloCover]?.price ?? 0) +
-      (BASS_PICKUP_MODEL_BRIDGE_OPTIONS[config.bassType]?.[config.pbBridgePickupModel]?.price ?? 0) +
-      (BASS_PICKUP_MODEL_NECK_OPTIONS[config.bassType]?.[config.pbNeckPickupModel]?.price ?? 0) +
-      (BASS_PICKUP_COLOR_OPTIONS[config.pbPickupColor]?.price ?? 0) 
+      (BASS_PICKUP_MODEL_BRIDGE_OPTIONS[config.bassType]?.[
+        config.bassType === 'jb' ? config.jbBridgePickupModel : config.pbBridgePickupModel
+      ]?.price ?? 0) +
+      (BASS_PICKUP_MODEL_NECK_OPTIONS[config.bassType]?.[
+        config.bassType === 'jb' ? config.jbNeckPickupModel : config.pbNeckPickupModel
+      ]?.price ?? 0) +
+      (BASS_PICKUP_COLOR_OPTIONS[
+        config.bassType === 'jb' ? config.jbPickupColor : config.pbPickupColor
+      ]?.price ?? 0) 
     )
   }, [
     config, dynamicBasePrice,
@@ -1049,11 +1124,11 @@ const mergedInlayMaterialOptions = useMemo(() => {
     [config.bassType, mergedKnobOptions],
   )
   const pickupOptions = useMemo(
-    () => config.bassType === 'vader' ? [] : Object.entries(mergedPickupOptions).map(([value, option]) => ({ value, ...option })),
+    () => config.bassType === 'vader' || config.bassType === 'jb' ? [] : Object.entries(mergedPickupOptions).map(([value, option]) => ({ value, ...option })),
     [config.bassType, mergedPickupOptions],
   )
   const pickupConfigOptions = useMemo(
-    () => config.bassType === 'vader' ? [] : Object.entries(BASS_PICKUP_CONFIG_OPTIONS).map(([value, option]) => ({ value, ...option })),
+    () => config.bassType === 'vader' || config.bassType === 'jb' ? [] : Object.entries(BASS_PICKUP_CONFIG_OPTIONS).map(([value, option]) => ({ value, ...option })),
     [config.bassType],
   )
   const stringOptions = useMemo(
@@ -1061,7 +1136,13 @@ const mergedInlayMaterialOptions = useMemo(() => {
     [mergedStringOptions],
   )
   const headstockStyleOptions = useMemo(
-    () => Object.entries(mergedHeadstockStyleOptions).map(([value, option]) => ({ value, ...option })),
+    () => Object.entries(mergedHeadstockStyleOptions).map(([value, option]) => ({
+      value,
+      ...option,
+      preview: bassAsset(`all-models/headstocks/bass/4-string/${value}/masks/mask.png`),
+    imageZoom: 7,
+    imagePosition: '88% 50%',
+    })),
     [mergedHeadstockStyleOptions],
   )
   const neckStyleOptions = useMemo(
@@ -1094,7 +1175,7 @@ const mergedInlayMaterialOptions = useMemo(() => {
     return groups
   }, [mergedNeckOptions])
   const pickupTypeStyleOptions = useMemo(
-    () => config.bassType === 'vader' ? [] : Object.entries(mergedPickupTypeStyleOptions).map(([value, option]) => ({ value, ...option })),
+    () => config.bassType === 'vader' || config.bassType === 'jb' ? [] : Object.entries(mergedPickupTypeStyleOptions).map(([value, option]) => ({ value, ...option })),
     [config.bassType, mergedPickupTypeStyleOptions],
   )
   const hardwareOptions = useMemo(
@@ -1109,7 +1190,7 @@ const mergedInlayMaterialOptions = useMemo(() => {
     [config.bassType],
   )
   const backplateOptions = useMemo(
-    () => config.bassType === 'vader' ? [] : Object.entries(mergedBackplateOptions[config.bassType] ?? mergedBackplateOptions.vader).map(([value, option]) => ({ value, ...option })),
+    () => config.bassType === 'vader' || config.bassType === 'jb' ? [] : Object.entries(mergedBackplateOptions[config.bassType] ?? mergedBackplateOptions.vader).map(([value, option]) => ({ value, ...option })),
     [config.bassType, mergedBackplateOptions],
   )
   const pickupScrewOptions = useMemo(
@@ -1121,15 +1202,37 @@ const mergedInlayMaterialOptions = useMemo(() => {
     [config.bassType, mergedControlPlateOptions],
   )
   const pbBridgePickupModelOptions = useMemo(
-    () => config.bassType === 'pb' ? Object.entries(BASS_PICKUP_MODEL_BRIDGE_OPTIONS.pb ?? {}).map(([value, option]) => ({ value, ...option })) : [],
-    [config.bassType],
+    () => config.bassType === 'pb'
+      ? Object.entries(getCatalogOptions(['pbBridgePickupModel'], 'pb') || BASS_PICKUP_MODEL_BRIDGE_OPTIONS.pb || {}).map(([value, option]) => ({ value, ...option }))
+      : [],
+    [config.bassType, getCatalogOptions],
   )
   const pbNeckPickupModelOptions = useMemo(
-    () => config.bassType === 'pb' ? Object.entries(BASS_PICKUP_MODEL_NECK_OPTIONS.pb ?? {}).map(([value, option]) => ({ value, ...option })) : [],
-    [config.bassType],
+    () => config.bassType === 'pb'
+      ? Object.entries(getCatalogOptions(['pbNeckPickupModel'], 'pb') || BASS_PICKUP_MODEL_NECK_OPTIONS.pb || {}).map(([value, option]) => ({ value, ...option }))
+      : [],
+    [config.bassType, getCatalogOptions],
   )
   const pbPickupColorOptions = useMemo(
     () => config.bassType === 'pb' ? Object.entries(BASS_PICKUP_COLOR_OPTIONS).map(([value, option]) => ({ value, ...option })) : [],
+    [config.bassType],
+  )
+  const jbBridgePickupModelOptions = useMemo(
+  () => config.bassType === 'jb'
+    ? Object.entries(getCatalogOptions(['jbBridgePickupModel'], 'jb') || BASS_PICKUP_MODEL_BRIDGE_OPTIONS.jb || {}).map(([value, option]) => ({ value, ...option }))
+    : [],
+  [config.bassType, getCatalogOptions],
+)
+  const jbNeckPickupModelOptions = useMemo(
+    () => config.bassType === 'jb'
+      ? Object.entries(getCatalogOptions(['jbNeckPickupModel'], 'jb') || BASS_PICKUP_MODEL_NECK_OPTIONS.jb || {}).map(([value, option]) => ({ value, ...option }))
+      : [],
+    [config.bassType, getCatalogOptions],
+  )
+  const jbPickupColorOptions = useMemo(
+    () => config.bassType === 'jb'
+      ? Object.entries(BASS_PICKUP_COLOR_OPTIONS).map(([value, option]) => ({ value, ...option }))
+      : [],
     [config.bassType],
   )
   const dexterityOptions = useMemo(
@@ -1161,6 +1264,14 @@ const mergedInlayMaterialOptions = useMemo(() => {
     [mergedTopCoatOptions],
   )
   const finishColorOptions = useMemo(() => {
+    const catalog = getCatalogOptions(['finishColor'], config.finishType)
+    if (catalog) {
+      return Object.entries(catalog).map(([value, option]) => ({
+        value,
+        ...option,
+        preview: option.src || resolveFinishAsset('bass', config.bassType || 'vader', config.finishType, value),
+      }))
+    }
     const finishType = config.finishType
     if (!finishType || finishType === 'solid') return []
     const fallbackMap = {
@@ -1215,7 +1326,7 @@ const mergedInlayMaterialOptions = useMemo(() => {
       ...option,
       preview: resolveFinishAsset('bass', config.bassType || 'vader', finishType, option.value),
     }))
-  }, [config.finishType, config.bassType])
+  }, [config.finishType, config.bassType, getCatalogOptions])
   const burstFinishOptions = useMemo(
     () => Object.entries(mergedBurstFinishOptions).map(([value, option]) => ({ value, ...option })),
     [mergedBurstFinishOptions],
@@ -1257,35 +1368,52 @@ const mergedInlayMaterialOptions = useMemo(() => {
     [mergedHeadstockShapeOptions],
   )
   const trussRodCoverOptions = useMemo(
-    () => Object.entries(mergedTrussRodCoverOptions).map(([value, option]) => ({ value, ...option })),
+    () => Object.entries(mergedTrussRodCoverOptions).map(([value, option]) => ({
+      value,
+      ...option,
+      preview: bassAsset(`all-models/headstocks/bass/4-string/truss-cover/${value}.png`),
+    imageZoom: 20,
+    imagePosition: '80% 50%',
+    })),
     [mergedTrussRodCoverOptions],
   )
   const electronicsTypeOptions = useMemo(
-    () => config.bassType === 'vader' ? [] : Object.entries(mergedElectronicsTypeOptions).map(([value, option]) => ({ value, ...option })),
+    () => config.bassType === 'vader' || config.bassType === 'jb' ? [] : Object.entries(mergedElectronicsTypeOptions).map(([value, option]) => ({ value, ...option })),
     [config.bassType, mergedElectronicsTypeOptions],
   )
   const pickupConfigurationOptions = useMemo(
-    () => config.bassType === 'vader' ? [] : Object.entries(mergedPickupConfigurationOptions).map(([value, option]) => ({ value, ...option })),
+    () => config.bassType === 'vader' || config.bassType === 'jb' ? [] : Object.entries(mergedPickupConfigurationOptions).map(([value, option]) => ({ value, ...option })),
     [config.bassType, mergedPickupConfigurationOptions],
   )
   const bridgePickupModelOptions = useMemo(
-    () => config.bassType === 'vader' ? [] : Object.entries(mergedBridgePickupModelOptions).map(([value, option]) => ({ value, ...option })),
+    () => config.bassType === 'vader' || config.bassType === 'jb' ? [] : Object.entries(mergedBridgePickupModelOptions).map(([value, option]) => ({ value, ...option })),
     [config.bassType, mergedBridgePickupModelOptions],
   )
   const middlePickupModelOptions = useMemo(
-    () => config.bassType === 'vader' ? [] : Object.entries(mergedMiddlePickupModelOptions).map(([value, option]) => ({ value, ...option })),
+    () => config.bassType === 'vader' || config.bassType === 'jb' ? [] : Object.entries(mergedMiddlePickupModelOptions).map(([value, option]) => ({ value, ...option })),
     [config.bassType, mergedMiddlePickupModelOptions],
   )
   const neckPickupModelOptions = useMemo(
-    () => config.bassType === 'vader' ? [] : Object.entries(mergedNeckPickupModelOptions).map(([value, option]) => ({ value, ...option })),
+    () => config.bassType === 'vader' || config.bassType === 'jb' ? [] : Object.entries(mergedNeckPickupModelOptions).map(([value, option]) => ({ value, ...option })),
     [config.bassType, mergedNeckPickupModelOptions],
   )
   const pickupColorOptions = useMemo(
-    () => config.bassType === 'vader' ? [] : Object.entries(mergedPickupColorOptions).map(([value, option]) => ({ value, ...option })),
+    () => {
+      if (config.bassType === 'vader') return []
+      if (config.bassType === 'jb') {
+        // JB only: Standard Color (Black, Creme) + Painted Pickup (Custom RGB)
+        return [
+          { value: 'black', label: 'Black', note: 'Standard black pickup', price: 0 },
+          { value: 'creme', label: 'Creme', note: 'Standard creme pickup', price: 0 },
+          { value: 'custom', label: 'Custom RGB', note: 'Painted pickup, custom RGB color', price: 10 },
+        ]
+      }
+      return Object.entries(mergedPickupColorOptions).map(([value, option]) => ({ value, ...option }))
+    },
     [config.bassType, mergedPickupColorOptions],
   )
   const pickupColorVariantOptions = useMemo(() => {
-    if (config.bassType === 'vader') return []
+    if (config.bassType === 'vader' || config.bassType === 'jb') return []
     const type = config.pickupColor || 'bobbins'
     if (type === 'bobbins' || type === 'covers') {
       const variantOptions = type === 'bobbins'
@@ -1308,15 +1436,15 @@ const mergedInlayMaterialOptions = useMemo(() => {
     return []
   }, [config.bassType, config.pickupColor])
   const pickupPoleColorOptions = useMemo(
-    () => config.bassType === 'vader' ? [] : Object.entries(mergedPickupPoleColorOptions).map(([value, option]) => ({ value, ...option })),
+    () => config.bassType === 'vader' || config.bassType === 'jb' ? [] : Object.entries(mergedPickupPoleColorOptions).map(([value, option]) => ({ value, ...option })),
     [config.bassType, mergedPickupPoleColorOptions],
   )
   const pickupPaintedColorOptions = useMemo(() => {
-    if (config.bassType === 'vader') return []
+    if (config.bassType === 'vader' || config.bassType === 'jb') return []
     return pickupColorVariantOptions.filter(o => o.value === 'black' || o.value === 'white' || o.value === 'cream' || o.value === 'racing-green' || o.value === 'chrome' || o.value === 'gold')
   }, [config.bassType, pickupColorVariantOptions])
   const pickupWoodTypeOptions = useMemo(() => {
-    if (config.bassType === 'vader') return []
+    if (config.bassType === 'vader' || config.bassType === 'jb') return []
     return [
       { value: 'black', label: 'Black', note: 'Dark wood grain', price: 0 },
       { value: 'white', label: 'White', note: 'Light wood grain', price: 0 },
@@ -1325,7 +1453,7 @@ const mergedInlayMaterialOptions = useMemo(() => {
     ]
   }, [config.bassType])
   const controlsOptions = useMemo(
-    () => config.bassType === 'vader' ? [] : Object.entries(mergedControlsOptions).map(([value, option]) => ({ value, ...option })),
+    () => config.bassType === 'vader' || config.bassType === 'jb' ? [] : Object.entries(mergedControlsOptions).map(([value, option]) => ({ value, ...option })),
     [config.bassType, mergedControlsOptions],
   )
   const nutOptions = useMemo(
@@ -1406,6 +1534,13 @@ const mergedInlayMaterialOptions = useMemo(() => {
     middlePickupModel: mergedMiddlePickupModelOptions[config.middlePickupModel]?.price ?? 0,
     neckPickupModel: mergedNeckPickupModelOptions[config.neckPickupModel]?.price ?? 0,
     pickupColor: mergedPickupColorOptions[config.pickupColor]?.price ?? 0,
+    // PB/JB specific pickup model/color pricing
+    pbBridgePickupModel: config.bassType === 'pb' ? (BASS_PICKUP_MODEL_BRIDGE_OPTIONS.pb?.[config.pbBridgePickupModel]?.price ?? 0) : 0,
+    pbNeckPickupModel: config.bassType === 'pb' ? (BASS_PICKUP_MODEL_NECK_OPTIONS.pb?.[config.pbNeckPickupModel]?.price ?? 0) : 0,
+    pbPickupColor: config.bassType === 'pb' ? (BASS_PICKUP_COLOR_OPTIONS[config.pbPickupColor]?.price ?? 0) : 0,
+    jbBridgePickupModel: config.bassType === 'jb' ? (BASS_PICKUP_MODEL_BRIDGE_OPTIONS.jb?.[config.jbBridgePickupModel]?.price ?? 0) : 0,
+    jbNeckPickupModel: config.bassType === 'jb' ? (BASS_PICKUP_MODEL_NECK_OPTIONS.jb?.[config.jbNeckPickupModel]?.price ?? 0) : 0,
+    jbPickupColor: config.bassType === 'jb' ? (BASS_PICKUP_COLOR_OPTIONS[config.jbPickupColor]?.price ?? 0) : 0,
     pickupColorVariant: 0,
     pickupPoleColor: mergedPickupPoleColorOptions[config.pickupPoleColor]?.price ?? 0,
     controls: mergedControlsOptions[config.controls]?.price ?? 0,
@@ -1503,8 +1638,16 @@ const mergedInlayMaterialOptions = useMemo(() => {
       pickupWoodTypeOptions,
       pickupPoleColorOptions,
       controlsOptions,
+      //pbass
+      pbBridgePickupModelOptions,
+      pbNeckPickupModelOptions,
+      pbPickupColorOptions,
+      //jbass
+      jbBridgePickupModelOptions,
+      jbNeckPickupModelOptions,
+      jbPickupColorOptions,
       // Vader-specific pickup options
-      vaderBridgePickupOptions: Object.entries(VADER_PICKUP_OPTIONS)
+      vaderBridgePickupOptions: Object.entries(getCatalogOptions(['vaderBridgePickup']) || VADER_PICKUP_OPTIONS)
         .filter(([key]) => ['radiumHumbucker', 'radiumSingle', 'singleHbSweetSpot', 'hbAlnico', 'fishmanFluence'].includes(key))
         .map(([value, option]) => ({ value, ...option })),
       vaderNeckPickupOptions: (() => {
@@ -1518,24 +1661,24 @@ const mergedInlayMaterialOptions = useMemo(() => {
               : bridge === 'fishmanFluence'
                 ? ['fishmanFluence']
                 : []
-        return Object.entries(VADER_PICKUP_OPTIONS)
+        return Object.entries(getCatalogOptions(['vaderBridgePickup']) || VADER_PICKUP_OPTIONS)
           .filter(([key]) => allowed.includes(key))
           .map(([value, option]) => ({ value, ...option }))
       })(),
-      vaderPickupColorOptions: [
-        { value: 'none', label: 'None (Stock)', note: 'No color customization', price: 0 },
-        { value: 'custom', label: 'Custom RGB Color', note: 'Apply custom RGB color shift', price: 10 },
-      ],
+      vaderPickupColorOptions: Object.entries(getCatalogOptions(['vaderPickupColor']) || {
+        none: { label: 'None (Stock)', note: 'No color customization', price: 0 },
+        custom: { label: 'Custom RGB Color', note: 'Apply custom RGB color shift', price: 10 },
+      }).map(([value, option]) => ({ value, ...option })),
+      vaderKnobsOptions: Object.entries(getCatalogOptions(['vaderKnobs']) || {
+        hardwareColor: { label: 'Hardware Color Knobs', note: 'Knobs matched to hardware color', price: 0 },
+        abalone: { label: 'Metal Knobs w/ Abalone Inlays', note: 'Chrome knobs with abalone inlay', price: 0 },
+        pearl: { label: 'Metal Knobs w/ White Pearl Inlays', note: 'Chrome knobs with white pearl inlay', price: 0 },
+        tamarind: { label: 'Tamarind Wood', note: 'Warm wood-look knobs', price: 0 },
+      }).map(([value, option]) => ({ value, ...option })),
       // Vader-specific hardware options
       vaderHardwareOptions: [
         { value: 'chrome', label: 'Chrome', note: 'Standard bright hardware', price: 0 },
         { value: 'black', label: 'Black', note: 'Stealth hardware', price: 45 },
-      ],
-      vaderKnobsOptions: [
-        { value: 'hardwareColor', label: 'Hardware Color Knobs', note: 'Knobs matched to hardware color', price: 0 },
-        { value: 'abalone', label: 'Metal Knobs w/ Abalone Inlays', note: 'Chrome knobs with abalone inlay', price: 0 },
-        { value: 'pearl', label: 'Metal Knobs w/ White Pearl Inlays', note: 'Chrome knobs with white pearl inlay', price: 0 },
-        { value: 'tamarind', label: 'Tamarind Wood', note: 'Warm wood-look knobs', price: 0 },
       ],
       vaderStrapButtonOptions: Object.entries(VADER_STRAP_BUTTON_OPTIONS).map(([value, option]) => ({ value, ...option })),
       vaderElectronicsCavityCoverOptions: Object.entries(VADER_ELECTRONICS_CAVITY_COVER_OPTIONS).map(([value, option]) => ({ value, ...option })),

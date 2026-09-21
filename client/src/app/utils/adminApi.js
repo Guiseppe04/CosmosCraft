@@ -97,6 +97,8 @@ export const adminApi = {
     request('/api/builder-parts/import-models', { method: 'POST', body: { guitarType } }),
   seedCustomizeBuilderParts: (guitarType) =>
     request('/api/builder-parts/seed-customize-parts', { method: 'POST', body: { guitarType } }),
+  replaceCustomizeBuilderParts: (guitarType) =>
+    request('/api/builder-parts/replace-customize-parts', { method: 'POST', body: { guitarType } }),
 
   // Users / RBAC
   getUsers: (params = {}) => {

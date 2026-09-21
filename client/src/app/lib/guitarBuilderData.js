@@ -71,7 +71,7 @@ export const DEFAULT_CONFIG = {
   pickupColor: 'bobbins',
   pickupColorVariant: 'black',
   pickupPaintedColor: '#000000',
-  pickupWoodType: 'black',
+  pickupWoodType: 'ebony',
     pickupPoleColor: 'silver',
     controls: 'off',
   saddle: 'chrome',
@@ -407,7 +407,7 @@ export const HEADSTOCK_WOOD_OPTIONS = {
     texture: asset('all-models/woods-colors/headstock-woods/plain-maple.png'),
     price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
-  ash: {
+  'ash': {
     label: 'Ash',
     note: 'Warm ash headstock',
     texture: asset('all-models/woods-colors/headstock-woods/ash.png'),

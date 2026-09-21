@@ -1,6 +1,6 @@
-import { Search, Layers, List, Plus } from 'lucide-react'
+import { Search, Layers, List, Plus, RefreshCw } from 'lucide-react'
 
-export function GuitarPartsStickyHeader({ viewMode, setViewMode, density, setDensity, searchQuery, setSearchQuery, onAddPart, onClearFilters, partQuery }) {
+export function GuitarPartsStickyHeader({ viewMode, setViewMode, density, setDensity, searchQuery, setSearchQuery, onAddPart, onClearFilters, onMigrateCatalog, partQuery }) {
   return (
     <div className="sticky top-0 z-20 bg-[var(--bg-primary)]/95 backdrop-blur-md border-b border-[var(--border)] pb-4 mb-4">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
@@ -8,13 +8,22 @@ export function GuitarPartsStickyHeader({ viewMode, setViewMode, density, setDen
           <h3 className="text-white text-xl font-semibold">Guitar Parts (Builder Catalog)</h3>
           <p className="text-[var(--text-muted)] text-sm">Manage parts aligned with builder slots used in customization pages.</p>
         </div>
-        <button
-          onClick={onAddPart}
-          className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black rounded-xl font-semibold text-sm hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all"
-        >
-          <Plus className="w-4 h-4" />
-          Add Part
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => onMigrateCatalog?.('bass')}
+            className="flex items-center gap-2 px-3 py-2.5 border border-[var(--gold-primary)]/40 text-[var(--gold-primary)] rounded-xl font-semibold text-xs hover:bg-[var(--gold-primary)]/10 transition-all"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Migrate Bass
+          </button>
+          <button
+            onClick={onAddPart}
+            className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black rounded-xl font-semibold text-sm hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all"
+          >
+            <Plus className="w-4 h-4" />
+            Add Part
+          </button>
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-3">

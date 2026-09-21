@@ -787,7 +787,8 @@ const buildElectricCustomizeSeedPayloads = (catalogSource, module) => {
         metadata: {
           group: config.group,
           option_key: optionKey,
-          option_identity: `${config.group}:${optionKey}`,
+          option_identity: `${config.group}:${config.variant || ''}:${optionKey}`,
+          ...(config.variant ? { variant: config.variant } : {}),
         },
       });
     });
@@ -838,6 +839,18 @@ const buildElectricCustomizeSeedPayloads = (catalogSource, module) => {
   addFlatOptions(module.BEVEL_OPTIONS || {}, { label: 'Bevel', typeMapping: 'bevel', partCategory: 'misc', group: 'BEVEL_OPTIONS' });
   addFlatOptions(module.TOP_WOOD_OPTIONS || {}, { label: 'Top Wood', typeMapping: 'topWood', partCategory: 'misc', group: 'TOP_WOOD_OPTIONS' });
   addFlatOptions(module.FINISH_TYPE_OPTIONS || {}, { label: 'Finish Type', typeMapping: 'finishType', partCategory: 'misc', group: 'FINISH_TYPE_OPTIONS' });
+  const finishColorCatalog = {
+    metallic: ['black-magic-metallic', 'blue-mist-metallic', 'candy-red-metallic', 'gold', 'grape-jelly-metallic', 'green-to-purple-color-shift', 'gunmetal-gray-metallic', 'lambo-orange-metallic', 'metallic-peach'],
+    translucent: ['aqua', 'emerald-green', 'moss-green', 'orange', 'pink', 'purple', 'red', 'sapphire-blue', 'teal', 'tigers-eye', 'trans-black', 'wine'],
+    sparkle: ['aqua', 'emerald-green', 'orange', 'pink', 'purple', 'red', 'sapphire-blue', 'silver', 'teal', 'wine'],
+    fade: ['black-to-red', 'black-to-blue', 'black-to-green', 'white-to-black', 'red-to-yellow', 'blue-to-purple'],
+  };
+  Object.entries(finishColorCatalog).forEach(([variant, values]) => {
+    addFlatOptions(Object.fromEntries(values.map((value) => [value, {
+      label: value.replace(/-/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()),
+      price: variant === 'sparkle' ? 40 : variant === 'fade' ? 45 : 35,
+    }])), { label: `${variant} Finish Color`, typeMapping: 'finishColor', partCategory: 'finish', group: 'FINISH_COLOR_OPTIONS', variant });
+  });
   addFlatOptions(module.TOP_COAT_OPTIONS || {}, { label: 'Top Coat', typeMapping: 'topCoat', partCategory: 'misc', group: 'TOP_COAT_OPTIONS' });
   addFlatOptions(module.BURST_FINISH_OPTIONS || {}, { label: 'Burst Finish', typeMapping: 'burstFinish', partCategory: 'misc', group: 'BURST_FINISH_OPTIONS' });
   addFlatOptions(module.NECK_CONSTRUCTION_OPTIONS || {}, { label: 'Neck Construction', typeMapping: 'neckConstruction', partCategory: 'misc', group: 'NECK_CONSTRUCTION_OPTIONS' });
@@ -864,6 +877,15 @@ const buildElectricCustomizeSeedPayloads = (catalogSource, module) => {
   addFlatOptions(module.TUNER_BUTTON_OPTIONS || {}, { label: 'Tuner Buttons', typeMapping: 'tunerButtons', partCategory: 'misc', group: 'TUNER_BUTTON_OPTIONS' });
   addFlatOptions(module.ELECTRONICS_CAVITY_COVER_OPTIONS || {}, { label: 'Electronics Cavity Cover', typeMapping: 'electronicsCavityCover', partCategory: 'misc', group: 'ELECTRONICS_CAVITY_COVER_OPTIONS' });
   addFlatOptions(module.TREMOLO_COVER_OPTIONS || {}, { label: 'Tremolo Cover', typeMapping: 'tremoloCover', partCategory: 'misc', group: 'TREMOLO_COVER_OPTIONS' });
+  addFlatOptions({
+    black: { label: 'Black', price: 0 },
+    white: { label: 'White', price: 0 },
+    cream: { label: 'Cream', price: 0 },
+    'racing-green': { label: 'Racing Green', price: 0 },
+    'white-black': { label: 'White & Black', price: 0 },
+    'black-cream': { label: 'Black & Cream', price: 0 },
+    'racing-green-black': { label: 'Racing Green & Black', price: 0 },
+  }, { label: 'Pickup Color Variant', typeMapping: 'pickupColorVariant', partCategory: 'pickups', group: 'PICKUP_COLOR_VARIANT_OPTIONS' });
 
   addNestedOptions(PICKGUARD_OPTIONS_BY_BODY, {
     label: 'Pickguard',
@@ -878,6 +900,12 @@ const buildElectricCustomizeSeedPayloads = (catalogSource, module) => {
     partCategory: 'hardware',
     group: 'KNOB_OPTIONS_BY_BODY',
     allowedVariants: electricBodyKeys,
+  });
+  addNestedOptions(module.TREMOLO_COVER_OPTIONS_BY_BRIDGE || {}, {
+    label: 'Tremolo Cover',
+    typeMapping: 'tremoloCover',
+    partCategory: 'hardware',
+    group: 'TREMOLO_COVER_OPTIONS_BY_BRIDGE',
   });
 
   return payloads;
@@ -899,6 +927,33 @@ const buildBassCustomizeSeedPayloads = (catalogSource, module) => {
     BASS_PICKUP_CONFIG_OPTIONS,
     BASS_STRING_OPTIONS,
     BASS_CONTROL_PLATE_OPTIONS,
+    BASS_FINGERBOARD_RADIUS_OPTIONS,
+    BASS_FRET_OPTIONS,
+    DEXTERITY_OPTIONS,
+    MULTISCALE_OPTIONS,
+    SCALE_LENGTH_OPTIONS,
+    CASE_OPTIONS,
+    TOP_WOOD_OPTIONS,
+    FINISH_TYPE_OPTIONS,
+    TOP_COAT_OPTIONS,
+    BURST_FINISH_OPTIONS,
+    NECK_CONSTRUCTION_OPTIONS,
+    INLAY_SHAPE_OPTIONS,
+    INLAY_MATERIAL_OPTIONS,
+    NECK_REAR_FINISH_OPTIONS,
+    HEADSTOCK_SHAPE_OPTIONS,
+    TRUSS_ROD_COVER_OPTIONS,
+    ELECTRONICS_TYPE_OPTIONS,
+    PICKUP_CONFIGURATION_OPTIONS,
+    PICKUP_MODEL_BRIDGE_OPTIONS,
+    PICKUP_MODEL_MIDDLE_OPTIONS,
+    PICKUP_MODEL_NECK_OPTIONS,
+    PICKUP_COLOR_OPTIONS,
+    PICKUP_POLE_COLOR_OPTIONS,
+    CONTROLS_OPTIONS,
+    NUT_OPTIONS,
+    STRAP_BUTTON_OPTIONS,
+    TREMOLO_COVER_OPTIONS,
     BASS_BRIDGE_OPTIONS,
     BASS_PICKGUARD_OPTIONS,
     BASS_KNOB_OPTIONS,
@@ -943,7 +998,8 @@ const buildBassCustomizeSeedPayloads = (catalogSource, module) => {
         metadata: {
           group: config.group,
           option_key: optionKey,
-          option_identity: `${config.group}:${optionKey}`,
+          option_identity: `${config.group}:${config.variant || ''}:${optionKey}`,
+          ...(config.variant ? { variant: config.variant } : {}),
         },
       });
     });
@@ -986,6 +1042,62 @@ const buildBassCustomizeSeedPayloads = (catalogSource, module) => {
   addFlatOptions(BASS_PICKUP_CONFIG_OPTIONS, { label: 'Pickup Config', typeMapping: 'pickupConfig', partCategory: 'pickups', group: 'BASS_PICKUP_CONFIG_OPTIONS' });
   addFlatOptions(BASS_STRING_OPTIONS, { label: 'String Setup', typeMapping: 'strings', partCategory: 'strings', group: 'BASS_STRING_OPTIONS' });
   addFlatOptions(BASS_CONTROL_PLATE_OPTIONS, { label: 'Control Plate', typeMapping: 'controlPlate', partCategory: 'hardware', group: 'BASS_CONTROL_PLATE_OPTIONS' });
+  addFlatOptions(BASS_FINGERBOARD_RADIUS_OPTIONS, { label: 'Fingerboard Radius', typeMapping: 'fingerboardRadius', partCategory: 'fretboard', group: 'BASS_FINGERBOARD_RADIUS_OPTIONS' });
+  addFlatOptions(BASS_FRET_OPTIONS, { label: 'Frets', typeMapping: 'frets', partCategory: 'neck', group: 'BASS_FRET_OPTIONS' });
+  addFlatOptions(DEXTERITY_OPTIONS, { label: 'Dexterity', typeMapping: 'dexterity', partCategory: 'misc', group: 'DEXTERITY_OPTIONS' });
+  addFlatOptions(MULTISCALE_OPTIONS, { label: 'Multiscale', typeMapping: 'multiscale', partCategory: 'misc', group: 'MULTISCALE_OPTIONS' });
+  addFlatOptions(SCALE_LENGTH_OPTIONS, { label: 'Scale Length', typeMapping: 'scaleLength', partCategory: 'misc', group: 'SCALE_LENGTH_OPTIONS' });
+  addFlatOptions(CASE_OPTIONS, { label: 'Case', typeMapping: 'case', partCategory: 'misc', group: 'CASE_OPTIONS' });
+  addFlatOptions(TOP_WOOD_OPTIONS, { label: 'Top Wood', typeMapping: 'topWood', partCategory: 'misc', group: 'TOP_WOOD_OPTIONS' });
+  addFlatOptions(FINISH_TYPE_OPTIONS, { label: 'Finish Type', typeMapping: 'finishType', partCategory: 'misc', group: 'FINISH_TYPE_OPTIONS' });
+  const finishColorCatalog = {
+    metallic: ['black-magic-metallic', 'blue-mist-metallic', 'candy-red-metallic', 'gold', 'grape-jelly-metallic', 'green-to-purple-color-shift', 'gunmetal-gray-metallic', 'lambo-orange-metallic', 'metallic-peach'],
+    translucent: ['aqua', 'emerald-green', 'moss-green', 'orange', 'pink', 'purple', 'red', 'sapphire-blue', 'teal', 'tigers-eye', 'trans-black', 'wine'],
+    sparkle: ['aqua', 'emerald-green', 'orange', 'pink', 'purple', 'red', 'sapphire-blue', 'silver', 'teal', 'wine'],
+    fade: ['black-to-red', 'black-to-blue', 'black-to-green', 'white-to-black', 'red-to-yellow', 'blue-to-purple'],
+  };
+  Object.entries(finishColorCatalog).forEach(([variant, values]) => {
+    addFlatOptions(Object.fromEntries(values.map((value) => [value, {
+      label: value.replace(/-/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase()),
+      price: variant === 'sparkle' ? 40 : variant === 'fade' ? 45 : 35,
+    }])), { label: `${variant} Finish Color`, typeMapping: 'finishColor', partCategory: 'finish', group: 'FINISH_COLOR_OPTIONS', variant });
+  });
+  addFlatOptions(TOP_COAT_OPTIONS, { label: 'Top Coat', typeMapping: 'topCoat', partCategory: 'misc', group: 'TOP_COAT_OPTIONS' });
+  addFlatOptions(BURST_FINISH_OPTIONS, { label: 'Burst Finish', typeMapping: 'burstFinish', partCategory: 'misc', group: 'BURST_FINISH_OPTIONS' });
+  addFlatOptions(NECK_CONSTRUCTION_OPTIONS, { label: 'Neck Construction', typeMapping: 'neckConstruction', partCategory: 'misc', group: 'NECK_CONSTRUCTION_OPTIONS' });
+  addFlatOptions(INLAY_SHAPE_OPTIONS, { label: 'Inlay Shape', typeMapping: 'inlayShape', partCategory: 'misc', group: 'INLAY_SHAPE_OPTIONS' });
+  addFlatOptions(INLAY_MATERIAL_OPTIONS, { label: 'Inlay Material', typeMapping: 'inlayMaterial', partCategory: 'misc', group: 'INLAY_MATERIAL_OPTIONS' });
+  addFlatOptions(NECK_REAR_FINISH_OPTIONS, { label: 'Neck Rear Finish', typeMapping: 'neckRearFinish', partCategory: 'misc', group: 'NECK_REAR_FINISH_OPTIONS' });
+  addFlatOptions(HEADSTOCK_SHAPE_OPTIONS, { label: 'Headstock Shape', typeMapping: 'headstockShape', partCategory: 'misc', group: 'HEADSTOCK_SHAPE_OPTIONS' });
+  addFlatOptions(TRUSS_ROD_COVER_OPTIONS, { label: 'Truss Rod Cover', typeMapping: 'trussRodCover', partCategory: 'misc', group: 'TRUSS_ROD_COVER_OPTIONS' });
+  addFlatOptions(ELECTRONICS_TYPE_OPTIONS, { label: 'Electronics Type', typeMapping: 'electronicsType', partCategory: 'misc', group: 'ELECTRONICS_TYPE_OPTIONS' });
+  addFlatOptions(PICKUP_CONFIGURATION_OPTIONS, { label: 'Pickup Configuration', typeMapping: 'pickupConfiguration', partCategory: 'misc', group: 'PICKUP_CONFIGURATION_OPTIONS' });
+  addFlatOptions(PICKUP_MODEL_BRIDGE_OPTIONS, { label: 'Bridge Pickup Model', typeMapping: 'bridgePickupModel', partCategory: 'misc', group: 'PICKUP_MODEL_BRIDGE_OPTIONS' });
+  addFlatOptions(PICKUP_MODEL_MIDDLE_OPTIONS, { label: 'Middle Pickup Model', typeMapping: 'middlePickupModel', partCategory: 'misc', group: 'PICKUP_MODEL_MIDDLE_OPTIONS' });
+  addFlatOptions(PICKUP_MODEL_NECK_OPTIONS, { label: 'Neck Pickup Model', typeMapping: 'neckPickupModel', partCategory: 'misc', group: 'PICKUP_MODEL_NECK_OPTIONS' });
+  addFlatOptions(PICKUP_COLOR_OPTIONS, { label: 'Pickup Color', typeMapping: 'pickupColor', partCategory: 'misc', group: 'PICKUP_COLOR_OPTIONS' });
+  addFlatOptions(PICKUP_POLE_COLOR_OPTIONS, { label: 'Pickup Pole Color', typeMapping: 'pickupPoleColor', partCategory: 'misc', group: 'PICKUP_POLE_COLOR_OPTIONS' });
+  addFlatOptions(CONTROLS_OPTIONS, { label: 'Controls', typeMapping: 'controls', partCategory: 'misc', group: 'CONTROLS_OPTIONS' });
+  addFlatOptions(NUT_OPTIONS, { label: 'Nut', typeMapping: 'nut', partCategory: 'hardware', group: 'NUT_OPTIONS' });
+  addFlatOptions(STRAP_BUTTON_OPTIONS, { label: 'Strap Buttons', typeMapping: 'strapButtons', partCategory: 'hardware', group: 'STRAP_BUTTON_OPTIONS' });
+  addFlatOptions(TREMOLO_COVER_OPTIONS, { label: 'Tremolo Cover', typeMapping: 'tremoloCover', partCategory: 'hardware', group: 'TREMOLO_COVER_OPTIONS' });
+  addFlatOptions(module.BASS_TYPE_OPTIONS || {}, { label: 'Bass Model', typeMapping: 'body', partCategory: 'body', group: 'BASS_TYPE_OPTIONS' });
+  addFlatOptions(module.BASS_SCALE_LENGTH_OPTIONS || {}, { label: 'Scale Length', typeMapping: 'scaleLength', partCategory: 'misc', group: 'BASS_SCALE_LENGTH_OPTIONS' });
+  addFlatOptions(module.STRING_COUNT_OPTIONS || {}, { label: 'String Count', typeMapping: 'strings', partCategory: 'strings', group: 'STRING_COUNT_OPTIONS' });
+  addFlatOptions(module.VADER_PICKUP_OPTIONS || {}, { label: 'Vader Pickup', typeMapping: 'vaderBridgePickup', partCategory: 'pickups', group: 'VADER_PICKUP_OPTIONS' });
+  addFlatOptions(module.VADER_STRAP_BUTTON_OPTIONS || {}, { label: 'Vader Strap Buttons', typeMapping: 'vaderStrapButtons', partCategory: 'hardware', group: 'VADER_STRAP_BUTTON_OPTIONS' });
+  addFlatOptions(module.VADER_ELECTRONICS_CAVITY_COVER_OPTIONS || {}, { label: 'Vader Electronics Cavity Cover', typeMapping: 'vaderElectronicsCavityCover', partCategory: 'electronics', group: 'VADER_ELECTRONICS_CAVITY_COVER_OPTIONS' });
+  addFlatOptions({
+    none: { label: 'None (Stock)', price: 0 },
+    custom: { label: 'Custom RGB Color', price: 10 },
+  }, { label: 'Vader Pickup Color', typeMapping: 'vaderPickupColor', partCategory: 'pickups', group: 'VADER_PICKUP_COLOR_OPTIONS' });
+  addFlatOptions({
+    hardwareColor: { label: 'Hardware Color Knobs', price: 0 },
+    abalone: { label: 'Metal Knobs w/ Abalone Inlays', price: 0 },
+    pearl: { label: 'Metal Knobs w/ White Pearl Inlays', price: 0 },
+    tamarind: { label: 'Tamarind Wood', price: 0 },
+  }, { label: 'Vader Knobs', typeMapping: 'vaderKnobs', partCategory: 'hardware', group: 'VADER_KNOBS_OPTIONS' });
+  addFlatOptions(module.BASS_PICKUP_COLOR_OPTIONS || {}, { label: 'Bass Pickup Color', typeMapping: 'pickupColor', partCategory: 'pickups', group: 'BASS_PICKUP_COLOR_OPTIONS' });
 
   addNestedOptions(BASS_BRIDGE_OPTIONS, { label: 'Bridge', typeMapping: 'bridge', partCategory: 'bridge', group: 'BASS_BRIDGE_OPTIONS' });
   addNestedOptions(BASS_PICKGUARD_OPTIONS, { label: 'Pickguard', typeMapping: 'pickguard', partCategory: 'pickguard', group: 'BASS_PICKGUARD_OPTIONS' });
@@ -993,6 +1105,10 @@ const buildBassCustomizeSeedPayloads = (catalogSource, module) => {
   addNestedOptions(BASS_LOGO_OPTIONS, { label: 'Logo', typeMapping: 'logo', partCategory: 'misc', group: 'BASS_LOGO_OPTIONS' });
   addNestedOptions(BASS_BACKPLATE_OPTIONS, { label: 'Backplate', typeMapping: 'backplate', partCategory: 'misc', group: 'BASS_BACKPLATE_OPTIONS' });
   addNestedOptions(BASS_PICKUP_SCREW_OPTIONS, { label: 'Pickup Screws', typeMapping: 'pickupScrews', partCategory: 'hardware', group: 'BASS_PICKUP_SCREW_OPTIONS' });
+  addNestedOptions({ pb: module.BASS_PICKUP_MODEL_BRIDGE_OPTIONS?.pb || {} }, { label: 'PB Bridge Pickup Model', typeMapping: 'pbBridgePickupModel', partCategory: 'pickups', group: 'BASS_PICKUP_MODEL_BRIDGE_OPTIONS' });
+  addNestedOptions({ jb: module.BASS_PICKUP_MODEL_BRIDGE_OPTIONS?.jb || {} }, { label: 'JB Bridge Pickup Model', typeMapping: 'jbBridgePickupModel', partCategory: 'pickups', group: 'BASS_PICKUP_MODEL_BRIDGE_OPTIONS' });
+  addNestedOptions({ pb: module.BASS_PICKUP_MODEL_NECK_OPTIONS?.pb || {} }, { label: 'PB Neck Pickup Model', typeMapping: 'pbNeckPickupModel', partCategory: 'pickups', group: 'BASS_PICKUP_MODEL_NECK_OPTIONS' });
+  addNestedOptions({ jb: module.BASS_PICKUP_MODEL_NECK_OPTIONS?.jb || {} }, { label: 'JB Neck Pickup Model', typeMapping: 'jbNeckPickupModel', partCategory: 'pickups', group: 'BASS_PICKUP_MODEL_NECK_OPTIONS' });
 
   return payloads;
 };
@@ -1064,6 +1180,38 @@ exports.seedCustomizeParts = async ({ guitarType }) => {
     guitarType: normalizedType,
     source,
     seeded: stats,
+  };
+};
+
+exports.replaceCustomizeParts = async ({ guitarType }) => {
+  const { normalizedType, source, module } = await loadCustomizeCatalogModule(guitarType);
+  const payloads = normalizedType === 'electric'
+    ? buildElectricCustomizeSeedPayloads(source, module)
+    : buildBassCustomizeSeedPayloads(source, module);
+
+  const archivedRes = await pool.query(
+    `UPDATE guitar_builder_parts
+     SET is_active = false,
+         deleted_at = now(),
+         metadata = COALESCE(metadata, '{}'::jsonb) || jsonb_build_object('catalog_status', 'legacy_archived'),
+         updated_at = now()
+     WHERE guitar_type = $1
+     RETURNING part_id`,
+    [normalizedType]
+  );
+
+  let created = 0;
+  for (const payload of payloads) {
+    await exports.createPart(payload);
+    created += 1;
+  }
+
+  return {
+    guitarType: normalizedType,
+    source,
+    archived: archivedRes.rowCount || 0,
+    created,
+    total: payloads.length,
   };
 };
 

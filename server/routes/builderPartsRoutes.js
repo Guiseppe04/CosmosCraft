@@ -15,6 +15,7 @@ router.get('/:id', validateParams(uuidParamSchema), builderPartsController.getPa
 router.post('/', authenticateToken, authorize('staff', 'admin', 'super_admin'), validate(createBuilderPartSchema), builderPartsController.createPart);
 router.post('/import-models', authenticateToken, authorize('admin', 'super_admin'), validate(guitarTypeRequestSchema), builderPartsController.importPartsFromModels);
 router.post('/seed-customize-parts', authenticateToken, authorize('admin', 'super_admin'), validate(guitarTypeRequestSchema), builderPartsController.seedCustomizeParts);
+router.post('/replace-customize-parts', authenticateToken, authorize('admin', 'super_admin'), validate(guitarTypeRequestSchema), builderPartsController.replaceCustomizeParts);
 router.put('/model-images/:guitarType/:modelKey', authenticateToken, authorize('staff', 'admin', 'super_admin'), validateParams(guitarTypeParamSchema), validate(upsertModelImageSchema), builderPartsController.upsertModelImage);
 router.put('/:id', authenticateToken, authorize('staff', 'admin', 'super_admin'), validateParams(uuidParamSchema), validate(updateBuilderPartSchema), builderPartsController.updatePart);
 router.delete('/:id', authenticateToken, authorize('staff', 'admin', 'super_admin'), validateParams(uuidParamSchema), builderPartsController.deletePart);

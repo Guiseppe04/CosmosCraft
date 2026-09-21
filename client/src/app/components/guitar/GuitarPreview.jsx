@@ -276,7 +276,7 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
     const pickupColorType = isActive ? 'painted' : (config.pickupColor || 'bobbins')
     const pickupColorVariant = config.pickupColorVariant || 'black'
     const paintedColor = config.pickupPaintedColor || '#000000'
-    const woodType = config.pickupWoodType || 'black'
+    const woodType = config.pickupWoodType || fretboardWoodKey
     const poleColor = config.pickupPoleColor || 'silver'
     const bridgeModel = isActive ? 'fluence' : (config.bridgePickupModel || 'vantium')
     const middleModel = config.middlePickupModel || 'none'
@@ -358,8 +358,8 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
         return { backgroundColor: paintedColor }
       }
       if (pickupColorType === 'wooden') {
-        const woodTexture = resolveBodyWoodAsset('electric', config.body || 'dc', woodType)
-        return { backgroundImage: `url(${woodTexture})` }
+        const woodTexture = resolveFingerboardWoodAsset('electric', config.body || 'dc', woodType)
+        return { backgroundImage: `url(${woodTexture})`, backgroundSize: 'cover', backgroundPosition: 'center' }
       }
       return {}
     }
@@ -960,10 +960,10 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
                     {tremoloCoverAsset && (
                       <GuitarLayer maskSrc={rearBodyMask} style={{ backgroundImage: `url(${tremoloCoverAsset})`, zIndex: 134, backgroundRepeat: 'no-repeat', backgroundPosition: 'center', backgroundSize: 'contain', transform: 'scaleX(-1)' }} layerName="tremolo-cover" protectedLayer />
                     )}
-                    {cavityCoverAsset && (
+                    {config.body !== 'delos' && cavityCoverAsset && (
                       <GuitarLayer maskSrc={rearBodyMask} style={{ backgroundImage: `url(${cavityCoverAsset})`, zIndex: 135, backgroundRepeat: 'no-repeat', backgroundPosition: 'center', backgroundSize: 'contain', transform: 'scaleX(-1)' }} layerName="electronics-cavity-cover" protectedLayer />
                     )}
-                    {cavityScrewsAsset && (
+                    {config.body !== 'delos' && cavityScrewsAsset && (
                       <GuitarLayer maskSrc={rearBodyMask} style={{ backgroundImage: `url(${cavityScrewsAsset})`, zIndex: 136, backgroundRepeat: 'no-repeat', backgroundPosition: 'center', backgroundSize: 'contain', transform: 'scaleX(-1)' }} layerName="cavity-screws" protectedLayer />
                     )}
                     {batteryCompartmentAsset && (

@@ -1025,11 +1025,37 @@ export function AdminPage() {
   }
 
   const handleQuickAddPart = (guitarType, category) => {
-    openModal('part', { guitar_type: guitarType, part_category: category })
+    openModal('part', {
+      guitar_type: guitarType,
+      type_mapping: category,
+      part_category: SLOT_TO_PART_CATEGORY[category] || 'misc',
+      builder_category: getBuilderCategoryForTypeMapping(category),
+    })
+  }
+
+  const migrateCurrentCatalog = async (guitarType) => {
+    const label = guitarType === 'bass' ? 'Bass' : 'Electric'
+    if (!window.confirm(`Sync the current ${label} Customization catalog into Guitar Parts without deleting the other guitar type's catalog?`)) return
+    try {
+      const result = await adminApi.seedCustomizeBuilderParts(guitarType)
+      setPartQuery((prev) => ({
+        ...prev,
+        guitar_type: guitarType,
+        is_active: 'true',
+        page: 1,
+      }))
+      const seeded = result.data?.seeded || {}
+      const created = seeded.created || 0
+      const updated = seeded.updated || 0
+      showToast(`${label} catalog synced: ${created} new, ${updated} updated.`)
+      await fetchParts()
+    } catch (error) {
+      showToast(error.message, 'error')
+    }
   }
 
   const clearPartFilters = () => {
-    setPartQuery({ page: 1, pageSize: partQuery.pageSize, sortBy: 'created_at', sortDir: 'desc', guitar_type: '', part_category: '', is_active: '', min_price: '', max_price: '' })
+    setPartQuery({ page: 1, pageSize: partQuery.pageSize, sortBy: 'created_at', sortDir: 'desc', guitar_type: '', part_category: '', is_active: 'true', min_price: '', max_price: '' })
     setPartSearchQuery('')
   }
 
@@ -1095,6 +1121,7 @@ export function AdminPage() {
         price: Number(form.price ?? 0) || 0,
         metadata: {
           ...(form.metadata && typeof form.metadata === 'object' ? form.metadata : {}),
+          ...(form.metadata?.option_key?.trim() ? { option_key: form.metadata.option_key.trim() } : {}),
           inventory_category:
             normalizeInventoryPartCategory(form.inventory_category) ||
             deriveInventoryPartCategory(form),
@@ -2291,6 +2318,7 @@ export function AdminPage() {
               setPartSearchQuery={setPartSearchQuery}
               openModal={openModal}
               clearPartFilters={clearPartFilters}
+              migrateCatalog={migrateCurrentCatalog}
               partQuery={partQuery}
               partsLoading={partsLoading}
               sortedFilteredParts={sortedFilteredParts}

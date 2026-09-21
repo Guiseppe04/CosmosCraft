@@ -24,8 +24,8 @@ const layerStyle = (src, extra = {}) => {
   return {
     backgroundImage: `url(${src})`,
     backgroundRepeat: 'no-repeat',
-    backgroundPosition: 'center',
-    backgroundSize: 'contain',
+    backgroundPosition: extra.backgroundPosition || 'center',
+    backgroundSize: extra.backgroundSize || 'contain',
     ...extra,
   }
 }
@@ -35,8 +35,8 @@ const maskedLayerStyle = (maskSrc, extra = {}) => {
   return {
     backgroundColor: 'transparent',
     backgroundRepeat: 'no-repeat',
-    backgroundPosition: 'center',
-    backgroundSize: 'contain',
+    backgroundPosition: extra.backgroundPosition || 'center',
+    backgroundSize: extra.backgroundSize || 'contain',
     WebkitMaskImage: `url(${maskSrc})`,
     maskImage: `url(${maskSrc})`,
     WebkitMaskMode: 'alpha',
@@ -172,10 +172,11 @@ const resolvePbPickupLayers = (resolvedConfig) => {
   const neckKey = resolvedConfig.pbNeckPickupModel || 'scpSplitCoil'
   const colorMode = resolvedConfig.pbPickupColor || 'black'
   const rgbColor = resolvedConfig.pbPickupColorRgb || '#000000'
+  const colorToken = colorMode === 'custom' ? 'black' : colorMode
   const layers = []
 
   if (bridgeKey === 'jvaSingleCoil') {
-    const bridgeSrc = bassAsset(`bass/${resolvedConfig.bassType}/front/pickups/4/bridge-black.png`)
+    const bridgeSrc = bassAsset(`bass/${resolvedConfig.bassType}/front/pickups/4/bridge-${colorToken}.png`)
     layers.push({
       name: 'pickup-bridge',
       src: bridgeSrc,
@@ -215,35 +216,39 @@ const resolvePbPickupLayers = (resolvedConfig) => {
 
 const resolveJbPickupLayers = (resolvedConfig) => {
   const colorMode = resolvedConfig.jbPickupColor || 'black'
-  const rgbColor  = resolvedConfig.jbPickupColorRgb || '#000000'
+  const rgbColor = resolvedConfig.jbPickupColorRgb || '#000000'
   const colorToken = colorMode === 'custom' ? 'black' : colorMode
   const layers = []
 
+  // Bridge: JVA Single Coil and H50A Humbucker both use the JB J-style art.
+  const bridgeSrc = bassAsset(`bass/jb/front/pickups/4/j/bridge-${colorToken}.png`)
   layers.push({
     name: 'pickup-bridge',
-    src: bassAsset(`bass/jb/front/pickups/4/j/bridge-${colorToken}.png`),
+    src: bridgeSrc,
     style: { zIndex: 121 },
     protectedLayer: true,
   })
   if (colorMode === 'custom') {
     layers.push({
       name: 'pickup-bridge-color',
-      maskSrc: bassAsset('all-models/pickups/bass/j/4/bridge-mask.png'),
+      maskSrc: bridgeSrc,
       style: { zIndex: 122, backgroundColor: rgbColor, mixBlendMode: 'color' },
       protectedLayer: true,
     })
   }
 
+  // Neck: JVA Single Coil and H50A Humbucker both use the shared J neck art.
+  const neckSrc = bassAsset(`all-models/pickups/bass/j/4/neck-${colorToken}.png`)
   layers.push({
     name: 'pickup-neck',
-    src: bassAsset(`all-models/pickups/bass/j/4/neck-${colorToken}.png`),
+    src: neckSrc,
     style: { zIndex: 123 },
     protectedLayer: true,
   })
   if (colorMode === 'custom') {
     layers.push({
       name: 'pickup-neck-color',
-      maskSrc: bassAsset('bass/jb/front/pickups/4/j/neck-mask.png'),
+      maskSrc: neckSrc,
       style: { zIndex: 124, backgroundColor: rgbColor, mixBlendMode: 'color' },
       protectedLayer: true,
     })
@@ -293,17 +298,12 @@ const resolvePickupLayers = (resolvedConfig) => {
 const resolveHeadstockStyleForStrings = (headstockStyle, strings = '4') => {
   const rawStyle = String(headstockStyle || 'ch').trim().toLowerCase()
   const styleAliases = {
-    classic: 'ch',
-    standard: 'ch',
     'classic-headstock': 'ch',
     'classic reverse': 'chr',
     'classic-reverse': 'chr',
-    classicreverse: 'chr',
     'gt-4': 'gt4',
     'gt-4r': 'gt4r',
     'gt4-reverse': 'gt4r',
-    gt4reverse: 'gt4r',
-    hl: 'headless',
   }
   
   const style = styleAliases[rawStyle] || rawStyle
@@ -402,6 +402,8 @@ const resolved = {
       pbPickupColorRgb: config.pbPickupColorRgb ?? '#000000',
       jbPickupColor: config.jbPickupColor ?? 'black',
       jbPickupColorRgb: config.jbPickupColorRgb ?? '#000000',
+      jbBridgePickupModel: config.jbBridgePickupModel ?? 'jvaSingleCoil',
+      jbNeckPickupModel: config.jbNeckPickupModel ?? 'jvaSingleCoil',
      }
      if (DEBUG) console.log('[RESOLVED CONFIG]', resolved)
      return resolved
@@ -559,7 +561,9 @@ const resolved = {
     // CONCATENATING the shape code and mask token — e.g. "id/idwhite-pearl.png",
     // "idia/idiawhite-pearl.png".
     const inlayMaskColorToken = (resolvedConfig.bassType === 'vader' || resolvedConfig.bassType === 'jb') ? 'white-pearl' : 'white'
-    const inlayMaskFileStem = `${inlayShapeFolder}${inlayMaskColorToken}`
+    const inlayMaskFileStem = (resolvedConfig.bassType === 'vader' || resolvedConfig.bassType === 'jb')
+      ? `${inlayShapeFolder}${inlayMaskColorToken}`
+      : inlayMaskColorToken
 
     const inlayMaskSrc = bassBuilder.resolveSharedAsset('necks/bass', {
       strings: resolvedConfig.strings,
@@ -820,14 +824,25 @@ const resolved = {
         overlaySrc,
       }
     }
-    if (resolvedConfig.bassType === 'jb') {
-      const jbKnobs = bassBuilder.KNOB_OPTIONS.jb
-      const knobKey = resolvedConfig.knobs === 'hardwareColor'
-        ? (jbKnobs[resolvedConfig.hardware] ? resolvedConfig.hardware : 'chrome')
-        : resolvedConfig.knobs
-      resolvedAssets.knobs = jbKnobs[knobKey]
-        || { src: bassAsset(`bass/jb/front/knobs/${resolvedConfig.hardware}.png`) }
+if (resolvedConfig.bassType === 'jb') {
+  const jbKnobs = bassBuilder.KNOB_OPTIONS.jb
+  const isInlayKnob = resolvedConfig.knobs === 'pearl' || resolvedConfig.knobs === 'abalone'
+
+  if (isInlayKnob) {
+    // Base knob follows the selected hardware color; the inlay sits on top.
+    resolvedAssets.knobs = {
+      ...jbKnobs[resolvedConfig.knobs],
+      src: bassAsset(`bass/jb/front/knobs/${resolvedConfig.hardware}.png`),
+      overlaySrc: jbKnobs[resolvedConfig.knobs]?.src,
     }
+  } else {
+    const knobKey = resolvedConfig.knobs === 'hardwareColor'
+      ? (jbKnobs[resolvedConfig.hardware] ? resolvedConfig.hardware : 'chrome')
+      : resolvedConfig.knobs
+    resolvedAssets.knobs = jbKnobs[knobKey]
+      || { src: bassAsset(`bass/jb/front/knobs/${resolvedConfig.hardware}.png`) }
+  }
+}
     if (resolvedConfig.bassType === 'vader') {
       const vaderKnobEntry = BASS_KNOB_OPTIONS.vader[resolvedConfig.vaderKnobs]
       if (vaderKnobEntry) resolvedAssets.knobs = vaderKnobEntry
@@ -860,9 +875,21 @@ const resolved = {
     const layers = []
     const bodyMask = assets.bodyMask || assets.bodyModel?.bodySrc
 
-    if (assets.bodyModel?.bodySrc) {
-      layers.push({ name: 'body-wood', maskSrc: bodyMask, style: { backgroundImage: assets.bodyWood?.texture ? `url(${assets.bodyWood.texture})` : undefined, opacity: 1, mixBlendMode: 'normal', zIndex: 1 } })
-    }
+    // body-wood layer
+if (assets.bodyModel?.bodySrc) {
+  layers.push({
+    name: 'body-wood',
+    maskSrc: bodyMask,
+    style: {
+      backgroundImage: assets.bodyWood?.texture ? `url(${assets.bodyWood.texture})` : undefined,
+      backgroundSize: assets.bodyWood?.bgSize || 'cover',      // 'cover' zooms to fill instead of letterboxing
+      backgroundPosition: assets.bodyWood?.bgPosition || 'center',
+      opacity: 1,
+      mixBlendMode: 'normal',
+      zIndex: 1,
+    },
+  })
+}
     if (resolvedConfig.threePieceBody === 'on') {
       const threePieceMask = bassAsset(`bass/${resolvedConfig.bassType}/front/masks/three-piece-body-mask.png`)
       if (threePieceMask) {
@@ -957,9 +984,12 @@ const resolved = {
         layers.push({ name: 'knobs-active-overlay', src: assets.knobs.overlaySrc, style: { zIndex: 125 }, protectedLayer: true })
       }
     }
-    if (resolvedConfig.bassType === 'jb' && assets.knobs?.src) {
-      layers.push({ name: 'knobs', src: assets.knobs.src, style: { zIndex: 124 }, protectedLayer: true })
-    }
+if (resolvedConfig.bassType === 'jb' && assets.knobs?.src) {
+  layers.push({ name: 'knobs', src: assets.knobs.src, style: { zIndex: 124 }, protectedLayer: true })
+  if (assets.knobs.overlaySrc) {
+    layers.push({ name: 'knobs-overlay', src: assets.knobs.overlaySrc, style: { zIndex: 125 }, protectedLayer: true })
+  }
+}
         if (resolvedConfig.bassType === 'vader' && assets.knobs) {
       const knobType = assets.knobs.type
       if (knobType === 'hardwareColor' && assets.knobs.src) {
@@ -1053,7 +1083,8 @@ const resolved = {
     resolvedConfig.vaderStrapButtons, resolvedConfig.hardware, resolvedConfig.strapButtons,
     resolvedConfig.frets, resolvedConfig.nut,
     resolvedConfig.knobs, resolvedConfig.pbBridgePickupModel, resolvedConfig.electronicsType,
-    resolvedConfig.jbPickupColor, resolvedConfig.jbPickupColorRgb])
+    resolvedConfig.jbPickupColor, resolvedConfig.jbPickupColorRgb,
+    resolvedConfig.jbBridgePickupModel, resolvedConfig.jbNeckPickupModel])
 
   const rearLayers = useMemo(() => {
     const layers = []

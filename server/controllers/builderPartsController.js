@@ -99,6 +99,18 @@ exports.seedCustomizeParts = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+exports.replaceCustomizeParts = async (req, res, next) => {
+  try {
+    const guitarType = String(req.body?.guitarType || '').trim().toLowerCase();
+    const result = await builderPartsService.replaceCustomizeParts({ guitarType });
+    res.json({
+      status: 'success',
+      message: `Replaced ${guitarType} catalog with current customization options`,
+      data: result,
+    });
+  } catch (err) { next(err); }
+};
+
 exports.listBuilderAssets = async (req, res, next) => {
   try {
     const assets = await builderPartsService.listBuilderAssets(req.query);

@@ -186,6 +186,19 @@ export function PartModal({
                   'Slots follow CustomizePage field names to keep admin parts aligned with builder logic.',
                 )}
               </div>
+              <div>
+                <label className={labelCls}>Customization Option Key</label>
+                <input
+                  value={form.metadata?.option_key || ''}
+                  onChange={(e) => setForm((f) => ({
+                    ...f,
+                    metadata: { ...(f.metadata || {}), option_key: e.target.value },
+                  }))}
+                  placeholder="e.g. mahogany or stainlessRegular"
+                  className={partFieldOk}
+                />
+                {partHint('Matches the option value used by the customization page. Required for a new choice; seeded choices already have this value.')}
+              </div>
             </div>
           </div>
           <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]/60 p-4 sm:p-5">
