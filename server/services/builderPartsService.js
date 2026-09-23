@@ -1507,6 +1507,15 @@ exports.deletePart = async (id) => {
   return res.rows[0] || null;
 };
 
+exports.hardDeletePart = async (id) => {
+  // Permanent delete — cannot be undone
+  const res = await pool.query(
+    `DELETE FROM guitar_builder_parts WHERE part_id = $1 RETURNING *`,
+    [id]
+  );
+  return res.rows[0] || null;
+};
+
 exports.importPartsFromModelFolder = async ({ guitarType }) => {
   const normalizedType = normalizeKey(guitarType);
   const importConfig = IMPORT_CONFIG[normalizedType];

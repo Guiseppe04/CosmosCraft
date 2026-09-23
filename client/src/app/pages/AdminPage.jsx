@@ -824,27 +824,28 @@ export function AdminPage() {
      }
 
 
-     if (type === 'part') {
-       const normalizedPart = normalizeBuilderPart(initialForm)
-       initialForm = {
-         guitar_type: 'electric',
-         part_category: '',
-         type_mapping: '',
-         builder_category: '',
-         inventory_category: '',
-         stock: 0,
-         price: 0,
-         is_active: true,
-         ...normalizedPart,
-       }
-       initialForm.builder_category =
-         initialForm.builder_category || getBuilderCategoryForTypeMapping(initialForm.type_mapping)
-       initialForm.part_category =
-         initialForm.part_category || SLOT_TO_PART_CATEGORY[initialForm.type_mapping] || ''
-       initialForm.inventory_category =
-         normalizeInventoryPartCategory(initialForm.inventory_category) ||
-         deriveInventoryPartCategory(initialForm)
-     }
+      if (type === 'part') {
+        const normalizedPart = normalizeBuilderPart(initialForm)
+        initialForm = {
+          guitar_type: 'electric',
+          part_category: '',
+          type_mapping: '',
+          builder_category: '',
+          inventory_category: '',
+          stock: 0,
+          price: 0,
+          is_active: true,
+          ...normalizedPart,
+        }
+        initialForm.builder_category =
+          initialForm.builder_category || getBuilderCategoryForTypeMapping(initialForm.type_mapping)
+        initialForm.part_category =
+          initialForm.part_category || SLOT_TO_PART_CATEGORY[initialForm.type_mapping] || ''
+        initialForm.inventory_category =
+          normalizeInventoryPartCategory(initialForm.inventory_category) ||
+          deriveInventoryPartCategory(initialForm)
+        initialForm.option_key = initialForm.metadata?.option_key || initialForm.option_key || ''  // ← add this line
+      }
 
      setForm(initialForm)
      setFormErrors({})
@@ -1055,7 +1056,7 @@ export function AdminPage() {
   }
 
   const clearPartFilters = () => {
-    setPartQuery({ page: 1, pageSize: partQuery.pageSize, sortBy: 'created_at', sortDir: 'desc', guitar_type: '', part_category: '', is_active: 'true', min_price: '', max_price: '' })
+    setPartQuery({ page: 1, pageSize: partQuery.pageSize, sortBy: 'created_at', sortDir: 'desc', guitar_type: '', part_category: '', is_active: '', min_price: '', max_price: '' })
     setPartSearchQuery('')
   }
 
@@ -1144,17 +1145,35 @@ export function AdminPage() {
     finally { setIsSaving(false) }
   }
 
-  const deletePart = (id, name) => {
-    openConfirm({
-      title: 'Deactivate Builder Part?',
-      description: `"${name}" will be removed from the guitar configurator. Existing customizations using it will not be affected.`,
-      variant: 'warning',
-      onConfirm: async () => {
-        await adminApi.deleteBuilderPart(id)
-        showToast('Builder Part deactivated')
-        fetchParts()
-      },
-    })
+  const deletePart = (id, name, isActive = true) => {
+    if (isActive) {
+      openConfirm({
+        title: 'Deactivate Builder Part?',
+        description: `"${name}" will be removed from the guitar configurator. Existing customizations using it will not be affected.`,
+        variant: 'warning',
+        onConfirm: async () => {
+          await adminApi.deleteBuilderPart(id)
+          showToast('Builder Part deactivated')
+          fetchParts()
+        },
+      })
+    } else {
+      openConfirm({
+        title: 'Permanently Delete Part?',
+        description: `"${name}" will be permanently deleted and cannot be recovered.`,
+        confirmLabel: 'Delete Permanently',
+        variant: 'danger',
+        onConfirm: async () => {
+          try {
+            await adminApi.deleteBuilderPart(id, { permanent: true })
+            showToast('Builder Part permanently deleted')
+            fetchParts()
+          } catch (e) {
+            showToast(e.message || 'Failed to permanently delete part', 'error')
+          }
+        },
+      })
+    }
   }
 
   // ── Image Upload ─────────────────────────────────────────────────────────

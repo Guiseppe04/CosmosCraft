@@ -33,6 +33,7 @@ export const PART_RULES = {
   name: [required('Name')],
   type_mapping: [required('Type Mapping')],
   inventory_category: [required('Category')],
+  option_key: [required('Customization Option Key')],
 }
 
 export const PROJECT_RULES = {

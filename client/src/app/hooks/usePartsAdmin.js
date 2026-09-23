@@ -9,7 +9,7 @@ const DEFAULT_PART_QUERY = {
   sortDir: 'desc',
   guitar_type: '',
   part_category: '',
-  is_active: 'true',
+  is_active: '',
   min_price: '',
   max_price: '',
 }

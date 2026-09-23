@@ -98,10 +98,13 @@ function stringsOverlayStyle() {
   }
 }
 
-function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverlay = null, stickerMaskSrc = null, stageRef = null }) {
+function GuitarPreview({ config, view, onViewChange, modelImageSrc, bodyWoodImageSrc = null, topWoodImageSrc = null, stickerOverlay = null, stickerMaskSrc = null, stageRef = null }) {
   const model = guitarBuilder.BODY_OPTIONS[config.body] ?? guitarBuilder.BODY_OPTIONS.strat
   const modelBodySrc = modelImageSrc || model.bodySrc
-  const bodyWood = guitarBuilder.BODY_WOOD_OPTIONS[config.bodyWood] ?? guitarBuilder.BODY_WOOD_OPTIONS.mah
+  const bodyWood = {
+    ...(guitarBuilder.BODY_WOOD_OPTIONS[config.bodyWood] ?? guitarBuilder.BODY_WOOD_OPTIONS.mah),
+    ...(bodyWoodImageSrc ? { texture: bodyWoodImageSrc } : {}),
+  }
   
   // Handle both predefined finishes and custom hex colors
   const isCustomColor = config.bodyFinish && typeof config.bodyFinish === 'string' && config.bodyFinish.startsWith('#')
@@ -118,7 +121,7 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
   const fretboard = { ...fretboardStatic, src: resolveFingerboardWoodAsset('electric', config.body || 'dc', fretboardWoodKey) || fretboardStatic.src }
   const headstock = guitarBuilder.HEADSTOCK_OPTIONS[config.headstock] ?? guitarBuilder.HEADSTOCK_OPTIONS.gt6
   const topWoodOption = guitarBuilder.TOP_WOOD_OPTIONS[config.topWood] || null
-  const topWoodTexture = topWoodOption?.texture || (config.topWood && config.topWood !== 'none' ? resolveTopWoodAsset('electric', config.body || 'dc', config.topWood) : null)
+  const topWoodTexture = topWoodImageSrc || topWoodOption?.texture || (config.topWood && config.topWood !== 'none' ? resolveTopWoodAsset('electric', config.body || 'dc', config.topWood) : null)
   const isHeadstockWoodOverride = config.headstockWood && config.headstockWood !== 'none'
   const headstockWoodKey = config.topWood && config.topWood !== 'none'
     ? config.topWood
@@ -127,7 +130,7 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
     ? (guitarBuilder.HEADSTOCK_WOOD_OPTIONS[config.headstockWood] ?? guitarBuilder.HEADSTOCK_WOOD_OPTIONS['plain-maple'])
     : guitarBuilder.HEADSTOCK_WOOD_OPTIONS['plain-maple']
   const headstockTexture = config.topWood && config.topWood !== 'none'
-    ? (topWoodOption?.texture || resolveTopWoodAsset('electric', config.body || 'dc', headstockWoodKey))
+    ? (topWoodImageSrc || topWoodOption?.texture || resolveTopWoodAsset('electric', config.body || 'dc', headstockWoodKey))
     : isHeadstockWoodOverride
       ? resolveHeadstockWoodAsset('electric', config.body || 'dc', config.headstockWood)
       : (neck.src || resolveNeckWoodAsset('electric', config.body || 'dc', neckWoodKey))
@@ -164,8 +167,10 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
   const knobHardwareBase = isMetalKnob
     ? resolveKnobHardwareBase('electric', config.body || 'dc', `${hardware.color}${knobControlsSuffix}`)
     : null
-  const knobStyleOverlay = isMetalKnob && knobStyle
-    ? resolveKnobStyleOverlay('electric', config.body || 'dc', `${knobStyle.fileKey}${knobControlsSuffix}`)
+  const knobStyleOverlay = isMetalKnob
+    ? (knobStyle?.fileKey
+        ? resolveKnobStyleOverlay('electric', config.body || 'dc', `${knobStyle.fileKey}${knobControlsSuffix}`)
+        : null)
     : (config.body === 'delos'
         ? resolveKnobAsset('electric', config.body || 'delos', `${config.knobs}${knobControlsSuffix}`)
         : (guitarBuilder.KNOB_OPTIONS_BY_BODY[config.body]?.[config.knobs]?.src ?? null))
@@ -487,6 +492,46 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
 
   const overlayLayers = useMemo(() => {
     const layers = []
+    if (config.body === 'delos') {
+      const isTungOil = config.topCoat === 'tungOil'
+      const isMatte = config.topCoat === 'satinMatte'
+      const useRbd = config.bevel === 'on' && !isTungOil
+      const overlaySrc = isTungOil
+        ? bodyAssets.op
+        : isMatte
+          ? (useRbd ? bodyAssets.matteRbd : bodyAssets.matte)
+          : (useRbd ? bodyAssets.glossRbd : bodyAssets.gloss)
+
+      if (overlaySrc) {
+        layers.push({
+          name: 'delos-body-finish-overlay',
+          src: overlaySrc,
+          style: { opacity: 1, mixBlendMode: isTungOil ? 'multiply' : 'screen', zIndex: 202 },
+        })
+      }
+      return layers
+    }
+
+    if (config.body === 'dc') {
+      const finishOverlay = config.topCoat === 'tungOil'
+        ? bodyAssets.op
+        : config.topCoat === 'satinMatte'
+          ? bodyAssets.matte
+          : bodyAssets.gloss
+
+      if (config.bevel === 'on') {
+        if (finishOverlay) {
+          layers.push({ name: 'dc-body-finish-overlay', src: finishOverlay, style: { opacity: 1, mixBlendMode: 'screen', zIndex: 201 } })
+        }
+        if (bodyAssets.shadows) {
+          layers.push({ name: 'dc-body-edge-shadow', src: bodyAssets.shadows, style: { opacity: 1, mixBlendMode: 'multiply', zIndex: 200 } })
+        }
+      } else if (bodyAssets.shadows) {
+        layers.push({ name: 'dc-body-edge-shadow', src: bodyAssets.shadows, style: { opacity: 1, mixBlendMode: 'multiply', zIndex: 200 } })
+      }
+      return layers
+    }
+
     if (config.bevel === 'on') {
       if (bodyAssets.gloss) {
         layers.push({ name: 'body-gloss', src: bodyAssets.gloss, style: { opacity: 1, mixBlendMode: 'screen', zIndex: 202 } })
@@ -497,7 +542,7 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
       }
     }
     return layers
-  }, [bodyAssets, config.bevel])
+  }, [bodyAssets, config.bevel, config.body, config.topCoat])
 
   const frontNeckLayers = useMemo(() => {
     const burstOption = guitarBuilder.BURST_FINISH_OPTIONS[config.burstFinish]

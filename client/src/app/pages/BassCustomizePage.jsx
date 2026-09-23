@@ -2342,6 +2342,8 @@ export function BassCustomizePage() {
                     view={view}
                     onViewChange={setView}
                     modelImageSrc={selectedBassModel?.previewImageUrl || selectedBassModel?.bodySrc || null}
+                    bodyWoodImageSrc={options.bodyWoodOptions?.find((option) => option.value === config.bodyWood)?.preview || null}
+                    topWoodImageSrc={options.topWoodOptions?.find((option) => option.value === config.topWood)?.preview || null}
                     stickerOverlay={currentStickerOverlay}
                     stickerMaskSrc={selectedBassModel?.bodySrc || null}
                     stageRef={previewStageRef}

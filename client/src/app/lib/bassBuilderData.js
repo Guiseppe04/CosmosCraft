@@ -3,7 +3,10 @@
 const CLOUD_NAME = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_CLOUDINARY_CLOUD_NAME) ? import.meta.env.VITE_CLOUDINARY_CLOUD_NAME : ''
 const USE_CLOUDINARY = Boolean(CLOUD_NAME)
 
+const isNoneAssetPath = (value) => /(?:^|\/)none(?:\.png)?$/i.test(String(value || '').replace(/^\/+/, ''))
+
 export const cloudImage = (root, path) => {
+  if (isNoneAssetPath(path)) return null
   if (!USE_CLOUDINARY) {
     return `/builder/${String(path || '').replace(/^\/+/, '')}`
   }
@@ -12,6 +15,7 @@ export const cloudImage = (root, path) => {
 
 export const bassAsset = (path) => {
   const cleanPath = String(path || '').replace(/^\/+/, '')
+  if (isNoneAssetPath(cleanPath)) return null
   const encodedPath = encodeURI(cleanPath) // encodeURI preserves '/', encodes spaces and other unsafe chars
   if (!USE_CLOUDINARY) {
     return `/builder/${encodedPath}`
@@ -21,6 +25,7 @@ export const bassAsset = (path) => {
 
 export const bassWoodAsset = (path) => {
   const cleanPath = String(path || '').replace(/^\/+/, '')
+  if (isNoneAssetPath(cleanPath)) return null
   const encodedPath = encodeURI(cleanPath)
   if (!USE_CLOUDINARY) {
     return `/builder/${encodedPath}`

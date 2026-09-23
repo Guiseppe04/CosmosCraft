@@ -852,6 +852,13 @@ export function CustomizePage() {
     return options.knobOptions
   }, [options.knobOptions, options.knobStyleOptionList, config.body])
 
+  const isDc = config.body === 'dc'
+  const showDcTopCoat = !isDc || config.bevel !== 'off'
+  const showDcFinish = !isDc || config.topCoat !== 'tungOil'
+  const visibleTopCoatOptions = options.topCoatOptions?.filter((option) => (
+    !(isDc && config.topCoat === 'wood' && option.value === 'tungOil')
+  ))
+
   const [toastMessage, setToastMessage] = useState(null)
 
   useEffect(() => {
@@ -1313,7 +1320,7 @@ export function CustomizePage() {
                   
                   {/* Beveled Body Edges */}
                   <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Beveled Body Edges</h3>
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Bevel</h3>
                     <div className="grid grid-cols-2 gap-2">
                       {options.bevelOptions?.map((opt) => (
                         <OptionButton
@@ -1360,6 +1367,7 @@ export function CustomizePage() {
                    </div>
                   
                   {/* Finish Type */}
+                  {showDcFinish && (
                   <div>
                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Finish Type</h3>
                     <div className="grid grid-cols-2 gap-2">
@@ -1373,9 +1381,10 @@ export function CustomizePage() {
                       ))}
                     </div>
                   </div>
+                  )}
                   
                    {/* Finish Color - dynamically discovered from selected finish folder */}
-                   {config.finishType && config.finishType !== 'solid' && (
+                   {showDcFinish && config.finishType && config.finishType !== 'solid' && (
                      <div>
                        <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Finish Color</h3>
                        <div className="grid grid-cols-2 gap-2">
@@ -1394,10 +1403,11 @@ export function CustomizePage() {
                    )}
                   
                    {/* Top Coat */}
-                   <div>
+                     {showDcTopCoat && (
+                     <div>
                      <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Top Coat</h3>
                      <div className="grid grid-cols-2 gap-2">
-                       {options.topCoatOptions?.map((opt) => (
+                       {visibleTopCoatOptions?.map((opt) => (
                          <VisualCard
                            key={opt.value}
                            option={opt}
@@ -1409,6 +1419,7 @@ export function CustomizePage() {
                        ))}
                      </div>
                    </div>
+                  )}
                   
                   {/* Additional Finish Options (Burst Finish) - depends on Top Coat */}
                   <div>
@@ -1426,7 +1437,7 @@ export function CustomizePage() {
                   </div>
                   
                   {/* Body Finish - Solid color picker, shown when finishType is 'solid' or not set */}
-                  {(!config.finishType || config.finishType === 'solid') && (
+                  {showDcFinish && (!config.finishType || config.finishType === 'solid') && (
                     <div>
                       <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-3">Body Finish Color</h3>
                       <RGBColorPicker
@@ -2143,6 +2154,8 @@ export function CustomizePage() {
                     view={view}
                     onViewChange={setView}
                     modelImageSrc={selectedBodyModel?.previewImageUrl || selectedBodyModel?.bodySrc || null}
+                    bodyWoodImageSrc={options.bodyWoodOptions?.find((option) => option.value === config.bodyWood)?.preview || null}
+                    topWoodImageSrc={options.topWoodOptions?.find((option) => option.value === config.topWood)?.preview || null}
                     stickerOverlay={currentStickerOverlay}
                     stickerMaskSrc={selectedBodyModel?.bodySrc || null}
                     stageRef={previewStageRef}
@@ -2374,7 +2387,6 @@ export function CustomizePage() {
 
             <BuilderCheckoutSection
               price={totalPrice}
-              basePrice={options.basePrice}
               onAddToCart={handleAddToCart}
             />
 

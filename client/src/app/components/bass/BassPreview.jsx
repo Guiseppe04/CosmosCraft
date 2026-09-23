@@ -341,7 +341,7 @@ const resolveNutColor = (nut) => {
   return aliases[raw] || 'black'
 }
 
-function BassPreview({ config, view, onViewChange, modelImageSrc, stickerOverlay = null, stickerMaskSrc = null, stageRef = null }) {
+function BassPreview({ config, view, onViewChange, modelImageSrc, bodyWoodImageSrc = null, topWoodImageSrc = null, stickerOverlay = null, stickerMaskSrc = null, stageRef = null }) {
   const previewRef = useRef(null)
 
   const resolvedConfig = useMemo(() => {
@@ -589,13 +589,18 @@ const resolved = {
     const resolvedAssets = {
       finishTexture,
       bodyModel,
-      bodyWood: bassBuilder.BODY_WOOD_OPTIONS[resolvedConfig.bodyWood],
+      bodyWood: {
+        ...(bassBuilder.BODY_WOOD_OPTIONS[resolvedConfig.bodyWood] || {}),
+        ...(bodyWoodImageSrc ? { texture: bodyWoodImageSrc } : {}),
+      },
       bodyFinish: finishTexture
         ? { texture: finishTexture }
         : resolvedConfig.bodyFinish && typeof resolvedConfig.bodyFinish === 'string' && resolvedConfig.bodyFinish.startsWith('#')
           ? { color: resolvedConfig.bodyFinish, texture: null }
           : bassBuilder.BODY_FINISH_OPTIONS[resolvedConfig.bodyFinish],
-      topWood: bassBuilder.TOP_WOOD_OPTIONS?.[resolvedConfig.topWood] || null,
+      topWood: topWoodImageSrc
+        ? { ...(bassBuilder.TOP_WOOD_OPTIONS?.[resolvedConfig.topWood] || {}), texture: topWoodImageSrc }
+        : (bassBuilder.TOP_WOOD_OPTIONS?.[resolvedConfig.topWood] || null),
       topWoodMask: resolvedConfig.bassType === 'vader'
         ? bassAsset('bass/vader/front/masks/topwoodmask.png')
         : bodyModel.bodySrc,

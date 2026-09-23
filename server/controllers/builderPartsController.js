@@ -62,6 +62,21 @@ exports.deletePart = async (req, res, next) => {
     const existing = await builderPartsService.getPartById(req.params.id);
     if (!existing) throw new AppError('Part not found', 404);
 
+    const permanent = req.query.permanent === 'true';
+
+    if (permanent) {
+      const part = await builderPartsService.hardDeletePart(req.params.id);
+      if (!part) throw new AppError('Part not found', 404);
+      await auditService.logDelete(
+        req.user?.user_id || null,
+        'guitar_builder_parts',
+        part.part_id,
+        existing,
+        req.ip
+      );
+      return res.json({ status: 'success', message: 'Part permanently deleted', data: { part } });
+    }
+
     const part = await builderPartsService.deletePart(req.params.id);
     if (!part) throw new AppError('Part not found', 404);
     await auditService.logDelete(

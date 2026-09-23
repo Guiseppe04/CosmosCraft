@@ -19,11 +19,14 @@ const CLOUD_NAME = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_
 
 const USE_CLOUDINARY = Boolean(CLOUD_NAME) 
 
+const isNoneAssetPath = (value) => /(?:^|\/)none\.png$/i.test(String(value || '').replace(/^\/+/, ''))
+
 /**
  * Resolve an asset path using either Cloudinary or local files
  */
 // After
 export function resolveAssetPath(subPath) {
+  if (isNoneAssetPath(subPath)) return null
   if (USE_CLOUDINARY) {
     // Cloudinary mirrors the local folder structure exactly:
     // cosmoscraft_assets/customization_assets/builder/{dc|delos|all-models}/...
@@ -219,6 +222,18 @@ export function resolveGloss(category, model) {
  * Path: customization_assets/builder/{category}/{model}/back/shadows_highlights/{topCoatKey}.png
  */
 export function resolveTopCoatAsset(category, model, topCoatKey, neckRearFinish) {
+  if (category === 'electric' && model === 'dc') {
+    const dcFileMap = {
+      tungOil: 'op',
+      satinMatte: 'matte',
+      clearGloss: 'gloss',
+    }
+    const dcFileKey = dcFileMap[topCoatKey]
+    if (dcFileKey) {
+      return resolveModelAsset(category, model, 'shadows_highlights', `${dcFileKey}.png`)
+    }
+  }
+
   const neckFinish = neckRearFinish || 'tungOil'
   
   const pathMap = {
@@ -648,6 +663,7 @@ export function resolveBodySpecificAsset(category, model, assetType, fileName) {
  * Get the button preview image for a given option type and value
  */
 export function getButtonPreview(category, model, optionType, value) {
+  if (String(value || '').trim().toLowerCase() === 'none') return null
   const buttonFileName = `${value}.png`
   return resolveButtonAsset(category, model, optionType, buttonFileName)
 }

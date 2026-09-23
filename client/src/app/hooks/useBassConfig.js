@@ -137,6 +137,11 @@ export default function useBassConfig() {
 
   const priceOverrides = useMemo(() => {
     const overrides = {}
+    const orderedParts = [...builderParts].sort((left, right) => {
+      const leftDate = new Date(left.updated_at || left.created_at || 0).getTime()
+      const rightDate = new Date(right.updated_at || right.created_at || 0).getTime()
+      return rightDate - leftDate
+    })
     const registerOverride = (key, value) => {
       if (!key) return
       if (overrides[key] === undefined) {
@@ -144,7 +149,7 @@ export default function useBassConfig() {
       }
     }
 
-    builderParts.forEach(part => {
+    orderedParts.forEach(part => {
       const partType = typeof part.guitar_type === 'string' ? part.guitar_type.trim().toLowerCase() : ''
       const matchesType = !partType || partType === 'bass'
       if (matchesType && part.price !== undefined) {
@@ -231,7 +236,13 @@ export default function useBassConfig() {
     })
     const merged = matchingParts.length > 0 ? {} : { ...baseOptions }
 
-    builderParts.forEach((part) => {
+    const orderedParts = [...builderParts].sort((left, right) => {
+      const leftDate = new Date(left.updated_at || left.created_at || 0).getTime()
+      const rightDate = new Date(right.updated_at || right.created_at || 0).getTime()
+      return leftDate - rightDate
+    })
+
+    orderedParts.forEach((part) => {
       const partType = typeof part.bass_type === 'string' ? part.bass_type.trim().toLowerCase() : ''
       const matchesType = !partType || partType === normalizedType
       if (!matchesType) return
@@ -906,7 +917,6 @@ const mergedInlayMaterialOptions = useMemo(() => {
 
   const price = useMemo(() => {
     return (
-      dynamicBasePrice +
       (mergedBodyOptions[config.bassType]?.price ?? BASS_BODY_OPTIONS[config.bassType]?.price ?? 0) +
       (mergedBodyWoodOptions[config.bodyWood]?.price ?? BASS_BODY_WOOD_OPTIONS[config.bodyWood]?.price ?? 0) +
       (mergedBodyFinishOptions[config.bodyFinish]?.price ?? BASS_BODY_FINISH_OPTIONS[config.bodyFinish]?.price ?? 0) +

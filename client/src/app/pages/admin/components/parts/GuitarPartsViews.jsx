@@ -54,7 +54,12 @@ export function GuitarPartAccordion({ parts, expandedGuitarTypes, onToggleGuitar
           <button type="button" onClick={() => onEdit(part)} className="p-1.5 hover:bg-[var(--gold-primary)]/20 rounded" title="Edit">
             <Edit className="w-3.5 h-3.5 text-[var(--text-muted)]" />
           </button>
-          <button type="button" onClick={() => onDelete(part.part_id, part.name)} className="p-1.5 hover:bg-red-500/20 rounded" title="Deactivate">
+          <button
+            type="button"
+            onClick={() => onDelete(part.part_id, part.name, part.is_active)}
+            className="p-1.5 hover:bg-red-500/20 rounded"
+            title={part.is_active ? 'Deactivate' : 'Delete permanently'}
+          >
             <Trash2 className="w-3.5 h-3.5 text-red-400" />
           </button>
         </div>

@@ -343,6 +343,11 @@ export default function useGuitarConfig() {
 
   const priceOverrides = useMemo(() => {
     const overrides = {}
+    const orderedParts = [...builderParts].sort((left, right) => {
+      const leftDate = new Date(left.updated_at || left.created_at || 0).getTime()
+      const rightDate = new Date(right.updated_at || right.created_at || 0).getTime()
+      return rightDate - leftDate
+    })
     const registerOverride = (key, value) => {
       if (!key) return
       if (overrides[key] === undefined) {
@@ -350,7 +355,7 @@ export default function useGuitarConfig() {
       }
     }
 
-    builderParts.forEach(part => {
+    orderedParts.forEach(part => {
       const partType = typeof part.guitar_type === 'string' ? part.guitar_type.trim().toLowerCase() : ''
       const configType = typeof config.guitarType === 'string' ? config.guitarType.trim().toLowerCase() : ''
       const matchesType = !partType || partType === configType
@@ -425,20 +430,30 @@ export default function useGuitarConfig() {
   const mergeOptionsFromBuilderParts = useCallback((baseOptions, { partCategory, typeMappings = [] } = {}) => {
     const normalizedType = String(config.guitarType || 'electric').trim().toLowerCase()
     const normalizedMappings = typeMappings.map(mapping => String(mapping).trim().toLowerCase())
+    const normalizedCategories = Array.isArray(partCategory)
+      ? partCategory.map(category => String(category).trim().toLowerCase())
+      : [String(partCategory || '').trim().toLowerCase()]
+    const matchesCategory = (category) => !partCategory || normalizedCategories.includes(category)
     const matchingParts = builderParts.filter((part) => {
       const partType = typeof part.guitar_type === 'string' ? part.guitar_type.trim().toLowerCase() : ''
       const normalizedCategory = typeof part.part_category === 'string' ? part.part_category.trim().toLowerCase() : ''
       const normalizedMapping = typeof part.type_mapping === 'string' ? part.type_mapping.trim().toLowerCase() : ''
       const optionKey = part?.metadata?.option_key
       return (!partType || partType === normalizedType) &&
-        (!partCategory || normalizedCategory === String(partCategory).trim().toLowerCase()) &&
+        matchesCategory(normalizedCategory) &&
         (!normalizedMappings.length || normalizedMappings.includes(normalizedMapping)) &&
         typeof optionKey === 'string' && optionKey.trim()
     })
     const merged = matchingParts.length > 0 ? {} : { ...baseOptions }
     const normalizedTypeMappings = normalizedMappings
 
-    builderParts.forEach((part) => {
+    const orderedParts = [...builderParts].sort((left, right) => {
+      const leftDate = new Date(left.updated_at || left.created_at || 0).getTime()
+      const rightDate = new Date(right.updated_at || right.created_at || 0).getTime()
+      return leftDate - rightDate
+    })
+
+    orderedParts.forEach((part) => {
       const partType = typeof part.guitar_type === 'string' ? part.guitar_type.trim().toLowerCase() : ''
       const matchesType = !partType || partType === normalizedType
       if (!matchesType) return
@@ -450,7 +465,7 @@ export default function useGuitarConfig() {
       const variant = typeof metadata.variant === 'string' ? metadata.variant.trim() : ''
 
       if (!optionKey) return
-      if (partCategory && normalizedCategory !== String(partCategory).trim().toLowerCase()) return
+      if (!matchesCategory(normalizedCategory)) return
       if (normalizedTypeMappings.length > 0 && !normalizedTypeMappings.includes(normalizedTypeMapping)) return
 
       const normalizedOptionKey = String(optionKey).trim()
@@ -789,12 +804,30 @@ export default function useGuitarConfig() {
   }, [mergeOptionsFromBuilderParts, priceOverrides])
 
   const mergedBevelOptions = useMemo(() => {
-    const merged = mergeOptionsFromBuilderParts(BEVEL_OPTIONS, { partCategory: 'misc', typeMappings: ['bevel'] })
+    const merged = mergeOptionsFromBuilderParts(BEVEL_OPTIONS, { partCategory: ['misc', 'finish'], typeMappings: ['bevel'] })
+    const legacyBevelPart = builderParts.find((part) => {
+      const typeMapping = String(part.type_mapping || '').trim().toLowerCase()
+      const category = String(part.part_category || '').trim().toLowerCase()
+      const optionKey = String(part?.metadata?.option_key || '').trim().toLowerCase()
+      return typeMapping === 'bevel' &&
+        ['misc', 'finish'].includes(category) &&
+        (!optionKey || optionKey === 'bevel')
+    })
+    const legacyBevelPrice = Number(legacyBevelPart?.price)
+    const hasExplicitOnPart = builderParts.some((part) => {
+      const typeMapping = String(part.type_mapping || '').trim().toLowerCase()
+      const category = String(part.part_category || '').trim().toLowerCase()
+      const optionKey = String(part?.metadata?.option_key || '').trim().toLowerCase()
+      return typeMapping === 'bevel' && ['misc', 'finish'].includes(category) && optionKey === 'on'
+    })
+    if (!hasExplicitOnPart && legacyBevelPart && Number.isFinite(legacyBevelPrice)) {
+      merged.on = { ...merged.on, price: legacyBevelPrice }
+    }
     Object.keys(merged).forEach(key => {
       if (priceOverrides[key] !== undefined) merged[key] = { ...merged[key], price: priceOverrides[key].price }
     })
     return merged
-  }, [mergeOptionsFromBuilderParts, priceOverrides])
+  }, [builderParts, mergeOptionsFromBuilderParts, priceOverrides])
 
   const mergedTopWoodOptions = useMemo(() => {
     const merged = mergeOptionsFromBuilderParts(TOP_WOOD_OPTIONS, { partCategory: 'misc', typeMappings: ['topWood'] })
@@ -1183,7 +1216,6 @@ export default function useGuitarConfig() {
 
   const price = useMemo(() => {
     return (
-      dynamicBasePrice +
       // Old options (unchanged)
       (mergedBodyOptions[config.body]?.price ?? BODY_OPTIONS[config.body]?.price ?? 0) +
       (mergedBodyWoodOptions[config.bodyWood]?.price ?? BODY_WOOD_OPTIONS[config.bodyWood]?.price ?? 0) +
@@ -1280,7 +1312,9 @@ export default function useGuitarConfig() {
       multiscale: MULTISCALE_OPTIONS[config.multiscale]?.label ?? config.multiscale,
       scaleLength: SCALE_LENGTH_OPTIONS[config.scaleLength]?.label ?? config.scaleLength,
       caseType: CASE_OPTIONS[config.case]?.label ?? config.case,
-      bevel: BEVEL_OPTIONS[config.bevel]?.label ?? config.bevel,
+      bevel: config.body === 'dc'
+        ? (config.bevel === 'on' ? 'Beveled Body Edges' : 'None')
+        : (BEVEL_OPTIONS[config.bevel]?.label ?? config.bevel),
       topWood: mergedDynamicTopWoodOptions[config.topWood]?.label ?? TOP_WOOD_OPTIONS[config.topWood]?.label ?? config.topWood,
       finishType: FINISH_TYPE_OPTIONS[config.finishType]?.label ?? config.finishType,
       topCoat: mergedDynamicTopCoatOptions[config.topCoat]?.label ?? TOP_COAT_OPTIONS[config.topCoat]?.label ?? config.topCoat,
@@ -1460,8 +1494,14 @@ export default function useGuitarConfig() {
     [mergedCaseOptions],
   )
   const bevelOptions = useMemo(
-    () => Object.entries(mergedBevelOptions).map(([value, option]) => ({ value, ...option })),
-    [mergedBevelOptions],
+    () => Object.entries(mergedBevelOptions).map(([value, option]) => ({
+      value,
+      ...option,
+      ...(config.body === 'dc'
+        ? { label: value === 'on' ? 'Beveled Body Edges' : 'None' }
+        : {}),
+    })),
+    [config.body, mergedBevelOptions],
   )
   const topWoodOptions = useMemo(
     () => {

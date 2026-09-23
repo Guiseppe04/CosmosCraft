@@ -96,7 +96,8 @@ export function PartModal({
   const canSubmit = Boolean(
     String(form.name || '').trim() &&
     String(form.type_mapping || '').trim() &&
-    normalizeInventoryPartCategory(form.inventory_category)
+    normalizeInventoryPartCategory(form.inventory_category) &&
+    String(form.metadata?.option_key || '').trim()
   )
   const previewPrice = form.price !== '' && form.price != null && !Number.isNaN(Number(form.price)) ? formatCurrency(Number(form.price), false) : '—'
 
@@ -187,17 +188,19 @@ export function PartModal({
                 )}
               </div>
               <div>
-                <label className={labelCls}>Customization Option Key</label>
+                <label className={`${labelCls} ${formErrors.option_key ? 'text-red-400' : ''}`}>Customization Option Key *</label>
                 <input
                   value={form.metadata?.option_key || ''}
                   onChange={(e) => setForm((f) => ({
                     ...f,
+                    option_key: e.target.value,
                     metadata: { ...(f.metadata || {}), option_key: e.target.value },
                   }))}
                   placeholder="e.g. mahogany or stainlessRegular"
-                  className={partFieldOk}
+                  className={formErrors.option_key ? partFieldErr : partFieldOk}
                 />
-                {partHint('Matches the option value used by the customization page. Required for a new choice; seeded choices already have this value.')}
+                {formErrors.option_key && <p className="mt-1 text-xs text-red-400">{formErrors.option_key}</p>}
+                {partHint('Matches the option value used by the customization page. Required — this is what makes the part appear as a selectable choice on the Customize Page.')}
               </div>
             </div>
           </div>

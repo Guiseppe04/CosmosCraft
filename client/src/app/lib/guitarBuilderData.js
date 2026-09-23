@@ -913,6 +913,8 @@ export const BODY_LAYER_ASSETS = {
     pickguard: null,
     shadows:  modelAsset('electric', 'dc', 'shadows_highlights/edge-shadow.png'),
     gloss:  modelAsset('electric', 'dc', 'shadows_highlights/gloss.png'),
+    matte:  modelAsset('electric', 'dc', 'shadows_highlights/matte.png'),
+    op:  modelAsset('electric', 'dc', 'shadows_highlights/op.png'),
   },
   delos: {
     bridge: BRIDGE_OPTIONS.hipshotTremolo.assets,
@@ -928,8 +930,11 @@ export const BODY_LAYER_ASSETS = {
     },
     switch: modelAsset('electric', 'delos', 'bodies/front/switches/blade/black.png'),
     pickguard: modelAsset('electric', 'delos', 'bodies/front/pickguard/white.png'),
-    shadows: modelAsset('electric', 'delos', 'shadows_highlights/edge-shadow.png'),
+    matte: modelAsset('electric', 'delos', 'shadows_highlights/matte.png'),
+    matteRbd: modelAsset('electric', 'delos', 'shadows_highlights/matte-rbd.png'),
+    op: modelAsset('electric', 'delos', 'shadows_highlights/op.png'),
     gloss: modelAsset('electric', 'delos', 'shadows_highlights/gloss.png'),
+    glossRbd: modelAsset('electric', 'delos', 'shadows_highlights/gloss-rbd.png'),
   },
 }
 
