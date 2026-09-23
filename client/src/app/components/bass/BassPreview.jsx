@@ -52,13 +52,36 @@ const maskedLayerStyle = (maskSrc, extra = {}) => {
   }
 }
 
-function BassLayer({ src, maskSrc, style, className = '', layerName = '', protectedLayer = false }) {
+const doubleMaskedLayerStyle = (maskSrc, outerMaskSrc, extra = {}) => {
+  if (!maskSrc || !outerMaskSrc) return maskedLayerStyle(maskSrc, extra)
+  return {
+    backgroundColor: 'transparent',
+    backgroundRepeat: 'no-repeat',
+    backgroundPosition: extra.backgroundPosition || 'center',
+    backgroundSize: extra.backgroundSize || 'contain',
+    WebkitMaskImage: `url(${maskSrc}), url(${outerMaskSrc})`,
+    maskImage: `url(${maskSrc}), url(${outerMaskSrc})`,
+    WebkitMaskComposite: 'source-in',
+    maskComposite: 'intersect',
+    WebkitMaskRepeat: 'no-repeat, no-repeat',
+    maskRepeat: 'no-repeat, no-repeat',
+    WebkitMaskSize: 'contain, contain',
+    maskSize: 'contain, contain',
+    WebkitMaskPosition: 'center, center',
+    maskPosition: 'center, center',
+    ...extra,
+  }
+}
+
+function BassLayer({ src, maskSrc, outerMaskSrc, style, className = '', layerName = '', protectedLayer = false }) {
   if (!src && !maskSrc) {
     if (DEBUG) console.warn(`[BassLayer] Missing source for ${layerName}`)
     return null
   }
 
-  const computedStyle = maskSrc ? maskedLayerStyle(maskSrc, style) : layerStyle(src, style)
+  const computedStyle = maskSrc
+    ? (outerMaskSrc ? doubleMaskedLayerStyle(maskSrc, outerMaskSrc, style) : maskedLayerStyle(maskSrc, style))
+    : layerStyle(src, style)
   
   if (!computedStyle) return null
 
@@ -1086,6 +1109,7 @@ if (resolvedConfig.bassType === 'jb' && assets.knobs?.src) {
         layers.push({
           name: `burst-edges-${resolvedConfig.burstEdges}`,
           maskSrc: burstSpec.mask,
+          outerMaskSrc: bodyMask,
           style: { backgroundColor: burstSpec.color, zIndex: 6, mixBlendMode: resolvedConfig.burstEdges === 'translucentBlackBurst' ? 'multiply' : 'normal', opacity: 1 },
           protectedLayer: true,
         })
@@ -1248,6 +1272,7 @@ if (resolvedConfig.bassType === 'jb' && assets.knobs?.src) {
         layers.push({
           name: `rear-burst-edges-${resolvedConfig.burstEdges}`,
           maskSrc: burstSpec.mask,
+          outerMaskSrc: rearBodyMask,
           style: { backgroundColor: burstSpec.color, zIndex: 100, mixBlendMode: resolvedConfig.burstEdges === 'translucentBlackBurst' ? 'multiply' : 'normal', opacity: 1 },
           protectedLayer: true,
         })
@@ -1345,6 +1370,7 @@ if (resolvedConfig.bassType === 'jb' && assets.knobs?.src) {
                     key={layer.name}
                     src={layer.src ?? undefined}
                     maskSrc={layer.maskSrc ?? undefined}
+                    outerMaskSrc={layer.outerMaskSrc ?? undefined}
                     style={layer.style}
                     layerName={layer.name}
                     protectedLayer={layer.protectedLayer}
@@ -1376,6 +1402,7 @@ if (resolvedConfig.bassType === 'jb' && assets.knobs?.src) {
                     key={layer.name}
                     src={layer.src ?? undefined}
                     maskSrc={layer.maskSrc ?? undefined}
+                    outerMaskSrc={layer.outerMaskSrc ?? undefined}
                     style={layer.style}
                     layerName={layer.name}
                     protectedLayer={layer.protectedLayer}

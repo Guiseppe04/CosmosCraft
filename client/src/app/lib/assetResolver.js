@@ -162,10 +162,17 @@ export function resolveBurstMask(category, model, burstKey, side = 'front') {
         blackBurst: 'delos/bodies/front/masks/black-burst-mask.png',
         whiteBurst: 'delos/bodies/front/masks/burstmask.png',
         translucentBlackBurst: 'delos/bodies/front/masks/burstmask.png',
+        reverseTranslucentBlackBurst: 'delos/bodies/front/masks/burstmask.png',
+        blackBackSides: 'delos/bodies/front/masks/black-burst-mask.png',
+        blackSidesBlackBurstBack: 'delos/bodies/front/masks/black-burst-mask.png',
       },
       dc: {
         blackBurst: 'dc/bodies/front/masks/bvdmask.png',
         whiteBurst: 'dc/bodies/front/masks/bvdmask.png',
+        translucentBlackBurst: 'dc/bodies/front/masks/bvdmask.png',
+        reverseTranslucentBlackBurst: 'dc/bodies/front/masks/bvdmask.png',
+        blackBackSides: 'dc/bodies/front/masks/bvdmask.png',
+        blackSidesBlackBurstBack: 'dc/bodies/front/masks/bvdmask.png',
       },
     },
     rear: {
@@ -174,6 +181,16 @@ export function resolveBurstMask(category, model, burstKey, side = 'front') {
         whiteBurst: 'delos/back/masks/burstmask.png',
         translucentBlackBurst: 'delos/back/masks/burstmask.png',
         reverseTranslucentBlackBurst: 'delos/back/masks/burstmask.png',
+      },
+      // DC has no dedicated back/masks burst art yet — reuse the front masks.
+      // The rear layer already applies transform: scaleX(-1), so reusing the
+      // front asset mirrors correctly rather than needing separate back art.
+      dc: {
+        blackBurst: 'dc/back/masks/burstmask.png',
+        whiteBurst: 'dc/back/masks/burstmask.png',
+        translucentBlackBurst: 'dc/back/masks/burstmask.png',
+        reverseTranslucentBlackBurst: 'dc/back/masks/burstmask.png',
+        //cosmoscraft_assets/customization_assets/builder/electric/dc/back/masks/burstmask.png
       },
     },
   }
@@ -553,8 +570,12 @@ export const resolveStringFerrulesAsset = (category, model, hardwareColor) =>
 
 /**
  * Resolve output jack asset by hardware color (spec keys it by hardware color, not a jack "type").
+ * Delos front-body output jacks live under the front body folder and should never render on the rear view.
  */
-export function resolveOutputJackByColor(category, model, hardwareColor) {
+export function resolveOutputJackByColor(category, model, hardwareColor, side = 'rear') {
+  if (model === 'delos' && side === 'front') {
+    return resolveModelAsset(category, model, 'bodies', 'front', 'output jack', `${hardwareColor}.png`)
+  }
   return resolveModelAsset(category, model, 'back', 'output-jacks', `${hardwareColor}.png`)
 }
 
