@@ -13,7 +13,7 @@ import { PaymentModal } from '../components/PaymentModal.jsx'
 import TermsAndConditionsModal from '../components/TermsAndConditionsModal.jsx'
 import { AddressForm } from '../components/AddressForm.jsx'
 import { SelectableCartItemRow } from '../components/cart/SelectableCartItemRow.jsx'
-import { API } from '../utils/apiConfig'
+import { API, getAuthHeaders } from '../utils/apiConfig'
 import { getCustomBuildSummaryTree } from '../utils/customBuildSummary.js'
 import { Country, State } from 'country-state-city'
 import { getAllProvinces, getMunicipalitiesByProvince, getBarangaysByMunicipality } from '@aivangogh/ph-address'
@@ -852,7 +852,7 @@ export function CheckoutPage() {
       
       const response = await fetch(`${API}/api/users/me/addresses`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
         credentials: 'include',
         body: JSON.stringify(payload)
       })
@@ -1028,7 +1028,7 @@ export function CheckoutPage() {
       // 1. Create order
       const response = await fetch(`${API}/api/orders`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
         credentials: 'include',
         body: JSON.stringify({
           items: checkoutItems.map(item => {
@@ -1095,7 +1095,7 @@ export function CheckoutPage() {
         try {
           const paymentResponse = await fetch(`${API}/api/payments`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
             credentials: 'include',
             body: JSON.stringify({
               order_id: orderId,

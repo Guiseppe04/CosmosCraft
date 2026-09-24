@@ -61,8 +61,9 @@ export function LoginPage() {
         return
       }
 
+      const token = data.data?.accessToken || data.data?.token || data.token
       if (data.data?.user) {
-        login(data.data.user)
+        login(data.data.user, token)
       }
 
       const role = data.data?.user?.role || 'customer'

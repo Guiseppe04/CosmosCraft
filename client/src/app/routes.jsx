@@ -40,7 +40,7 @@ export const router = createBrowserRouter([
       { path: 'customize-bass', Component: BassCustomizePage },
       { path: 'shop', Component: ShopPage },
       { path: 'appointments', Component: AppointmentPage },
-      
+
       // Authentication routes
       { path: 'login', Component: LoginPage },
       { path: 'signup', Component: SignupPage },
@@ -49,16 +49,16 @@ export const router = createBrowserRouter([
       { path: 'auth/success', Component: OAuthSuccessPage },
       { path: 'auth/signup', Component: OAuthSignupPage },
       { path: 'reset-password', Component: ResetPasswordPage },
-      
+
       // Customer routes (authenticated)
       { path: 'dashboard', element: <ProtectedRoute><DashboardPage /></ProtectedRoute> },
       { path: 'cart', element: <ProtectedRoute><CartPage /></ProtectedRoute> },
       { path: 'checkout', element: <ProtectedRoute><CheckoutPage /></ProtectedRoute> },
       { path: 'feedback', element: <ProtectedRoute><FeedbackPage /></ProtectedRoute> },
-      
+
       // Staff routes (staff role only)
       { path: 'staff', element: <ProtectedRoute allowedRoles={['staff', 'admin', 'super_admin']}><StaffDashboard /></ProtectedRoute> },
-      
+
       // Admin routes (admin role only)
       { path: 'admin', element: <ProtectedRoute allowedRoles={['admin', 'super_admin']}><AdminPage /></ProtectedRoute> },
       { path: 'admin/cloudinary', element: <ProtectedRoute allowedRoles={['admin', 'super_admin']}><CloudinaryAssetsPage /></ProtectedRoute> },

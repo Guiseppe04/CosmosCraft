@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useNavigate, useLocation } from 'react-router'
 import { motion, AnimatePresence } from 'motion/react'
-import { API } from '../utils/apiConfig'
+import { API, getAuthHeaders } from '../utils/apiConfig'
 import { uploadToCloudinary } from '../utils/cloudinary.js'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useToast } from '../components/ui/Toast.jsx'
@@ -721,7 +721,7 @@ export function AppointmentPage() {
     try {
       const response = await fetch(`${API}/api/users/me/phone`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
         credentials: 'include',
         body: JSON.stringify({ phone: trimmed }),
       })
@@ -887,9 +887,9 @@ export function AppointmentPage() {
         // Update existing appointment (reschedule)
         const response = await fetch(`${API}/api/appointments/${rescheduleData.appointment_id}`, {
           method: 'PATCH',
-          headers: {
+          headers: getAuthHeaders({
             'Content-Type': 'application/json'
-          },
+          }),
           credentials: 'include',
           body: JSON.stringify({
             scheduled_at: scheduledAt.toISOString(),
@@ -926,9 +926,9 @@ export function AppointmentPage() {
         // Create new appointment
         const response = await fetch(`${API}/api/appointments`, {
           method: 'POST',
-          headers: {
+          headers: getAuthHeaders({
             'Content-Type': 'application/json'
-          },
+          }),
           credentials: 'include',
           body: JSON.stringify({
             appointment_type: selectedAppointmentType,

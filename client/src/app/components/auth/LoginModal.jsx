@@ -34,8 +34,9 @@ export function LoginModal() {
       }
 
       // Set user data directly from login response
+      const token = data.data?.accessToken || data.data?.token || data.token
       if (data.data?.user) {
-        login(data.data.user)
+        login(data.data.user, token)
       }
 
       // Clear form and close modal
