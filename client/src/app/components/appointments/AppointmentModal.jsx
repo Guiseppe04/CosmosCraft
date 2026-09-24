@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
-import { API } from '../../utils/apiConfig'
+import { API, getAuthHeaders } from '../../utils/apiConfig'
 import {
   X, Calendar, Clock, User, Mail, Phone, FileText, CreditCard,
   CheckCircle, XCircle, AlertCircle, Loader2, ChevronDown,
@@ -194,6 +194,7 @@ export default function AppointmentModal({
     const loadUnavailableDates = async () => {
       try {
         const response = await fetch(`${API}/api/appointments/unavailable-dates`, {
+          headers: getAuthHeaders(),
           credentials: 'include',
         })
         const payload = await response.json().catch(() => ({}))
@@ -211,6 +212,7 @@ export default function AppointmentModal({
     const loadServices = async () => {
       try {
         const response = await fetch(`${API}/api/services?is_active=true&limit=100&sort=name&order=asc`, {
+          headers: getAuthHeaders(),
           credentials: 'include',
         })
         const payload = await response.json().catch(() => ({}))

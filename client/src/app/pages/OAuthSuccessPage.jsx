@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams, useNavigate } from 'react-router'
 import { useAuth } from '../context/AuthContext.jsx'
+import { setAuthToken } from '../utils/apiConfig'
 
 export function OAuthSuccessPage() {
   const [searchParams] = useSearchParams()
@@ -11,8 +12,13 @@ export function OAuthSuccessPage() {
 
   useEffect(() => {
     const userId = searchParams.get('userId')
+    const token = searchParams.get('token') || searchParams.get('accessToken')
 
-    if (!userId) {
+    if (token) {
+      setAuthToken(token)
+    }
+
+    if (!userId && !token) {
       setError('Authentication failed. Please try again.')
       setTimeout(() => navigate('/'), 2000)
       return
@@ -25,7 +31,7 @@ export function OAuthSuccessPage() {
         
         if (userData) {
           // Use the full user data from backend
-          login(userData)
+          login(userData, token)
           // Redirect to home
           setTimeout(() => navigate('/'), 500)
         } else {

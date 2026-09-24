@@ -3,7 +3,7 @@
  * Handles all HTTP requests to the backend
  */
 
-import { API } from '../utils/apiConfig'
+import { API, getAuthToken, removeAuthToken } from '../utils/apiConfig'
 
 // Base API configuration
 const API_BASE_URL = `${API}/api`
@@ -20,7 +20,7 @@ async function fetchAPI(endpoint, options = {}) {
   }
 
   // Add auth token if available
-  const token = localStorage.getItem('authToken')
+  const token = getAuthToken()
   if (token) {
     defaultHeaders['Authorization'] = `Bearer ${token}`
   }
@@ -47,7 +47,8 @@ async function fetchAPI(endpoint, options = {}) {
       // Handle specific error codes
       if (response.status === 401) {
         // Unauthorized - clear token and redirect
-        localStorage.removeItem('authToken')
+        removeAuthToken()
+        localStorage.removeItem('cosmoscraft_auth')
         window.location.href = '/login'
         throw new Error('Session expired. Please login again.')
       }
@@ -411,7 +412,7 @@ export const uploadAPI = {
     formData.append('file', file)
     formData.append('folder', folder)
 
-    const token = localStorage.getItem('authToken')
+    const token = getAuthToken()
     const response = await fetch(`${API_BASE_URL}/upload`, {
       method: 'POST',
       headers: token ? { 'Authorization': `Bearer ${token}` } : {},

@@ -2,15 +2,16 @@
  * Centralized Feedback & Review Service
  * Handles public testimonials, public product reviews, customer eligibility, and admin moderation.
  */
-import { API } from '../utils/apiConfig'
+import { API, getAuthHeaders } from '../utils/apiConfig'
 
 const API_URL = API
 
 async function request(path, options = {}) {
   const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData
-  const headers = isFormData
+  const baseHeaders = isFormData
     ? { ...options.headers }
     : { 'Content-Type': 'application/json', ...options.headers }
+  const headers = getAuthHeaders(baseHeaders)
 
   const res = await fetch(`${API_URL}${path}`, {
     credentials: 'include',

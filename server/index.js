@@ -76,10 +76,20 @@ app.use(
         callback(null, true);
         return;
       }
+      // In development, allow access from local network devices (e.g. phones/tablets on the same Wi-Fi)
+      if (process.env.NODE_ENV !== 'production') {
+        const isLan = /^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+)(:\d+)?$/.test(origin);
+        if (isLan) {
+          callback(null, true);
+          return;
+        }
+      }
       callback(new Error(`Origin ${origin} not allowed by CORS`));
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Access-Token', 'X-Refresh-Token', 'Accept', 'X-Requested-With'],
+    exposedHeaders: ['Set-Cookie', 'X-New-Access-Token'],
   })
 );
 

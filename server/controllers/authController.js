@@ -27,6 +27,22 @@ const getFrontendUrl = () => {
   throw new Error('Frontend URL not configured.');
 };
 
+const getCookieOptions = () => {
+  const isProd = process.env.NODE_ENV === 'production';
+  return {
+    httpOnly: true,
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+    ...(isProd ? {
+      secure: true,
+      sameSite: 'none',
+      partitioned: true,
+    } : {
+      secure: false,
+      sameSite: 'lax',
+    }),
+  };
+};
+
 // Google Callback
 exports.googleCallback = asyncHandler(async (req, res, next) => {
   if (!req.user) {
@@ -36,22 +52,12 @@ exports.googleCallback = asyncHandler(async (req, res, next) => {
   const roleSummary = await rbacService.getUserRoleSummary(req.user.user_id, false);
   const { accessToken, refreshToken } = await generateTokens(req.user.user_id, roleSummary.role);
 
-  const cookieOptions = {
-    httpOnly: true,
-    maxAge: 7 * 24 * 60 * 60 * 1000,
-    ...(process.env.NODE_ENV === 'production' ? {
-      secure: true,
-      sameSite: 'none'
-    } : {
-      secure: false,
-      sameSite: 'lax'
-    })
-  };
+  const cookieOptions = getCookieOptions();
 
   res.cookie('accessToken', accessToken, cookieOptions);
   res.cookie('refreshToken', refreshToken, { ...cookieOptions, maxAge: 7 * 24 * 60 * 60 * 1000 });
 
-  return res.redirect(`${getFrontendUrl()}/auth/success?userId=${req.user.user_id}&provider=google`);
+  return res.redirect(`${getFrontendUrl()}/auth/success?userId=${req.user.user_id}&token=${encodeURIComponent(accessToken)}&provider=google`);
 });
 // Facebook Callback
 exports.facebookCallback = asyncHandler(async (req, res, next) => {
@@ -62,22 +68,12 @@ exports.facebookCallback = asyncHandler(async (req, res, next) => {
   const roleSummary = await rbacService.getUserRoleSummary(req.user.user_id, false);
   const { accessToken, refreshToken } = await generateTokens(req.user.user_id, roleSummary.role);
 
-  const cookieOptions = {
-    httpOnly: true,
-    maxAge: 7 * 24 * 60 * 60 * 1000,
-    ...(process.env.NODE_ENV === 'production' ? {
-      secure: true,
-      sameSite: 'none'
-    } : {
-      secure: false,
-      sameSite: 'lax'
-    })
-  };
+  const cookieOptions = getCookieOptions();
 
   res.cookie('accessToken', accessToken, cookieOptions);
   res.cookie('refreshToken', refreshToken, { ...cookieOptions, maxAge: 7 * 24 * 60 * 60 * 1000 });
 
-  return res.redirect(`${getFrontendUrl()}/auth/success?userId=${req.user.user_id}&provider=facebook`);
+  return res.redirect(`${getFrontendUrl()}/auth/success?userId=${req.user.user_id}&token=${encodeURIComponent(accessToken)}&provider=facebook`);
 });
 
 // OAuth Signup(for new users)
@@ -179,24 +175,19 @@ exports.emailSignup = asyncHandler(async (req, res, next) => {
     const roleSummary = await rbacService.getUserRoleSummary(newUser.user_id, false);
     const { accessToken, refreshToken } = await generateTokens(newUser.user_id, roleSummary.role);
 
-    const cookieOptions = {
-      httpOnly: true,
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-      ...(process.env.NODE_ENV === 'production' ? {
-        secure: true,
-        sameSite: 'none'
-      } : {
-        secure: false,
-        sameSite: 'lax'
-      })
-    };
+    const cookieOptions = getCookieOptions();
 
     res.cookie('accessToken', accessToken, cookieOptions);
     res.cookie('refreshToken', refreshToken, { ...cookieOptions, maxAge: 7 * 24 * 60 * 60 * 1000 });
 
     res.status(201).json({
       status: 'success', message: 'Signup successful. Please check your email for the verification code.',
-      data: { user: { id: newUser.user_id, email: newUser.email, is_verified: newUser.is_verified } }
+      data: {
+        token: accessToken,
+        accessToken,
+        refreshToken,
+        user: { id: newUser.user_id, email: newUser.email, is_verified: newUser.is_verified }
+      }
     });
   } catch (error) {
     if (error.message && error.message.includes('already exists')) {
@@ -240,17 +231,7 @@ exports.emailLogin = asyncHandler(async (req, res, next) => {
   const roleSummary = await rbacService.getUserRoleSummary(user.user_id, false);
   const { accessToken, refreshToken } = await generateTokens(user.user_id, roleSummary.role);
 
-  const cookieOptions = {
-    httpOnly: true,
-    maxAge: 7 * 24 * 60 * 60 * 1000,
-    ...(process.env.NODE_ENV === 'production' ? {
-      secure: true,
-      sameSite: 'none'
-    } : {
-      secure: false,
-      sameSite: 'lax'
-    })
-  };
+  const cookieOptions = getCookieOptions();
 
   res.cookie('accessToken', accessToken, cookieOptions);
   res.cookie('refreshToken', refreshToken, { ...cookieOptions, maxAge: 7 * 24 * 60 * 60 * 1000 });
@@ -258,6 +239,9 @@ exports.emailLogin = asyncHandler(async (req, res, next) => {
   res.status(200).json({
     status: 'success', message: 'Login successful',
     data: { 
+      token: accessToken,
+      accessToken,
+      refreshToken,
       user: { 
         id: user.user_id, 
         email: user.email, 
@@ -270,7 +254,7 @@ exports.emailLogin = asyncHandler(async (req, res, next) => {
 });
 
 exports.refreshAccessToken = asyncHandler(async (req, res, next) => {
-  const refreshToken = req.cookies.refreshToken;
+  const refreshToken = req.cookies?.refreshToken || req.headers?.['x-refresh-token'] || req.body?.refreshToken;
   if (!refreshToken) throw new AppError('Refresh token not found', 401);
 
   const decoded = await verifyRefreshToken(refreshToken);
@@ -279,29 +263,29 @@ exports.refreshAccessToken = asyncHandler(async (req, res, next) => {
   const roleSummary = await rbacService.getUserRoleSummary(user.user_id, false);
   const tokens = await generateTokens(user.user_id, roleSummary.role);
 
-  const cookieOptions = {
-    httpOnly: true,
-    maxAge: 7 * 24 * 60 * 60 * 1000,
-    ...(process.env.NODE_ENV === 'production' ? {
-      secure: true,
-      sameSite: 'none'
-    } : {
-      secure: false,
-      sameSite: 'lax'
-    })
-  };
+  const cookieOptions = getCookieOptions();
 
   res.cookie('accessToken', tokens.accessToken, cookieOptions);
   res.cookie('refreshToken', tokens.refreshToken, { ...cookieOptions, maxAge: 7 * 24 * 60 * 60 * 1000 });
 
-  res.status(200).json({ status: 'success', message: 'Token refreshed' });
+  res.status(200).json({
+    status: 'success',
+    message: 'Token refreshed',
+    data: {
+      token: tokens.accessToken,
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+    },
+  });
 });
 
 exports.logout = asyncHandler(async (req, res, next) => {
-  const refreshToken = req.cookies.refreshToken;
+  const refreshToken = req.cookies?.refreshToken || req.headers?.['x-refresh-token'] || req.body?.refreshToken;
   if (refreshToken) await revokeRefreshToken(refreshToken);
-  res.clearCookie('accessToken');
-  res.clearCookie('refreshToken');
+
+  const cookieOptions = getCookieOptions();
+  res.clearCookie('accessToken', cookieOptions);
+  res.clearCookie('refreshToken', cookieOptions);
   res.status(200).json({ status: 'success', message: 'Logged out successfully' });
 });
 

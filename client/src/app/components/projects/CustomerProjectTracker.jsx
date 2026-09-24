@@ -7,7 +7,7 @@ import {
   X, Upload, QrCode, Eye, Loader2, Check, MapPin, Edit2
 } from 'lucide-react';
 import { adminApi } from '../../utils/adminApi';
-import { resolveImageUrl, API } from '../../utils/apiConfig';
+import { resolveImageUrl, API, getAuthHeaders } from '../../utils/apiConfig';
 import { ConfirmModal } from '../ui/ConfirmModal';
 
 const formatLabel = (value) => {
@@ -687,7 +687,7 @@ export default function CustomerProjectTracker({ projectId, projectName, project
 
   const loadAddresses = async () => {
     try {
-      const res = await fetch(`${API}/api/users/me`, { credentials: 'include' });
+      const res = await fetch(`${API}/api/users/me`, { headers: getAuthHeaders(), credentials: 'include' });
       if (res.ok) {
         const json = await res.json();
         const addrs = json?.data?.user?.addresses || [];
