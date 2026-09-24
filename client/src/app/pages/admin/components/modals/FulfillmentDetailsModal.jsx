@@ -303,10 +303,18 @@ export function FulfillmentDetailsModal({ request, onClose, onUpdateStatus }) {
           )}
 
           {status === 'completed' && (
-            <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-400">
-              <CheckCircle className="w-4 h-4" />
-              Fulfillment Complete
-            </span>
+            <div className="flex flex-col sm:items-end">
+              <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-400">
+                <CheckCircle className="w-4 h-4" />
+                {method === 'delivery' ? 'Delivered' : 'Fulfillment Complete'}
+              </span>
+              {method === 'delivery' && (
+                <span className="text-[11px] text-emerald-300/80">
+                  {request.delivery_confirmation_method === 'customer' ? 'Confirmed by Customer' : 'Confirmed by Shop'}
+                  {request.delivered_at && ` (${formatDate(request.delivered_at)})`}
+                </span>
+              )}
+            </div>
           )}
         </div>
       </motion.div>

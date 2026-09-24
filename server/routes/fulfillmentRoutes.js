@@ -13,10 +13,12 @@ router.use(authenticateToken);
 // Customer & Admin: Project-level fulfillment endpoints
 router.get('/project/:projectId', ctrl.getProjectFulfillment);
 router.post('/project/:projectId', validate(submitFulfillmentSchema), ctrl.submitFulfillmentChoice);
+router.patch('/project/:projectId/confirm-delivery', ctrl.confirmDelivery);
 
 // Admin & Staff: Fulfillment management endpoints
 router.get('/requests', authorize('staff', 'admin', 'super_admin'), ctrl.listFulfillmentRequests);
 router.get('/requests/:id', ctrl.getFulfillmentRequestById);
 router.patch('/requests/:id/status', authorize('staff', 'admin', 'super_admin'), validate(updateFulfillmentStatusSchema), ctrl.updateFulfillmentStatus);
+router.patch('/requests/:id/confirm-delivery', ctrl.confirmDelivery);
 
 module.exports = router;

@@ -535,6 +535,42 @@ class ReviewService {
   }
 
   /**
+   * Public: Get approved guitar customization feedback for Landing Page testimonials
+   */
+  async getPublicTestimonials({ limit = 10 } = {}) {
+    const safeLimit = Math.min(Math.max(Number(limit) || 10, 1), 50);
+
+    const query = `
+      SELECT 
+        cf.feedback_id AS id,
+        'customization' AS feedback_type,
+        cf.overall_rating AS rating,
+        'Custom Guitar Build' AS title,
+        cf.comment,
+        cf.images,
+        cf.created_at,
+        COALESCE(proj.title, 'Custom Guitar Build') AS target_name,
+        CASE
+          WHEN COALESCE(u.first_name, '') <> '' AND COALESCE(u.last_name, '') <> ''
+            THEN TRIM(u.first_name) || ' ' || UPPER(SUBSTRING(TRIM(u.last_name) FROM 1 FOR 1)) || '.'
+          WHEN COALESCE(u.first_name, '') <> ''
+            THEN TRIM(u.first_name)
+          ELSE 'Verified Customer'
+        END AS customer_name,
+        u.avatar_url AS user_avatar
+      FROM customization_feedback cf
+      LEFT JOIN projects proj ON proj.project_id = cf.project_id
+      JOIN users u ON u.user_id = cf.user_id
+      WHERE cf.status = 'approved' AND cf.deleted_at IS NULL
+      ORDER BY cf.created_at DESC
+      LIMIT $1;
+    `;
+
+    const { rows } = await pool.query(query, [safeLimit]);
+    return rows;
+  }
+
+  /**
    * Public: Get approved reviews for a specific product
    */
   async getPublicProductReviews(productId) {
@@ -546,7 +582,20 @@ class ReviewService {
         pr.comment,
         pr.images,
         pr.created_at,
-        COALESCE(u.first_name, '') || ' ' || COALESCE(u.last_name, '') AS user_name,
+        CASE
+          WHEN COALESCE(u.first_name, '') <> '' AND COALESCE(u.last_name, '') <> ''
+            THEN TRIM(u.first_name) || ' ' || UPPER(SUBSTRING(TRIM(u.last_name) FROM 1 FOR 1)) || '.'
+          WHEN COALESCE(u.first_name, '') <> ''
+            THEN TRIM(u.first_name)
+          ELSE 'Verified Customer'
+        END AS customer_name,
+        CASE
+          WHEN COALESCE(u.first_name, '') <> '' AND COALESCE(u.last_name, '') <> ''
+            THEN TRIM(u.first_name) || ' ' || UPPER(SUBSTRING(TRIM(u.last_name) FROM 1 FOR 1)) || '.'
+          WHEN COALESCE(u.first_name, '') <> ''
+            THEN TRIM(u.first_name)
+          ELSE 'Verified Customer'
+        END AS user_name,
         u.avatar_url AS user_avatar
       FROM product_reviews pr
       JOIN users u ON u.user_id = pr.user_id

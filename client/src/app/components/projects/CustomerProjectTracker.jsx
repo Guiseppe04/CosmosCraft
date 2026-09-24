@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { adminApi } from '../../utils/adminApi';
 import { resolveImageUrl, API } from '../../utils/apiConfig';
+import { ConfirmModal } from '../ui/ConfirmModal';
 
 const formatLabel = (value) => {
   if (!value) return '';
@@ -620,6 +621,28 @@ export default function CustomerProjectTracker({ projectId, projectName, project
   const [fulfillmentNotes, setFulfillmentNotes] = useState('');
   const [fulfillmentSaving, setFulfillmentSaving] = useState(false);
   const [fulfillmentMessage, setFulfillmentMessage] = useState(null);
+  const [showDeliveryConfirmModal, setShowDeliveryConfirmModal] = useState(false);
+  const [confirmingDelivery, setConfirmingDelivery] = useState(false);
+  const [deliveryConfirmError, setDeliveryConfirmError] = useState(null);
+
+  const handleConfirmDelivery = async () => {
+    if (!projectId) return;
+    try {
+      setConfirmingDelivery(true);
+      setDeliveryConfirmError(null);
+      await adminApi.confirmProjectDelivery(projectId);
+      setShowDeliveryConfirmModal(false);
+      await Promise.all([
+        loadData(),
+        loadFulfillment(),
+      ]);
+    } catch (err) {
+      console.error('Failed to confirm delivery:', err);
+      setDeliveryConfirmError(err.message || 'Failed to confirm delivery');
+    } finally {
+      setConfirmingDelivery(false);
+    }
+  };
 
   const handleSelectAddress = useCallback((addressId) => {
     setSelectedAddressId(addressId);
@@ -1114,6 +1137,67 @@ export default function CustomerProjectTracker({ projectId, projectName, project
                     {fStatus === 'out_for_delivery' && 'Your custom guitar is out for delivery with our courier.'}
                     {fStatus === 'completed' && 'Your custom build has been successfully fulfilled.'}
                   </p>
+                </div>
+              </div>
+            )}
+
+            {/* OUT FOR DELIVERY: CUSTOMER DELIVERY CONFIRMATION ACTION */}
+            {fStatus === 'out_for_delivery' && activeMethod === 'delivery' && (
+              <div className="rounded-2xl border border-[var(--gold-primary)]/50 bg-[var(--gold-primary)]/10 p-5 space-y-4 shadow-lg shadow-[var(--gold-primary)]/5">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  <div className="flex items-start gap-3.5">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--gold-primary)]/20 text-[var(--gold-primary)] flex-shrink-0">
+                      <Truck className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-white tracking-tight">Your custom guitar is out for delivery</h4>
+                      <p className="text-xs text-[var(--text-muted)] mt-1">
+                        Once you receive your guitar, please confirm the delivery below.
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDeliveryConfirmError(null);
+                      setShowDeliveryConfirmModal(true);
+                    }}
+                    disabled={confirmingDelivery}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] px-5 py-2.5 text-xs font-bold text-black shadow-lg shadow-[var(--gold-primary)]/20 hover:opacity-95 disabled:opacity-50 transition-all cursor-pointer whitespace-nowrap"
+                  >
+                    {confirmingDelivery ? <RefreshCw className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
+                    {confirmingDelivery ? 'Confirming...' : 'Confirm Delivery'}
+                  </button>
+                </div>
+
+                {deliveryConfirmError && (
+                  <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-300 flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
+                    <span>{deliveryConfirmError}</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* DELIVERED STATUS BANNER */}
+            {fStatus === 'completed' && activeMethod === 'delivery' && (
+              <div className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/20 text-emerald-400 flex-shrink-0">
+                    <CheckCircle className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-emerald-200">
+                      Delivered
+                    </p>
+                    <p className="text-xs text-emerald-300/80">
+                      {(fulfillmentData?.delivery_confirmation_method === 'customer' || hierarchy?.delivery_confirmation_method === 'customer')
+                        ? 'Delivery confirmed by customer.'
+                        : 'Delivery confirmed by the shop.'}
+                      {(fulfillmentData?.delivered_at || hierarchy?.delivered_at) && ` (${formatDate(fulfillmentData?.delivered_at || hierarchy?.delivered_at)})`}
+                    </p>
+                  </div>
                 </div>
               </div>
             )}
@@ -2250,6 +2334,19 @@ export default function CustomerProjectTracker({ projectId, projectName, project
             onClose={() => setConfirmedPayment(null)}
           />
         )}
+
+        {/* Customer Delivery Confirmation Modal */}
+        <ConfirmModal
+          open={showDeliveryConfirmModal}
+          title="Confirm Delivery"
+          description="Have you received your custom guitar? Only confirm after you have physically received and inspected the guitar."
+          confirmLabel="Confirm Delivery"
+          cancelLabel="Cancel"
+          variant="info"
+          isBusy={confirmingDelivery}
+          onConfirm={handleConfirmDelivery}
+          onCancel={() => setShowDeliveryConfirmModal(false)}
+        />
       </div>
     </div>
   );

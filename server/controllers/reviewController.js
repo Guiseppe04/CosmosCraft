@@ -83,6 +83,21 @@ class ReviewController {
     }
   }
 
+  // Public: Get testimonials for Landing Page
+  async getPublicTestimonials(req, res, next) {
+    try {
+      const testimonials = await reviewService.getPublicTestimonials({
+        limit: req.query.limit,
+      });
+      res.status(200).json({
+        status: 'success',
+        data: testimonials,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   // Public: Get product reviews
   async getPublicProductReviews(req, res, next) {
     try {
