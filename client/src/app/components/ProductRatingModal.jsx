@@ -405,7 +405,7 @@ export function ProductRatingModal({
             </div>
 
             {/* Actions Bar Footer */}
-            <div className="p-4 sm:p-6 border-t border-white/10 bg-[var(--surface-dark)] flex items-center gap-3 flex-shrink-0">
+            <div className="prod-modal-actions">
               {!outOfStock && isAuthenticated && (
                 <button
                   type="button"
@@ -413,7 +413,7 @@ export function ProductRatingModal({
                     onClose()
                     onBuyNow?.(product)
                   }}
-                  className="flex-1 py-3 rounded-full bg-[var(--gold-primary)] text-black font-bold text-xs tracking-wider uppercase hover:brightness-110 transition-all shadow-md"
+                  className="prod-modal-btn prod-modal-btn--primary"
                 >
                   Buy Now
                 </button>
@@ -424,13 +424,7 @@ export function ProductRatingModal({
                   if (buttonState !== 'out_of_stock') onAddToCart?.(product)
                 }}
                 disabled={buttonState === 'out_of_stock'}
-                className={`flex-1 py-3 rounded-full text-xs font-bold tracking-wider uppercase transition-all border ${
-                  buttonState === 'out_of_stock'
-                    ? 'border-white/10 text-white/30 bg-transparent cursor-not-allowed'
-                    : buttonState === 'item_added' || buttonState === 'in_cart'
-                    ? 'bg-green-500/10 border-green-500/30 text-green-400'
-                    : 'border-white/20 text-white hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)] bg-[var(--surface-elevated)]'
-                }`}
+                className="prod-modal-btn prod-modal-btn--secondary"
               >
                 {buttonState === 'add'
                   ? 'Add to Cart'

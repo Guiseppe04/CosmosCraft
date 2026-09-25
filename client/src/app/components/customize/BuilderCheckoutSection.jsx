@@ -3,9 +3,9 @@ import { AnimatedPrice } from './AnimatedPrice.jsx'
 
 export function BuilderCheckoutSection({ price, onAddToCart }) {
   return (
-    <div className="border-t border-white/10 p-5 flex-shrink-0 space-y-4">
+    <div className="border-t border-[var(--border)] p-5 flex-shrink-0 space-y-4">
       <div>
-        <p className="text-xs uppercase tracking-[0.2em] text-white/40">Your Build Total</p>
+        <p className="text-xs uppercase tracking-[0.2em] text-[var(--text-muted)]">Your Build Total</p>
         <AnimatedPrice price={price} className="text-3xl sm:text-4xl" />
       </div>
 

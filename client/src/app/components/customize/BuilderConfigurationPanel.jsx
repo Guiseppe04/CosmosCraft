@@ -20,13 +20,13 @@ export function BuilderConfigurationPanel({
   }, [lineItems])
 
   return (
-    <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
-      <h3 className="mb-4 text-xs font-semibold uppercase tracking-[0.15em] text-white/40">
+    <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] p-4">
+      <h3 className="mb-4 text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)]">
         {title}
       </h3>
 
       {loadingPrices ? (
-        <p className="text-xs text-white/40">Loading prices…</p>
+        <p className="text-xs text-[var(--text-muted)]">Loading prices…</p>
       ) : (
         <div className="space-y-4">
           {groupedItems.map((group) => (
@@ -37,15 +37,15 @@ export function BuilderConfigurationPanel({
               {group.items.map((item) => (
                 <div
                   key={item.id}
-                  className="flex items-start justify-between gap-3 border-b border-white/[0.04] pb-2 last:border-b-0 last:pb-0"
+                  className="flex items-start justify-between gap-3 border-b border-[var(--border)] pb-2 last:border-b-0 last:pb-0"
                 >
                   <div className="min-w-0 flex-1">
-                    <p className="text-xs leading-relaxed text-white/80">
-                      <span className="text-white/40">– </span>
+                    <p className="text-xs leading-relaxed text-[var(--text-light)]">
+                      <span className="text-[var(--text-muted)]">– </span>
                       {item.name}
                     </p>
                     {item.quantity > 1 && (
-                      <p className="mt-0.5 text-[10px] text-white/40">
+                      <p className="mt-0.5 text-[10px] text-[var(--text-muted)]">
                         Qty: {item.quantity}
                       </p>
                     )}
@@ -55,7 +55,7 @@ export function BuilderConfigurationPanel({
                       {formatPeso(item.subtotal)}
                     </p>
                     {item.quantity > 1 && (
-                      <p className="mt-0.5 text-[10px] tabular-nums text-white/35">
+                      <p className="mt-0.5 text-[10px] tabular-nums text-[var(--text-muted)]">
                         {formatPeso(item.unitPrice)} ea.
                       </p>
                     )}
@@ -65,7 +65,7 @@ export function BuilderConfigurationPanel({
             </div>
           ))}
 
-          <div className="border-t border-white/10 pt-3">
+          <div className="border-t border-[var(--border)] pt-3">
             <div className="flex items-center justify-between gap-3">
               <span className="text-xs font-semibold uppercase tracking-[0.12em] text-white/50">
                 Configuration Total

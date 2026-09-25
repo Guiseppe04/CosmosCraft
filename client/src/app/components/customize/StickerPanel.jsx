@@ -13,7 +13,7 @@ export function StickerPanel({
   const [expanded, setExpanded] = useState(defaultExpanded)
 
   return (
-    <div className="absolute top-4 right-2 z-10 w-[calc(100%-1rem)] sm:right-4 sm:w-[360px] sm:max-w-[calc(100%-2rem)] overflow-hidden rounded-lg border border-white/10 bg-black/35 backdrop-blur-sm">
+    <div className="absolute top-4 right-2 z-10 w-[calc(100%-1rem)] sm:right-4 sm:w-[360px] sm:max-w-[calc(100%-2rem)] overflow-hidden rounded-lg border border-[var(--border)] bg-black/35 backdrop-blur-sm">
       <div className="flex items-center justify-between gap-2 p-2">
         <div className="flex min-w-0 flex-1 items-center gap-2">
           {expanded && (
@@ -31,7 +31,7 @@ export function StickerPanel({
           {!expanded && (
             <span className="text-xs font-semibold text-[var(--text-light)]">Add Sticker</span>
           )}
-          <span className="text-[10px] text-white/70 whitespace-nowrap">
+          <span className="text-[10px] text-[var(--text-muted)] whitespace-nowrap">
             {stickerCount}/{maxStickers} items
           </span>
         </div>
@@ -59,7 +59,7 @@ export function StickerPanel({
             transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
             className="overflow-hidden"
           >
-            <div className="space-y-2 border-t border-white/10 p-2">{children}</div>
+            <div className="space-y-2 border-t border-[var(--border)] p-2">{children}</div>
           </motion.div>
         )}
       </AnimatePresence>

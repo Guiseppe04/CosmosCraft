@@ -18,6 +18,8 @@ import { getAllProvinces, getMunicipalitiesByProvince, getBarangaysByMunicipalit
 import { Country } from 'country-state-city'
 import { ConfirmModal } from '../components/ui/ConfirmModal'
 import { SelectableCartItemRow } from '../components/cart/SelectableCartItemRow.jsx'
+import { DashboardSectionTabs } from '../components/DashboardSectionTabs.jsx'
+import '../../styles/DashboardSections.css'
 
 const ALL_COUNTRIES = Country.getAllCountries()
 const PHILIPPINES = ALL_COUNTRIES.find(c => c.isoCode === 'PH')
@@ -1538,22 +1540,19 @@ export function DashboardPage() {
       <div className="space-y-8">
         {/* {renderProjectsContent()} */}
 
-        <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-5 sm:p-8">
+        <div className="dash-card">
           <div className="mb-6">
             <h2 className="text-2xl font-bold text-white mb-1">Orders & Purchases</h2>
             <p className="text-sm text-[var(--text-muted)]">Track and manage your orders, refunds, and feedback</p>
           </div>
 
           {/* Order Status Filters */}
-          <div className="flex flex-wrap gap-4 text-sm font-medium border-b border-[var(--border)] pb-3 mb-10 overflow-x-auto">
+          <div className="purch-tabs">
             {['All', 'To Pay', 'To Ship', 'To Receive', 'Completed', 'Cancelled', 'Refund'].map(label => (
               <button
                 key={label}
                 onClick={() => setActivePurchaseTab(label)}
-                className={`pb-2 transition-colors duration-200 whitespace-nowrap ${label === activePurchaseTab
-                  ? 'border-b-2 border-[var(--gold-primary)] text-[var(--gold-primary)] font-semibold'
-                  : 'border-transparent text-[var(--text-muted)] hover:text-white border-b-2'
-                  }`}
+                className={`purch-tab ${label === activePurchaseTab ? 'purch-tab--active' : ''}`}
                 type="button"
               >
                 {label}
@@ -1614,25 +1613,28 @@ export function DashboardPage() {
                 const hasCustomItems = orderItems.some(i => i.customization_id)
 
                 return (
-                  <div key={order.order_id} className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl p-5 hover:border-[var(--gold-primary)]/40 transition-colors">
-                    <div className="flex flex-col gap-4 mb-4 border-b border-[var(--border)] pb-4 sm:flex-row sm:items-start sm:justify-between">
+                  <div key={order.order_id} className="purch-card">
+                    <div className="purch-card-header">
                       <div>
                         <h3 className="font-bold text-white text-lg">{order.order_number}</h3>
                         <p className="text-xs text-[var(--text-muted)] mt-1">{new Date(order.created_at).toLocaleDateString()} {new Date(order.created_at).toLocaleTimeString()}</p>
                       </div>
-                      <div className="flex flex-col gap-2 sm:items-end">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[11px] uppercase tracking-wider text-[var(--text-muted)]">Order Status</span>
-                          <span className="inline-block px-3 py-1 bg-[var(--surface-light)] border border-[var(--border)] rounded-full text-xs font-semibold text-white capitalize">
+                      <div className="purch-status-row">
+                        <div className="purch-status-group">
+                          <span className="purch-status-label">Order Status</span>
+                          <span className="purch-status-badge" style={{ background: 'var(--surface-light)', color: 'var(--text-light)', borderColor: 'var(--border)' }}>
                             {formatStatus(order.status)}
                           </span>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-[11px] uppercase tracking-wider text-[var(--text-muted)]">Payment Status</span>
-                          <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold capitalize border ${['approved', 'paid', 'verified'].includes(String(order.payment_status || '').toLowerCase())
-                            ? 'bg-green-500/10 text-green-400 border-green-500/30'
-                            : 'bg-yellow-500/10 text-yellow-500 border-yellow-500/30'
-                            }`}>
+                        <div className="purch-status-group">
+                          <span className="purch-status-label">Payment Status</span>
+                          <span
+                            className="purch-status-badge"
+                            style={['approved', 'paid', 'verified'].includes(String(order.payment_status || '').toLowerCase())
+                              ? { background: 'rgba(34,197,94,0.1)', color: '#4ade80', borderColor: 'rgba(34,197,94,0.3)' }
+                              : { background: 'rgba(234,179,8,0.1)', color: '#facc15', borderColor: 'rgba(234,179,8,0.3)' }
+                            }
+                          >
                             {formatStatus(order.payment_status)}
                           </span>
                         </div>
@@ -1652,10 +1654,10 @@ export function DashboardPage() {
                             const canReview = orderIsFulfilled && !item.customization_id && order.payment_status !== 'refunded'
 
                             return (
-                              <div key={item.order_item_id || `${order.order_id}-${index}`} className="rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] px-4 py-3">
+                              <div key={item.order_item_id || `${order.order_id}-${index}`} className="purch-item-block">
                                 <div className="flex items-start justify-between gap-4">
                                   <div className="min-w-0">
-                                    <p className="text-sm font-semibold text-white">{itemName}</p>
+                                    <p className="purch-item-name">{itemName}</p>
                                     <p className="text-xs text-[var(--text-muted)] mt-1">
                                       Qty: {quantity}{item.customization_id ? ' • Custom Build' : ''}
                                     </p>
@@ -1814,11 +1816,11 @@ export function DashboardPage() {
                         <span className="text-xl font-bold text-[var(--gold-primary)] block">₱{Number(order.total_amount || 0).toLocaleString('en-PH')}</span>
                       </div>
                     </div>
-                    <div className="mt-4 pt-4 border-t border-[var(--border)] flex justify-end flex-wrap gap-3">
+                    <div className="purch-actions-row">
                       <button
                         onClick={() => printCustomerInvoice(order)}
                         disabled={printingOrderId === order.order_id}
-                        className="px-4 py-2 border border-[var(--gold-primary)]/40 text-[var(--gold-primary)] hover:bg-[var(--gold-primary)]/10 transition-colors rounded-lg text-sm font-semibold flex items-center gap-2 disabled:opacity-50"
+                        className="purch-action-btn purch-action-btn--gold disabled:opacity-50"
                       >
                         {printingOrderId === order.order_id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Printer className="w-4 h-4" />}
                         Print Invoice
@@ -1826,7 +1828,7 @@ export function DashboardPage() {
                       {order.status === 'pending' && (
                         <button
                           onClick={() => openCancelOrderModal(order)}
-                          className="px-4 py-2 border border-red-500/30 text-red-500 hover:bg-red-500/10 transition-colors rounded-lg text-sm font-semibold"
+                          className="purch-action-btn purch-action-btn--danger"
                         >
                           Cancel Order
                         </button>
@@ -1835,7 +1837,8 @@ export function DashboardPage() {
                         <button
                           onClick={() => handleMarkAsReceived(order)}
                           disabled={isMarkingReceived}
-                          className="px-4 py-2 border border-green-500/30 text-green-500 hover:bg-green-500/10 transition-colors rounded-lg text-sm font-semibold flex items-center gap-2 disabled:opacity-50"
+                          className="purch-action-btn disabled:opacity-50"
+                          style={{ border: '1px solid rgba(34,197,94,0.3)', color: '#4ade80' }}
                         >
                           {isMarkingReceived ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
                           Received
@@ -1844,7 +1847,8 @@ export function DashboardPage() {
                       {(order.status === 'received' || order.status === 'delivered') && order.payment_status !== 'refunded' && !order.has_refund_request && (
                         <button
                           onClick={() => openRefundModal(order)}
-                          className="px-4 py-2 border border-[var(--border)] text-white hover:bg-white/5 transition-colors rounded-lg text-sm font-semibold flex items-center gap-2"
+                          className="purch-action-btn"
+                          style={{ border: '1px solid var(--border)', color: 'var(--text-light)' }}
                         >
                           <RefreshCw className="w-4 h-4 text-[var(--gold-primary)]" />
                           Refund
@@ -1853,7 +1857,8 @@ export function DashboardPage() {
                       {orderIsFulfilled && (
                         <button
                           onClick={() => handleBuyAgain(order.order_id)}
-                          className="px-4 py-2 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] hover:shadow-[0_0_15px_rgba(212,175,55,0.4)] transition-all rounded-lg text-sm font-bold flex items-center gap-2"
+                          className="purch-action-btn"
+                          style={{ border: '1px solid var(--gold-primary)', background: 'var(--gold-primary)', color: 'var(--text-dark)' }}
                         >
                           <ShoppingBag className="w-4 h-4" />
                           Buy Again
@@ -1929,15 +1934,15 @@ export function DashboardPage() {
   }
 
   const renderAppointmentsContent = () => (
-    <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-5 sm:p-8">
-      <div className="flex justify-between items-center mb-6">
+    <div className="dash-card">
+      <div className="appt-header">
         <div>
-          <h2 className="text-2xl font-bold text-white mb-1">My Appointments</h2>
-          <p className="text-sm text-[var(--text-muted)]">View and manage your service appointments</p>
+          <h2 className="dash-card-title">My Appointments</h2>
+          <p className="dash-card-subtitle">View and manage your service appointments</p>
         </div>
         <button
           onClick={() => navigate('/appointments')}
-          className="px-4 py-2 rounded-lg bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-semibold text-sm hover:shadow-[0_0_15px_rgba(212,175,55,0.4)] transition-all flex items-center gap-2"
+          className="appt-book-btn"
         >
           <Calendar className="w-4 h-4" />
           Book Appointment
@@ -1954,13 +1959,13 @@ export function DashboardPage() {
         </div>
       ) : (
         <div className="max-h-[62vh] space-y-4 overflow-y-auto pr-2">
-          <div className="flex items-center justify-end mb-2">
-            <label className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
+          <div className="appt-sort-row">
+            <label className="appt-sort-label">
               <span>Sort by:</span>
               <select
                 value={appointmentSort}
                 onChange={(e) => setAppointmentSort(e.target.value)}
-                className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
+                className="appt-sort-select"
               >
                 <option value="soonest">Soonest first</option>
                 <option value="latest">Latest first</option>
@@ -2000,8 +2005,8 @@ export function DashboardPage() {
             }
 
             return (
-              <div key={apt.appointment_id || apt.id} className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl p-5 hover:border-[var(--gold-primary)]/40 transition-colors">
-                <div className="flex justify-between items-start mb-4 gap-4">
+              <div key={apt.appointment_id || apt.id} className="appt-card">
+                <div className="appt-header">
                   <div>
                     <h3 className="font-bold text-white text-lg">Appointment</h3>
                     {apt.reference_code && (
@@ -2187,8 +2192,8 @@ export function DashboardPage() {
     }
 
     return (
-      <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-5 sm:p-8">
-        <div className="flex flex-wrap gap-6 sm:gap-8 border-b border-[var(--border)] mb-6">
+      <div className="dash-card">
+        <div className="guitar-tabs">
           {[
             { id: 'build-projects', label: 'Build Projects' },
             { id: 'saved-builds', label: 'Saved Builds' },
@@ -2199,8 +2204,7 @@ export function DashboardPage() {
                 key={tab.id}
                 type="button"
                 onClick={() => setActiveBuildTab(tab.id)}
-                className={`relative pb-3 text-sm sm:text-base font-semibold whitespace-nowrap transition-colors ${isActive ? 'text-white' : 'text-[var(--text-muted)] hover:text-white'
-                  }`}
+                className={`guitar-tab ${isActive ? 'guitar-tab--active' : ''}`}
               >
                 {tab.label}
                 <span
@@ -2222,13 +2226,13 @@ export function DashboardPage() {
               placeholder="Search projects..."
               value={myProjectSearch}
               onChange={(e) => setMyProjectSearch(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
+              className="guitar-search"
             />
           </div>
           <select
             value={myProjectSort}
             onChange={(e) => setMyProjectSort(e.target.value)}
-            className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]"
+            className="guitar-select"
           >
             <option value="updated">Recently Updated</option>
             <option value="created">Recently Created</option>
@@ -2259,7 +2263,7 @@ export function DashboardPage() {
                 .trim();
 
               return (
-                <div key={project.project_id} className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl p-5 hover:border-[var(--gold-primary)]/40 transition-colors">
+                <div key={project.project_id} className="guitar-project-card">
                   <div className="flex justify-between items-center">
                     <div>
                       <h3 className="text-lg font-bold text-white">{cleanName}</h3>
@@ -2432,8 +2436,8 @@ export function DashboardPage() {
         {activeBuildTab === 'build-projects' && renderProjectsContent()}
 
         {activeBuildTab === 'saved-builds' && (
-          <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-5 sm:p-8">
-            <div className="flex flex-wrap gap-6 sm:gap-8 border-b border-[var(--border)] mb-6">
+          <div className="dash-card">
+            <div className="guitar-tabs">
               {[
                 { id: 'build-projects', label: 'Build Projects' },
                 { id: 'saved-builds', label: 'Saved Builds' },
@@ -2444,8 +2448,7 @@ export function DashboardPage() {
                     key={tab.id}
                     type="button"
                     onClick={() => setActiveBuildTab(tab.id)}
-                    className={`relative pb-3 text-sm sm:text-base font-semibold whitespace-nowrap transition-colors ${isActive ? 'text-white' : 'text-[var(--text-muted)] hover:text-white'
-                      }`}
+                    className={`guitar-tab ${isActive ? 'guitar-tab--active' : ''}`}
                   >
                     {tab.label}
                     <span
@@ -2638,8 +2641,8 @@ export function DashboardPage() {
     const allItemsSelected = cart.length > 0 && cart.every(item => selectedCartItemIds.includes(String(item.id)))
 
     return (
-      <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-5 sm:p-8">
-        <div className="flex items-center justify-between mb-6">
+      <div className="dash-card">
+        <div className="cart-header">
           <div>
             <h2 className="text-2xl font-bold text-white mb-1">My Cart</h2>
             <p className="text-sm text-[var(--text-muted)]">
@@ -2650,7 +2653,7 @@ export function DashboardPage() {
             <button
               type="button"
               onClick={toggleSelectAllItems}
-              className="text-sm font-medium text-[var(--gold-primary)] hover:text-white transition-colors"
+              className="cart-select-all"
             >
               {allItemsSelected ? 'Clear Selection' : 'Select All'}
             </button>
@@ -2676,7 +2679,7 @@ export function DashboardPage() {
           </div>
         ) : (
           <div className="space-y-4">
-            <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-3 text-sm text-[var(--text-muted)]">
+            <div className="cart-selection-info">
               {selectedCount} of {cart.length} item{cart.length !== 1 ? 's' : ''} selected for checkout
             </div>
 
@@ -2691,6 +2694,7 @@ export function DashboardPage() {
                 selectionEnabled
                 showQuantityControls
                 showRemove
+                className="cart-item-card"
               />
             ))}
 
@@ -2980,11 +2984,11 @@ export function DashboardPage() {
     }
 
     return (
-      <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-5 sm:p-8">
-        <div className="flex justify-between items-center mb-6">
+      <div className="dash-card">
+        <div className="dash-card-header">
           <div>
-            <h2 className="text-2xl font-bold text-white mb-1">My Addresses</h2>
-            <p className="text-sm text-[var(--text-muted)]">Manage your shipping addresses</p>
+            <h2 className="dash-card-title">My Addresses</h2>
+            <p className="dash-card-subtitle">Manage your shipping addresses</p>
           </div>
           {canShowAddButton && (
             <button
@@ -3049,24 +3053,24 @@ export function DashboardPage() {
             />
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="addr-list">
             {addresses && addresses.length > 0 ? (
               [...addresses]
                 .sort((a, b) => (b.is_default ? 1 : 0) - (a.is_default ? 1 : 0))
                 .map((addr) => (
-                  <div key={addr.address_id} className="p-4 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-white capitalize">{addr.label || 'Address'}</span>
+                  <div key={addr.address_id} className="addr-card">
+                    <div className="addr-card-top">
+                      <div className="addr-label-group">
+                        <span className="addr-label">{addr.label || 'Address'}</span>
                         {addr.is_default && (
-                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-[var(--gold-primary)] text-[var(--text-dark)]">
+                          <span className="addr-default-badge">
                             Default
                           </span>
                         )}
                       </div>
-                      <div className="flex items-center gap-3">
+                      <div className="addr-actions">
                         {!addr.is_default && (
-                          <button onClick={() => setDefaultAddress(addr.address_id)} className="p-2.5 hover:bg-[var(--gold-primary)]/20 hover:border hover:border-[var(--gold-primary)] rounded-lg transition-all duration-150" title="Set as default">
+                          <button onClick={() => setDefaultAddress(addr.address_id)} className="addr-action-btn" title="Set as default">
                             <Star className="w-5 h-5 text-[var(--gold-primary)]" />
                           </button>
                         )}
@@ -3098,16 +3102,16 @@ export function DashboardPage() {
                             setLocationData({ provinces, cities, barangays })
                             setIsAddingAddress(true)
                           }}
-                          className="p-2.5 hover:bg-[var(--gold-primary)]/20 hover:border hover:border-[var(--gold-primary)] rounded-lg transition-all duration-150"
+                          className="addr-action-btn"
                         >
                           <Edit className="w-5 h-5 text-[var(--gold-primary)]" />
                         </button>
-                        <button onClick={() => openDeleteConfirm(addr.address_id)} className="p-2.5 hover:bg-red-500/20 hover:border hover:border-red-500 rounded-lg transition-all duration-150">
+                        <button onClick={() => openDeleteConfirm(addr.address_id)} className="addr-action-btn addr-action-btn--danger">
                           <Trash2 className="w-5 h-5 text-red-400" />
                         </button>
                       </div>
                     </div>
-                    <div className="text-sm text-[var(--text-muted)] space-y-1">
+                    <div className="addr-details">
                       {formatAddressFull(addr)?.map((line, idx) => (
                         <p key={idx}>{line}</p>
                       ))}
@@ -4760,37 +4764,15 @@ export function DashboardPage() {
 
           {/* Main content */}
           <motion.main
-            key={activeSection}
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
             className="flex flex-col space-y-4"
           >
-            <div className="xl:hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-3">
-              <div className="mb-2 text-[11px] font-semibold tracking-wide text-[var(--text-muted)]">
-                SECTIONS
-              </div>
-              <div className="flex gap-2 overflow-x-auto pb-1">
-                {menuItems
-                  .filter(item => item.id !== 'logout')
-                  .map(item => {
-                    const Icon = item.icon
-                    const active = activeSection === item.id
-                    return (
-                      <button
-                        key={`mobile-${item.id}`}
-                        type="button"
-                        onClick={() => setActiveSection(item.id)}
-                        className={`inline-flex shrink-0 items-center gap-2 rounded-full border px-3 py-2 text-xs font-medium transition-colors ${active
-                          ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)] text-[var(--text-dark)]'
-                          : 'border-[var(--border)] bg-[var(--bg-primary)] text-[var(--text-muted)]'
-                          }`}
-                      >
-                        <Icon className="h-3.5 w-3.5" />
-                        <span>{item.label}</span>
-                      </button>
-                    )
-                  })}
-              </div>
+            <div className="xl:hidden">
+              <DashboardSectionTabs
+                activeSection={activeSection}
+                onSectionChange={setActiveSection}
+              />
             </div>
 
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">

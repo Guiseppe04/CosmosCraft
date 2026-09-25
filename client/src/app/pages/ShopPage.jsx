@@ -7,6 +7,7 @@ import { useNavigate } from 'react-router'
 import { ProductRatingModal } from '../components/ProductRatingModal.jsx'
 import { StarRating } from '../components/common/StarRating.jsx'
 import { API } from '../utils/apiConfig.js'
+import '../../styles/ShopPage.css'
 
 async function fetchPublicJson(path) {
   const response = await fetch(`${API}${path}`, {
@@ -581,10 +582,10 @@ export function ShopPage() {
   }
 
   return (
-    <div className="min-h-screen pt-20 pb-24 bg-[var(--bg-primary)] font-sans">
+    <div className="shop-page min-h-screen pt-20 pb-24 bg-[var(--bg-primary)] font-sans">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
-        <section className="relative w-full min-h-[450px] mb-12 rounded-[32px] overflow-hidden border border-white/10 shadow-2xl group bg-[#0a0a0a]">
+        <section className="shop-hero relative w-full min-h-[450px] mb-12 rounded-[32px] overflow-hidden border border-white/10 shadow-2xl group bg-[#0a0a0a]">
           <div className="absolute inset-0 z-0">
             <img 
               src="/assets/landing/480473076_1131061492149780_4368555505559771502_n.jpg"
@@ -612,7 +613,7 @@ export function ShopPage() {
                 </div>
               </div>
               
-              <div className="text-lg sm:text-xl max-w-lg font-light leading-relaxed drop-shadow-lg opacity-90" style={{ color: '#f3f4f6' }}>
+              <div className="shop-hero-title text-lg sm:text-xl max-w-lg font-light leading-relaxed drop-shadow-lg opacity-90" style={{ color: '#f3f4f6' }}>
                 Experience unparalleled craftsmanship with our curated selection of premium instruments, hardware, and essential accessories.
               </div>
             </motion.div>
@@ -657,20 +658,22 @@ export function ShopPage() {
           />
           
           <div>
-            <div className="flex items-center justify-between mb-6">
+            <div className="shop-toolbar">
+              <div className="shop-filter-row">
               <div className="flex items-center gap-3">
-                <div className="relative w-72">
-                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
+                <div className="shop-search-wrapper relative w-72">
+                  <Search className="shop-search-icon absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
                   <input
                     type="text"
                     placeholder="Search our catalog..."
                     value={searchQuery}
                     onChange={e => setSearchQuery(e.target.value)}
-                    className="w-full pl-11 pr-4 py-2 bg-[var(--surface-dark)] border border-[var(--border)] rounded-full text-xs text-white placeholder-white/30 focus:outline-none focus:border-[var(--gold-primary)]/50 transition-all focus:bg-[var(--surface-elevated)] shadow-sm"
+                    className="shop-search-input w-full pl-11 pr-4 py-2 bg-[var(--surface-dark)] border border-[var(--border)] rounded-full text-xs text-white placeholder-white/30 focus:outline-none focus:border-[var(--gold-primary)]/50 transition-all focus:bg-[var(--surface-elevated)] shadow-sm"
                   />
                 </div>
               </div>
-              <span className="text-sm text-[var(--text-muted)]">{filteredProducts.length} products</span>
+              <span className="shop-count text-sm text-[var(--text-muted)]">{filteredProducts.length} products</span>
+              </div>
             </div>
 
             {loadError && (
@@ -706,7 +709,7 @@ export function ShopPage() {
               )}
             </AnimatePresence>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
+            <div className="shop-grid">
               {loading ? (
                 <div className="col-span-full flex items-center justify-center py-20 bg-[var(--surface-dark)] rounded-2xl border border-white/5">
                   <p className="text-[var(--text-muted)] text-sm">Loading products...</p>
@@ -726,13 +729,13 @@ export function ShopPage() {
                         setSelectedProduct(product)
                         setProductModalTab('details')
                       }}
-                      className={`group bg-[var(--surface-dark)] border border-white/5 rounded-[20px] rounded-br-[20px] overflow-hidden hover:border-white/20 transition-all duration-300 flex flex-col hover:shadow-2xl hover:-translate-y-1 cursor-pointer ${outOfStock ? 'opacity-60' : ''}`}
+                      className={`product-card group bg-[var(--surface-dark)] border border-white/5 rounded-[20px] rounded-br-[20px] overflow-hidden hover:border-white/20 transition-all duration-300 flex flex-col hover:shadow-2xl hover:-translate-y-1 cursor-pointer ${outOfStock ? 'opacity-60' : ''}`}
                     >
-                      <div className="aspect-[4/3] bg-[var(--surface-elevated)] overflow-hidden relative flex flex-col justify-center items-center border border-white/5 rounded-[16px] m-2">
+                      <div className="product-card-image-wrapper aspect-[4/3] bg-[var(--surface-elevated)] overflow-hidden relative flex flex-col justify-center items-center border border-white/5 rounded-[16px] m-2">
                         <img
                           src={product.image}
                           alt={product.name}
-                          className="w-full h-full object-cover filter brightness-90 group-hover:scale-105 group-hover:brightness-100 transition-all duration-700 ease-out"
+                          className="product-card-image w-full h-full object-cover filter brightness-90 group-hover:scale-105 group-hover:brightness-100 transition-all duration-700 ease-out"
                         />
                         
                         {outOfStock && (
@@ -744,16 +747,16 @@ export function ShopPage() {
                         )}
                       </div>
                       
-                      <div className="px-4 pb-4 pt-2 flex flex-col flex-1 relative bg-transparent">
-                        <p className="text-[12px] text-[var(--text-muted)] font-medium mb-1 tracking-wide">{product.category}</p>
+                      <div className="product-card-info px-4 pb-4 pt-2 flex flex-col flex-1 relative bg-transparent">
+                        <p className="product-card-category text-[12px] text-[var(--text-muted)] font-medium mb-1 tracking-wide">{product.category}</p>
                         {product.brand && (
                           <p className="text-[11px] text-[var(--gold-primary)] font-semibold mb-1.5 tracking-wide uppercase">
                             {product.brand}
                           </p>
                         )}
-                        <h3 className="font-bold text-white text-[15px] leading-snug mb-2 group-hover:text-[var(--gold-primary)] transition-colors line-clamp-1">{product.name}</h3>
+                        <h3 className="product-card-name font-bold text-white text-[15px] leading-snug mb-2 group-hover:text-[var(--gold-primary)] transition-colors line-clamp-1">{product.name}</h3>
 
-                        <div className="flex items-center gap-2 mb-2">
+                        <div className="product-card-reviews flex items-center gap-2 mb-2">
                           {product.review_count > 0 ? (
                             <button
                               type="button"
@@ -783,7 +786,7 @@ export function ShopPage() {
 
                         <div className="mt-auto flex flex-col gap-4 pt-3 border-t border-white/10">
                           <div className="flex items-center justify-between">
-                            <p className="text-lg font-bold text-white tracking-tight">
+                            <p className="product-card-price text-lg font-bold text-white tracking-tight">
                               ₱{product.price.toLocaleString('en-PH')}
                             </p>
                           </div>
@@ -800,7 +803,7 @@ export function ShopPage() {
                             <button
                               onClick={(e) => { e.stopPropagation(); handleAddToCart(product); }}
                               disabled={buttonState === 'out_of_stock'}
-                              className={`flex-1 px-4 py-2.5 rounded-full text-xs tracking-wide font-bold transition-all border ${
+                              className={`product-card-btn flex-1 px-4 py-2.5 rounded-full text-xs tracking-wide font-bold transition-all border ${
                                 buttonState === 'out_of_stock'
                                   ? 'border-[var(--border)] bg-[var(--surface-dark)] text-[var(--text-muted)] cursor-not-allowed'
                                   : 'bg-[var(--surface-dark)] border-[var(--border)] text-[var(--text-light)] hover:text-[var(--gold-primary)] hover:border-[var(--gold-primary)] shadow-sm'
@@ -825,11 +828,31 @@ export function ShopPage() {
           </div>
         </section>
 
-        <section className="lg:hidden">
-          <div className="flex items-center justify-between mb-6 pt-6">
+        <section className="shop-mobile-catalog lg:hidden">
+          <div className="shop-category-tabs shop-mobile-category-rail" aria-label="Shop categories">
+            <button
+              type="button"
+              className={`shop-category-tab ${selectedCategory === 'all' ? 'shop-category-tab--active' : ''}`}
+              onClick={() => handleCategoryChange('all')}
+            >
+              All Products
+            </button>
+            {categoryTree.map((category) => (
+              <button
+                key={category.name}
+                type="button"
+                className={`shop-category-tab ${selectedCategory === category.name ? 'shop-category-tab--active' : ''}`}
+                onClick={() => handleCategoryChange(category.name)}
+              >
+                {category.name}
+              </button>
+            ))}
+          </div>
+
+          <div className="shop-toolbar shop-mobile-toolbar flex items-center justify-between mb-6 pt-6">
             <button 
               onClick={() => setMobileFilterOpen(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-[var(--surface-dark)] border border-[var(--border)] rounded-full text-xs font-semibold text-white"
+              className="shop-filters-btn flex items-center gap-2 px-4 py-2 bg-[var(--surface-dark)] border border-[var(--border)] rounded-full text-xs font-semibold text-white"
             >
               <Filter className="w-4 h-4" />
               Filters
@@ -838,19 +861,19 @@ export function ShopPage() {
               )}
             </button>
             
-            <div className="relative flex-1 ml-4">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
+            <div className="shop-search-wrapper relative flex-1 ml-4">
+              <Search className="shop-search-icon absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
               <input
                 type="text"
                 placeholder="Search..."
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                className="w-full pl-11 pr-4 py-2 bg-[var(--surface-dark)] border border-[var(--border)] rounded-full text-xs text-white placeholder-white/30 focus:outline-none focus:border-[var(--gold-primary)]/50"
+                className="shop-search-input w-full pl-11 pr-4 py-2 bg-[var(--surface-dark)] border border-[var(--border)] rounded-full text-xs text-white placeholder-white/30 focus:outline-none focus:border-[var(--gold-primary)]/50"
               />
             </div>
           </div>
 
-          <span className="text-sm text-[var(--text-muted)] mb-4 block">{filteredProducts.length} products</span>
+          <span className="shop-count text-sm text-[var(--text-muted)] mb-4 block">{filteredProducts.length} products</span>
 
           {loadError && (
             <div className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
@@ -871,7 +894,7 @@ export function ShopPage() {
             brandLabels={brandLabels}
           />
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="shop-grid shop-mobile-grid">
             {loading ? (
               <div className="col-span-2 flex items-center justify-center py-12 bg-[var(--surface-dark)] rounded-2xl">
                 <p className="text-[var(--text-muted)] text-sm">Loading products...</p>
@@ -891,13 +914,13 @@ export function ShopPage() {
                       setSelectedProduct(product)
                       setProductModalTab('details')
                     }}
-                    className={`group bg-[var(--surface-dark)] border border-white/5 rounded-2xl overflow-hidden cursor-pointer ${outOfStock ? 'opacity-60' : ''}`}
+                    className={`product-card shop-mobile-card group bg-[var(--surface-dark)] border border-white/5 rounded-2xl overflow-hidden cursor-pointer ${outOfStock ? 'opacity-60' : ''}`}
                   >
-                    <div className="aspect-square bg-[var(--surface-elevated)] relative">
+                    <div className="product-card-image-wrapper aspect-square bg-[var(--surface-elevated)] relative">
                       <img
                         src={product.image}
                         alt={product.name}
-                        className="w-full h-full object-cover"
+                        className="product-card-image w-full h-full object-cover"
                       />
                       {outOfStock && (
                         <span className="absolute top-2 left-2 px-2 py-0.5 bg-red-500 text-white text-[9px] uppercase font-bold rounded-full">
@@ -905,9 +928,9 @@ export function ShopPage() {
                         </span>
                       )}
                     </div>
-                    <div className="p-3">
-                      <p className="text-[10px] text-[var(--text-muted)] truncate">{product.category}</p>
-                      <h3 className="text-sm font-bold text-white truncate">{product.name}</h3>
+                    <div className="product-card-info p-3">
+                      <p className="product-card-category text-[10px] text-[var(--text-muted)] truncate">{product.category}</p>
+                      <h3 className="product-card-name text-sm font-bold text-white truncate">{product.name}</h3>
 
                       <div className="flex items-center gap-1 my-1">
                         {product.review_count > 0 ? (
@@ -927,9 +950,18 @@ export function ShopPage() {
                         )}
                       </div>
 
-                      <p className="text-sm font-bold text-[var(--gold-primary)] mt-1">
+                      <p className="product-card-price text-sm font-bold text-[var(--gold-primary)] mt-1">
                         ₱{product.price.toLocaleString('en-PH')}
                       </p>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); handleAddToCart(product) }}
+                        disabled={buttonState === 'out_of_stock'}
+                        className="product-card-btn shop-mobile-quick-add mt-3 flex min-h-10 w-full items-center justify-center gap-2 rounded-lg bg-[var(--text-light)] px-3 py-2 text-xs font-bold text-[var(--text-dark)] transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <ShoppingCart className="h-3.5 w-3.5" />
+                        {buttonState === 'add' ? 'Quick Add' : buttonState === 'out_of_stock' ? 'Out of Stock' : 'Added'}
+                      </button>
                     </div>
                   </motion.div>
                 )

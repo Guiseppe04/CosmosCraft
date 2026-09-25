@@ -10,6 +10,11 @@ import {
   Settings,
   LogOut,
   LayoutDashboard,
+  MapPin,
+  Lock,
+  Calendar,
+  ShoppingBag,
+  Music,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'motion/react'
 import { useCart } from '../context/CartContext.jsx'
@@ -27,8 +32,13 @@ export function Header() {
   const [profileMenuOpen, setProfileMenuOpen] = useState(false)
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
   const [isScrolled, setIsScrolled] = useState(false)
+
+  // Mobile profile dropdown state (for the avatar icon on the right)
+  const [mobileProfileDropdownOpen, setMobileProfileDropdownOpen] = useState(false)
+
   const customizeRef = useRef(null)
   const profileMenuRef = useRef(null)
+  const mobileProfileRef = useRef(null)
   const { getCartCount, setIsOpen: setCartOpen } = useCart()
   const { isAuthenticated, user, openLogin, logout } = useAuth()
   const cartCount = getCartCount()
@@ -55,6 +65,9 @@ export function Header() {
       if (profileMenuRef.current && !profileMenuRef.current.contains(event.target)) {
         setProfileMenuOpen(false)
       }
+      if (mobileProfileRef.current && !mobileProfileRef.current.contains(event.target)) {
+        setMobileProfileDropdownOpen(false)
+      }
     }
 
     document.addEventListener('mousedown', handleClickOutside)
@@ -66,6 +79,8 @@ export function Header() {
       if (event.key === 'Escape') {
         setCustomizeOpen(false)
         setProfileMenuOpen(false)
+        setMobileProfileDropdownOpen(false)
+        setMobileMenuOpen(false)
       }
     }
 
@@ -156,8 +171,17 @@ export function Header() {
   const handleConfirmLogout = () => {
     setShowLogoutConfirm(false)
     setProfileMenuOpen(false)
+    setMobileMenuOpen(false)
+    setMobileProfileDropdownOpen(false)
     logout()
     navigate('/')
+  }
+
+  // Mobile menu navigation handler
+  const handleMobileNav = (path, state = null) => {
+    setMobileMenuOpen(false)
+    setMobileProfileDropdownOpen(false)
+    navigate(path, state ? { state } : undefined)
   }
 
   return (
@@ -168,10 +192,146 @@ export function Header() {
           : 'bg-transparent'
       }`}
     >
-      <div className="mx-auto flex h-16 max-w-7xl items-center gap-3 px-4 sm:px-6 lg:px-8">
-        <Link to="/" className="flex items-center gap-2">
+      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+        
+{/* --- MOBILE/TABLET HEADER LAYOUT --- */}
+{/* Left: Hamburger */}
+<button
+  type="button"
+  onClick={() => setMobileMenuOpen((prev) => !prev)}
+  className="rounded-lg p-2 text-[var(--text-light)] transition-colors duration-200 hover:bg-[var(--surface-elevated)] lg:hidden"
+  aria-label="Toggle navigation menu"
+>
+  {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+</button>
+
+{/* Left: Logo (sits beside the hamburger, not centered) */}
+<Link to="/" className="flex items-center gap-2 lg:hidden">
+  <img src="/logo-cosmos.png" alt="CosmosCraft Logo" className="h-8 w-auto object-contain" />
+</Link>
+
+{/* Right: Theme + Cart + Profile */}
+<div className="ml-auto flex items-center gap-1 lg:hidden">
+  {/* Theme Toggle */}
+  <div className="mobile-theme-toggle">
+    <ThemeToggle />
+  </div>
+
+  {/* Cart Icon — always visible */}
+  <button
+    type="button"
+    onClick={() => setCartOpen(true)}
+    className="mobile-header-icon-btn relative"
+    aria-label="Open cart"
+  >
+    <ShoppingCart className="h-5 w-5" />
+    {cartCount > 0 && (
+      <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-[var(--gold-primary)] px-1 text-[10px] font-bold text-[var(--text-dark)]">
+        {cartCount}
+      </span>
+    )}
+  </button>
+
+  {/* Profile Avatar with Dropdown */}
+  <div className="relative" ref={mobileProfileRef}>
+    {isAuthenticated ? (
+      <>
+        <button
+          type="button"
+          onClick={() => setMobileProfileDropdownOpen((prev) => !prev)}
+          className="rounded-full border border-[var(--border)] p-1 text-[var(--text-light)] transition-colors duration-200 hover:bg-[var(--surface-elevated)]"
+          aria-label="Open profile menu"
+        >
+          {userAvatar ? (
+            <img src={userAvatar} alt="Profile" className="h-8 w-8 rounded-full object-cover" />
+          ) : (
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--gold-primary)] text-xs font-bold text-[var(--text-dark)]">
+              {profileInitials.slice(0, 1)}
+            </div>
+          )}
+        </button>
+
+        <AnimatePresence>
+          {mobileProfileDropdownOpen && (
+            <motion.div
+              initial={{ opacity: 0, y: 8, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 8, scale: 0.98 }}
+              className="absolute right-0 top-[calc(100%+12px)] z-50 w-[280px] overflow-hidden rounded-[24px] border border-[var(--border)] bg-[var(--surface-dark)] p-6 shadow-2xl"
+            >
+              <div className="flex flex-col items-center mb-6">
+                {userAvatar ? (
+                  <img
+                    src={userAvatar}
+                    alt="Profile"
+                    className="h-16 w-16 rounded-full border-2 border-[var(--border)] object-cover mb-3"
+                  />
+                ) : (
+                  <div className="flex h-16 w-16 items-center justify-center rounded-full border-2 border-[var(--border)] bg-[var(--gold-primary)] text-2xl font-bold text-[var(--text-dark)] mb-3">
+                    {profileInitials}
+                  </div>
+                )}
+                <p className="text-base font-bold text-[var(--text-light)] text-center">
+                  {profileName}
+                </p>
+              </div>
+
+              <div className="space-y-1">
+                {hasRole(user?.role, 'admin', 'staff') && (
+                  <button
+                    type="button"
+                    onClick={() => handleMobileNav(hasRole(user?.role, 'admin') ? '/admin' : '/staff')}
+                    className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-medium text-[var(--text-light)] transition-colors hover:bg-white/5"
+                  >
+                    <LayoutDashboard className="h-5 w-5 text-[var(--gold-primary)]" />
+                    Admin Dashboard
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => handleMobileNav('/dashboard', { section: 'profile' })}
+                  className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-medium text-[var(--text-light)] transition-colors hover:bg-white/5"
+                >
+                  <Settings className="h-5 w-5 text-[var(--gold-primary)]" />
+                  Settings
+                </button>
+
+                <div className="border-t border-[var(--border)] my-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowLogoutConfirm(true)
+                      setMobileProfileDropdownOpen(false)
+                    }}
+                    className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-medium text-red-400 transition-colors hover:bg-red-500/10"
+                  >
+                    <LogOut className="h-5 w-5" />
+                    Sign Out
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </>
+    ) : (
+      <button
+        type="button"
+        onClick={openLogin}
+        className="rounded-full p-2 text-[var(--text-muted)] transition-colors duration-200 hover:bg-[var(--surface-elevated)] hover:text-[var(--gold-primary)]"
+        aria-label="Login"
+      >
+        <User className="h-5 w-5" />
+      </button>
+    )}
+  </div>
+</div>
+
+        {/* --- DESKTOP HEADER LAYOUT (Unchanged) --- */}
+        <Link to="/" className="hidden lg:flex items-center gap-2">
           <img src="/logo-cosmos.png" alt="CosmosCraft Logo" className="h-9 w-auto object-contain" />
-          <span className="hidden text-lg font-semibold text-[var(--text-light)] sm:block">
+          <span className="text-lg font-semibold text-[var(--text-light)]">
             Cosmos Craft
           </span>
         </Link>
@@ -375,33 +535,8 @@ export function Header() {
             </>
           )}
         </div>
-
-        {isAuthenticated && (
-          <button
-            type="button"
-            onClick={() => navigate('/dashboard', { state: { section: 'profile' } })}
-            className="rounded-full border border-[var(--border)] p-1 text-[var(--text-light)] transition-colors duration-200 hover:bg-[var(--surface-elevated)] lg:hidden"
-            aria-label="Open profile"
-          >
-            {userAvatar ? (
-              <img src={userAvatar} alt="Profile" className="h-8 w-8 rounded-full object-cover" />
-            ) : (
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--gold-primary)] text-xs font-bold text-[var(--text-dark)]">
-                {profileInitials.slice(0, 1)}
-              </div>
-            )}
-          </button>
-        )}
-
-        <button
-          type="button"
-          onClick={() => setMobileMenuOpen((prev) => !prev)}
-          className="rounded-lg p-2 text-[var(--gold-primary)] transition-colors duration-200 hover:bg-[var(--surface-elevated)] lg:hidden"
-          aria-label="Toggle navigation menu"
-        >
-          {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-        </button>
       </div>
+
       <ConfirmModal
         open={showLogoutConfirm}
         title="Logout"
@@ -424,13 +559,13 @@ export function Header() {
             <nav className="space-y-2 px-4 py-4">
               {!isAdminOrStaff &&
                 navLinksBeforeCustomize.map((link) => (
-                <Link
-                  key={link.label}
-                  to={link.to}
-                  onClick={(event) => handleNavClick(event, link.to)}
-                  className={`${navLinkClasses(location.pathname === link.to)} block w-full`}
-                >
-                  {link.label}
+                  <Link
+                    key={link.label}
+                    to={link.to}
+                    onClick={(event) => handleNavClick(event, link.to)}
+                    className={`${navLinkClasses(location.pathname === link.to)} block w-full`}
+                  >
+                    {link.label}
                   </Link>
                 ))}
 
@@ -469,40 +604,6 @@ export function Header() {
                   </Link>
                 ))}
 
-              <div className="flex items-center gap-2 pt-2">
-                {!isAuthenticated && <ThemeToggle />}
-                <button
-                  type="button"
-                  onClick={() => setCartOpen(true)}
-                  className="rounded-full border border-[var(--border)] p-2 text-[var(--text-light)]"
-                >
-                  <ShoppingCart className="h-5 w-5" />
-                </button>
-                {isAuthenticated && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      navigate('/dashboard', { state: { section: 'profile' } })
-                      setMobileMenuOpen(false)
-                    }}
-                    className="rounded-full border border-[var(--border)] px-4 py-2 text-sm font-medium text-[var(--text-light)]"
-                  >
-                    My Profile
-                  </button>
-                )}
-                {!isAuthenticated && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      openLogin()
-                      setMobileMenuOpen(false)
-                    }}
-                    className="rounded-full border border-[var(--border)] px-4 py-2 text-sm font-medium text-[var(--text-light)]"
-                  >
-                    Login
-                  </button>
-                )}
-              </div>
             </nav>
           </motion.div>
         )}
@@ -510,4 +611,3 @@ export function Header() {
     </header>
   )
 }
-

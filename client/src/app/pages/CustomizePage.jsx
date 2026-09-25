@@ -77,7 +77,7 @@ function Tooltip({ content, children }) {
     <div className="group relative inline-flex">
       {children}
       <div className="absolute bottom-full left-1/2 z-50 mb-2 -translate-x-1/2 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-all duration-200">
-        <div className="bg-theme-surface-deep border border-white/10 rounded-lg px-3 py-2 text-xs text-white/90 whitespace-nowrap shadow-xl shadow-black/50 max-w-xs">
+        <div className="bg-[var(--surface-deep)] border border-[var(--border)] rounded-lg px-3 py-2 text-xs text-[var(--text-light)] whitespace-nowrap shadow-xl shadow-black/50 max-w-xs">
           {content}
           <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-[var(--surface-elevated)]" />
         </div>
@@ -269,18 +269,18 @@ function SmartOption({ option, isSelected, onClick, disabled = false, imageHeigh
 function AccordionSection({ title, icon: Icon, children, defaultOpen = true }) {
   const [isOpen, setIsOpen] = useState(defaultOpen)
   return (
-    <div className="rounded-xl border border-white/10 overflow-hidden">
+    <div className="rounded-xl border border-[var(--border)] overflow-hidden">
       <button
         type="button"
         onClick={() => setIsOpen(prev => !prev)}
-        className="flex w-full items-center justify-between px-4 py-3 bg-white/[0.02] hover:bg-white/[0.04] transition-colors"
+        className="flex w-full items-center justify-between px-4 py-3 bg-[var(--surface-elevated)] hover:bg-[var(--surface-dark)] transition-colors"
       >
-        <span className="text-xs font-semibold uppercase tracking-[0.15em] text-white/60">{title}</span>
-        {Icon && <Icon className="h-4 w-4 text-white/40" />}
-        <ChevronDown className={`h-4 w-4 text-white/40 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+        <span className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)]">{title}</span>
+        {Icon && <Icon className="h-4 w-4 text-[var(--text-muted)]" />}
+        <ChevronDown className={`h-4 w-4 text-[var(--text-muted)] transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
       </button>
       {isOpen && (
-        <div className="border-t border-white/10 p-4 space-y-5">
+        <div className="border-t border-[var(--border)] p-4 space-y-5">
           {children}
         </div>
       )}
@@ -1139,10 +1139,10 @@ export function CustomizePage() {
         <div className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[340px_minmax(0,1fr)_400px]">
           
 {/* LEFT PANEL - Configuration Categories */}
-<aside className="min-h-0 rounded-2xl border border-white/10 bg-[var(--bg-primary)] overflow-hidden flex flex-col">
-            <div className="border-b border-white/10 px-4 py-4">
+<aside className="min-h-0 rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] overflow-hidden flex flex-col">
+            <div className="border-b border-[var(--border)] px-4 py-4">
               <h2 className="text-lg font-semibold tracking-tight">Build Your Guitar</h2>
-              <p className="mt-1 text-xs text-white/50">Select a category to customize</p>
+              <p className="mt-1 text-xs text-[var(--text-muted)]">Select a category to customize</p>
             </div>
             
             {/* Combined dropdown - Guitar Type + Categories */}
@@ -1215,14 +1215,14 @@ export function CustomizePage() {
             </div>
             
             {/* Category-specific options */}
-            <div className="flex-1 overflow-y-auto border-t border-white/10">
+            <div className="flex-1 overflow-y-auto border-t border-[var(--border)]">
               
               {/* GENERAL OPTIONS */}
               {activeCategory === 'general' && (
                 <div className="p-4 space-y-5">
                   {/* Dexterity */}
                   <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Dexterity</h3>
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Dexterity</h3>
                     <div className="grid grid-cols-2 gap-2">
                       {options.dexterityOptions?.map((opt) => (
                         <OptionButton
@@ -1237,7 +1237,7 @@ export function CustomizePage() {
                   
                   {/* Strings */}
                   <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Number of Strings</h3>
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Number of Strings</h3>
                     <div className="grid grid-cols-2 gap-2">
                       {options.stringCountOptions?.map((opt) => (
                         <OptionButton
@@ -1252,7 +1252,7 @@ export function CustomizePage() {
                   
                   {/* Multiscale */}
                   <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Multiscale</h3>
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Multiscale</h3>
                     <div className="grid grid-cols-2 gap-2">
                       {options.multiscaleOptions?.map((opt) => (
                         <OptionButton
@@ -1267,7 +1267,7 @@ export function CustomizePage() {
                   
                   {/* Scale Length */}
                   <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Scale Length</h3>
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Scale Length</h3>
                     <div className="grid grid-cols-2 gap-2">
                       {options.scaleLengthOptions?.map((opt) => (
                         <OptionButton
@@ -1282,7 +1282,7 @@ export function CustomizePage() {
                   
                   {/* Case */}
                   <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Case</h3>
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Case</h3>
                     <div className="grid grid-cols-2 gap-2">
                       {options.caseOptions?.map((opt) => (
                         <OptionButton
@@ -1302,7 +1302,7 @@ export function CustomizePage() {
                 <div className="p-4 space-y-5">
                   {/* Body Shape */}
                   <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Body Shape</h3>
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Body Shape</h3>
                     <div className="grid grid-cols-2 gap-2">
                       {options.bodyOptions?.map((opt) => (
                         <VisualCard
@@ -1320,7 +1320,7 @@ export function CustomizePage() {
                   
                   {/* Beveled Body Edges */}
                   <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Bevel</h3>
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Bevel</h3>
                     <div className="grid grid-cols-2 gap-2">
                       {options.bevelOptions?.map((opt) => (
                         <OptionButton
@@ -1335,7 +1335,7 @@ export function CustomizePage() {
                   
                   {/* Body Wood */}
                   <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Body Wood</h3>
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Body Wood</h3>
                     <div className="grid grid-cols-2 gap-2">
                       {options.bodyWoodOptions?.map((opt) => (
                         <VisualCard
@@ -1351,7 +1351,7 @@ export function CustomizePage() {
                   
                    {/* Top Wood */}
                    <div>
-                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Top Wood</h3>
+                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Top Wood</h3>
                      <div className="grid grid-cols-2 gap-2">
                        {options.topWoodOptions?.map((opt) => (
                          <VisualCard
@@ -1369,7 +1369,7 @@ export function CustomizePage() {
                   {/* Finish Type */}
                   {showDcFinish && (
                   <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Finish Type</h3>
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Finish Type</h3>
                     <div className="grid grid-cols-2 gap-2">
                       {options.finishTypeOptions?.map((opt) => (
                         <OptionButton
@@ -1386,7 +1386,7 @@ export function CustomizePage() {
                    {/* Finish Color - dynamically discovered from selected finish folder */}
                    {showDcFinish && config.finishType && config.finishType !== 'solid' && (
                      <div>
-                       <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Finish Color</h3>
+                       <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Finish Color</h3>
                        <div className="grid grid-cols-2 gap-2">
                          {options.finishColorOptions?.map((opt) => (
                            <VisualCard
@@ -1405,7 +1405,7 @@ export function CustomizePage() {
                    {/* Top Coat */}
                      {showDcTopCoat && (
                      <div>
-                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Top Coat</h3>
+                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Top Coat</h3>
                      <div className="grid grid-cols-2 gap-2">
                        {visibleTopCoatOptions?.map((opt) => (
                          <VisualCard
@@ -1423,7 +1423,7 @@ export function CustomizePage() {
                   
                   {/* Additional Finish Options (Burst Finish) - depends on Top Coat */}
                   <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Additional Finish Options</h3>
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Additional Finish Options</h3>
                     <div className="grid grid-cols-2 gap-2">
                       {options.burstFinishOptions?.map((opt) => (
                         <OptionButton
@@ -1439,19 +1439,19 @@ export function CustomizePage() {
                   {/* Body Finish - Solid color picker, shown when finishType is 'solid' or not set */}
                   {showDcFinish && (!config.finishType || config.finishType === 'solid') && (
                     <div>
-                      <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-3">Body Finish Color</h3>
+                      <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-3">Body Finish Color</h3>
                       <RGBColorPicker
                         value={config.bodyFinish && config.bodyFinish !== 'none' ? config.bodyFinish : '#1a1a1a'}
                         onChange={(color) => updateConfig({ bodyFinish: color })}
                         label="Select Guitar Body Color"
                       />
-                      <p className="text-xs text-white/40 mt-3">Choose any custom color for your guitar body using the RGB picker or enter a hex value.</p>
+                      <p className="text-xs text-[var(--text-muted)] mt-3">Choose any custom color for your guitar body using the RGB picker or enter a hex value.</p>
                     </div>
                   )}
                   
                   {/* Pickguard */}
                   <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Pickguard</h3>
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Pickguard</h3>
                     <div className="grid grid-cols-2 gap-2">
                       {pickguardOptions.map((opt) => (
                         config.body === 'delos' ? (
@@ -1485,7 +1485,7 @@ export function CustomizePage() {
                 <div className="p-4 space-y-5">
                   {/* Neck Construction */}
                   <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Neck Construction</h3>
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Neck Construction</h3>
                     <div className="grid grid-cols-2 gap-2">
                       {options.neckConstructionOptions?.map((opt) => (
                         <OptionButton
@@ -1500,7 +1500,7 @@ export function CustomizePage() {
                   
                     {/* Neck */}
                     <div>
-                      <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Neck Wood</h3>
+                      <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Neck Wood</h3>
                       <div className="grid grid-cols-2 gap-2">
 {options.neckOptions?.filter(opt => opt.construction === config.neckConstruction).map((opt) => (
                             <VisualCard
@@ -1518,7 +1518,7 @@ export function CustomizePage() {
 
                     {/* Fretboard */}
                     <div>
-                      <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Fingerboard Wood</h3>
+                      <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Fingerboard Wood</h3>
                       <div className="grid grid-cols-2 gap-2">
 {options.fretboardOptions?.map((opt) => (
                             <VisualCard
@@ -1536,7 +1536,7 @@ export function CustomizePage() {
                   
                   {/* Frets */}
                   <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Frets</h3>
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Frets</h3>
                     <div className="grid grid-cols-2 gap-2">
                       {options.fretOptions?.map((opt) => (
                         <OptionButton
@@ -1551,7 +1551,7 @@ export function CustomizePage() {
                   
                    {/* Neck Rear Finish */}
                    <div>
-                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Neck Rear Finish</h3>
+                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Neck Rear Finish</h3>
                      <div className="grid grid-cols-2 gap-2">
                        {options.neckRearFinishOptions?.map((opt) => (
                          <OptionButton
@@ -1573,7 +1573,7 @@ export function CustomizePage() {
                   
                   {/* Headstock Shape */}
                   <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Headstock Shape</h3>
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Headstock Shape</h3>
                     <div className="grid grid-cols-2 gap-2">
                       {options.headstockShapeOptions?.map((opt) => (
                         <VisualCard
@@ -1593,7 +1593,7 @@ export function CustomizePage() {
                   
                   {/* Headstock Wood */}
                   <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Headstock Overlay</h3>
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Headstock Overlay</h3>
                     <div className="grid grid-cols-2 gap-2">
 {options.headstockWoodOptions?.map((opt) => (
                             <VisualCard
@@ -1611,7 +1611,7 @@ export function CustomizePage() {
                   
                   {/* Truss Rod Cover */}
                   <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Truss Rod Cover</h3>
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Truss Rod Cover</h3>
                     <div className="grid grid-cols-2 gap-2">
                       {options.trussRodCoverOptions?.map((opt) => (
                         <VisualCard
@@ -1631,7 +1631,7 @@ export function CustomizePage() {
                   
                    {/* Inlay Shape */}
                    <div>
-                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Inlay Shape</h3>
+                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Inlay Shape</h3>
                      <div className="grid grid-cols-2 gap-2">
                        {options.inlayShapeOptions?.map((opt) => (
                          <OptionButton
@@ -1644,7 +1644,7 @@ export function CustomizePage() {
                      </div>
                    </div>
                    <div>
-                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Inlay Material</h3>
+                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Inlay Material</h3>
                      <div className="grid grid-cols-2 gap-2">
                        {options.inlayMaterialOptions?.map((opt) => (
                          <VisualCard
@@ -1667,7 +1667,7 @@ export function CustomizePage() {
                   <div className="p-4 space-y-5">
                     {/* Hardware Color */}
                     <div>
-                      <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Hardware Color</h3>
+                      <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Hardware Color</h3>
                       <div className="grid grid-cols-2 gap-2">
                       {options.hardwareOptions?.map((opt) => (
                         <OptionButton
@@ -1682,7 +1682,7 @@ export function CustomizePage() {
                   
                   {/* Bridge */}
                   <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Bridge</h3>
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Bridge</h3>
                     <div className="grid grid-cols-2 gap-2">
                       {options.bridgeOptions?.map((opt) => (
                         <VisualCard
@@ -1699,7 +1699,7 @@ export function CustomizePage() {
                   
                   {/* Knobs */}
                   <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Control Knobs</h3>
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Control Knobs</h3>
                     <div className="grid grid-cols-2 gap-2">
                       {knobOptions.map((opt) => (
                         <VisualCard
@@ -1716,7 +1716,7 @@ export function CustomizePage() {
                   
                   {/* Nut */}
                   <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Nut</h3>
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Nut</h3>
                     <div className="grid grid-cols-2 gap-2">
                       {options.nutOptions?.map((opt) => (
                         <OptionButton
@@ -1731,7 +1731,7 @@ export function CustomizePage() {
                   
                    {/* Tuning */}
                    <div>
-                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Tuning</h3>
+                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Tuning</h3>
                      <div className="grid grid-cols-2 gap-2">
                        {options.tuningOptions?.map((opt) => (
                          <OptionButton
@@ -1743,13 +1743,13 @@ export function CustomizePage() {
                        ))}
                      </div>
                      {options.tuningDisclaimer && (
-                       <p className="mt-2 text-[10px] leading-relaxed text-white/40 italic">{options.tuningDisclaimer}</p>
+                       <p className="mt-2 text-[10px] leading-relaxed text-[var(--text-muted)] italic">{options.tuningDisclaimer}</p>
                      )}
                    </div>
                   
                   {/* String Brand */}
                   <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">String Brand</h3>
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">String Brand</h3>
                     <div className="grid grid-cols-2 gap-2">
                       {options.stringBrandOptions?.map((opt) => (
                         <OptionButton
@@ -1764,7 +1764,7 @@ export function CustomizePage() {
                   
                   {/* Output Jack */}
                   <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Output Jack</h3>
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Output Jack</h3>
                     <div className="grid grid-cols-2 gap-2">
                       {options.outputJackOptions?.map((opt) => (
                         <OptionButton
@@ -1779,7 +1779,7 @@ export function CustomizePage() {
                   
                   {/* Strap Buttons */}
                   <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Strap Buttons</h3>
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Strap Buttons</h3>
                     <div className="grid grid-cols-2 gap-2">
                       {options.strapButtonOptions?.map((opt) => (
                         <OptionButton
@@ -1794,7 +1794,7 @@ export function CustomizePage() {
                   
                   {/* Tuner Buttons */}
                   <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Tuner Buttons</h3>
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Tuner Buttons</h3>
                     <div className="grid grid-cols-2 gap-2">
                       {options.tunerButtonOptions?.map((opt) => (
                         <OptionButton
@@ -1810,7 +1810,7 @@ export function CustomizePage() {
                   {/* Electronics Cavity Cover */}
                   {config.body !== 'delos' && (
                     <div>
-                      <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Electronics Cavity Cover</h3>
+                      <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Electronics Cavity Cover</h3>
                       <div className="grid grid-cols-2 gap-2">
                         {options.electronicsCavityCoverOptions?.map((opt) => (
                           <VisualCard
@@ -1830,7 +1830,7 @@ export function CustomizePage() {
                    {/* Tremolo Cover - only for bridges with a tremolo */}
                    {(config.bridge === 'hipshotTremolo' || config.bridge === 'floydRoseTremolo') && (
                    <div>
-                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Tremolo Cover</h3>
+                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Tremolo Cover</h3>
                      <div className="grid grid-cols-2 gap-2">
                        {options.tremoloCoverOptions?.map((opt) => (
                          <VisualCard
@@ -1855,7 +1855,7 @@ export function CustomizePage() {
                    <AccordionSection title="Pickup Configuration" icon={Zap} defaultOpen={true}>
                     {/* Electronics Type */}
                     <div>
-                      <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Electronics Type</h3>
+                      <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Electronics Type</h3>
                       {/* Responsible for rendering electronics type selector (passive/active) */}
                       <div className="grid grid-cols-2 gap-2">
                         {options.electronicsTypeOptions?.map((opt) => (
@@ -1872,7 +1872,7 @@ export function CustomizePage() {
                      {/* Pickup Configuration - hidden when Active (Fluence locks the layout) */}
                      {!isActive && (
                      <div>
-                       <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Pickup Configuration</h3>
+                       <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Pickup Configuration</h3>
                        {/* Responsible for rendering pickup configuration selector (HH / H-S-H) */}
                        <div className="grid grid-cols-2 gap-2">
                          {options.pickupConfigurationOptions?.map((opt) => (
@@ -1890,7 +1890,7 @@ export function CustomizePage() {
                      {/* Bridge Pickup Model - hidden when Active */}
                      {!isActive && (
                      <div>
-                       <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Bridge Pickup</h3>
+                       <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Bridge Pickup</h3>
                        {/* Responsible for rendering bridge humbucker model selector */}
                        <div className="grid grid-cols-2 gap-2">
                          {options.bridgePickupModelOptions?.map((opt) => (
@@ -1908,7 +1908,7 @@ export function CustomizePage() {
                      {/* Middle Pickup Model - only for H-S-H - hidden when Active */}
                      {!isActive && ['hss'].includes(config.pickupConfiguration || config.pickups) && (
                        <div>
-                         <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Middle Pickup</h3>
+                         <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Middle Pickup</h3>
                          {/* Responsible for rendering middle single coil model selector */}
                          <div className="grid grid-cols-2 gap-2">
                            {options.middlePickupModelOptions?.map((opt) => (
@@ -1926,7 +1926,7 @@ export function CustomizePage() {
                      {/* Neck Pickup Model - hidden when Active */}
                      {!isActive && (
                      <div>
-                       <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Neck Pickup</h3>
+                       <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Neck Pickup</h3>
                        {/* Responsible for rendering neck humbucker model selector */}
                        <div className="grid grid-cols-2 gap-2">
                          {options.neckPickupModelOptions?.map((opt) => (
@@ -1947,7 +1947,7 @@ export function CustomizePage() {
                      {/* Pickup Color - hidden when Active (Painted Bobbin RGB is used instead) */}
                      {!isActive && (
                      <div>
-                       <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Pickup Color</h3>
+                       <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Pickup Color</h3>
                        {/* Responsible for rendering pickup color/style selector (bobbins, painted, wooden, covers) */}
                        <div className="grid grid-cols-2 gap-2">
                          {options.pickupColorOptions?.map((opt) => (
@@ -1965,7 +1965,7 @@ export function CustomizePage() {
                      {/* Pickup Color Variant - hidden when Active */}
                      {!isActive && config.pickupColor === 'bobbins' && (
                       <div>
-                        <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Bobbin Color</h3>
+                        <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Bobbin Color</h3>
                         {/* Responsible for rendering bobbin color variant selector */}
                         <div className="grid grid-cols-2 gap-2">
                           {options.pickupColorVariantOptions?.map((opt) => (
@@ -1983,7 +1983,7 @@ export function CustomizePage() {
                      {/* Cover Color - hidden when Active */}
                      {!isActive && config.pickupColor === 'covers' && (
                       <div>
-                        <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Cover Color</h3>
+                        <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Cover Color</h3>
                         {/* Responsible for rendering cover color variant selector */}
                         <div className="grid grid-cols-2 gap-2">
                           {options.pickupColorVariantOptions?.map((opt) => (
@@ -2001,7 +2001,7 @@ export function CustomizePage() {
                      {/* Painted Color (RGB) - visible in Active mode (Fluence mask tint) */}
                      {(config.pickupColor === 'painted' || isActive) && (
                       <div>
-                        <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Painted Color (RGB)</h3>
+                        <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Painted Color (RGB)</h3>
                         {/* Responsible for rendering RGB color picker for painted bobbins */}
                         <RGBColorPicker
                           value={config.pickupPaintedColor || '#000000'}
@@ -2013,7 +2013,7 @@ export function CustomizePage() {
                      {/* Wood Type - hidden when Active */}
 {!isActive && config.pickupColor === 'wooden' && (
                        <div>
-                         <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Wood Type</h3>
+                         <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Wood Type</h3>
                          {/* Responsible for rendering wood type selector for wooden bobbins */}
                          <div className="grid grid-cols-2 gap-2">
 {options.pickupWoodTypeOptions?.map((opt) => (
@@ -2034,7 +2034,7 @@ export function CustomizePage() {
                    {/* Pole Piece Color - hidden when Active (Fluence pickups use fixed poles) */}
                    {!isActive && (
                    <div>
-                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Pole Piece Color</h3>
+                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Pole Piece Color</h3>
                      {/* Responsible for rendering pole piece color selector (black, chrome, gold) */}
                      <div className="grid grid-cols-2 gap-2">
                        {options.pickupPoleColorOptions?.map((opt) => (
@@ -2053,7 +2053,7 @@ export function CustomizePage() {
                   {/* Controls */}
                   <AccordionSection title="Controls" icon={Cog} defaultOpen={true}>
                     <div>
-                      <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Controls</h3>
+                      <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Controls</h3>
                       {/* Responsible for rendering controls layout selector (Off, DTC, DTMV) */}
                        <div className="grid grid-cols-2 gap-2">
                          {options.controlsOptions?.map((opt) => (
@@ -2069,16 +2069,16 @@ export function CustomizePage() {
                   </AccordionSection>
 
                   {/* Pickup Info */}
-                  <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+                  <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] p-4">
                     <div className="flex items-start gap-3">
                       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#14b8a6]/10">
                         <Info className="h-4 w-4 text-[#14b8a6]" />
                       </div>
                        <div>
-                        <h4 className="text-xs font-semibold uppercase tracking-[0.1em] text-white/60">
+                        <h4 className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)]">
                           About Pickups
                         </h4>
-                        <p className="mt-1 text-xs text-white/40 leading-relaxed">
+                        <p className="mt-1 text-xs text-[var(--text-muted)] leading-relaxed">
                           <strong>HH:</strong> Dual humbuckers - warm, high output<br/>
                           <strong>H-S-H:</strong> Bridge humbucker, middle single, neck humbucker - versatile<br/>
                           <strong>Fluence:</strong> Modern active pickups - clean, powerful
@@ -2094,7 +2094,7 @@ export function CustomizePage() {
 
           {/* CENTER - Guitar Preview */}
           <main className="min-h-0 flex flex-col">
-            <div ref={previewRef} className="relative flex-1 min-h-[320px] rounded-2xl border border-white/10 bg-gradient-to-b from-[#141414] via-[#0d0d0d] to-[#080808] overflow-hidden">
+            <div ref={previewRef} className="relative flex-1 min-h-[320px] rounded-2xl border border-[var(--border)] bg-gradient-to-b from-[#141414] via-[#0d0d0d] to-[#080808] overflow-hidden">
               {/* Spotlight effects */}
               <div className="absolute inset-0 overflow-hidden pointer-events-none">
                 <div className="absolute -top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-gradient-radial from-[#d4af37]/10 via-transparent to-transparent opacity-60" />
@@ -2193,7 +2193,7 @@ export function CustomizePage() {
               </div>
 
               {/* Zoom controls */}
-              <div className="absolute bottom-4 right-4 flex items-center gap-2 rounded-lg border border-white/10 bg-black/35 p-1.5 backdrop-blur-sm">
+              <div className="absolute bottom-4 right-4 flex items-center gap-2 rounded-lg border border-[var(--border)] bg-black/35 p-1.5 backdrop-blur-sm">
                 <button
                   type="button"
                   onClick={handleZoomOut}
@@ -2207,7 +2207,7 @@ export function CustomizePage() {
                 <button
                   type="button"
                   onClick={handleZoomReset}
-                  className="rounded-md px-2.5 py-1.5 text-xs font-semibold text-white/80 transition-colors hover:bg-white/10"
+                  className="rounded-md px-2.5 py-1.5 text-xs font-semibold text-[var(--text-light)] transition-colors hover:bg-[var(--surface-elevated)]"
                   aria-label="Reset zoom"
                   title="Reset zoom"
                 >
@@ -2245,7 +2245,7 @@ export function CustomizePage() {
                 addDisabled={stickers.length >= MAX_STICKERS}
               >
                 {selectedSticker && (selectedSticker.side || 'front') === view && (
-                  <div className="space-y-2 rounded-md border border-white/10 bg-black/25 p-2">
+                  <div className="space-y-2 rounded-md border border-[var(--border)] bg-black/25 p-2">
                     <div className="grid grid-cols-4 gap-1.5">
                       <button type="button" onClick={() => moveLayer('back')} className="rounded bg-[var(--border)] px-1.5 py-1 text-[10px] text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]">Back</button>
                       <button type="button" onClick={() => moveLayer('down')} className="rounded bg-[var(--border)] px-1.5 py-1 text-[10px] text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]">Down</button>
@@ -2262,7 +2262,7 @@ export function CustomizePage() {
                       >
                         -
                       </button>
-                      <span className="text-[10px] text-white/70 min-w-10 text-center">{Math.round(selectedSticker.size)}%</span>
+                      <span className="text-[10px] text-[var(--text-light)] min-w-10 text-center">{Math.round(selectedSticker.size)}%</span>
                       <button
                         type="button"
                         onClick={() => updateSelectedSticker(prev => ({ ...prev, size: Math.min(50, prev.size + 2) }))}
@@ -2321,7 +2321,7 @@ export function CustomizePage() {
                 )}
 
                 {currentViewStickers.length > 0 && (
-                  <div className="max-h-24 overflow-y-auto space-y-1 rounded-md border border-white/10 bg-black/20 p-1.5">
+                  <div className="max-h-24 overflow-y-auto space-y-1 rounded-md border border-[var(--border)] bg-black/20 p-1.5">
                     {currentViewStickers.map((stickerItem, index) => (
                       <button
                         key={stickerItem.id}
@@ -2330,7 +2330,7 @@ export function CustomizePage() {
                         className={`w-full flex items-center gap-2 rounded px-1.5 py-1 text-left text-[10px] ${
                           selectedStickerId === stickerItem.id
                             ? 'bg-[#d4af37]/20 text-[#d4af37]'
-                            : 'bg-white/5 text-white/70 hover:bg-white/10'
+                            : 'bg-[var(--surface-elevated)] text-[var(--text-light)] hover:bg-[var(--surface-elevated)]'
                         }`}
                       >
                         <img src={stickerItem.src} alt={`Sticker ${index + 1}`} className="h-5 w-5 rounded object-cover" />
@@ -2352,7 +2352,7 @@ export function CustomizePage() {
               <button
                 type="button"
                 onClick={handleSaveImage}
-                className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-transparent px-3 py-1.5 text-xs font-medium text-white/40 transition-colors hover:border-[var(--border)] hover:text-[var(--text-muted)]"
+                className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-transparent px-3 py-1.5 text-xs font-medium text-[var(--text-muted)] transition-colors hover:border-[var(--border)] hover:text-[var(--text-light)]"
               >
                 <Image className="h-3.5 w-3.5" />
                 Save preview image
@@ -2361,9 +2361,9 @@ export function CustomizePage() {
           </main>
 
           {/* RIGHT PANEL - Summary & Actions */}
-          <aside className="min-h-0 rounded-2xl border border-white/10 bg-[var(--bg-primary)] overflow-hidden flex flex-col">
+          <aside className="min-h-0 rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] overflow-hidden flex flex-col">
             {/* Header with current editing label */}
-            <div className="border-b border-white/10 px-5 py-4 flex-shrink-0">
+            <div className="border-b border-[var(--border)] px-5 py-4 flex-shrink-0">
               <div className="flex items-center gap-2 text-xs text-[#d4af37]">
                 <Sparkles className="h-3.5 w-3.5" />
                 <span>Currently Editing</span>
@@ -2371,7 +2371,7 @@ export function CustomizePage() {
               <h2 className="mt-1 text-lg font-semibold tracking-tight">
                 {getCategoryInfo()?.label || 'Select a Category'}
               </h2>
-              <p className="mt-0.5 text-xs text-white/50">
+              <p className="mt-0.5 text-xs text-[var(--text-muted)]">
                 {getCategoryInfo()?.tooltip || 'Choose from the left panel'}
               </p>
             </div>
@@ -2391,17 +2391,17 @@ export function CustomizePage() {
             />
 
             {/* Help section */}
-            <div className="border-t border-white/10 p-4 flex-shrink-0">
-              <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+            <div className="border-t border-[var(--border)] p-4 flex-shrink-0">
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)] p-4">
                 <div className="flex items-start gap-3">
                   <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#d4af37]/10">
                     <Info className="h-4 w-4 text-[#d4af37]" />
                   </div>
                   <div>
-                    <h4 className="text-xs font-semibold uppercase tracking-[0.1em] text-white/60">
+                    <h4 className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)]">
                       Need Help?
                     </h4>
-                    <p className="mt-1 text-xs text-white/40 leading-relaxed">
+                    <p className="mt-1 text-xs text-[var(--text-muted)] leading-relaxed">
                       Each option is carefully crafted to deliver premium quality. Hover over category names for more details, or{' '}
                       <a
                         href="https://www.facebook.com/messages/t/CosmosGuitars"
@@ -2422,7 +2422,7 @@ export function CustomizePage() {
       </div>
       
       {/* Disclaimer */}
-      <p className="mt-2 text-center text-[10px] uppercase tracking-[0.15em] text-white/30">
+      <p className="mt-2 text-center text-[10px] uppercase tracking-[0.15em] text-[var(--text-muted)]">
         Graphic representation only. Actual product may differ slightly due to natural wood variations.
       </p>
 
@@ -2437,7 +2437,7 @@ export function CustomizePage() {
               <button
                 type="button"
                 onClick={handleStayOnPage}
-                className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-2.5 text-sm font-semibold text-white hover:bg-white/5 transition-colors"
+                className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[var(--surface-elevated)] transition-colors"
               >
                 Stay
               </button>

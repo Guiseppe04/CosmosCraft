@@ -10,6 +10,7 @@ export function SelectableCartItemRow({
   selectionEnabled = true,
   showQuantityControls = true,
   showRemove = true,
+  className = '',
 }) {
   const parsedStock = Number(item.stock)
   const hasStockValue = Number.isFinite(parsedStock) && parsedStock >= 0
@@ -20,7 +21,7 @@ export function SelectableCartItemRow({
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      className="group rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)]/50 p-4 transition-all duration-200 hover:border-[var(--gold-primary)]/30 hover:bg-[var(--surface-elevated)]"
+      className={`group rounded-xl border border-[var(--border)] bg-[var(--surface-elevated)]/50 p-4 transition-all duration-200 hover:border-[var(--gold-primary)]/30 hover:bg-[var(--surface-elevated)] ${className}`}
     >
       <div className="flex items-center gap-4">
         {selectionEnabled && (

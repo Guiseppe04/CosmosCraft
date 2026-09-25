@@ -1,0 +1,116 @@
+.dash-nav-outer {
+  display: block !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  overflow: hidden !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 1rem !important;
+  background: var(--surface-dark) !important;
+  padding: 0.5rem !important;
+  box-sizing: border-box !important;
+}
+
+.dash-nav-scroll {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  gap: 0.5rem !important;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  -webkit-overflow-scrolling: touch !important;
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+  padding-bottom: 2px !important;
+}
+
+.dash-nav-scroll::-webkit-scrollbar {
+  display: none !important;
+  height: 0 !important;
+}
+
+.dash-tab-btn {
+  display: inline-flex !important;
+  flex: 0 0 auto !important;
+  flex-shrink: 0 !important;
+  flex-grow: 0 !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 0.5rem !important;
+  white-space: nowrap !important;
+  word-wrap: normal !important;
+  overflow-wrap: normal !important;
+  word-break: keep-all !important;
+  width: auto !important;
+  max-width: none !important;
+  min-width: max-content !important;
+  min-height: 40px !important;
+  padding: 0.5rem 1rem !important;
+  margin: 0 !important;
+  border: none !important;
+  border-radius: 0.75rem !important;
+  background: transparent !important;
+  color: var(--text-muted) !important;
+  font-size: 0.875rem !important;
+  font-weight: 500 !important;
+  line-height: 1.25 !important;
+  cursor: pointer !important;
+  transition: background-color 0.2s, color 0.2s !important;
+  touch-action: manipulation !important;
+}
+
+.dash-tab-btn:hover {
+  background: var(--surface-elevated) !important;
+  color: var(--text-light) !important;
+}
+
+.dash-tab-btn--active,
+.dash-tab-btn--active:hover {
+  background: var(--gold-primary) !important;
+  color: var(--text-dark) !important;
+}
+
+.dash-tab-label {
+  display: inline-block !important;
+  white-space: nowrap !important;
+  word-wrap: normal !important;
+  overflow-wrap: normal !important;
+  word-break: keep-all !important;
+  font-size: 0.875rem !important;
+  line-height: 1.25 !important;
+}
+
+.dash-tab-icon {
+  display: block !important;
+  flex-shrink: 0 !important;
+  width: 1rem !important;
+  height: 1rem !important;
+  min-width: 1rem !important;
+  min-height: 1rem !important;
+  color: var(--gold-primary) !important;
+}
+
+.dash-tab-btn--active .dash-tab-icon {
+  color: var(--text-dark) !important;
+}
+
+@media (max-width: 767px) {
+  .dash-tab-btn {
+    padding: 0.5rem 0.875rem !important;
+    font-size: 0.8125rem !important;
+    min-height: 38px !important;
+  }
+
+  .dash-tab-label {
+    font-size: 0.8125rem !important;
+  }
+
+  .dash-tab-icon {
+    width: 0.9375rem !important;
+    height: 0.9375rem !important;
+    min-width: 0.9375rem !important;
+    min-height: 0.9375rem !important;
+  }
+}
