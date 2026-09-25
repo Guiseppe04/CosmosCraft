@@ -76,6 +76,32 @@ const phpFormatter = new Intl.NumberFormat('en-PH', {
 })
 const API_URL = API
 
+const BASS_CONFIG_SESSION_KEY = 'cosmoscraft.bassConfig.draft'
+
+function loadSessionBassConfig() {
+  try {
+    if (typeof window === 'undefined') return null
+    const raw = window.sessionStorage.getItem(BASS_CONFIG_SESSION_KEY)
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
+
+function saveSessionBassConfig(config) {
+  try {
+    if (typeof window === 'undefined') return
+    window.sessionStorage.setItem(BASS_CONFIG_SESSION_KEY, JSON.stringify(config))
+  } catch {}
+}
+
+function clearSessionBassConfig() {
+  try {
+    if (typeof window === 'undefined') return
+    window.sessionStorage.removeItem(BASS_CONFIG_SESSION_KEY)
+  } catch {}
+}
+
 const normalizeBassAssetUrl = (url) => {
   if (typeof url !== 'string') return url
   return url.replace('/builder/customization_assets/', '/builder/')
@@ -86,10 +112,19 @@ export function formatPricePHP(price) {
 }
 
 export default function useBassConfig() {
-  const [config, setConfig] = useState(BASS_DEFAULT_CONFIG)
+  const [config, setConfig] = useState(() => {
+    const saved = loadSessionBassConfig()
+    return saved ? { ...BASS_DEFAULT_CONFIG, ...saved } : BASS_DEFAULT_CONFIG
+  })
   const [builderParts, setBuilderParts] = useState([])
   const [modelImages, setModelImages] = useState([])
   const [loadingPrices, setLoadingPrices] = useState(true)
+
+  // Persist config to sessionStorage so it survives navigation and refresh,
+  // but resets when the browser tab closes.
+  useEffect(() => {
+    saveSessionBassConfig(config)
+  }, [config])
 
   const fetchBuilderParts = async () => {
     setLoadingPrices(true)
@@ -912,6 +947,7 @@ const mergedInlayMaterialOptions = useMemo(() => {
   }, [])
 
   const resetConfig = useCallback(() => {
+    clearSessionBassConfig()
     setConfig(BASS_DEFAULT_CONFIG)
   }, [])
 

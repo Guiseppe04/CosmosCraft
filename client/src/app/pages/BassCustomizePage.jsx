@@ -751,6 +751,15 @@ export function BassCustomizePage() {
   const { isAuthenticated, openLogin } = useAuth()
   const { addToCart, setIsOpen: setCartOpen } = useCart()
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(Boolean(editBuildId))
+  const [hasBeenSaved, setHasBeenSaved] = useState(Boolean(editBuildId) && isAuthenticated)
+
+  // Nothing is truly "saved" for a logged-out user yet.
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setHasBeenSaved(false)
+    }
+  }, [isAuthenticated])
+
   const bypassNavigationBlockRef = useRef(false)
   const [showUnsavedModal, setShowUnsavedModal] = useState(false)
   const suppressDirtyTrackingRef = useRef(false)
@@ -1339,6 +1348,7 @@ export function BassCustomizePage() {
     if (stored.length > 10) stored = stored.slice(0, 10)
     window.localStorage.setItem(storedKey, JSON.stringify(stored))
     setHasUnsavedChanges(false)
+    setHasBeenSaved(true)
     
     if (continueBlockedNavigation && blocker.state === 'blocked') {
       setShowUnsavedModal(false)
@@ -1350,7 +1360,13 @@ export function BassCustomizePage() {
 
     if (shouldNavigate) {
       bypassNavigationBlockRef.current = true
-      navigate('/dashboard', { state: { section: 'my-bass', message: 'Build saved to My Bass!' } })
+      navigate('/dashboard', {
+        state: {
+          section: 'my-guitar',
+          message: 'Build saved to My Bass!',
+          openBuildId: buildId,
+        },
+      })
       setTimeout(() => { bypassNavigationBlockRef.current = false }, 0)
     } else {
       setToastMessage('Your Build is saved to My Bass!')
@@ -1359,21 +1375,10 @@ export function BassCustomizePage() {
 
   const handleSave = () => {
     if (!isAuthenticated) {
-      openLogin(() => saveBuild({ shouldNavigate: true }))
+      openLogin(() => saveBuild({ shouldNavigate: false }))
       return
     }
-    saveBuild({ shouldNavigate: true })
-  }
-
-  const handleAddToCart = () => {
-    const saveAndToast = () => saveBuild({ shouldNavigate: false })
-
-    if (!isAuthenticated) {
-      openLogin(saveAndToast)
-      return
-    }
-
-    saveAndToast()
+    saveBuild({ shouldNavigate: false })
   }
 
   const handleSaveAndLeave = () => {
@@ -2412,7 +2417,11 @@ export function BassCustomizePage() {
 
               {/* Saved status */}
               <div className="absolute bottom-4 left-4 z-10">
-                <BuilderSavedBadge hasUnsavedChanges={hasUnsavedChanges} />
+                <BuilderSavedBadge
+                  hasUnsavedChanges={hasUnsavedChanges}
+                  hasBeenSaved={hasBeenSaved && isAuthenticated}
+                  isAuthenticated={isAuthenticated}
+                />
               </div>
 
               <input
@@ -2570,7 +2579,6 @@ export function BassCustomizePage() {
             <BuilderCheckoutSection
               price={price}
               basePrice={options.basePrice}
-              onAddToCart={handleAddToCart}
             />
 
             <div className="border-t border-white/10 p-4 flex-shrink-0">

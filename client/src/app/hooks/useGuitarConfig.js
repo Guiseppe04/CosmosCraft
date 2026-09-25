@@ -70,12 +70,42 @@ const phpFormatter = new Intl.NumberFormat('en-PH', {
 })
 const API_URL = API
 
+const GUITAR_CONFIG_SESSION_KEY = 'cosmoscraft.guitarConfig.draft'
+
+function loadSessionConfig() {
+  try {
+    if (typeof window === 'undefined') return null
+    const raw = window.sessionStorage.getItem(GUITAR_CONFIG_SESSION_KEY)
+    if (!raw) return null
+    return JSON.parse(raw)
+  } catch {
+    return null
+  }
+}
+
+function saveSessionConfig(config) {
+  try {
+    if (typeof window === 'undefined') return
+    window.sessionStorage.setItem(GUITAR_CONFIG_SESSION_KEY, JSON.stringify(config))
+  } catch {}
+}
+
+function clearSessionConfig() {
+  try {
+    if (typeof window === 'undefined') return
+    window.sessionStorage.removeItem(GUITAR_CONFIG_SESSION_KEY)
+  } catch {}
+}
+
 export function formatPricePHP(price) {
   return phpFormatter.format(price)
 }
 
 export default function useGuitarConfig() {
-  const [config, setConfig] = useState(DEFAULT_CONFIG)
+  const [config, setConfig] = useState(() => {
+    const saved = loadSessionConfig()
+    return saved ? { ...DEFAULT_CONFIG, ...saved } : DEFAULT_CONFIG
+  })
   const [builderParts, setBuilderParts] = useState([])
   const [modelImages, setModelImages] = useState([])
   const [loadingPrices, setLoadingPrices] = useState(true)
@@ -173,6 +203,12 @@ export default function useGuitarConfig() {
 
   const [dynamicBackplateList, setDynamicBackplateList] = useState([])
   const [dynamicOutputJackList, setDynamicOutputJackList] = useState([])
+
+  // Persist config to sessionStorage so it survives page navigation & refresh,
+  // but resets when the user closes the browser/tab.
+  useEffect(() => {
+    saveSessionConfig(config)
+  }, [config])
 
   const fetchBuilderParts = useCallback(async (guitarType = 'electric') => {
     setLoadingPrices(true)
@@ -1205,6 +1241,7 @@ export default function useGuitarConfig() {
   }, [])
 
   const resetConfig = useCallback(() => {
+    clearSessionConfig()
     setConfig(DEFAULT_CONFIG)
   }, [])
 

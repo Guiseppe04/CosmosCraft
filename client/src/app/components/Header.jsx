@@ -10,11 +10,6 @@ import {
   Settings,
   LogOut,
   LayoutDashboard,
-  MapPin,
-  Lock,
-  Calendar,
-  ShoppingBag,
-  Music,
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'motion/react'
 import { useCart } from '../context/CartContext.jsx'
@@ -33,8 +28,8 @@ export function Header() {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
   const [isScrolled, setIsScrolled] = useState(false)
 
-  // Mobile profile dropdown state (for the avatar icon on the right)
   const [mobileProfileDropdownOpen, setMobileProfileDropdownOpen] = useState(false)
+  const [activeHomeSection, setActiveHomeSection] = useState('')
 
   const customizeRef = useRef(null)
   const profileMenuRef = useRef(null)
@@ -51,7 +46,6 @@ export function Header() {
     function onScroll() {
       setIsScrolled(window.scrollY > 8)
     }
-
     onScroll()
     window.addEventListener('scroll', onScroll, { passive: true })
     return () => window.removeEventListener('scroll', onScroll)
@@ -69,7 +63,6 @@ export function Header() {
         setMobileProfileDropdownOpen(false)
       }
     }
-
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
@@ -83,10 +76,22 @@ export function Header() {
         setMobileMenuOpen(false)
       }
     }
-
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [])
+
+  useEffect(() => {
+    if (location.pathname !== '/') {
+      setActiveHomeSection('')
+      return
+    }
+    const hash = (location.hash || '').replace('#', '')
+    if (hash && ['services', 'about', 'contact'].includes(hash)) {
+      setActiveHomeSection(hash)
+    } else if (!hash) {
+      setActiveHomeSection('')
+    }
+  }, [location.pathname, location.hash])
 
   const handleSelectGuitarType = (guitarType) => {
     if (guitarType === 'bass') {
@@ -120,12 +125,17 @@ export function Header() {
 
   const userAvatar = user?.avatar || user?.avatarUrl || user?.avatar_url || ''
 
-  const navLinksBeforeCustomize = [{ label: 'Home', to: '/' }]
-  const navLinksAfterCustomize = [
-    { label: 'Shop', to: '/shop' },
+  // ============================================================
+  // NEW NAV ORDER: Home | Services | About Us | Contact Us | Shop | Customize | Appointment
+  // ============================================================
+  const navLinksBeforeCustomize = [
+    { label: 'Home', to: '/' },
     { label: 'Services', to: '/#services' },
     { label: 'About Us', to: '/#about' },
     { label: 'Contact Us', to: '/#contact' },
+    { label: 'Shop', to: '/shop' },
+  ]
+  const navLinksAfterCustomize = [
     { label: 'Appointment', to: '/appointments' },
   ]
 
@@ -136,6 +146,28 @@ export function Header() {
         : 'text-[var(--text-muted)] hover:text-[var(--gold-primary)]'
     }`
 
+  // Compute whether a nav link is active based on route + hash
+  const isNavLinkActive = (to) => {
+    // Home: active only when on "/" AND no home section is highlighted
+    if (to === '/') {
+      return location.pathname === '/' && !activeHomeSection
+    }
+
+    // Hash links like "/#services"
+    if (to.startsWith('/#')) {
+      const targetId = to.replace('/#', '')
+      // On the home page, active if the current hash or tracked section matches
+      if (location.pathname === '/') {
+        const hash = (location.hash || '').replace('#', '')
+        return hash === targetId || activeHomeSection === targetId
+      }
+      return false
+    }
+
+    // Regular route (e.g. "/shop", "/appointments")
+    return location.pathname === to
+  }
+
   const scrollToSection = (id) => {
     const target = document.getElementById(id)
     if (!target) return
@@ -144,6 +176,7 @@ export function Header() {
 
   const handleNavClick = (event, to) => {
     if (to === '/') {
+      setActiveHomeSection('')
       if (location.pathname === '/') {
         event.preventDefault()
         window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -155,6 +188,7 @@ export function Header() {
     if (!to.startsWith('/#')) return
     event.preventDefault()
     const id = to.replace('/#', '')
+    setActiveHomeSection(id)
     setMobileMenuOpen(false)
 
     if (location.pathname === '/') {
@@ -177,7 +211,6 @@ export function Header() {
     navigate('/')
   }
 
-  // Mobile menu navigation handler
   const handleMobileNav = (path, state = null) => {
     setMobileMenuOpen(false)
     setMobileProfileDropdownOpen(false)
@@ -193,142 +226,136 @@ export function Header() {
       }`}
     >
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-        
-{/* --- MOBILE/TABLET HEADER LAYOUT --- */}
-{/* Left: Hamburger */}
-<button
-  type="button"
-  onClick={() => setMobileMenuOpen((prev) => !prev)}
-  className="rounded-lg p-2 text-[var(--text-light)] transition-colors duration-200 hover:bg-[var(--surface-elevated)] lg:hidden"
-  aria-label="Toggle navigation menu"
->
-  {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-</button>
 
-{/* Left: Logo (sits beside the hamburger, not centered) */}
-<Link to="/" className="flex items-center gap-2 lg:hidden">
-  <img src="/logo-cosmos.png" alt="CosmosCraft Logo" className="h-8 w-auto object-contain" />
-</Link>
-
-{/* Right: Theme + Cart + Profile */}
-<div className="ml-auto flex items-center gap-1 lg:hidden">
-  {/* Theme Toggle */}
-  <div className="mobile-theme-toggle">
-    <ThemeToggle />
-  </div>
-
-  {/* Cart Icon — always visible */}
-  <button
-    type="button"
-    onClick={() => setCartOpen(true)}
-    className="mobile-header-icon-btn relative"
-    aria-label="Open cart"
-  >
-    <ShoppingCart className="h-5 w-5" />
-    {cartCount > 0 && (
-      <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-[var(--gold-primary)] px-1 text-[10px] font-bold text-[var(--text-dark)]">
-        {cartCount}
-      </span>
-    )}
-  </button>
-
-  {/* Profile Avatar with Dropdown */}
-  <div className="relative" ref={mobileProfileRef}>
-    {isAuthenticated ? (
-      <>
+        {/* --- MOBILE/TABLET HEADER --- */}
         <button
           type="button"
-          onClick={() => setMobileProfileDropdownOpen((prev) => !prev)}
-          className="rounded-full border border-[var(--border)] p-1 text-[var(--text-light)] transition-colors duration-200 hover:bg-[var(--surface-elevated)]"
-          aria-label="Open profile menu"
+          onClick={() => setMobileMenuOpen((prev) => !prev)}
+          className="rounded-lg p-2 text-[var(--text-light)] transition-colors duration-200 hover:bg-[var(--surface-elevated)] lg:hidden"
+          aria-label="Toggle navigation menu"
         >
-          {userAvatar ? (
-            <img src={userAvatar} alt="Profile" className="h-8 w-8 rounded-full object-cover" />
-          ) : (
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--gold-primary)] text-xs font-bold text-[var(--text-dark)]">
-              {profileInitials.slice(0, 1)}
-            </div>
-          )}
+          {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
         </button>
 
-        <AnimatePresence>
-          {mobileProfileDropdownOpen && (
-            <motion.div
-              initial={{ opacity: 0, y: 8, scale: 0.98 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 8, scale: 0.98 }}
-              className="absolute right-0 top-[calc(100%+12px)] z-50 w-[280px] overflow-hidden rounded-[24px] border border-[var(--border)] bg-[var(--surface-dark)] p-6 shadow-2xl"
-            >
-              <div className="flex flex-col items-center mb-6">
-                {userAvatar ? (
-                  <img
-                    src={userAvatar}
-                    alt="Profile"
-                    className="h-16 w-16 rounded-full border-2 border-[var(--border)] object-cover mb-3"
-                  />
-                ) : (
-                  <div className="flex h-16 w-16 items-center justify-center rounded-full border-2 border-[var(--border)] bg-[var(--gold-primary)] text-2xl font-bold text-[var(--text-dark)] mb-3">
-                    {profileInitials}
-                  </div>
-                )}
-                <p className="text-base font-bold text-[var(--text-light)] text-center">
-                  {profileName}
-                </p>
-              </div>
+        <Link to="/" className="flex items-center gap-2 lg:hidden">
+          <img src="/logo-cosmos.png" alt="CosmosCraft Logo" className="h-8 w-auto object-contain" />
+        </Link>
 
-              <div className="space-y-1">
-                {hasRole(user?.role, 'admin', 'staff') && (
-                  <button
-                    type="button"
-                    onClick={() => handleMobileNav(hasRole(user?.role, 'admin') ? '/admin' : '/staff')}
-                    className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-medium text-[var(--text-light)] transition-colors hover:bg-white/5"
-                  >
-                    <LayoutDashboard className="h-5 w-5 text-[var(--gold-primary)]" />
-                    Admin Dashboard
-                  </button>
-                )}
+        <div className="ml-auto flex items-center gap-1 lg:hidden">
+          <div className="mobile-theme-toggle">
+            <ThemeToggle />
+          </div>
 
+          <button
+            type="button"
+            onClick={() => setCartOpen(true)}
+            className="mobile-header-icon-btn relative"
+            aria-label="Open cart"
+          >
+            <ShoppingCart className="h-5 w-5" />
+            {cartCount > 0 && (
+              <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-[var(--gold-primary)] px-1 text-[10px] font-bold text-[var(--text-dark)]">
+                {cartCount}
+              </span>
+            )}
+          </button>
+
+          <div className="relative" ref={mobileProfileRef}>
+            {isAuthenticated ? (
+              <>
                 <button
                   type="button"
-                  onClick={() => handleMobileNav('/dashboard', { section: 'profile' })}
-                  className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-medium text-[var(--text-light)] transition-colors hover:bg-white/5"
+                  onClick={() => setMobileProfileDropdownOpen((prev) => !prev)}
+                  className="rounded-full border border-[var(--border)] p-1 text-[var(--text-light)] transition-colors duration-200 hover:bg-[var(--surface-elevated)]"
+                  aria-label="Open profile menu"
                 >
-                  <Settings className="h-5 w-5 text-[var(--gold-primary)]" />
-                  Settings
+                  {userAvatar ? (
+                    <img src={userAvatar} alt="Profile" className="h-8 w-8 rounded-full object-cover" />
+                  ) : (
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--gold-primary)] text-xs font-bold text-[var(--text-dark)]">
+                      {profileInitials.slice(0, 1)}
+                    </div>
+                  )}
                 </button>
 
-                <div className="border-t border-[var(--border)] my-2 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowLogoutConfirm(true)
-                      setMobileProfileDropdownOpen(false)
-                    }}
-                    className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-medium text-red-400 transition-colors hover:bg-red-500/10"
-                  >
-                    <LogOut className="h-5 w-5" />
-                    Sign Out
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </>
-    ) : (
-      <button
-        type="button"
-        onClick={openLogin}
-        className="rounded-full p-2 text-[var(--text-muted)] transition-colors duration-200 hover:bg-[var(--surface-elevated)] hover:text-[var(--gold-primary)]"
-        aria-label="Login"
-      >
-        <User className="h-5 w-5" />
-      </button>
-    )}
-  </div>
-</div>
+                <AnimatePresence>
+                  {mobileProfileDropdownOpen && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 8, scale: 0.98 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 8, scale: 0.98 }}
+                      className="absolute right-0 top-[calc(100%+12px)] z-50 w-[280px] overflow-hidden rounded-[24px] border border-[var(--border)] bg-[var(--surface-dark)] p-6 shadow-2xl"
+                    >
+                      <div className="flex flex-col items-center mb-6">
+                        {userAvatar ? (
+                          <img
+                            src={userAvatar}
+                            alt="Profile"
+                            className="h-16 w-16 rounded-full border-2 border-[var(--border)] object-cover mb-3"
+                          />
+                        ) : (
+                          <div className="flex h-16 w-16 items-center justify-center rounded-full border-2 border-[var(--border)] bg-[var(--gold-primary)] text-2xl font-bold text-[var(--text-dark)] mb-3">
+                            {profileInitials}
+                          </div>
+                        )}
+                        <p className="text-base font-bold text-[var(--text-light)] text-center">
+                          {profileName}
+                        </p>
+                      </div>
 
-        {/* --- DESKTOP HEADER LAYOUT (Unchanged) --- */}
+                      <div className="space-y-1">
+                        {hasRole(user?.role, 'admin', 'staff') && (
+                          <button
+                            type="button"
+                            onClick={() => handleMobileNav(hasRole(user?.role, 'admin') ? '/admin' : '/staff')}
+                            className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-medium text-[var(--text-light)] transition-colors hover:bg-white/5"
+                          >
+                            <LayoutDashboard className="h-5 w-5 text-[var(--gold-primary)]" />
+                            Admin Dashboard
+                          </button>
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={() => handleMobileNav('/dashboard', { section: 'profile' })}
+                          className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-medium text-[var(--text-light)] transition-colors hover:bg-white/5"
+                        >
+                          <Settings className="h-5 w-5 text-[var(--gold-primary)]" />
+                          Settings
+                        </button>
+
+                        <div className="border-t border-[var(--border)] my-2 pt-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowLogoutConfirm(true)
+                              setMobileProfileDropdownOpen(false)
+                            }}
+                            className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-medium text-red-400 transition-colors hover:bg-red-500/10"
+                          >
+                            <LogOut className="h-5 w-5" />
+                            Sign Out
+                          </button>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={openLogin}
+                className="rounded-full p-2 text-[var(--text-muted)] transition-colors duration-200 hover:bg-[var(--surface-elevated)] hover:text-[var(--gold-primary)]"
+                aria-label="Login"
+              >
+                <User className="h-5 w-5" />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* --- DESKTOP HEADER --- */}
         <Link to="/" className="hidden lg:flex items-center gap-2">
           <img src="/logo-cosmos.png" alt="CosmosCraft Logo" className="h-9 w-auto object-contain" />
           <span className="text-lg font-semibold text-[var(--text-light)]">
@@ -339,17 +366,19 @@ export function Header() {
         <nav className="hidden flex-1 items-center justify-center gap-1 lg:flex">
           {!isAdminOrStaff && (
             <>
+              {/* Home | Services | About Us | Contact Us | Shop */}
               {navLinksBeforeCustomize.map((link) => (
                 <Link
                   key={link.label}
                   to={link.to}
                   onClick={(event) => handleNavClick(event, link.to)}
-                  className={navLinkClasses(location.pathname === link.to)}
+                  className={navLinkClasses(isNavLinkActive(link.to))}
                 >
                   {link.label}
                 </Link>
               ))}
 
+              {/* Customize dropdown */}
               <div className="relative" ref={customizeRef}>
                 <button
                   type="button"
@@ -390,12 +419,13 @@ export function Header() {
                 )}
               </div>
 
+              {/* Appointment */}
               {navLinksAfterCustomize.map((link) => (
                 <Link
                   key={link.label}
                   to={link.to}
                   onClick={(event) => handleNavClick(event, link.to)}
-                  className={navLinkClasses(location.pathname === link.to)}
+                  className={navLinkClasses(isNavLinkActive(link.to))}
                 >
                   {link.label}
                 </Link>
@@ -557,53 +587,85 @@ export function Header() {
             className="border-t border-[var(--border)] bg-[var(--bg-primary)] lg:hidden"
           >
             <nav className="space-y-2 px-4 py-4">
-              {!isAdminOrStaff &&
-                navLinksBeforeCustomize.map((link) => (
-                  <Link
-                    key={link.label}
-                    to={link.to}
-                    onClick={(event) => handleNavClick(event, link.to)}
-                    className={`${navLinkClasses(location.pathname === link.to)} block w-full`}
-                  >
-                    {link.label}
-                  </Link>
-                ))}
-
               {!isAdminOrStaff && (
-                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] p-2">
-                  <p className="px-2 pb-2 text-xs uppercase tracking-[0.1em] text-[var(--text-muted)]">
-                    Customize
-                  </p>
-                  {GUITAR_TYPE_OPTIONS.map((type) => (
-                    <button
-                      key={type.id}
-                      type="button"
-                      onClick={() => handleSelectGuitarType(type.id)}
-                      className={`mb-1 flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
-                        isCustomizeActive && currentGuitarType === type.id
-                          ? 'bg-[var(--gold-primary)]/20 text-[var(--gold-primary)]'
-                          : 'text-[var(--text-light)] hover:bg-[var(--surface-elevated)]'
-                      }`}
-                    >
-                      <Guitar className="h-4 w-4" />
-                      {type.label}
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {!isAdminOrStaff &&
-                navLinksAfterCustomize.map((link) => (
+                <>
+                  {/* Home */}
                   <Link
-                    key={link.label}
-                    to={link.to}
-                    onClick={(event) => handleNavClick(event, link.to)}
-                    className={`${navLinkClasses(location.pathname === link.to)} block w-full`}
+                    to="/"
+                    onClick={(event) => handleNavClick(event, '/')}
+                    className={`${navLinkClasses(location.pathname === '/')} block w-full`}
                   >
-                    {link.label}
+                    Home
                   </Link>
-                ))}
 
+                  {/* Services */}
+                  <Link
+                    to="/#services"
+                    onClick={(event) => handleNavClick(event, '/#services')}
+                    className={`${navLinkClasses(false)} block w-full`}
+                  >
+                    Services
+                  </Link>
+
+                  {/* About Us */}
+                  <Link
+                    to="/#about"
+                    onClick={(event) => handleNavClick(event, '/#about')}
+                    className={`${navLinkClasses(false)} block w-full`}
+                  >
+                    About Us
+                  </Link>
+
+                  {/* Contact Us */}
+                  <Link
+                    to="/#contact"
+                    onClick={(event) => handleNavClick(event, '/#contact')}
+                    className={`${navLinkClasses(false)} block w-full`}
+                  >
+                    Contact Us
+                  </Link>
+
+                  {/* Shop */}
+                  <Link
+                    to="/shop"
+                    onClick={(event) => handleNavClick(event, '/shop')}
+                    className={`${navLinkClasses(location.pathname === '/shop')} block w-full`}
+                  >
+                    Shop
+                  </Link>
+
+                  {/* Customize — expanded list */}
+                  <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] p-2">
+                    <p className="px-2 pb-2 text-xs uppercase tracking-[0.1em] text-[var(--text-muted)]">
+                      Customize
+                    </p>
+                    {GUITAR_TYPE_OPTIONS.map((type) => (
+                      <button
+                        key={type.id}
+                        type="button"
+                        onClick={() => handleSelectGuitarType(type.id)}
+                        className={`mb-1 flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
+                          isCustomizeActive && currentGuitarType === type.id
+                            ? 'bg-[var(--gold-primary)]/20 text-[var(--gold-primary)]'
+                            : 'text-[var(--text-light)] hover:bg-[var(--surface-elevated)]'
+                        }`}
+                      >
+                        <Guitar className="h-4 w-4" />
+                        {type.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Appointment */}
+                  <Link
+                    to="/appointments"
+                    onClick={(event) => handleNavClick(event, '/appointments')}
+                    className={`${navLinkClasses(location.pathname === '/appointments')} block w-full`}
+                  >
+                    Appointment
+                  </Link>
+                </>
+              )}
             </nav>
           </motion.div>
         )}

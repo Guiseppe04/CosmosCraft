@@ -18,7 +18,6 @@ import {
   normalizeStickerPlacement,
 } from '../utils/stickerPlacement.js'
 import { useAuth } from '../context/AuthContext.jsx'
-import { useCart } from '../context/CartContext.jsx'
 import useGuitarConfig from '../hooks/useGuitarConfig.js'
 import GuitarPreview from '../components/guitar/GuitarPreview.jsx'
 import { RGBColorPicker } from '../components/options/RGBColorPicker.jsx'
@@ -331,12 +330,20 @@ export function CustomizePage() {
   const categoryDropdownRef = useRef(null)
   const { isAuthenticated, openLogin } = useAuth()
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(Boolean(editBuildId))
+  const [hasBeenSaved, setHasBeenSaved] = useState(Boolean(editBuildId) && isAuthenticated)
   const [dbCustomizationId, setDbCustomizationId] = useState(null)
   const [isLockedCustomization, setIsLockedCustomization] = useState(false)
   const bypassNavigationBlockRef = useRef(false)
   const [showUnsavedModal, setShowUnsavedModal] = useState(false)
   const suppressDirtyTrackingRef = useRef(false)
   const stickersInitializedRef = useRef(false)
+  
+  // If the user is not logged in, nothing is truly "saved" for them yet.
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setHasBeenSaved(false)
+    }
+  }, [isAuthenticated])
 
   const updateConfig = (patch) => {
     if (editBuildId && !suppressDirtyTrackingRef.current) {
@@ -837,8 +844,6 @@ export function CustomizePage() {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload)
   }, [shouldBlockNavigation])
 
-  const { addToCart, setIsOpen: setCartOpen } = useCart()
-
   // Get pickguard options for current body
   const pickguardOptions = useMemo(() => {
     if (!options.pickguardOptions) return []
@@ -860,6 +865,7 @@ export function CustomizePage() {
   ))
 
   const [toastMessage, setToastMessage] = useState(null)
+  const [justSaved, setJustSaved] = useState(false)
 
   useEffect(() => {
     if (toastMessage) {
@@ -1021,32 +1027,30 @@ export function CustomizePage() {
 
     if (shouldNavigate) {
       bypassNavigationBlockRef.current = true
-      navigate('/dashboard', { state: { section: 'my-guitar', message: 'Build saved to My Guitar!' } })
+      navigate('/dashboard', {
+        state: {
+          section: 'my-guitar',
+          message: 'Build saved to My Guitar!',
+          openBuildId: buildId,
+        },
+      })
       setTimeout(() => { bypassNavigationBlockRef.current = false }, 0)
     } else {
+      setJustSaved(true)
       setToastMessage('Your Build is saved to My Guitar!')
+      setTimeout(() => setJustSaved(false), 500)
     }
   }
 
   const handleSave = () => {
     if (!isAuthenticated) {
-      openLogin(() => { void saveBuild({ shouldNavigate: true }) })
+      openLogin(() => { void saveBuild({ shouldNavigate: false }) })
       return
     }
-    void saveBuild({ shouldNavigate: true })
+    void saveBuild({ shouldNavigate: false })
   }
 
-  const handleAddToCart = () => {
-    const saveAndToast = () => { void saveBuild({ shouldNavigate: false }) }
-
-    if (!isAuthenticated) {
-      openLogin(saveAndToast)
-      return
-    }
-
-    saveAndToast()
-  }
-
+  
   const handleSaveAndLeave = () => {
     if (!isAuthenticated) {
       openLogin(() => { void saveBuild({ shouldNavigate: false, continueBlockedNavigation: true }) })
@@ -2227,7 +2231,12 @@ export function CustomizePage() {
 
               {/* Saved status */}
               <div className="absolute bottom-4 left-4 z-10">
-                <BuilderSavedBadge hasUnsavedChanges={hasUnsavedChanges} />
+                <BuilderSavedBadge
+                  hasUnsavedChanges={hasUnsavedChanges}
+                  hasBeenSaved={hasBeenSaved && isAuthenticated}
+                  autoShowHint={justSaved}
+                  isAuthenticated={isAuthenticated}
+                />
               </div>
 
               <input
@@ -2387,7 +2396,6 @@ export function CustomizePage() {
 
             <BuilderCheckoutSection
               price={totalPrice}
-              onAddToCart={handleAddToCart}
             />
 
             {/* Help section */}

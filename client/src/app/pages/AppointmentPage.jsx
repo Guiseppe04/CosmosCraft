@@ -151,6 +151,32 @@ function parseTimeLabelTo24(timeLabel = '') {
   return { hour, minute }
 }
 
+const APPT_DRAFT_KEY = 'cosmoscraft.appointment.draft'
+
+function saveAppointmentDraft(draft) {
+  try {
+    if (typeof window === 'undefined') return
+    window.sessionStorage.setItem(APPT_DRAFT_KEY, JSON.stringify(draft))
+  } catch {}
+}
+
+function loadAppointmentDraft() {
+  try {
+    if (typeof window === 'undefined') return null
+    const raw = window.sessionStorage.getItem(APPT_DRAFT_KEY)
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
+
+function clearAppointmentDraft() {
+  try {
+    if (typeof window === 'undefined') return
+    window.sessionStorage.removeItem(APPT_DRAFT_KEY)
+  } catch {}
+}
+
 function isPastTimeSlot(dateId, timeLabel) {
   const parsed = parseTimeLabelTo24(timeLabel)
   if (!parsed || !dateId) return false
@@ -229,11 +255,16 @@ export function AppointmentPage() {
   const branches = useMemo(() => [branch], [branch])
   const userAddresses = Array.isArray(user?.addresses) ? user.addresses : []
   const savedBuilds = useMemo(() => {
-    if (typeof window === 'undefined') return []
-    const savedGuitarBuilds = JSON.parse(window.localStorage.getItem('cosmoscraft_saved_builds') || '[]').map((build) => ({ ...build, isBass: false }))
-    const savedBassBuilds = JSON.parse(window.localStorage.getItem('cosmoscraft_saved_bass_builds') || '[]').map((build) => ({ ...build, isBass: true }))
-    return [...savedGuitarBuilds, ...savedBassBuilds]
-  }, [])
+  // Only return saved builds when the user is authenticated.
+  // localStorage is shared across sessions on the same browser, so we must
+  // gate reads on auth state to avoid leaking another account's builds.
+  if (!isAuthenticated) return []
+  if (typeof window === 'undefined') return []
+
+  const savedGuitarBuilds = JSON.parse(window.localStorage.getItem('cosmoscraft_saved_builds') || '[]').map((build) => ({ ...build, isBass: false }))
+  const savedBassBuilds = JSON.parse(window.localStorage.getItem('cosmoscraft_saved_bass_builds') || '[]').map((build) => ({ ...build, isBass: true }))
+  return [...savedGuitarBuilds, ...savedBassBuilds]
+}, [isAuthenticated])
 
   // Reschedule mode - check if we're editing an existing appointment
   const rescheduleData = location.state?.rescheduleAppointment || null
@@ -291,6 +322,39 @@ export function AppointmentPage() {
   const [currentYear, setCurrentYear] = useState(today.getFullYear())
   const [isSubmittingBooking, setIsSubmittingBooking] = useState(false)
   const [showBookingSuccess, setShowBookingSuccess] = useState(false)
+
+  useEffect(() => {
+    if (!isAuthenticated) return
+    const draft = loadAppointmentDraft()
+    if (!draft) return
+
+    if (draft.currentStep) setCurrentStep(draft.currentStep)
+    if (draft.guitarSelectionMode) setGuitarSelectionMode(draft.guitarSelectionMode)
+    if (draft.selectedSavedBuildId) setSelectedSavedBuildId(draft.selectedSavedBuildId)
+    if (draft.homeServiceOption) setHomeServiceOption(draft.homeServiceOption)
+    if (draft.homeServiceAddressId) setHomeServiceAddressId(draft.homeServiceAddressId)
+    if (draft.homeServiceContact) setHomeServiceContact(draft.homeServiceContact)
+    if (draft.selectedServiceId) setSelectedServiceId(draft.selectedServiceId)
+    if (draft.guitarDetails) setGuitarDetails(draft.guitarDetails)
+    if (draft.selectedDateId) setSelectedDateId(draft.selectedDateId)
+    if (draft.selectedTime) setSelectedTime(draft.selectedTime)
+    if (draft.selectedPaymentMethod) setSelectedPaymentMethod(draft.selectedPaymentMethod)
+    if (draft.additionalNotes) setAdditionalNotes(draft.additionalNotes)
+
+    clearAppointmentDraft()
+  }, [isAuthenticated])
+
+  useEffect(() => {
+    if (isAuthenticated && savedBuilds.length > 0) {
+      setGuitarSelectionMode((prev) => (prev === 'manual' && !selectedSavedBuildId ? 'saved' : prev))
+    }
+  }, [isAuthenticated, savedBuilds.length, selectedSavedBuildId])
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setHomeServiceOption('no')
+    }
+  }, [isAuthenticated])
 
   const timeSlots = useMemo(
     () => ['9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM'],
@@ -695,9 +759,29 @@ export function AppointmentPage() {
   }
 
   const handleNextStep = () => {
-    if (canProceed() && currentStep < 5) {
-      setCurrentStep(s => s + 1)
+    if (!canProceed() || currentStep >= 5) return
+
+    const nextStep = currentStep + 1
+    if (nextStep === 4 && selectedAppointmentType === 'service_home' && !isAuthenticated) {
+      saveAppointmentDraft({
+        currentStep: nextStep,
+        guitarSelectionMode,
+        selectedSavedBuildId,
+        homeServiceOption,
+        homeServiceAddressId,
+        homeServiceContact,
+        selectedServiceId,
+        guitarDetails,
+        selectedDateId,
+        selectedTime,
+        selectedPaymentMethod,
+        additionalNotes,
+      })
+      openLogin(() => navigate('/appointments', { replace: true }))
+      return
     }
+
+    setCurrentStep(nextStep)
   }
 
   const handlePrevStep = () => {
@@ -817,6 +901,20 @@ export function AppointmentPage() {
 
   const handleSubmit = async () => {
     if (!isAuthenticated) {
+      saveAppointmentDraft({
+        currentStep,
+        guitarSelectionMode,
+        selectedSavedBuildId,
+        homeServiceOption,
+        homeServiceAddressId,
+        homeServiceContact,
+        selectedServiceId,
+        guitarDetails,
+        selectedDateId,
+        selectedTime,
+        selectedPaymentMethod,
+        additionalNotes,
+      })
       openLogin(() => navigate('/appointments', { replace: true }))
       return
     }
@@ -917,6 +1015,7 @@ export function AppointmentPage() {
         }
 
         setShowBookingSuccess(true)
+        clearAppointmentDraft()
         setTimeout(() => {
           setShowBookingSuccess(false)
           setIsSubmittingBooking(false)
@@ -958,6 +1057,7 @@ export function AppointmentPage() {
         }
 
         setShowBookingSuccess(true)
+        clearAppointmentDraft()
         setTimeout(() => {
           setShowBookingSuccess(false)
           setIsSubmittingBooking(false)
@@ -979,35 +1079,6 @@ export function AppointmentPage() {
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
           <div className="rounded-2xl border border-[var(--border)] bg-theme-surface-deep p-8 text-center">
             <p className="text-sm text-[var(--text-muted)]">Checking your session...</p>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  if (!isAuthenticated) {
-    return (
-      <div className="min-h-screen pt-16 bg-[var(--bg-primary)]">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-          <div className="rounded-2xl border border-[var(--border)] bg-theme-surface-deep p-8 text-center space-y-5">
-            <h1 className="text-2xl font-bold text-white">Sign in to book an appointment</h1>
-            <p className="text-sm text-[var(--text-muted)]">Booking is available only for authenticated users.</p>
-            <div className="flex flex-col sm:flex-row gap-3 justify-center">
-              <button
-                type="button"
-                onClick={() => openLogin(() => navigate('/appointments', { replace: true }))}
-                className="px-6 py-2.5 rounded-xl text-sm font-bold bg-[#d4af37] text-black hover:bg-[#ffe270] transition-colors"
-              >
-                Login to Continue
-              </button>
-              <button
-                type="button"
-                onClick={() => navigate('/login')}
-                className="px-6 py-2.5 rounded-xl text-sm font-bold text-[var(--text-light)] bg-[var(--surface-dark)] border border-[var(--border)] hover:bg-[var(--surface-elevated)] transition-colors"
-              >
-                Go to Login Page
-              </button>
-            </div>
           </div>
         </div>
       </div>
@@ -1131,25 +1202,41 @@ export function AppointmentPage() {
                 </>
               )}
 
-              <div>
-                <label className="block text-sm font-medium text-white mb-1.5">Home Service <span className="text-red-400">*</span></label>
-                <div className="grid sm:grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setHomeServiceOption('yes')}
-                    className={`rounded-xl border p-3 text-sm font-semibold transition-colors ${homeServiceOption === 'yes' ? 'border-[#d4af37] bg-[#d4af37]/10 text-[#d4af37]' : 'border-[var(--border)] text-[var(--text-muted)]'}`}
-                  >
-                    Yes, Home Service
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setHomeServiceOption('no')}
-                    className={`rounded-xl border p-3 text-sm font-semibold transition-colors ${homeServiceOption === 'no' ? 'border-[#d4af37] bg-[#d4af37]/10 text-[#d4af37]' : 'border-[var(--border)] text-[var(--text-muted)]'}`}
-                  >
-                    No, In-store Service
-                  </button>
+              {isAuthenticated ? (
+                <div>
+                  <label className="block text-sm font-medium text-white mb-1.5">Home Service <span className="text-red-400">*</span></label>
+                  <div className="grid sm:grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setHomeServiceOption('yes')}
+                      className={`rounded-xl border p-3 text-sm font-semibold transition-colors ${homeServiceOption === 'yes' ? 'border-[#d4af37] bg-[#d4af37]/10 text-[#d4af37]' : 'border-[var(--border)] text-[var(--text-muted)]'}`}
+                    >
+                      Yes, Home Service
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setHomeServiceOption('no')}
+                      className={`rounded-xl border p-3 text-sm font-semibold transition-colors ${homeServiceOption === 'no' ? 'border-[#d4af37] bg-[#d4af37]/10 text-[#d4af37]' : 'border-[var(--border)] text-[var(--text-muted)]'}`}
+                    >
+                      No, In-store Service
+                    </button>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="rounded-xl p-2 bg-[#d4af37]/10 text-[#d4af37]">
+                      <MapPin className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-[var(--text-light)]">In-store Service</p>
+                      <p className="mt-1 text-xs text-[var(--text-muted)]">
+                        Your appointment will be at our Balagtas branch. Home Service is available after signing in - it requires a saved address on your account.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-4 space-y-3">
                 <p className="text-sm font-semibold text-[var(--text-light)]">Guitar Reference Image (Optional)</p>
@@ -1324,6 +1411,14 @@ export function AppointmentPage() {
                   <h2 className="text-2xl font-bold text-white mb-2">Location</h2>
                   <p className="text-sm text-[var(--text-muted)]">Appointments are currently available at our Balagtas branch.</p>
                 </div>
+
+                {!isAuthenticated && (
+                  <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-4">
+                    <p className="text-xs text-[var(--text-muted)]">
+                      You're browsing as a guest. You'll be asked to sign in on the final step to confirm this booking.
+                    </p>
+                  </div>
+                )}
 
                 <div className="space-y-3">
                   {branches.map(branch => {
@@ -1786,20 +1881,43 @@ export function AppointmentPage() {
                  >
                    Next
                  </button>
-               ) : (
-                 <button
-                   onClick={handleSubmit}
-                   disabled={isSubmittingBooking || !canProceed()}
-                   className="px-8 py-2.5 rounded-xl text-sm font-bold bg-[#d4af37] text-black hover:bg-[#ffe270] transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(212,175,55,0.3)] shadow-[#d4af37]/20 flex items-center gap-2"
-                 >
-                   {isSubmittingBooking ? (
-                     <>Processing... <Settings className="w-4 h-4 animate-spin" /></>
-                   ) : isRescheduleMode ? (
-                     "Update Appointment"
-                   ) : (
-                     "Complete Booking"
-                   )}
-                 </button>
+              ) : !isAuthenticated ? (
+                  <button
+                    onClick={() => {
+                      saveAppointmentDraft({
+                        currentStep: 5,
+                        guitarSelectionMode,
+                        selectedSavedBuildId,
+                        homeServiceOption,
+                        homeServiceAddressId,
+                        homeServiceContact,
+                        selectedServiceId,
+                        guitarDetails,
+                        selectedDateId,
+                        selectedTime,
+                        selectedPaymentMethod,
+                        additionalNotes,
+                      })
+                      openLogin(() => navigate('/appointments', { replace: true }))
+                    }}
+                    className="px-8 py-2.5 rounded-xl text-sm font-bold bg-[#d4af37] text-black hover:bg-[#ffe270] transition-all shadow-[0_0_20px_rgba(212,175,55,0.3)] flex items-center gap-2"
+                  >
+                    Sign in to Complete
+                  </button>
+              ) : (
+                <button
+                  onClick={handleSubmit}
+                  disabled={isSubmittingBooking || !canProceed()}
+                  className="px-8 py-2.5 rounded-xl text-sm font-bold bg-[#d4af37] text-black hover:bg-[#ffe270] transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(212,175,55,0.3)] shadow-[#d4af37]/20 flex items-center gap-2"
+                >
+                  {isSubmittingBooking ? (
+                    <>Processing... <Settings className="w-4 h-4 animate-spin" /></>
+                  ) : isRescheduleMode ? (
+                    "Update Appointment"
+                  ) : (
+                    "Complete Booking"
+                  )}
+                </button>
                )}
               </div>
             </div>

@@ -20,7 +20,11 @@ export function BuilderActionBar({
         Reset
       </button>
       {showSave && (
-        <button type="button" onClick={onSave} className={actionButtonClass}>
+        <button
+          type="button"
+          onClick={onSave}
+          className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] px-4 py-3 text-sm font-bold text-[var(--text-dark)] shadow-lg shadow-[#d4af37]/20 transition-all duration-200 hover:shadow-xl hover:shadow-[#d4af37]/30"
+        >
           <Save className="h-4 w-4" />
           Save Build
         </button>

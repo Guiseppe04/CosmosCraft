@@ -280,10 +280,16 @@ export function DashboardPage() {
   const queryParams = useMemo(() => new URLSearchParams(location.search), [location.search])
   const tabFromQuery = queryParams.get('tab') || queryParams.get('orderTab')
   const sectionFromQuery = queryParams.get('section')
-  const initialSection = (tabFromQuery && ['ratings', 'ratings-feedback', 'refunds'].includes(tabFromQuery))
-    ? 'purchases'
-    : (sectionFromQuery === 'orders' ? 'purchases' : (location.state?.section || 'profile'))
   const VALID_SECTIONS = new Set(['profile', 'my-guitar', 'appointments', 'cart', 'purchases', 'addresses', 'password'])
+  const initialSection = (() => {
+    if (tabFromQuery && ['ratings', 'ratings-feedback', 'refunds'].includes(tabFromQuery)) {
+      return 'purchases'
+    }
+    if (sectionFromQuery === 'orders') return 'purchases'
+    if (sectionFromQuery && VALID_SECTIONS.has(sectionFromQuery)) return sectionFromQuery
+    if (location.state?.section && VALID_SECTIONS.has(location.state.section)) return location.state.section
+    return 'profile'
+  })()
   const [activeSection, setActiveSection] = useState(initialSection)
 
   useEffect(() => {
@@ -408,6 +414,25 @@ export function DashboardPage() {
   const [ratingModalOrderId, setRatingModalOrderId] = useState(null)
   const [rating, setRating] = useState(0)
   const [ratingText, setRatingText] = useState('')
+
+  useEffect(() => {
+    const openBuildId = location.state?.openBuildId
+    if (!openBuildId || activeSection !== 'my-guitar') return
+
+    const savedGuitarBuilds = JSON.parse(window.localStorage.getItem('cosmoscraft_saved_builds') || '[]')
+    const savedBassBuilds = JSON.parse(window.localStorage.getItem('cosmoscraft_saved_bass_builds') || '[]')
+    const target = [...savedGuitarBuilds, ...savedBassBuilds]
+      .find((build) => String(build.id) === String(openBuildId))
+
+    if (target) {
+      setViewingBuild(target)
+    }
+
+    navigate(location.pathname + location.search, {
+      replace: true,
+      state: { ...location.state, openBuildId: undefined },
+    })
+  }, [activeSection, location.state, location.pathname, location.search, navigate])
 
   useEffect(() => {
     const sectionFromState = location.state?.section
