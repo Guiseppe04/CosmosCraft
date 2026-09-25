@@ -96,6 +96,8 @@ exports.getPaymentMethodAnalysis = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+const salesExcelService = require('../services/salesExcelService');
+
 exports.exportReport = async (req, res, next) => {
   try {
     const { type, start_date, end_date, status, payment_method } = req.query;
@@ -104,4 +106,35 @@ exports.exportReport = async (req, res, next) => {
     res.json({ status: 'success', data: result });
   } catch (err) { next(err); }
 };
+
+exports.exportSalesExcel = async (req, res, next) => {
+  try {
+    let salesReport = req.body?.salesReport;
+    const dateLabel = req.body?.dateLabel || req.query?.dateLabel || 'All Time';
+    const printedBy = req.body?.printedBy || (req.user?.firstName ? `${req.user.firstName} ${req.user.lastName || ''}`.trim() : 'Administrator');
+    const datePrinted = req.body?.datePrinted || new Date().toLocaleString('en-PH');
+
+    if (!salesReport) {
+      const { start_date, end_date, order_type, payment_method, category_id, status, payment_status } = { ...req.query, ...req.body };
+      salesReport = await reportService.getSalesReport({ start_date, end_date, order_type, payment_method, category_id, status, payment_status });
+    }
+
+    const buffer = salesExcelService.generateSalesExcelWorkbook(salesReport, {
+      dateLabel,
+      printedBy,
+      datePrinted,
+    });
+
+    const safeLabel = (dateLabel || 'All Time').replace(/[\\/:*?"<>|]/g, '').trim();
+    const filename = `CosmosCraft Sales Report - ${safeLabel}.xlsx`;
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
+    res.setHeader('Content-Length', buffer.length);
+    res.send(buffer);
+  } catch (err) {
+    next(err);
+  }
+};
+
 

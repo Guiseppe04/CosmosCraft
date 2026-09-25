@@ -16,6 +16,7 @@ import {
 import * as XLSX from "xlsx";
 import { formatCurrency } from "../../../utils/formatCurrency";
 import { useAuth } from "../../../context/AuthContext";
+import { adminApi } from "../../../utils/adminApi";
 
 /* ─── Constants ─── */
 
@@ -115,302 +116,731 @@ function buildReportFilename(dateLabel, ext) {
   return `CosmosCraft Sales Report - ${period}.${ext}`;
 }
 
-/* ─── Excel Table & Formatting Helper ─── */
+/* ─── Excel Table & Formatting Helpers ─── */
 
-function createExcelTableSheet(headers, rows, colFormats = [], options = {}) {
-  const aoa = [headers, ...rows];
-  const ws = XLSX.utils.aoa_to_sheet(aoa);
-  if (!ws["!ref"]) return ws;
-  const range = XLSX.utils.decode_range(ws["!ref"]);
+const EXCEL_FMTS = {
+  currency: '"₱"#,##0.00',
+  int: '#,##0',
+  pct: '0.0%',
+  date: 'mmm d, yyyy',
+  text: '@',
+};
 
-  // Apply number formats and typed values
-  for (let R = 1; R <= range.e.r; ++R) {
-    for (let C = 0; C <= range.e.c; ++C) {
-      const cellRef = XLSX.utils.encode_cell({ r: R, c: C });
+const EXCEL_PAYMENT_LABELS = {
+  gcash: "GCash",
+  bank_transfer: "Bank Transfer",
+  cash: "Cash",
+};
+
+function formatExcelMethod(method) {
+  if (!method) return "Unknown";
+  if (EXCEL_PAYMENT_LABELS[method]) return EXCEL_PAYMENT_LABELS[method];
+  return method.split(/[_\s]+/).map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+}
+
+function formatExcelAdjustmentType(type) {
+  if (!type) return "Other";
+  const clean = type.trim();
+  const capitalized = clean.charAt(0).toUpperCase() + clean.slice(1);
+  return capitalized.endsWith("s") ? capitalized : `${capitalized}s`;
+}
+
+/**
+ * Creates an individual Excel worksheet from structured data rows.
+ * Supports typed numeric values, Excel formulas with fallback cached values,
+ * custom cell formatting, AutoFilter ranges, freeze panes, print setup, and
+ * intelligent dynamic column widths.
+ */
+function buildExcelWorksheet(rows, options = {}) {
+  const ws = {};
+  let maxR = 0;
+  let maxC = 0;
+
+  rows.forEach((row, r) => {
+    if (r > maxR) maxR = r;
+    if (!Array.isArray(row)) return;
+    row.forEach((cell, c) => {
+      if (c > maxC) maxC = c;
+      if (cell === undefined || cell === null) return;
+
+      const cellRef = XLSX.utils.encode_cell({ r, c });
+      let cellObj;
+
+      if (typeof cell === "object" && !(cell instanceof Date) && (cell.v !== undefined || cell.f !== undefined)) {
+        cellObj = { ...cell };
+      } else {
+        cellObj = { v: cell };
+      }
+
+      let fmtKey = null;
+      if (options.getCellFormat) {
+        fmtKey = options.getCellFormat(r, c, cellObj.v, row);
+      } else if (options.colFormats && options.colFormats[c]) {
+        fmtKey = options.colFormats[c];
+      }
+
+      if (cellObj.v instanceof Date) {
+        cellObj.t = "d";
+        cellObj.z = EXCEL_FMTS.date;
+      } else if (typeof cellObj.v === "number") {
+        cellObj.t = "n";
+        if (fmtKey && EXCEL_FMTS[fmtKey]) {
+          cellObj.z = EXCEL_FMTS[fmtKey];
+        } else if (cellObj.z && EXCEL_FMTS[cellObj.z]) {
+          cellObj.z = EXCEL_FMTS[cellObj.z];
+        }
+      } else if (typeof cellObj.v === "string") {
+        cellObj.t = "s";
+      } else if (typeof cellObj.v === "boolean") {
+        cellObj.t = "b";
+      }
+
+      ws[cellRef] = cellObj;
+    });
+  });
+
+  const ref = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: maxR, c: maxC } });
+  ws["!ref"] = ref;
+
+  // AutoFilter
+  if (options.autofilter) {
+    if (typeof options.autofilter === "string") {
+      ws["!autofilter"] = { ref: options.autofilter };
+    } else if (options.headerRowIndex !== undefined) {
+      const headerR = options.headerRowIndex;
+      const endR = options.autofilterEndRow !== undefined ? options.autofilterEndRow : maxR;
+      ws["!autofilter"] = {
+        ref: XLSX.utils.encode_range({ s: { r: headerR, c: 0 }, e: { r: endR, c: maxC } }),
+      };
+    } else {
+      ws["!autofilter"] = { ref };
+    }
+  }
+
+  // Freeze Panes
+  const freezeRow = options.freezeRow !== undefined
+    ? options.freezeRow
+    : (options.headerRowIndex !== undefined ? options.headerRowIndex + 1 : 0);
+  if (freezeRow > 0) {
+    const topLeftCell = XLSX.utils.encode_cell({ r: freezeRow, c: 0 });
+    ws["!views"] = [{ state: "frozen", ySplit: freezeRow, xSplit: 0, topLeftCell, activeCell: topLeftCell }];
+    ws["!freeze"] = { state: "frozen", ySplit: freezeRow, xSplit: 0, topLeftCell, activeCell: topLeftCell };
+  }
+
+  // Margins for clean printing
+  ws["!margins"] = { left: 0.7, right: 0.7, top: 0.75, bottom: 0.75, header: 0.3, footer: 0.3 };
+
+  // Calculate intelligent column widths
+  const colWidths = [];
+  for (let c = 0; c <= maxC; c++) {
+    let maxLen = 0;
+    for (let r = 0; r <= maxR; r++) {
+      const cellRef = XLSX.utils.encode_cell({ r, c });
       const cell = ws[cellRef];
       if (!cell || cell.v === undefined || cell.v === null) continue;
 
-      let fmt = colFormats[C];
-      if (options.getCellFormat) {
-        const customFmt = options.getCellFormat(R - 1, C, cell.v, rows[R - 1]);
-        if (customFmt) fmt = customFmt;
+      let len = 0;
+      if (cell.z === EXCEL_FMTS.currency) {
+        len = `₱${Number(cell.v || 0).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`.length;
+      } else if (cell.z === EXCEL_FMTS.pct) {
+        len = `${(Number(cell.v || 0) * 100).toFixed(1)}%`.length;
+      } else if (cell.z === EXCEL_FMTS.int) {
+        len = Number(cell.v || 0).toLocaleString("en-PH").length;
+      } else if (cell.v instanceof Date) {
+        len = 14;
+      } else {
+        len = String(cell.v).length;
       }
-
-      if (fmt === "currency") {
-        cell.t = "n";
-        cell.z = '"₱"#,##0.00';
-      } else if (fmt === "int") {
-        cell.t = "n";
-        cell.z = "#,##0";
-      } else if (fmt === "pct") {
-        cell.t = "n";
-        cell.z = '0.0"%"';
-      } else if (fmt === "date") {
-        cell.z = "yyyy-mm-dd";
-      }
-    }
-  }
-
-  // Calculate reasonable column widths based on cell content length
-  const colWidths = headers.map((h, C) => {
-    let maxLen = String(h || "").length;
-    for (let R = 1; R <= range.e.r; ++R) {
-      const cellRef = XLSX.utils.encode_cell({ r: R, c: C });
-      const cell = ws[cellRef];
-      if (cell) {
-        let valStr = "";
-        if (cell.w) {
-          valStr = cell.w;
-        } else if (cell.v !== undefined && cell.v !== null) {
-          let fmt = colFormats[C];
-          if (options.getCellFormat) {
-            const customFmt = options.getCellFormat(R - 1, C, cell.v, rows[R - 1]);
-            if (customFmt) fmt = customFmt;
-          }
-          if (fmt === "currency") valStr = `₱${Number(cell.v).toLocaleString("en-PH", { minimumFractionDigits: 2 })}`;
-          else if (fmt === "pct") valStr = `${cell.v}%`;
-          else if (fmt === "int") valStr = `${Number(cell.v).toLocaleString("en-PH")}`;
-          else valStr = String(cell.v);
-        }
-        maxLen = Math.max(maxLen, valStr.length);
-      }
+      if (len > maxLen) maxLen = len;
     }
     const minW = options.minColWidth || 14;
-    return { wch: Math.max(maxLen + 4, minW) };
-  });
-  ws["!cols"] = colWidths;
-
-  // AutoFilter enables proper Excel Table filter dropdowns on the table header
-  if (options.autofilter !== false && rows.length > 0) {
-    ws["!autofilter"] = { ref: ws["!ref"] };
+    colWidths.push({ wch: Math.min(Math.max(maxLen + 3, minW), 50) });
   }
+  ws["!cols"] = colWidths;
 
   return ws;
 }
 
+/**
+ * Generates and downloads a multi-sheet, executive-ready Excel workbook
+ * preserving all underlying sales metrics while elevating presentation,
+ * default sorting, formulas, and filterability.
+ */
 function exportExcel(salesReport, dateLabel, printedBy, datePrinted) {
   if (!salesReport) return;
   const wb = XLSX.utils.book_new();
+
+  // Shared formatting helpers
   const fc = (v) => Number((v || 0).toFixed(2));
   const fi = (v) => Math.round(v || 0);
-  const pct = (v, total) => (total > 0 ? Number(((v / total) * 100).toFixed(1)) : 0);
+  const fp = (num, denom) => (denom > 0 ? Number((num / denom).toFixed(4)) : 0);
+
+  // Compute shared baseline totals once
+  const grossSales = salesReport.grossSales || 0;
+  const totalAdjustments = salesReport.totalAdjustments || 0;
+  const netSales = salesReport.netSales || 0;
+  const totalTransactions = salesReport.totalTransactions || 0;
+  const avgTx = totalTransactions > 0 ? grossSales / totalTransactions : 0;
+  const customizationOrders = salesReport.customizationOrders || 0;
+  const adjustmentRateDecimal = grossSales > 0 ? totalAdjustments / grossSales : 0;
+  const netRetentionDecimal = grossSales > 0 ? netSales / grossSales : 0;
+
+  // Shared channel list sorted by Net Sales descending
   const chs = salesReport.channels || {};
-  const ns = salesReport.netSales || 0;
+  const channelsList = Object.entries(chs).map(([key, ch]) => ({
+    key,
+    label: (CHANNEL_META[key] || { label: key }).label,
+    transactions: fi(ch.transactions),
+    gross: fc(ch.gross),
+    adjustments: fc(ch.adjustments),
+    net: fc(ch.net),
+    avg: ch.transactions > 0 ? fc(ch.gross / ch.transactions) : 0,
+    share: fp(ch.net, netSales),
+  })).sort((a, b) => b.net - a.net);
 
-  // 1. Report Info Table
-  const infoHeaders = ["Report Metadata", "Details"];
-  const infoRows = [
-    ["Report Title", "CosmosCraft Sales Analytics Report"],
-    ["Reporting Period", dateLabel || "All Time"],
-    ["Generated On", new Date().toLocaleString("en-PH")],
-    ["Exported By", printedBy || "Unknown User"],
-    ["Print / Export Timestamp", datePrinted || new Date().toLocaleString("en-PH")],
-    ["Currency", "Philippine Peso (PHP / ₱)"],
+  /* ─────────────────────────────────────────────────────────────
+     1. Dashboard Sheet (First & Most Useful Overview)
+     ───────────────────────────────────────────────────────────── */
+  const dashRows = [
+    ["COSMOSCRAFT GUITARS & CUSTOM SHOP", "", "", ""],
+    ["Executive Sales & Business Analytics Dashboard", "", "", ""],
+    ["", "", "", ""],
+    ["REPORT OVERVIEW & METADATA", "", "", ""],
+    ["Reporting Period", dateLabel || "All Time", "Generated On", new Date().toLocaleString("en-PH")],
+    ["Exported By", printedBy || "Unknown User", "Currency", "Philippine Peso (PHP / ₱)"],
+    ["", "", "", ""],
+    ["KEY PERFORMANCE INDICATORS (KPIs)", "", "", ""],
+    ["Metric / Performance Indicator", "Amount / Value", "Metric Type", "Performance Notes & Benchmarks"],
+    ["Gross Sales", { v: fc(grossSales), z: "currency" }, "Revenue", "Total unadjusted sales value across all channels before deductions"],
+    ["Total Adjustments", { v: fc(totalAdjustments), z: "currency" }, "Deduction", "Combined customer refunds, returns, discounts, and canceled orders"],
+    ["Net Sales", { v: fc(netSales), z: "currency" }, "Primary KPI", "Gross Sales minus Total Adjustments (Primary financial benchmark)"],
+    ["Total Transactions", { v: fi(totalTransactions), z: "int" }, "Volume", "Total successfully completed customer sales and appointment orders"],
+    ["Average Transaction", { v: fc(avgTx), z: "currency" }, "Efficiency", "Average gross revenue generated per completed customer transaction"],
+    ["Customization Orders", { v: fi(customizationOrders), z: "int" }, "Custom Shop", "Total bespoke guitar build projects and modification requests"],
+    ["Adjustment Rate", { v: adjustmentRateDecimal, z: "pct" }, "Operational", "Sales adjustments as a percentage of gross sales (Target: < 5.0%)"],
+    ["Net Sales as % of Gross", { v: netRetentionDecimal, z: "pct" }, "Operational", "Percentage of gross revenue retained after adjustments (Target: > 95.0%)"],
+    ["", "", "", ""],
+    ["CHANNEL REVENUE CONTRIBUTION", "", "", ""],
+    ["Sales Channel", "Transactions", "Gross Sales", "Net Sales", "Share of Net Sales"],
   ];
-  XLSX.utils.book_append_sheet(wb, createExcelTableSheet(infoHeaders, infoRows, ["text", "text"]), "Report Info");
 
-  // 2. Executive Summary Table
-  const sumHeaders = ["Sales Metric", "Amount / Value", "Description / Notes"];
-  const sumRows = [
-    ["Gross Sales", fc(salesReport.grossSales), "Total unadjusted sales value across all channels"],
-    ["Total Adjustments", fc(salesReport.totalAdjustments), "Refunds, returns, and canceled items deducted"],
-    ["Net Sales", fc(salesReport.netSales), "Gross Sales minus Total Adjustments (Primary KPI)"],
-    ["Total Transactions", fi(salesReport.totalTransactions), "Completed transactions across all channels"],
-    ["Average per Transaction", fc(salesReport.averagePerTransaction), "Average revenue generated per transaction"],
-    ["Customization Orders", fi(salesReport.customizationOrders), "Total custom product orders processed"],
-    ["Adjustment Rate", salesReport.adjustmentRate || 0, "Adjustments as a percentage of gross sales"],
-    ["Net as % of Gross", salesReport.grossSales > 0 ? Number((100 - (salesReport.adjustmentRate || 0)).toFixed(1)) : 0, "Percentage of gross sales retained as net revenue"],
-  ];
-  const sumSheet = createExcelTableSheet(sumHeaders, sumRows, ["text", "mixed", "text"], {
-    getCellFormat: (rowIdx, colIdx) => {
-      if (colIdx === 1) {
-        if ([0, 1, 2, 4].includes(rowIdx)) return "currency";
-        if ([3, 5].includes(rowIdx)) return "int";
-        if ([6, 7].includes(rowIdx)) return "pct";
-      }
-      return "text";
-    },
-  });
-  XLSX.utils.book_append_sheet(wb, sumSheet, "Executive Summary");
-
-  // 3. Channels Table
-  const chHeaders = ["Sales Channel", "Transactions", "Gross Sales", "Adjustments", "Net Sales", "% of Net Sales"];
-  const chRows = [];
-  Object.entries(chs).forEach(([key, ch]) => {
-    const lbl = (CHANNEL_META[key] || { label: key }).label;
-    chRows.push([lbl, fi(ch.transactions), fc(ch.gross), fc(ch.adjustments), fc(ch.net), pct(ch.net, ns)]);
-  });
-  chRows.push(["TOTAL", fi(salesReport.totalTransactions), fc(salesReport.grossSales), fc(salesReport.totalAdjustments), fc(salesReport.netSales), 100]);
-  XLSX.utils.book_append_sheet(
-    wb,
-    createExcelTableSheet(chHeaders, chRows, ["text", "int", "currency", "currency", "currency", "pct"]),
-    "Channels"
-  );
-
-  // 4. Adjustments by Type Table
-  const adjTypes = salesReport.adjustmentsByType || [];
-  const totAdjAmt = salesReport.totalAdjustments || 0;
-  const adjTypeHeaders = ["Adjustment Type", "Count", "Total Amount", "% of Adjustments"];
-  const adjTypeRows = adjTypes.map((a) => {
-    const typeName = (a.type || "Unknown").charAt(0).toUpperCase() + (a.type || "Unknown").slice(1) + "s";
-    return [typeName, fi(a.count), fc(a.amount), pct(a.amount, totAdjAmt)];
-  });
-  adjTypeRows.push(["TOTAL", fi(adjTypes.reduce((s, a) => s + (a.count || 0), 0)), fc(totAdjAmt), 100]);
-  XLSX.utils.book_append_sheet(
-    wb,
-    createExcelTableSheet(adjTypeHeaders, adjTypeRows, ["text", "int", "currency", "pct"]),
-    "Adjustments - Type"
-  );
-
-  // 5. Adjustments by Channel Table
-  const adjChannels = salesReport.adjustmentsByChannel || [];
-  const adjChHeaders = ["Sales Channel", "Count", "Total Amount", "% of Adjustments"];
-  const adjChRows = adjChannels.map((a) => {
-    const chLabel = (CHANNEL_META[a.channel] || {}).label || a.channel;
-    return [chLabel, fi(a.count), fc(a.amount), pct(a.amount, totAdjAmt)];
-  });
-  adjChRows.push(["TOTAL", fi(adjChannels.reduce((s, a) => s + (a.count || 0), 0)), fc(totAdjAmt), 100]);
-  XLSX.utils.book_append_sheet(
-    wb,
-    createExcelTableSheet(adjChHeaders, adjChRows, ["text", "int", "currency", "pct"]),
-    "Adjustments - Channel"
-  );
-
-  // 6. Top Products Table
-  if ((salesReport.bestSellingProducts || []).length > 0) {
-    const pHeaders = ["Rank", "Product Name", "Category", "Units Sold", "Total Revenue", "Avg Price per Unit"];
-    const pRows = salesReport.bestSellingProducts.map((p, i) => [
-      i + 1,
-      p.name,
-      p.category || "—",
-      fi(p.units),
-      fc(p.revenue),
-      fc(p.units > 0 ? p.revenue / p.units : 0),
+  channelsList.forEach((ch) => {
+    dashRows.push([
+      ch.label,
+      { v: ch.transactions, z: "int" },
+      { v: ch.gross, z: "currency" },
+      { v: ch.net, z: "currency" },
+      { v: ch.share, z: "pct" },
     ]);
-    XLSX.utils.book_append_sheet(
-      wb,
-      createExcelTableSheet(pHeaders, pRows, ["int", "text", "text", "int", "currency", "currency"]),
-      "Top Products"
-    );
-  }
-
-  // 7. Customization Table
-  const cc = chs.customization || {};
-  const co = salesReport.customizationOrders || 0;
-  const custHeaders = ["Customization Metric", "Amount / Value", "Notes"];
-  const custRows = [
-    ["Total Customization Orders", fi(co), "Total custom keyboard builds & requests"],
-    ["Gross Sales", fc(cc.gross), "Customization gross billings"],
-    ["Adjustments", fc(cc.adjustments), "Customization refunds or deductions"],
-    ["Net Sales", fc(cc.net), "Gross minus adjustments"],
-    ["Total Transactions", fi(cc.transactions), "Number of transactions"],
-    ["Avg Order Value", fc(co > 0 ? (cc.net || 0) / co : 0), "Average net revenue per custom order"],
-    ["% of Total Net Sales", pct(cc.net, ns), "Share of company-wide net sales"],
-  ];
-  const custSheet = createExcelTableSheet(custHeaders, custRows, ["text", "mixed", "text"], {
-    getCellFormat: (rowIdx, colIdx) => {
-      if (colIdx === 1) {
-        if ([1, 2, 3, 5].includes(rowIdx)) return "currency";
-        if ([0, 4].includes(rowIdx)) return "int";
-        if (rowIdx === 6) return "pct";
-      }
-      return "text";
-    },
   });
-  XLSX.utils.book_append_sheet(wb, custSheet, "Customization");
 
-  // 8. Order Payment Methods Table
-  const om = salesReport.orderPaymentMethods || [];
-  if (om.length > 0) {
-    const oHeaders = ["Payment Method", "Transactions", "Total Amount", "% of Volume", "Avg Transaction"];
-    const oAmt = om.reduce((s, m) => s + (m.amount || 0), 0);
-    const oTx = om.reduce((s, m) => s + (m.transactions || 0), 0);
-    const oRows = om.map((m) => {
-      const lbl = m.method === "gcash" ? "GCash" : m.method === "bank_transfer" ? "Bank Transfer" : m.method;
-      return [lbl, fi(m.transactions), fc(m.amount), pct(m.amount, oAmt), fc(m.transactions > 0 ? (m.amount || 0) / m.transactions : 0)];
+  dashRows.push([
+    "TOTAL",
+    { v: fi(totalTransactions), z: "int" },
+    { v: fc(grossSales), z: "currency" },
+    { v: fc(netSales), z: "currency" },
+    { v: 1.0, z: "pct" },
+  ]);
+
+  const dashWs = buildExcelWorksheet(dashRows, {
+    minColWidth: 16,
+    freezeRow: 0,
+  });
+  XLSX.utils.book_append_sheet(wb, dashWs, "Dashboard");
+
+  /* ─────────────────────────────────────────────────────────────
+     2. Executive Summary Sheet
+     ───────────────────────────────────────────────────────────── */
+  const execRows = [
+    ["Sales Metric", "Amount / Value", "Operational Definition & Explanatory Notes"],
+    ["Gross Sales", { v: fc(grossSales), z: "currency" }, "Total unadjusted sales value generated across all retail and service channels."],
+    ["Total Adjustments", { v: fc(totalAdjustments), z: "currency" }, "Combined deductions including customer refunds, return credits, and order voids."],
+    ["Net Sales", { v: fc(netSales), z: "currency" }, "Net operating revenue (Gross Sales minus Adjustments). Primary financial KPI."],
+    ["Total Transactions", { v: fi(totalTransactions), z: "int" }, "Total count of successfully completed customer orders and paid service appointments."],
+    ["Average Transaction", { v: fc(avgTx), z: "currency" }, "Average gross value generated per completed transaction across all channels."],
+    ["Customization Orders", { v: fi(customizationOrders), z: "int" }, "Total volume of custom guitar builds and bespoke instrument modification orders."],
+    ["Adjustment Rate", { v: adjustmentRateDecimal, z: "pct" }, "Adjustments as a percentage of gross revenue. Measures return/void efficiency."],
+    ["Net Sales as % of Gross", { v: netRetentionDecimal, z: "pct" }, "Percentage of gross sales retained after accounting for all adjustments."],
+  ];
+  const execWs = buildExcelWorksheet(execRows, {
+    headerRowIndex: 0,
+    autofilter: true,
+    minColWidth: 18,
+  });
+  XLSX.utils.book_append_sheet(wb, execWs, "Executive Summary");
+
+  /* ─────────────────────────────────────────────────────────────
+     3. Sales by Channel Sheet
+     ───────────────────────────────────────────────────────────── */
+  if (channelsList.length > 0) {
+    const chHeaders = ["Sales Channel", "Transactions", "Gross Sales", "Adjustments", "Net Sales", "% of Net Sales", "Average Transaction"];
+    const chRows = [chHeaders];
+    const totalRowIndex = channelsList.length + 2;
+
+    channelsList.forEach((ch, idx) => {
+      const rowNum = idx + 2;
+      chRows.push([
+        ch.label,
+        { v: ch.transactions, z: "int" },
+        { v: ch.gross, z: "currency" },
+        { v: ch.adjustments, z: "currency" },
+        { v: ch.net, f: `C${rowNum}-D${rowNum}`, z: "currency" },
+        { v: ch.share, f: `E${rowNum}/$E$${totalRowIndex}`, z: "pct" },
+        { v: ch.avg, f: `IF(B${rowNum}>0, C${rowNum}/B${rowNum}, 0)`, z: "currency" },
+      ]);
     });
-    oRows.push(["TOTAL", fi(oTx), fc(oAmt), 100, fc(oTx > 0 ? oAmt / oTx : 0)]);
-    XLSX.utils.book_append_sheet(
-      wb,
-      createExcelTableSheet(oHeaders, oRows, ["text", "int", "currency", "pct", "currency"]),
-      "Payments - Orders"
-    );
-  }
 
-  // 9. Appointment Payment Methods Table
-  const am = salesReport.appointmentPaymentMethods || [];
-  if (am.length > 0) {
-    const aHeaders = ["Payment Method", "Appointments", "Total Revenue", "% of Appt Payments", "Avg Transaction"];
-    const aRev = am.reduce((s, m) => s + (m.revenue || 0), 0);
-    const aAp = am.reduce((s, m) => s + (m.appointments || 0), 0);
-    const aRows = am.map((m) => {
-      const lbl = m.method === "cash" ? "Cash" : m.method === "gcash" ? "GCash" : m.method === "bank_transfer" ? "Bank Transfer" : m.method;
-      return [lbl, fi(m.appointments), fc(m.revenue), pct(m.revenue, aRev), fc(m.appointments > 0 ? (m.revenue || 0) / m.appointments : 0)];
-    });
-    aRows.push(["TOTAL", fi(aAp), fc(aRev), 100, fc(aAp > 0 ? aRev / aAp : 0)]);
-    XLSX.utils.book_append_sheet(
-      wb,
-      createExcelTableSheet(aHeaders, aRows, ["text", "int", "currency", "pct", "currency"]),
-      "Payments - Appts"
-    );
-  }
-
-  // 10. Daily Trend Table
-  if ((salesReport.dailyTrend || []).length > 0) {
-    const tHeaders = ["Date", "Revenue", "Transactions", "Avg per Transaction"];
-    const tRows = salesReport.dailyTrend.map((d) => [
-      d.date,
-      fc(d.revenue),
-      fi(d.transactions),
-      fc(d.transactions > 0 ? (d.revenue || 0) / d.transactions : 0),
+    chRows.push([
+      "TOTAL",
+      { v: fi(totalTransactions), f: `SUM(B2:B${totalRowIndex - 1})`, z: "int" },
+      { v: fc(grossSales), f: `SUM(C2:C${totalRowIndex - 1})`, z: "currency" },
+      { v: fc(totalAdjustments), f: `SUM(D2:D${totalRowIndex - 1})`, z: "currency" },
+      { v: fc(netSales), f: `SUM(E2:E${totalRowIndex - 1})`, z: "currency" },
+      { v: 1.0, z: "pct" },
+      { v: fc(avgTx), f: `IF(B${totalRowIndex}>0, C${totalRowIndex}/B${totalRowIndex}, 0)`, z: "currency" },
     ]);
-    const totRev = salesReport.dailyTrend.reduce((s, d) => s + (d.revenue || 0), 0);
-    const totTx = salesReport.dailyTrend.reduce((s, d) => s + (d.transactions || 0), 0);
-    tRows.push(["TOTAL", fc(totRev), fi(totTx), fc(totTx > 0 ? totRev / totTx : 0)]);
-    XLSX.utils.book_append_sheet(
-      wb,
-      createExcelTableSheet(tHeaders, tRows, ["text", "currency", "int", "currency"]),
-      "Daily Trend"
-    );
+
+    const chWs = buildExcelWorksheet(chRows, {
+      headerRowIndex: 0,
+      autofilterEndRow: totalRowIndex - 1,
+      autofilter: true,
+      minColWidth: 16,
+    });
+    XLSX.utils.book_append_sheet(wb, chWs, "Sales by Channel");
   }
 
-  // 11. Top Adjusted Products Table
-  if ((salesReport.topAdjustedProducts || []).length > 0) {
-    const apHeaders = ["Product Name", "Adjustment Amount", "Primary Reason"];
-    const apRows = salesReport.topAdjustedProducts.map((p) => [p.name, fc(p.adjustmentAmount), p.reason || "—"]);
-    XLSX.utils.book_append_sheet(
-      wb,
-      createExcelTableSheet(apHeaders, apRows, ["text", "currency", "text"]),
-      "Adjusted Products"
-    );
+  /* ─────────────────────────────────────────────────────────────
+     4. Daily Sales Sheet
+     ───────────────────────────────────────────────────────────── */
+  const dailyData = (salesReport.dailyTrend || []).map((d) => {
+    let dateObj;
+    try {
+      dateObj = new Date(d.date + "T00:00:00");
+      if (isNaN(dateObj.getTime())) dateObj = d.date;
+    } catch {
+      dateObj = d.date;
+    }
+    return {
+      date: dateObj,
+      rawDate: d.date,
+      gross: fc(d.revenue),
+      adjustments: fc(d.adjustments || 0),
+      net: fc((d.revenue || 0) - (d.adjustments || 0)),
+      transactions: fi(d.transactions),
+      avg: d.transactions > 0 ? fc(d.revenue / d.transactions) : 0,
+    };
+  }).sort((a, b) => new Date(a.rawDate) - new Date(b.rawDate));
+
+  if (dailyData.length > 0) {
+    const dailyHeaders = ["Date", "Gross Sales", "Adjustments", "Net Sales", "Transactions", "Average Transaction"];
+    const dailyRows = [dailyHeaders];
+    const totalRowIndex = dailyData.length + 2;
+
+    const totDailyGross = dailyData.reduce((s, d) => s + d.gross, 0);
+    const totDailyAdj = dailyData.reduce((s, d) => s + d.adjustments, 0);
+    const totDailyNet = dailyData.reduce((s, d) => s + d.net, 0);
+    const totDailyTx = dailyData.reduce((s, d) => s + d.transactions, 0);
+    const totDailyAvg = totDailyTx > 0 ? totDailyGross / totDailyTx : 0;
+
+    dailyData.forEach((d, idx) => {
+      const rowNum = idx + 2;
+      dailyRows.push([
+        d.date,
+        { v: d.gross, z: "currency" },
+        { v: d.adjustments, z: "currency" },
+        { v: d.net, f: `B${rowNum}-C${rowNum}`, z: "currency" },
+        { v: d.transactions, z: "int" },
+        { v: d.avg, f: `IF(E${rowNum}>0, B${rowNum}/E${rowNum}, 0)`, z: "currency" },
+      ]);
+    });
+
+    dailyRows.push([
+      "TOTAL",
+      { v: fc(totDailyGross), f: `SUM(B2:B${totalRowIndex - 1})`, z: "currency" },
+      { v: fc(totDailyAdj), f: `SUM(C2:C${totalRowIndex - 1})`, z: "currency" },
+      { v: fc(totDailyNet), f: `SUM(D2:D${totalRowIndex - 1})`, z: "currency" },
+      { v: fi(totDailyTx), f: `SUM(E2:E${totalRowIndex - 1})`, z: "int" },
+      { v: fc(totDailyAvg), f: `IF(E${totalRowIndex}>0, B${totalRowIndex}/E${totalRowIndex}, 0)`, z: "currency" },
+    ]);
+
+    const dailyWs = buildExcelWorksheet(dailyRows, {
+      headerRowIndex: 0,
+      autofilterEndRow: totalRowIndex - 1,
+      autofilter: true,
+      minColWidth: 16,
+    });
+    XLSX.utils.book_append_sheet(wb, dailyWs, "Daily Sales");
   }
 
-  // 12. Refund Reasons Table
-  if ((salesReport.refundReasons || []).length > 0) {
-    const totRefundAmt = salesReport.refundReasons.reduce((s, r) => s + (r.amount || 0), 0);
-    const totRefundCount = salesReport.refundReasons.reduce((s, r) => s + (r.count || 0), 0);
+  /* ─────────────────────────────────────────────────────────────
+     5. Top Products Sheet (Sorted by Revenue DESC)
+     ───────────────────────────────────────────────────────────── */
+  const rawProducts = salesReport.bestSellingProducts || [];
+  if (rawProducts.length > 0) {
+    const sortedProducts = [...rawProducts].sort((a, b) => (b.revenue || 0) - (a.revenue || 0));
+    const totProdRevenue = sortedProducts.reduce((s, p) => s + (p.revenue || 0), 0);
+    const totProdUnits = sortedProducts.reduce((s, p) => s + (p.units || 0), 0);
+    const totProdAvgPrice = totProdUnits > 0 ? totProdRevenue / totProdUnits : 0;
+    const totalRowIndex = sortedProducts.length + 2;
+
+    const prodHeaders = ["Rank", "Product Name", "Category", "Units Sold", "Total Revenue", "Average Price per Unit", "Revenue Share %"];
+    const prodRows = [prodHeaders];
+
+    sortedProducts.forEach((p, idx) => {
+      const rowNum = idx + 2;
+      const units = fi(p.units);
+      const revenue = fc(p.revenue);
+      const avgPrice = units > 0 ? fc(revenue / units) : 0;
+      const share = fp(revenue, totProdRevenue);
+
+      prodRows.push([
+        { v: idx + 1, z: "int" },
+        p.name || "Unknown Product",
+        p.category || "General",
+        { v: units, z: "int" },
+        { v: revenue, z: "currency" },
+        { v: avgPrice, f: `IF(D${rowNum}>0, E${rowNum}/D${rowNum}, 0)`, z: "currency" },
+        { v: share, f: `E${rowNum}/$E$${totalRowIndex}`, z: "pct" },
+      ]);
+    });
+
+    prodRows.push([
+      "",
+      "TOTAL",
+      "—",
+      { v: fi(totProdUnits), f: `SUM(D2:D${totalRowIndex - 1})`, z: "int" },
+      { v: fc(totProdRevenue), f: `SUM(E2:E${totalRowIndex - 1})`, z: "currency" },
+      { v: fc(totProdAvgPrice), f: `IF(D${totalRowIndex}>0, E${totalRowIndex}/D${totalRowIndex}, 0)`, z: "currency" },
+      { v: 1.0, z: "pct" },
+    ]);
+
+    const prodWs = buildExcelWorksheet(prodRows, {
+      headerRowIndex: 0,
+      autofilterEndRow: totalRowIndex - 1,
+      autofilter: true,
+      minColWidth: 16,
+    });
+    XLSX.utils.book_append_sheet(wb, prodWs, "Top Products");
+  }
+
+  /* ─────────────────────────────────────────────────────────────
+     6. Customization Sheet (Bespoke Guitar & Workshop Builds)
+     ───────────────────────────────────────────────────────────── */
+  const custCh = chs.customization || {};
+  const hasCustData = customizationOrders > 0 || custCh.gross > 0 || custCh.transactions > 0;
+  if (hasCustData) {
+    const custGross = fc(custCh.gross);
+    const custAdj = fc(custCh.adjustments);
+    const custNet = fc(custCh.net);
+    const custTx = fi(custCh.transactions);
+    const avgOrderVal = customizationOrders > 0 ? fc(custNet / customizationOrders) : 0;
+    const custShare = fp(custNet, netSales);
+
+    const custRows = [
+      ["Customization Metric", "Amount / Value", "Operational Notes & Details"],
+      ["Total Customization Orders", { v: fi(customizationOrders), z: "int" }, "Total bespoke guitar build requests & custom instrument jobs processed"],
+      ["Gross Sales", { v: custGross, z: "currency" }, "Custom guitar builds & bespoke modification gross billings"],
+      ["Adjustments", { v: custAdj, z: "currency" }, "Guitar customization refund credits or deductions"],
+      ["Net Sales", { v: custNet, z: "currency" }, "Net revenue retained from custom guitar projects (Gross minus Adjustments)"],
+      ["Total Transactions", { v: custTx, z: "int" }, "Number of completed custom guitar payment transactions"],
+      ["Average Order Value", { v: avgOrderVal, z: "currency" }, "Average net revenue generated per custom guitar order"],
+      ["% of Total Net Sales", { v: custShare, z: "pct" }, "Share of overall CosmosCraft net sales generated by guitar customization"],
+    ];
+
+    const custWs = buildExcelWorksheet(custRows, {
+      headerRowIndex: 0,
+      autofilter: true,
+      minColWidth: 18,
+    });
+    XLSX.utils.book_append_sheet(wb, custWs, "Customization");
+  }
+
+  /* ─────────────────────────────────────────────────────────────
+     7. Payments Sheet (Combined Order & Appointment Payments)
+     ───────────────────────────────────────────────────────────── */
+  const orderPayments = [...(salesReport.orderPaymentMethods || [])].sort((a, b) => (b.amount || 0) - (a.amount || 0));
+  const apptPayments = [...(salesReport.appointmentPaymentMethods || [])].sort((a, b) => (b.revenue || 0) - (a.revenue || 0));
+  const hasPaymentsData = orderPayments.length > 0 || apptPayments.length > 0;
+
+  if (hasPaymentsData) {
+    const payRows = [];
+    const totOrderAmt = orderPayments.reduce((s, p) => s + (p.amount || 0), 0);
+    const totOrderTx = orderPayments.reduce((s, p) => s + (p.transactions || 0), 0);
+    const totOrderAvg = totOrderTx > 0 ? totOrderAmt / totOrderTx : 0;
+
+    payRows.push(["ORDER PAYMENTS (Retail & Online Product Sales)", "", "", "", ""]);
+    payRows.push(["Payment Method", "Transactions", "Total Amount", "% of Payment Volume", "Average Transaction"]);
+
+    const orderStartRow = 3;
+    const orderEndRow = orderStartRow + orderPayments.length - 1;
+    const orderTotalRow = orderEndRow + 1;
+
+    orderPayments.forEach((m, idx) => {
+      const rowNum = orderStartRow + idx;
+      const amt = fc(m.amount);
+      const tx = fi(m.transactions);
+      const share = fp(amt, totOrderAmt);
+      const avg = tx > 0 ? fc(amt / tx) : 0;
+
+      payRows.push([
+        formatExcelMethod(m.method),
+        { v: tx, z: "int" },
+        { v: amt, z: "currency" },
+        { v: share, f: `C${rowNum}/$C$${orderTotalRow}`, z: "pct" },
+        { v: avg, f: `IF(B${rowNum}>0, C${rowNum}/B${rowNum}, 0)`, z: "currency" },
+      ]);
+    });
+
+    payRows.push([
+      "TOTAL ORDER PAYMENTS",
+      { v: fi(totOrderTx), f: `SUM(B${orderStartRow}:B${orderEndRow})`, z: "int" },
+      { v: fc(totOrderAmt), f: `SUM(C${orderStartRow}:C${orderEndRow})`, z: "currency" },
+      { v: 1.0, z: "pct" },
+      { v: fc(totOrderAvg), f: `IF(B${orderTotalRow}>0, C${orderTotalRow}/B${orderTotalRow}, 0)`, z: "currency" },
+    ]);
+
+    if (apptPayments.length > 0) {
+      payRows.push(["", "", "", "", ""]);
+      payRows.push(["APPOINTMENT PAYMENTS (Luthier Services & Repairs)", "", "", "", ""]);
+      payRows.push(["Payment Method", "Appointments", "Total Revenue", "% of Appointment Payments", "Average Transaction"]);
+
+      const totApptRev = apptPayments.reduce((s, p) => s + (p.revenue || 0), 0);
+      const totApptCount = apptPayments.reduce((s, p) => s + (p.appointments || 0), 0);
+      const totApptAvg = totApptCount > 0 ? totApptRev / totApptCount : 0;
+
+      const apptStartRow = payRows.length + 1;
+      const apptEndRow = apptStartRow + apptPayments.length - 1;
+      const apptTotalRow = apptEndRow + 1;
+
+      apptPayments.forEach((m, idx) => {
+        const rowNum = apptStartRow + idx;
+        const rev = fc(m.revenue);
+        const appts = fi(m.appointments);
+        const share = fp(rev, totApptRev);
+        const avg = appts > 0 ? fc(rev / appts) : 0;
+
+        payRows.push([
+          formatExcelMethod(m.method),
+          { v: appts, z: "int" },
+          { v: rev, z: "currency" },
+          { v: share, f: `C${rowNum}/$C$${apptTotalRow}`, z: "pct" },
+          { v: avg, f: `IF(B${rowNum}>0, C${rowNum}/B${rowNum}, 0)`, z: "currency" },
+        ]);
+      });
+
+      payRows.push([
+        "TOTAL APPOINTMENT PAYMENTS",
+        { v: fi(totApptCount), f: `SUM(B${apptStartRow}:B${apptEndRow})`, z: "int" },
+        { v: fc(totApptRev), f: `SUM(C${apptStartRow}:C${apptEndRow})`, z: "currency" },
+        { v: 1.0, z: "pct" },
+        { v: fc(totApptAvg), f: `IF(B${apptTotalRow}>0, C${apptTotalRow}/B${apptTotalRow}, 0)`, z: "currency" },
+      ]);
+    }
+
+    const payWs = buildExcelWorksheet(payRows, {
+      freezeRow: 0,
+      minColWidth: 16,
+    });
+    XLSX.utils.book_append_sheet(wb, payWs, "Payments");
+  }
+
+  /* ─────────────────────────────────────────────────────────────
+     8. Adjustments Sheet (By Type, By Channel, & Top Adjusted)
+     ───────────────────────────────────────────────────────────── */
+  const adjTypes = [...(salesReport.adjustmentsByType || [])].sort((a, b) => (b.amount || 0) - (a.amount || 0));
+  const adjChannels = [...(salesReport.adjustmentsByChannel || [])].sort((a, b) => (b.amount || 0) - (a.amount || 0));
+  const topAdjusted = [...(salesReport.topAdjustedProducts || [])].sort((a, b) => (b.adjustmentAmount || 0) - (a.adjustmentAmount || 0));
+  const hasAdjData = adjTypes.length > 0 || adjChannels.length > 0 || topAdjusted.length > 0 || totalAdjustments > 0;
+
+  if (hasAdjData) {
+    const adjRows = [];
+    const totAdjAmt = salesReport.totalAdjustments || 0;
+
+    adjRows.push(["SALES ADJUSTMENTS BY TYPE", "", "", ""]);
+    adjRows.push(["Adjustment Type", "Count", "Total Amount", "% of Adjustments"]);
+    const typeStartRow = 3;
+    const typeEndRow = typeStartRow + adjTypes.length - 1;
+    const typeTotalRow = typeEndRow + 1;
+    const totTypeCount = adjTypes.reduce((s, a) => s + (a.count || 0), 0);
+
+    adjTypes.forEach((a, idx) => {
+      const rowNum = typeStartRow + idx;
+      const amt = fc(a.amount);
+      const share = fp(amt, totAdjAmt);
+      adjRows.push([
+        formatExcelAdjustmentType(a.type),
+        { v: fi(a.count), z: "int" },
+        { v: amt, z: "currency" },
+        { v: share, f: `C${rowNum}/$C$${typeTotalRow}`, z: "pct" },
+      ]);
+    });
+
+    adjRows.push([
+      "TOTAL BY TYPE",
+      { v: fi(totTypeCount), f: `SUM(B${typeStartRow}:B${typeEndRow})`, z: "int" },
+      { v: fc(totAdjAmt), f: `SUM(C${typeStartRow}:C${typeEndRow})`, z: "currency" },
+      { v: 1.0, z: "pct" },
+    ]);
+
+    if (adjChannels.length > 0) {
+      adjRows.push(["", "", "", ""]);
+      adjRows.push(["SALES ADJUSTMENTS BY CHANNEL", "", "", ""]);
+      adjRows.push(["Sales Channel", "Count", "Total Amount", "% of Adjustments"]);
+
+      const chStartRow = adjRows.length + 1;
+      const chEndRow = chStartRow + adjChannels.length - 1;
+      const chTotalRow = chEndRow + 1;
+      const totChCount = adjChannels.reduce((s, a) => s + (a.count || 0), 0);
+
+      adjChannels.forEach((a, idx) => {
+        const rowNum = chStartRow + idx;
+        const chLabel = (CHANNEL_META[a.channel] || {}).label || a.channel;
+        const amt = fc(a.amount);
+        const share = fp(amt, totAdjAmt);
+
+        adjRows.push([
+          chLabel,
+          { v: fi(a.count), z: "int" },
+          { v: amt, z: "currency" },
+          { v: share, f: `C${rowNum}/$C$${chTotalRow}`, z: "pct" },
+        ]);
+      });
+
+      adjRows.push([
+        "TOTAL BY CHANNEL",
+        { v: fi(totChCount), f: `SUM(B${chStartRow}:B${chEndRow})`, z: "int" },
+        { v: fc(totAdjAmt), f: `SUM(C${chStartRow}:C${chEndRow})`, z: "currency" },
+        { v: 1.0, z: "pct" },
+      ]);
+    }
+
+    if (topAdjusted.length > 0) {
+      adjRows.push(["", "", ""]);
+      adjRows.push(["TOP ADJUSTED / RETURNED PRODUCTS", "", ""]);
+      adjRows.push(["Product Name", "Adjustment Amount", "Primary Reason"]);
+
+      topAdjusted.forEach((p) => {
+        adjRows.push([
+          p.name || "Unknown Product",
+          { v: fc(p.adjustmentAmount), z: "currency" },
+          p.reason || "—",
+        ]);
+      });
+    }
+
+    const adjWs = buildExcelWorksheet(adjRows, {
+      freezeRow: 0,
+      minColWidth: 16,
+    });
+    XLSX.utils.book_append_sheet(wb, adjWs, "Adjustments");
+  }
+
+  /* ─────────────────────────────────────────────────────────────
+     9. Refund Reasons Sheet (Sorted by Amount DESC)
+     ───────────────────────────────────────────────────────────── */
+  const refundReasons = [...(salesReport.refundReasons || [])].sort((a, b) => (b.amount || 0) - (a.amount || 0));
+  if (refundReasons.length > 0) {
+    const totRefundAmt = refundReasons.reduce((s, r) => s + (r.amount || 0), 0);
+    const totRefundCount = refundReasons.reduce((s, r) => s + (r.count || 0), 0);
+    const totalRowIndex = refundReasons.length + 2;
+
     const rrHeaders = ["Refund Reason", "Incident Count", "Total Amount", "% of Refund Amount"];
-    const rrRows = salesReport.refundReasons.map((r) => [r.reason, fi(r.count), fc(r.amount), pct(r.amount, totRefundAmt)]);
-    rrRows.push(["TOTAL", fi(totRefundCount), fc(totRefundAmt), 100]);
-    XLSX.utils.book_append_sheet(
-      wb,
-      createExcelTableSheet(rrHeaders, rrRows, ["text", "int", "currency", "pct"]),
-      "Refund Reasons"
-    );
+    const rrRows = [rrHeaders];
+
+    refundReasons.forEach((r, idx) => {
+      const rowNum = idx + 2;
+      const amt = fc(r.amount);
+      const count = fi(r.count);
+      const share = fp(amt, totRefundAmt);
+
+      rrRows.push([
+        r.reason || "Unspecified Reason",
+        { v: count, z: "int" },
+        { v: amt, z: "currency" },
+        { v: share, f: `C${rowNum}/$C$${totalRowIndex}`, z: "pct" },
+      ]);
+    });
+
+    rrRows.push([
+      "TOTAL",
+      { v: fi(totRefundCount), f: `SUM(B2:B${totalRowIndex - 1})`, z: "int" },
+      { v: fc(totRefundAmt), f: `SUM(C2:C${totalRowIndex - 1})`, z: "currency" },
+      { v: 1.0, z: "pct" },
+    ]);
+
+    const rrWs = buildExcelWorksheet(rrRows, {
+      headerRowIndex: 0,
+      autofilterEndRow: totalRowIndex - 1,
+      autofilter: true,
+      minColWidth: 16,
+    });
+    XLSX.utils.book_append_sheet(wb, rrWs, "Refund Reasons");
   }
 
-  // 13. Performance Summary Table
-  const perfHeaders = ["Period", "Revenue", "Transactions", "Avg per Transaction"];
-  const perfRows = [
-    ["Today", fc(salesReport.dailySales), fi(salesReport.dailyTransactions), fc(salesReport.dailyTransactions > 0 ? (salesReport.dailySales || 0) / salesReport.dailyTransactions : 0)],
-    ["This Week", fc(salesReport.weeklySales), fi(salesReport.weeklyTransactions), fc(salesReport.weeklyTransactions > 0 ? (salesReport.weeklySales || 0) / salesReport.weeklyTransactions : 0)],
-    ["This Month", fc(salesReport.monthlySales), fi(salesReport.monthlyTransactions), fc(salesReport.monthlyTransactions > 0 ? (salesReport.monthlySales || 0) / salesReport.monthlyTransactions : 0)],
+  /* ─────────────────────────────────────────────────────────────
+     10. Performance Sheet (Daily, Weekly, Monthly Summary)
+     ───────────────────────────────────────────────────────────── */
+  const hasPerf = salesReport.dailySales > 0 || salesReport.weeklySales > 0 || salesReport.monthlySales > 0 || salesReport.dailyTransactions > 0;
+  if (hasPerf) {
+    const dailyS = fc(salesReport.dailySales);
+    const dailyT = fi(salesReport.dailyTransactions);
+    const weeklyS = fc(salesReport.weeklySales);
+    const weeklyT = fi(salesReport.weeklyTransactions);
+    const monthlyS = fc(salesReport.monthlySales);
+    const monthlyT = fi(salesReport.monthlyTransactions);
+
+    const perfHeaders = ["Period", "Revenue", "Transactions", "Average Transaction"];
+    const perfRows = [
+      perfHeaders,
+      [
+        "Today",
+        { v: dailyS, z: "currency" },
+        { v: dailyT, z: "int" },
+        { v: dailyT > 0 ? fc(dailyS / dailyT) : 0, f: "IF(C2>0, B2/C2, 0)", z: "currency" },
+      ],
+      [
+        "This Week",
+        { v: weeklyS, z: "currency" },
+        { v: weeklyT, z: "int" },
+        { v: weeklyT > 0 ? fc(weeklyS / weeklyT) : 0, f: "IF(C3>0, B3/C3, 0)", z: "currency" },
+      ],
+      [
+        "This Month",
+        { v: monthlyS, z: "currency" },
+        { v: monthlyT, z: "int" },
+        { v: monthlyT > 0 ? fc(monthlyS / monthlyT) : 0, f: "IF(C4>0, B4/C4, 0)", z: "currency" },
+      ],
+    ];
+
+    const perfWs = buildExcelWorksheet(perfRows, {
+      headerRowIndex: 0,
+      autofilter: true,
+      minColWidth: 16,
+    });
+    XLSX.utils.book_append_sheet(wb, perfWs, "Performance");
+  }
+
+  /* ─────────────────────────────────────────────────────────────
+     11. Report Info Sheet (Audit, Provenance, Metadata)
+     ───────────────────────────────────────────────────────────── */
+  const infoHeaders = ["Configuration / Metadata Item", "Report Value", "Technical Description"];
+  const infoRows = [
+    infoHeaders,
+    ["Report Title", "CosmosCraft Sales Analytics Report", "Official management & financial sales reporting workbook"],
+    ["Reporting Period", dateLabel || "All Time", "Active date filtering period applied to transaction records"],
+    ["Generated On", new Date().toLocaleString("en-PH"), "Exact timestamp when this workbook was generated"],
+    ["Exported By", printedBy || "Unknown User", "Authenticated administrator or staff account"],
+    ["Print / Export Timestamp", datePrinted || new Date().toLocaleString("en-PH"), "Client-side export invocation timestamp"],
+    ["Currency", "Philippine Peso (PHP / ₱)", "Default financial currency for all monetary metrics"],
+    ["Workbook Engine", "CosmosCraft Management Analytics Engine (SheetJS)", "Underlying spreadsheet generation library"],
+    ["Data Status", "Verified live database records", "Reconciled against walk-in, online, custom, and appointment tables"],
   ];
-  XLSX.utils.book_append_sheet(
-    wb,
-    createExcelTableSheet(perfHeaders, perfRows, ["text", "currency", "int", "currency"]),
-    "Performance"
-  );
+  const infoWs = buildExcelWorksheet(infoRows, {
+    headerRowIndex: 0,
+    autofilter: true,
+    minColWidth: 18,
+  });
+  XLSX.utils.book_append_sheet(wb, infoWs, "Report Info");
 
   XLSX.writeFile(wb, buildReportFilename(dateLabel, "xlsx"));
 }
@@ -969,6 +1399,7 @@ export function SalesReportTab({ salesReport, fetchSalesReport }) {
   const [sortBy, setSortBy] = useState("units");
   const [showPrintModal, setShowPrintModal] = useState(false);
   const [paymentScope, setPaymentScope] = useState("overall"); // "overall" | "appointments"
+  const [isExporting, setIsExporting] = useState(false);
 
   const printedBy = user?.name?.firstName && user?.name?.lastName
     ? `${user.name.firstName} ${user.name.lastName}`
@@ -1046,6 +1477,32 @@ export function SalesReportTab({ salesReport, fetchSalesReport }) {
       fetchSalesReport({ start_date: customStart || undefined, end_date: customEnd || undefined });
     } else {
       fetchSalesReport(getPresetRange(activePreset));
+    }
+  };
+
+  const handleExportExcel = async () => {
+    if (!salesReport) return;
+    try {
+      setIsExporting(true);
+      const blob = await adminApi.exportSalesExcel({
+        salesReport,
+        dateLabel,
+        printedBy,
+        datePrinted,
+      });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", buildReportFilename(dateLabel, "xlsx"));
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.warn("Backend rusc-xlsx export failed, using client-side export fallback:", err);
+      exportExcel(salesReport, dateLabel, printedBy, datePrinted);
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -1175,19 +1632,20 @@ export function SalesReportTab({ salesReport, fetchSalesReport }) {
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <button
+              {/* <button
                 onClick={handleRefresh}
                 className="flex items-center gap-1.5 px-3 py-2 bg-[var(--surface-dark)] border border-[var(--border)] rounded-lg text-sm font-medium text-[var(--text-muted)] hover:border-[var(--gold-primary)] transition-colors"
               >
                 <RefreshCw className="w-4 h-4" />
                 Refresh
-              </button>
+              </button> */}
               <button
-                onClick={() => exportExcel(salesReport, dateLabel, printedBy, datePrinted)}
-                className="flex items-center gap-1.5 px-3 py-2 bg-[var(--surface-dark)] border border-[var(--border)] rounded-lg text-sm font-medium text-[var(--text-muted)] hover:border-[var(--gold-primary)] transition-colors"
+                onClick={handleExportExcel}
+                disabled={isExporting}
+                className="flex items-center gap-1.5 px-3 py-2 bg-[var(--surface-dark)] border border-[var(--border)] rounded-lg text-sm font-medium text-[var(--text-muted)] hover:border-[var(--gold-primary)] transition-colors disabled:opacity-50"
               >
-                <Download className="w-4 h-4" />
-                Export Excel
+                <Download className={`w-4 h-4 ${isExporting ? "animate-pulse text-[var(--gold-primary)]" : ""}`} />
+                {isExporting ? "Exporting..." : "Export Excel"}
               </button>
               <button
                 onClick={() => setShowPrintModal(true)}
