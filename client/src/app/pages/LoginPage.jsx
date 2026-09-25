@@ -17,6 +17,7 @@ export function LoginPage() {
   const [rememberMe, setRememberMe] = useState(false)
   const [error, setError] = useState('')
   const [emailError, setEmailError] = useState('')
+  const [passwordError, setPasswordError] = useState('')
   const [showPassword, setShowPassword] = useState(false)
 
   const navigate = useNavigate()
@@ -31,20 +32,36 @@ export function LoginPage() {
     if (error) setError('')
   }
 
+  const handlePasswordChange = (e) => {
+    setPassword(e.target.value)
+    if (passwordError) setPasswordError('')
+    if (error) setError('')
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     setIsLoading(true)
     setError('')
+    setEmailError('')
+    setPasswordError('')
 
-    if (!validateEmail(email)) {
-      const validationMessage = 'Validation Error: Please enter a valid email address.'
-      setEmailError(validationMessage)
-      setError(validationMessage)
+    if (!email.trim()) {
+      setEmailError('Email address is required.')
       setIsLoading(false)
       return
     }
 
-    setEmailError('')
+    if (!validateEmail(email)) {
+      setEmailError('Please enter a valid email address.')
+      setIsLoading(false)
+      return
+    }
+
+    if (!password) {
+      setPasswordError('Password is required.')
+      setIsLoading(false)
+      return
+    }
 
     try {
       const response = await fetch(`${API}/auth/email-login`, {
@@ -57,7 +74,24 @@ export function LoginPage() {
       const data = await response.json()
 
       if (!response.ok) {
-        setError(data.message || 'Login failed. Please check your credentials.')
+        // Extract field-level errors if the server returned them (e.g. from Joi validation)
+        if (data.errors && Array.isArray(data.errors) && data.errors.length > 0) {
+          data.errors.forEach(err => {
+            if (err.field === 'email') setEmailError(err.message)
+            else if (err.field === 'password') setPasswordError(err.message)
+            else setError(err.message)
+          })
+        } else {
+          const msg = data.message || 'Login failed. Please check your credentials.'
+          // Route specific server messages to the right field
+          if (/email/i.test(msg) && !/password/i.test(msg)) {
+            setEmailError(msg)
+          } else if (/password/i.test(msg) && !/email/i.test(msg)) {
+            setPasswordError(msg)
+          } else {
+            setError(msg)
+          }
+        }
         return
       }
 
@@ -131,19 +165,24 @@ export function LoginPage() {
               Email Address
             </label>
             <div className="relative">
-              <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[var(--text-muted)]" />
+              <Mail className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 ${emailError ? 'text-red-400' : 'text-[var(--text-muted)]'}`} />
               <input
                 id="email"
                 type="email"
                 placeholder="name@example.com"
                 value={email}
                 onChange={handleEmailChange}
-                required
+                autoComplete="email"
                 aria-invalid={Boolean(emailError)}
-                className="w-full pl-12 pr-4 py-3 bg-[var(--bg-primary)] border border-[var(--border)] rounded-lg text-white placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] focus:border-transparent transition-all duration-200"
+                aria-describedby={emailError ? 'email-error' : undefined}
+                className={`w-full pl-12 pr-4 py-3 bg-[var(--bg-primary)] border rounded-lg text-white placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:border-transparent transition-all duration-200 ${
+                  emailError
+                    ? 'border-red-500 focus:ring-red-500/50'
+                    : 'border-[var(--border)] focus:ring-[var(--gold-primary)]'
+                }`}
               />
             </div>
-            {emailError && <p className="mt-2 text-sm text-red-400">{emailError}</p>}
+            {emailError && <p id="email-error" className="mt-2 text-sm text-red-400 flex items-center gap-1.5"><span>⚠</span>{emailError}</p>}
           </div>
 
           {/* Password */}
@@ -152,15 +191,21 @@ export function LoginPage() {
               Password
             </label>
             <div className="relative">
-              <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[var(--text-muted)]" />
+              <Lock className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 ${passwordError ? 'text-red-400' : 'text-[var(--text-muted)]'}`} />
               <input
                 id="password"
                 type={showPassword ? 'text' : 'password'}
                 placeholder="••••••••"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                className="w-full pl-12 pr-12 py-3 bg-[var(--bg-primary)] border border-[var(--border)] rounded-lg text-white placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] focus:border-transparent transition-all duration-200"
+                onChange={handlePasswordChange}
+                autoComplete="current-password"
+                aria-invalid={Boolean(passwordError)}
+                aria-describedby={passwordError ? 'password-error' : undefined}
+                className={`w-full pl-12 pr-12 py-3 bg-[var(--bg-primary)] border rounded-lg text-white placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:border-transparent transition-all duration-200 ${
+                  passwordError
+                    ? 'border-red-500 focus:ring-red-500/50'
+                    : 'border-[var(--border)] focus:ring-[var(--gold-primary)]'
+                }`}
               />
               <button
                 type="button"
@@ -171,6 +216,7 @@ export function LoginPage() {
                 {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
               </button>
             </div>
+            {passwordError && <p id="password-error" className="mt-2 text-sm text-red-400 flex items-center gap-1.5"><span>⚠</span>{passwordError}</p>}
           </div>
 
           {/* Remember & Forgot */}

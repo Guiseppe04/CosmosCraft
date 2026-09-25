@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { motion } from "motion/react";
 import {
   BarChart3, DollarSign, ShoppingBag, TrendingUp, Printer,
@@ -13,7 +13,6 @@ import {
   format, startOfWeek, startOfMonth, endOfMonth, subMonths,
   startOfDay, endOfDay,
 } from "date-fns";
-import { jsPDF } from "jspdf";
 import * as XLSX from "xlsx";
 import { formatCurrency } from "../../../utils/formatCurrency";
 import { useAuth } from "../../../context/AuthContext";
@@ -28,11 +27,26 @@ const PRESETS = [
   { key: "last_month", label: "Last Month" },
 ];
 
+const PRINT_SECTIONS = [
+  { key: "summary", label: "Executive Summary (KPIs)", description: "Gross sales, net sales, transactions, averages" },
+  { key: "channels", label: "Channel Breakdown", description: "Walk-in, online, customization, appointments" },
+  { key: "adjustments", label: "Sales Adjustments", description: "Refunds, returns, voids by type and channel" },
+  { key: "products", label: "Top Selling Products", description: "Best performing products by units and revenue" },
+  { key: "customization", label: "Customization Performance", description: "Customization orders, revenue, and averages" },
+  { key: "payments", label: "Payment Method Analysis", description: "Overall sales and appointment payment method breakdown" },
+  { key: "dailyTrend", label: "Daily Sales Trend", description: "Day-by-day revenue and transaction count" },
+  { key: "adjusted", label: "Top Adjusted / Returned Products", description: "Most refunded or returned items" },
+  { key: "refundReasons", label: "Refund Reasons", description: "Breakdown of why refunds were issued" },
+  { key: "performance", label: "Performance Summary", description: "Daily, weekly, and monthly totals" },
+];
+
+const DEFAULT_PRINT_SECTIONS = PRINT_SECTIONS.map((s) => s.key);
+
 const CHANNEL_META = {
-  walkIn:        { label: "Walk-in / POS",  color: "#10B981" },
-  online:        { label: "Online Orders",  color: "#3B82F6" },
-  customization: { label: "Customization",  color: "#8B5CF6" },
-  appointments:  { label: "Appointments",   color: "#F59E0B" },
+  walkIn: { label: "Walk-in / POS", color: "#10B981" },
+  online: { label: "Online Orders", color: "#3B82F6" },
+  customization: { label: "Customization", color: "#8B5CF6" },
+  appointments: { label: "Appointments", color: "#F59E0B" },
 };
 
 const PAYMENT_COLORS = ["#10B981", "#3B82F6", "#F59E0B", "#8B5CF6", "#EC4899", "#6366F1"];
@@ -88,42 +102,323 @@ function fmtInteger(n) {
   return new Intl.NumberFormat("en-PH").format(Math.round(n || 0));
 }
 
-/* ─── Export helpers ─── */
+/* ─── Filename helper ─── */
 
-function exportPdf(salesReport, dateLabel) {
-  const doc = new jsPDF();
-  doc.text(`Sales Report - ${dateLabel || "All Time"}`, 10, 10);
-  doc.save("sales_report.pdf");
+function sanitizeFilename(str) {
+  // Strip characters that are actually invalid in Windows/Mac/Linux filenames,
+  // but leave spaces, dashes, and other readable characters untouched.
+  return str.replace(/[\\/:*?"<>|]/g, "").trim();
 }
 
-function exportExcel(salesReport) {
-  const wb = XLSX.utils.book_new();
-  const ws = XLSX.utils.json_to_sheet(salesReport.dailyTrend || []);
-  XLSX.utils.book_append_sheet(wb, ws, "DailyTrend");
-  XLSX.writeFile(wb, "sales_report.xlsx");
+function buildReportFilename(dateLabel, ext) {
+  const period = dateLabel ? sanitizeFilename(dateLabel) : "All Time";
+  return `CosmosCraft Sales Report - ${period}.${ext}`;
 }
 
-/* ─── Print Sections Config ─── */
+/* ─── Excel Table & Formatting Helper ─── */
 
-const PRINT_SECTIONS = [
-  { key: "summary",        label: "Executive Summary (KPIs)",         description: "Gross sales, net sales, transactions, averages" },
-  { key: "channels",       label: "Channel Breakdown",               description: "Walk-in, online, customization, appointments" },
-  { key: "adjustments",    label: "Sales Adjustments",               description: "Refunds, returns, voids by type and channel" },
-  { key: "products",       label: "Top Selling Products",            description: "Best performing products by units and revenue" },
-  { key: "customization",  label: "Customization Performance",       description: "Customization orders, revenue, and averages" },
-  { key: "payments",       label: "Payment Method Analysis",         description: "Overall sales and appointment payment method breakdown" },
-  { key: "dailyTrend",     label: "Daily Sales Trend",               description: "Day-by-day revenue and transaction count" },
-  { key: "adjusted",       label: "Top Adjusted / Returned Products", description: "Most refunded or returned items" },
-  { key: "refundReasons",  label: "Refund Reasons",                  description: "Breakdown of why refunds were issued" },
-  { key: "performance",    label: "Performance Summary",             description: "Daily, weekly, and monthly totals" },
-];
+function createExcelTableSheet(headers, rows, colFormats = [], options = {}) {
+  const aoa = [headers, ...rows];
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  if (!ws["!ref"]) return ws;
+  const range = XLSX.utils.decode_range(ws["!ref"]);
 
-const DEFAULT_PRINT_SECTIONS = PRINT_SECTIONS.map((s) => s.key);
+  // Apply number formats and typed values
+  for (let R = 1; R <= range.e.r; ++R) {
+    for (let C = 0; C <= range.e.c; ++C) {
+      const cellRef = XLSX.utils.encode_cell({ r: R, c: C });
+      const cell = ws[cellRef];
+      if (!cell || cell.v === undefined || cell.v === null) continue;
 
-/* ─── Print helper (B&W, no colors) ─── */
+      let fmt = colFormats[C];
+      if (options.getCellFormat) {
+        const customFmt = options.getCellFormat(R - 1, C, cell.v, rows[R - 1]);
+        if (customFmt) fmt = customFmt;
+      }
 
-function printSalesReport(salesReport, dateLabel, selectedSections, printedBy, datePrinted) {
+      if (fmt === "currency") {
+        cell.t = "n";
+        cell.z = '"₱"#,##0.00';
+      } else if (fmt === "int") {
+        cell.t = "n";
+        cell.z = "#,##0";
+      } else if (fmt === "pct") {
+        cell.t = "n";
+        cell.z = '0.0"%"';
+      } else if (fmt === "date") {
+        cell.z = "yyyy-mm-dd";
+      }
+    }
+  }
+
+  // Calculate reasonable column widths based on cell content length
+  const colWidths = headers.map((h, C) => {
+    let maxLen = String(h || "").length;
+    for (let R = 1; R <= range.e.r; ++R) {
+      const cellRef = XLSX.utils.encode_cell({ r: R, c: C });
+      const cell = ws[cellRef];
+      if (cell) {
+        let valStr = "";
+        if (cell.w) {
+          valStr = cell.w;
+        } else if (cell.v !== undefined && cell.v !== null) {
+          let fmt = colFormats[C];
+          if (options.getCellFormat) {
+            const customFmt = options.getCellFormat(R - 1, C, cell.v, rows[R - 1]);
+            if (customFmt) fmt = customFmt;
+          }
+          if (fmt === "currency") valStr = `₱${Number(cell.v).toLocaleString("en-PH", { minimumFractionDigits: 2 })}`;
+          else if (fmt === "pct") valStr = `${cell.v}%`;
+          else if (fmt === "int") valStr = `${Number(cell.v).toLocaleString("en-PH")}`;
+          else valStr = String(cell.v);
+        }
+        maxLen = Math.max(maxLen, valStr.length);
+      }
+    }
+    const minW = options.minColWidth || 14;
+    return { wch: Math.max(maxLen + 4, minW) };
+  });
+  ws["!cols"] = colWidths;
+
+  // AutoFilter enables proper Excel Table filter dropdowns on the table header
+  if (options.autofilter !== false && rows.length > 0) {
+    ws["!autofilter"] = { ref: ws["!ref"] };
+  }
+
+  return ws;
+}
+
+function exportExcel(salesReport, dateLabel, printedBy, datePrinted) {
   if (!salesReport) return;
+  const wb = XLSX.utils.book_new();
+  const fc = (v) => Number((v || 0).toFixed(2));
+  const fi = (v) => Math.round(v || 0);
+  const pct = (v, total) => (total > 0 ? Number(((v / total) * 100).toFixed(1)) : 0);
+  const chs = salesReport.channels || {};
+  const ns = salesReport.netSales || 0;
+
+  // 1. Report Info Table
+  const infoHeaders = ["Report Metadata", "Details"];
+  const infoRows = [
+    ["Report Title", "CosmosCraft Sales Analytics Report"],
+    ["Reporting Period", dateLabel || "All Time"],
+    ["Generated On", new Date().toLocaleString("en-PH")],
+    ["Exported By", printedBy || "Unknown User"],
+    ["Print / Export Timestamp", datePrinted || new Date().toLocaleString("en-PH")],
+    ["Currency", "Philippine Peso (PHP / ₱)"],
+  ];
+  XLSX.utils.book_append_sheet(wb, createExcelTableSheet(infoHeaders, infoRows, ["text", "text"]), "Report Info");
+
+  // 2. Executive Summary Table
+  const sumHeaders = ["Sales Metric", "Amount / Value", "Description / Notes"];
+  const sumRows = [
+    ["Gross Sales", fc(salesReport.grossSales), "Total unadjusted sales value across all channels"],
+    ["Total Adjustments", fc(salesReport.totalAdjustments), "Refunds, returns, and canceled items deducted"],
+    ["Net Sales", fc(salesReport.netSales), "Gross Sales minus Total Adjustments (Primary KPI)"],
+    ["Total Transactions", fi(salesReport.totalTransactions), "Completed transactions across all channels"],
+    ["Average per Transaction", fc(salesReport.averagePerTransaction), "Average revenue generated per transaction"],
+    ["Customization Orders", fi(salesReport.customizationOrders), "Total custom product orders processed"],
+    ["Adjustment Rate", salesReport.adjustmentRate || 0, "Adjustments as a percentage of gross sales"],
+    ["Net as % of Gross", salesReport.grossSales > 0 ? Number((100 - (salesReport.adjustmentRate || 0)).toFixed(1)) : 0, "Percentage of gross sales retained as net revenue"],
+  ];
+  const sumSheet = createExcelTableSheet(sumHeaders, sumRows, ["text", "mixed", "text"], {
+    getCellFormat: (rowIdx, colIdx) => {
+      if (colIdx === 1) {
+        if ([0, 1, 2, 4].includes(rowIdx)) return "currency";
+        if ([3, 5].includes(rowIdx)) return "int";
+        if ([6, 7].includes(rowIdx)) return "pct";
+      }
+      return "text";
+    },
+  });
+  XLSX.utils.book_append_sheet(wb, sumSheet, "Executive Summary");
+
+  // 3. Channels Table
+  const chHeaders = ["Sales Channel", "Transactions", "Gross Sales", "Adjustments", "Net Sales", "% of Net Sales"];
+  const chRows = [];
+  Object.entries(chs).forEach(([key, ch]) => {
+    const lbl = (CHANNEL_META[key] || { label: key }).label;
+    chRows.push([lbl, fi(ch.transactions), fc(ch.gross), fc(ch.adjustments), fc(ch.net), pct(ch.net, ns)]);
+  });
+  chRows.push(["TOTAL", fi(salesReport.totalTransactions), fc(salesReport.grossSales), fc(salesReport.totalAdjustments), fc(salesReport.netSales), 100]);
+  XLSX.utils.book_append_sheet(
+    wb,
+    createExcelTableSheet(chHeaders, chRows, ["text", "int", "currency", "currency", "currency", "pct"]),
+    "Channels"
+  );
+
+  // 4. Adjustments by Type Table
+  const adjTypes = salesReport.adjustmentsByType || [];
+  const totAdjAmt = salesReport.totalAdjustments || 0;
+  const adjTypeHeaders = ["Adjustment Type", "Count", "Total Amount", "% of Adjustments"];
+  const adjTypeRows = adjTypes.map((a) => {
+    const typeName = (a.type || "Unknown").charAt(0).toUpperCase() + (a.type || "Unknown").slice(1) + "s";
+    return [typeName, fi(a.count), fc(a.amount), pct(a.amount, totAdjAmt)];
+  });
+  adjTypeRows.push(["TOTAL", fi(adjTypes.reduce((s, a) => s + (a.count || 0), 0)), fc(totAdjAmt), 100]);
+  XLSX.utils.book_append_sheet(
+    wb,
+    createExcelTableSheet(adjTypeHeaders, adjTypeRows, ["text", "int", "currency", "pct"]),
+    "Adjustments - Type"
+  );
+
+  // 5. Adjustments by Channel Table
+  const adjChannels = salesReport.adjustmentsByChannel || [];
+  const adjChHeaders = ["Sales Channel", "Count", "Total Amount", "% of Adjustments"];
+  const adjChRows = adjChannels.map((a) => {
+    const chLabel = (CHANNEL_META[a.channel] || {}).label || a.channel;
+    return [chLabel, fi(a.count), fc(a.amount), pct(a.amount, totAdjAmt)];
+  });
+  adjChRows.push(["TOTAL", fi(adjChannels.reduce((s, a) => s + (a.count || 0), 0)), fc(totAdjAmt), 100]);
+  XLSX.utils.book_append_sheet(
+    wb,
+    createExcelTableSheet(adjChHeaders, adjChRows, ["text", "int", "currency", "pct"]),
+    "Adjustments - Channel"
+  );
+
+  // 6. Top Products Table
+  if ((salesReport.bestSellingProducts || []).length > 0) {
+    const pHeaders = ["Rank", "Product Name", "Category", "Units Sold", "Total Revenue", "Avg Price per Unit"];
+    const pRows = salesReport.bestSellingProducts.map((p, i) => [
+      i + 1,
+      p.name,
+      p.category || "—",
+      fi(p.units),
+      fc(p.revenue),
+      fc(p.units > 0 ? p.revenue / p.units : 0),
+    ]);
+    XLSX.utils.book_append_sheet(
+      wb,
+      createExcelTableSheet(pHeaders, pRows, ["int", "text", "text", "int", "currency", "currency"]),
+      "Top Products"
+    );
+  }
+
+  // 7. Customization Table
+  const cc = chs.customization || {};
+  const co = salesReport.customizationOrders || 0;
+  const custHeaders = ["Customization Metric", "Amount / Value", "Notes"];
+  const custRows = [
+    ["Total Customization Orders", fi(co), "Total custom keyboard builds & requests"],
+    ["Gross Sales", fc(cc.gross), "Customization gross billings"],
+    ["Adjustments", fc(cc.adjustments), "Customization refunds or deductions"],
+    ["Net Sales", fc(cc.net), "Gross minus adjustments"],
+    ["Total Transactions", fi(cc.transactions), "Number of transactions"],
+    ["Avg Order Value", fc(co > 0 ? (cc.net || 0) / co : 0), "Average net revenue per custom order"],
+    ["% of Total Net Sales", pct(cc.net, ns), "Share of company-wide net sales"],
+  ];
+  const custSheet = createExcelTableSheet(custHeaders, custRows, ["text", "mixed", "text"], {
+    getCellFormat: (rowIdx, colIdx) => {
+      if (colIdx === 1) {
+        if ([1, 2, 3, 5].includes(rowIdx)) return "currency";
+        if ([0, 4].includes(rowIdx)) return "int";
+        if (rowIdx === 6) return "pct";
+      }
+      return "text";
+    },
+  });
+  XLSX.utils.book_append_sheet(wb, custSheet, "Customization");
+
+  // 8. Order Payment Methods Table
+  const om = salesReport.orderPaymentMethods || [];
+  if (om.length > 0) {
+    const oHeaders = ["Payment Method", "Transactions", "Total Amount", "% of Volume", "Avg Transaction"];
+    const oAmt = om.reduce((s, m) => s + (m.amount || 0), 0);
+    const oTx = om.reduce((s, m) => s + (m.transactions || 0), 0);
+    const oRows = om.map((m) => {
+      const lbl = m.method === "gcash" ? "GCash" : m.method === "bank_transfer" ? "Bank Transfer" : m.method;
+      return [lbl, fi(m.transactions), fc(m.amount), pct(m.amount, oAmt), fc(m.transactions > 0 ? (m.amount || 0) / m.transactions : 0)];
+    });
+    oRows.push(["TOTAL", fi(oTx), fc(oAmt), 100, fc(oTx > 0 ? oAmt / oTx : 0)]);
+    XLSX.utils.book_append_sheet(
+      wb,
+      createExcelTableSheet(oHeaders, oRows, ["text", "int", "currency", "pct", "currency"]),
+      "Payments - Orders"
+    );
+  }
+
+  // 9. Appointment Payment Methods Table
+  const am = salesReport.appointmentPaymentMethods || [];
+  if (am.length > 0) {
+    const aHeaders = ["Payment Method", "Appointments", "Total Revenue", "% of Appt Payments", "Avg Transaction"];
+    const aRev = am.reduce((s, m) => s + (m.revenue || 0), 0);
+    const aAp = am.reduce((s, m) => s + (m.appointments || 0), 0);
+    const aRows = am.map((m) => {
+      const lbl = m.method === "cash" ? "Cash" : m.method === "gcash" ? "GCash" : m.method === "bank_transfer" ? "Bank Transfer" : m.method;
+      return [lbl, fi(m.appointments), fc(m.revenue), pct(m.revenue, aRev), fc(m.appointments > 0 ? (m.revenue || 0) / m.appointments : 0)];
+    });
+    aRows.push(["TOTAL", fi(aAp), fc(aRev), 100, fc(aAp > 0 ? aRev / aAp : 0)]);
+    XLSX.utils.book_append_sheet(
+      wb,
+      createExcelTableSheet(aHeaders, aRows, ["text", "int", "currency", "pct", "currency"]),
+      "Payments - Appts"
+    );
+  }
+
+  // 10. Daily Trend Table
+  if ((salesReport.dailyTrend || []).length > 0) {
+    const tHeaders = ["Date", "Revenue", "Transactions", "Avg per Transaction"];
+    const tRows = salesReport.dailyTrend.map((d) => [
+      d.date,
+      fc(d.revenue),
+      fi(d.transactions),
+      fc(d.transactions > 0 ? (d.revenue || 0) / d.transactions : 0),
+    ]);
+    const totRev = salesReport.dailyTrend.reduce((s, d) => s + (d.revenue || 0), 0);
+    const totTx = salesReport.dailyTrend.reduce((s, d) => s + (d.transactions || 0), 0);
+    tRows.push(["TOTAL", fc(totRev), fi(totTx), fc(totTx > 0 ? totRev / totTx : 0)]);
+    XLSX.utils.book_append_sheet(
+      wb,
+      createExcelTableSheet(tHeaders, tRows, ["text", "currency", "int", "currency"]),
+      "Daily Trend"
+    );
+  }
+
+  // 11. Top Adjusted Products Table
+  if ((salesReport.topAdjustedProducts || []).length > 0) {
+    const apHeaders = ["Product Name", "Adjustment Amount", "Primary Reason"];
+    const apRows = salesReport.topAdjustedProducts.map((p) => [p.name, fc(p.adjustmentAmount), p.reason || "—"]);
+    XLSX.utils.book_append_sheet(
+      wb,
+      createExcelTableSheet(apHeaders, apRows, ["text", "currency", "text"]),
+      "Adjusted Products"
+    );
+  }
+
+  // 12. Refund Reasons Table
+  if ((salesReport.refundReasons || []).length > 0) {
+    const totRefundAmt = salesReport.refundReasons.reduce((s, r) => s + (r.amount || 0), 0);
+    const totRefundCount = salesReport.refundReasons.reduce((s, r) => s + (r.count || 0), 0);
+    const rrHeaders = ["Refund Reason", "Incident Count", "Total Amount", "% of Refund Amount"];
+    const rrRows = salesReport.refundReasons.map((r) => [r.reason, fi(r.count), fc(r.amount), pct(r.amount, totRefundAmt)]);
+    rrRows.push(["TOTAL", fi(totRefundCount), fc(totRefundAmt), 100]);
+    XLSX.utils.book_append_sheet(
+      wb,
+      createExcelTableSheet(rrHeaders, rrRows, ["text", "int", "currency", "pct"]),
+      "Refund Reasons"
+    );
+  }
+
+  // 13. Performance Summary Table
+  const perfHeaders = ["Period", "Revenue", "Transactions", "Avg per Transaction"];
+  const perfRows = [
+    ["Today", fc(salesReport.dailySales), fi(salesReport.dailyTransactions), fc(salesReport.dailyTransactions > 0 ? (salesReport.dailySales || 0) / salesReport.dailyTransactions : 0)],
+    ["This Week", fc(salesReport.weeklySales), fi(salesReport.weeklyTransactions), fc(salesReport.weeklyTransactions > 0 ? (salesReport.weeklySales || 0) / salesReport.weeklyTransactions : 0)],
+    ["This Month", fc(salesReport.monthlySales), fi(salesReport.monthlyTransactions), fc(salesReport.monthlyTransactions > 0 ? (salesReport.monthlySales || 0) / salesReport.monthlyTransactions : 0)],
+  ];
+  XLSX.utils.book_append_sheet(
+    wb,
+    createExcelTableSheet(perfHeaders, perfRows, ["text", "currency", "int", "currency"]),
+    "Performance"
+  );
+
+  XLSX.writeFile(wb, buildReportFilename(dateLabel, "xlsx"));
+}
+
+/* ─── Shared HTML builder (used by Print) ─── */
+
+function buildSalesReportHTML(salesReport, dateLabel, selectedSections, printedBy, datePrinted) {
+  if (!salesReport) return "";
   const sections = new Set(selectedSections || DEFAULT_PRINT_SECTIONS);
   const reportDate = new Date().toLocaleDateString("en-PH", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
   const printMetaDate = datePrinted || new Date().toLocaleString("en-PH", { year: "numeric", month: "long", day: "numeric", hour: "numeric", minute: "2-digit" });
@@ -220,8 +515,8 @@ function printSalesReport(salesReport, dateLabel, selectedSections, printedBy, d
       </thead>
       <tbody>
         ${Object.entries(channels).map(([key, ch]) => {
-          const meta = CHANNEL_META[key] || { label: key };
-          return `<tr>
+    const meta = CHANNEL_META[key] || { label: key };
+    return `<tr>
             <td class="b">${meta.label}</td>
             <td class="r">${fi(ch.transactions)}</td>
             <td class="r">${fc(ch.gross)}</td>
@@ -229,7 +524,7 @@ function printSalesReport(salesReport, dateLabel, selectedSections, printedBy, d
             <td class="r b">${fc(ch.net)}</td>
             <td class="r">${pct(ch.net, netSales)}%</td>
           </tr>`;
-        }).join("")}
+  }).join("")}
         <tr class="total">
           <td>TOTAL</td>
           <td class="r">${fi(salesReport.totalTransactions)}</td>
@@ -308,24 +603,24 @@ function printSalesReport(salesReport, dateLabel, selectedSections, printedBy, d
       </thead>
       <tbody>
         ${(() => {
-          const list = orderPaymentMethods.length > 0 ? orderPaymentMethods : [
-            { method: "gcash", transactions: 0, amount: 0 },
-            { method: "bank_transfer", transactions: 0, amount: 0 },
-          ];
-          const totalAmount = list.reduce((s, m) => s + (m.amount || 0), 0);
-          const totalTx = list.reduce((s, m) => s + (m.transactions || 0), 0);
-          const avgTotal = totalTx > 0 ? totalAmount / totalTx : 0;
-          return list.map(m => {
-            const label = m.method === "gcash" ? "GCash" : m.method === "bank_transfer" ? "Bank Transfer" : m.method;
-            const avg = m.transactions > 0 ? (m.amount || 0) / m.transactions : 0;
-            return `<tr>
+        const list = orderPaymentMethods.length > 0 ? orderPaymentMethods : [
+          { method: "gcash", transactions: 0, amount: 0 },
+          { method: "bank_transfer", transactions: 0, amount: 0 },
+        ];
+        const totalAmount = list.reduce((s, m) => s + (m.amount || 0), 0);
+        const totalTx = list.reduce((s, m) => s + (m.transactions || 0), 0);
+        const avgTotal = totalTx > 0 ? totalAmount / totalTx : 0;
+        return list.map(m => {
+          const label = m.method === "gcash" ? "GCash" : m.method === "bank_transfer" ? "Bank Transfer" : m.method;
+          const avg = m.transactions > 0 ? (m.amount || 0) / m.transactions : 0;
+          return `<tr>
               <td class="b">${label}</td>
               <td class="r">${fi(m.transactions)}</td>
               <td class="r">${fc(m.amount)}</td>
               <td class="r">${pct(m.amount, totalAmount)}%</td>
               <td class="r">${fc(avg)}</td>
             </tr>`;
-          }).join("") + `
+        }).join("") + `
             <tr class="total">
               <td>TOTAL</td>
               <td class="r">${fi(totalTx)}</td>
@@ -333,7 +628,7 @@ function printSalesReport(salesReport, dateLabel, selectedSections, printedBy, d
               <td class="r">100%</td>
               <td class="r">${fc(avgTotal)}</td>
             </tr>`;
-        })()}
+      })()}
       </tbody>
     </table>
 
@@ -353,25 +648,25 @@ function printSalesReport(salesReport, dateLabel, selectedSections, printedBy, d
       </thead>
       <tbody>
         ${(() => {
-          const list = appointmentPaymentMethods.length > 0 ? appointmentPaymentMethods : [
-            { method: "cash", appointments: 0, revenue: 0 },
-            { method: "gcash", appointments: 0, revenue: 0 },
-            { method: "bank_transfer", appointments: 0, revenue: 0 },
-          ];
-          const totalRev = list.reduce((s, m) => s + (m.revenue || 0), 0);
-          const totalAppt = list.reduce((s, m) => s + (m.appointments || 0), 0);
-          const avgTotal = totalAppt > 0 ? totalRev / totalAppt : 0;
-          return list.map(m => {
-            const label = m.method === "cash" ? "Cash" : m.method === "gcash" ? "GCash" : m.method === "bank_transfer" ? "Bank Transfer" : m.method;
-            const avg = m.appointments > 0 ? (m.revenue || 0) / m.appointments : 0;
-            return `<tr>
+        const list = appointmentPaymentMethods.length > 0 ? appointmentPaymentMethods : [
+          { method: "cash", appointments: 0, revenue: 0 },
+          { method: "gcash", appointments: 0, revenue: 0 },
+          { method: "bank_transfer", appointments: 0, revenue: 0 },
+        ];
+        const totalRev = list.reduce((s, m) => s + (m.revenue || 0), 0);
+        const totalAppt = list.reduce((s, m) => s + (m.appointments || 0), 0);
+        const avgTotal = totalAppt > 0 ? totalRev / totalAppt : 0;
+        return list.map(m => {
+          const label = m.method === "cash" ? "Cash" : m.method === "gcash" ? "GCash" : m.method === "bank_transfer" ? "Bank Transfer" : m.method;
+          const avg = m.appointments > 0 ? (m.revenue || 0) / m.appointments : 0;
+          return `<tr>
               <td class="b">${label}</td>
               <td class="r">${fi(m.appointments)}</td>
               <td class="r">${fc(m.revenue)}</td>
               <td class="r">${pct(m.revenue, totalRev)}%</td>
               <td class="r">${fc(avg)}</td>
             </tr>`;
-          }).join("") + `
+        }).join("") + `
             <tr class="total">
               <td>TOTAL</td>
               <td class="r">${fi(totalAppt)}</td>
@@ -379,7 +674,7 @@ function printSalesReport(salesReport, dateLabel, selectedSections, printedBy, d
               <td class="r">100%</td>
               <td class="r">${fc(avgTotal)}</td>
             </tr>`;
-        })()}
+      })()}
       </tbody>
     </table>
   </div>` : ""}
@@ -443,19 +738,35 @@ function printSalesReport(salesReport, dateLabel, selectedSections, printedBy, d
 </body>
 </html>`;
 
-  const printWindow = window.open("", "_blank");
-  printWindow.document.write(html);
-  printWindow.document.close();
-  printWindow.onload = () => {
-    printWindow.focus();
-    printWindow.print();
-  };
+  return html;
+}
+
+/* ─── Print helper ─── */
+
+function printSalesReport(salesReport, dateLabel, selectedSections, printedBy, datePrinted) {
+  if (!salesReport) return;
+  const html = buildSalesReportHTML(salesReport, dateLabel, selectedSections, printedBy, datePrinted);
+  const pw = window.open("", "_blank");
+  pw.document.write(html);
+  pw.document.close();
+  pw.onload = () => { pw.focus(); pw.print(); };
 }
 
 /* ─── Print Options Modal ─── */
 
-function PrintOptionsModal({ isOpen, onClose, onPrint, salesReport, printedBy, datePrinted }) {
+function PrintOptionsModal({
+  isOpen,
+  onClose,
+  onPrint,
+  salesReport,
+  printedBy,
+  datePrinted,
+}) {
   const [selected, setSelected] = useState(new Set(DEFAULT_PRINT_SECTIONS));
+
+  useEffect(() => {
+    if (isOpen) setSelected(new Set(DEFAULT_PRINT_SECTIONS));
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -502,8 +813,10 @@ function PrintOptionsModal({ isOpen, onClose, onPrint, salesReport, printedBy, d
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border)]">
           <div>
-            <h3 className="text-white text-lg font-semibold">Print Report</h3>
-            <p className="text-[var(--text-muted)] text-xs mt-0.5">Select sections to include in the printed report</p>
+            <h3 className="text-white text-lg font-semibold">Print Options</h3>
+            <p className="text-[var(--text-muted)] text-xs mt-0.5">
+              Select sections to include in your printed report
+            </p>
           </div>
           <button onClick={onClose} className="text-[var(--text-muted)] hover:text-white transition-colors p-1">
             <X className="w-5 h-5" />
@@ -542,9 +855,8 @@ function PrintOptionsModal({ isOpen, onClose, onPrint, salesReport, printedBy, d
               return (
                 <label
                   key={sec.key}
-                  className={`flex items-start gap-3 p-2.5 rounded-lg cursor-pointer transition-colors ${
-                    selected.has(sec.key) ? "bg-[var(--gold-primary)]/10 border border-[var(--gold-primary)]/30" : "border border-transparent hover:bg-[var(--bg-primary)]"
-                  } ${noData ? "opacity-40" : ""}`}
+                  className={`flex items-start gap-3 p-2.5 rounded-lg cursor-pointer transition-colors ${selected.has(sec.key) ? "bg-[var(--gold-primary)]/10 border border-[var(--gold-primary)]/30" : "border border-transparent hover:bg-[var(--bg-primary)]"
+                    } ${noData ? "opacity-40" : ""}`}
                 >
                   <input
                     type="checkbox"
@@ -564,22 +876,25 @@ function PrintOptionsModal({ isOpen, onClose, onPrint, salesReport, printedBy, d
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-[var(--border)] flex items-center justify-between">
+        <div className="px-6 py-4 border-t border-[var(--border)] flex flex-wrap items-center justify-between gap-3">
           <span className="text-xs text-[var(--text-muted)]">{selected.size} of {PRINT_SECTIONS.length} sections selected</span>
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2">
             <button
               onClick={onClose}
-              className="px-4 py-2 text-sm font-medium text-[var(--text-muted)] bg-[var(--bg-primary)] border border-[var(--border)] rounded-lg hover:text-white transition-colors"
+              className="px-3.5 py-2 text-sm font-medium text-[var(--text-muted)] bg-[var(--bg-primary)] border border-[var(--border)] rounded-lg hover:text-white transition-colors"
             >
               Cancel
             </button>
-              <button
-                onClick={() => { onPrint(Array.from(selected), printedBy, datePrinted); onClose(); }}
-                disabled={selected.size === 0}
-                className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-[var(--gold-primary)] text-black rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
-              >
+            <button
+              onClick={() => {
+                onPrint(Array.from(selected), printedBy, datePrinted);
+                onClose();
+              }}
+              disabled={selected.size === 0}
+              className="flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium rounded-lg transition-colors border bg-[var(--gold-primary)] text-black border-[var(--gold-primary)] hover:opacity-90 font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
+            >
               <Printer className="w-4 h-4" />
-              Print ({selected.size} sections)
+              Print ({selected.size})
             </button>
           </div>
         </div>
@@ -627,11 +942,10 @@ function ToggleGroup({ options, value, onChange }) {
         <button
           key={opt.value}
           onClick={() => onChange(opt.value)}
-          className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
-            value === opt.value
-              ? "bg-[var(--surface-dark)] text-[var(--gold-primary)] shadow-sm"
-              : "text-[var(--text-muted)] hover:text-white"
-          }`}
+          className={`px-3 py-1 rounded text-xs font-medium transition-colors ${value === opt.value
+            ? "bg-[var(--surface-dark)] text-[var(--gold-primary)] shadow-sm"
+            : "text-[var(--text-muted)] hover:text-white"
+            }`}
         >
           {opt.label}
         </button>
@@ -664,26 +978,75 @@ export function SalesReportTab({ salesReport, fetchSalesReport }) {
   /* ─── Derived data ─── */
 
   const dateLabel = useMemo(() => {
-    if (!salesReport?.dailyTrend?.length && preset === "all") return "All Time";
+    if (preset === "all") return "All Time";
+    if (preset === "custom") {
+      if (customStart && customEnd) {
+        return customStart === customEnd ? customStart : `${customStart} — ${customEnd}`;
+      }
+      if (customStart) return `From ${customStart}`;
+      if (customEnd) return `Until ${customEnd}`;
+      return "Custom Range";
+    }
     const range = getPresetRange(preset);
     if (range.start_date && range.end_date) {
       if (range.start_date === range.end_date) return range.start_date;
       return `${range.start_date} — ${range.end_date}`;
     }
     return "Custom Range";
-  }, [preset, salesReport]);
+  }, [preset, customStart, customEnd]);
 
   const applyPreset = (key) => {
     setActivePreset(key);
     setPreset(key);
+    setCustomStart("");
+    setCustomEnd("");
     fetchSalesReport(getPresetRange(key));
   };
 
-  const applyCustom = () => {
-    if (!customStart && !customEnd) return;
+  const handleCustomStartChange = (val) => {
+    setCustomStart(val);
+    if (!val && !customEnd) {
+      applyPreset("all");
+      return;
+    }
     setActivePreset("custom");
     setPreset("custom");
-    fetchSalesReport({ start_date: customStart || undefined, end_date: customEnd || undefined });
+    if (val && customEnd && val > customEnd) {
+      setCustomEnd(val);
+      fetchSalesReport({ start_date: val, end_date: val });
+    } else {
+      fetchSalesReport({ start_date: val || undefined, end_date: customEnd || undefined });
+    }
+  };
+
+  const handleCustomEndChange = (val) => {
+    setCustomEnd(val);
+    if (!customStart && !val) {
+      applyPreset("all");
+      return;
+    }
+    setActivePreset("custom");
+    setPreset("custom");
+    if (customStart && val && customStart > val) {
+      setCustomStart(val);
+      fetchSalesReport({ start_date: val, end_date: val });
+    } else {
+      fetchSalesReport({ start_date: customStart || undefined, end_date: val || undefined });
+    }
+  };
+
+  const clearCustomDates = () => {
+    setCustomStart("");
+    setCustomEnd("");
+    applyPreset("all");
+  };
+
+  const handleRefresh = () => {
+    if (activePreset === "custom") {
+      fetchSalesReport({ start_date: customStart || undefined, end_date: customEnd || undefined });
+    } else {
+      fetchSalesReport(getPresetRange(activePreset));
+    }
   };
 
   // Channel data array
@@ -813,25 +1176,18 @@ export function SalesReportTab({ salesReport, fetchSalesReport }) {
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <button
-                onClick={() => applyPreset(activePreset)}
+                onClick={handleRefresh}
                 className="flex items-center gap-1.5 px-3 py-2 bg-[var(--surface-dark)] border border-[var(--border)] rounded-lg text-sm font-medium text-[var(--text-muted)] hover:border-[var(--gold-primary)] transition-colors"
               >
                 <RefreshCw className="w-4 h-4" />
                 Refresh
               </button>
               <button
-                onClick={() => exportExcel(salesReport)}
+                onClick={() => exportExcel(salesReport, dateLabel, printedBy, datePrinted)}
                 className="flex items-center gap-1.5 px-3 py-2 bg-[var(--surface-dark)] border border-[var(--border)] rounded-lg text-sm font-medium text-[var(--text-muted)] hover:border-[var(--gold-primary)] transition-colors"
               >
                 <Download className="w-4 h-4" />
                 Export Excel
-              </button>
-              <button
-                onClick={() => exportPdf(salesReport, dateLabel)}
-                className="flex items-center gap-1.5 px-3 py-2 bg-[var(--surface-dark)] border border-[var(--border)] rounded-lg text-sm font-medium text-[var(--text-muted)] hover:border-[var(--gold-primary)] transition-colors"
-              >
-                <Download className="w-4 h-4" />
-                Export PDF
               </button>
               <button
                 onClick={() => setShowPrintModal(true)}
@@ -849,11 +1205,10 @@ export function SalesReportTab({ salesReport, fetchSalesReport }) {
               <button
                 key={p.key}
                 onClick={() => applyPreset(p.key)}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                  activePreset === p.key
-                    ? "bg-[var(--gold-primary)] text-black"
-                    : "bg-[var(--surface-dark)] border border-[var(--border)] text-[var(--text-light)] hover:border-[var(--gold-primary)]"
-                }`}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${activePreset === p.key
+                  ? "bg-[var(--gold-primary)] text-black"
+                  : "bg-[var(--surface-dark)] border border-[var(--border)] text-[var(--text-light)] hover:border-[var(--gold-primary)]"
+                  }`}
               >
                 {p.label}
               </button>
@@ -862,22 +1217,28 @@ export function SalesReportTab({ salesReport, fetchSalesReport }) {
               <input
                 type="date"
                 value={customStart}
-                onChange={(e) => setCustomStart(e.target.value)}
+                max={customEnd || undefined}
+                onChange={(e) => handleCustomStartChange(e.target.value)}
                 className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-lg px-3 py-1.5 text-[var(--text-light)] text-sm focus:border-[var(--gold-primary)] focus:outline-none"
               />
               <span className="text-[var(--text-muted)]">to</span>
               <input
                 type="date"
                 value={customEnd}
-                onChange={(e) => setCustomEnd(e.target.value)}
+                min={customStart || undefined}
+                onChange={(e) => handleCustomEndChange(e.target.value)}
                 className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-lg px-3 py-1.5 text-[var(--text-light)] text-sm focus:border-[var(--gold-primary)] focus:outline-none"
               />
-              <button
-                onClick={applyCustom}
-                className="px-3 py-1.5 bg-[var(--surface-dark)] border border-[var(--border)] text-[var(--text-light)] rounded-lg text-sm font-medium hover:border-[var(--gold-primary)] transition-colors"
-              >
-                Apply
-              </button>
+              {(customStart || customEnd) && (
+                <button
+                  onClick={clearCustomDates}
+                  title="Clear custom date filter"
+                  className="px-2.5 py-1.5 bg-[var(--surface-dark)] border border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-light)] rounded-lg text-sm font-medium hover:border-[var(--gold-primary)] transition-colors flex items-center gap-1"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  Clear
+                </button>
+              )}
             </div>
           </div>
 
@@ -1117,12 +1478,11 @@ export function SalesReportTab({ salesReport, fetchSalesReport }) {
                     {sortedProducts.map((p, i) => (
                       <tr key={p.name + i} className="hover:bg-[var(--bg-primary)]/50 transition-colors">
                         <td className="px-4 py-3">
-                          <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold ${
-                            i === 0 ? "bg-[var(--gold-primary)] text-black" :
+                          <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold ${i === 0 ? "bg-[var(--gold-primary)] text-black" :
                             i === 1 ? "bg-gray-400 text-black" :
-                            i === 2 ? "bg-orange-600 text-white" :
-                            "bg-[var(--bg-primary)] text-[var(--text-muted)]"
-                          }`}>
+                              i === 2 ? "bg-orange-600 text-white" :
+                                "bg-[var(--bg-primary)] text-[var(--text-muted)]"
+                            }`}>
                             {i + 1}
                           </span>
                         </td>
@@ -1202,21 +1562,19 @@ export function SalesReportTab({ salesReport, fetchSalesReport }) {
                 <div className="flex items-center bg-[var(--bg-primary)] p-1 rounded-xl border border-[var(--border)]">
                   <button
                     onClick={() => setPaymentScope("overall")}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                      paymentScope === "overall"
-                        ? "bg-[var(--gold-primary)] text-black shadow-sm"
-                        : "text-[var(--text-muted)] hover:text-white"
-                    }`}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${paymentScope === "overall"
+                      ? "bg-[var(--gold-primary)] text-black shadow-sm"
+                      : "text-[var(--text-muted)] hover:text-white"
+                      }`}
                   >
                     Overall Sales
                   </button>
                   <button
                     onClick={() => setPaymentScope("appointments")}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                      paymentScope === "appointments"
-                        ? "bg-[var(--gold-primary)] text-black shadow-sm"
-                        : "text-[var(--text-muted)] hover:text-white"
-                    }`}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${paymentScope === "appointments"
+                      ? "bg-[var(--gold-primary)] text-black shadow-sm"
+                      : "text-[var(--text-muted)] hover:text-white"
+                      }`}
                   >
                     Appointments
                   </button>
@@ -1401,7 +1759,7 @@ export function SalesReportTab({ salesReport, fetchSalesReport }) {
       <PrintOptionsModal
         isOpen={showPrintModal}
         onClose={() => setShowPrintModal(false)}
-        onPrint={(sections, printedBy, datePrinted) => printSalesReport(salesReport, dateLabel, sections, printedBy, datePrinted)}
+        onPrint={(sections, pBy, dPrinted) => printSalesReport(salesReport, dateLabel, sections, pBy, dPrinted)}
         salesReport={salesReport}
         printedBy={printedBy}
         datePrinted={datePrinted}
