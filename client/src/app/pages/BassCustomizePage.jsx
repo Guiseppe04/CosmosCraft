@@ -750,19 +750,32 @@ export function BassCustomizePage() {
   const categoryDropdownRef = useRef(null)
   const { isAuthenticated, openLogin } = useAuth()
   const { addToCart, setIsOpen: setCartOpen } = useCart()
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(Boolean(editBuildId))
-  const [hasBeenSaved, setHasBeenSaved] = useState(Boolean(editBuildId) && isAuthenticated)
-
-  // Nothing is truly "saved" for a logged-out user yet.
-  useEffect(() => {
-    if (!isAuthenticated) {
-      setHasBeenSaved(false)
+  const [savedSnapshot, setSavedSnapshot] = useState(() => {
+    // If editing an existing build, consider it already saved
+    if (editBuildId) return JSON.stringify({ config: null, stickers: null })
+    try {
+      return window.sessionStorage.getItem('cosmoscraft.bassBuild.savedSnapshot')
+    } catch {
+      return null
     }
-  }, [isAuthenticated])
+  })
+
+  // Derived: is there anything to save?
+  const hasUnsavedChanges = useMemo(() => {
+    if (savedSnapshot === null) return true // never saved → unsaved
+    try {
+      const current = JSON.stringify({ config, stickers })
+      return current !== savedSnapshot
+    } catch {
+      return true
+    }
+  }, [savedSnapshot, config, stickers])
+
+  // Derived: has this build ever been saved?
+  const hasBeenSaved = savedSnapshot !== null
 
   const bypassNavigationBlockRef = useRef(false)
   const [showUnsavedModal, setShowUnsavedModal] = useState(false)
-  const suppressDirtyTrackingRef = useRef(false)
   const [stickers, setStickers] = useState([])
   const [selectedStickerId, setSelectedStickerId] = useState(null)
   const [isDraggingSticker, setIsDraggingSticker] = useState(false)
@@ -772,28 +785,10 @@ export function BassCustomizePage() {
   const panStartRef = useRef({ pointerX: 0, pointerY: 0, originX: 0, originY: 0 })
   const previewViewportRef = useRef(null)
   const previewStageRef = useRef(null)
-  const stickersInitializedRef = useRef(false)
 
-  const updateConfig = (patch) => {
-    if (editBuildId && !suppressDirtyTrackingRef.current) {
-      setHasUnsavedChanges(true)
-    }
-    baseUpdateConfig(patch)
-  }
-
-  const resetConfig = () => {
-    if (editBuildId && !suppressDirtyTrackingRef.current) {
-      setHasUnsavedChanges(true)
-    }
-    baseResetConfig()
-  }
-
-  const loadConfig = (raw) => {
-    if (editBuildId && !suppressDirtyTrackingRef.current) {
-      setHasUnsavedChanges(true)
-    }
-    baseLoadConfig(raw)
-  }
+  const updateConfig = (patch) => baseUpdateConfig(patch)
+  const resetConfig = () => baseResetConfig()
+  const loadConfig = (raw) => baseLoadConfig(raw)
 
   const handleZoomIn = () => setZoomLevel((prev) => Math.min(2, Number((prev + 0.1).toFixed(2))))
   const handleZoomOut = () => setZoomLevel((prev) => Math.max(0.7, Number((prev - 0.1).toFixed(2))))
@@ -1178,16 +1173,6 @@ export function BassCustomizePage() {
   }, [zoomLevel])
 
   useEffect(() => {
-    if (!stickersInitializedRef.current) {
-      stickersInitializedRef.current = true
-      return
-    }
-    if (editBuildId && !suppressDirtyTrackingRef.current) {
-      setHasUnsavedChanges(true)
-    }
-  }, [stickers, editBuildId])
-
-  useEffect(() => {
     if (!stickerPlacementContextRef.current) return
     setStickers((prev) =>
       prev.map((stickerItem) => (
@@ -1250,18 +1235,17 @@ export function BassCustomizePage() {
       for (const storageKey of ['cosmoscraft_saved_bass_builds', 'cosmoscraft_saved_builds']) {
         const builds = JSON.parse(window.localStorage.getItem(storageKey) || '[]')
         const target = builds.find(b => b.id === editBuildId)
-        if (target) {
-          try {
-            suppressDirtyTrackingRef.current = true
-            baseLoadConfig(target.config)
-            setStickers(Array.isArray(target.stickers) ? target.stickers : [])
-          } catch (e) {
-            console.error('Failed to load build config for editing:', e)
-          } finally {
-            suppressDirtyTrackingRef.current = false
+if (target) {
+            try {
+              baseLoadConfig(target.config)
+              const loadedStickers = Array.isArray(target.stickers) ? target.stickers : []
+              setStickers(loadedStickers)
+              setSavedSnapshot(JSON.stringify({ config: target.config, stickers: loadedStickers }))
+            } catch (e) {
+              console.error('Failed to load build config for editing:', e)
+            }
+            break
           }
-          break
-        }
       }
     }
   }, [editBuildId, baseLoadConfig])
@@ -1347,8 +1331,11 @@ export function BassCustomizePage() {
 
     if (stored.length > 10) stored = stored.slice(0, 10)
     window.localStorage.setItem(storedKey, JSON.stringify(stored))
-    setHasUnsavedChanges(false)
-    setHasBeenSaved(true)
+    try {
+      const snap = JSON.stringify({ config, stickers })
+      setSavedSnapshot(snap)
+      window.sessionStorage.setItem('cosmoscraft.bassBuild.savedSnapshot', snap)
+    } catch {}
     
     if (continueBlockedNavigation && blocker.state === 'blocked') {
       setShowUnsavedModal(false)

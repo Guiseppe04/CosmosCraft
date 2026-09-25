@@ -329,35 +329,36 @@ export function CustomizePage() {
   const [guitarTypeDropdownOpen, setGuitarTypeDropdownOpen] = useState(false)
   const categoryDropdownRef = useRef(null)
   const { isAuthenticated, openLogin } = useAuth()
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(Boolean(editBuildId))
-  const [hasBeenSaved, setHasBeenSaved] = useState(Boolean(editBuildId) && isAuthenticated)
+  const [savedSnapshot, setSavedSnapshot] = useState(() => {
+    if (editBuildId) return JSON.stringify({ config: null, stickers: null })
+    try {
+      return window.sessionStorage.getItem('cosmoscraft.electricBuild.savedSnapshot')
+    } catch {
+      return null
+    }
+  })
   const [dbCustomizationId, setDbCustomizationId] = useState(null)
   const [isLockedCustomization, setIsLockedCustomization] = useState(false)
   const bypassNavigationBlockRef = useRef(false)
   const [showUnsavedModal, setShowUnsavedModal] = useState(false)
-  const suppressDirtyTrackingRef = useRef(false)
-  const stickersInitializedRef = useRef(false)
-  
-  // If the user is not logged in, nothing is truly "saved" for them yet.
-  useEffect(() => {
-    if (!isAuthenticated) {
-      setHasBeenSaved(false)
-    }
-  }, [isAuthenticated])
 
-  const updateConfig = (patch) => {
-    if (editBuildId && !suppressDirtyTrackingRef.current) {
-      setHasUnsavedChanges(true)
+  // Derived: is there anything to save?
+  const hasUnsavedChanges = useMemo(() => {
+    if (savedSnapshot === null) return true
+    try {
+      const current = JSON.stringify({ config, stickers })
+      return current !== savedSnapshot
+    } catch {
+      return true
     }
-    baseUpdateConfig(patch)
-  }
+  }, [savedSnapshot, config, stickers])
 
-  const resetConfig = () => {
-    if (editBuildId && !suppressDirtyTrackingRef.current) {
-      setHasUnsavedChanges(true)
-    }
-    baseResetConfig()
-  }
+  // Derived: has this build ever been saved?
+  const hasBeenSaved = savedSnapshot !== null
+
+  const updateConfig = (patch) => baseUpdateConfig(patch)
+  const resetConfig = () => baseResetConfig()
+  const loadConfig = (raw) => baseLoadConfig(raw)
 
   const handleZoomIn = () => setZoomLevel(prev => Math.min(2, Number((prev + 0.1).toFixed(2))))
   const handleZoomOut = () => setZoomLevel(prev => Math.max(0.7, Number((prev - 0.1).toFixed(2))))
@@ -690,16 +691,6 @@ export function CustomizePage() {
   }, [config, currentBodyMaskSrc, view])
 
   useEffect(() => {
-    if (!stickersInitializedRef.current) {
-      stickersInitializedRef.current = true
-      return
-    }
-    if (editBuildId && !suppressDirtyTrackingRef.current) {
-      setHasUnsavedChanges(true)
-    }
-  }, [stickers, editBuildId])
-
-  useEffect(() => {
     if (!stickerPlacementContextRef.current) return
     setStickers(prev =>
       prev.map((stickerItem) => (
@@ -800,15 +791,16 @@ export function CustomizePage() {
         }
 
         try {
-          suppressDirtyTrackingRef.current = true
           baseLoadConfig(target.config)
-          setStickers(Array.isArray(target.stickers) ? target.stickers : [])
+          const loadedStickers = Array.isArray(target.stickers) ? target.stickers : []
+          setStickers(loadedStickers)
           setDbCustomizationId(targetCustomizationId)
           setIsLockedCustomization(false)
+          try {
+            setSavedSnapshot(JSON.stringify({ config: target.config, stickers: loadedStickers }))
+          } catch {}
         } catch (e) {
           console.error('Failed to load build config for editing:', e)
-        } finally {
-          suppressDirtyTrackingRef.current = false
         }
         break
       }
@@ -955,7 +947,12 @@ export function CustomizePage() {
     }
 
     persistLocalBuild()
-    setHasUnsavedChanges(false)
+
+    try {
+      const snap = JSON.stringify({ config, stickers })
+      setSavedSnapshot(snap)
+      window.sessionStorage.setItem('cosmoscraft.electricBuild.savedSnapshot', snap)
+    } catch {}
 
     try {
       const payload = {
