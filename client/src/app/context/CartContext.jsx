@@ -152,7 +152,8 @@ export function CartProvider({ children }) {
     } else {
       let stockLimitMessage = ''
       setCart(prevCart => {
-        const existing = prevCart.find(item => item.id === product.id)
+        // Normalize IDs to strings to prevent numeric/string type mismatches
+        const existing = prevCart.find(item => String(item.id) === String(product.id))
         const currentStock = resolveStockValue(product) ?? resolveStockValue(existing)
 
         if (existing) {
@@ -163,7 +164,11 @@ export function CartProvider({ children }) {
           }
           added = true
           shouldSync = true
-          return prevCart.map(item => item.id === product.id ? { ...item, quantity: newQuantity } : item)
+          return prevCart.map(item =>
+            String(item.id) === String(product.id)
+              ? { ...item, quantity: newQuantity }
+              : item
+          )
         }
         if (currentStock !== null && requestedQuantity > currentStock) {
           stockLimitMessage = formatStockLimitMessage(currentStock)
@@ -358,9 +363,9 @@ export function CartProvider({ children }) {
             initial={{ opacity: 0, y: -20, x: '-50%' }}
             animate={{ opacity: 1, y: 0, x: '-50%' }}
             exit={{ opacity: 0, y: -20, x: '-50%' }}
-            className="fixed top-24 left-1/2 z-[100] bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] px-6 py-3 rounded-xl font-bold shadow-[0_0_20px_rgba(212,175,55,0.4)] flex items-center gap-2 pointer-events-none"
+            className="fixed top-24 left-1/2 z-[200] bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] px-6 py-3 rounded-xl font-bold shadow-[0_0_20px_rgba(212,175,55,0.4)] flex items-center gap-2 pointer-events-none"
           >
-            <CheckCircle className="w-5 h-5" />
+            {!globalToast?.toLowerCase().includes('available in stock') && <CheckCircle className="w-5 h-5" />}
             {globalToast}
           </motion.div>
         )}

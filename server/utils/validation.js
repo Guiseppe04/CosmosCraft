@@ -4,6 +4,12 @@ const Joi = require('joi');
 // REUSABLE FIELD SCHEMAS
 // ============================================================================
 
+// Shared regex for PH-style place names (city / state-province). Matches any
+// Unicode letter (\p{L} -- accented Latin like ñ, é, ü, ß all pass), spaces,
+// periods, commas, parentheses, hyphens, and apostrophes, while still blocking
+// markup / injection characters such as < > { } = etc.
+const PH_PLACE_NAME_PATTERN = /^[\p{L}\s'.,()-]+$/u;
+
 const nameFields = {
   firstName: Joi.string()
     .min(2)
@@ -40,12 +46,12 @@ const nameFields = {
 
 const addressFields = {
   streetLine1: Joi.string()
-    .min(5)
+    .min(2)
     .max(100)
     .required()
     .trim()
     .messages({
-      'string.min': 'Street address must be at least 5 characters',
+      'string.min': 'Street address must be at least 2 characters',
       'string.max': 'Street address must not exceed 100 characters',
       'any.required': 'Street address line 1 is required',
     }),
@@ -61,9 +67,9 @@ const addressFields = {
     .min(2)
     .max(50)
     .required()
-    .pattern(/^[a-zA-Z\s'-]+$/)
+    .pattern(PH_PLACE_NAME_PATTERN)
     .messages({
-      'string.pattern.base': 'City can only contain letters, spaces, hyphens, and apostrophes',
+      'string.pattern.base': 'City contains invalid characters',
       'string.min': 'City must be at least 2 characters',
       'string.max': 'City must not exceed 50 characters',
       'any.required': 'City is required',
@@ -82,9 +88,9 @@ const addressFields = {
     .min(2)
     .max(50)
     .required()
-    .pattern(/^[a-zA-Z\s'-]+$/)
+    .pattern(PH_PLACE_NAME_PATTERN)
     .messages({
-      'string.pattern.base': 'State/Province can only contain letters, spaces, hyphens, and apostrophes',
+      'string.pattern.base': 'State/Province contains invalid characters',
       'string.min': 'State/Province must be at least 2 characters',
       'string.max': 'State/Province must not exceed 50 characters',
       'any.required': 'State/Province is required',
@@ -200,12 +206,12 @@ exports.emailSignupSchema = Joi.object({
     }),
   address: Joi.object({
     streetLine1: Joi.string()
-      .min(5)
+      .min(2)
       .max(100)
       .required()
       .trim()
       .messages({
-        'string.min': 'Street address must be at least 5 characters',
+        'string.min': 'Street address must be at least 2 characters',
         'string.max': 'Street address must not exceed 100 characters',
         'any.required': 'Street address is required',
       }),
@@ -222,11 +228,11 @@ exports.emailSignupSchema = Joi.object({
       .max(50)
       .required()
       .trim()
-      .pattern(/^[a-zA-Z\s'-]+$/)
+      .pattern(PH_PLACE_NAME_PATTERN)
       .messages({
         'string.min': 'City must be at least 2 characters',
         'string.max': 'City must not exceed 50 characters',
-        'string.pattern.base': 'City can only contain letters, spaces, hyphens, and apostrophes',
+        'string.pattern.base': 'City contains invalid characters',
         'any.required': 'City is required',
       }),
     barangay: Joi.string()
@@ -244,11 +250,11 @@ exports.emailSignupSchema = Joi.object({
       .max(50)
       .required()
       .trim()
-      .pattern(/^[a-zA-Z\s'-]+$/)
+      .pattern(PH_PLACE_NAME_PATTERN)
       .messages({
         'string.min': 'State/Province must be at least 2 characters',
         'string.max': 'State/Province must not exceed 50 characters',
-        'string.pattern.base': 'State/Province can only contain letters, spaces, hyphens, and apostrophes',
+        'string.pattern.base': 'State/Province contains invalid characters',
         'any.required': 'State/Province is required',
       }),
     postalZipCode: Joi.string()
@@ -737,8 +743,8 @@ exports.createOrderSchema = Joi.object({
     }),
   shippingAddressId: Joi.string().uuid().optional().allow(null),
   billingAddress: Joi.object({
-    street: Joi.string().min(5).max(100).required().trim().messages({
-      'string.min': 'Address street must be at least 5 characters',
+    street: Joi.string().min(2).max(100).required().trim().messages({
+      'string.min': 'Address street must be at least 2 characters',
       'string.max': 'Address street must not exceed 100 characters',
       'any.required': 'Billing street address is required',
     }),

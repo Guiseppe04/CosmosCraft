@@ -15,6 +15,7 @@
   "type": "commonjs",
   "dependencies": {
     "@getbrevo/brevo": "^3.0.1",
+    "@nazarkalytiuk/rusc-xlsx": "^2.0.0",
     "@supabase/supabase-js": "^2.101.1",
     "bcryptjs": "^2.4.3",
     "bootstrap": "^5.3.8",
@@ -24,6 +25,7 @@
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "express-rate-limit": "^8.5.2",
+    "html2canvas": "^1.4.1",
     "joi": "^18.0.2",
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.1.1",

@@ -8,6 +8,8 @@ router.use(authorize('staff', 'admin', 'super_admin'));
 
 router.get('/dashboard', ctrl.getDashboardSummary);
 router.get('/sales', ctrl.getSalesReport);
+router.post('/sales/export-excel', ctrl.exportSalesExcel);
+router.get('/sales/export-excel', ctrl.exportSalesExcel);
 router.get('/orders', ctrl.getOrderReport);
 router.get('/payments', ctrl.getPaymentReport);
 router.get('/appointments', ctrl.getAppointmentReport);

@@ -73,9 +73,18 @@ export function AddressForm({
 
   const isPhilippines = formData.country === 'PH'
 
+  const initialAddressKey = useMemo(
+    () => JSON.stringify(initialAddress || {}),
+    [initialAddress]
+  )
+
   useEffect(() => {
     setFormData(normalizeInitialAddress(initialAddress))
-  }, [initialAddress])
+    // Reset the form only when the address *content* changes, not on every render
+    // (callers may pass fresh object literals like `{}` that change identity on
+    // each render, which would otherwise wipe the user's input after a failed save).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialAddressKey])
 
   useEffect(() => {
     if (!isPhilippines) {
