@@ -72,9 +72,26 @@ const updateOauthCodeFailure = async (code, errorMessage) => {
   );
 };
 
+const getCookieOptions = () => {
+  const isProd = process.env.NODE_ENV === 'production';
+  return {
+    httpOnly: true,
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+    ...(isProd ? {
+      secure: true,
+      sameSite: 'none',
+      partitioned: true,
+    } : {
+      secure: false,
+      sameSite: 'lax',
+    }),
+  };
+};
+
 const clearAuthCookies = (res) => {
-  res.clearCookie('accessToken', { httpOnly: true, secure: true, sameSite: 'none' });
-  res.clearCookie('refreshToken', { httpOnly: true, secure: true, sameSite: 'none' });
+  const cookieOptions = getCookieOptions();
+  res.clearCookie('accessToken', cookieOptions);
+  res.clearCookie('refreshToken', cookieOptions);
 };
 
 // OAuth Routes - Use standard Passport middleware
@@ -133,21 +150,11 @@ router.get('/google/callback', oauthSingleUseGuard('google'), asyncHandler(async
         console.error('[Google Callback] Failed to update oauth_codes record:', uErr);
       }
 
-      res.cookie('accessToken', accessToken, {
-        httpOnly: true,
-        secure: true,
-        sameSite: 'none',
-        maxAge: 7 * 24 * 60 * 60 * 1000,
-      });
+      const cookieOptions = getCookieOptions();
+      res.cookie('accessToken', accessToken, cookieOptions);
+      res.cookie('refreshToken', refreshToken, { ...cookieOptions, maxAge: 7 * 24 * 60 * 60 * 1000 });
 
-      res.cookie('refreshToken', refreshToken, {
-        httpOnly: true,
-        secure: true,
-        sameSite: 'none',
-        maxAge: 7 * 24 * 60 * 60 * 1000,
-      });
-
-      const redirectUrl = `${getFrontendUrl()}/auth/success?userId=${user.user_id}&provider=google`;
+      const redirectUrl = `${getFrontendUrl()}/auth/success?userId=${user.user_id}&token=${encodeURIComponent(accessToken)}&provider=google`;
       console.log('[Google Callback] Redirecting to:', redirectUrl);
       
       return res.redirect(redirectUrl);
@@ -203,19 +210,9 @@ router.get('/facebook/callback', oauthSingleUseGuard('facebook'), asyncHandler(a
       const roleSummary = await rbacService.getUserRoleSummary(user.user_id, false);
       const { accessToken, refreshToken } = await generateTokens(user.user_id, roleSummary.role);
 
-      res.cookie('accessToken', accessToken, {
-        httpOnly: true,
-        secure: true,
-        sameSite: 'none',
-        maxAge: 7 * 24 * 60 * 60 * 1000,
-      });
-
-      res.cookie('refreshToken', refreshToken, {
-        httpOnly: true,
-        secure: true,
-        sameSite: 'none',
-        maxAge: 7 * 24 * 60 * 60 * 1000,
-      });
+      const cookieOptions = getCookieOptions();
+      res.cookie('accessToken', accessToken, cookieOptions);
+      res.cookie('refreshToken', refreshToken, { ...cookieOptions, maxAge: 7 * 24 * 60 * 60 * 1000 });
 
       // Update oauth_codes record to mark success so duplicate callers can proceed
       try {
@@ -224,7 +221,7 @@ router.get('/facebook/callback', oauthSingleUseGuard('facebook'), asyncHandler(a
         console.error('[Facebook Callback] Failed to update oauth_codes record:', uErr);
       }
 
-      return res.redirect(`${getFrontendUrl()}/auth/success?userId=${user.user_id}&provider=facebook`);
+      return res.redirect(`${getFrontendUrl()}/auth/success?userId=${user.user_id}&token=${encodeURIComponent(accessToken)}&provider=facebook`);
     } catch (error) {
       next(error);
     }

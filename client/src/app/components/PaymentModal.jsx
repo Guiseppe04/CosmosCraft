@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
-import { API } from '../utils/apiConfig'
+import { API, getAuthHeaders } from '../utils/apiConfig'
 
 const API_URL = API
 const FALLBACK_QR = '/gcashqrcode.png'
@@ -104,6 +104,7 @@ export function PaymentModal({
     const fetchSettings = async () => {
       try {
         const res = await fetch(`${API_URL}/api/payment-settings`, {
+          headers: getAuthHeaders(),
           credentials: 'include',
         })
         const json = await res.json()

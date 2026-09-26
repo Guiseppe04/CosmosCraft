@@ -3,7 +3,7 @@
  * All functions use credentials: 'include' so the access token cookie is sent automatically.
  */
 
-import { API } from './apiConfig'
+import { API, getAuthHeaders } from './apiConfig'
 import { feedbackService } from '../services/feedbackService'
 
 const API_URL = API
@@ -15,9 +15,10 @@ const normalizeAppointmentStatus = (status) => {
 
 async function request(path, options = {}) {
   const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData
-  const headers = isFormData
+  const baseHeaders = isFormData
     ? { ...options.headers }
     : { 'Content-Type': 'application/json', ...options.headers }
+  const headers = getAuthHeaders(baseHeaders)
 
   const res = await fetch(`${API_URL}${path}`, {
     credentials: 'include',

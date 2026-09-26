@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react'
-import { API } from '../utils/apiConfig'
+import { API, getAuthHeaders, setAuthToken, removeAuthToken, getAuthToken } from '../utils/apiConfig'
 import { normalizeRole } from '../utils/roles'
 
 const AuthContext = createContext(null)
@@ -19,34 +19,34 @@ export const PERMISSIONS = {
   ADD_PRODUCT: 'add_product',
   UPDATE_PRODUCT: 'update_product',
   DELETE_PRODUCT: 'delete_product',
-  
+
   // User management
   VIEW_USERS: 'view_users',
-  
+
   // Order management
   VIEW_ORDERS: 'view_orders',
   APPROVE_ORDER: 'approve_order',
   CANCEL_ORDER: 'cancel_order',
-  
+
   // Project management
   VIEW_PROJECTS: 'view_projects',
   UPDATE_PROJECT: 'update_project',
-  
+
   // Appointment management
   VIEW_APPOINTMENTS: 'view_appointments',
   APPROVE_APPOINTMENT: 'approve_appointment',
   CANCEL_APPOINTMENT: 'cancel_appointment',
-  
+
   // Reports
   VIEW_REPORTS: 'view_reports',
-  
+
   // Guitar designs
   VIEW_DESIGNS: 'view_designs',
   REMOVE_DESIGN: 'remove_design',
-  
+
   // Feedback
   VIEW_FEEDBACK: 'view_feedback',
-  
+
   // Cart operations
   ADD_TO_CART: 'add_to_cart',
   BUY_NOW: 'buy_now',
@@ -95,25 +95,33 @@ export function AuthProvider({ children }) {
   const [loginOpen, setLoginOpen] = useState(false)
   const [loginCallback, setLoginCallback] = useState(null)
   const [isLoadingUser, setIsLoadingUser] = useState(true)
-  
+
   // Fetch current authenticated user from backend
   const fetchUser = useCallback(async () => {
     try {
       const response = await fetch(`${API}/auth/check`, {
         method: 'GET',
+        headers: getAuthHeaders(),
         credentials: 'include',
       })
 
+      // If backend issued a new access token via header during auto-refresh
+      const newAccessToken = response.headers.get('X-New-Access-Token')
+      if (newAccessToken) {
+        setAuthToken(newAccessToken)
+      }
+
       if (response.ok) {
         const data = await response.json()
-        if (data.data.isAuthenticated && data.data.user) {
+        if (data.data?.isAuthenticated && data.data?.user) {
           // If auth check doesn't include addresses, fetch profile for full data
           let userData = data.data.user
-          
+
           // Fetch full profile which includes addresses
           try {
             const profileResponse = await fetch(`${API}/api/users/profile`, {
               method: 'GET',
+              headers: getAuthHeaders(),
               credentials: 'include',
             })
             if (profileResponse.ok) {
@@ -125,7 +133,7 @@ export function AuthProvider({ children }) {
           } catch (profileErr) {
             console.warn('Could not fetch full profile, using auth data')
           }
-          
+
           setIsAuthenticated(true)
           setUser(userData)
           // Store full user data in localStorage
@@ -139,10 +147,12 @@ export function AuthProvider({ children }) {
         setIsAuthenticated(false)
         setUser(null)
         window.localStorage.removeItem('cosmoscraft_auth')
+        removeAuthToken()
       } else if (response.status === 401) {
         setIsAuthenticated(false)
         setUser(null)
         window.localStorage.removeItem('cosmoscraft_auth')
+        removeAuthToken()
       }
     } catch (error) {
       console.error('Failed to fetch user:', error)
@@ -159,12 +169,12 @@ export function AuthProvider({ children }) {
       if (stored) {
         try {
           const parsed = JSON.parse(stored)
-          if (parsed?.id || parsed?._id) {
+          if (parsed?.id || parsed?.user_id || parsed?._id) {
             // Restore user immediately from localStorage
             setIsAuthenticated(true)
             setUser(parsed)
             setIsLoadingUser(false)
-            
+
             // Verify with backend in background
             await fetchUser()
           } else {
@@ -175,7 +185,12 @@ export function AuthProvider({ children }) {
           setIsLoadingUser(false)
         }
       } else {
-        setIsLoadingUser(false)
+        // Also check if we have a token stored
+        if (getAuthToken()) {
+          await fetchUser()
+        } else {
+          setIsLoadingUser(false)
+        }
       }
     }
 
@@ -197,12 +212,15 @@ export function AuthProvider({ children }) {
   }, [])
 
   const login = useCallback(
-    (userData) => {
+    (userData, token = null) => {
       setIsAuthenticated(true)
       setUser(userData)
       setLoginOpen(false)
       // Store full user data in localStorage
       window.localStorage.setItem('cosmoscraft_auth', JSON.stringify(userData))
+      if (token) {
+        setAuthToken(token)
+      }
       if (loginCallback) {
         loginCallback()
         setLoginCallback(null)
@@ -211,10 +229,20 @@ export function AuthProvider({ children }) {
     [loginCallback],
   )
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    try {
+      await fetch(`${API}/auth/logout`, {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        credentials: 'include',
+      })
+    } catch (err) {
+      console.warn('Logout API error:', err)
+    }
     setIsAuthenticated(false)
     setUser(null)
     window.localStorage.removeItem('cosmoscraft_auth')
+    removeAuthToken()
   }, [])
 
   // Update user data (e.g., after adding address)

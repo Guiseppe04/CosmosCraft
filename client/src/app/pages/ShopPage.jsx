@@ -28,11 +28,11 @@ async function fetchPublicJson(path) {
 function buildCategoryTree(categories) {
   const map = new Map()
   const roots = []
-  
+
   categories.forEach(c => {
     map.set(c.category_id, { ...c, children: [] })
   })
-  
+
   categories.forEach(c => {
     const node = map.get(c.category_id)
     if (c.parent_id && map.has(c.parent_id)) {
@@ -41,13 +41,13 @@ function buildCategoryTree(categories) {
       roots.push(node)
     }
   })
-  
+
   const sortNodes = (nodes) => {
     nodes.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
     nodes.forEach(n => sortNodes(n.children))
   }
   sortNodes(roots)
-  
+
   return roots
 }
 
@@ -65,7 +65,7 @@ function findNodeByName(tree, name) {
 function getCategoryWithChildren(tree, categoryName) {
   const node = findNodeByName(tree, categoryName)
   if (!node) return [categoryName]
-  
+
   const names = [node.name]
   node.children?.forEach(child => names.push(child.name))
   return names
@@ -76,17 +76,16 @@ function CategoryTreeItem({ node, level = 0, selectedCategory, onSelect, expande
   const hasChildren = node.children && node.children.length > 0
   const isExpanded = expandedCategories.has(key)
   const isSelected = selectedCategory === node.name
-  
+
   return (
     <div className="select-none">
-      <div 
-        className={`flex items-center gap-2 py-2 px-3 rounded-lg cursor-pointer transition-all ${
-          level === 0 ? 'font-semibold text-white' : 'text-sm text-[var(--text-muted)] ml-4'
-        } ${isSelected ? 'bg-[var(--gold-primary)]/10 text-[var(--gold-primary)]' : 'hover:bg-white/5'}`}
+      <div
+        className={`flex items-center gap-2 py-2 px-3 rounded-lg cursor-pointer transition-all ${level === 0 ? 'font-semibold text-white' : 'text-sm text-[var(--text-muted)] ml-4'
+          } ${isSelected ? 'bg-[var(--gold-primary)]/10 text-[var(--gold-primary)]' : 'hover:bg-white/5'}`}
         onClick={() => onSelect(node.name)}
       >
         {hasChildren && (
-          <button 
+          <button
             onClick={(e) => { e.stopPropagation(); onToggle(key) }}
             className="p-0.5 hover:bg-white/10 rounded"
           >
@@ -97,7 +96,7 @@ function CategoryTreeItem({ node, level = 0, selectedCategory, onSelect, expande
         <Folder className={`w-4 h-4 ${isSelected ? 'text-[var(--gold-primary)]' : level === 0 ? 'text-[var(--gold-primary)]/70' : 'text-white/40'}`} />
         <span className="truncate text-[13px]">{node.name}</span>
       </div>
-      
+
       <AnimatePresence>
         {hasChildren && isExpanded && (
           <motion.div
@@ -107,7 +106,7 @@ function CategoryTreeItem({ node, level = 0, selectedCategory, onSelect, expande
             transition={{ duration: 0.2 }}
           >
             {node.children.map((child, idx) => (
-              <CategoryTreeItem 
+              <CategoryTreeItem
                 key={child.name}
                 node={child}
                 level={level + 1}
@@ -125,13 +124,13 @@ function CategoryTreeItem({ node, level = 0, selectedCategory, onSelect, expande
   )
 }
 
-function FilterSidebar({ 
-  categoryTree, 
-  selectedCategory, 
-  onCategoryChange, 
-  expandedCategories, 
+function FilterSidebar({
+  categoryTree,
+  selectedCategory,
+  onCategoryChange,
+  expandedCategories,
   onToggleExpand,
-  selectedBrands, 
+  selectedBrands,
   onBrandToggle,
   brands,
   priceRange,
@@ -160,17 +159,16 @@ function FilterSidebar({
         <div>
           <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] mb-3">Category</h4>
           <div className="space-y-0.5">
-            <div 
-              className={`flex items-center gap-2 py-2 px-3 rounded-lg cursor-pointer transition-all font-semibold text-white ${
-                selectedCategory === 'all' ? 'bg-[var(--gold-primary)]/10 text-[var(--gold-primary)]' : 'hover:bg-white/5'
-              }`}
+            <div
+              className={`flex items-center gap-2 py-2 px-3 rounded-lg cursor-pointer transition-all font-semibold text-white ${selectedCategory === 'all' ? 'bg-[var(--gold-primary)]/10 text-[var(--gold-primary)]' : 'hover:bg-white/5'
+                }`}
               onClick={() => onCategoryChange('all')}
             >
               <Tag className="w-4 h-4" />
               <span className="text-[13px]">All Products</span>
             </div>
             {categoryTree.map((node, idx) => (
-              <CategoryTreeItem 
+              <CategoryTreeItem
                 key={node.name}
                 node={node}
                 selectedCategory={selectedCategory}
@@ -188,18 +186,17 @@ function FilterSidebar({
           <div className="space-y-2 max-h-48 overflow-y-auto">
             {brands.filter(b => b.value !== 'all').map(brand => (
               <label key={brand.value} className="flex items-center gap-3 cursor-pointer group">
-                <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${
-                  selectedBrands.includes(brand.value) 
-                    ? 'bg-[var(--gold-primary)] border-[var(--gold-primary)]' 
+                <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${selectedBrands.includes(brand.value)
+                    ? 'bg-[var(--gold-primary)] border-[var(--gold-primary)]'
                     : 'border-white/30 group-hover:border-white/60'
-                }`}>
+                  }`}>
                   {selectedBrands.includes(brand.value) && (
                     <svg className="w-3 h-3 text-black" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
                       <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                     </svg>
                   )}
                 </div>
-                <input 
+                <input
                   type="checkbox"
                   checked={selectedBrands.includes(brand.value)}
                   onChange={() => onBrandToggle(brand.value)}
@@ -235,18 +232,17 @@ function FilterSidebar({
         <div className="border-t border-white/10 pt-4">
           <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] mb-3">Availability</h4>
           <label className="flex items-center gap-3 cursor-pointer group">
-            <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${
-              inStockOnly 
-                ? 'bg-[var(--gold-primary)] border-[var(--gold-primary)]' 
+            <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${inStockOnly
+                ? 'bg-[var(--gold-primary)] border-[var(--gold-primary)]'
                 : 'border-white/30 group-hover:border-white/60'
-            }`}>
+              }`}>
               {inStockOnly && (
                 <svg className="w-3 h-3 text-black" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                 </svg>
               )}
             </div>
-            <input 
+            <input
               type="checkbox"
               checked={inStockOnly}
               onChange={() => onInStockChange(!inStockOnly)}
@@ -292,8 +288,8 @@ function FilterSidebar({
   return sidebarContent
 }
 
-function ActiveFiltersBar({ 
-  selectedCategory, 
+function ActiveFiltersBar({
+  selectedCategory,
   onCategoryClear,
   selectedBrands,
   onBrandClear,
@@ -305,24 +301,24 @@ function ActiveFiltersBar({
   brandLabels
 }) {
   const filters = []
-  
+
   if (selectedCategory !== 'all') {
     filters.push({ type: 'category', label: selectedCategory, onClear: onCategoryClear })
   }
-  
+
   selectedBrands.forEach(brand => {
     filters.push({ type: 'brand', label: brandLabels[brand] || brand, onClear: () => onBrandClear(brand) })
   })
-  
+
   if (priceRange[0] || priceRange[1]) {
-    const label = priceRange[0] && priceRange[1] 
+    const label = priceRange[0] && priceRange[1]
       ? `₱${priceRange[0].toLocaleString()} – ₱${priceRange[1].toLocaleString()}`
-      : priceRange[0] 
+      : priceRange[0]
         ? `₱${priceRange[0].toLocaleString()}+`
         : `Up to ₱${priceRange[1].toLocaleString()}`
     filters.push({ type: 'price', label, onClear: onPriceRangeClear })
   }
-  
+
   if (inStockOnly) {
     filters.push({ type: 'stock', label: 'In Stock', onClear: onInStockClear })
   }
@@ -340,7 +336,7 @@ function ActiveFiltersBar({
           className="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--gold-primary)]/10 border border-[var(--gold-primary)]/30 rounded-full text-xs font-medium text-[var(--gold-primary)]"
         >
           {filter.label}
-          <button 
+          <button
             onClick={filter.onClear}
             className="p-0.5 hover:bg-[var(--gold-primary)]/20 rounded-full transition-colors"
           >
@@ -348,7 +344,7 @@ function ActiveFiltersBar({
           </button>
         </motion.div>
       ))}
-      <button 
+      <button
         onClick={() => {
           onCategoryClear()
           selectedBrands.forEach(b => onBrandClear(b))
@@ -446,12 +442,12 @@ export function ShopPage() {
         })).filter(p => p.is_active !== false)
 
         const fetchedCategories = Array.isArray(categoriesRes) ? categoriesRes : (categoriesRes.data || [])
-        
+
         setProducts(fetchedProducts)
-        
+
         const tree = buildCategoryTree(fetchedCategories)
         setCategoryTree(tree)
-        
+
         const expanded = new Set()
         tree.forEach((node, idx) => {
           if (node.children && node.children.length > 0) {
@@ -477,21 +473,21 @@ export function ShopPage() {
   }, [])
 
   const filteredProducts = products.filter(product => {
-    const categoryNames = selectedCategory === 'all' 
-      ? [] 
+    const categoryNames = selectedCategory === 'all'
+      ? []
       : getCategoryWithChildren(categoryTree, selectedCategory)
     const matchesCategory = selectedCategory === 'all' || categoryNames.includes(product.category)
-    
+
     const matchesBrand = selectedBrands.length === 0 || selectedBrands.includes(product.brand)
-    
-    const matchesPrice = (!priceRange[0] || product.price >= priceRange[0]) && 
-                         (!priceRange[1] || product.price <= priceRange[1])
-    
+
+    const matchesPrice = (!priceRange[0] || product.price >= priceRange[0]) &&
+      (!priceRange[1] || product.price <= priceRange[1])
+
     const matchesStock = !inStockOnly || product.stock > 0
-    
-    const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                         (product.description || '').toLowerCase().includes(searchQuery.toLowerCase())
-    
+
+    const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (product.description || '').toLowerCase().includes(searchQuery.toLowerCase())
+
     return matchesCategory && matchesBrand && matchesPrice && matchesStock && matchesSearch
   })
 
@@ -500,8 +496,8 @@ export function ShopPage() {
   }
 
   const handleBrandToggle = (brand) => {
-    setSelectedBrands(prev => 
-      prev.includes(brand) 
+    setSelectedBrands(prev =>
+      prev.includes(brand)
         ? prev.filter(b => b !== brand)
         : [...prev, brand]
     )
@@ -531,7 +527,7 @@ export function ShopPage() {
       setTimeout(() => setNotification(null), 3000)
       return
     }
-    
+
     const added = addToCart({
       id: product.id,
       name: product.name,
@@ -541,7 +537,7 @@ export function ShopPage() {
       type: 'product',
       stock: product.stock,
     })
-    
+
     if (added) {
       setNotification(`${product.name} added to cart!`)
       setTimeout(() => setNotification(null), 3000)
@@ -584,10 +580,10 @@ export function ShopPage() {
   return (
     <div className="shop-page min-h-screen pt-20 pb-24 bg-[var(--bg-primary)] font-sans">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        
-        <section className="shop-hero relative w-full min-h-[450px] mb-12 rounded-[32px] overflow-hidden border border-white/10 shadow-2xl group bg-[#0a0a0a]">
+
+        <section className="relative w-full min-h-[450px] mb-12 rounded-[32px] overflow-hidden border border-white/10 shadow-2xl group bg-[#0a0a0a]">
           <div className="absolute inset-0 z-0">
-            <img 
+            <img
               src="/assets/landing/480473076_1131061492149780_4368555505559771502_n.jpg"
               alt="Premium Guitars"
               className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-[4s] ease-out opacity-80"
@@ -605,15 +601,15 @@ export function ShopPage() {
               <div className="inline-block px-4 py-1.5 mb-6 rounded-full border border-[var(--gold-primary)]/30 bg-[var(--gold-primary)]/10 backdrop-blur-md">
                 <div className="inline text-xs font-bold tracking-widest uppercase text-[var(--gold-primary)]">New Arrivals</div>
               </div>
-              
+
               <div className="text-5xl sm:text-6xl lg:text-7xl font-extrabold leading-tight tracking-tight mb-5 drop-shadow-2xl" style={{ color: '#ffffff' }}>
                 Elevate Your Sound <br />
                 <div className="inline text-transparent bg-clip-text bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] font-medium italic drop-shadow-md">
                   Up to 50% Off
                 </div>
               </div>
-              
-              <div className="shop-hero-title text-lg sm:text-xl max-w-lg font-light leading-relaxed drop-shadow-lg opacity-90" style={{ color: '#f3f4f6' }}>
+
+              <div className="text-lg sm:text-xl max-w-lg font-light leading-relaxed drop-shadow-lg opacity-90" style={{ color: '#f3f4f6' }}>
                 Experience unparalleled craftsmanship with our curated selection of premium instruments, hardware, and essential accessories.
               </div>
             </motion.div>
@@ -642,7 +638,7 @@ export function ShopPage() {
         )}
 
         <section className="hidden lg:grid grid-cols-[280px_1fr] gap-8 mb-8 pt-6">
-          <FilterSidebar 
+          <FilterSidebar
             categoryTree={categoryTree}
             selectedCategory={selectedCategory}
             onCategoryChange={handleCategoryChange}
@@ -656,7 +652,7 @@ export function ShopPage() {
             inStockOnly={inStockOnly}
             onInStockChange={setInStockOnly}
           />
-          
+
           <div>
             <div className="shop-toolbar">
               <div className="shop-filter-row">
@@ -682,7 +678,7 @@ export function ShopPage() {
               </div>
             )}
 
-            <ActiveFiltersBar 
+            <ActiveFiltersBar
               selectedCategory={selectedCategory}
               onCategoryClear={() => setSelectedCategory('all')}
               selectedBrands={selectedBrands}
@@ -718,7 +714,7 @@ export function ShopPage() {
                 filteredProducts.map((product, index) => {
                   const buttonState = getAddButtonState(product)
                   const outOfStock = isOutOfStock(product.id)
-                  
+
                   return (
                     <motion.div
                       key={product.id}
@@ -737,7 +733,7 @@ export function ShopPage() {
                           alt={product.name}
                           className="product-card-image w-full h-full object-cover filter brightness-90 group-hover:scale-105 group-hover:brightness-100 transition-all duration-700 ease-out"
                         />
-                        
+
                         {outOfStock && (
                           <div className="absolute top-3 left-3">
                             <span className="px-3 py-1 bg-red-500 text-white text-[10px] uppercase tracking-widest font-black rounded-full shadow-md">
@@ -746,9 +742,9 @@ export function ShopPage() {
                           </div>
                         )}
                       </div>
-                      
-                      <div className="product-card-info px-4 pb-4 pt-2 flex flex-col flex-1 relative bg-transparent">
-                        <p className="product-card-category text-[12px] text-[var(--text-muted)] font-medium mb-1 tracking-wide">{product.category}</p>
+
+                      <div className="px-4 pb-4 pt-2 flex flex-col flex-1 relative bg-transparent">
+                        <p className="text-[12px] text-[var(--text-muted)] font-medium mb-1 tracking-wide">{product.category}</p>
                         {product.brand && (
                           <p className="text-[11px] text-[var(--gold-primary)] font-semibold mb-1.5 tracking-wide uppercase">
                             {product.brand}
@@ -803,11 +799,10 @@ export function ShopPage() {
                             <button
                               onClick={(e) => { e.stopPropagation(); handleAddToCart(product); }}
                               disabled={buttonState === 'out_of_stock'}
-                              className={`product-card-btn flex-1 px-4 py-2.5 rounded-full text-xs tracking-wide font-bold transition-all border ${
-                                buttonState === 'out_of_stock'
+                              className={`flex-1 px-4 py-2.5 rounded-full text-xs tracking-wide font-bold transition-all border ${buttonState === 'out_of_stock'
                                   ? 'border-[var(--border)] bg-[var(--surface-dark)] text-[var(--text-muted)] cursor-not-allowed'
                                   : 'bg-[var(--surface-dark)] border-[var(--border)] text-[var(--text-light)] hover:text-[var(--gold-primary)] hover:border-[var(--gold-primary)] shadow-sm'
-                              }`}
+                                }`}
                             >
                               {buttonState === 'add' ? 'Add to cart' : buttonState === 'out_of_stock' ? 'Out of Stock' : 'Added to cart'}
                             </button>
@@ -828,29 +823,9 @@ export function ShopPage() {
           </div>
         </section>
 
-        <section className="shop-mobile-catalog lg:hidden">
-          <div className="shop-category-tabs shop-mobile-category-rail" aria-label="Shop categories">
+        <section className="lg:hidden">
+          <div className="flex items-center justify-between mb-6 pt-6">
             <button
-              type="button"
-              className={`shop-category-tab ${selectedCategory === 'all' ? 'shop-category-tab--active' : ''}`}
-              onClick={() => handleCategoryChange('all')}
-            >
-              All Products
-            </button>
-            {categoryTree.map((category) => (
-              <button
-                key={category.name}
-                type="button"
-                className={`shop-category-tab ${selectedCategory === category.name ? 'shop-category-tab--active' : ''}`}
-                onClick={() => handleCategoryChange(category.name)}
-              >
-                {category.name}
-              </button>
-            ))}
-          </div>
-
-          <div className="shop-toolbar shop-mobile-toolbar flex items-center justify-between mb-6 pt-6">
-            <button 
               onClick={() => setMobileFilterOpen(true)}
               className="shop-filters-btn flex items-center gap-2 px-4 py-2 bg-[var(--surface-dark)] border border-[var(--border)] rounded-full text-xs font-semibold text-white"
             >
@@ -860,9 +835,9 @@ export function ShopPage() {
                 <span className="w-2 h-2 bg-[var(--gold-primary)] rounded-full" />
               )}
             </button>
-            
-            <div className="shop-search-wrapper relative flex-1 ml-4">
-              <Search className="shop-search-icon absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
+
+            <div className="relative flex-1 ml-4">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
               <input
                 type="text"
                 placeholder="Search..."
@@ -881,7 +856,7 @@ export function ShopPage() {
             </div>
           )}
 
-          <ActiveFiltersBar 
+          <ActiveFiltersBar
             selectedCategory={selectedCategory}
             onCategoryClear={() => setSelectedCategory('all')}
             selectedBrands={selectedBrands}
@@ -903,7 +878,7 @@ export function ShopPage() {
               filteredProducts.map((product, index) => {
                 const buttonState = getAddButtonState(product)
                 const outOfStock = isOutOfStock(product.id)
-                
+
                 return (
                   <motion.div
                     key={product.id}
@@ -974,7 +949,7 @@ export function ShopPage() {
             )}
           </div>
 
-          <FilterSidebar 
+          <FilterSidebar
             categoryTree={categoryTree}
             selectedCategory={selectedCategory}
             onCategoryChange={handleCategoryChange}

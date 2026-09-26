@@ -2,12 +2,75 @@ const jwt = require('jsonwebtoken');
 const { generateTokens, verifyRefreshToken } = require('../utils/generateTokens');
 const rbacService = require('../services/rbacService');
 
+const getCookieOptions = () => {
+  const isProd = process.env.NODE_ENV === 'production';
+  return {
+    httpOnly: true,
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+    ...(isProd ? {
+      secure: true,
+      sameSite: 'none',
+      partitioned: true,
+    } : {
+      secure: false,
+      sameSite: 'lax',
+    }),
+  };
+};
+
 const handleAuth = async (req, res, next, { required }) => {
   try {
-    const accessToken = req.cookies.accessToken;
-    const refreshToken = req.cookies.refreshToken;
+    // 1. Extract access token from cookies, Authorization header (Bearer), or x-access-token
+    let accessToken = req.cookies?.accessToken;
+    if (!accessToken && req.headers?.authorization) {
+      const parts = req.headers.authorization.split(' ');
+      if (parts.length === 2 && /^Bearer$/i.test(parts[0])) {
+        accessToken = parts[1];
+      }
+    }
+    if (!accessToken && req.headers?.['x-access-token']) {
+      accessToken = req.headers['x-access-token'];
+    }
+
+    // 2. Extract refresh token from cookies, headers, or body
+    const refreshToken = req.cookies?.refreshToken || req.headers?.['x-refresh-token'] || req.body?.refreshToken;
+
+    const cookieOptions = getCookieOptions();
+
+    // Helper to attempt refreshing tokens using refreshToken
+    const tryRefreshToken = async () => {
+      if (!refreshToken) return null;
+      try {
+        const decoded = await verifyRefreshToken(refreshToken);
+        const { accessToken: newAccessToken, refreshToken: newRefreshToken } = await generateTokens(decoded.id, decoded.role);
+
+        res.cookie('accessToken', newAccessToken, cookieOptions);
+        res.cookie('refreshToken', newRefreshToken, { ...cookieOptions, maxAge: 7 * 24 * 60 * 60 * 1000 });
+        res.setHeader('X-New-Access-Token', newAccessToken);
+
+        const roleSummary = await rbacService.getUserRoleSummary(decoded.id, false);
+        return {
+          ...decoded,
+          user_id: decoded.id,
+          role: roleSummary.role,
+          roles: roleSummary.roles || [],
+          permissions: roleSummary.permissions || [],
+        };
+      } catch (refreshErr) {
+        return null;
+      }
+    };
 
     if (!accessToken) {
+      // If access token is not present but refresh token is, try to refresh immediately
+      if (refreshToken) {
+        const refreshedUser = await tryRefreshToken();
+        if (refreshedUser) {
+          req.user = refreshedUser;
+          return next();
+        }
+      }
+
       if (!required) {
         req.user = null;
         return next();
@@ -23,57 +86,22 @@ const handleAuth = async (req, res, next, { required }) => {
       if (err) {
         // If token is expired and we have a refresh token, try to refresh
         if (err.name === 'TokenExpiredError' && refreshToken) {
-          try {
-            const decoded = await verifyRefreshToken(refreshToken);
-            // Generate new tokens
-            const { accessToken: newAccessToken, refreshToken: newRefreshToken } = await generateTokens(decoded.id, decoded.role);
-
-            const cookieOptions = {
-              httpOnly: true,
-              maxAge: 7 * 24 * 60 * 60 * 1000,
-              ...(process.env.NODE_ENV === 'production' ? {
-                secure: true,
-                sameSite: 'none'
-              } : {
-                secure: false,
-                sameSite: 'lax'
-              })
-            };
-
-            // Set new tokens
-            res.cookie('accessToken', newAccessToken, cookieOptions);
-            res.cookie('refreshToken', newRefreshToken, { ...cookieOptions, maxAge: 7 * 24 * 60 * 60 * 1000 });
-
-            // Decode the new token and attach user to request
-            jwt.verify(newAccessToken, process.env.JWT_SECRET, async (err, decoded) => {
-              if (err) {
-                return res.status(403).json({
-                  status: 'error',
-                  message: 'Invalid token',
-                });
-              }
-              const roleSummary = await rbacService.getUserRoleSummary(decoded.id, false);
-              req.user = {
-                ...decoded,
-                user_id: decoded.id,
-                role: roleSummary.role,
-                roles: roleSummary.roles || [],
-                permissions: roleSummary.permissions || [],
-              };
-              next();
-            });
-          } catch (refreshErr) {
-            if (!required) {
-              req.user = null;
-              return next();
-            }
-
-            return res.status(401).json({
-              status: 'error',
-              message: 'Session expired. Please sign in again.',
-              code: 'SESSION_EXPIRED',
-            });
+          const refreshedUser = await tryRefreshToken();
+          if (refreshedUser) {
+            req.user = refreshedUser;
+            return next();
           }
+
+          if (!required) {
+            req.user = null;
+            return next();
+          }
+
+          return res.status(401).json({
+            status: 'error',
+            message: 'Session expired. Please sign in again.',
+            code: 'SESSION_EXPIRED',
+          });
         } else {
           if (!required) {
             req.user = null;
@@ -130,3 +158,4 @@ const authorize = (...allowedRoles) => {
 };
 
 module.exports = { authenticateToken, optionalAuthenticateToken, authorize };
+

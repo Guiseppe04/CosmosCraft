@@ -1,8 +1,9 @@
-import { API } from './apiConfig'
+import { API, getAuthHeaders } from './apiConfig'
 
 async function request(path, options = {}) {
+  const headers = getAuthHeaders({ 'Content-Type': 'application/json', ...options.headers })
   const res = await fetch(`${API}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...options.headers },
+    headers,
     credentials: 'include',
     ...options,
     body: options.body ? JSON.stringify(options.body) : undefined,
