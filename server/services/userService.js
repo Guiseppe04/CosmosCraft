@@ -381,7 +381,22 @@ exports.listUsers = async (filters = {}, limit = 10, skip = 0) => {
     values.push(`%${filters.email}%`);
     idx++;
   }
-  
+  if (filters.name) {
+    queryStr += ` AND (first_name ILIKE $${idx} OR last_name ILIKE $${idx} OR CONCAT(first_name, ' ', last_name) ILIKE $${idx})`;
+    values.push(`%${filters.name}%`);
+    idx++;
+  }
+  if (filters.search && String(filters.search).trim()) {
+    queryStr += ` AND (
+      email ILIKE $${idx} OR 
+      first_name ILIKE $${idx} OR 
+      last_name ILIKE $${idx} OR 
+      CONCAT(first_name, ' ', last_name) ILIKE $${idx} OR 
+      role::text ILIKE $${idx}
+    )`;
+    values.push(`%${String(filters.search).trim()}%`);
+    idx++;
+  }
   
   const paginatedQuery = queryStr + ` ORDER BY created_at DESC LIMIT $${idx} OFFSET $${idx+1}`;
   

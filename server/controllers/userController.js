@@ -172,13 +172,14 @@ exports.removeAddress = asyncHandler(async (req, res, next) => {
  * Get All Users (Admin Only)
  */
 exports.getAllUsers = asyncHandler(async (req, res, next) => {
-  const { role, name, email, limit = 10, page = 1 } = req.query;
+  const { role, name, email, search, limit = 100, page = 1 } = req.query;
   const skip = (parseInt(page) - 1) * parseInt(limit);
 
   const filters = {};
   if (role) filters.role = role;
   if (name) filters.name = name;
   if (email) filters.email = email;
+  if (search && search.trim()) filters.search = search.trim();
 
   const result = await userService.listUsers(filters, parseInt(limit), skip);
 

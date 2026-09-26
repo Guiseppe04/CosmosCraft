@@ -1,5 +1,5 @@
 import { motion } from 'motion/react'
-import { Search, Filter, RefreshCw, Users } from 'lucide-react'
+import { Search, Filter, RefreshCw, Users, X } from 'lucide-react'
 import { StatusBadge } from '../components/shared/StatusBadge'
 import { EmptyState } from '../components/shared/EmptyState'
 import { AdminTable } from '../components/shared/AdminTable'
@@ -24,14 +24,24 @@ export function UsersTab({
       <div className="p-4 bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl">
         <div className="flex flex-col xl:flex-row xl:items-center gap-3">
           <div className="relative min-w-0 flex-[1.7]">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
+            <Search className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
             <input
               type="text"
               placeholder="Search users..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full h-[50px] pl-11 pr-4 bg-[var(--bg-primary)] border border-[var(--border)] rounded-2xl text-[var(--text-light)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] text-sm"
+              className="w-full h-[50px] pl-11 pr-10 bg-[var(--bg-primary)] border border-[var(--border)] rounded-2xl text-[var(--text-light)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] text-sm"
             />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 p-1 text-[var(--text-muted)] hover:text-white transition-colors"
+                title="Clear search"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
           </div>
           <div className="flex flex-col sm:flex-row xl:flex-nowrap gap-3 xl:items-center">
             <div className="flex items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 h-[50px] min-w-[150px] shrink-0">

@@ -339,14 +339,25 @@ export function AdminPage() {
     }))
   }, [inventory, products, productImageById])
 
-  const visibleUsers = (users || []).filter(u => {
-    if (userRoleFilter !== 'all' && u.role !== userRoleFilter) return false
-    if (userStatusFilter !== 'all') {
-      const active = userStatusFilter === 'active'
-      if (u.is_active !== active) return false
-    }
-    return true
-  })
+  const visibleUsers = useMemo(() => {
+    const query = searchQuery?.trim().toLowerCase()
+    return (users || []).filter((u) => {
+      if (userRoleFilter !== 'all' && u.role !== userRoleFilter) return false
+      if (userStatusFilter !== 'all') {
+        const active = userStatusFilter === 'active'
+        if (u.is_active !== active) return false
+      }
+      if (query) {
+        const fullName = `${u.first_name || ''} ${u.last_name || ''}`.toLowerCase()
+        const email = (u.email || '').toLowerCase()
+        const role = (u.role || '').toLowerCase().replace(/_/g, ' ')
+        if (!fullName.includes(query) && !email.includes(query) && !role.includes(query)) {
+          return false
+        }
+      }
+      return true
+    })
+  }, [users, userRoleFilter, userStatusFilter, searchQuery])
 
   const inventoryPartCategoryOptions = useMemo(() => {
     const presentCategories = new Set((visibleParts || []).map((part) => part.inventory_category).filter(Boolean))
