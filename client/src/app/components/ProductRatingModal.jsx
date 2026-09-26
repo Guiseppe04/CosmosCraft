@@ -410,23 +410,23 @@ export function ProductRatingModal({
             {/* Actions Bar Footer */}
             <div className="p-4 sm:p-6 border-t border-white/10 bg-[var(--surface-dark)] flex flex-wrap sm:flex-nowrap items-center gap-3 flex-shrink-0">
               {!outOfStock && (
-                <div className="flex items-center gap-1.5 bg-black/40 border border-white/10 rounded-full px-2.5 py-1.5 flex-shrink-0">
+                <div className="flex items-center gap-1.5 bg-black/40 border border-white/10 rounded-full px-2 py-1 sm:px-2.5 sm:py-1.5 flex-shrink-0">
                   <button
                     type="button"
                     onClick={() => setQuantity(prev => Math.max(1, prev - 1))}
                     disabled={quantity <= 1}
-                    className="w-7 h-7 rounded-full flex items-center justify-center text-white/60 hover:text-white hover:bg-white/10 transition-all disabled:opacity-30 disabled:cursor-not-allowed text-sm font-bold"
+                    className="w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center text-white/60 hover:text-white hover:bg-white/10 transition-all disabled:opacity-30 disabled:cursor-not-allowed text-sm font-bold"
                   >
                     −
                   </button>
-                  <span className="w-7 text-center text-xs sm:text-sm font-bold text-white tabular-nums">
+                  <span className="w-6 sm:w-7 text-center text-xs sm:text-sm font-bold text-white tabular-nums">
                     {quantity}
                   </span>
                   <button
                     type="button"
                     onClick={() => setQuantity(prev => Math.min(product.stock || 1, prev + 1))}
                     disabled={quantity >= (product.stock || 1)}
-                    className="w-7 h-7 rounded-full flex items-center justify-center text-white/60 hover:text-white hover:bg-white/10 transition-all disabled:opacity-30 disabled:cursor-not-allowed text-sm font-bold"
+                    className="w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center text-white/60 hover:text-white hover:bg-white/10 transition-all disabled:opacity-30 disabled:cursor-not-allowed text-sm font-bold"
                   >
                     +
                   </button>

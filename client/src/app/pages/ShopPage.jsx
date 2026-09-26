@@ -701,9 +701,9 @@ export function ShopPage() {
               brandLabels={brandLabels}
             />
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
+            <div className="shop-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '1.25rem' }}>
               {loading ? (
-                <div className="col-span-full flex items-center justify-center py-20 bg-[var(--surface-dark)] rounded-2xl border border-white/5">
+                <div className="col-span-full flex items-center justify-center py-20 ...">
                   <p className="text-[var(--text-muted)] text-sm">Loading products...</p>
                 </div>
               ) : filteredProducts.length > 0 ? (
@@ -890,84 +890,144 @@ export function ShopPage() {
           />
 
           <div className="shop-grid shop-mobile-grid">
-            {loading ? (
-              <div className="col-span-2 flex items-center justify-center py-12 bg-[var(--surface-dark)] rounded-2xl">
-                <p className="text-[var(--text-muted)] text-sm">Loading products...</p>
-              </div>
-            ) : filteredProducts.length > 0 ? (
-              filteredProducts.map((product, index) => {
-                const buttonState = getAddButtonState(product)
-                const outOfStock = isOutOfStock(product.id)
+  {loading ? (
+    <div className="col-span-full flex items-center justify-center py-20 bg-[var(--surface-dark)] rounded-2xl border border-white/5">
+      <p className="text-[var(--text-muted)] text-sm">Loading products...</p>
+    </div>
+  ) : filteredProducts.length > 0 ? (
+    filteredProducts.map((product, index) => {
+      const buttonState = getAddButtonState(product)
+      const outOfStock = isOutOfStock(product.id)
 
-                return (
-                  <motion.div
-                    key={product.id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: index * 0.03, duration: 0.3 }}
-                    onClick={() => {
-                      setSelectedProduct(product)
-                      setProductModalTab('details')
-                    }}
-                    className={`product-card shop-mobile-card group bg-[var(--surface-dark)] border border-white/5 rounded-2xl overflow-hidden cursor-pointer ${outOfStock ? 'opacity-60' : ''}`}
-                  >
-                    <div className="product-card-image-wrapper aspect-square bg-[var(--surface-elevated)] relative">
-                      <img
-                        src={product.image}
-                        alt={product.name}
-                        className="product-card-image w-full h-full object-cover"
-                      />
-                      {outOfStock && (
-                        <span className="absolute top-2 left-2 px-2 py-0.5 bg-red-500 text-white text-[9px] uppercase font-bold rounded-full">
-                          Out of Stock
-                        </span>
-                      )}
-                    </div>
-                    <div className="product-card-info p-3">
-                      <p className="product-card-category text-[10px] text-[var(--text-muted)] truncate">{product.category}</p>
-                      <h3 className="product-card-name text-sm font-bold text-white truncate">{product.name}</h3>
+      return (
+        <motion.div
+          key={product.id}
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: index * 0.05, duration: 0.5 }}
+          onClick={() => {
+            setSelectedProduct(product)
+            setProductModalTab('details')
+          }}
+          className={`product-card group bg-[var(--surface-dark)] border border-white/5 rounded-[20px] rounded-br-[20px] overflow-hidden hover:border-white/20 transition-all duration-300 flex flex-col hover:shadow-2xl hover:-translate-y-1 cursor-pointer ${outOfStock ? 'opacity-60' : ''}`}
+        >
+          <div className="product-card-image-wrapper aspect-[4/3] bg-[var(--surface-elevated)] overflow-hidden relative flex flex-col justify-center items-center border border-white/5 rounded-[16px] m-2">
+            <img
+              src={product.image}
+              alt={product.name}
+              className="product-card-image w-full h-full object-cover filter brightness-90 group-hover:scale-105 group-hover:brightness-100 transition-all duration-700 ease-out"
+            />
 
-                      <div className="flex items-center gap-1 my-1">
-                        {product.review_count > 0 ? (
-                          <>
-                            <StarRating rating={product.average_rating} size="w-3 h-3" />
-                            <span className="text-[10px] font-bold text-[var(--gold-primary)] ml-0.5">
-                              {Number(product.average_rating).toFixed(1)}
-                            </span>
-                            <span className="text-[10px] text-[var(--text-muted)]">
-                              ({product.review_count})
-                            </span>
-                          </>
-                        ) : (
-                          <span className="text-[10px] text-[var(--text-muted)] italic">
-                            No reviews yet
-                          </span>
-                        )}
-                      </div>
-
-                      <p className="product-card-price text-sm font-bold text-[var(--gold-primary)] mt-1">
-                        ₱{product.price.toLocaleString('en-PH')}
-                      </p>
-                      <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); handleAddToCart(product) }}
-                        disabled={buttonState === 'out_of_stock'}
-                        className="product-card-btn shop-mobile-quick-add mt-3 flex min-h-10 w-full items-center justify-center gap-2 rounded-lg bg-[var(--text-light)] px-3 py-2 text-xs font-bold text-[var(--text-dark)] transition-colors disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        <ShoppingCart className="h-3.5 w-3.5" />
-                        {buttonState === 'add' ? 'Quick Add' : buttonState === 'out_of_stock' ? 'Out of Stock' : 'Added'}
-                      </button>
-                    </div>
-                  </motion.div>
-                )
-              })
-            ) : (
-              <div className="col-span-2 flex flex-col items-center justify-center py-12 bg-[var(--surface-dark)] rounded-2xl">
-                <Search className="w-10 h-10 text-white/20 mb-3" />
-                <p className="text-white font-medium">No products found</p>
+            {outOfStock && (
+              <div className="absolute top-3 left-3">
+                <span className="px-3 py-1 bg-red-500 text-white text-[10px] uppercase tracking-widest font-black rounded-full shadow-md">
+                  Out of Stock
+                </span>
               </div>
             )}
           </div>
+
+          <div className="px-4 pb-4 pt-2 flex flex-col flex-1 relative bg-transparent">
+            <p className="text-[12px] text-[var(--text-muted)] font-medium mb-1 tracking-wide">{product.category}</p>
+            {product.brand && (
+              <p className="text-[11px] text-[var(--gold-primary)] font-semibold mb-1.5 tracking-wide uppercase">
+                {product.brand}
+              </p>
+            )}
+            <h3 className="product-card-name font-bold text-white text-[15px] leading-snug mb-2 group-hover:text-[var(--gold-primary)] transition-colors line-clamp-1">{product.name}</h3>
+
+            <div className="product-card-reviews flex items-center gap-2 mb-2">
+              {product.review_count > 0 ? (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setSelectedProduct(product)
+                    setProductModalTab('reviews')
+                  }}
+                  className="flex items-center gap-1.5 group/rev text-left hover:opacity-90 transition-opacity"
+                  title="View product reviews"
+                >
+                  <StarRating rating={product.average_rating} size="w-3.5 h-3.5" showScore />
+                  <span className="text-[11px] text-[var(--gold-primary)] group-hover/rev:underline font-medium">
+                    ({product.review_count} {product.review_count === 1 ? 'review' : 'reviews'})
+                  </span>
+                </button>
+              ) : (
+                <span className="text-[11px] text-[var(--text-muted)] italic font-light">
+                  No reviews yet
+                </span>
+              )}
+            </div>
+
+            <p className="text-[12px] text-[var(--text-muted)] font-medium mb-4">
+              Stock: <span className="text-white">{product.stock || 0} pieces</span>
+            </p>
+
+            <div className="mt-auto flex flex-col gap-4 pt-3 border-t border-white/10">
+              <div className="flex items-center justify-between">
+                <p className="product-card-price text-lg font-bold text-white tracking-tight">
+                  ₱{product.price.toLocaleString('en-PH')}
+                </p>
+                {!outOfStock && (
+                  <div
+                    onClick={(e) => e.stopPropagation()}
+                    className="flex items-center gap-1 bg-white/5 border border-white/10 rounded-full px-1 py-0.5"
+                  >
+                    <button
+                      onClick={() => setQuantity(product.id, getQuantity(product.id) - 1, product.stock)}
+                      disabled={getQuantity(product.id) <= 1}
+                      className="w-6 h-6 rounded-full flex items-center justify-center text-white/60 hover:text-white hover:bg-white/10 transition-all disabled:opacity-30 disabled:cursor-not-allowed text-sm font-bold"
+                    >
+                      −
+                    </button>
+                    <span className="w-6 text-center text-xs font-bold text-white tabular-nums">
+                      {getQuantity(product.id)}
+                    </span>
+                    <button
+                      onClick={() => setQuantity(product.id, getQuantity(product.id) + 1, product.stock)}
+                      disabled={getQuantity(product.id) >= product.stock}
+                      className="w-6 h-6 rounded-full flex items-center justify-center text-white/60 hover:text-white hover:bg-white/10 transition-all disabled:opacity-30 disabled:cursor-not-allowed text-sm font-bold"
+                    >
+                      +
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex flex-col sm:flex-row items-stretch gap-3">
+                {!outOfStock && isAuthenticated && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleBuyNow(product); }}
+                    className="flex-1 px-4 py-2.5 rounded-full bg-[var(--gold-primary)] text-black font-bold text-xs tracking-wide hover:brightness-110 transition-all shadow-md"
+                  >
+                    Buy Now
+                  </button>
+                )}
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleAddToCart(product); }}
+                  disabled={buttonState === 'out_of_stock'}
+                  className={`flex-1 px-4 py-2.5 rounded-full text-xs tracking-wide font-bold transition-all border ${buttonState === 'out_of_stock'
+                      ? 'border-[var(--border)] bg-[var(--surface-dark)] text-[var(--text-muted)] cursor-not-allowed'
+                      : 'bg-[var(--surface-dark)] border-[var(--border)] text-[var(--text-light)] hover:text-[var(--gold-primary)] hover:border-[var(--gold-primary)] shadow-sm'
+                    }`}
+                >
+                  {buttonState === 'out_of_stock' ? 'Out of Stock' : 'Add to cart'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      )
+    })
+  ) : (
+    <div className="col-span-full flex flex-col items-center justify-center py-20 bg-[var(--surface-dark)] rounded-2xl border border-white/5">
+      <Search className="w-12 h-12 text-white/20 mb-4" />
+      <p className="text-white font-medium text-lg mb-1">No products found</p>
+      <p className="text-[var(--text-muted)] text-sm">Try adjusting your filters or search term.</p>
+    </div>
+  )}
+</div>
 
           <FilterSidebar
             categoryTree={categoryTree}

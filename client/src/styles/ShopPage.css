@@ -139,6 +139,9 @@
   font-size: 0.8125rem !important;
 }
 
+/* ============================================================
+   PRODUCT GRID — 2 columns on mobile, 2 on tablet, 3 on desktop
+   ============================================================ */
 .shop-grid {
   display: grid !important;
   grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
@@ -147,34 +150,179 @@
   max-width: 100% !important;
 }
 
+/* ============================================================
+   MOBILE PRODUCT GRID + CARD DESIGN
+   2 columns, but each card is redesigned to fit nicely
+   ============================================================ */
 @media (max-width: 767px) {
-  .shop-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-    gap: 0.75rem !important;
-  }
-
-  .shop-mobile-grid {
+  /* --- Grid --- */
+  .shop-page .shop-grid,
+  .shop-page .shop-mobile-grid,
+  section.lg\:hidden .shop-grid,
+  section.lg\:hidden .shop-mobile-grid,
+  div.shop-grid.shop-mobile-grid {
     display: grid !important;
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-    gap: 0.75rem !important;
+    gap: 0.625rem !important;
+    width: 100% !important;
+  }
+
+  .shop-page .shop-grid > *,
+  .shop-page .shop-mobile-grid > * {
+    min-width: 0 !important;
+    width: 100% !important;
+  }
+
+  /* --- Card shell --- */
+  .product-card {
+    border-radius: 0.75rem !important;
+    display: flex !important;
+    flex-direction: column !important;
+    height: 100% !important;
+  }
+
+  /* --- Image wrapper: keep square, remove the interior margin/border from desktop --- */
+  .product-card-image-wrapper,
+  .product-card .product-card-image-wrapper {
+    margin: 0 !important;
+    border: none !important;
+    border-radius: 0.75rem 0.75rem 0 0 !important;
+    aspect-ratio: 1 / 1 !important;
+    width: 100% !important;
+  }
+
+  .product-card-image {
+    border-radius: 0.75rem 0.75rem 0 0 !important;
+  }
+
+  /* --- Card content padding --- */
+  .product-card-info {
+    padding: 0.5rem 0.625rem 0.625rem !important;
+    gap: 0.125rem !important;
+    display: flex !important;
+    flex-direction: column !important;
+    flex: 1 1 auto !important;
+  }
+
+  /* --- Category --- */
+  .product-card-category {
+    font-size: 0.5625rem !important;
+    line-height: 1.3 !important;
+    margin: 0 !important;
+    letter-spacing: 0.04em !important;
+  }
+
+  /* --- Brand (the gold-uppercase line) --- */
+  .product-card-info > p.text-\[11px\] {
+    font-size: 0.5625rem !important;
+    margin: 0.0625rem 0 !important;
+    line-height: 1.3 !important;
+  }
+
+  /* --- Product name: 2 lines max, small, tight leading --- */
+  .product-card-name {
+    font-size: 0.75rem !important;
+    line-height: 1.3 !important;
+    min-height: 0 !important;
+    -webkit-line-clamp: 2 !important;
+    display: -webkit-box !important;
+    -webkit-box-orient: vertical !important;
+    overflow: hidden !important;
+    white-space: normal !important;
+    margin: 0.125rem 0 !important;
+  }
+
+  /* --- Reviews row --- */
+  .product-card-reviews,
+  .product-card-reviews .text-\[11px\] {
+    font-size: 0.5625rem !important;
+    line-height: 1.3 !important;
+    margin: 0.0625rem 0 !important;
+  }
+
+  /* --- Stock text --- */
+  .product-card-info > p.text-\[12px\] {
+    font-size: 0.5625rem !important;
+    margin: 0.0625rem 0 0.25rem !important;
+    line-height: 1.3 !important;
+  }
+
+  /* --- Price + quantity row --- */
+  .product-card-price {
+    font-size: 0.875rem !important;
+    font-weight: 700 !important;
+    margin: 0.125rem 0 0 !important;
+    line-height: 1.2 !important;
+  }
+
+  /* --- Quantity stepper --- */
+  .product-card-info .flex.items-center.gap-1.bg-white\/5 {
+    padding: 0.125rem !important;
+  }
+  .product-card-info .flex.items-center.gap-1.bg-white\/5 button {
+    width: 1.25rem !important;
+    height: 1.25rem !important;
+    font-size: 0.6875rem !important;
+  }
+  .product-card-info .flex.items-center.gap-1.bg-white\/5 span {
+    width: 1.25rem !important;
+    font-size: 0.625rem !important;
+  }
+
+  /* --- Action buttons: stack them if cramped --- */
+  .product-card-info .flex.flex-col.sm\:flex-row.items-stretch.gap-3 {
+    gap: 0.375rem !important;
+    flex-direction: column !important;
+  }
+
+  /* --- Buy Now + Add to cart buttons --- */
+  .product-card-btn,
+  .product-card-info button.rounded-full {
+    min-height: 32px !important;
+    padding: 0.375rem 0.5rem !important;
+    font-size: 0.625rem !important;
+    line-height: 1.2 !important;
+    border-radius: 0.5rem !important;
+    width: 100% !important;
+  }
+
+  .product-card-btn svg,
+  .product-card-info button.rounded-full svg {
+    width: 0.75rem !important;
+    height: 0.75rem !important;
+  }
+
+  /* --- Divider above buttons --- */
+  .product-card-info .pt-3.border-t {
+    padding-top: 0.375rem !important;
+    margin-top: 0.25rem !important;
+  }
+
+  /* --- Stock line above price — tighten --- */
+  .product-card-info .mt-auto {
+    gap: 0.375rem !important;
+  }
+
+  /* --- Out of stock overlay badge --- */
+  .product-card-image-wrapper span.absolute.top-2.left-2 {
+    font-size: 0.5rem !important;
+    padding: 0.125rem 0.375rem !important;
   }
 }
 
-@media (min-width: 768px) and (max-width: 1023px) {
-  .shop-grid {
-    gap: 1rem !important;
-  }
-}
-
-@media (min-width: 1024px) and (max-width: 1279px) {
+/* Desktop: 3 columns */
+@media (min-width: 1024px) {
   .shop-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 1.25rem !important;
   }
 }
 
+/* Large desktop: still 3 columns (no 4th column unless you want it) */
 @media (min-width: 1280px) {
   .shop-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 1.5rem !important;
   }
 }
 
@@ -224,19 +372,20 @@
 
 .product-card-image-wrapper {
   position: relative !important;
-  display: block !important;
+  display: grid !important;
+  place-items: center !important;
   flex-shrink: 0 !important;
   width: 100% !important;
   aspect-ratio: 1 / 1 !important;
   overflow: hidden !important;
-  background: var(--bg-primary) !important;
+  background: var(--surface-dark) !important;
 }
 
 .product-card-image {
   display: block !important;
-  width: 100% !important;
-  height: 100% !important;
-  object-fit: cover !important;
+  width: 88% !important;
+  height: 88% !important;
+  object-fit: contain !important;
   transition: transform 0.3s ease !important;
 }
 
@@ -435,5 +584,266 @@
 @media (min-width: 640px) {
   .prod-modal-actions {
     flex-direction: row !important;
+  }
+}
+
+/* ============================================================
+   MOBILE SHOP — TIGHTENED SPACING & LAYOUT
+   ============================================================ */
+@media (max-width: 1023px) {
+  /* Hero: shrink height on mobile so products appear sooner */
+  section.min-h-\[450px\],
+  .shop-hero {
+    min-height: auto !important;
+    margin-bottom: 1.25rem !important;
+    border-radius: 1rem !important;
+  }
+
+  /* Hero inner content: reduce padding */
+  section.min-h-\[450px\] > div.relative {
+    padding: 1.5rem 1.25rem !important;
+  }
+
+  /* Hero title: shrink for mobile */
+  section.min-h-\[450px\] .text-5xl,
+  section.min-h-\[450px\] .sm\:text-6xl,
+  section.min-h-\[450px\] .lg\:text-7xl {
+    font-size: 2rem !important;
+    line-height: 1.15 !important;
+    margin-bottom: 0.75rem !important;
+  }
+
+  /* Hero subtitle: shrink */
+  section.min-h-\[450px\] .text-lg,
+  section.min-h-\[450px\] .sm\:text-xl {
+    font-size: 0.9375rem !important;
+    line-height: 1.5 !important;
+  }
+
+  /* Badge "New Arrivals" — smaller */
+  section.min-h-\[450px\] .rounded-full {
+    padding: 0.35rem 0.75rem !important;
+    margin-bottom: 0.75rem !important;
+    font-size: 0.625rem !important;
+  }
+
+  /* --- TOOLBAR: put Filters and Search on the same row --- */
+  section.lg\:hidden > div.flex.items-center.justify-between {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 0.5rem !important;
+    padding-top: 0.75rem !important;
+    margin-bottom: 0.5rem !important;
+  }
+
+  /* Filters button — compact */
+  section.lg\:hidden .shop-filters-btn {
+    flex: 0 0 auto !important;
+    padding: 0.5rem 0.75rem !important;
+    font-size: 0.75rem !important;
+    min-height: 38px !important;
+  }
+
+  /* Search wrapper — fill the remaining space */
+  section.lg\:hidden > div.flex.items-center.justify-between > div.relative.flex-1 {
+    flex: 1 1 auto !important;
+    margin-left: 0.5rem !important;
+    max-width: none !important;
+  }
+
+  /* Search input — compact */
+  section.lg\:hidden .shop-search-input {
+    padding: 0.5rem 1rem 0.5rem 2.25rem !important;
+    font-size: 0.75rem !important;
+    min-height: 38px !important;
+  }
+
+  /* Search icon — reposition for the smaller input */
+  section.lg\:hidden .shop-search-icon,
+  section.lg\:hidden > div.flex.items-center.justify-between .absolute.left-4 {
+    left: 0.75rem !important;
+    width: 0.875rem !important;
+    height: 0.875rem !important;
+  }
+
+  /* Product count — tighter spacing */
+  .shop-count {
+    margin: 0.25rem 0 0.5rem 0 !important;
+    font-size: 0.75rem !important;
+  }
+
+  /* Product grid — tighter gap */
+  .shop-grid,
+  .shop-mobile-grid {
+    gap: 0.625rem !important;
+  }
+
+  /* Product cards — smaller radius for 2-col layout */
+  .product-card {
+    border-radius: 0.75rem !important;
+  }
+
+  /* Card info — reduce padding */
+  .product-card-info {
+    padding: 0.5rem 0.625rem 0.5rem !important;
+    gap: 0.25rem !important;
+  }
+
+  /* Product name — smaller */
+  .product-card-name {
+    font-size: 0.75rem !important;
+    line-height: 1.25 !important;
+    min-height: auto !important;
+    -webkit-line-clamp: 2 !important;
+    display: -webkit-box !important;
+  }
+
+  /* Category label — smaller */
+  .product-card-category {
+    font-size: 0.5625rem !important;
+  }
+
+  /* Reviews — smaller */
+  .product-card-reviews {
+    font-size: 0.5625rem !important;
+  }
+
+  /* Price — smaller but still bold */
+  .product-card-price {
+    font-size: 0.8125rem !important;
+    margin-top: 0.125rem !important;
+  }
+
+  /* Quick Add button — smaller */
+  .product-card-btn,
+  .shop-mobile-quick-add {
+    min-height: 30px !important;
+    padding: 0.375rem 0.5rem !important;
+    font-size: 0.625rem !important;
+    gap: 0.25rem !important;
+    border-radius: 0.5rem !important;
+  }
+
+  .product-card-btn svg,
+  .shop-mobile-quick-add svg {
+    width: 0.75rem !important;
+    height: 0.75rem !important;
+  }
+
+  /* Trim outer page padding so the grid feels wider */
+  .shop-page > div.max-w-7xl {
+    padding-left: 0.75rem !important;
+    padding-right: 0.75rem !important;
+  }
+
+  /* Reduce the top offset (was pt-20 = 5rem) so content appears higher */
+  .shop-page {
+    padding-top: 4.5rem !important;
+    padding-bottom: 4rem !important;
+  }
+}
+
+/* ============================================================
+   MOBILE PRODUCT GRID — FORCE 2 COLUMNS (highest specificity)
+   ============================================================ */
+@media (max-width: 767px) {
+  .shop-page .shop-grid,
+  .shop-page .shop-mobile-grid,
+  section.lg\:hidden .shop-grid,
+  section.lg\:hidden .shop-mobile-grid,
+  div.shop-grid.shop-mobile-grid {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 0.5rem !important;
+    width: 100% !important;
+  }
+
+  /* Kill any child spans that might break the grid */
+  .shop-page .shop-grid > *,
+  .shop-page .shop-mobile-grid > * {
+    min-width: 0 !important;
+    width: 100% !important;
+  }
+}
+
+/* ============================================================
+   QUANTITY STEPPER — compact on mobile (card + modal)
+   ============================================================ */
+@media (max-width: 767px) {
+  /* Outer pill — shrink padding + radius */
+  .product-card .flex.items-center.gap-1.bg-white\/5 {
+    gap: 0.125rem !important;
+    padding: 0.0625rem !important;
+    border-radius: 9999px !important;
+  }
+
+  /* The − and + buttons */
+  .product-card .flex.items-center.gap-1.bg-white\/5 button {
+    width: 1.25rem !important;
+    height: 1.25rem !important;
+    min-width: 1.25rem !important;
+    min-height: 1.25rem !important;
+    font-size: 0.6875rem !important;
+    line-height: 1 !important;
+    padding: 0 !important;
+    border-radius: 9999px !important;
+  }
+
+  /* The number */
+  .product-card .flex.items-center.gap-1.bg-white\/5 span {
+    width: 1.125rem !important;
+    min-width: 1.125rem !important;
+    font-size: 0.6875rem !important;
+    line-height: 1 !important;
+  }
+}
+
+/* Modal + anywhere else: compact quantity steppers on mobile */
+@media (max-width: 767px) {
+  /* Product modal stepper: shrink the − / + buttons and the number pill */
+  .product-rating-modal .flex.items-center.gap-1\.5.bg-black\/40,
+  [class*="product-rating-modal"] .flex.items-center.gap-1\.5.bg-black\/40 {
+    gap: 0.125rem !important;
+    padding: 0.125rem !important;
+    border-radius: 9999px !important;
+  }
+
+  .product-rating-modal .flex.items-center.gap-1\.5.bg-black\/40 button,
+  [class*="product-rating-modal"] .flex.items-center.gap-1\.5.bg-black\/40 button {
+    width: 1.375rem !important;
+    height: 1.375rem !important;
+    min-width: 1.375rem !important;
+    min-height: 1.375rem !important;
+    font-size: 0.75rem !important;
+    line-height: 1 !important;
+    padding: 0 !important;
+    border-radius: 9999px !important;
+  }
+
+  .product-rating-modal .flex.items-center.gap-1\.5.bg-black\/40 span,
+  [class*="product-rating-modal"] .flex.items-center.gap-1\.5.bg-black\/40 span {
+    width: 1.25rem !important;
+    min-width: 1.25rem !important;
+    font-size: 0.75rem !important;
+    line-height: 1 !important;
+  }
+
+  /* Broad safety net: any small bg-white/5 or bordered pill holding − / + */
+  .shop-page .bg-white\/5.rounded-full,
+  .shop-page .border.rounded-full.flex.items-center {
+    padding: 0.125rem !important;
+  }
+
+  .shop-page .bg-white\/5.rounded-full button,
+  .shop-page .border.rounded-full.flex.items-center button {
+    width: 1.5rem !important;
+    height: 1.5rem !important;
+    min-width: 1.5rem !important;
+    min-height: 1.5rem !important;
+    font-size: 0.75rem !important;
+    line-height: 1 !important;
+    padding: 0 !important;
   }
 }
