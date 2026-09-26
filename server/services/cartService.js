@@ -144,13 +144,58 @@ async function addItemToCart(userId, { product_id, customization_id, quantity = 
       throw new AppError('Product is not available', 400);
     }
 
-    if (product.stock < quantity) {
-      throw new AppError(`Not enough stock for ${product.name}. Available stock: ${product.stock}.`, 400);
-    }
-
     unitPrice = parseFloat(product.price);
     itemProductId = product_id;
+
+    // --- Normal product duplicate check (NULL-safe) ---
+    // PostgreSQL does not match NULL = NULL, so we must use IS NULL
+    // when customization_id is absent for regular products.
+    const existingNormalResult = await pool.query(
+      `SELECT * FROM cart_items
+       WHERE cart_id = $1
+         AND product_id = $2
+         AND customization_id IS NULL`,
+      [cart.cart_id, itemProductId]
+    );
+
+    if (existingNormalResult.rows.length > 0) {
+      // Item already in cart — accumulate quantity
+      const existingItem = existingNormalResult.rows[0];
+      const newQuantity = existingItem.quantity + quantity;
+
+      // Validate accumulated quantity against available stock
+      if (product.stock < newQuantity) {
+        throw new AppError(
+          `Not enough stock for ${product.name}. Available stock: ${product.stock}.`,
+          400
+        );
+      }
+
+      await pool.query(
+        `UPDATE cart_items SET quantity = $1, unit_price = $2, updated_at = now()
+         WHERE cart_item_id = $3`,
+        [newQuantity, unitPrice, existingItem.cart_item_id]
+      );
+    } else {
+      // New normal product — validate requested quantity first
+      if (product.stock < quantity) {
+        throw new AppError(
+          `Not enough stock for ${product.name}. Available stock: ${product.stock}.`,
+          400
+        );
+      }
+
+      await pool.query(
+        `INSERT INTO cart_items (cart_id, product_id, customization_id, quantity, unit_price)
+         VALUES ($1, $2, NULL, $3, $4)`,
+        [cart.cart_id, itemProductId, quantity, unitPrice]
+      );
+    }
+
+    await recalculateCartTotals(cart.cart_id);
+    return getCartWithItems(userId);
   } else if (customization_id) {
+    // --- Customized guitar handling (unchanged) ---
     const customResult = await pool.query(
       'SELECT total_price FROM customizations WHERE customization_id = $1',
       [customization_id]
@@ -164,32 +209,19 @@ async function addItemToCart(userId, { product_id, customization_id, quantity = 
     itemCustomizationId = customization_id;
   }
 
+  // Customization path: use original comparison (customization_id is never NULL here)
   const existingItemResult = await pool.query(
-    `SELECT * FROM cart_items 
-     WHERE cart_id = $1 AND product_id = $2 AND customization_id = $3`,
-    [cart.cart_id, itemProductId, itemCustomizationId]
+    `SELECT * FROM cart_items
+     WHERE cart_id = $1 AND customization_id = $2`,
+    [cart.cart_id, itemCustomizationId]
   );
 
   if (existingItemResult.rows.length > 0) {
     const existingItem = existingItemResult.rows[0];
     const newQuantity = existingItem.quantity + quantity;
 
-    if (product_id) {
-      const productResult = await pool.query(
-        `SELECT p.name, i.stock
-         FROM products p
-         LEFT JOIN inventory i ON p.product_id = i.product_id
-         WHERE p.product_id = $1`,
-       
-        [product_id]
-      );
-      if (productResult.rows[0].stock < newQuantity) {
-        throw new AppError(`Not enough stock for ${productResult.rows[0].name}. Available stock: ${productResult.rows[0].stock}.`, 400);
-      }
-    }
-
     await pool.query(
-      `UPDATE cart_items SET quantity = $1, unit_price = $2, updated_at = now() 
+      `UPDATE cart_items SET quantity = $1, unit_price = $2, updated_at = now()
        WHERE cart_item_id = $3`,
       [newQuantity, unitPrice, existingItem.cart_item_id]
     );

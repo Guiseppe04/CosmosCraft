@@ -152,7 +152,8 @@ export function CartProvider({ children }) {
     } else {
       let stockLimitMessage = ''
       setCart(prevCart => {
-        const existing = prevCart.find(item => item.id === product.id)
+        // Normalize IDs to strings to prevent numeric/string type mismatches
+        const existing = prevCart.find(item => String(item.id) === String(product.id))
         const currentStock = resolveStockValue(product) ?? resolveStockValue(existing)
 
         if (existing) {
@@ -163,7 +164,11 @@ export function CartProvider({ children }) {
           }
           added = true
           shouldSync = true
-          return prevCart.map(item => item.id === product.id ? { ...item, quantity: newQuantity } : item)
+          return prevCart.map(item =>
+            String(item.id) === String(product.id)
+              ? { ...item, quantity: newQuantity }
+              : item
+          )
         }
         if (currentStock !== null && requestedQuantity > currentStock) {
           stockLimitMessage = formatStockLimitMessage(currentStock)

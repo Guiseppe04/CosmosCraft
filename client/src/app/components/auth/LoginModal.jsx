@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react'
 import { useNavigate } from 'react-router'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { API } from '../../utils/apiConfig'
+import { Loader2 } from 'lucide-react'
 
 export function LoginModal() {
   const { loginOpen, closeLogin, login, fetchUser } = useAuth()
@@ -12,6 +13,7 @@ export function LoginModal() {
   const [rememberMe, setRememberMe] = useState(true)
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
+  const [redirectingProvider, setRedirectingProvider] = useState(null)
   const navigate = useNavigate()
   const handleSubmit = async e => {
     e.preventDefault()
@@ -71,6 +73,7 @@ export function LoginModal() {
       // Reset states whenever modal is (re)opened
       setIsLoading(false)
       setError('')
+      setRedirectingProvider(null)
     }
   }, [loginOpen])
 
@@ -195,19 +198,39 @@ export function LoginModal() {
               <div className="grid grid-cols-2 gap-3">
                 <button
                   type="button"
-                  onClick={() => window.location.href = `${API}/auth/google`}
+                  disabled={redirectingProvider !== null}
+                  onClick={() => {
+                    setRedirectingProvider('google')
+                    window.location.href = `${API}/auth/google`
+                  }}
                   className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border border-[var(--border)] text-sm font-medium text-[var(--text-light)] hover:bg-[var(--surface-elevated)]"
                 >
-                  <img src="/google.svg" alt="" aria-hidden="true" className="h-4 w-4 object-contain" />
-                  Google
+                  {redirectingProvider === 'google' ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <>
+                      <img src="/google.svg" alt="" aria-hidden="true" className="h-4 w-4 object-contain" />
+                      Google
+                    </>
+                  )}
                 </button>
                 <button
                   type="button"
-                  onClick={() => window.location.href = `${API}/auth/facebook`}
+                  disabled={redirectingProvider !== null}
+                  onClick={() => {
+                    setRedirectingProvider('facebook')
+                    window.location.href = `${API}/auth/facebook`
+                  }}
                   className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border border-[var(--border)] text-sm font-medium text-[var(--text-light)] hover:bg-[var(--surface-elevated)]"
                 >
-                  <img src="/facebook.svg" alt="" aria-hidden="true" className="h-4 w-4 object-contain" />
-                  Facebook
+                  {redirectingProvider === 'facebook' ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <>
+                      <img src="/facebook.svg" alt="" aria-hidden="true" className="h-4 w-4 object-contain" />
+                      Facebook
+                    </>
+                  )}
                 </button>
               </div>
             </div>

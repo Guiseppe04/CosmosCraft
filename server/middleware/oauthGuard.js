@@ -92,7 +92,7 @@ const oauthSingleUseGuard = (provider) => {
                 // because clearAuthCookies/res may have been called on this duplicate
                 // request, which would otherwise leave the user logged out.
                 try {
-                  await setAuthCookies(res, Number(duplicateUserId));
+                  await setAuthCookies(res, duplicateUserId); // no Number()
                 } catch (tokenErr) {
                   console.error('[oauthGuard] Failed to re-issue tokens for duplicate OAuth code:', tokenErr);
                 }

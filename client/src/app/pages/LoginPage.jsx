@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { motion } from 'motion/react'
-import { Mail, Lock, ArrowRight, Eye, EyeOff } from 'lucide-react'
+import { Mail, Lock, ArrowRight, Eye, EyeOff, Loader2 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { API } from '../utils/apiConfig'
 
@@ -19,6 +19,7 @@ export function LoginPage() {
   const [emailError, setEmailError] = useState('')
   const [passwordError, setPasswordError] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  const [redirectingProvider, setRedirectingProvider] = useState(null)
 
   const navigate = useNavigate()
   const { login } = useAuth()
@@ -117,6 +118,7 @@ export function LoginPage() {
   }
 
   const handleSocialLogin = (provider) => {
+    setRedirectingProvider(provider)
     window.location.href = `${API}/auth/${provider.toLowerCase()}`
   }
 
@@ -271,19 +273,33 @@ export function LoginPage() {
           <div className="grid grid-cols-2 gap-4">
             <button
               type="button"
+              disabled={redirectingProvider !== null}
               onClick={() => handleSocialLogin('Google')}
               className="w-full border border-[var(--border)] hover:border-[var(--gold-primary)] bg-[var(--bg-primary)] rounded-lg py-3 font-medium text-white transition-all duration-200 hover:bg-[var(--gold-primary)]/10 flex items-center justify-center gap-2"
             >
-              <img src="/google.svg" alt="" aria-hidden="true" className="h-4 w-4 object-contain" />
-              Google
+              {redirectingProvider === 'Google' ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <>
+                  <img src="/google.svg" alt="" aria-hidden="true" className="h-4 w-4 object-contain" />
+                  Google
+                </>
+              )}
             </button>
             <button
               type="button"
+              disabled={redirectingProvider !== null}
               onClick={() => handleSocialLogin('Facebook')}
               className="w-full border border-[var(--border)] hover:border-[var(--gold-primary)] bg-[var(--bg-primary)] rounded-lg py-3 font-medium text-white transition-all duration-200 hover:bg-[var(--gold-primary)]/10 flex items-center justify-center gap-2"
             >
-              <img src="/facebook.svg" alt="" aria-hidden="true" className="h-4 w-4 object-contain" />
-              Facebook
+              {redirectingProvider === 'Facebook' ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <>
+                  <img src="/facebook.svg" alt="" aria-hidden="true" className="h-4 w-4 object-contain" />
+                  Facebook
+                </>
+              )}
             </button>
           </div>
         </motion.form>
