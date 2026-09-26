@@ -269,21 +269,30 @@
     font-size: 0.625rem !important;
   }
 
-  /* --- Action buttons: stack them if cramped --- */
-  .product-card-info .flex.flex-col.sm\:flex-row.items-stretch.gap-3 {
+  /* --- Action buttons: keep side-by-side on mobile too --- */
+  .product-card .flex.flex-col.sm\:flex-row.items-stretch.gap-3 {
     gap: 0.375rem !important;
-    flex-direction: column !important;
+    flex-direction: row !important;
+  }
+
+  /* Let the two buttons share the row equally */
+  .product-card .flex.flex-col.sm\:flex-row.items-stretch.gap-3 > button {
+    flex: 1 1 0 !important;
+    min-width: 0 !important;
+    padding: 0.375rem 0.25rem !important;
+    font-size: 0.5625rem !important;
   }
 
   /* --- Buy Now + Add to cart buttons --- */
   .product-card-btn,
   .product-card-info button.rounded-full {
     min-height: 32px !important;
-    padding: 0.375rem 0.5rem !important;
-    font-size: 0.625rem !important;
+    padding: 0.375rem 0.375rem !important;
+    font-size: 0.5625rem !important;
     line-height: 1.2 !important;
     border-radius: 0.5rem !important;
-    width: 100% !important;
+    width: auto !important;
+    min-width: 0 !important;
   }
 
   .product-card-btn svg,

@@ -131,7 +131,7 @@ export function ProductRatingModal({
               </h2>
 
               <div className="flex items-center gap-3 mt-2">
-                <p className="text-xl sm:text-2xl font-mono font-bold text-white">
+                <p className="text-xl sm:text-2xl font-mono font-bold text-white hidden sm:block">
                   ₱{Number(product.price).toLocaleString('en-PH')}
                 </p>
 
@@ -408,60 +408,70 @@ export function ProductRatingModal({
             </div>
 
             {/* Actions Bar Footer */}
-            <div className="p-4 sm:p-6 border-t border-white/10 bg-[var(--surface-dark)] flex flex-wrap sm:flex-nowrap items-center gap-3 flex-shrink-0">
-              {!outOfStock && (
-                <div className="flex items-center gap-1.5 bg-black/40 border border-white/10 rounded-full px-2 py-1 sm:px-2.5 sm:py-1.5 flex-shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => setQuantity(prev => Math.max(1, prev - 1))}
-                    disabled={quantity <= 1}
-                    className="w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center text-white/60 hover:text-white hover:bg-white/10 transition-all disabled:opacity-30 disabled:cursor-not-allowed text-sm font-bold"
-                  >
-                    −
-                  </button>
-                  <span className="w-6 sm:w-7 text-center text-xs sm:text-sm font-bold text-white tabular-nums">
-                    {quantity}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setQuantity(prev => Math.min(product.stock || 1, prev + 1))}
-                    disabled={quantity >= (product.stock || 1)}
-                    className="w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center text-white/60 hover:text-white hover:bg-white/10 transition-all disabled:opacity-30 disabled:cursor-not-allowed text-sm font-bold"
-                  >
-                    +
-                  </button>
-                </div>
-              )}
+            <div className="p-3 sm:px-5 sm:py-4 border-t border-white/10 bg-[var(--surface-dark)] flex flex-col gap-3 flex-shrink-0">
+              <div className="flex items-center justify-between gap-3">
+                {!outOfStock ? (
+                  <div className="flex items-center gap-1 bg-black/40 border border-white/10 rounded-full px-1.5 py-1 flex-shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setQuantity(prev => Math.max(1, prev - 1))}
+                      disabled={quantity <= 1}
+                      className="w-6 h-6 rounded-full flex items-center justify-center text-white/60 hover:text-white hover:bg-white/10 transition-all disabled:opacity-30 disabled:cursor-not-allowed text-sm font-bold"
+                    >
+                      −
+                    </button>
+                    <span className="w-6 text-center text-xs font-bold text-white tabular-nums">
+                      {quantity}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setQuantity(prev => Math.min(product.stock || 1, prev + 1))}
+                      disabled={quantity >= (product.stock || 1)}
+                      className="w-6 h-6 rounded-full flex items-center justify-center text-white/60 hover:text-white hover:bg-white/10 transition-all disabled:opacity-30 disabled:cursor-not-allowed text-sm font-bold"
+                    >
+                      +
+                    </button>
+                  </div>
+                ) : (
+                  <div />
+                )}
 
-              {!outOfStock && isAuthenticated && (
+                <p className="text-lg sm:text-xl font-mono font-bold text-white tracking-tight">
+                  ₱{(Number(product.price) * quantity).toLocaleString('en-PH')}
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {!outOfStock && isAuthenticated && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose()
+                      onBuyNow?.(product, quantity)
+                    }}
+                    className="flex-1 min-w-0 py-2.5 px-3 rounded-full bg-[var(--gold-primary)] text-black font-bold text-xs whitespace-nowrap hover:brightness-110 transition-all shadow-md"
+                  >
+                    Buy Now
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => {
-                    onClose()
-                    onBuyNow?.(product, quantity)
+                    if (buttonState !== 'out_of_stock') {
+                      onAddToCart?.(product, quantity)
+                      setQuantity(1)
+                    }
                   }}
-                  className="flex-1 py-3 px-4 rounded-full bg-[var(--gold-primary)] text-black font-bold text-xs tracking-wider uppercase hover:brightness-110 transition-all shadow-md"
+                  disabled={buttonState === 'out_of_stock'}
+                  className={`flex-1 min-w-0 py-2.5 px-3 rounded-full text-xs font-bold whitespace-nowrap transition-all border ${
+                    buttonState === 'out_of_stock'
+                      ? 'border-white/10 text-white/30 bg-transparent cursor-not-allowed'
+                      : 'border-white/20 text-white hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)] bg-[var(--surface-elevated)]'
+                  }`}
                 >
-                  Buy Now
+                  {buttonState === 'out_of_stock' ? 'Out of Stock' : 'Add to Cart'}
                 </button>
-              )}
-              <button
-                type="button"
-                onClick={() => {
-                  if (buttonState !== 'out_of_stock') {
-                    onAddToCart?.(product, quantity)
-                    setQuantity(1)
-                  }
-                }}
-                disabled={buttonState === 'out_of_stock'}
-                className={`flex-1 py-3 px-4 rounded-full text-xs font-bold tracking-wider uppercase transition-all border ${
-                  buttonState === 'out_of_stock'
-                    ? 'border-white/10 text-white/30 bg-transparent cursor-not-allowed'
-                    : 'border-white/20 text-white hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)] bg-[var(--surface-elevated)]'
-                }`}
-              >
-                {buttonState === 'out_of_stock' ? 'Out of Stock' : 'Add to Cart'}
-              </button>
+              </div>
             </div>
           </div>
 
