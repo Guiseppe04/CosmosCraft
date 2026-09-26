@@ -722,8 +722,9 @@ function NeckAccordion({ config, updateConfig, options }) {
 }
 
 export function BassCustomizePage() {
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const editBuildId = searchParams.get('edit')
+  const [activeBuildId, setActiveBuildId] = useState(editBuildId)
   const navigate = useNavigate()
 
   const {
@@ -1235,22 +1236,23 @@ export function BassCustomizePage() {
       for (const storageKey of ['cosmoscraft_saved_bass_builds', 'cosmoscraft_saved_builds']) {
         const builds = JSON.parse(window.localStorage.getItem(storageKey) || '[]')
         const target = builds.find(b => b.id === editBuildId)
-if (target) {
-            try {
-              baseLoadConfig(target.config)
-              const loadedStickers = Array.isArray(target.stickers) ? target.stickers : []
-              setStickers(loadedStickers)
-              setSavedSnapshot(JSON.stringify({ config: target.config, stickers: loadedStickers }))
-            } catch (e) {
-              console.error('Failed to load build config for editing:', e)
-            }
-            break
+        if (target) {
+          try {
+            baseLoadConfig(target.config)
+            const loadedStickers = Array.isArray(target.stickers) ? target.stickers : []
+            setStickers(loadedStickers)
+            setSavedSnapshot(JSON.stringify({ config: target.config, stickers: loadedStickers }))
+            setActiveBuildId(target.id)
+          } catch (e) {
+            console.error('Failed to load build config for editing:', e)
           }
+          break
+        }
       }
     }
   }, [editBuildId, baseLoadConfig])
 
-  const shouldBlockNavigation = Boolean(editBuildId) && hasUnsavedChanges && !bypassNavigationBlockRef.current
+  const shouldBlockNavigation = Boolean(activeBuildId) && hasUnsavedChanges && !bypassNavigationBlockRef.current
   const blocker = useBlocker(
     ({ currentLocation, nextLocation }) =>
       shouldBlockNavigation &&
@@ -1289,7 +1291,7 @@ if (target) {
   }, [toastMessage])
 
   const saveBuild = ({ shouldNavigate = true, continueBlockedNavigation = false } = {}) => {
-    const buildId = editBuildId || `build-${Date.now()}`
+    const buildId = activeBuildId || `build-${Date.now()}`
     const build = {
       id: buildId,
       name: `${summary.body} build`,
@@ -1331,6 +1333,8 @@ if (target) {
 
     if (stored.length > 10) stored = stored.slice(0, 10)
     window.localStorage.setItem(storedKey, JSON.stringify(stored))
+    setActiveBuildId(buildId)
+    if (storedKey === 'cosmoscraft_saved_bass_builds') setSavedBuilds(stored)
     try {
       const snap = JSON.stringify({ config, stickers })
       setSavedSnapshot(snap)
@@ -1429,11 +1433,34 @@ if (target) {
 
   const handleLoadBuild = (buildId) => {
     const build = savedBuilds.find(b => b.id === buildId)
-    if (build) {
-      loadConfig(build.config)
-      setStickers(Array.isArray(build.stickers) ? build.stickers : [])
-      setShowLoadModal(false)
-    }
+    if (!build) return
+
+    const loadedStickers = Array.isArray(build.stickers) ? build.stickers : []
+    loadConfig(build.config)
+    setStickers(loadedStickers)
+    setSavedSnapshot(JSON.stringify({ config: build.config, stickers: loadedStickers }))
+    setActiveBuildId(build.id)
+    setSearchParams((params) => {
+      params.set('edit', build.id)
+      return params
+    }, { replace: true })
+    setShowLoadModal(false)
+  }
+
+  const handleCreateNewBuild = () => {
+    resetConfig()
+    setStickers([])
+    setSelectedStickerId(null)
+    setActiveBuildId(null)
+    setSavedSnapshot(null)
+    setShowLoadModal(false)
+    try {
+      window.sessionStorage.removeItem('cosmoscraft.bassBuild.savedSnapshot')
+    } catch {}
+    setSearchParams((params) => {
+      params.delete('edit')
+      return params
+    }, { replace: true })
   }
 
   const handleDeleteBuild = (buildId) => {
@@ -2615,7 +2642,11 @@ if (target) {
                   <p>No saved builds yet. Create one using the Save Build button!</p>
                 </div>
               ) : (
-                savedBuilds.map((build) => (
+                savedBuilds.map((build) => {
+                  const savedDate = build.savedAt || build.createdAt
+                  const buildPrice = Number(build.price) || 0
+
+                  return (
                   <div
                     key={build.id}
                     className="group relative rounded-xl border border-white/10 bg-white/[0.02] p-4 hover:bg-white/[0.04] transition-colors duration-200 cursor-pointer"
@@ -2625,11 +2656,11 @@ if (target) {
                       <div className="flex-1 min-w-0">
                         <h4 className="font-medium truncate">{build.name}</h4>
                         <div className="mt-1 space-y-1 text-xs text-white/50">
-                          <p>{build.config.bassType} / {build.config.bodyWood} / {build.config.pickups}</p>
-                          <p>Created: {new Date(build.createdAt).toLocaleDateString('en-PH')}</p>
+                          <p>{build.config?.bassType || 'Bass'} / {build.config?.bodyWood || 'Custom body'} / {build.config?.pickups || 'Custom pickups'}</p>
+                          {savedDate && <p>Saved: {new Date(savedDate).toLocaleDateString('en-PH')}</p>}
                         </div>
                         <div className="mt-2 text-sm font-semibold text-[#d4af37]">
-                          ₱{build.price.toLocaleString('en-PH')}
+                          ₱{buildPrice.toLocaleString('en-PH')}
                         </div>
                       </div>
                       <button
@@ -2644,12 +2675,20 @@ if (target) {
                       </button>
                     </div>
                   </div>
-                ))
+                  )
+                })
               )}
             </div>
             
             {/* Footer */}
             <div className="border-t border-white/10 px-6 py-4 flex-shrink-0 flex gap-2">
+              <button
+                type="button"
+                onClick={handleCreateNewBuild}
+                className="flex-1 rounded-lg bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] px-4 py-2.5 text-sm font-semibold text-[var(--text-dark)] transition-all hover:brightness-110"
+              >
+                Create New Build
+              </button>
               <button
                 type="button"
                 onClick={() => setShowLoadModal(false)}

@@ -13,12 +13,14 @@ import { useDebounce } from '../hooks/useDebounce'
 import { uploadToCloudinary } from '../utils/cloudinary.js'
 import { formatCurrency } from '../utils/formatCurrency.js'
 import CustomerProjectTracker from '../components/projects/CustomerProjectTracker.jsx'
+import GuitarPreview from '../components/guitar/GuitarPreview.jsx'
 import { AddressForm } from '../components/AddressForm.jsx'
 import { getAllProvinces, getMunicipalitiesByProvince, getBarangaysByMunicipality } from '@aivangogh/ph-address'
 import { Country } from 'country-state-city'
 import { ConfirmModal } from '../components/ui/ConfirmModal'
 import { SelectableCartItemRow } from '../components/cart/SelectableCartItemRow.jsx'
 import { DashboardSectionTabs } from '../components/DashboardSectionTabs.jsx'
+
 import '../../styles/DashboardSections.css'
 
 const ALL_COUNTRIES = Country.getAllCountries()
@@ -2537,21 +2539,57 @@ export function DashboardPage() {
 
                   return (
                     <div key={build.id} className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl p-5 hover:border-[var(--gold-primary)]/40 transition-colors flex flex-col h-full">
-                      <div className="flex justify-between items-start mb-4 gap-4">
-                        <div>
+                      <div className="flex items-start gap-3 mb-4">
+                        {/* Mini guitar preview */}
+                        <div className="relative h-20 w-20 flex-shrink-0 overflow-hidden rounded-lg border border-[var(--border)] bg-gradient-to-b from-[#141414] to-[#0a0a0a]">
+                          <div
+                            className="absolute top-1/2 left-1/2"
+                            style={{
+                              width: '320px',
+                              height: '320px',
+                              transform: 'translate(-50%, -47%) scale(0.35)',
+                              transformOrigin: 'center center',
+                              pointerEvents: 'none',
+                            }}
+                          >
+                            <GuitarPreview
+                              config={build.config}
+                              view="front"
+                              modelImageSrc={null}
+                              bodyWoodImageSrc={null}
+                              topWoodImageSrc={null}
+                              stickerOverlay={[]}
+                              stickerMaskSrc={null}
+                              stageRef={{ current: null }}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Name + meta + price stacked */}
+                        <div className="min-w-0 flex-1 flex flex-col gap-1">
                           <div className="flex flex-wrap items-center gap-2">
-                            <h3 className="text-lg font-bold text-white">{build.name || 'Custom Build'}</h3>
+                            <h3 className="text-base font-bold text-white truncate">
+                              {build.name || 'Custom Build'}
+                            </h3>
                             {buildLockState.isLocked && (
-                              <span className="px-2 py-0.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 text-[11px] font-semibold">
+                              <span className="px-2 py-0.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 text-[10px] font-semibold whitespace-nowrap">
                                 Already Ordered
                               </span>
                             )}
                           </div>
-                          <p className="text-xs text-[var(--text-muted)] mt-1">Saved on {new Date(build.savedAt || new Date()).toLocaleDateString()}</p>
-                        </div>
-                        <div className="text-right">
-                          <span className="text-lg font-bold text-[var(--gold-primary)] block">₱{grandTotal.toLocaleString('en-PH')}</span>
-                          {additionalPartsTotal > 0 && <span className="text-xs text-[var(--text-muted)]">Includes Add-ons</span>}
+
+                          <p className="text-xs text-[var(--text-muted)] truncate">
+                            Saved on {new Date(build.savedAt || new Date()).toLocaleDateString()}
+                          </p>
+
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="text-lg font-bold text-[var(--gold-primary)]">
+                              ₱{grandTotal.toLocaleString('en-PH')}
+                            </span>
+                            {additionalPartsTotal > 0 && (
+                              <span className="text-[11px] text-[var(--text-muted)]">• Includes Add-ons</span>
+                            )}
+                          </div>
                         </div>
                       </div>
 

@@ -291,8 +291,9 @@ const MAX_STICKERS = 10
 const DEFAULT_STICKER_PRICE = 100
 
 export function CustomizePage() {
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const editBuildId = searchParams.get('edit')
+  const [activeBuildId, setActiveBuildId] = useState(editBuildId)
   
   const {
     config,
@@ -341,6 +342,15 @@ export function CustomizePage() {
   const [isLockedCustomization, setIsLockedCustomization] = useState(false)
   const bypassNavigationBlockRef = useRef(false)
   const [showUnsavedModal, setShowUnsavedModal] = useState(false)
+  const [savedBuilds, setSavedBuilds] = useState(() => {
+    try {
+      const builds = JSON.parse(window.localStorage.getItem('cosmoscraft_saved_builds') || '[]')
+      return Array.isArray(builds) ? builds : []
+    } catch {
+      return []
+    }
+  })
+  const [showLoadModal, setShowLoadModal] = useState(false)
 
   // Derived: is there anything to save?
   const hasUnsavedChanges = useMemo(() => {
@@ -813,7 +823,7 @@ export function CustomizePage() {
     }
   }, [editBuildId, baseLoadConfig, isAuthenticated, navigate])
 
-  const shouldBlockNavigation = Boolean(editBuildId) && hasUnsavedChanges && !bypassNavigationBlockRef.current
+  const shouldBlockNavigation = Boolean(activeBuildId) && hasUnsavedChanges && !bypassNavigationBlockRef.current
   const blocker = useBlocker(
     ({ currentLocation, nextLocation }) =>
       shouldBlockNavigation &&
@@ -887,7 +897,7 @@ export function CustomizePage() {
       return
     }
 
-    const buildId = editBuildId || `build-${Date.now()}`
+    const buildId = activeBuildId || `build-${Date.now()}`
     const baseBuild = {
       id: buildId,
       name: `${summary.body} build`,
@@ -943,10 +953,12 @@ export function CustomizePage() {
       }
       if (nextStored.length > 10) nextStored = nextStored.slice(0, 10)
       window.localStorage.setItem(storedKey, JSON.stringify(nextStored))
+      if (storedKey === 'cosmoscraft_saved_builds') setSavedBuilds(nextStored)
       return nextBuild
     }
 
     persistLocalBuild()
+    setActiveBuildId(buildId)
 
     try {
       const snap = JSON.stringify({ config, stickers })
@@ -1099,13 +1111,46 @@ export function CustomizePage() {
     }
   }
 
-  const handleLoad = () => {
-    navigate('/dashboard', {
-      state: {
-        section: 'my-guitar',
-        message: 'Select a saved build from My Guitar to continue.',
-      },
-    })
+  const handleLoadBuild = (buildId) => {
+    const build = savedBuilds.find((savedBuild) => savedBuild.id === buildId)
+    if (!build) return
+
+    const loadedStickers = Array.isArray(build.stickers) ? build.stickers : []
+    loadConfig(build.config)
+    setStickers(loadedStickers)
+    setSavedSnapshot(JSON.stringify({ config: build.config, stickers: loadedStickers }))
+    setActiveBuildId(build.id)
+    setDbCustomizationId(build.dbCustomizationId || build.customization_id || null)
+    setIsLockedCustomization(false)
+    setSearchParams((params) => {
+      params.set('edit', build.id)
+      return params
+    }, { replace: true })
+    setShowLoadModal(false)
+  }
+
+  const handleCreateNewBuild = () => {
+    resetConfig()
+    setStickers([])
+    setSelectedStickerId(null)
+    setActiveBuildId(null)
+    setDbCustomizationId(null)
+    setIsLockedCustomization(false)
+    setSavedSnapshot(null)
+    setShowLoadModal(false)
+    try {
+      window.sessionStorage.removeItem('cosmoscraft.electricBuild.savedSnapshot')
+    } catch {}
+    setSearchParams((params) => {
+      params.delete('edit')
+      return params
+    }, { replace: true })
+  }
+
+  const handleDeleteBuild = (buildId) => {
+    const updated = savedBuilds.filter((build) => build.id !== buildId)
+    setSavedBuilds(updated)
+    window.localStorage.setItem('cosmoscraft_saved_builds', JSON.stringify(updated))
   }
 
   // Get current category info
@@ -2352,7 +2397,8 @@ export function CustomizePage() {
             <BuilderActionBar
               onReset={resetConfig}
               onSave={handleSave}
-              onLoad={handleLoad}
+              onLoad={() => setShowLoadModal(true)}
+              loadLabel={savedBuilds.length > 0 ? `Load Build (${savedBuilds.length})` : 'Load Build'}
             />
             {isAuthenticated && (
               <button
@@ -2430,6 +2476,101 @@ export function CustomizePage() {
       <p className="mt-2 text-center text-[10px] uppercase tracking-[0.15em] text-[var(--text-muted)]">
         Graphic representation only. Actual product may differ slightly due to natural wood variations.
       </p>
+
+      {showLoadModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="relative flex max-h-[80vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-[var(--bg-primary)] shadow-2xl">
+            <div className="flex-shrink-0 border-b border-white/10 px-6 py-4">
+              <h3 className="text-lg font-semibold">Load Saved Build</h3>
+              <p className="mt-1 text-xs text-white/50">Select a previous guitar build to continue editing</p>
+            </div>
+
+            <div className="flex-1 space-y-3 overflow-y-auto p-6">
+              {savedBuilds.length === 0 ? (
+                <div className="flex items-center justify-center py-8 text-white/50">
+                  <p>No saved builds yet. Create one using the Save Build button!</p>
+                </div>
+              ) : (
+                savedBuilds.map((build) => {
+                  const savedDate = build.savedAt || build.createdAt
+                  const buildPrice = Number(build.price) || 0
+
+                  return (
+                    <div
+                      key={build.id}
+                      className="group relative cursor-pointer rounded-xl border border-white/10 bg-white/[0.02] p-4 transition-colors duration-200 hover:bg-white/[0.04]"
+                      onClick={() => handleLoadBuild(build.id)}
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="relative h-20 w-20 flex-shrink-0 overflow-hidden rounded-lg border border-white/10 bg-gradient-to-b from-[#141414] to-[#0a0a0a]">
+                          <div
+                            className="absolute top-1/2 left-1/2"
+                            style={{
+                              width: '320px',
+                              height: '320px',
+                              transform: 'translate(-50%, -47%) scale(0.40)',
+                              transformOrigin: 'center center',
+                              pointerEvents: 'none',
+                            }}
+                          >
+                            <GuitarPreview
+                              config={build.config}
+                              view="front"
+                              modelImageSrc={null}
+                              bodyWoodImageSrc={null}
+                              topWoodImageSrc={null}
+                              stickerOverlay={[]}
+                              stickerMaskSrc={null}
+                              stageRef={{ current: null }}
+                            />
+                          </div>
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <h4 className="truncate font-medium">{build.name || 'Custom guitar build'}</h4>
+                          <div className="mt-1 space-y-1 text-xs text-white/50">
+                            <p>{build.config?.guitarType || 'Guitar'} / {build.summary?.body || build.config?.body || 'Custom build'}</p>
+                            {savedDate && <p>Saved: {new Date(savedDate).toLocaleDateString('en-PH')}</p>}
+                          </div>
+                          <div className="mt-2 text-sm font-semibold text-[#d4af37]">
+                            ₱{buildPrice.toLocaleString('en-PH')}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            handleDeleteBuild(build.id)
+                          }}
+                          className="flex-shrink-0 rounded-lg bg-red-500/20 px-3 py-2 text-xs font-medium text-red-400 opacity-100 transition-opacity duration-200 sm:opacity-0 sm:group-hover:opacity-100"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+
+            <div className="flex flex-shrink-0 gap-2 border-t border-white/10 px-6 py-4">
+              <button
+                type="button"
+                onClick={handleCreateNewBuild}
+                className="flex-1 rounded-lg bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] px-4 py-2.5 text-sm font-semibold text-[var(--text-dark)] transition-all hover:brightness-110"
+              >
+                Create New Build
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowLoadModal(false)}
+                className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] px-4 py-2.5 text-sm font-medium text-[var(--text-muted)] transition-all duration-200 hover:bg-[var(--surface-dark)]"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showUnsavedModal && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
