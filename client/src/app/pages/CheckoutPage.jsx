@@ -25,6 +25,11 @@ const COUNTRIES = PHILIPPINES ? [PHILIPPINES, ...OTHER_COUNTRIES] : ALL_COUNTRIE
 const CUSTOM_BUILD_DOWN_PAYMENT_RATE = 0.5
 const ORDER_TAX_RATE = 0
 
+// Stable empty object for the "add new address" modal. Passing a fresh `{}`
+// literal on every render would re-trigger AddressForm's reset effect and wipe
+// whatever the user already typed (e.g. after a failed save attempt).
+const EMPTY_INITIAL_ADDRESS = {}
+
 const normalizeAddressValue = (value) => String(value || '')
   .trim()
   .replace(/\s+/g, ' ')
@@ -620,7 +625,7 @@ function SuccessModal({ isOpen, onClose, onGoToMyPurchase }) {
   )
 }
 
-function AddAddressModal({ isOpen, onClose, onSave, isSaving }) {
+function AddAddressModal({ isOpen, onClose, onSave, isSaving, error }) {
   if (!isOpen) return null
 
   return (
@@ -643,8 +648,14 @@ function AddAddressModal({ isOpen, onClose, onSave, isSaving }) {
           </button>
         </div>
 
+        {error && (
+          <div className="mb-4 p-3 rounded-lg border border-red-500/30 bg-red-500/10">
+            <p className="text-sm text-red-400">{error}</p>
+          </div>
+        )}
+
         <AddressForm
-          initialAddress={{}}
+          initialAddress={EMPTY_INITIAL_ADDRESS}
           onSubmit={onSave}
           onCancel={onClose}
           submitLabel="Save Address"
@@ -686,6 +697,7 @@ export function CheckoutPage() {
   const [addressError, setAddressError] = useState(false)
   const [showAddAddressModal, setShowAddAddressModal] = useState(false)
   const [isSavingAddress, setIsSavingAddress] = useState(false)
+  const [saveAddressError, setSaveAddressError] = useState('')
   const [addressLocationData, setAddressLocationData] = useState({
     provinces: [],
     cities: [],
@@ -782,6 +794,7 @@ export function CheckoutPage() {
 
   const handleAddNewAddress = () => {
     setShowAddAddressModal(true)
+    setSaveAddressError('')
   }
 
   const handleToggleItemSelection = (itemId) => {
@@ -894,14 +907,18 @@ export function CheckoutPage() {
 
         setShowAddAddressModal(false)
         setAddressError(false)
+        setSaveAddressError('')
       } else {
         const err = await response.json()
         console.error('Address save error:', err)
-        alert(err.message || 'Failed to save address')
+        const fieldErrors = Array.isArray(err.errors) && err.errors.length > 0
+          ? err.errors.map(e => e.message).filter(Boolean).join(' ')
+          : ''
+        setSaveAddressError(fieldErrors || err.message || 'Failed to save address. Please check the details and try again.')
       }
     } catch (error) {
       console.error('Error saving address:', error)
-      alert('Failed to save address. Please try again.')
+      setSaveAddressError(error.message || 'Failed to save address. Please try again.')
     } finally {
       setIsSavingAddress(false)
     }
@@ -917,7 +934,7 @@ export function CheckoutPage() {
 
   const handlePlaceOrderClick = () => {
     if (!isAuthenticated) {
-      alert('Please log in to place an order.')
+      setOrderError('Please log in to place an order.')
       return
     }
     if (!hasSelectedItems) {
@@ -1347,9 +1364,13 @@ export function CheckoutPage() {
       {/* Add Address Modal */}
       <AddAddressModal
         isOpen={showAddAddressModal}
-        onClose={() => setShowAddAddressModal(false)}
+        onClose={() => {
+          setShowAddAddressModal(false)
+          setSaveAddressError('')
+        }}
         onSave={handleSaveAddress}
         isSaving={isSavingAddress}
+        error={saveAddressError}
         locationData={addressLocationData}
         setLocationData={setAddressLocationData}
       />
