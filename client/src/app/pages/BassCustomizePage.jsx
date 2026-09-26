@@ -759,6 +759,7 @@ export function BassCustomizePage() {
       return null
     }
   })
+  const [stickers, setStickers] = useState([])
 
   // Derived: is there anything to save?
   const hasUnsavedChanges = useMemo(() => {
@@ -776,7 +777,6 @@ export function BassCustomizePage() {
 
   const bypassNavigationBlockRef = useRef(false)
   const [showUnsavedModal, setShowUnsavedModal] = useState(false)
-  const [stickers, setStickers] = useState([])
   const [selectedStickerId, setSelectedStickerId] = useState(null)
   const [isDraggingSticker, setIsDraggingSticker] = useState(false)
   const stickerFileInputRef = useRef(null)
