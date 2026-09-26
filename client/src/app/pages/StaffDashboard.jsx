@@ -144,6 +144,8 @@ export function StaffDashboard() {
   const [salesReport, setSalesReport] = useState(null)
 
   const [appointments, setAppointments] = useState([])
+  const [appointmentSearch, setAppointmentSearch] = useState('')
+  const debouncedAppointmentSearch = useDebounce(appointmentSearch, 300)
   const [appointmentPagination, setAppointmentPagination] = useState({ page: 1, limit: 20, total: 0, pages: 1 })
   const [appointmentLoading, setAppointmentLoading] = useState(false)
   const [unavailableDates, setUnavailableDates] = useState([])
@@ -415,7 +417,7 @@ export function StaffDashboard() {
     if (!silent) setAppointmentLoading(true)
     try {
       const res = await staffApi.getAppointments({
-        search: debouncedSearch,
+        search: debouncedAppointmentSearch || debouncedSearch,
         limit: appointmentPagination.limit,
         offset: (appointmentPagination.page - 1) * appointmentPagination.limit,
       })
@@ -429,7 +431,7 @@ export function StaffDashboard() {
     } finally {
       if (!silent) setAppointmentLoading(false)
     }
-  }, [appointmentPagination.limit, appointmentPagination.page, debouncedSearch, showToast])
+  }, [appointmentPagination.limit, appointmentPagination.page, debouncedAppointmentSearch, debouncedSearch, showToast])
 
   const fetchServices = useCallback(async () => {
     try {
@@ -1296,6 +1298,8 @@ export function StaffDashboard() {
               setUnavailableDatesOpen={setUnavailableDatesOpen}
               setAppointmentPagination={setAppointmentPagination}
               isSuperAdmin={true}
+              searchQuery={appointmentSearch}
+              onSearchChange={setAppointmentSearch}
             />
           )}
 

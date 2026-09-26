@@ -367,12 +367,12 @@ const appointmentValidation = {
     limit: Joi.number()
       .integer()
       .min(1)
-      .max(100)
+      .max(500)
       .optional()
       .default(20)
       .messages({
         'number.min': 'limit must be at least 1',
-        'number.max': 'limit cannot exceed 100',
+        'number.max': 'limit cannot exceed 500',
       }),
 
     offset: Joi.number()
