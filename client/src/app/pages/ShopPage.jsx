@@ -370,6 +370,7 @@ export function ShopPage() {
   const [expandedCategories, setExpandedCategories] = useState(new Set())
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false)
   const [productModalTab, setProductModalTab] = useState('details')
+  const [quantities, setQuantities] = useState({})
 
   const { cart, addToCart, isItemAtMaxQuantity, getItemAddedState } = useCart()
   const navigate = useNavigate()
@@ -514,8 +515,16 @@ export function ShopPage() {
 
   const hasActiveFilters = selectedCategory !== 'all' || selectedBrands.length > 0 || priceRange[0] > 0 || priceRange[1] > 0 || inStockOnly
 
-  const handleAddToCart = product => {
+  const getQuantity = (productId) => quantities[productId] ?? 1
+
+  const setQuantity = (productId, value, stock) => {
+    const clamped = Math.max(1, Math.min(value, stock || Infinity))
+    setQuantities(prev => ({ ...prev, [productId]: clamped }))
+  }
+
+  const handleAddToCart = (product, quantityOverride) => {
     const stock = getProductStock(product.id)
+    const qty = quantityOverride ?? getQuantity(product.id)
     if (isOutOfStock(product.id)) {
       setNotification('Out of stock.')
       setTimeout(() => setNotification(null), 3000)
@@ -535,15 +544,16 @@ export function ShopPage() {
       category: product.category,
       type: 'product',
       stock: product.stock,
-    })
+    }, qty)
 
     if (added) {
+      setQuantities(prev => ({ ...prev, [product.id]: 1 }))
       setNotification(`${product.name} added to cart!`)
       setTimeout(() => setNotification(null), 3000)
     }
   }
 
-  const performBuyNow = product => {
+  const performBuyNow = (product, customQty = 1) => {
     if (isOutOfStock(product.id)) return
     navigate('/checkout', {
       state: {
@@ -556,16 +566,16 @@ export function ShopPage() {
           category: product.category,
           type: 'product',
           stock: product.stock,
-          quantity: 1
+          quantity: customQty
         }
       }
     })
   }
 
-  const handleBuyNow = product => {
+  const handleBuyNow = (product, customQty = 1) => {
     if (isOutOfStock(product.id)) return
-    if (!isAuthenticated) openLogin(() => performBuyNow(product))
-    else performBuyNow(product)
+    if (!isAuthenticated) openLogin(() => performBuyNow(product, customQty))
+    else performBuyNow(product, customQty)
   }
 
   const getAddButtonState = (product) => {
@@ -688,20 +698,6 @@ export function ShopPage() {
               brandLabels={brandLabels}
             />
 
-            <AnimatePresence>
-              {notification && (
-                <motion.div
-                  initial={{ opacity: 0, y: -20, x: '-50%' }}
-                  animate={{ opacity: 1, y: 0, x: '-50%' }}
-                  exit={{ opacity: 0, y: -20, x: '-50%' }}
-                  className="fixed top-24 left-1/2 z-[100] px-6 py-3 bg-[var(--gold-primary)] text-[#111111] rounded-full flex items-center gap-2 text-sm font-bold shadow-[0_10px_25px_rgba(212,175,55,0.3)]"
-                >
-                  <Zap className="w-4 h-4 fill-black" />
-                  {notification}
-                </motion.div>
-              )}
-            </AnimatePresence>
-
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
               {loading ? (
                 <div className="col-span-full flex items-center justify-center py-20 bg-[var(--surface-dark)] rounded-2xl border border-white/5">
@@ -782,6 +778,30 @@ export function ShopPage() {
                             <p className="text-lg font-bold text-white tracking-tight">
                               ₱{product.price.toLocaleString('en-PH')}
                             </p>
+                            {!outOfStock && (
+                              <div
+                                onClick={(e) => e.stopPropagation()}
+                                className="flex items-center gap-1 bg-white/5 border border-white/10 rounded-full px-1 py-0.5"
+                              >
+                                <button
+                                  onClick={() => setQuantity(product.id, getQuantity(product.id) - 1, product.stock)}
+                                  disabled={getQuantity(product.id) <= 1}
+                                  className="w-6 h-6 rounded-full flex items-center justify-center text-white/60 hover:text-white hover:bg-white/10 transition-all disabled:opacity-30 disabled:cursor-not-allowed text-sm font-bold"
+                                >
+                                  −
+                                </button>
+                                <span className="w-6 text-center text-xs font-bold text-white tabular-nums">
+                                  {getQuantity(product.id)}
+                                </span>
+                                <button
+                                  onClick={() => setQuantity(product.id, getQuantity(product.id) + 1, product.stock)}
+                                  disabled={getQuantity(product.id) >= product.stock}
+                                  className="w-6 h-6 rounded-full flex items-center justify-center text-white/60 hover:text-white hover:bg-white/10 transition-all disabled:opacity-30 disabled:cursor-not-allowed text-sm font-bold"
+                                >
+                                  +
+                                </button>
+                              </div>
+                            )}
                           </div>
 
                           <div className="flex flex-col sm:flex-row items-stretch gap-3">
@@ -801,7 +821,7 @@ export function ShopPage() {
                                   : 'bg-[var(--surface-dark)] border-[var(--border)] text-[var(--text-light)] hover:text-[var(--gold-primary)] hover:border-[var(--gold-primary)] shadow-sm'
                                 }`}
                             >
-                              {buttonState === 'add' ? 'Add to cart' : buttonState === 'out_of_stock' ? 'Out of Stock' : 'Added to cart'}
+                              {buttonState === 'out_of_stock' ? 'Out of Stock' : 'Add to cart'}
                             </button>
                           </div>
                         </div>
@@ -956,6 +976,19 @@ export function ShopPage() {
           />
         </section>
       </div>
+
+      <AnimatePresence>
+        {notification && (
+          <motion.div
+            initial={{ opacity: 0, y: -20, x: '-50%' }}
+            animate={{ opacity: 1, y: 0, x: '-50%' }}
+            exit={{ opacity: 0, y: -20, x: '-50%' }}
+            className="fixed top-24 left-1/2 z-[200] px-6 py-3 bg-[var(--gold-primary)] text-[#111111] rounded-full flex items-center justify-center text-sm font-bold shadow-[0_10px_25px_rgba(212,175,55,0.4)] pointer-events-none"
+          >
+            {notification}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <ProductRatingModal
         product={selectedProduct}

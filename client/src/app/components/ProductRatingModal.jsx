@@ -28,15 +28,18 @@ export function ProductRatingModal({
   const [reviewsLoading, setReviewsLoading] = useState(false)
   const [reviewsError, setReviewsError] = useState(null)
   const [selectedImage, setSelectedImage] = useState(null)
+  const [quantity, setQuantity] = useState(1)
 
   useEffect(() => {
     if (isOpen && product) {
       setActiveTab(defaultTab || 'details')
+      setQuantity(1)
       loadProductReviews(product.id)
     } else {
       setReviewsData({ reviews: [], summary: null })
       setReviewsError(null)
       setSelectedImage(null)
+      setQuantity(1)
     }
   }, [isOpen, product?.id, defaultTab])
 
@@ -405,15 +408,39 @@ export function ProductRatingModal({
             </div>
 
             {/* Actions Bar Footer */}
-            <div className="p-4 sm:p-6 border-t border-white/10 bg-[var(--surface-dark)] flex items-center gap-3 flex-shrink-0">
+            <div className="p-4 sm:p-6 border-t border-white/10 bg-[var(--surface-dark)] flex flex-wrap sm:flex-nowrap items-center gap-3 flex-shrink-0">
+              {!outOfStock && (
+                <div className="flex items-center gap-1.5 bg-black/40 border border-white/10 rounded-full px-2.5 py-1.5 flex-shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setQuantity(prev => Math.max(1, prev - 1))}
+                    disabled={quantity <= 1}
+                    className="w-7 h-7 rounded-full flex items-center justify-center text-white/60 hover:text-white hover:bg-white/10 transition-all disabled:opacity-30 disabled:cursor-not-allowed text-sm font-bold"
+                  >
+                    −
+                  </button>
+                  <span className="w-7 text-center text-xs sm:text-sm font-bold text-white tabular-nums">
+                    {quantity}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setQuantity(prev => Math.min(product.stock || 1, prev + 1))}
+                    disabled={quantity >= (product.stock || 1)}
+                    className="w-7 h-7 rounded-full flex items-center justify-center text-white/60 hover:text-white hover:bg-white/10 transition-all disabled:opacity-30 disabled:cursor-not-allowed text-sm font-bold"
+                  >
+                    +
+                  </button>
+                </div>
+              )}
+
               {!outOfStock && isAuthenticated && (
                 <button
                   type="button"
                   onClick={() => {
                     onClose()
-                    onBuyNow?.(product)
+                    onBuyNow?.(product, quantity)
                   }}
-                  className="flex-1 py-3 rounded-full bg-[var(--gold-primary)] text-black font-bold text-xs tracking-wider uppercase hover:brightness-110 transition-all shadow-md"
+                  className="flex-1 py-3 px-4 rounded-full bg-[var(--gold-primary)] text-black font-bold text-xs tracking-wider uppercase hover:brightness-110 transition-all shadow-md"
                 >
                   Buy Now
                 </button>
@@ -421,22 +448,19 @@ export function ProductRatingModal({
               <button
                 type="button"
                 onClick={() => {
-                  if (buttonState !== 'out_of_stock') onAddToCart?.(product)
+                  if (buttonState !== 'out_of_stock') {
+                    onAddToCart?.(product, quantity)
+                    setQuantity(1)
+                  }
                 }}
                 disabled={buttonState === 'out_of_stock'}
-                className={`flex-1 py-3 rounded-full text-xs font-bold tracking-wider uppercase transition-all border ${
+                className={`flex-1 py-3 px-4 rounded-full text-xs font-bold tracking-wider uppercase transition-all border ${
                   buttonState === 'out_of_stock'
                     ? 'border-white/10 text-white/30 bg-transparent cursor-not-allowed'
-                    : buttonState === 'item_added' || buttonState === 'in_cart'
-                    ? 'bg-green-500/10 border-green-500/30 text-green-400'
                     : 'border-white/20 text-white hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)] bg-[var(--surface-elevated)]'
                 }`}
               >
-                {buttonState === 'add'
-                  ? 'Add to Cart'
-                  : buttonState === 'out_of_stock'
-                  ? 'Out of Stock'
-                  : 'Added to Cart'}
+                {buttonState === 'out_of_stock' ? 'Out of Stock' : 'Add to Cart'}
               </button>
             </div>
           </div>

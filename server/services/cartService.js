@@ -147,48 +147,49 @@ async function addItemToCart(userId, { product_id, customization_id, quantity = 
     unitPrice = parseFloat(product.price);
     itemProductId = product_id;
 
-    // --- Normal product duplicate check (NULL-safe) ---
-    // PostgreSQL does not match NULL = NULL, so we must use IS NULL
-    // when customization_id is absent for regular products.
-    const existingNormalResult = await pool.query(
-      `SELECT * FROM cart_items
-       WHERE cart_id = $1
-         AND product_id = $2
-         AND customization_id IS NULL`,
-      [cart.cart_id, itemProductId]
+    // --- Normal product stock guard ---
+    // stock may be NULL if inventory row is missing (LEFT JOIN); treat as 0.
+    const availableStock = product.stock ?? 0;
+
+    // --- Atomic upsert to avoid race-condition duplicate-key errors ---
+    // We read the current cart quantity inside the DB so the entire
+    // read-check-write is a single round-trip with no TOCTOU window.
+    const upsertResult = await pool.query(
+      `INSERT INTO cart_items (cart_id, product_id, customization_id, quantity, unit_price)
+       VALUES ($1, $2, NULL, $3, $4)
+       ON CONFLICT (cart_id, product_id) WHERE product_id IS NOT NULL AND customization_id IS NULL
+       DO UPDATE SET
+         quantity   = cart_items.quantity + EXCLUDED.quantity,
+         unit_price = EXCLUDED.unit_price,
+         updated_at = now()
+       RETURNING quantity`,
+      [cart.cart_id, itemProductId, quantity, unitPrice]
     );
 
-    if (existingNormalResult.rows.length > 0) {
-      // Item already in cart — accumulate quantity
-      const existingItem = existingNormalResult.rows[0];
-      const newQuantity = existingItem.quantity + quantity;
+    const finalQuantity = upsertResult.rows[0].quantity;
 
-      // Validate accumulated quantity against available stock
-      if (product.stock < newQuantity) {
-        throw new AppError(
-          `Not enough stock for ${product.name}. Available stock: ${product.stock}.`,
-          400
+    // Validate the resulting quantity against available stock.
+    // We do this *after* the upsert so the check is always against the true
+    // accumulated value; roll back by restoring the previous quantity if needed.
+    if (finalQuantity > availableStock) {
+      // Restore previous quantity (finalQuantity - quantity added this call)
+      const previousQuantity = finalQuantity - quantity;
+      if (previousQuantity > 0) {
+        await pool.query(
+          `UPDATE cart_items SET quantity = $1, updated_at = now()
+           WHERE cart_id = $2 AND product_id = $3 AND customization_id IS NULL`,
+          [previousQuantity, cart.cart_id, itemProductId]
+        );
+      } else {
+        await pool.query(
+          `DELETE FROM cart_items
+           WHERE cart_id = $1 AND product_id = $2 AND customization_id IS NULL`,
+          [cart.cart_id, itemProductId]
         );
       }
-
-      await pool.query(
-        `UPDATE cart_items SET quantity = $1, unit_price = $2, updated_at = now()
-         WHERE cart_item_id = $3`,
-        [newQuantity, unitPrice, existingItem.cart_item_id]
-      );
-    } else {
-      // New normal product — validate requested quantity first
-      if (product.stock < quantity) {
-        throw new AppError(
-          `Not enough stock for ${product.name}. Available stock: ${product.stock}.`,
-          400
-        );
-      }
-
-      await pool.query(
-        `INSERT INTO cart_items (cart_id, product_id, customization_id, quantity, unit_price)
-         VALUES ($1, $2, NULL, $3, $4)`,
-        [cart.cart_id, itemProductId, quantity, unitPrice]
+      throw new AppError(
+        `Not enough stock for ${product.name}. Available stock: ${availableStock}.`,
+        400
       );
     }
 
