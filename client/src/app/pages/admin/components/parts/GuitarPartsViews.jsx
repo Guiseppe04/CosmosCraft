@@ -1,26 +1,116 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, ChevronUp, Edit, Guitar, Layers, Plus, Trash2 } from 'lucide-react'
-import { GUITAR_TYPE_LABELS, PART_CATEGORY_LABELS, PART_CATEGORIES_BY_GUITAR_TYPE } from '../../constants/adminOptions'
+import { BUILDER_CATEGORY_MAP, GUITAR_TYPE_LABELS, PART_CATEGORY_LABELS } from '../../constants/adminOptions'
 import { formatCurrency } from '../../../../utils/formatCurrency'
 
 export function GuitarPartAccordion({ parts, expandedGuitarTypes, onToggleGuitarType, expandedPartCategories, onTogglePartCategory, onEdit, onDelete, onQuickAdd, density }) {
   const guitarTypes = ['electric', 'bass', 'general']
   const densityClass = density === 'compact' ? 'text-xs' : 'text-sm'
+  const sectionLabels = {
+    pricing: 'Pricing',
+    body: 'Body',
+    neck: 'Neck & Headstock',
+    hardware: 'Hardware',
+    electronics: 'Electronics',
+  }
 
-  const getPartsByGuitarTypeAndCategory = (guitarType, category) => {
-    if (guitarType === 'general') {
-      return parts.filter(
-        (p) =>
-          (!p.guitar_type || p.guitar_type === 'general' || p.guitar_type === '') &&
-          (p.part_category || 'misc') === category
-      )
-    }
+  const formatSlotLabel = (slot) => slot
+    .replace(/([A-Z])/g, ' $1')
+    .replace(/^./, (character) => character.toUpperCase())
 
-    return parts.filter(
-      (p) =>
-        p.guitar_type === guitarType &&
-        (p.part_category || 'misc') === category
+  const getPartType = (part) => String(part.guitar_type || 'general').trim().toLowerCase() || 'general'
+  const getPartSlot = (part) => String(part.type_mapping || '').trim()
+  const getPartVariant = (part) => {
+    const variant = part.metadata?.variant
+    return typeof variant === 'string' && variant.trim() ? variant.trim() : null
+  }
+  const mappedSlots = new Set(Object.values(BUILDER_CATEGORY_MAP).flat())
+
+  const renderPart = (part) => (
+    <div
+      key={part.part_id}
+      className="flex items-center justify-between gap-3 rounded-lg bg-[var(--bg-primary)]/50 p-2 hover:bg-[var(--gold-primary)]/10 transition-colors group"
+    >
+      <div className="flex items-center gap-3 min-w-0">
+        {part.image_url ? (
+          <img src={part.image_url} alt={part.name} className="w-8 h-8 rounded object-contain border border-[var(--border)]" />
+        ) : (
+          <div className="w-8 h-8 rounded bg-[var(--surface-dark)] flex items-center justify-center border border-[var(--border)]">
+            <Guitar className="w-4 h-4 text-[var(--text-muted)]" />
+          </div>
+        )}
+        <div className="min-w-0">
+          <p className={`text-white truncate ${densityClass}`}>{part.name}</p>
+          <p className="text-[var(--gold-primary)] text-xs">{formatCurrency(part.price)}</p>
+        </div>
+      </div>
+      <div className="flex items-center gap-2 shrink-0">
+        <span className={`px-2 py-0.5 rounded-full text-xs ${part.is_active ? 'bg-green-500/20 text-green-400' : 'bg-gray-500/20 text-gray-400'}`}>
+          {part.is_active ? 'Active' : 'Inactive'}
+        </span>
+        <span className="text-[var(--text-muted)] text-xs">{part.quantity ?? 0} in stock</span>
+        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button type="button" onClick={() => onEdit(part)} className="p-1.5 hover:bg-[var(--gold-primary)]/20 rounded" title="Edit">
+            <Edit className="w-3.5 h-3.5 text-[var(--text-muted)]" />
+          </button>
+          <button
+            type="button"
+            onClick={() => onDelete(part.part_id, part.name, part.is_active)}
+            className="p-1.5 hover:bg-red-500/20 rounded"
+            title={part.is_active ? 'Deactivate' : 'Delete permanently'}
+          >
+            <Trash2 className="w-3.5 h-3.5 text-red-400" />
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+
+  const renderSlot = (guitarType, sectionKey, slot, slotParts) => {
+    const slotId = `${guitarType}-${sectionKey}-${slot}`
+    const isSlotExpanded = expandedPartCategories.has(slotId)
+    const variantGroups = Array.from(new Set(slotParts.map(getPartVariant).filter(Boolean)))
+    const hasVariants = variantGroups.length > 0
+
+    return (
+      <div key={slot} className="border border-[var(--border)] rounded-xl overflow-hidden">
+        <div className="flex items-center gap-2 px-4 py-3 bg-[var(--bg-primary)]/50">
+          <button
+            type="button"
+            onClick={() => onTogglePartCategory(slotId)}
+            className="flex-1 flex items-center gap-2 text-left hover:text-white transition-colors"
+          >
+            {isSlotExpanded ? <ChevronDown className="w-4 h-4 text-[var(--gold-primary)]" /> : <ChevronRight className="w-4 h-4 text-[var(--gold-primary)]" />}
+            <span className="text-white font-medium">{formatSlotLabel(slot)}</span>
+            <span className="px-2 py-0.5 rounded-full text-xs bg-[var(--bg-primary)] text-[var(--text-muted)]">{slotParts.length}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => onQuickAdd(guitarType, slot)}
+            className="p-1.5 hover:bg-[var(--gold-primary)]/20 rounded-lg transition-colors"
+            title={`Add ${formatSlotLabel(slot)} choice`}
+          >
+            <Plus className="w-4 h-4 text-[var(--gold-primary)]" />
+          </button>
+        </div>
+        <AnimatePresence>
+          {isSlotExpanded && (
+            <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="border-t border-[var(--border)]">
+              <div className={`p-3 space-y-3 ${density === 'compact' ? 'p-2' : 'p-3'}`}>
+                {hasVariants ? variantGroups.map((variant) => (
+                  <div key={variant} className="rounded-lg border border-[var(--border)] bg-[var(--surface-dark)]/50 p-2">
+                    <p className="mb-2 px-1 text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">{formatSlotLabel(variant)}</p>
+                    <div className="space-y-2">{slotParts.filter((part) => getPartVariant(part) === variant).map(renderPart)}</div>
+                  </div>
+                )) : (
+                  <div className="space-y-2">{slotParts.map(renderPart)}</div>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
     )
   }
 
@@ -29,20 +119,6 @@ export function GuitarPartAccordion({ parts, expandedGuitarTypes, onToggleGuitar
       {guitarTypes.map((guitarType) => {
         const isExpanded = expandedGuitarTypes.has(guitarType)
         const typeLabel = GUITAR_TYPE_LABELS[guitarType] || guitarType
-        const baseCategories = PART_CATEGORIES_BY_GUITAR_TYPE[guitarType] || []
-        const dataCategories = Array.from(
-          new Set(
-            parts
-              .filter((p) =>
-                guitarType === 'general'
-                  ? (!p.guitar_type || p.guitar_type === 'general' || p.guitar_type === '')
-                  : p.guitar_type === guitarType
-              )
-              .map((p) => p.part_category || 'misc')
-          )
-        )
-        const categories = Array.from(new Set([...baseCategories, ...dataCategories]))
-
         return (
           <div key={guitarType} className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl overflow-hidden">
             <button
@@ -77,91 +153,58 @@ export function GuitarPartAccordion({ parts, expandedGuitarTypes, onToggleGuitar
                   className="border-t border-[var(--border)]"
                 >
                   <div className="p-4 space-y-2">
-                    {categories.map((category) => {
-                      const categoryParts = getPartsByGuitarTypeAndCategory(guitarType, category)
-                      const isCategoryExpanded = expandedPartCategories.has(`${guitarType}-${category}`)
-                      const categoryLabel = PART_CATEGORY_LABELS[category] || category
-
-                      if (categoryParts.length === 0) return null
+                    {Object.entries(BUILDER_CATEGORY_MAP).map(([sectionKey, slots]) => {
+                      const sectionParts = parts.filter((part) => getPartType(part) === guitarType && slots.includes(getPartSlot(part)))
+                      if (sectionParts.length === 0) return null
+                      const sectionId = `${guitarType}-section-${sectionKey}`
+                      const isSectionExpanded = expandedPartCategories.has(sectionId)
+                      const presentSlots = slots.filter((slot) => sectionParts.some((part) => getPartSlot(part) === slot))
 
                       return (
-                        <div key={category} className="border border-[var(--border)] rounded-xl overflow-hidden">
-                          <div className="flex items-center gap-2 px-4 py-3 bg-[var(--bg-primary)]/50">
-                            <button
-                              type="button"
-                              onClick={() => onTogglePartCategory(`${guitarType}-${category}`)}
-                              className="flex-1 flex items-center gap-2 text-left hover:text-white transition-colors"
-                            >
-                              {isCategoryExpanded ? (
-                                <ChevronDown className="w-4 h-4 text-[var(--gold-primary)]" />
-                              ) : (
-                                <ChevronRight className="w-4 h-4 text-[var(--gold-primary)]" />
-                              )}
-                              <span className="text-white font-medium">{categoryLabel}</span>
-                              <span className="px-2 py-0.5 rounded-full text-xs bg-[var(--bg-primary)] text-[var(--text-muted)]">
-                                {categoryParts.length}
-                              </span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => onQuickAdd(guitarType, category)}
-                              className="p-1.5 hover:bg-[var(--gold-primary)]/20 rounded-lg transition-colors"
-                              title="Quick add part"
-                            >
-                              <Plus className="w-4 h-4 text-[var(--gold-primary)]" />
-                            </button>
-                          </div>
-
-                          <AnimatePresence>
-                            {isCategoryExpanded && (
-                              <motion.div
-                                initial={{ height: 0, opacity: 0 }}
-                                animate={{ height: 'auto', opacity: 1 }}
-                                exit={{ height: 0, opacity: 0 }}
-                                className="border-t border-[var(--border)]"
-                              >
-                                <div className={`p-3 space-y-2 ${density === 'compact' ? 'p-2' : 'p-3'}`}>
-                                  {categoryParts.map((part) => (
-                                    <div
-                                      key={part.part_id}
-                                      className="flex items-center justify-between p-2 rounded-lg bg-[var(--bg-primary)]/50 hover:bg-[var(--gold-primary)]/10 transition-colors group"
-                                    >
-                                      <div className="flex items-center gap-3 min-w-0">
-                                        {part.image_url ? (
-                                          <img src={part.image_url} alt={part.name} className="w-8 h-8 rounded object-contain border border-[var(--border)]" />
-                                        ) : (
-                                          <div className="w-8 h-8 rounded bg-[var(--surface-dark)] flex items-center justify-center border border-[var(--border)]">
-                                            <Guitar className="w-4 h-4 text-[var(--text-muted)]" />
-                                          </div>
-                                        )}
-                                        <div className="min-w-0">
-                                          <p className={`text-white truncate ${densityClass}`}>{part.name}</p>
-                                          <p className="text-[var(--gold-primary)] text-xs">{formatCurrency(part.price)}</p>
-                                        </div>
-                                      </div>
-                                      <div className="flex items-center gap-2">
-                                        <span className={`px-2 py-0.5 rounded-full text-xs ${part.is_active ? 'bg-green-500/20 text-green-400' : 'bg-gray-500/20 text-gray-400'}`}>
-                                          {part.is_active ? 'Active' : 'Inactive'}
-                                        </span>
-                                        <span className="text-[var(--text-muted)] text-xs">{part.quantity ?? 0} in stock</span>
-                                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                          <button onClick={() => onEdit(part)} className="p-1.5 hover:bg-[var(--gold-primary)]/20 rounded" title="Edit">
-                                            <Edit className="w-3.5 h-3.5 text-[var(--text-muted)]" />
-                                          </button>
-                                          <button onClick={() => onDelete(part.part_id, part.name)} className="p-1.5 hover:bg-red-500/20 rounded" title="Delete">
-                                            <Trash2 className="w-3.5 h-3.5 text-red-400" />
-                                          </button>
-                                        </div>
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              </motion.div>
-                            )}
-                          </AnimatePresence>
+                        <div key={sectionKey} className="border border-[var(--border)] rounded-xl overflow-hidden">
+                          <button
+                            type="button"
+                            onClick={() => onTogglePartCategory(sectionId)}
+                            className="flex w-full items-center gap-2 px-4 py-3 bg-[var(--bg-primary)]/50 text-left hover:text-white transition-colors"
+                          >
+                            {isSectionExpanded ? <ChevronDown className="w-4 h-4 text-[var(--gold-primary)]" /> : <ChevronRight className="w-4 h-4 text-[var(--gold-primary)]" />}
+                            <span className="text-white font-semibold">{sectionLabels[sectionKey] || formatSlotLabel(sectionKey)}</span>
+                            <span className="px-2 py-0.5 rounded-full text-xs bg-[var(--bg-primary)] text-[var(--text-muted)]">{sectionParts.length}</span>
+                          </button>
+                          {isSectionExpanded && (
+                            <div className="border-t border-[var(--border)] p-3 space-y-2">
+                              {presentSlots.map((slot) => renderSlot(guitarType, sectionKey, slot, sectionParts.filter((part) => getPartSlot(part) === slot)))}
+                            </div>
+                          )}
                         </div>
                       )
                     })}
+                    {(() => {
+                      const unmappedParts = parts.filter((part) => getPartType(part) === guitarType && !mappedSlots.has(getPartSlot(part)))
+                      if (unmappedParts.length === 0) return null
+                      const sectionKey = 'unmapped'
+                      const sectionId = `${guitarType}-section-${sectionKey}`
+                      const isSectionExpanded = expandedPartCategories.has(sectionId)
+                      const presentSlots = Array.from(new Set(unmappedParts.map((part) => getPartSlot(part) || 'unassigned')))
+                      return (
+                        <div className="border border-amber-500/30 rounded-xl overflow-hidden">
+                          <button
+                            type="button"
+                            onClick={() => onTogglePartCategory(sectionId)}
+                            className="flex w-full items-center gap-2 px-4 py-3 bg-amber-500/10 text-left hover:text-white transition-colors"
+                          >
+                            {isSectionExpanded ? <ChevronDown className="w-4 h-4 text-amber-400" /> : <ChevronRight className="w-4 h-4 text-amber-400" />}
+                            <span className="text-white font-semibold">Needs Mapping</span>
+                            <span className="px-2 py-0.5 rounded-full text-xs bg-[var(--bg-primary)] text-[var(--text-muted)]">{unmappedParts.length}</span>
+                          </button>
+                          {isSectionExpanded && (
+                            <div className="border-t border-amber-500/30 p-3 space-y-2">
+                              {presentSlots.map((slot) => renderSlot(guitarType, sectionKey, slot, unmappedParts.filter((part) => (getPartSlot(part) || 'unassigned') === slot)))}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })()}
                   </div>
                 </motion.div>
               )}

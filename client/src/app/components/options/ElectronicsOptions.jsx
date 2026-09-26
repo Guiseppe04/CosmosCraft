@@ -16,7 +16,6 @@ export default function ElectronicsOptions({
       <OptionGroup
         title="Pickups"
         description="Pickup layout"
-        variant="text"
         value={config.pickups}
         onChange={pickups => onChange({ pickups })}
         options={options.pickupOptions}

@@ -3,27 +3,32 @@
 const CLOUD_NAME = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_CLOUDINARY_CLOUD_NAME) ? import.meta.env.VITE_CLOUDINARY_CLOUD_NAME : ''
 const USE_CLOUDINARY = Boolean(CLOUD_NAME)
 
+const isNoneAssetPath = (value) => /(?:^|\/)none(?:\.png)?$/i.test(String(value || '').replace(/^\/+/, ''))
+
 export const cloudImage = (root, path) => {
+  if (isNoneAssetPath(path)) return null
   if (!USE_CLOUDINARY) {
-    return `/builder/customization_assets/${String(path || '').replace(/^\/+/, '')}`
+    return `/builder/${String(path || '').replace(/^\/+/, '')}`
   }
   return `https://res.cloudinary.com/${CLOUD_NAME}/image/upload/${root}/${path}`
 }
 
 export const bassAsset = (path) => {
   const cleanPath = String(path || '').replace(/^\/+/, '')
+  if (isNoneAssetPath(cleanPath)) return null
   const encodedPath = encodeURI(cleanPath) // encodeURI preserves '/', encodes spaces and other unsafe chars
   if (!USE_CLOUDINARY) {
-    return `/builder/customization_assets/${encodedPath}`
+    return `/builder/${encodedPath}`
   }
   return cloudImage('cosmoscraft_assets/customization_assets/builder', encodedPath)
 }
 
 export const bassWoodAsset = (path) => {
   const cleanPath = String(path || '').replace(/^\/+/, '')
+  if (isNoneAssetPath(cleanPath)) return null
   const encodedPath = encodeURI(cleanPath)
   if (!USE_CLOUDINARY) {
-    return `/builder/customization_assets/${encodedPath}`
+    return `/builder/${encodedPath}`
   }
   return cloudImage('cosmoscraft_assets/customization_assets/builder', encodedPath)
 }
@@ -345,46 +350,46 @@ function pickColorVariants(model, view, category = '', strings) {
 }
 
 export const BASS_DEFAULT_CONFIG = {
-  bassType: 'vader',
-  bodyWood: 'alder',
-  bodyFinish: 'none',
-  neck: 'plainMaple',
-  fingerboardRadius: 'bass14inch',
-  fretboard: 'rosewood',
-  headstockWood: 'maple',
-  headstockStyle: 'ch',
-  neckStyle: 'roundBottom',
-  inlays: 'whiteDots',
-  frets: 'stainlessMedJumbo',
-  neckRearFinish: 'tungOilNeck',
-  bridge: 'standard',
-  pickguard: 'white',
-  knobs: 'hardwareColor',
-  pickups: 'standard',
-  pickupTypeStyle: 'j',
-  hardware: 'chrome',
-  strings: '4',
-  pickupConfig: 'j',
-  backplate: 'standard',
-  // --- New customization options ---
-  dexterity: 'right',
-  multiscale: 'off',
-  scaleLength: '34',
-  case: 'none',
-  bevel: 'off',
-  topWood: 'none',
-  topCoat: 'clearGloss',
-  burstFinish: 'none',
-  neckConstruction: '1piece',
-  inlayShape: 'dots',
-  inlayMaterial: 'motherOfPearl',
-   headstockShape: '6in',
-  trussRodCover: 'black',
-  electronicsType: 'passive',
-   pickupConfiguration: 'hh',
-  bridgePickupModel: 'beryllium',
-  middlePickupModel: 'none',
-  neckPickupModel: 'beryllium',
+    bassType: 'vader',
+    bodyWood: 'alder',
+    bodyFinish: 'none',
+    neck: 'plainMaple',
+    fingerboardRadius: 'bass14inch',
+    fretboard: 'rosewood',
+    headstockWood: 'maple',
+    headstockStyle: 'ch',
+    neckStyle: 'roundBottom',
+    inlays: 'whiteDots',
+    frets: 'stainlessMedJumbo',
+    neckRearFinish: 'tungOilNeck',
+    bridge: 'standard',
+    pickguard: 'white',
+    knobs: 'hardwareColor',
+    pickups: 'standard',
+    pickupTypeStyle: 'j',
+    hardware: 'chrome',
+    strings: '4',
+    pickupConfig: 'j',
+    backplate: 'standard',
+    // --- New customization options ---
+    dexterity: 'right',
+    multiscale: 'off',
+    scaleLength: '34',
+    case: 'none',
+    bevel: 'off',
+    topWood: 'none',
+    topCoat: 'clearGloss',
+    burstFinish: 'none',
+    neckConstruction: '1piece',
+    inlayShape: 'dots',
+    inlayMaterial: 'motherOfPearl',
+    headstockShape: '6in',
+    trussRodCover: 'black',
+    electronicsType: 'passive',
+    pickupConfiguration: 'hh',
+    bridgePickupModel: 'beryllium',
+    middlePickupModel: 'none',
+    neckPickupModel: 'beryllium',
     pickupColor: 'bobbins',
     pickupColorVariant: 'black',
     pickupPaintedColor: '#000000',
@@ -403,6 +408,8 @@ export const BASS_DEFAULT_CONFIG = {
     pbPickupColorRgb: '#000000',
     jbPickupColor: 'black',
     jbPickupColorRgb: '#000000',
+    jbBridgePickupModel: 'jvaSingleCoil',
+    jbNeckPickupModel: 'jvaSingleCoil',
     controls: 'off',
     nut: 'blackGraphTech',
     strapButtons: 'standard',
@@ -426,7 +433,7 @@ export const BASS_BODY_OPTIONS = {
     label: 'Vader',
     note: 'Modern aggressive bass shape',
     bodySrc: resolveBassCatalogAsset('vader', 'front', 'masks', { strings: '4', preferTokens: ['bodymask'] }) ?? bassModelAsset('vader', 'front/masks/bodymask.png'),
-    price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
+    price: 0, specs: { size: '', dimensions: '', material: '', notes: '' },
   },
   pb: {
     label: 'Precision',
@@ -1069,12 +1076,6 @@ export const BASS_HEADSTOCK_STYLE_OPTIONS = {
     src: bassAsset('all-models/headstocks/bass/4-string/gt4r/'),
     price: 50, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
-  headless: {
-    label: 'Headless',
-    note: 'No headstock',
-    src: null,
-    price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
-  },
 }
 
 // Neck Style Options from all-models
@@ -1167,7 +1168,9 @@ export const BASS_PICKUP_SCREW_OPTIONS = {
       label: 'Black Screws',
       note: 'Black pickup mounting screws',
       src: bassModelAsset('pb', 'front/pickguard/screws-black.png'),
-      price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
+      price: 0, specs: { size: '', dimensions: '', material: '', notes: '' },
+      bgSize: '140%',           // zoom in — texture image is smaller/sparser than the body
+      bgPosition: '50% 40%',    // nudge the grain pattern up a bit
     },
     chrome: {
       label: 'Chrome Screws',
@@ -1660,11 +1663,19 @@ export const BASS_PICKUP_MODEL_BRIDGE_OPTIONS = {
     none: { label: 'None', note: 'No bridge pickup', price: 0, specs: specs() },
     jvaSingleCoil: { label: 'JVA Single Coil', note: 'JVA single coil bridge pickup', price: 0, specs: specs() },
   },
+  jb: {
+    h50aHumbucker: { label: 'H50A Alnico Humbucker', note: 'H50A alnico humbucker bridge pickup', price: 0, specs: specs() },
+    jvaSingleCoil: { label: 'JVA Single Coil', note: 'JVA single coil bridge pickup', price: 0, specs: specs() },
+  },
 }
 
 export const BASS_PICKUP_MODEL_NECK_OPTIONS = {
   pb: {
     scpSplitCoil: { label: 'SCP Split-Coil Alnico', note: 'SCP split-coil Alnico neck pickup', price: 0, specs: specs() },
+  },
+  jb: {
+    h50aHumbucker: { label: 'H50A Alnico Humbucker', note: 'H50A alnico humbucker neck pickup', price: 0, specs: specs() },
+    jvaSingleCoil: { label: 'JVA Single Coil', note: 'JVA single coil neck pickup', price: 0, specs: specs() },
   },
 }
 

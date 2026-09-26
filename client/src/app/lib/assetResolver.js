@@ -19,11 +19,14 @@ const CLOUD_NAME = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_
 
 const USE_CLOUDINARY = Boolean(CLOUD_NAME) 
 
+const isNoneAssetPath = (value) => /(?:^|\/)none\.png$/i.test(String(value || '').replace(/^\/+/, ''))
+
 /**
  * Resolve an asset path using either Cloudinary or local files
  */
 // After
 export function resolveAssetPath(subPath) {
+  if (isNoneAssetPath(subPath)) return null
   if (USE_CLOUDINARY) {
     // Cloudinary mirrors the local folder structure exactly:
     // cosmoscraft_assets/customization_assets/builder/{dc|delos|all-models}/...
@@ -152,26 +155,56 @@ export function resolveFinishAsset(category, model, finishType, finishKey) {
   const folder = folderMap[finishType] || finishType
   return resolveSharedAsset(category, model, 'woods-colors', 'colors', folder, `${finishKey}.png`)
 }
-export function resolveBurstMask(category, model, burstKey) {
+export function resolveBurstMask(category, model, burstKey, side = 'front') {
   const burstMaskMap = {
-    delos: {
-      blackBurst: 'delos/bodies/front/masks/black-burst-mask.png',
-      whiteBurst: 'delos/bodies/front/masks/burstmask.png',
+    front: {
+      delos: {
+        blackBurst: 'delos/bodies/front/masks/black-burst-mask.png',
+        whiteBurst: 'delos/bodies/front/masks/burstmask.png',
+        translucentBlackBurst: 'delos/bodies/front/masks/burstmask.png',
+        reverseTranslucentBlackBurst: 'delos/bodies/front/masks/burstmask.png',
+        blackBackSides: 'delos/bodies/front/masks/black-burst-mask.png',
+        blackSidesBlackBurstBack: 'delos/bodies/front/masks/black-burst-mask.png',
+      },
+      dc: {
+        blackBurst: 'dc/bodies/front/masks/bvdmask.png',
+        whiteBurst: 'dc/bodies/front/masks/bvdmask.png',
+        translucentBlackBurst: 'dc/bodies/front/masks/bvdmask.png',
+        reverseTranslucentBlackBurst: 'dc/bodies/front/masks/bvdmask.png',
+        blackBackSides: 'dc/bodies/front/masks/bvdmask.png',
+        blackSidesBlackBurstBack: 'dc/bodies/front/masks/bvdmask.png',
+      },
     },
-    dc: {
-      blackBurst: 'dc/bodies/front/masks/bvdmask.png',
-      whiteBurst: 'dc/bodies/front/masks/bvdmask.png',
+    rear: {
+      delos: {
+        blackBurst: 'delos/back/masks/burstmask.png',
+        whiteBurst: 'delos/back/masks/burstmask.png',
+        translucentBlackBurst: 'delos/back/masks/burstmask.png',
+        reverseTranslucentBlackBurst: 'delos/back/masks/burstmask.png',
+      },
+      // DC has no dedicated back/masks burst art yet — reuse the front masks.
+      // The rear layer already applies transform: scaleX(-1), so reusing the
+      // front asset mirrors correctly rather than needing separate back art.
+      dc: {
+        blackBurst: 'dc/back/masks/burstmask.png',
+        whiteBurst: 'dc/back/masks/burstmask.png',
+        translucentBlackBurst: 'dc/back/masks/burstmask.png',
+        reverseTranslucentBlackBurst: 'dc/back/masks/burstmask.png',
+        //cosmoscraft_assets/customization_assets/builder/electric/dc/back/masks/burstmask.png
+      },
     },
   }
-  
-  const modelMap = burstMaskMap[model]
-  // After
+
+  const modelMap = burstMaskMap[side]?.[model]
   if (modelMap && modelMap[burstKey]) {
-      return asset(`customization_assets/builder/${category}/${modelMap[burstKey]}`)
+    return asset(`customization_assets/builder/${category}/${modelMap[burstKey]}`)
   }
-  
+
   // Fallback to default resolution
-  return resolveModelAsset(category, model, 'bodies', 'front', 'masks', `${burstKey === 'blackBurst' || burstKey === 'whiteBurst' ? 'bvdmask' : 'burstmask'}.png`)
+  const fallbackFile = burstKey === 'blackBurst' || burstKey === 'whiteBurst' ? 'bvdmask' : 'burstmask'
+  return side === 'rear'
+    ? resolveModelAsset(category, model, 'back', 'masks', `${fallbackFile}.png`)
+    : resolveModelAsset(category, model, 'bodies', 'front', 'masks', `${fallbackFile}.png`)
 }
 /**
  * Resolve a body mask path
@@ -206,6 +239,18 @@ export function resolveGloss(category, model) {
  * Path: customization_assets/builder/{category}/{model}/back/shadows_highlights/{topCoatKey}.png
  */
 export function resolveTopCoatAsset(category, model, topCoatKey, neckRearFinish) {
+  if (category === 'electric' && model === 'dc') {
+    const dcFileMap = {
+      tungOil: 'op',
+      satinMatte: 'matte',
+      clearGloss: 'gloss',
+    }
+    const dcFileKey = dcFileMap[topCoatKey]
+    if (dcFileKey) {
+      return resolveModelAsset(category, model, 'shadows_highlights', `${dcFileKey}.png`)
+    }
+  }
+
   const neckFinish = neckRearFinish || 'tungOil'
   
   const pathMap = {
@@ -477,6 +522,17 @@ export function resolveRearHeadstockMask(category, model, frontHeadstockShape) {
   return resolveSharedAsset(category, model, 'back', 'necks', '6-string', 'back', '6-string-neck-thru-back', rearShape, 'mask.png')
 }
 
+export function resolveRearNeckThruShading(headstockShape, kind) {
+  const rearShape = FRONT_TO_REAR_HEADSTOCK_MAP[headstockShape]
+  if (!rearShape || !kind) return null
+  return resolveSharedAsset(
+    null, null,
+    'back', 'necks', '6-string', 'back', '6-string-neck-thru-back',
+    rearShape,
+    `${kind}.png`
+  )
+}
+
 export function resolveRearBodyMask(category, model) {
   if (model === 'delos') {
     return resolveModelAsset(category, model, 'back', 'masks', 'bodymask.png')
@@ -514,8 +570,12 @@ export const resolveStringFerrulesAsset = (category, model, hardwareColor) =>
 
 /**
  * Resolve output jack asset by hardware color (spec keys it by hardware color, not a jack "type").
+ * Delos front-body output jacks live under the front body folder and should never render on the rear view.
  */
-export function resolveOutputJackByColor(category, model, hardwareColor) {
+export function resolveOutputJackByColor(category, model, hardwareColor, side = 'rear') {
+  if (model === 'delos' && side === 'front') {
+    return resolveModelAsset(category, model, 'bodies', 'front', 'output jack', `${hardwareColor}.png`)
+  }
   return resolveModelAsset(category, model, 'back', 'output-jacks', `${hardwareColor}.png`)
 }
 
@@ -624,6 +684,7 @@ export function resolveBodySpecificAsset(category, model, assetType, fileName) {
  * Get the button preview image for a given option type and value
  */
 export function getButtonPreview(category, model, optionType, value) {
+  if (String(value || '').trim().toLowerCase() === 'none') return null
   const buttonFileName = `${value}.png`
   return resolveButtonAsset(category, model, optionType, buttonFileName)
 }
@@ -721,6 +782,7 @@ export default {
     resolveTunerButtonStyle,
     resolveRearTunerAsset,
     resolveRearHeadstockMask,
+    resolveRearNeckThruShading,
     resolveRearBodyMask,
    resolveBackplateScrews,
    resolveTremoloCoverAsset,

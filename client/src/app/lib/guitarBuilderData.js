@@ -37,7 +37,7 @@ export const DEFAULT_CONFIG = {
   bodyFinish: 'none',
   neck: 'maple',
   fretboard: 'rosewood',
-  headstockWood: 'plain-maple',
+  headstockWood: 'none',
   inlays: 'pearl',
   bridge: 'hipshotFixed',
    knobs: 'plasticBlack',
@@ -71,7 +71,7 @@ export const DEFAULT_CONFIG = {
   pickupColor: 'bobbins',
   pickupColorVariant: 'black',
   pickupPaintedColor: '#000000',
-  pickupWoodType: 'black',
+  pickupWoodType: 'ebony',
     pickupPoleColor: 'silver',
     controls: 'off',
   saddle: 'chrome',
@@ -391,14 +391,23 @@ export const NECK_NUT = {
   white: asset('all-models/necks/6-string/front/24-fret-front/standard/nut/white.png'),
 }
 
+export const NECK_HEEL_MULTIPLY = asset('all-models/back/necks/6-string/back/6-string-bolt-on-back/new-heel-multiply.png')
+export const NECK_HEEL_SCREEN = asset('all-models/back/necks/6-string/back/6-string-bolt-on-back/new-neck-heel-screen.png')
+
 export const HEADSTOCK_WOOD_OPTIONS = {
+    none: {
+    label: 'None',
+    note: 'Raw wood texture',
+    texture: null,
+    price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
+  },
   'plain-maple': {
     label: 'Plain Maple',
     note: 'Light plain maple headstock',
     texture: asset('all-models/woods-colors/headstock-woods/plain-maple.png'),
     price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
   },
-  ash: {
+  'ash': {
     label: 'Ash',
     note: 'Warm ash headstock',
     texture: asset('all-models/woods-colors/headstock-woods/ash.png'),
@@ -645,29 +654,42 @@ export const KNOB_OPTIONS_BY_BODY = {
     },
   },
   delos: {
-    black: {
-      label: 'Black',
-      note: 'Standard black knobs',
-      src: modelAsset('electric', 'delos', 'bodies/front/knobs/black-dtmv.png'),
+    'no-style': {
+      label: 'No Style',
+      note: 'Standard hardware-colored knobs',
+      src: modelAsset('electric', 'delos', 'bodies/front/knobs/black-plastic.png'),
+      price: 0, specs: { size: '', dimensions: '', material: '', notes: '' },
+      isMetalKnob: true,
+    },
+    'black-plastic': {
+      label: 'Black Plastic',
+      note: 'Black plastic knobs',
+      src: modelAsset('electric', 'delos', 'bodies/front/knobs/black-plastic.png'),
       price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
-    blackPlastic: {
-      label: 'Black Plastic',
-      note: 'Black plastic DTMV',
-      src: modelAsset('electric', 'delos', 'bodies/front/knobs/black-plastic-dtmv.png'),
-      price: 10, specs: { size: '', dimensions: '', material: '', notes: '' }
-    },
-    whitePlastic: {
+    'white-plastic': {
       label: 'White Plastic',
-      note: 'White plastic DTMV',
-      src: modelAsset('electric', 'delos', 'bodies/front/knobs/white-plastic-dtmv.png'),
-      price: 10, specs: { size: '', dimensions: '', material: '', notes: '' }
+      note: 'White plastic knobs',
+      src: modelAsset('electric', 'delos', 'bodies/front/knobs/white-plastic.png'),
+      price: 0, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
-    pearl: {
-      label: 'Pearl Inlay',
-      note: 'White pearl inlay DTMV',
-      src: modelAsset('electric', 'delos', 'bodies/front/knobs/white-pearl-inlay-dtmv.png'),
+    'white-pearl-inlay': {
+      label: 'Metal Knobs w/ White Pearl Inlay',
+      note: 'Metal knobs with white pearl inlay',
+      src: modelAsset('electric', 'delos', 'bodies/front/knobs/white-pearl-inlay.png'),
       price: 20, specs: { size: '', dimensions: '', material: '', notes: '' }
+    },
+    'abalone-inlay': {
+      label: 'Metal Knobs w/ Abalone Inlays',
+      note: 'Metal knobs with abalone inlays',
+      src: modelAsset('electric', 'delos', 'bodies/front/knobs/abalone-inlay.png'),
+      price: 30, specs: { size: '', dimensions: '', material: '', notes: '' }
+    },
+    tamarind: {
+      label: 'Tamarind',
+      note: 'Tamarind wood knobs',
+      src: modelAsset('electric', 'delos', 'bodies/front/knobs/tamarind.png'),
+      price: 15, specs: { size: '', dimensions: '', material: '', notes: '' }
     },
   },
 }
@@ -891,6 +913,8 @@ export const BODY_LAYER_ASSETS = {
     pickguard: null,
     shadows:  modelAsset('electric', 'dc', 'shadows_highlights/edge-shadow.png'),
     gloss:  modelAsset('electric', 'dc', 'shadows_highlights/gloss.png'),
+    matte:  modelAsset('electric', 'dc', 'shadows_highlights/matte.png'),
+    op:  modelAsset('electric', 'dc', 'shadows_highlights/op.png'),
   },
   delos: {
     bridge: BRIDGE_OPTIONS.hipshotTremolo.assets,
@@ -906,8 +930,11 @@ export const BODY_LAYER_ASSETS = {
     },
     switch: modelAsset('electric', 'delos', 'bodies/front/switches/blade/black.png'),
     pickguard: modelAsset('electric', 'delos', 'bodies/front/pickguard/white.png'),
-    shadows: modelAsset('electric', 'delos', 'shadows_highlights/edge-shadow.png'),
+    matte: modelAsset('electric', 'delos', 'shadows_highlights/matte.png'),
+    matteRbd: modelAsset('electric', 'delos', 'shadows_highlights/matte-rbd.png'),
+    op: modelAsset('electric', 'delos', 'shadows_highlights/op.png'),
     gloss: modelAsset('electric', 'delos', 'shadows_highlights/gloss.png'),
+    glossRbd: modelAsset('electric', 'delos', 'shadows_highlights/gloss-rbd.png'),
   },
 }
 
@@ -1275,10 +1302,11 @@ export const STRING_BRAND_OPTIONS = {
 
 export const KNOB_STYLE_OPTIONS = {
   plasticBlack: { label: 'Black Plastic', fileKey: 'plasticblack', price: 0, specs: specs() },
+  'no-style': { label: 'No Style', fileKey: '', price: 15, specs: specs() },
   chrome: { label: 'No Style', fileKey: '', price: 15, specs: specs() },
   plasticWhite: { label: 'White Plastic', fileKey: 'plasticwhite', price: 0, specs: specs() },
-  abaloneInlay: { label: 'Metal Knobs w/ Abalone Inlays', fileKey: 'abalone-inlay', price: 30, specs: specs() },
-  whitePearlInlay: { label: 'Metal Knobs w/ White Pearl Inlays', fileKey: 'white-pearl-inlay', price: 25, specs: specs() },
+  'abalone-inlay': { label: 'Metal Knobs w/ Abalone Inlays', fileKey: 'abalone-inlay', price: 30, specs: specs() },
+  'white-pearl-inlay': { label: 'Metal Knobs w/ White Pearl Inlays', fileKey: 'white-pearl-inlay', price: 25, specs: specs() },
   tamarind: { label: 'Tamarind Wood', fileKey: 'tamarind', price: 20, specs: specs() },
 }
 
@@ -1338,6 +1366,8 @@ export const guitarBuilder = {
   NECK_OPTIONS,
   FRETBOARD_OPTIONS,
   NECK_MASK,
+  NECK_HEEL_MULTIPLY,
+  NECK_HEEL_SCREEN,
   NECK_FRETS,
   NECK_NUT,
   HEADSTOCK_WOOD_OPTIONS,

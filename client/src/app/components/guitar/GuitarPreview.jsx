@@ -5,6 +5,8 @@ import {
   NECK_FRETS,
   NECK_MASK,
   NECK_NUT,
+  NECK_HEEL_MULTIPLY,
+  NECK_HEEL_SCREEN,
   resolveVariant,
 } from '../../lib/guitarBuilderData.js'
 import {
@@ -20,14 +22,16 @@ import {
   resolveFingerboardWoodAsset,
   resolveTrussCover,
   resolveKnobHardwareBase,
-   resolveKnobStyleOverlay,
+  resolveKnobStyleOverlay,
+  resolveKnobAsset,
   resolveTremoloCoverAsset,
   resolveStrapButtonBack,
   resolveStrapButtonFront,
-   resolveTunerButtonStyle,
-   resolveRearTunerAsset,
-   resolveRearHeadstockMask,
-   resolveRearBodyMask,
+  resolveTunerButtonStyle,
+  resolveRearTunerAsset,
+  resolveRearHeadstockMask,
+  resolveRearNeckThruShading,
+  resolveRearBodyMask,
   resolveOutputJackByColor,
   resolveBackplateAsset,
   resolveBackplateScrews,
@@ -64,19 +68,37 @@ const maskedLayerStyle = (maskSrc, extra = {}) => ({
   ...extra,
 })
 
-function GuitarLayer({ src, maskSrc, gradient, style, className = '', layerName = '', protectedLayer = false }) {
+const doubleMaskedLayerStyle = (maskSrc, outerMaskSrc, extra = {}) => ({
+  backgroundColor: 'transparent',
+  WebkitMaskImage: `url(${encodeURI(maskSrc)}), url(${encodeURI(outerMaskSrc)})`,
+  maskImage: `url(${encodeURI(maskSrc)}), url(${encodeURI(outerMaskSrc)})`,
+  WebkitMaskComposite: 'source-in',
+  maskComposite: 'intersect',
+  WebkitMaskRepeat: 'no-repeat, no-repeat',
+  maskRepeat: 'no-repeat, no-repeat',
+  WebkitMaskSize: 'contain, contain',
+  maskSize: 'contain, contain',
+  WebkitMaskPosition: 'center, center',
+  maskPosition: 'center, center',
+  ...extra,
+})
+
+function GuitarLayer({ src, maskSrc, outerMaskSrc, gradient, style, className = '', layerName = '', protectedLayer = false }) {
   if (!src && !maskSrc && !gradient) return null
+
+  const computedStyle = gradient
+    ? gradientLayerStyle(gradient, style)
+    : maskSrc && outerMaskSrc
+    ? doubleMaskedLayerStyle(maskSrc, outerMaskSrc, style)
+    : maskSrc
+    ? maskedLayerStyle(maskSrc, style)
+    : layerStyle(src, style)
+
   return (
     <div
       aria-hidden="true"
       className={`absolute inset-0 pointer-events-none select-none ${className}`}
-      style={
-        gradient
-          ? gradientLayerStyle(gradient, style)
-          : maskSrc
-          ? maskedLayerStyle(maskSrc, style)
-          : layerStyle(src, style)
-      }
+      style={computedStyle}
       data-export-layer="true"
       data-layer={layerName}
       data-layer-src={src || ''}
@@ -94,10 +116,13 @@ function stringsOverlayStyle() {
   }
 }
 
-function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverlay = null, stickerMaskSrc = null, stageRef = null }) {
+function GuitarPreview({ config, view, onViewChange, modelImageSrc, bodyWoodImageSrc = null, topWoodImageSrc = null, stickerOverlay = null, stickerMaskSrc = null, stageRef = null }) {
   const model = guitarBuilder.BODY_OPTIONS[config.body] ?? guitarBuilder.BODY_OPTIONS.strat
   const modelBodySrc = modelImageSrc || model.bodySrc
-  const bodyWood = guitarBuilder.BODY_WOOD_OPTIONS[config.bodyWood] ?? guitarBuilder.BODY_WOOD_OPTIONS.mah
+  const bodyWood = {
+    ...(guitarBuilder.BODY_WOOD_OPTIONS[config.bodyWood] ?? guitarBuilder.BODY_WOOD_OPTIONS.mah),
+    ...(bodyWoodImageSrc ? { texture: bodyWoodImageSrc } : {}),
+  }
   
   // Handle both predefined finishes and custom hex colors
   const isCustomColor = config.bodyFinish && typeof config.bodyFinish === 'string' && config.bodyFinish.startsWith('#')
@@ -114,12 +139,19 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
   const fretboard = { ...fretboardStatic, src: resolveFingerboardWoodAsset('electric', config.body || 'dc', fretboardWoodKey) || fretboardStatic.src }
   const headstock = guitarBuilder.HEADSTOCK_OPTIONS[config.headstock] ?? guitarBuilder.HEADSTOCK_OPTIONS.gt6
   const topWoodOption = guitarBuilder.TOP_WOOD_OPTIONS[config.topWood] || null
-  const topWoodTexture = topWoodOption?.texture || (config.topWood && config.topWood !== 'none' ? resolveTopWoodAsset('electric', config.body || 'dc', config.topWood) : null)
-  const headstockWoodKey = config.topWood && config.topWood !== 'none' ? config.topWood : (config.headstockWood || 'plain-maple')
-  const headstockWoodStatic = guitarBuilder.HEADSTOCK_WOOD_OPTIONS[headstockWoodKey] ?? guitarBuilder.HEADSTOCK_WOOD_OPTIONS['plain-maple']
+  const topWoodTexture = topWoodImageSrc || topWoodOption?.texture || (config.topWood && config.topWood !== 'none' ? resolveTopWoodAsset('electric', config.body || 'dc', config.topWood) : null)
+  const isHeadstockWoodOverride = config.headstockWood && config.headstockWood !== 'none'
+  const headstockWoodKey = config.topWood && config.topWood !== 'none'
+    ? config.topWood
+    : (isHeadstockWoodOverride ? config.headstockWood : neckWoodKey)
+  const headstockWoodStatic = isHeadstockWoodOverride
+    ? (guitarBuilder.HEADSTOCK_WOOD_OPTIONS[config.headstockWood] ?? guitarBuilder.HEADSTOCK_WOOD_OPTIONS['plain-maple'])
+    : guitarBuilder.HEADSTOCK_WOOD_OPTIONS['plain-maple']
   const headstockTexture = config.topWood && config.topWood !== 'none'
-    ? (topWoodOption?.texture || resolveTopWoodAsset('electric', config.body || 'dc', headstockWoodKey))
-    : resolveHeadstockWoodAsset('electric', config.body || 'dc', headstockWoodKey)
+    ? (topWoodImageSrc || topWoodOption?.texture || resolveTopWoodAsset('electric', config.body || 'dc', headstockWoodKey))
+    : isHeadstockWoodOverride
+      ? resolveHeadstockWoodAsset('electric', config.body || 'dc', config.headstockWood)
+      : (neck.src || resolveNeckWoodAsset('electric', config.body || 'dc', neckWoodKey))
   const headstockWood = { ...headstockWoodStatic, texture: headstockTexture || headstockWoodStatic.texture }
   const headstockTrussCover = resolveTrussCover('electric', config.body || 'dc', config.trussRodCover || 'black') || headstock.trussCover
   const inlaySrc = config.inlayShape || config.inlayMaterial
@@ -146,13 +178,20 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
   const knobControlsSuffix =
     config.controls === 'deleteTone' ? '-dtc' :
     config.controls === 'deleteToneMoveVolume' ? '-dtmv' : ''
-  const knobStyle = config.body === 'dc' ? guitarBuilder.KNOB_STYLE_OPTIONS[config.knobs] : null
-  const knobHardwareBase = config.body === 'dc'
+  const delosKnobOption = config.body === 'delos' ? guitarBuilder.KNOB_OPTIONS_BY_BODY.delos?.[config.knobs] : null
+  const isDelosMetalKnob = delosKnobOption?.isMetalKnob === true
+  const isMetalKnob = config.body === 'dc' || isDelosMetalKnob
+  const knobStyle = isMetalKnob ? guitarBuilder.KNOB_STYLE_OPTIONS[config.knobs] : null
+  const knobHardwareBase = isMetalKnob
     ? resolveKnobHardwareBase('electric', config.body || 'dc', `${hardware.color}${knobControlsSuffix}`)
     : null
-  const knobStyleOverlay = config.body === 'dc' && knobStyle
-    ? resolveKnobStyleOverlay('electric', config.body || 'dc', `${knobStyle.fileKey}${knobControlsSuffix}`)
-    : (guitarBuilder.KNOB_OPTIONS_BY_BODY[config.body]?.[config.knobs]?.src ?? null)
+  const knobStyleOverlay = isMetalKnob
+    ? (knobStyle?.fileKey
+        ? resolveKnobStyleOverlay('electric', config.body || 'dc', `${knobStyle.fileKey}${knobControlsSuffix}`)
+        : null)
+    : (config.body === 'delos'
+        ? resolveKnobAsset('electric', config.body || 'delos', `${config.knobs}${knobControlsSuffix}`)
+        : (guitarBuilder.KNOB_OPTIONS_BY_BODY[config.body]?.[config.knobs]?.src ?? null))
 
   const nutOption = guitarBuilder.NUT_OPTIONS[config.nut] ?? guitarBuilder.NUT_OPTIONS.blackGraphTech
 
@@ -170,6 +209,9 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
 
   const outputJackAsset = config.outputJack === 'on'
     ? resolveOutputJackByColor('electric', config.body || 'dc', hardware.color)
+    : null
+  const delosFrontOutputJackAsset = config.body === 'delos'
+    ? resolveOutputJackByColor('electric', config.body || 'dc', hardware.color, 'front')
     : null
 
   const strapOption = guitarBuilder.STRAP_BUTTON_OPTIONS[config.strapButtons]
@@ -201,6 +243,19 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
   const rearBodyMask = useMemo(
     () => resolveRearBodyMask('electric', config.body || 'dc'),
     [config.body],
+  )
+
+  const isSixStringNeckThru =
+    config.strings === '6' 
+
+  const rearNeckThruMultiply = useMemo(
+    () => (isSixStringNeckThru ? resolveRearNeckThruShading(headstockShapeKey, 'multiply') : null),
+    [isSixStringNeckThru, headstockShapeKey],
+  )
+
+  const rearNeckThruScreen = useMemo(
+    () => (isSixStringNeckThru ? resolveRearNeckThruShading(headstockShapeKey, 'screen') : null),
+    [isSixStringNeckThru, headstockShapeKey],
   )
 
     const neckBoltsAsset = useMemo(
@@ -247,7 +302,7 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
     const pickupColorType = isActive ? 'painted' : (config.pickupColor || 'bobbins')
     const pickupColorVariant = config.pickupColorVariant || 'black'
     const paintedColor = config.pickupPaintedColor || '#000000'
-    const woodType = config.pickupWoodType || 'black'
+    const woodType = config.pickupWoodType || fretboardWoodKey
     const poleColor = config.pickupPoleColor || 'silver'
     const bridgeModel = isActive ? 'fluence' : (config.bridgePickupModel || 'vantium')
     const middleModel = config.middlePickupModel || 'none'
@@ -329,8 +384,8 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
         return { backgroundColor: paintedColor }
       }
       if (pickupColorType === 'wooden') {
-        const woodTexture = resolveBodyWoodAsset('electric', config.body || 'dc', woodType)
-        return { backgroundImage: `url(${woodTexture})` }
+        const woodTexture = resolveFingerboardWoodAsset('electric', config.body || 'dc', woodType)
+        return { backgroundImage: `url(${woodTexture})`, backgroundSize: 'cover', backgroundPosition: 'center' }
       }
       return {}
     }
@@ -458,6 +513,46 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
 
   const overlayLayers = useMemo(() => {
     const layers = []
+    if (config.body === 'delos') {
+      const isTungOil = config.topCoat === 'tungOil'
+      const isMatte = config.topCoat === 'satinMatte'
+      const useRbd = config.bevel === 'on' && !isTungOil
+      const overlaySrc = isTungOil
+        ? bodyAssets.op
+        : isMatte
+          ? (useRbd ? bodyAssets.matteRbd : bodyAssets.matte)
+          : (useRbd ? bodyAssets.glossRbd : bodyAssets.gloss)
+
+      if (overlaySrc) {
+        layers.push({
+          name: 'delos-body-finish-overlay',
+          src: overlaySrc,
+          style: { opacity: 1, mixBlendMode: isTungOil ? 'multiply' : 'screen', zIndex: 202 },
+        })
+      }
+      return layers
+    }
+
+    if (config.body === 'dc') {
+      const finishOverlay = config.topCoat === 'tungOil'
+        ? bodyAssets.op
+        : config.topCoat === 'satinMatte'
+          ? bodyAssets.matte
+          : bodyAssets.gloss
+
+      if (config.bevel === 'on') {
+        if (finishOverlay) {
+          layers.push({ name: 'dc-body-finish-overlay', src: finishOverlay, style: { opacity: 1, mixBlendMode: 'screen', zIndex: 201 } })
+        }
+        if (bodyAssets.shadows) {
+          layers.push({ name: 'dc-body-edge-shadow', src: bodyAssets.shadows, style: { opacity: 1, mixBlendMode: 'multiply', zIndex: 200 } })
+        }
+      } else if (bodyAssets.shadows) {
+        layers.push({ name: 'dc-body-edge-shadow', src: bodyAssets.shadows, style: { opacity: 1, mixBlendMode: 'multiply', zIndex: 200 } })
+      }
+      return layers
+    }
+
     if (config.bevel === 'on') {
       if (bodyAssets.gloss) {
         layers.push({ name: 'body-gloss', src: bodyAssets.gloss, style: { opacity: 1, mixBlendMode: 'screen', zIndex: 202 } })
@@ -468,23 +563,41 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
       }
     }
     return layers
-  }, [bodyAssets, config.bevel])
+  }, [bodyAssets, config.bevel, config.body, config.topCoat])
 
   const frontNeckLayers = useMemo(() => {
     const burstOption = guitarBuilder.BURST_FINISH_OPTIONS[config.burstFinish]
     const finishBlendMode = config.finishType === 'translucent' ? 'screen' : 'normal'
+    const FRONT_BURST_KEYS = [
+      'blackBurst',
+      'whiteBurst',
+      'translucentBlackBurst',
+      'reverseTranslucentBlackBurst',
+      'blackBackSides',
+      'blackSidesBlackBurstBack',
+    ]
+    const burstMask = FRONT_BURST_KEYS.includes(config.burstFinish)
+      ? resolveBurstMask('electric', config.body || 'dc', config.burstFinish, 'front')
+      : null
+    const burstBlendMode = config.burstFinish === 'whiteBurst' ? 'screen' : 'multiply'
+    const burstOpacity =
+      config.burstFinish === 'translucentBlackBurst' ? 0.45 :
+      config.burstFinish === 'reverseTranslucentBlackBurst' ? 0.25 :
+      0.9
+    
     return [
-      // Body wood base
-      {
-        name: 'body-wood',
-        maskSrc: modelBodySrc,
-        style: {
-          backgroundImage: `url(${bodyWood.texture})`,
-          
-          mixBlendMode: 'normal',
-          zIndex: 1,
-        },
-      },
+          // frontNeckLayers
+          {
+            name: 'body-wood',
+            maskSrc: modelBodySrc,
+            style: {
+              backgroundImage: `url(${bodyWood.texture})`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+              mixBlendMode: 'normal',
+              zIndex: 1,
+            },
+          },
       // Top wood layer (above body wood, masked to body shape)
       topWoodTexture
         ? {
@@ -534,15 +647,17 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
           }
         : null,
       // Burst finish layer (front)
-      burstOption && resolveBurstMask('electric', config.body || 'dc', config.burstFinish) && (config.burstFinish === 'blackBurst' || config.burstFinish === 'whiteBurst')
+      burstOption && burstMask
         ? {
             name: 'body-burst-finish',
-            maskSrc: burstOption.texture,
+            maskSrc: burstMask,
+            outerMaskSrc: modelBodySrc,
             style: {
               backgroundColor: burstOption.color,
-              opacity: 0.9,
-              mixBlendMode: 'multiply',
+              opacity: burstOpacity,
+              mixBlendMode: burstBlendMode,
               zIndex: 4,
+              
             },
           }
         : null,
@@ -567,6 +682,8 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
         style: {
           backgroundImage: `url(${headstockWood.texture})`,
           zIndex: 105,
+          backgroundPosition: 'center top',
+          backgroundSize: 'contain', 
         },
         protectedLayer: true,
       },
@@ -589,23 +706,36 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
     ].filter(Boolean)
    }, [bodyFinish.texture, bodyFinish.color, bodyWood.texture, colorKey, config.body, config.pickups, config.topWood, config.finishType, config.finishColor, finishTypeColorAsset, topWoodTexture, fretboard.src, headstock, headstockWood.texture, headstockTrussCover, inlaySrc, neck.filter, neck.src, hardware.color, modelBodySrc, config.trussRodCover, nutOption, headstockTunerBase, headstockTunerButtons, config.bevel, config.burstFinish])
    
-     const rearNeckLayers = useMemo(() => {
-       const bodyMask = rearBodyMask
-       const burstOption = guitarBuilder.BURST_FINISH_OPTIONS[config.burstFinish]
-       const finishBlendMode = config.finishType === 'translucent' ? 'screen' : 'normal'
-       const isRearBurst = burstOption && burstOption.rearOnly
+      const rearNeckLayers = useMemo(() => {
+        const bodyMask = rearBodyMask
+        const burstOption = guitarBuilder.BURST_FINISH_OPTIONS[config.burstFinish]
+        const finishBlendMode = config.finishType === 'translucent' ? 'screen' : 'normal'
+        const isRearBurst = burstOption && burstOption.rearOnly
+        const FRONT_BURST_KEYS = ['blackBurst', 'whiteBurst', 'translucentBlackBurst', 'reverseTranslucentBlackBurst']
+        const isFrontStyleBurst = FRONT_BURST_KEYS.includes(config.burstFinish)
+        const rearFrontStyleBurstMask = !isRearBurst && isFrontStyleBurst
+          ? resolveBurstMask('electric', config.body || 'dc', config.burstFinish, 'rear')
+          : null
+        const burstBlendMode = config.burstFinish === 'whiteBurst' ? 'screen' : 'multiply'
+        const burstOpacity =
+          config.burstFinish === 'translucentBlackBurst' ? 0.45 :
+          config.burstFinish === 'reverseTranslucentBlackBurst' ? 0.25 :
+          0.9
       return [
-       {
-         name: 'body-wood',
-         maskSrc: bodyMask,
-         style: {
-           backgroundImage: `url(${bodyWood.texture})`,
-           opacity: 1,
-           mixBlendMode: 'normal',
-           zIndex: 1,
-           transform: 'scaleX(-1)',
-         },
-       },
+// rearNeckLayers
+            {
+              name: 'body-wood',
+              maskSrc: bodyMask,
+              style: {
+                backgroundImage: `url(${bodyWood.texture})`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                opacity: 1,
+                mixBlendMode: 'normal',
+                zIndex: 1,
+                transform: 'scaleX(-1)',
+              },
+            },
       // Top wood on rear
       topWoodTexture
          ? {
@@ -658,19 +788,21 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
               },
             }
            : null,
-         // Front-style burst finishes on rear (black/white burst apply to both sides)
-         !isRearBurst && burstOption && burstOption.texture && (config.burstFinish === 'blackBurst' || config.burstFinish === 'whiteBurst')
-           ? {
-               name: 'body-burst-finish',
-               maskSrc: burstOption.texture,
-               style: {
-                 backgroundColor: burstOption.color,
-                 mixBlendMode: 'multiply',
-                 zIndex: 2,
-
-               },
-             }
-           : null,
+          // Front-style burst finishes on rear (black/white burst apply to both sides)
+          rearFrontStyleBurstMask
+            ? {
+                name: 'body-burst-finish',
+                maskSrc: rearFrontStyleBurstMask,
+                outerMaskSrc: bodyMask,
+                style: {
+                  backgroundColor: burstOption.color,
+                  opacity: burstOpacity,
+                  mixBlendMode: burstBlendMode,
+                  zIndex: 2,
+                  transform: 'scaleX(-1)',
+                },
+              }
+            : null,
          // Rear-only burst finishes
          isRearBurst && burstOption && burstOption.texture
            ? {
@@ -685,17 +817,18 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
              }
            : null,
          isRearBurst && burstOption && !burstOption.texture
-           ? {
-               name: 'body-finish-rear-solid',
-               style: {
-                 backgroundColor: burstOption.color,
-                 opacity: 1,
-                 mixBlendMode: 'normal',
-                 zIndex: 2,
-                 transform: 'scaleX(-1)',
-               },
-             }
-           : null,
+            ? {
+                name: 'body-finish-rear-solid',
+                maskSrc: bodyMask,
+                style: {
+                  backgroundColor: burstOption.color,
+                  opacity: 1,
+                  mixBlendMode: 'normal',
+                  zIndex: 2,
+                  transform: 'scaleX(-1)',
+                },
+              }
+            : null,
              // Neck rear finish overlay
              (config.neckRearFinish)
              ? {
@@ -747,11 +880,68 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
           },
           protectedLayer: true,
         },
+                // Neck heel shading (Delos, 6-string bolt-on neck)
+                config.body === 'delos' && config.strings === '6'
+                  ? {
+                      name: 'neck-heel-multiply',
+                      maskSrc: rearHeadstockMask,
+                      style: {
+                        backgroundImage: `url(${NECK_HEEL_MULTIPLY})`,
+                        zIndex: 140,
+                        mixBlendMode: 'multiply',
+                        transform: 'scaleX(-1)',
+                        backgroundPosition: 'center',
+                        backgroundSize: 'contain',
+                      },
+                    }
+                  : null,
+                config.body === 'delos' && config.strings === '6'
+                  ? {
+                      name: 'neck-heel-screen',
+                      maskSrc: rearHeadstockMask,
+                      style: {
+                        backgroundImage: `url(${NECK_HEEL_SCREEN})`,
+                        zIndex: 141,
+                        mixBlendMode: 'screen',
+                        transform: 'scaleX(-1)',
+                        backgroundPosition: 'center',
+                        backgroundSize: 'contain',
+                      },
+                    }
+                  : null,
+          rearNeckThruMultiply
+            ? {
+                name: 'rear-neck-thru-multiply',
+                maskSrc: rearHeadstockMask,
+                style: {
+                  backgroundImage: `url(${rearNeckThruMultiply})`,
+                  zIndex: 100,
+                  mixBlendMode: 'multiply',
+                  transform: 'scaleX(-1) scaleY(-1)',
+                  backgroundPosition: 'top center',
+                  backgroundSize: 'contain',
+                },
+              }
+            : null,
+          rearNeckThruScreen
+            ? {
+                name: 'rear-neck-thru-screen',
+                maskSrc: rearHeadstockMask,
+                style: {
+                  backgroundImage: `url(${rearNeckThruScreen})`,
+                  zIndex: 101,
+                  mixBlendMode: 'screen',
+                  transform: 'scaleX(-1) scaleY(-1)',
+                  backgroundPosition: 'top center',
+                  backgroundSize: 'contain',
+                },
+              }
+            : null,
           rearTunerAsset
-           ? { name: 'headstock-tuners-base', src: rearTunerAsset, protectedLayer: true, style: { zIndex: 103, transform: 'scaleX(-1) scaleY(-1)', backgroundPosition: 'top center' } }
-           : null,
-        ].filter(Boolean)
-          }, [bodyFinish.texture, bodyFinish.color, bodyWood.texture, colorKey, config.topWood, config.finishType, config.finishColor, finishTypeColorAsset, topWoodTexture, fretboard.src, headstock, headstockWood.texture, modelBodySrc, neck.filter, neck.src, topCoatAsset, rearTunerAsset, rearHeadstockMask, rearBodyMask, config.bevel, config.burstFinish, config.neckWood, config.headstockWood, config.neckConstruction])
+            ? { name: 'headstock-tuners-base', src: rearTunerAsset, protectedLayer: true, style: { zIndex: 103, transform: 'scaleX(-1) scaleY(-1)', backgroundPosition: 'top center' } }
+            : null,
+         ].filter(Boolean)
+           }, [bodyFinish.texture, bodyFinish.color, bodyWood.texture, colorKey, config.topWood, config.finishType, config.finishColor, finishTypeColorAsset, topWoodTexture, fretboard.src, headstock, headstockWood.texture, modelBodySrc, neck.filter, neck.src, topCoatAsset, rearTunerAsset, rearHeadstockMask, rearBodyMask, rearNeckThruMultiply, rearNeckThruScreen, config.bevel, config.burstFinish, config.neckWood, config.headstockWood, config.neckConstruction, config.body])
   
   const stringLayer = useMemo(() => {
     return headstock.strings ? { src: headstock.strings,  style: { zIndex: 110 } } : null
@@ -784,6 +974,7 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
                       key={`${layer.src ?? layer.maskSrc ?? 'layer'}-${index}`}
                       src={layer.src}
                       maskSrc={layer.maskSrc}
+                      outerMaskSrc={layer.outerMaskSrc}
                       style={layer.style}
                       className={layer.className}
                       layerName={layer.name}
@@ -812,6 +1003,15 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
                     </div>
                   )}
                   {pickguardAsset && <GuitarLayer src={pickguardAsset} className="opacity-95" layerName="pickguard" style={{ zIndex: 15 }} protectedLayer />}
+                  {delosFrontOutputJackAsset && (
+                    <GuitarLayer
+                      src={delosFrontOutputJackAsset}
+                      className="opacity-95"
+                      style={{ zIndex: 55 }}
+                      layerName="delos-front-output-jack"
+                      protectedLayer
+                    />
+                  )}
                   {pickupLayers.map((layer, index) => (
                     <GuitarLayer
                       key={`${layer.src ?? layer.maskSrc ?? 'layer'}-${index}`}
@@ -840,27 +1040,28 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
                 </>
               ) : (
                 <>
-                   {rearNeckLayers.map((layer, index) => (
-                     <GuitarLayer
-                       key={`${layer.src ?? layer.maskSrc ?? 'layer'}-${index}`}
-                       src={layer.src}
-                       maskSrc={layer.maskSrc}
-                       style={layer.style}
-                       className={layer.className}
-                       layerName={layer.name}
-                       protectedLayer={layer.protectedLayer}
-                     />
-                   ))}
+                    {rearNeckLayers.map((layer, index) => (
+                      <GuitarLayer
+                        key={`${layer.src ?? layer.maskSrc ?? 'layer'}-${index}`}
+                        src={layer.src}
+                        maskSrc={layer.maskSrc}
+                        outerMaskSrc={layer.outerMaskSrc}
+                        style={layer.style}
+                        className={layer.className}
+                        layerName={layer.name}
+                        protectedLayer={layer.protectedLayer}
+                      />
+                    ))}
                     {outputJackAsset && (
                       <GuitarLayer src={outputJackAsset} className="opacity-95" style={{ zIndex: 55, transform: 'scaleX(-1)' }} layerName="output-jack" protectedLayer />
                     )}
                     {tremoloCoverAsset && (
                       <GuitarLayer maskSrc={rearBodyMask} style={{ backgroundImage: `url(${tremoloCoverAsset})`, zIndex: 134, backgroundRepeat: 'no-repeat', backgroundPosition: 'center', backgroundSize: 'contain', transform: 'scaleX(-1)' }} layerName="tremolo-cover" protectedLayer />
                     )}
-                    {cavityCoverAsset && (
+                    {config.body !== 'delos' && cavityCoverAsset && (
                       <GuitarLayer maskSrc={rearBodyMask} style={{ backgroundImage: `url(${cavityCoverAsset})`, zIndex: 135, backgroundRepeat: 'no-repeat', backgroundPosition: 'center', backgroundSize: 'contain', transform: 'scaleX(-1)' }} layerName="electronics-cavity-cover" protectedLayer />
                     )}
-                    {cavityScrewsAsset && (
+                    {config.body !== 'delos' && cavityScrewsAsset && (
                       <GuitarLayer maskSrc={rearBodyMask} style={{ backgroundImage: `url(${cavityScrewsAsset})`, zIndex: 136, backgroundRepeat: 'no-repeat', backgroundPosition: 'center', backgroundSize: 'contain', transform: 'scaleX(-1)' }} layerName="cavity-screws" protectedLayer />
                     )}
                     {batteryCompartmentAsset && (
@@ -872,7 +1073,7 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, stickerOverl
                     {neckBoltsAsset && (
                       <GuitarLayer
                         src={neckBoltsAsset}
-                        style={{ zIndex: 139, transform: 'scaleX(-1)' }}
+                        style={{ zIndex: 143, transform: 'scaleX(-1)' }}
                         layerName="neck-bolts"
                         protectedLayer
                       />

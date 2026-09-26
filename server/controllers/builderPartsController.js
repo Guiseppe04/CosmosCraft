@@ -62,6 +62,21 @@ exports.deletePart = async (req, res, next) => {
     const existing = await builderPartsService.getPartById(req.params.id);
     if (!existing) throw new AppError('Part not found', 404);
 
+    const permanent = req.query.permanent === 'true';
+
+    if (permanent) {
+      const part = await builderPartsService.hardDeletePart(req.params.id);
+      if (!part) throw new AppError('Part not found', 404);
+      await auditService.logDelete(
+        req.user?.user_id || null,
+        'guitar_builder_parts',
+        part.part_id,
+        existing,
+        req.ip
+      );
+      return res.json({ status: 'success', message: 'Part permanently deleted', data: { part } });
+    }
+
     const part = await builderPartsService.deletePart(req.params.id);
     if (!part) throw new AppError('Part not found', 404);
     await auditService.logDelete(
@@ -94,6 +109,18 @@ exports.seedCustomizeParts = async (req, res, next) => {
     res.json({
       status: 'success',
       message: `Seeded ${result.seeded.created + result.seeded.updated} ${guitarType} customize parts`,
+      data: result,
+    });
+  } catch (err) { next(err); }
+};
+
+exports.replaceCustomizeParts = async (req, res, next) => {
+  try {
+    const guitarType = String(req.body?.guitarType || '').trim().toLowerCase();
+    const result = await builderPartsService.replaceCustomizeParts({ guitarType });
+    res.json({
+      status: 'success',
+      message: `Replaced ${guitarType} catalog with current customization options`,
       data: result,
     });
   } catch (err) { next(err); }

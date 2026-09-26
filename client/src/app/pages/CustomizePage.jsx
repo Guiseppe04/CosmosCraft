@@ -132,7 +132,7 @@ function OptionButton({ option, isSelected, onClick, disabled = false }) {
 }
 
 // Visual card option for wood/material selection
-function VisualCard({ option, isSelected, onClick, previewImage, fallbackImage, imageHeight = 'h-16' }) {
+function VisualCard({ option, isSelected, onClick, previewImage, fallbackImage, imageHeight = 'h-16' , fit = 'cover', imageZoom, imagePosition }) {
   const [displayImage, setDisplayImage] = useState(previewImage || fallbackImage || '')
 
   useEffect(() => {
@@ -140,6 +140,8 @@ function VisualCard({ option, isSelected, onClick, previewImage, fallbackImage, 
   }, [previewImage, fallbackImage])
 
   const optimizedImage = optimizeCloudinaryImage(displayImage, { width: 640 })
+  const resolvedImageZoom = imageZoom ?? option.textureZoom ?? 1
+  const resolvedImagePosition = imagePosition ?? option.texturePosition ?? '50% 50%'
 
   return (
     <button
@@ -152,7 +154,7 @@ function VisualCard({ option, isSelected, onClick, previewImage, fallbackImage, 
       }`}
     >
       {/* Preview image/gradient */}
-      <div className={`relative ${imageHeight} w-full overflow-hidden`}>
+      <div className={`relative ${imageHeight} w-full overflow-hidden `}>
         {displayImage ? (
           <img
             src={optimizedImage}
@@ -165,7 +167,16 @@ function VisualCard({ option, isSelected, onClick, previewImage, fallbackImage, 
               }
               setDisplayImage('')
             }}
-            className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+            className={`absolute inset-0 h-full w-full transition-transform duration-500 ${
+              fit === 'contain'
+                ? 'object-contain p-1.5 group-hover:scale-110'
+                : 'object-cover group-hover:scale-105'
+            }`}
+            style={{
+              objectPosition: resolvedImagePosition,
+              transform: `scale(${resolvedImageZoom})`,
+              transformOrigin: resolvedImagePosition,
+            }}
           />
         ) : (
           <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-white/5" />
@@ -211,6 +222,48 @@ function VisualCard({ option, isSelected, onClick, previewImage, fallbackImage, 
       )}
     </button>
    )
+}
+
+// Smart option picker: automatically chooses VisualCard if option has an image,
+// otherwise falls back to OptionButton. Extend getOptionPreviewImage if your
+// options object uses other keys (e.g. opt.thumbnail, opt.image, etc.).
+function getOptionPreviewImage(option) {
+  return (
+    option.preview ||
+    option.previewImageUrl ||
+    option.texture ||
+    option.src ||
+    option.bodySrc ||
+    null
+  )
+}
+
+function SmartOption({ option, isSelected, onClick, disabled = false, imageHeight = 'h-16' }) {
+  const previewImage = getOptionPreviewImage(option)
+
+  // No image asset available -> fall back to the plain text button
+  if (!previewImage) {
+    return (
+      <OptionButton
+        option={option}
+        isSelected={isSelected}
+        onClick={onClick}
+        disabled={disabled}
+      />
+    )
+  }
+
+  // Image exists -> render the visual card
+  return (
+    <VisualCard
+      option={option}
+      isSelected={isSelected}
+      onClick={onClick}
+      previewImage={previewImage}
+      fallbackImage={option.bodySrc || option.src}
+      imageHeight={imageHeight}
+    />
+  )
 }
 
 function AccordionSection({ title, icon: Icon, children, defaultOpen = true }) {
@@ -799,6 +852,13 @@ export function CustomizePage() {
     return options.knobOptions
   }, [options.knobOptions, options.knobStyleOptionList, config.body])
 
+  const isDc = config.body === 'dc'
+  const showDcTopCoat = !isDc || config.bevel !== 'off'
+  const showDcFinish = !isDc || config.topCoat !== 'tungOil'
+  const visibleTopCoatOptions = options.topCoatOptions?.filter((option) => (
+    !(isDc && config.topCoat === 'wood' && option.value === 'tungOil')
+  ))
+
   const [toastMessage, setToastMessage] = useState(null)
 
   useEffect(() => {
@@ -1260,7 +1320,7 @@ export function CustomizePage() {
                   
                   {/* Beveled Body Edges */}
                   <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Beveled Body Edges</h3>
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Bevel</h3>
                     <div className="grid grid-cols-2 gap-2">
                       {options.bevelOptions?.map((opt) => (
                         <OptionButton
@@ -1307,6 +1367,7 @@ export function CustomizePage() {
                    </div>
                   
                   {/* Finish Type */}
+                  {showDcFinish && (
                   <div>
                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Finish Type</h3>
                     <div className="grid grid-cols-2 gap-2">
@@ -1320,9 +1381,10 @@ export function CustomizePage() {
                       ))}
                     </div>
                   </div>
+                  )}
                   
                    {/* Finish Color - dynamically discovered from selected finish folder */}
-                   {config.finishType && config.finishType !== 'solid' && (
+                   {showDcFinish && config.finishType && config.finishType !== 'solid' && (
                      <div>
                        <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Finish Color</h3>
                        <div className="grid grid-cols-2 gap-2">
@@ -1341,10 +1403,11 @@ export function CustomizePage() {
                    )}
                   
                    {/* Top Coat */}
-                   <div>
+                     {showDcTopCoat && (
+                     <div>
                      <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Top Coat</h3>
                      <div className="grid grid-cols-2 gap-2">
-                       {options.topCoatOptions?.map((opt) => (
+                       {visibleTopCoatOptions?.map((opt) => (
                          <VisualCard
                            key={opt.value}
                            option={opt}
@@ -1356,6 +1419,7 @@ export function CustomizePage() {
                        ))}
                      </div>
                    </div>
+                  )}
                   
                   {/* Additional Finish Options (Burst Finish) - depends on Top Coat */}
                   <div>
@@ -1373,7 +1437,7 @@ export function CustomizePage() {
                   </div>
                   
                   {/* Body Finish - Solid color picker, shown when finishType is 'solid' or not set */}
-                  {(!config.finishType || config.finishType === 'solid') && (
+                  {showDcFinish && (!config.finishType || config.finishType === 'solid') && (
                     <div>
                       <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-3">Body Finish Color</h3>
                       <RGBColorPicker
@@ -1390,12 +1454,26 @@ export function CustomizePage() {
                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Pickguard</h3>
                     <div className="grid grid-cols-2 gap-2">
                       {pickguardOptions.map((opt) => (
-                        <OptionButton
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.pickguard === opt.value}
-                          onClick={() => updateConfig({ pickguard: opt.value })}
-                        />
+                        config.body === 'delos' ? (
+                          <VisualCard
+                            key={opt.value}
+                            option={opt}
+                            isSelected={config.pickguard === opt.value}
+                            onClick={() => updateConfig({ pickguard: opt.value })}
+                            previewImage={opt.preview}
+                            imageHeight="h-16"
+                            fit="contain"
+                            imageZoom={1.4}
+                            imagePosition="30%"
+                          />
+                        ) : (
+                          <OptionButton
+                            key={opt.value}
+                            option={opt}
+                            isSelected={config.pickguard === opt.value}
+                            onClick={() => updateConfig({ pickguard: opt.value })}
+                          />
+                        )
                       ))}
                     </div>
                   </div>
@@ -1420,35 +1498,41 @@ export function CustomizePage() {
                     </div>
                   </div>
                   
-                  {/* Neck */}
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Neck Wood</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.neckOptions?.filter(opt => opt.construction === config.neckConstruction).map((opt) => (
-                        <OptionButton
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.neck === opt.value}
-                          onClick={() => updateConfig({ neck: opt.value })}
-                        />
-                      ))}
+                    {/* Neck */}
+                    <div>
+                      <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Neck Wood</h3>
+                      <div className="grid grid-cols-2 gap-2">
+{options.neckOptions?.filter(opt => opt.construction === config.neckConstruction).map((opt) => (
+                            <VisualCard
+                              key={opt.value}
+                              option={opt}
+                              isSelected={config.neck === opt.value}
+                              onClick={() => updateConfig({ neck: opt.value })}
+                              previewImage={opt.preview}
+                              imageHeight="h-16"
+                              fit="contain"
+                            />
+                          ))}
+                      </div>
                     </div>
-                  </div>
-                  
-                  {/* Fretboard */}
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Fingerboard Wood</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.fretboardOptions?.map((opt) => (
-                        <OptionButton
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.fretboard === opt.value}
-                          onClick={() => updateConfig({ fretboard: opt.value })}
-                        />
-                      ))}
+
+                    {/* Fretboard */}
+                    <div>
+                      <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Fingerboard Wood</h3>
+                      <div className="grid grid-cols-2 gap-2">
+{options.fretboardOptions?.map((opt) => (
+                            <VisualCard
+                              key={opt.value}
+                              option={opt}
+                              isSelected={config.fretboard === opt.value}
+                              onClick={() => updateConfig({ fretboard: opt.value })}
+                              previewImage={opt.preview}
+                              imageHeight="h-16"
+                              fit="contain"
+                            />
+                          ))}
+                      </div>
                     </div>
-                  </div>
                   
                   {/* Frets */}
                   <div>
@@ -1492,11 +1576,16 @@ export function CustomizePage() {
                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Headstock Shape</h3>
                     <div className="grid grid-cols-2 gap-2">
                       {options.headstockShapeOptions?.map((opt) => (
-                        <OptionButton
+                        <VisualCard
                           key={opt.value}
                           option={opt}
                           isSelected={config.headstockShape === opt.value}
                           onClick={() => updateConfig({ headstockShape: opt.value })}
+                          previewImage={opt.preview}
+                          imageHeight="h-16"
+                          fit="contain"
+                          imageZoom={7}
+                          imagePosition="88% 50%"
                         />
                       ))}
                     </div>
@@ -1504,16 +1593,19 @@ export function CustomizePage() {
                   
                   {/* Headstock Wood */}
                   <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Headstock Wood</h3>
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Headstock Overlay</h3>
                     <div className="grid grid-cols-2 gap-2">
-                      {options.headstockWoodOptions?.map((opt) => (
-                        <OptionButton
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.headstockWood === opt.value}
-                          onClick={() => updateConfig({ headstockWood: opt.value })}
-                        />
-                      ))}
+{options.headstockWoodOptions?.map((opt) => (
+                            <VisualCard
+                              key={opt.value}
+                              option={opt}
+                              isSelected={config.headstockWood === opt.value}
+                              onClick={() => updateConfig({ headstockWood: opt.value })}
+                              previewImage={opt.preview}
+                              imageHeight="h-16"
+                              fit="contain"
+                            />
+                          ))}
                     </div>
                   </div>
                   
@@ -1522,11 +1614,16 @@ export function CustomizePage() {
                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Truss Rod Cover</h3>
                     <div className="grid grid-cols-2 gap-2">
                       {options.trussRodCoverOptions?.map((opt) => (
-                        <OptionButton
+                        <VisualCard
                           key={opt.value}
                           option={opt}
                           isSelected={config.trussRodCover === opt.value}
                           onClick={() => updateConfig({ trussRodCover: opt.value })}
+                          previewImage={opt.preview}
+                          imageHeight="h-16"
+                          fit="contain"
+                          imageZoom={20}
+                          imagePosition="80% 50%"
                         />
                       ))}
                     </div>
@@ -1550,11 +1647,14 @@ export function CustomizePage() {
                      <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Inlay Material</h3>
                      <div className="grid grid-cols-2 gap-2">
                        {options.inlayMaterialOptions?.map((opt) => (
-                         <OptionButton
+                         <VisualCard
                            key={opt.value}
                            option={opt}
                            isSelected={config.inlayMaterial === opt.value}
                            onClick={() => updateConfig({ inlayMaterial: opt.value })}
+                           previewImage={opt.preview}
+                           imageHeight="h-16"
+                           fit="contain"
                          />
                        ))}
                      </div>
@@ -1585,11 +1685,13 @@ export function CustomizePage() {
                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Bridge</h3>
                     <div className="grid grid-cols-2 gap-2">
                       {options.bridgeOptions?.map((opt) => (
-                        <OptionButton
+                        <VisualCard
                           key={opt.value}
                           option={opt}
                           isSelected={config.bridge === opt.value}
                           onClick={() => updateConfig({ bridge: opt.value })}
+                          previewImage={opt.preview}
+                           imageHeight="h-16"
                         />
                       ))}
                     </div>
@@ -1600,11 +1702,13 @@ export function CustomizePage() {
                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Control Knobs</h3>
                     <div className="grid grid-cols-2 gap-2">
                       {knobOptions.map((opt) => (
-                        <OptionButton
+                        <VisualCard
                           key={opt.value}
                           option={opt}
                           isSelected={config.knobs === opt.value}
                           onClick={() => updateConfig({ knobs: opt.value })}
+                          previewImage={opt.preview}
+                          imageHeight="h-16"
                         />
                       ))}
                     </div>
@@ -1704,19 +1808,24 @@ export function CustomizePage() {
                   </div>
                   
                   {/* Electronics Cavity Cover */}
-                  <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Electronics Cavity Cover</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {options.electronicsCavityCoverOptions?.map((opt) => (
-                        <OptionButton
-                          key={opt.value}
-                          option={opt}
-                          isSelected={config.electronicsCavityCover === opt.value}
-                          onClick={() => updateConfig({ electronicsCavityCover: opt.value })}
-                        />
-                      ))}
+                  {config.body !== 'delos' && (
+                    <div>
+                      <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Electronics Cavity Cover</h3>
+                      <div className="grid grid-cols-2 gap-2">
+                        {options.electronicsCavityCoverOptions?.map((opt) => (
+                          <VisualCard
+                            key={opt.value}
+                            option={opt}
+                            isSelected={config.electronicsCavityCover === opt.value}
+                            onClick={() => updateConfig({ electronicsCavityCover: opt.value })}
+                            previewImage={opt.preview}
+                            imageHeight="h-16"
+                            fit="contain"
+                          />
+                        ))}
+                      </div>
                     </div>
-                  </div>
+                  )}
                   
                    {/* Tremolo Cover - only for bridges with a tremolo */}
                    {(config.bridge === 'hipshotTremolo' || config.bridge === 'floydRoseTremolo') && (
@@ -1724,11 +1833,13 @@ export function CustomizePage() {
                      <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Tremolo Cover</h3>
                      <div className="grid grid-cols-2 gap-2">
                        {options.tremoloCoverOptions?.map((opt) => (
-                         <OptionButton
+                         <VisualCard
                            key={opt.value}
                            option={opt}
                            isSelected={config.tremoloCover === opt.value}
                            onClick={() => updateConfig({ tremoloCover: opt.value })}
+                           previewImage={opt.preview}
+                           imageHeight="h-16"
                          />
                        ))}
                      </div>
@@ -1900,24 +2011,25 @@ export function CustomizePage() {
                     )}
 
                      {/* Wood Type - hidden when Active */}
-                     {!isActive && config.pickupColor === 'wooden' && (
-                      <div>
-                        <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Wood Type</h3>
-                        {/* Responsible for rendering wood type selector for wooden bobbins */}
-                        <div className="grid grid-cols-2 gap-2">
-                          {options.pickupWoodTypeOptions?.map((opt) => (
-                            <VisualCard
-                              key={opt.value}
-                              option={opt}
-                              isSelected={config.pickupWoodType === opt.value}
-                              onClick={() => updateConfig({ pickupWoodType: opt.value })}
-                              fallbackImage={opt.src}
-                              imageHeight="h-12"
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    )}
+{!isActive && config.pickupColor === 'wooden' && (
+                       <div>
+                         <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-white/40 mb-2">Wood Type</h3>
+                         {/* Responsible for rendering wood type selector for wooden bobbins */}
+                         <div className="grid grid-cols-2 gap-2">
+{options.pickupWoodTypeOptions?.map((opt) => (
+                              <VisualCard
+                                key={opt.value}
+                                option={opt}
+                                isSelected={config.pickupWoodType === opt.value}
+                                onClick={() => updateConfig({ pickupWoodType: opt.value })}
+                                previewImage={opt.preview}
+                                imageHeight="h-12"
+                                fit="contain"
+                              />
+                            ))}
+                         </div>
+                       </div>
+                     )}
                    
                    {/* Pole Piece Color - hidden when Active (Fluence pickups use fixed poles) */}
                    {!isActive && (
@@ -2042,6 +2154,8 @@ export function CustomizePage() {
                     view={view}
                     onViewChange={setView}
                     modelImageSrc={selectedBodyModel?.previewImageUrl || selectedBodyModel?.bodySrc || null}
+                    bodyWoodImageSrc={options.bodyWoodOptions?.find((option) => option.value === config.bodyWood)?.preview || null}
+                    topWoodImageSrc={options.topWoodOptions?.find((option) => option.value === config.topWood)?.preview || null}
                     stickerOverlay={currentStickerOverlay}
                     stickerMaskSrc={selectedBodyModel?.bodySrc || null}
                     stageRef={previewStageRef}
@@ -2273,7 +2387,6 @@ export function CustomizePage() {
 
             <BuilderCheckoutSection
               price={totalPrice}
-              basePrice={options.basePrice}
               onAddToCart={handleAddToCart}
             />
 

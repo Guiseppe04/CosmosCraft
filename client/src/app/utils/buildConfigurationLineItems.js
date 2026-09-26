@@ -1,5 +1,4 @@
 export const GUITAR_CONFIGURATION_ITEMS = [
-  { key: 'base', category: 'Base Price', summaryKey: null, label: 'Starting Price' },
   { key: 'body', category: 'Body', summaryKey: 'body' },
   { key: 'bodyWood', category: 'Body Wood', summaryKey: 'bodyWood' },
   { key: 'bodyFinish', category: 'Finish', summaryKey: 'bodyFinish' },
@@ -58,7 +57,6 @@ export const GUITAR_CONFIGURATION_ITEMS = [
 ]
 
 export const BASS_CONFIGURATION_ITEMS = [
-  { key: 'base', category: 'Base Price', summaryKey: null, label: 'Starting Price' },
   { key: 'body', category: 'Body', summaryKey: 'body' },
   { key: 'bodyWood', category: 'Body Wood', summaryKey: 'bodyWood' },
   { key: 'bodyFinish', category: 'Finish', summaryKey: 'bodyFinish' },

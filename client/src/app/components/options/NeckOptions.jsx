@@ -16,7 +16,7 @@ export default function NeckOptions({
       <OptionGroup
         title="Neck"
         description="Neck profile and finish"
-        variant="text"
+
         value={config.neck}
         onChange={neck => onChange({ neck })}
         options={options.neckOptions}
@@ -27,7 +27,7 @@ export default function NeckOptions({
       <OptionGroup
         title="Fretboard"
         description="Fingerboard wood"
-        variant="text"
+
         value={config.fretboard}
         onChange={fretboard => onChange({ fretboard })}
         options={options.fretboardOptions}
@@ -38,7 +38,7 @@ export default function NeckOptions({
       <OptionGroup
         title="Headstock"
         description="Headstock shape"
-        variant="text"
+
         value={config.headstock}
         onChange={headstock => onChange({ headstock })}
         options={options.headstockOptions}

@@ -94,11 +94,14 @@ export const adminApi = {
   updateBuilderPart: (id, body) => request(`/api/builder-parts/${id}`, { method: 'PUT', body }),
   updateBuilderModelImage: (guitarType, modelKey, body) =>
     request(`/api/builder-parts/model-images/${guitarType}/${modelKey}`, { method: 'PUT', body }),
-  deleteBuilderPart: (id) => request(`/api/builder-parts/${id}`, { method: 'DELETE' }),
+  deleteBuilderPart: (id, { permanent = false } = {}) =>
+  request(`/api/builder-parts/${id}${permanent ? '?permanent=true' : ''}`, { method: 'DELETE' }),
   importBuilderPartsFromModels: (guitarType) =>
     request('/api/builder-parts/import-models', { method: 'POST', body: { guitarType } }),
   seedCustomizeBuilderParts: (guitarType) =>
     request('/api/builder-parts/seed-customize-parts', { method: 'POST', body: { guitarType } }),
+  replaceCustomizeBuilderParts: (guitarType) =>
+    request('/api/builder-parts/replace-customize-parts', { method: 'POST', body: { guitarType } }),
 
   // Users / RBAC
   getUsers: (params = {}) => {

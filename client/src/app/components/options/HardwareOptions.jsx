@@ -16,7 +16,6 @@ export default function HardwareOptions({
       <OptionGroup
         title="Hardware Color"
         description="Finish color"
-        variant="text"
         value={config.hardware}
         onChange={hardware => onChange({ hardware })}
         options={options.hardwareOptions}

@@ -1,15 +1,12 @@
 import { ShoppingCart } from 'lucide-react'
 import { AnimatedPrice } from './AnimatedPrice.jsx'
 
-export function BuilderCheckoutSection({ price, basePrice, onAddToCart }) {
+export function BuilderCheckoutSection({ price, onAddToCart }) {
   return (
     <div className="border-t border-white/10 p-5 flex-shrink-0 space-y-4">
       <div>
         <p className="text-xs uppercase tracking-[0.2em] text-white/40">Your Build Total</p>
         <AnimatedPrice price={price} className="text-3xl sm:text-4xl" />
-        <p className="mt-1 text-xs text-white/30">
-          Base price: ₱{(basePrice ?? 0).toLocaleString('en-PH')}
-        </p>
       </div>
 
       <button
