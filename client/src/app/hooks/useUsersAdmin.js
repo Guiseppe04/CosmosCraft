@@ -11,8 +11,10 @@ export function useUsersAdmin({ debouncedSearch, showToast }) {
     usersRef.current = users
   }, [users])
 
-  const fetchUsers = useCallback(async () => {
-    const requestKey = JSON.stringify({ search: debouncedSearch })
+  const fetchUsers = useCallback(async (customParams = {}) => {
+    const searchVal = customParams.search !== undefined ? customParams.search : debouncedSearch
+    const limitVal = customParams.limit !== undefined ? customParams.limit : 100
+    const requestKey = JSON.stringify({ search: searchVal?.trim() || '', limit: limitVal })
     if (inFlightRequestRef.current === requestKey) {
       if (import.meta.env.DEV) console.debug('[useUsersAdmin] skipping duplicate request', requestKey)
       return
@@ -21,7 +23,11 @@ export function useUsersAdmin({ debouncedSearch, showToast }) {
     inFlightRequestRef.current = requestKey
 
     try {
-      const res = await adminApi.getUsers({ search: debouncedSearch })
+      const params = { limit: limitVal }
+      if (searchVal && searchVal.trim()) {
+        params.search = searchVal.trim()
+      }
+      const res = await adminApi.getUsers(params)
       const newData = Array.isArray(res.data) ? res.data : res.data?.users || []
       if (JSON.stringify(usersRef.current) !== JSON.stringify(newData)) {
         usersRef.current = newData

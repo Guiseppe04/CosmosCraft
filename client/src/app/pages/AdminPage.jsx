@@ -225,7 +225,7 @@ export function AdminPage() {
   const { users, fetchUsers } = useUsersAdmin({ debouncedSearch, showToast })
   const { orders, ordersLoading, ordersPagination, fetchOrders, setOrdersPagination } = useOrdersAdmin({ debouncedSearch, showToast })
   const { projects, projectsPagination, fetchProjects, setProjects, setProjectsPagination } = useProjectsAdmin({ debouncedSearch, showToast })
-  const { appointments, appointmentPagination, setAppointmentPagination, appointmentLoading, unavailableDates, availableDates, fetchAppointments, fetchUnavailableDates, fetchAvailableDates } = useAppointmentsAdmin({ debouncedSearch, showToast })
+  const { appointments, calendarAppointments, appointmentPagination, setAppointmentPagination, appointmentLoading, unavailableDates, availableDates, search: appointmentSearch, setSearch: setAppointmentSearch, fetchAppointments, fetchCalendarAppointments, fetchUnavailableDates, fetchAvailableDates } = useAppointmentsAdmin({ showToast })
   const { services, servicesLoading, servicesPagination, serviceQuery, setServiceQuery, setServices, setServicesPagination, fetchServices } = useServicesAdmin({ debouncedSearch, showToast })
   const { inventory, inventoryStats, salesReport, setInventory, setInventoryStats, setSalesReport, fetchInventory, fetchSalesReport } = useInventoryAdmin({ products, showToast })
 
@@ -329,6 +329,7 @@ export function AdminPage() {
   const visibleProjects = projects || []
   const visibleArchivedProjects = archivedProjects || []
   const visibleAppointments = useMemo(() => appointments || [], [appointments])
+  const visibleCalendarAppointments = useMemo(() => calendarAppointments || [], [calendarAppointments])
   const normalizedUnavailableDates = useMemo(() => unavailableDates.map((entry) => entry?.date || entry).filter(Boolean), [unavailableDates])
   const visibleInventory = useMemo(() => {
     const source = (inventory && inventory.length > 0) ? inventory : (products || [])
@@ -338,14 +339,25 @@ export function AdminPage() {
     }))
   }, [inventory, products, productImageById])
 
-  const visibleUsers = (users || []).filter(u => {
-    if (userRoleFilter !== 'all' && u.role !== userRoleFilter) return false
-    if (userStatusFilter !== 'all') {
-      const active = userStatusFilter === 'active'
-      if (u.is_active !== active) return false
-    }
-    return true
-  })
+  const visibleUsers = useMemo(() => {
+    const query = searchQuery?.trim().toLowerCase()
+    return (users || []).filter((u) => {
+      if (userRoleFilter !== 'all' && u.role !== userRoleFilter) return false
+      if (userStatusFilter !== 'all') {
+        const active = userStatusFilter === 'active'
+        if (u.is_active !== active) return false
+      }
+      if (query) {
+        const fullName = `${u.first_name || ''} ${u.last_name || ''}`.toLowerCase()
+        const email = (u.email || '').toLowerCase()
+        const role = (u.role || '').toLowerCase().replace(/_/g, ' ')
+        if (!fullName.includes(query) && !email.includes(query) && !role.includes(query)) {
+          return false
+        }
+      }
+      return true
+    })
+  }, [users, userRoleFilter, userStatusFilter, searchQuery])
 
   const inventoryPartCategoryOptions = useMemo(() => {
     const presentCategories = new Set((visibleParts || []).map((part) => part.inventory_category).filter(Boolean))
@@ -720,11 +732,11 @@ export function AdminPage() {
       'users': fetchUsers,
       'orders': fetchOrders,
       'projects': fetchProjects,
-      'appointments': () => { fetchAppointments(); fetchServices(); fetchUnavailableDates(); fetchAvailableDates(); },
+      'appointments': () => { fetchAppointments(); fetchCalendarAppointments(); fetchServices(); fetchUnavailableDates(); fetchAvailableDates(); },
       'inventory': () => { fetchInventory(); fetchParts(); fetchProducts(); },
       'pos': () => { fetchInventory(); fetchProducts(); },
       'sales-report': fetchSalesReport,
-      'dashboard': () => { fetchOrders(); fetchProjects(); fetchAppointments(); fetchSalesReport() },
+      'dashboard': () => { fetchOrders(); fetchProjects(); fetchAppointments(); fetchCalendarAppointments(); fetchSalesReport() },
     }
     loaders[activeTab]?.()
   }, [activeTab]) // run only when switching tabs
@@ -743,7 +755,7 @@ export function AdminPage() {
      if (activeTab === 'users') fetchUsers()
      if (activeTab === 'orders') fetchOrders()
      if (activeTab === 'projects') fetchProjects()
-     if (activeTab === 'appointments') fetchAppointments()
+     if (activeTab === 'appointments') { fetchAppointments(); fetchCalendarAppointments(); }
      if (activeTab === 'inventory') { fetchInventory(); fetchParts(); }
      if (activeTab === 'pos') fetchInventory()
     }, [debouncedSearch]) // eslint-disable-line
@@ -785,14 +797,14 @@ export function AdminPage() {
          'orders': fetchOrders,
          'projects': fetchProjects,
          'services': fetchServices,
-         'appointments': () => fetchAppointments({ silent: true }),
+         'appointments': async () => { await fetchAppointments({ silent: true }); fetchCalendarAppointments(); },
          'inventory': () => fetchInventory({ silent: true }),
          'pos': () => fetchInventory({ silent: true }),
          'sales-report': fetchSalesReport,
-          'dashboard': async () => { await fetchOrders(); await fetchProjects(); await fetchAppointments({ silent: true }); await fetchSalesReport() },
+          'dashboard': async () => { await fetchOrders(); await fetchProjects(); await fetchAppointments({ silent: true }); fetchCalendarAppointments(); await fetchSalesReport() },
        }
        return map[activeTab]?.()
-     }, [activeTab, fetchProducts, fetchParts, fetchCategories, fetchUsers, fetchOrders, fetchProjects, fetchServices, fetchAppointments, fetchInventory, fetchSalesReport])
+     }, [activeTab, fetchProducts, fetchParts, fetchCategories, fetchUsers, fetchOrders, fetchProjects, fetchServices, fetchAppointments, fetchCalendarAppointments, fetchInventory, fetchSalesReport])
 
   const pollingEnabled = ['dashboard', 'orders', 'inventory', 'pos', 'projects', 'appointments'].includes(activeTab)
   useSmartPolling(pollingFn, { interval: 5000, maxInterval: 60000, backoffFactor: 1.5, enabled: pollingEnabled })
@@ -2226,9 +2238,9 @@ export function AdminPage() {
         <main className={`p-6 ${activeTab === 'pos' ? 'pt-19' : 'pt-5'}`}>
 
           {/* Actions bar */}
-          {activeTab !== 'pos' && activeTab !== 'inventory' && activeTab !== 'products' && (
+          {activeTab !== 'pos' && activeTab !== 'inventory' && activeTab !== 'products' && activeTab !== 'appointments' && (
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
-            {['product-categories', 'services', 'appointments'].includes(activeTab) && (
+            {['product-categories', 'services'].includes(activeTab) && (
               <div className="relative max-w-sm w-full">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
                 <input
@@ -2242,8 +2254,8 @@ export function AdminPage() {
             )}
 
             <div className="flex items-center gap-2 ml-auto">
-              {/* Refresh button (hidden on dashboard/inventory) */}
-              {activeTab !== 'dashboard' && activeTab !== 'inventory' && activeTab !== 'products' && activeTab !== 'guitar-parts' && activeTab !== 'orders' && activeTab !== 'users' && (
+              {/* Refresh button (hidden on dashboard/inventory/appointments) */}
+              {activeTab !== 'dashboard' && activeTab !== 'inventory' && activeTab !== 'products' && activeTab !== 'guitar-parts' && activeTab !== 'orders' && activeTab !== 'users' && activeTab !== 'appointments' && (
                 <button onClick={handleRefresh} className="p-2 border border-[var(--border)] rounded-lg hover:border-[var(--gold-primary)] hover:bg-[var(--gold-primary)]/10 transition-all" title="Refresh">
                   <RefreshCw className={`w-4 h-4 text-[var(--text-muted)] ${isLoading ? 'animate-spin' : ''}`} />
                 </button>
@@ -2477,6 +2489,7 @@ export function AdminPage() {
 
 <AppointmentsTab
                visibleAppointments={visibleAppointments}
+               visibleCalendarAppointments={visibleCalendarAppointments}
                appointmentLoading={appointmentLoading}
                appointmentPagination={appointmentPagination}
                selectedCalendarDate={selectedCalendarDate}
@@ -2490,6 +2503,8 @@ export function AdminPage() {
                setUnavailableDatesOpen={setUnavailableDatesOpen}
                setAppointmentPagination={setAppointmentPagination}
                isSuperAdmin={isSuperAdmin}
+               searchQuery={appointmentSearch}
+               onSearchChange={setAppointmentSearch}
              />
           )}
 

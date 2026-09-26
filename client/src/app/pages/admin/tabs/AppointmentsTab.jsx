@@ -5,6 +5,7 @@ import AppointmentList from '../../../components/appointments/AppointmentList'
 
 export function AppointmentsTab({
   visibleAppointments,
+  visibleCalendarAppointments,
   appointmentLoading,
   appointmentPagination,
   selectedCalendarDate,
@@ -18,7 +19,12 @@ export function AppointmentsTab({
   setUnavailableDatesOpen,
   setAppointmentPagination,
   isSuperAdmin,
+  searchQuery,
+  onSearchChange,
 }) {
+  // Calendar uses the full unpaginated list; table uses the paginated list.
+  const calendarData = visibleCalendarAppointments ?? visibleAppointments
+
   return (
     <motion.div key="appointments" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
       <div className="flex items-center justify-between mb-6">
@@ -38,7 +44,7 @@ export function AppointmentsTab({
       </div>
 
       <AppointmentCalendar
-        appointments={visibleAppointments}
+        appointments={calendarData}
         onAppointmentClick={(apt) => {
           setSelectedAppointment(apt)
           setAppointmentModalOpen(true)
@@ -65,6 +71,8 @@ export function AppointmentsTab({
           pagination={appointmentPagination}
           onPageChange={(page) => setAppointmentPagination((prev) => ({ ...prev, page }))}
           selectedDate={selectedCalendarDate}
+          searchQuery={searchQuery}
+          onSearchChange={onSearchChange}
         />
       </div>
     </motion.div>

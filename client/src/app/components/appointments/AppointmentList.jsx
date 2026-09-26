@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import {
   Search, Filter, Calendar, Clock, User, ChevronLeft, ChevronRight,
-  RefreshCw, X, CheckCircle, XCircle, AlertCircle, Loader2,
+  X, CheckCircle, XCircle, AlertCircle, Loader2,
   MoreHorizontal, Eye, Trash2, Plus, Download, ChevronDown
 } from 'lucide-react'
 import { format, parseISO, isToday, isTomorrow, isPast, isFuture } from 'date-fns'
@@ -145,91 +145,98 @@ function renderAppointmentServiceSummary(appointment) {
 
 // Main AppointmentList component
 export default function AppointmentList({
-   appointments = [],
-   loading = false,
-   onRefresh,
-   onViewDetails,
-   onEdit,
-   onCreateNew,
-   pagination = {},
-   onPageChange,
-   onFilterChange,
-   selectedDate = null,
- }) {
-   const [searchQuery, setSearchQuery] = useState('')
-   const [dateFilter, setDateFilter] = useState('all')
-   const [statusFilter, setStatusFilter] = useState('all')
-   const [viewMode, setViewMode] = useState('list') // 'list' or 'grid'
-   const [showFilters, setShowFilters] = useState(false)
-   const [selectedAppointment, setSelectedAppointment] = useState(null)
-   const [showDetailsModal, setShowDetailsModal] = useState(false)
-   const [sortBy, setSortBy] = useState('scheduled_at')
-   const [sortOrder, setSortOrder] = useState('asc')
+  appointments = [],
+  loading = false,
+  onRefresh,
+  onViewDetails,
+  onEdit,
+  onCreateNew,
+  pagination = {},
+  onPageChange,
+  onFilterChange,
+  selectedDate = null,
+  searchQuery: externalSearchQuery,
+  onSearchChange: externalOnSearchChange,
+}) {
+  const [internalSearchQuery, setInternalSearchQuery] = useState('')
+  const searchQuery = externalSearchQuery !== undefined ? externalSearchQuery : internalSearchQuery
+  const [dateFilter, setDateFilter] = useState('all')
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [viewMode, setViewMode] = useState('list') // 'list' or 'grid'
+  const [showFilters, setShowFilters] = useState(false)
+  const [selectedAppointment, setSelectedAppointment] = useState(null)
+  const [showDetailsModal, setShowDetailsModal] = useState(false)
+  const [sortBy, setSortBy] = useState('created_at')
+  const [sortOrder, setSortOrder] = useState('desc')
 
-// Filter appointments based on search and filters
-   const filteredAppointments = useMemo(() => {
-     let result = [...appointments]
+  // Filter appointments based on search and filters
+  const filteredAppointments = useMemo(() => {
+    let result = [...appointments]
 
-     // Search filter
-     if (searchQuery) {
-       const query = searchQuery.toLowerCase()
-       result = result.filter(apt =>
-         getCustomerName(apt).toLowerCase().includes(query) ||
-         apt.appointment_id?.toLowerCase().includes(query) ||
-         apt.reference_code?.toLowerCase().includes(query) ||
-         apt.notes?.toLowerCase().includes(query) ||
-         (apt.services && JSON.stringify(apt.services).toLowerCase().includes(query))
-       )
-     }
+    // Search filter
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase()
+      result = result.filter(apt =>
+        getCustomerName(apt).toLowerCase().includes(query) ||
+        apt.user_email?.toLowerCase().includes(query) ||
+        apt.customer_email?.toLowerCase().includes(query) ||
+        apt.user_phone?.toLowerCase().includes(query) ||
+        String(apt.appointment_id || '').toLowerCase().includes(query) ||
+        apt.reference_code?.toLowerCase().includes(query) ||
+        apt.notes?.toLowerCase().includes(query) ||
+        (apt.services && JSON.stringify(apt.services).toLowerCase().includes(query)) ||
+        (apt.service_name && String(apt.service_name).toLowerCase().includes(query))
+      )
+    }
 
-     // Date filter
-     if (dateFilter !== 'all') {
-       const now = new Date()
-       result = result.filter(apt => {
-         const aptDate = new Date(apt.scheduled_at)
-         switch (dateFilter) {
-           case 'today':
-             return isToday(aptDate)
-           case 'upcoming':
-             return isFuture(aptDate) && !isToday(aptDate)
-           case 'past':
-             return isPast(aptDate) && !isToday(aptDate)
-           default:
-             return true
-         }
-       })
-     }
+    // Date filter
+    if (dateFilter !== 'all') {
+      const now = new Date()
+      result = result.filter(apt => {
+        const aptDate = new Date(apt.scheduled_at)
+        switch (dateFilter) {
+          case 'today':
+            return isToday(aptDate)
+          case 'upcoming':
+            return isFuture(aptDate) && !isToday(aptDate)
+          case 'past':
+            return isPast(aptDate) && !isToday(aptDate)
+          default:
+            return true
+        }
+      })
+    }
 
-     // Status filter
-     if (statusFilter !== 'all') {
-       result = result.filter(apt => apt.status === statusFilter)
-     }
+    // Status filter
+    if (statusFilter !== 'all') {
+      result = result.filter(apt => apt.status === statusFilter)
+    }
 
-     // Sort
-     result.sort((a, b) => {
-       let aVal, bVal
-       switch (sortBy) {
-         case 'status':
-           aVal = a.status || ''
-           bVal = b.status || ''
-           break
-         case 'created_at':
-           aVal = a.created_at || ''
-           bVal = b.created_at || ''
-           break
-         case 'scheduled_at':
-         default:
-           aVal = a.scheduled_at || ''
-           bVal = b.scheduled_at || ''
-           break
-       }
-       if (aVal < bVal) return sortOrder === 'asc' ? -1 : 1
-       if (aVal > bVal) return sortOrder === 'asc' ? 1 : -1
-       return 0
-     })
+    // Sort
+    result.sort((a, b) => {
+      let aVal, bVal
+      switch (sortBy) {
+        case 'status':
+          aVal = a.status || ''
+          bVal = b.status || ''
+          break
+        case 'created_at':
+          aVal = a.created_at || ''
+          bVal = b.created_at || ''
+          break
+        case 'scheduled_at':
+        default:
+          aVal = a.scheduled_at || ''
+          bVal = b.scheduled_at || ''
+          break
+      }
+      if (aVal < bVal) return sortOrder === 'asc' ? -1 : 1
+      if (aVal > bVal) return sortOrder === 'asc' ? 1 : -1
+      return 0
+    })
 
-     return result
-   }, [appointments, searchQuery, dateFilter, statusFilter, sortBy, sortOrder])
+    return result
+  }, [appointments, searchQuery, dateFilter, statusFilter, sortBy, sortOrder])
 
   // Handle filter changes
   const handleDateFilterChange = (value) => {
@@ -243,25 +250,29 @@ export default function AppointmentList({
   }
 
   const handleSearchChange = (value) => {
-    setSearchQuery(value)
+    if (externalOnSearchChange) {
+      externalOnSearchChange(value)
+    } else {
+      setInternalSearchQuery(value)
+    }
     onFilterChange?.({ date: dateFilter, status: statusFilter, search: value })
   }
 
-const handleSortChange = (field) => {
-     if (sortBy === field) {
-       setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')
-     } else {
-       setSortBy(field)
-       setSortOrder('asc')
-     }
-   }
+  const handleSortChange = (field) => {
+    if (sortBy === field) {
+      setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortBy(field)
+      setSortOrder('asc')
+    }
+  }
 
-   const clearFilters = () => {
-     setSearchQuery('')
-     setDateFilter('all')
-     setStatusFilter('all')
-     onFilterChange?.({ date: 'all', status: 'all', search: '' })
-   }
+  const clearFilters = () => {
+    handleSearchChange('')
+    setDateFilter('all')
+    setStatusFilter('all')
+    onFilterChange?.({ date: 'all', status: 'all', search: '' })
+  }
 
   const hasActiveFilters = searchQuery || dateFilter !== 'all' || statusFilter !== 'all'
 
@@ -325,7 +336,7 @@ const handleSortChange = (field) => {
                onChange={(e) => setSortBy(e.target.value)}
                className="rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] px-3 py-2 text-sm text-[var(--text-muted)] focus:border-[var(--gold-primary)] focus:outline-none"
              >
-               <option value="scheduled_at">Date & Time</option>
+               <option value="scheduled_at">Date &amp; Time</option>
                <option value="status">Status</option>
                <option value="created_at">Created</option>
              </select>
@@ -339,13 +350,6 @@ const handleSortChange = (field) => {
              </button>
            </div>
            <button
-             onClick={onRefresh}
-             className="p-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] text-[var(--text-muted)] hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)] transition-colors"
-             title="Refresh"
-           >
-             <RefreshCw className="w-4 h-4" />
-           </button>
-           <button
              onClick={onCreateNew}
              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[var(--gold-primary)] text-black font-medium hover:bg-[var(--gold-primary)]/90 transition-colors"
            >
@@ -353,6 +357,27 @@ const handleSortChange = (field) => {
              <span>New Appointment</span>
            </button>
          </div>
+      </div>
+
+      {/* Search bar */}
+      <div className="relative">
+        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)] pointer-events-none" />
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => handleSearchChange(e.target.value)}
+          placeholder="Search by customer, reference code, service…"
+          className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] pl-10 pr-10 py-2.5 text-sm text-white placeholder:text-[var(--text-muted)] focus:border-[var(--gold-primary)] focus:outline-none transition-colors"
+        />
+        {searchQuery && (
+          <button
+            type="button"
+            onClick={() => handleSearchChange('')}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-white transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
       </div>
 
       {/* Loading State */}
