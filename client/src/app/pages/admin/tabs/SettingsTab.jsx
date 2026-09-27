@@ -7,6 +7,9 @@ export function SettingsTab({
   appointmentBranchAddress,
   setAppointmentBranchAddress,
   saveAppointmentBranchAddress,
+  siteContactInfo,
+  setSiteContactInfo,
+  saveSiteContactInfo,
 }) {
   return (
     <motion.div key="settings" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
@@ -21,6 +24,38 @@ export function SettingsTab({
             <div>
               <label className="block text-sm font-semibold text-[var(--text-muted)] mb-2">Dashboard Theme</label>
               <p className="text-white text-sm">Light mode is the default. You can switch to dark mode using the theme toggle in the top bar.</p>
+            </div>
+
+            <div className="pt-2 border-t border-[var(--border)]">
+              <label className="block text-sm font-semibold text-[var(--text-muted)] mb-2">Landing Page Contact Email</label>
+              <input
+                type="email"
+                value={siteContactInfo.email}
+                onChange={(e) => setSiteContactInfo((prev) => ({ ...prev, email: e.target.value }))}
+                className="w-full px-4 py-3 bg-[var(--bg-primary)] text-white border border-[var(--border)] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]/50"
+                placeholder="your@email.com"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold text-[var(--text-muted)] mb-2">Landing Page Contact Phone</label>
+              <input
+                type="text"
+                value={siteContactInfo.phone}
+                onChange={(e) => setSiteContactInfo((prev) => ({ ...prev, phone: e.target.value }))}
+                className="w-full px-4 py-3 bg-[var(--bg-primary)] text-white border border-[var(--border)] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]/50"
+                placeholder="+63 912 345 6789"
+              />
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                onClick={saveSiteContactInfo}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--gold-primary)] text-black font-semibold text-sm hover:opacity-90 transition"
+              >
+                <Save className="w-4 h-4" />
+                Save Contact Info
+              </button>
             </div>
           </div>
         </div>

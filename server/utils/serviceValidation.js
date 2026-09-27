@@ -22,6 +22,16 @@ const serviceValidation = {
         'string.max': 'Service name cannot exceed 150 characters',
         'any.required': 'Service name is required',
       }),
+    slug: Joi.string()
+      .min(2)
+      .max(150)
+      .optional()
+      .allow('')
+      .trim()
+      .pattern(/^[a-z0-9-]+$/)
+      .messages({
+        'string.pattern.base': 'Slug must contain only lowercase letters, numbers, and hyphens',
+      }),
     description: Joi.string()
       .max(1000)
       .optional()
@@ -29,6 +39,14 @@ const serviceValidation = {
       .trim()
       .messages({
         'string.max': 'Description cannot exceed 1000 characters',
+      }),
+    image_url: Joi.string()
+      .max(1000)
+      .optional()
+      .allow('')
+      .uri({ allowRelative: true })
+      .messages({
+        'string.uri': 'Image URL must be a valid URL',
       }),
     price: Joi.number()
       .min(0)
@@ -58,11 +76,29 @@ const serviceValidation = {
       .max(150)
       .optional()
       .trim(),
+    slug: Joi.string()
+      .min(2)
+      .max(150)
+      .optional()
+      .allow('')
+      .trim()
+      .pattern(/^[a-z0-9-]+$/)
+      .messages({
+        'string.pattern.base': 'Slug must contain only lowercase letters, numbers, and hyphens',
+      }),
     description: Joi.string()
       .max(1000)
       .optional()
       .allow('')
       .trim(),
+    image_url: Joi.string()
+      .max(1000)
+      .optional()
+      .allow('')
+      .uri({ allowRelative: true })
+      .messages({
+        'string.uri': 'Image URL must be a valid URL',
+      }),
     price: Joi.number()
       .min(0)
       .max(99999.99)

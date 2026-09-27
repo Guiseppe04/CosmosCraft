@@ -66,12 +66,62 @@ export function ServiceModal({ modal, form, setForm, formErrors, closeModal, isS
           />
         </FormField>
 
+        <FormField label="Slug">
+          <input
+            className={inputCls}
+            value={form.slug || ''}
+            onChange={(e) => setForm((f) => ({ ...f, slug: e.target.value }))}
+            placeholder="setup-and-intonation"
+          />
+        </FormField>
+
         <FormField label="Description">
           <textarea
             className={`${inputCls} min-h-[120px] resize-none`}
             value={form.description || ''}
             onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
             placeholder="Describe the service..."
+          />
+        </FormField>
+
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]/40 p-3">
+          <label className="flex items-center gap-3 text-sm font-medium text-[var(--text-light)]">
+            <input
+              type="checkbox"
+              checked={Boolean(form.show_on_landing ?? true)}
+              onChange={(e) => setForm((f) => ({ ...f, show_on_landing: e.target.checked }))}
+              className="h-4 w-4 rounded border-[var(--border)] bg-transparent text-[var(--gold-primary)] focus:ring-[var(--gold-primary)]"
+            />
+            Show this service on the landing page
+          </label>
+        </div>
+
+        <FormField label="Landing card text">
+          <textarea
+            className={`${inputCls} min-h-[90px] resize-none`}
+            value={form.landing_text ?? form.description ?? ''}
+            onChange={(e) => setForm((f) => ({ ...f, landing_text: e.target.value }))}
+            placeholder="Optional custom card description for the landing page"
+          />
+        </FormField>
+
+        <FormField label="Landing image URL">
+          <input
+            className={inputCls}
+            value={form.landing_image_url || form.image_url || form.image || ''}
+            onChange={(e) => setForm((f) => ({ ...f, landing_image_url: e.target.value, image_url: e.target.value, image: e.target.value }))}
+            placeholder="https://example.com/service-image.jpg"
+          />
+        </FormField>
+
+        <FormField label="Landing order">
+          <input
+            type="number"
+            min="1"
+            className={inputCls}
+            value={form.landing_order ?? 1}
+            onChange={(e) => setForm((f) => ({ ...f, landing_order: Number(e.target.value) || 1 }))}
+            placeholder="1"
           />
         </FormField>
 

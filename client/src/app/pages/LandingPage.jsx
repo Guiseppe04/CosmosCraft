@@ -1,4 +1,5 @@
-﻿import { Link } from 'react-router'
+﻿import { useEffect, useState } from 'react'
+import { Link } from 'react-router'
 import {
   ArrowRight,
   Phone,
@@ -8,33 +9,83 @@ import { ImageWithFallback } from '../components/figma/ImageWithFallback.jsx'
 import { TestimonialCarousel } from '../components/TestimonialCarousel.jsx'
 import { FacebookIcon, InstagramIcon, TikTokIcon, YouTubeIcon, SocialMediaLink } from '../components/social/SocialMediaIcons.jsx'
 
-const serviceCards = [
+const DEFAULT_CONTACT_INFO = {
+  email: 'cosmosguitars@gmail.com',
+  phone: '+095213121581',
+}
+
+const SITE_CONTACT_STORAGE_KEY = 'cosmoscraft.site.contact'
+const LANDING_SERVICES_STORAGE_KEY = 'cosmoscraft.landing.services'
+
+const defaultServiceCards = [
   {
     title: 'Setup & Intonation',
     text: 'Precision setup for optimal action, tuning stability, and accurate intonation.',
     image: '/assets/landing/480706588_1131061512149778_5794129601486897065_n.jpg',
+    href: '/appointments?step=2&service=setup%20and%20intonation&serviceName=Setup%20%26%20Intonation',
   },
   {
-    title: 'Recondition',
+    title: 'Refinishing',
     text: 'Professional refinishing services to restore and elevate your instrument look.',
     image: '/assets/landing/499948200_1197883048800957_5172319103702371821_n.jpg',
+    href: '/appointments?step=2&service=refinishing&serviceName=Refinishing',
   },
   {
     title: 'Repair & Restoration',
     text: 'Reliable structural and cosmetic restoration handled by skilled technicians.',
     image: '/assets/landing/615157658_1389213549667905_4695629074825690570_n.jpg',
+    href: '/appointments?step=2&service=repair%20and%20restoration&serviceName=Repair%20%26%20Restoration',
   },
   {
     title: 'Electronics Upgrades',
     text: 'Pickup, wiring, and hardware electronics upgrades for improved tone and control.',
     image: '/assets/landing/480473076_1131061492149780_4368555505559771502_n.jpg',
+    href: '/appointments?step=2&service=electronics%20upgrades&serviceName=Electronics%20Upgrades',
   },
 ]
+
+const readLandingServiceCards = () => {
+  if (typeof window === 'undefined') return defaultServiceCards
+
+  try {
+    const raw = window.localStorage.getItem(LANDING_SERVICES_STORAGE_KEY)
+    if (!raw) return defaultServiceCards
+
+    const stored = JSON.parse(raw)
+    if (!Array.isArray(stored) || stored.length === 0) return defaultServiceCards
+
+    const normalized = stored
+      .filter((item) => item && item.enabled !== false)
+      .map((item, index) => {
+        const title = item.title || defaultServiceCards[index % defaultServiceCards.length]?.title || 'Service'
+        const text = item.text || item.description || 'Premium service tailored for your instrument.'
+        const image = item.image || item.image_url || defaultServiceCards[index % defaultServiceCards.length]?.image || ''
+        const href = item.href || defaultServiceCards[index % defaultServiceCards.length]?.href || '/appointments'
+
+        return {
+          title,
+          text,
+          image,
+          href,
+        }
+      })
+      .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0))
+
+    return normalized.length ? normalized : defaultServiceCards
+  } catch {
+    return defaultServiceCards
+  }
+}
+
+const footerServiceLinks = defaultServiceCards.map(({ title, href }) => ({
+  label: title,
+  href,
+}))
 
 const footerGroups = [
   {
     title: 'Services',
-    links: ['Setup & Intonation', 'Refinishing', 'Repair & Restoration', 'Electronics Upgrades'],
+    links: footerServiceLinks,
   },
   {
     title: 'Social Media',
@@ -48,6 +99,61 @@ const footerGroups = [
 ]
 
 export function LandingPage() {
+  const [contactInfo, setContactInfo] = useState(DEFAULT_CONTACT_INFO)
+  const [serviceCards, setServiceCards] = useState(() => readLandingServiceCards())
+
+  useEffect(() => {
+    const applyContactInfo = () => {
+      if (typeof window === 'undefined') return
+
+      try {
+        const raw = window.localStorage.getItem(SITE_CONTACT_STORAGE_KEY)
+        if (!raw) {
+          setContactInfo(DEFAULT_CONTACT_INFO)
+          return
+        }
+        const parsed = JSON.parse(raw)
+        setContactInfo({
+          email: parsed?.email || DEFAULT_CONTACT_INFO.email,
+          phone: parsed?.phone || DEFAULT_CONTACT_INFO.phone,
+        })
+      } catch {
+        setContactInfo(DEFAULT_CONTACT_INFO)
+      }
+    }
+
+    applyContactInfo()
+
+    const onStorage = (event) => {
+      if (event.key === SITE_CONTACT_STORAGE_KEY) {
+        applyContactInfo()
+      }
+    }
+
+    const onContactUpdated = (event) => {
+      if (event?.detail) {
+        setContactInfo({
+          email: event.detail.email || DEFAULT_CONTACT_INFO.email,
+          phone: event.detail.phone || DEFAULT_CONTACT_INFO.phone,
+        })
+      }
+    }
+
+    const onLandingServicesUpdated = () => {
+      setServiceCards(readLandingServiceCards())
+    }
+
+    window.addEventListener('storage', onStorage)
+    window.addEventListener('cosmoscraft-site-contact-updated', onContactUpdated)
+    window.addEventListener('cosmoscraft-landing-services-updated', onLandingServicesUpdated)
+
+    return () => {
+      window.removeEventListener('storage', onStorage)
+      window.removeEventListener('cosmoscraft-site-contact-updated', onContactUpdated)
+      window.removeEventListener('cosmoscraft-landing-services-updated', onLandingServicesUpdated)
+    }
+  }, [])
+
   return (
     <div className="min-h-screen bg-[var(--bg-primary)] text-[var(--text-light)]">
       <section className="pt-16">
@@ -117,7 +223,7 @@ export function LandingPage() {
                   <h3 className="text-xl font-semibold text-white sm:text-2xl">{card.title}</h3>
                   <p className="mt-3 text-sm leading-relaxed text-[var(--text-muted)] sm:text-base">{card.text}</p>
                   <Link
-                    to="/appointments"
+                    to={card.href}
                     className="mt-5 inline-flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-[var(--gold-primary)] transition-colors hover:text-[var(--gold-secondary)]"
                   >
                     Learn More
@@ -195,9 +301,9 @@ export function LandingPage() {
                   or want to provide feedback, our team is ready to assist you.
                 </p>
                 <p className="mt-5 sm:mt-6 text-xs sm:text-sm text-[var(--text-muted)]">Email:</p>
-                <p className="text-lg sm:text-xl font-semibold text-[var(--text-light)]">cosmosguitars@gmail.com</p>
+                <p className="text-lg sm:text-xl font-semibold text-[var(--text-light)]">{contactInfo.email}</p>
                 <p className="mt-3 sm:mt-4 text-xs sm:text-sm text-[var(--text-muted)]">Phone:</p>
-                <p className="text-xl sm:text-2xl font-semibold text-[var(--text-light)]">+095213121581</p>
+                <p className="text-xl sm:text-2xl font-semibold text-[var(--text-light)]">{contactInfo.phone}</p>
                 <p className="mt-1 text-xs text-[var(--text-muted)]">Available Monday to Friday, 9 AM - 6 PM GMT</p>
               </div>
 
@@ -260,7 +366,7 @@ export function LandingPage() {
               </p>
               <p className="mt-2 sm:mt-3 inline-flex items-center gap-2 text-xs sm:text-sm text-[var(--text-muted)]">
                 <Phone className="h-4 w-4 text-[var(--gold-primary)]" />
-                cosmosguitars@gmail.com
+                {contactInfo.email}
               </p>
             </div>
 
@@ -279,6 +385,17 @@ export function LandingPage() {
                     {group.links.map((item) => {
                       const label = typeof item === 'string' ? item : item.label;
                       const url = typeof item === 'object' ? item.url : null;
+                      const href = typeof item === 'object' ? item.href : null;
+
+                      if (href) {
+                        return (
+                          <li key={label}>
+                            <Link to={href} className="hover:text-[var(--gold-primary)] transition-colors">
+                              {label}
+                            </Link>
+                          </li>
+                        );
+                      }
 
                       if (url) {
                         return (

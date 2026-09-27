@@ -35,26 +35,15 @@ export function LoginModal() {
         return
       }
 
-      // Set user data directly from login response
       const token = data.data?.accessToken || data.data?.token || data.token
-      if (data.data?.user) {
-        login(data.data.user, token)
+      const userData = data.data?.user || null
+      if (userData) {
+        login(userData, token)
       }
 
-      // Clear form and close modal
       setEmail('')
       setPassword('')
       closeLogin()
-
-      // Redirect to dashboard based on role
-      const role = data.data?.user?.role || 'customer'
-      if (role === 'admin' || role === 'super_admin') {
-        navigate('/admin')
-      } else if (role === 'staff') {
-        navigate('/staff')
-      } else {
-        navigate('/dashboard')
-      }
     } catch (error) {
       console.error('Login error:', error)
       setError('Network error. Please check your connection and try again.')
@@ -66,6 +55,14 @@ export function LoginModal() {
   const handleGoToSignup = () => {
     closeLogin()
     navigate('/signup')
+  }
+
+  const startSocialLogin = (provider) => {
+    try {
+      const returnTo = `${window.location.pathname}${window.location.search}${window.location.hash}`
+      window.sessionStorage.setItem('cosmoscraft.auth.returnTo', returnTo)
+    } catch {}
+    window.location.href = `${API}/auth/${provider}`
   }
 
   useEffect(() => {
@@ -201,7 +198,7 @@ export function LoginModal() {
                   disabled={redirectingProvider !== null}
                   onClick={() => {
                     setRedirectingProvider('google')
-                    window.location.href = `${API}/auth/google`
+                    startSocialLogin('google')
                   }}
                   className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border border-[var(--border)] text-sm font-medium text-[var(--text-light)] hover:bg-[var(--surface-elevated)]"
                 >
@@ -219,7 +216,7 @@ export function LoginModal() {
                   disabled={redirectingProvider !== null}
                   onClick={() => {
                     setRedirectingProvider('facebook')
-                    window.location.href = `${API}/auth/facebook`
+                    startSocialLogin('facebook')
                   }}
                   className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border border-[var(--border)] text-sm font-medium text-[var(--text-light)] hover:bg-[var(--surface-elevated)]"
                 >

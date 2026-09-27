@@ -55,6 +55,14 @@ function inferLeadTimeDays(service = {}) {
   if (Number.isFinite(Number(service.lead_time_days))) {
     return Number(service.lead_time_days)
   }
+
+  const durationMinutes = Number(service.duration_minutes || 0)
+  if (durationMinutes > 0) {
+    const durationDays = durationMinutes / (60 * 24)
+    if (durationDays >= 1) return Math.ceil(durationDays)
+    return 0
+  }
+
   const description = String(service.description || '').toLowerCase()
   if (!description) return 0
   if (description.includes('same day')) return 0

@@ -3,6 +3,20 @@ import { useSearchParams, useNavigate } from 'react-router'
 import { useAuth } from '../context/AuthContext.jsx'
 import { setAuthToken } from '../utils/apiConfig'
 
+function getOAuthReturnPath() {
+  try {
+    const returnTo = window.sessionStorage.getItem('cosmoscraft.auth.returnTo')
+    window.sessionStorage.removeItem('cosmoscraft.auth.returnTo')
+    if (!returnTo) return '/'
+
+    const target = new URL(returnTo, window.location.origin)
+    if (target.origin !== window.location.origin || target.pathname === '/auth/success') return '/'
+    return `${target.pathname}${target.search}${target.hash}`
+  } catch {
+    return '/'
+  }
+}
+
 export function OAuthSuccessPage() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
@@ -13,6 +27,8 @@ export function OAuthSuccessPage() {
   useEffect(() => {
     const userId = searchParams.get('userId')
     const token = searchParams.get('token') || searchParams.get('accessToken')
+    const returnPath = getOAuthReturnPath()
+    const fallbackPath = returnPath && returnPath !== '/auth/success' ? returnPath : '/'
 
     if (token) {
       setAuthToken(token)
@@ -20,7 +36,7 @@ export function OAuthSuccessPage() {
 
     if (!userId && !token) {
       setError('Authentication failed. Please try again.')
-      setTimeout(() => navigate('/'), 2000)
+      setTimeout(() => navigate(fallbackPath, { replace: true }), 800)
       return
     }
 
@@ -28,20 +44,19 @@ export function OAuthSuccessPage() {
     const initializeUser = async () => {
       try {
         const userData = await fetchUser()
-        
+
         if (userData) {
-          // Use the full user data from backend
           login(userData, token)
-          // Redirect to home
-          setTimeout(() => navigate('/'), 500)
-        } else {
-          setError('Failed to load user data')
-          setTimeout(() => navigate('/'), 2000)
+          setTimeout(() => navigate(fallbackPath, { replace: true }), 300)
+          return
         }
+
+        setError('Failed to load user data')
+        setTimeout(() => navigate(fallbackPath, { replace: true }), 800)
       } catch (err) {
         console.error('Auth initialization error:', err)
         setError('Failed to complete authentication')
-        setTimeout(() => navigate('/'), 2000)
+        setTimeout(() => navigate(fallbackPath, { replace: true }), 800)
       } finally {
         setIsLoading(false)
       }

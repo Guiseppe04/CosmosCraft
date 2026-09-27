@@ -605,7 +605,9 @@ ON CONFLICT (id) DO NOTHING;
 CREATE TABLE services (
     service_id SERIAL PRIMARY KEY,
     name VARCHAR(150) NOT NULL,
+    slug VARCHAR(150),
     description TEXT,
+    image_url TEXT,
     price NUMERIC(12, 2) NOT NULL CHECK (price >= 0),
     duration_minutes SMALLINT NOT NULL CHECK (duration_minutes > 0),
     is_active BOOLEAN NOT NULL DEFAULT TRUE,

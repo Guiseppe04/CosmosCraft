@@ -75,7 +75,6 @@ export function LoginPage() {
       const data = await response.json()
 
       if (!response.ok) {
-        // Extract field-level errors if the server returned them (e.g. from Joi validation)
         if (data.errors && Array.isArray(data.errors) && data.errors.length > 0) {
           data.errors.forEach(err => {
             if (err.field === 'email') setEmailError(err.message)
@@ -84,7 +83,6 @@ export function LoginPage() {
           })
         } else {
           const msg = data.message || 'Login failed. Please check your credentials.'
-          // Route specific server messages to the right field
           if (/email/i.test(msg) && !/password/i.test(msg)) {
             setEmailError(msg)
           } else if (/password/i.test(msg) && !/email/i.test(msg)) {
@@ -97,12 +95,28 @@ export function LoginPage() {
       }
 
       const token = data.data?.accessToken || data.data?.token || data.token
-      if (data.data?.user) {
-        login(data.data.user, token)
+      const userData = data.data?.user || null
+      if (userData) {
+        login(userData, token)
       }
 
-      const role = data.data?.user?.role || 'customer'
-      if (role === 'admin' || role === 'super_admin') {
+      const storedReturnTo = (() => {
+        try {
+          const value = window.sessionStorage.getItem('cosmoscraft.auth.returnTo')
+          window.sessionStorage.removeItem('cosmoscraft.auth.returnTo')
+          if (!value) return null
+          const parsed = new URL(value, window.location.origin)
+          if (parsed.origin !== window.location.origin || parsed.pathname === '/auth/success') return null
+          return `${parsed.pathname}${parsed.search}${parsed.hash}`
+        } catch {
+          return null
+        }
+      })()
+
+      const role = userData?.role || 'customer'
+      if (storedReturnTo) {
+        navigate(storedReturnTo, { replace: true })
+      } else if (role === 'admin' || role === 'super_admin') {
         navigate('/admin')
       } else if (role === 'staff') {
         navigate('/staff')
@@ -118,6 +132,13 @@ export function LoginPage() {
   }
 
   const handleSocialLogin = (provider) => {
+    try {
+      const returnTo = `${window.location.pathname}${window.location.search}${window.location.hash}`
+      if (returnTo && !returnTo.startsWith('/auth')) {
+        window.sessionStorage.setItem('cosmoscraft.auth.returnTo', returnTo)
+      }
+    } catch {}
+
     setRedirectingProvider(provider)
     window.location.href = `${API}/auth/${provider.toLowerCase()}`
   }

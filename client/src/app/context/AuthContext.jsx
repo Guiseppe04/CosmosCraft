@@ -198,6 +198,13 @@ export function AuthProvider({ children }) {
   }, [fetchUser])
 
   const openLogin = useCallback(callback => {
+    try {
+      const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`
+      if (currentPath && !currentPath.startsWith('/auth')) {
+        window.sessionStorage.setItem('cosmoscraft.auth.returnTo', currentPath)
+      }
+    } catch {}
+
     setLoginOpen(true)
     if (typeof callback === 'function') {
       setLoginCallback(() => callback)

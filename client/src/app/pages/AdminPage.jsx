@@ -129,6 +129,12 @@ import { OrderDetailsModal } from './admin/components/modals/OrderDetailsModal'
 import { OrderStatusModal } from './admin/components/modals/OrderStatusModal'
 import { getStockTier } from '../utils/stockUtils'
 
+const SITE_CONTACT_STORAGE_KEY = 'cosmoscraft.site.contact'
+const DEFAULT_SITE_CONTACT = {
+  email: 'cosmosguitars@gmail.com',
+  phone: '+095213121581',
+}
+
 export function AdminPage() {
   const { user, isAuthenticated } = useAuth()
   const navigate = useNavigate()
@@ -309,6 +315,7 @@ export function AdminPage() {
   const [messagePanelOpen, setMessagePanelOpen] = useState(false)
   const [selectedConversation, setSelectedConversation] = useState(null)
   const [appointmentBranchAddress, setAppointmentBranchAddress] = useState(DEFAULT_APPOINTMENT_BRANCH.address)
+  const [siteContactInfo, setSiteContactInfo] = useState(DEFAULT_SITE_CONTACT)
 
   // ── Derived / filtered views ─────────────────────────────────────────────
   const visibleProducts = products || []
@@ -602,6 +609,19 @@ export function AdminPage() {
       // Ignore invalid persisted admin setting
     }
 
+    try {
+      const contactRaw = window.localStorage.getItem(SITE_CONTACT_STORAGE_KEY)
+      if (!contactRaw) return
+      const parsedContact = JSON.parse(contactRaw)
+      if (parsedContact?.email || parsedContact?.phone) {
+        setSiteContactInfo({
+          email: parsedContact.email || DEFAULT_SITE_CONTACT.email,
+          phone: parsedContact.phone || DEFAULT_SITE_CONTACT.phone,
+        })
+      }
+    } catch {
+      // Ignore invalid persisted contact info
+    }
   }, [])
 
   const saveAppointmentBranchAddress = useCallback(() => {
@@ -627,6 +647,63 @@ export function AdminPage() {
       showToast('Failed to save branch address', 'error')
     }
   }, [appointmentBranchAddress, showToast])
+
+  const saveSiteContactInfo = useCallback(() => {
+    const cleanEmail = siteContactInfo.email.trim()
+    const cleanPhone = siteContactInfo.phone.trim()
+
+    if (!cleanEmail || !cleanPhone) {
+      showToast('Email and phone are required', 'error')
+      return
+    }
+
+    try {
+      const payload = {
+        email: cleanEmail,
+        phone: cleanPhone,
+      }
+
+      window.localStorage.setItem(
+        SITE_CONTACT_STORAGE_KEY,
+        JSON.stringify(payload)
+      )
+      window.dispatchEvent(new CustomEvent('cosmoscraft-site-contact-updated', { detail: payload }))
+      showToast('Landing page contact info saved')
+    } catch {
+      showToast('Failed to save contact info', 'error')
+    }
+  }, [showToast, siteContactInfo])
+
+  const syncLandingServiceConfig = useCallback((service) => {
+    if (!service || !service.name) return
+
+    try {
+      const storageKey = 'cosmoscraft.landing.services'
+      const raw = window.localStorage.getItem(storageKey)
+      const existing = raw ? JSON.parse(raw) : []
+      const normalizedExisting = Array.isArray(existing) ? existing : []
+      const nextItem = {
+        serviceId: service.service_id ?? null,
+        title: form.name || service.name,
+        text: form.landing_text || form.description || service.description || 'Premium service tailored for your instrument.',
+        image: form.landing_image_url || form.image_url || form.image || service.image_url || '',
+        href: `/appointments?step=2&service=${encodeURIComponent((form.name || service.name).toLowerCase().replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, ' '))}&serviceName=${encodeURIComponent(form.name || service.name)}`,
+        enabled: Boolean(form.show_on_landing ?? true),
+        order: Number(form.landing_order ?? 1),
+      }
+
+      const merged = normalizedExisting.filter((item) => String(item.serviceId ?? item.id) !== String(service.service_id))
+      if (nextItem.enabled) {
+        merged.push(nextItem)
+      }
+
+      merged.sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0))
+      window.localStorage.setItem(storageKey, JSON.stringify(merged))
+      window.dispatchEvent(new CustomEvent('cosmoscraft-landing-services-updated'))
+    } catch {
+      showToast('Failed to sync landing page service settings', 'error')
+    }
+  }, [form, showToast])
 
   // ── Confirm dialog helper ────────────────────────────────────────────────
   const openConfirm = ({ title, description, onConfirm, variant = 'danger', confirmLabel = 'Confirm', cancelLabel = 'Cancel' }) => {
@@ -1530,7 +1607,6 @@ export function AdminPage() {
    const saveService = async () => {
      setIsSaving(true)
      try {
-       // Base payload with fields common to create & update
        const payload = {
          name: form.name,
          description: form.description || '',
@@ -1538,15 +1614,18 @@ export function AdminPage() {
          duration_minutes: form.duration !== '' && form.duration != null ? Math.round(Number(form.duration) * 60) : null,
        }
 
-       // is_active only sent on update (create defaults to true in DB)
+       let savedService = null
        if (modal.data?.service_id) {
          payload.is_active = form.is_active !== undefined ? Boolean(form.is_active) : true
-         await adminApi.updateService(modal.data.service_id, payload)
+         savedService = await adminApi.updateService(modal.data.service_id, payload)
          showToast('Service updated!')
        } else {
-         await adminApi.createService(payload)
+         savedService = await adminApi.createService(payload)
          showToast('Service added!')
        }
+
+       const mergedService = savedService?.data || savedService || { ...modal.data, ...form, service_id: modal.data?.service_id }
+       syncLandingServiceConfig(mergedService)
        fetchServices()
        closeModal()
      } catch (e) { showToast(e.message, 'error') }
@@ -2467,6 +2546,9 @@ export function AdminPage() {
               appointmentBranchAddress={appointmentBranchAddress}
               setAppointmentBranchAddress={setAppointmentBranchAddress}
               saveAppointmentBranchAddress={saveAppointmentBranchAddress}
+              siteContactInfo={siteContactInfo}
+              setSiteContactInfo={setSiteContactInfo}
+              saveSiteContactInfo={saveSiteContactInfo}
             />
           )}
 

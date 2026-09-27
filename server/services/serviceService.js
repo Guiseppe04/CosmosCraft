@@ -103,12 +103,19 @@ exports.getServiceById = async (serviceId) => {
 /**
  * Create new service
  */
-exports.createService = async ({ name, description, price, duration_minutes }) => {
+exports.createService = async ({ name, slug, description, image_url, price, duration_minutes }) => {
+  const finalSlug = (slug || name)
+    .toLowerCase()
+    .trim()
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'service';
+
   const result = await pool.query(
-    `INSERT INTO services (name, description, price, duration_minutes, is_active, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, true, now(), now())
+    `INSERT INTO services (name, slug, description, image_url, price, duration_minutes, is_active, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, true, now(), now())
      RETURNING *`,
-    [name, description || null, price, duration_minutes]
+    [name, finalSlug, description || null, image_url || null, price, duration_minutes]
   );
   return result.rows[0];
 };
@@ -117,7 +124,7 @@ exports.createService = async ({ name, description, price, duration_minutes }) =
  * Update service
  */
 exports.updateService = async (serviceId, updates) => {
-  const { name, description, price, duration_minutes, is_active } = updates;
+  const { name, slug, description, image_url, price, duration_minutes, is_active } = updates;
 
   const setClauses = [];
   const params = [];
@@ -127,9 +134,17 @@ exports.updateService = async (serviceId, updates) => {
     setClauses.push(`name = $${idx++}`);
     params.push(name);
   }
+  if (slug !== undefined) {
+    setClauses.push(`slug = $${idx++}`);
+    params.push(slug || null);
+  }
   if (description !== undefined) {
     setClauses.push(`description = $${idx++}`);
     params.push(description || null);
+  }
+  if (image_url !== undefined) {
+    setClauses.push(`image_url = $${idx++}`);
+    params.push(image_url || null);
   }
   if (price !== undefined) {
     setClauses.push(`price = $${idx++}`);
