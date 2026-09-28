@@ -116,7 +116,8 @@ export function SignupPage() {
       'confirmPassword',
       'address.country',
       'address.streetLine1',
-      'address.stateProvince',
+      'address.region',
+      'address.province',
       'address.city',
       'address.barangay',
       'address.postalZipCode',
@@ -173,6 +174,11 @@ export function SignupPage() {
       ...prev,
       address: { ...prev.address, stateProvince: name, city: '', barangay: '' }
     }))
+    setErrors(prev => ({
+      ...prev,
+      'address.region': '',
+      'address.stateProvince': '',
+    }))
   }
 
   // When PH province changes, reset downstream
@@ -184,6 +190,11 @@ export function SignupPage() {
       ...prev,
       address: { ...prev.address, stateProvince: name, city: '', barangay: '' }
     }))
+    setErrors(prev => ({
+      ...prev,
+      'address.province': '',
+      'address.stateProvince': '',
+    }))
   }
 
   // When PH municipality changes, reset barangay/street
@@ -193,6 +204,10 @@ export function SignupPage() {
     setForm(prev => ({
       ...prev,
       address: { ...prev.address, city: name, barangay: '' }
+    }))
+    setErrors(prev => ({
+      ...prev,
+      'address.city': '',
     }))
   }
 
@@ -243,17 +258,14 @@ export function SignupPage() {
     // Address Information
     if (!form.address.country.trim()) newErrors['address.country'] = 'Country is required.'
     if (!form.address.streetLine1.trim()) newErrors['address.streetLine1'] = 'Street address is required.'
-    if (!form.address.city.trim()) newErrors['address.city'] = 'City / Municipality is required.'
-    if (!phBarangay) newErrors['address.barangay'] = 'Barangay is required.'
-    if (!form.address.stateProvince.trim()) newErrors['address.stateProvince'] = 'Province is required.'
     if (!phMunicipality) newErrors['address.city'] = 'Municipality is required.'
+    if (!phBarangay) newErrors['address.barangay'] = 'Barangay is required.'
+    if (!phProvince) newErrors['address.province'] = 'Province is required.'
+    if (!phRegion) newErrors['address.region'] = 'Region is required.'
     if (!form.address.postalZipCode.trim()) newErrors['address.postalZipCode'] = 'Postal/Zip code is required.'
     if (phMunicipality && form.address.postalZipCode.trim() && zipValid === false) {
       newErrors['address.postalZipCode'] = zipError || 'The ZIP code entered is incorrect for the selected city. Please verify and try again.'
     }
-    if (!phRegion) newErrors['address.stateProvince'] = 'Region is required.'
-    if (!phProvince) newErrors['address.stateProvince'] = 'Province is required.'
-    if (!phMunicipality) newErrors['address.city'] = 'Municipality is required.'
 
     // Terms
     if (!form.terms) newErrors.terms = 'You must agree to the terms to continue.'
@@ -313,16 +325,14 @@ export function SignupPage() {
     if (step === 3) {
       if (!form.address.country.trim()) newErrors['address.country'] = 'Country is required.'
       if (!form.address.streetLine1.trim()) newErrors['address.streetLine1'] = 'Street address is required.'
-      if (!form.address.city.trim()) newErrors['address.city'] = 'City / Municipality is required.'
-      if (!phBarangay) newErrors['address.barangay'] = 'Barangay is required.'
-      if (!form.address.stateProvince.trim()) newErrors['address.stateProvince'] = 'Province is required.'
       if (!phMunicipality) newErrors['address.city'] = 'Municipality is required.'
+      if (!phBarangay) newErrors['address.barangay'] = 'Barangay is required.'
+      if (!phProvince) newErrors['address.province'] = 'Province is required.'
+      if (!phRegion) newErrors['address.region'] = 'Region is required.'
       if (!form.address.postalZipCode.trim()) newErrors['address.postalZipCode'] = 'Postal/Zip code is required.'
       if (phMunicipality && form.address.postalZipCode.trim() && zipValid === false) {
         newErrors['address.postalZipCode'] = zipError || 'The ZIP code entered is incorrect for the selected city. Please verify and try again.'
       }
-      if (!phRegion) newErrors['address.stateProvince'] = 'Region is required.'
-      if (!phProvince) newErrors['address.stateProvince'] = 'Province is required.'
       if (!form.terms) newErrors.terms = 'You must agree to the terms to continue.'
     }
 
@@ -783,47 +793,49 @@ export function SignupPage() {
 
               <>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                  <motion.div animate={errors['address.stateProvince'] ? shakeAnimation : {}}>
-                    <label className="block text-xs uppercase tracking-wider font-semibold text-[var(--text-muted)] mb-2">Region *</label>
+                  <motion.div animate={errors['address.region'] ? shakeAnimation : {}}>
+                    <label className="block text-xs uppercase tracking-wider font-semibold text-[var(--text-muted)] mb-2">Region <span style={{ color: '#ef4444' }}>*</span></label>
                     <select
                       value={phRegion}
-                      ref={registerFieldRef('address.stateProvince')}
+                      ref={registerFieldRef('address.region')}
                       onChange={e => {
                         const opt = phRegions.find(r => r.psgcCode === e.target.value)
                         handlePhRegionChange(e.target.value, opt?.designation || opt?.name || '')
                       }}
-                      className={`${getInputStyles(errors['address.stateProvince'])} appearance-none cursor-pointer`}
+                      className={`${getInputStyles(errors['address.region'])} appearance-none cursor-pointer`}
                     >
                       <option value="" disabled className="text-gray-900">Select Region</option>
                       {phRegions.map(r => (
                         <option key={r.psgcCode} value={r.psgcCode} className="text-gray-900">{r.name}</option>
                       ))}
                     </select>
-                    {errors['address.stateProvince'] && <span className="text-xs text-red-400 mt-1.5 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{errors['address.stateProvince']}</span>}
+                    {errors['address.region'] && <span className="text-xs text-red-400 mt-1.5 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{errors['address.region']}</span>}
                   </motion.div>
 
-                  <motion.div animate={errors['address.stateProvince'] ? shakeAnimation : {}}>
+                  <motion.div animate={errors['address.province'] ? shakeAnimation : {}}>
                     <label className="block text-xs uppercase tracking-wider font-semibold text-[var(--text-muted)] mb-2">Province <span style={{ color: '#ef4444' }}>*</span></label>
                     <select
                       value={phProvince}
+                      ref={registerFieldRef('address.province')}
                       disabled={!phRegion}
                       onChange={e => {
                         const opt = phProvinces.find(p => p.psgcCode === e.target.value)
                         handlePhProvinceChange(e.target.value, opt?.name || '')
                       }}
-                      className={`${getInputStyles(errors['address.stateProvince'])} appearance-none cursor-pointer disabled:opacity-40`}
+                      className={`${getInputStyles(errors['address.province'])} appearance-none cursor-pointer disabled:opacity-40`}
                     >
                       <option value="" disabled className="text-gray-900">{phRegion ? 'Select Province' : 'Select a region first'}</option>
                       {phProvinces.map(p => (
                         <option key={p.psgcCode} value={p.psgcCode} className="text-gray-900">{p.name}</option>
                       ))}
                     </select>
+                    {errors['address.province'] && <span className="text-xs text-red-400 mt-1.5 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{errors['address.province']}</span>}
                   </motion.div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                   <motion.div animate={errors['address.city'] ? shakeAnimation : {}}>
-                    <label className="block text-xs uppercase tracking-wider font-semibold text-[var(--text-muted)] mb-2">Municipality / City *</label>
+                    <label className="block text-xs uppercase tracking-wider font-semibold text-[var(--text-muted)] mb-2">Municipality / City <span style={{ color: '#ef4444' }}>*</span></label>
                     <select
                       value={phMunicipality}
                       ref={registerFieldRef('address.city')}
@@ -853,12 +865,14 @@ export function SignupPage() {
                           ...prev,
                           address: { ...prev.address, barangay: e.target.value }
                         }))
-                        setErrors(prev => ({ ...prev, ['address.barangay']: '' }))
+                          if (e.target.value) {
+                            setErrors(prev => ({ ...prev, 'address.barangay': '' }))
+                          }
                       }}
                       ref={registerFieldRef('address.barangay')}
                       className={`${getInputStyles(errors['address.barangay'])} appearance-none cursor-pointer disabled:opacity-40`}
                     >
-                      <option value="" className="text-gray-900">{phMunicipality ? 'Select Barangay' : 'Select a municipality first'}</option>
+                      <option value="" disabled className="text-gray-900">{phMunicipality ? 'Select Barangay' : 'Select a municipality first'}</option>
                       {phBarangays.map(b => (
                         <option key={b.psgcCode} value={b.name} className="text-gray-900">{b.name}</option>
                       ))}
