@@ -143,7 +143,7 @@ export function LandingPage() {
     if (reduceMotion.matches) return
 
     const SPEED = 30
-    const RESUME_DELAY = 1800
+    const RESUME_DELAY = 2000
 
     let rafId = null
     let resumeTimer = null
