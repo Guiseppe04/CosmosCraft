@@ -206,7 +206,7 @@ export function LoginModal() {
                     <Loader2 className="w-4 h-4 animate-spin" />
                   ) : (
                     <>
-                      <img src="/google.svg" alt="" aria-hidden="true" className="h-4 w-4 object-contain" />
+                      <img src="/social/google-color-svgrepo-com.svg" alt="" aria-hidden="true" className="h-4 w-4 object-contain" />
                       Google
                     </>
                   )}
@@ -224,7 +224,7 @@ export function LoginModal() {
                     <Loader2 className="w-4 h-4 animate-spin" />
                   ) : (
                     <>
-                      <img src="/facebook.svg" alt="" aria-hidden="true" className="h-4 w-4 object-contain" />
+                      <img src="/social/facebook.svg" alt="" aria-hidden="true" className="h-4 w-4 object-contain" />
                       Facebook
                     </>
                   )}

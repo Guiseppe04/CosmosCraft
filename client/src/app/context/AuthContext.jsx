@@ -95,6 +95,7 @@ export function AuthProvider({ children }) {
   const [loginOpen, setLoginOpen] = useState(false)
   const [loginCallback, setLoginCallback] = useState(null)
   const [isLoadingUser, setIsLoadingUser] = useState(true)
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
 
   // Fetch current authenticated user from backend
   const fetchUser = useCallback(async () => {
@@ -237,6 +238,8 @@ export function AuthProvider({ children }) {
   )
 
   const logout = useCallback(async () => {
+    setIsLoggingOut(true)
+
     try {
       await fetch(`${API}/auth/logout`, {
         method: 'POST',
@@ -245,11 +248,16 @@ export function AuthProvider({ children }) {
       })
     } catch (err) {
       console.warn('Logout API error:', err)
+    } finally {
+      setIsAuthenticated(false)
+      setUser(null)
+      window.localStorage.removeItem('cosmoscraft_auth')
+      removeAuthToken()
+
+      window.setTimeout(() => {
+        setIsLoggingOut(false)
+      }, 800)
     }
-    setIsAuthenticated(false)
-    setUser(null)
-    window.localStorage.removeItem('cosmoscraft_auth')
-    removeAuthToken()
   }, [])
 
   // Update user data (e.g., after adding address)
@@ -308,6 +316,7 @@ export function AuthProvider({ children }) {
         logout,
         fetchUser,
         updateUser,
+        isLoggingOut,
         isLoadingUser,
         // Role helpers
         getUserRole,

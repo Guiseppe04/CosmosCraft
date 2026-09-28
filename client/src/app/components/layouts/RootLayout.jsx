@@ -2,6 +2,7 @@ import { Outlet, useLocation, useNavigate } from 'react-router'
 import { Header } from '../Header.jsx'
 import { LoginModal } from '../auth/LoginModal.jsx'
 import { CartDrawer } from '../cart/CartDrawer.jsx'
+import { useAuth } from '../../context/AuthContext.jsx'
 import { useEffect } from 'react'
 import { useToast } from '../ui/Toast.jsx'
 import { useRef } from 'react'
@@ -14,6 +15,7 @@ export function RootLayout() {
   const location = useLocation()
   const navigate = useNavigate()
   const { toast } = useToast()
+  const { isLoggingOut } = useAuth()
   const handledSearchRef = useRef(new Set())
   const isAdminOrStaff = location.pathname.startsWith('/admin') || location.pathname.startsWith('/staff') || location.pathname.startsWith('/staff/')
 
@@ -54,6 +56,19 @@ export function RootLayout() {
       </main>
       <LoginModal />
       <CartDrawer />
+
+      {isLoggingOut && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40 px-4 backdrop-blur-[2px]">
+          <div className="w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-8 text-center shadow-2xl">
+            <div className="mb-6 flex justify-center">
+              <img src="/logo-cosmos.png" alt="CosmosCraft Logo" className="h-16 w-auto object-contain" />
+            </div>
+            <h2 className="mb-2 text-2xl font-bold text-white">Signing Out</h2>
+            <p className="mb-6 text-sm text-[var(--text-muted)]">Completing your logout...</p>
+            <div className="mx-auto h-12 w-12 animate-spin rounded-full border-2 border-[var(--border)] border-t-[var(--gold-primary)]" />
+          </div>
+        </div>
+      )}
     </div>
   )
 }

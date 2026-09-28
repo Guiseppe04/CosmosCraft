@@ -216,6 +216,14 @@
     return normalized.charAt(0).toUpperCase() + normalized.slice(1)
   }
 
+  function formatSummaryLabel(key = '') {
+    return String(key)
+      .replace(/([a-z])([A-Z])/g, '$1 $2')
+      .replace(/[_-]+/g, ' ')
+      .trim()
+      .replace(/\b\w/g, (c) => c.toUpperCase())
+  }
+
   function getMonthMatrix(year, month, maxLeadTimeDays, disabledDateSet = new Set()) {
     const firstDay = new Date(year, month, 1)
     const firstWeekday = firstDay.getDay()
@@ -309,7 +317,7 @@
     const [servicesError, setServicesError] = useState('')
     const [servicesLoading, setServicesLoading] = useState(true)
     const [serviceSearch, setServiceSearch] = useState('')
-    const [selectedServiceId, setSelectedServiceId] = useState('')
+    const [selectedServiceIds, setSelectedServiceIds] = useState([])
     const [guitarDetails, setGuitarDetails] = useState({ brand: '', model: '', type: 'electric', notes: '' })
     const [serviceReferenceFile, setServiceReferenceFile] = useState(null)
     const [serviceReferencePreviewUrl, setServiceReferencePreviewUrl] = useState('')
@@ -383,7 +391,11 @@
         if (draft.homeServiceOption) setHomeServiceOption(draft.homeServiceOption)
         if (draft.homeServiceAddressId) setHomeServiceAddressId(draft.homeServiceAddressId)
         if (draft.homeServiceContact) setHomeServiceContact(draft.homeServiceContact)
-        if (draft.selectedServiceId) setSelectedServiceId(draft.selectedServiceId)
+        if (draft.selectedServiceIds) {
+          setSelectedServiceIds(Array.isArray(draft.selectedServiceIds) ? draft.selectedServiceIds : [draft.selectedServiceIds])
+        } else if (draft.selectedServiceId) {
+          setSelectedServiceIds([draft.selectedServiceId])
+        }
         if (draft.guitarDetails) setGuitarDetails(draft.guitarDetails)
         if (draft.selectedDateId) setSelectedDateId(draft.selectedDateId)
         if (draft.selectedTime) setSelectedTime(draft.selectedTime)
@@ -427,7 +439,7 @@
         homeServiceOption,
         homeServiceAddressId,
         homeServiceContact,
-        selectedServiceId,
+        selectedServiceIds,
         guitarDetails,
         selectedDateId,
         selectedTime,
@@ -444,7 +456,7 @@
       homeServiceOption,
       homeServiceAddressId,
       homeServiceContact,
-      selectedServiceId,
+      selectedServiceIds,
       guitarDetails,
       selectedDateId,
       selectedTime,
@@ -520,7 +532,7 @@
       })
 
       if (match) {
-        setSelectedServiceId(String(match.service_id))
+        setSelectedServiceIds((prev) => prev.includes(String(match.service_id)) ? prev : [...prev, String(match.service_id)])
         setCurrentStep(2)
         const nextParams = new URLSearchParams(params)
         nextParams.delete('service')
@@ -541,9 +553,13 @@
       () => savedBuilds.filter((build) => String(build.id) === String(selectedSavedBuildId)),
       [selectedSavedBuildId, savedBuilds]
     )
+    const selectedServices = useMemo(
+      () => availableServices.filter((item) => selectedServiceIds.includes(String(item.service_id))),
+      [availableServices, selectedServiceIds]
+    )
     const selectedService = useMemo(
-      () => availableServices.find((item) => String(item.service_id) === String(selectedServiceId)) || null,
-      [availableServices, selectedServiceId]
+      () => selectedServices[0] || null,
+      [selectedServices]
     )
     const selectedGuitarEntries = useMemo(() => {
       if (guitarSelectionMode === 'saved') {
@@ -555,6 +571,9 @@
           notes: build.summary
             ? `Saved build details: ${Object.values(build.summary).filter(Boolean).join(', ')}`
             : '',
+          details: Object.entries(build.summary || {})
+            .filter(([, value]) => value !== null && value !== undefined && String(value).trim() !== '')
+            .map(([key, value]) => ({ label: formatSummaryLabel(key), value: String(value) })),
         }))
       }
 
@@ -584,7 +603,7 @@
 
       // Pre-fill service
       if (Array.isArray(rescheduleData.services) && rescheduleData.services.length > 0) {
-        setSelectedServiceId(String(rescheduleData.services[0]))
+        setSelectedServiceIds(rescheduleData.services.map(String))
       }
 
       // Pre-fill home service option
@@ -703,7 +722,7 @@
           return
         }
 
-        const fallbackServiceId = selectedServiceId || availableServices[0]?.service_id
+        const fallbackServiceId = selectedServiceIds[0] || availableServices[0]?.service_id
         if (!fallbackServiceId) {
           setAvailableTimeSet(new Set(timeSlots))
           setSlotAvailabilityStatus('open')
@@ -756,29 +775,29 @@
 
       loadAvailableSlots()
       return () => { isMounted = false }
-    }, [availableServices, selectedDateId, selectedServiceId, selectedTime, timeSlots, unavailableDateSet])
+    }, [availableServices, selectedDateId, selectedServiceIds, selectedTime, timeSlots, unavailableDateSet])
 
     // Derived calculations
     const { maxLeadTime, totalPrice, selectedDetailedServices } = useMemo(() => {
-      if (!selectedService) {
+      if (selectedServices.length === 0) {
         return { maxLeadTime: 0, totalPrice: 0, selectedDetailedServices: [] }
       }
 
+      const detailed = selectedServices.map((service) => ({
+        id: String(service.service_id),
+        name: service.name,
+        price: Number(service.price || 0),
+        desc: service.description || '',
+        duration_minutes: Number(service.duration_minutes || 0),
+        icon: inferServiceIcon(service),
+      }))
+
       return {
-        maxLeadTime: inferLeadTimeDays(selectedService),
-        totalPrice: Number(selectedService.price || 0),
-        selectedDetailedServices: [
-          {
-            id: String(selectedService.service_id),
-            name: selectedService.name,
-            price: Number(selectedService.price || 0),
-            desc: selectedService.description || '',
-            duration_minutes: Number(selectedService.duration_minutes || 0),
-            icon: inferServiceIcon(selectedService),
-          },
-        ],
+        maxLeadTime: Math.max(...selectedServices.map((service) => inferLeadTimeDays(service))),
+        totalPrice: detailed.reduce((sum, service) => sum + Number(service.price || 0), 0),
+        selectedDetailedServices: detailed,
       }
-    }, [selectedService])
+    }, [selectedServices])
 
     const monthMatrix = useMemo(
       () => getMonthMatrix(currentYear, currentMonth, maxLeadTime, unavailableDateSet),
@@ -794,7 +813,7 @@
     // Validation
     const canProceed = () => {
       if (currentStep === 1) return selectedDateId && selectedTime
-      if (currentStep === 2) return Boolean(selectedDateId) && Boolean(selectedTime) && Boolean(selectedServiceId)
+      if (currentStep === 2) return Boolean(selectedDateId) && Boolean(selectedTime) && selectedServiceIds.length > 0
       if (currentStep === 3) {
         if (!hasSelectedGuitar) return false
         return Boolean(selectedAppointmentType)
@@ -821,10 +840,10 @@
       }
       if (currentStep === 2) {
         if (!selectedDateId || !selectedTime) return 'Select both appointment date and time before continuing.'
-        if (!selectedServiceId) return 'Select a service to continue.'
+        if (selectedServiceIds.length === 0) return 'Select at least one service to continue.'
       }
       if (currentStep === 3) {
-        if (!hasSelectedGuitar) return 'Please select a guitar before continuing.'
+        if (!hasSelectedGuitar) return 'Please select a guitar before continuing*.'
         if (!selectedAppointmentType) return 'Please choose Home Service: Yes or No.'
       }
       if (currentStep === 4 && selectedAppointmentType === 'service_home') {
@@ -838,12 +857,14 @@
     // Handlers
     const handleToggleService = (serviceId) => {
       const normalizedServiceId = String(serviceId)
-      setSelectedServiceId((prev) => (prev === normalizedServiceId ? '' : normalizedServiceId))
+      setSelectedServiceIds((prev) => prev.includes(normalizedServiceId)
+        ? prev.filter((id) => id !== normalizedServiceId)
+        : [...prev, normalizedServiceId])
     }
 
     const renderServiceOption = (service) => {
       const serviceId = String(service.service_id)
-      const isSelected = String(selectedServiceId) === serviceId
+      const isSelected = selectedServiceIds.includes(serviceId)
       const Icon = inferServiceIcon(service)
 
       return (
@@ -851,7 +872,7 @@
           key={serviceId}
           type="button"
           onClick={() => handleToggleService(serviceId)}
-          className={`text-left rounded-xl border-2 p-4 transition-all ${
+          className={`flex h-full min-h-[200px] w-full flex-col text-left rounded-xl border-2 p-4 transition-all ${
             isSelected
               ? 'border-[#d4af37] bg-[#d4af37]/10'
               : 'border-[var(--border)] bg-theme-surface-deep hover:border-[#d4af37]/30 hover:bg-[var(--surface-elevated)]'
@@ -862,7 +883,7 @@
               <div className={`rounded-xl p-2 ${isSelected ? 'bg-[#d4af37]/20 text-[#d4af37]' : 'bg-[var(--surface-dark)] text-[var(--text-muted)]'}`}>
                 <Icon className="h-4 w-4" />
               </div>
-              <div>
+              <div className="min-w-0">
                 <span className={`block text-sm font-semibold ${isSelected ? 'text-[#d4af37]' : 'text-[var(--text-light)]'}`}>
                   {service.name}
                 </span>
@@ -871,9 +892,9 @@
                 </span>
               </div>
             </div>
-            <span className="text-sm font-bold text-[var(--text-muted)]">PHP {Number(service.price || 0).toLocaleString('en-PH')}</span>
+            <span className="shrink-0 text-sm font-bold text-[var(--text-muted)]">PHP {Number(service.price || 0).toLocaleString('en-PH')}</span>
           </div>
-          <p className="text-xs leading-relaxed text-[var(--text-muted)]">
+          <p className="flex-1 text-xs leading-relaxed text-[var(--text-muted)]">
             {service.description || 'No description available.'}
           </p>
         </button>
@@ -896,7 +917,7 @@
           </div>
         )
       }
-
+      
       if (availableServices.length === 0) {
         return (
           <div className="rounded-2xl border border-[var(--border)] bg-theme-surface-deep p-6 text-sm text-[var(--text-muted)]">
@@ -905,12 +926,20 @@
         )
       }
 
+      const isDesktopScrollable = filteredServices.length > 4
+
       return (
         <div className="space-y-6">
           <div className="space-y-3">
-            <div className="grid gap-3 sm:grid-cols-2">
-              {filteredServices.map((service) => renderServiceOption(service))}
-            </div>
+            {isDesktopScrollable ? (
+              <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1 xl:block">
+                {filteredServices.map((service) => renderServiceOption(service))}
+              </div>
+            ) : (
+              <div className="grid gap-3 max-h-[55vh] overflow-y-auto pr-1 md:max-h-[62vh] xl:grid-cols-2 xl:max-h-none xl:overflow-visible xl:pr-0">
+                {filteredServices.map((service) => renderServiceOption(service))}
+              </div>
+            )}
           </div>
         </div>
       )
@@ -928,7 +957,7 @@
           homeServiceOption,
           homeServiceAddressId,
           homeServiceContact,
-          selectedServiceId,
+          selectedServiceIds,
           guitarDetails,
           selectedDateId,
           selectedTime,
@@ -1067,7 +1096,7 @@
           homeServiceOption,
           homeServiceAddressId,
           homeServiceContact,
-          selectedServiceId,
+          selectedServiceIds,
           guitarDetails,
           selectedDateId,
           selectedTime,
@@ -1112,6 +1141,7 @@
         let serviceReferenceImageUrl = ''
         let guitarReferenceImageUrl = ''
         let paymentProofImageUrl = ''
+        const guitarsPayload = selectedGuitarEntries.map(({ details, ...rest }) => rest)
         if (serviceReferenceFile) {
           serviceReferenceImageUrl = await uploadToCloudinary(serviceReferenceFile, {
             folder: 'cosmoscraft/appointments/service-reference',
@@ -1152,7 +1182,7 @@
             body: JSON.stringify({
               scheduled_at: scheduledAt.toISOString(),
               appointment_type: selectedAppointmentType,
-              services: selectedServiceId ? [selectedServiceId] : [],
+              services: selectedServiceIds,
               location_id: selectedBranchId,
               guitar_details: hasSelectedGuitar
                 ? {
@@ -1161,7 +1191,7 @@
                     type: selectedPrimaryGuitar?.type || 'electric',
                     serial: selectedPrimaryGuitar?.serial || 'N/A',
                     notes: selectedPrimaryGuitar?.notes || '',
-                    guitars: selectedGuitarEntries,
+                    guitars: guitarsPayload,
                   }
                 : undefined,
               payment_method: selectedPaymentMethod,
@@ -1191,7 +1221,7 @@
             credentials: 'include',
             body: JSON.stringify({
               appointment_type: selectedAppointmentType,
-              services: selectedServiceId ? [selectedServiceId] : [],
+              services: selectedServiceIds,
               location_id: selectedBranchId,
               address_id: selectedAppointmentType === 'service_home' ? homeServiceAddressId : undefined,
               payment_method: selectedPaymentMethod,
@@ -1203,7 +1233,7 @@
                     type: selectedPrimaryGuitar?.type || 'electric',
                     serial: selectedPrimaryGuitar?.serial || 'N/A',
                     notes: selectedPrimaryGuitar?.notes || '',
-                    guitars: selectedGuitarEntries,
+                    guitars: guitarsPayload,
                   }
                 : undefined,
               scheduled_at: scheduledAt.toISOString(),
@@ -1251,10 +1281,10 @@
       switch (currentStep) {
         case 2:
           return (
-            <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
+            <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="space-y-4 sm:space-y-6">
               <div>
-                <h2 className="text-2xl font-bold text-white mb-2">Select Services</h2>
-                <p className="text-sm text-[var(--text-muted)]">Choose one or more professional guitar services. Our calendar availability will automatically adjust based on the expected turnaround times.</p>
+                <h2 className="text-xl sm:text-2xl font-bold text-white mb-1.5 sm:mb-2">Select Services</h2>
+                <p className="text-xs sm:text-sm text-[var(--text-muted)]">Choose one or more professional guitar services. Our calendar availability will automatically adjust based on the expected turnaround times.</p>
               </div>
               
               <div className="space-y-6">
@@ -1266,28 +1296,28 @@
 
         case 3:
           return (
-            <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
+            <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="space-y-4 sm:space-y-6">
               <div>
-                <h2 className="text-2xl font-bold text-white mb-2">Select Guitar and Service Type</h2>
-                <p className="text-sm text-[var(--text-muted)]">Choose the guitar first, then select Home Service or In-store service.</p>
+                <h2 className="text-xl sm:text-2xl font-bold text-white mb-1.5 sm:mb-2">Select Guitar and Service Type</h2>
+                <p className="text-xs sm:text-sm text-[var(--text-muted)]">Choose the guitar first, then select Home Service or In-store service.</p>
               </div>
               
               <div className="bg-theme-surface-deep border border-[var(--border)] p-6 rounded-2xl space-y-5">
                 {savedBuilds.length > 0 && (
                   <div>
                     <label className="block text-sm font-medium text-white mb-1.5">Guitar Source</label>
-                    <div className="grid sm:grid-cols-2 gap-3">
+                    <div className="grid grid-cols-2 gap-2 sm:gap-3">
                       <button
                         type="button"
                         onClick={() => setGuitarSelectionMode('saved')}
-                        className={`rounded-xl border p-3 text-sm font-semibold transition-colors ${guitarSelectionMode === 'saved' ? 'border-[#d4af37] bg-[#d4af37]/10 text-[#d4af37]' : 'border-[var(--border)] text-[var(--text-muted)]'}`}
+                        className={`rounded-xl border px-2 py-2.5 text-xs font-semibold transition-colors sm:px-3 sm:py-3 sm:text-sm ${guitarSelectionMode === 'saved' ? 'border-[#d4af37] bg-[#d4af37]/10 text-[#d4af37]' : 'border-[var(--border)] text-[var(--text-muted)]'}`}
                       >
                         Saved Guitar Build
                       </button>
                       <button
                         type="button"
                         onClick={() => setGuitarSelectionMode('manual')}
-                        className={`rounded-xl border p-3 text-sm font-semibold transition-colors ${guitarSelectionMode === 'manual' ? 'border-[#d4af37] bg-[#d4af37]/10 text-[#d4af37]' : 'border-[var(--border)] text-[var(--text-muted)]'}`}
+                        className={`rounded-xl border px-2 py-2.5 text-xs font-semibold transition-colors sm:px-3 sm:py-3 sm:text-sm ${guitarSelectionMode === 'manual' ? 'border-[#d4af37] bg-[#d4af37]/10 text-[#d4af37]' : 'border-[var(--border)] text-[var(--text-muted)]'}`}
                       >
                         Manual Guitar Details
                       </button>
@@ -1303,7 +1333,7 @@
                       onChange={(e) => setSelectedSavedBuildId(e.target.value)}
                       className="w-full px-4 py-3 bg-[var(--surface-dark)] text-[var(--text-light)] border border-[var(--border)] rounded-xl text-sm focus:outline-none focus:border-[#d4af37]"
                     >
-                      <option value="">No saved guitar selected</option>
+                      <option value="">No selected saved guitar</option>
                       {savedBuilds.map((build) => (
                         <option key={String(build.id)} value={String(build.id)}>
                           {build.name || 'Custom Build'} - {build.isBass ? 'Bass Build' : 'Guitar Build'}
@@ -1365,18 +1395,18 @@
                 {isAuthenticated ? (
                   <div>
                     <label className="block text-sm font-medium text-white mb-1.5">Home Service <span className="text-red-500" style={{ color: '#ef4444' }}>*</span></label>
-                    <div className="grid sm:grid-cols-2 gap-3">
+                    <div className="grid grid-cols-2 gap-2 sm:gap-3">
                       <button
                         type="button"
                         onClick={() => setHomeServiceOption('yes')}
-                        className={`rounded-xl border p-3 text-sm font-semibold transition-colors ${homeServiceOption === 'yes' ? 'border-[#d4af37] bg-[#d4af37]/10 text-[#d4af37]' : 'border-[var(--border)] text-[var(--text-muted)]'}`}
+                        className={`rounded-xl border px-2 py-2.5 text-xs font-semibold transition-colors sm:px-3 sm:py-3 sm:text-sm ${homeServiceOption === 'yes' ? 'border-[#d4af37] bg-[#d4af37]/10 text-[#d4af37]' : 'border-[var(--border)] text-[var(--text-muted)]'}`}
                       >
                         Yes, Home Service
                       </button>
                       <button
                         type="button"
                         onClick={() => setHomeServiceOption('no')}
-                        className={`rounded-xl border p-3 text-sm font-semibold transition-colors ${homeServiceOption === 'no' ? 'border-[#d4af37] bg-[#d4af37]/10 text-[#d4af37]' : 'border-[var(--border)] text-[var(--text-muted)]'}`}
+                        className={`rounded-xl border px-2 py-2.5 text-xs font-semibold transition-colors sm:px-3 sm:py-3 sm:text-sm ${homeServiceOption === 'no' ? 'border-[#d4af37] bg-[#d4af37]/10 text-[#d4af37]' : 'border-[var(--border)] text-[var(--text-muted)]'}`}
                       >
                         No, In-store Service
                       </button>
@@ -1617,33 +1647,35 @@
               </div>
 
               <div className="bg-theme-surface-deep border border-[var(--border)] rounded-2xl p-6 shadow-xl relative">
-                {/* Calendar header */}
-                  <div className="flex items-center justify-between mb-6">
-                  <span className="text-lg font-bold text-[var(--text-light)]">
+{/* Calendar header */}
+                <div className="mb-6 flex items-center justify-between gap-3">
+                  <button
+                    onClick={() => {
+                      const prev = new Date(currentYear, currentMonth - 1, 1)
+                      setCurrentYear(prev.getFullYear())
+                      setCurrentMonth(prev.getMonth())
+                    }}
+                    aria-label="Previous month"
+                    className="p-2 rounded-lg bg-[var(--surface-dark)] text-[var(--text-muted)] hover:bg-[var(--surface-elevated)] hover:text-[var(--text-light)] transition-colors border border-[var(--border)]"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+
+                  <span className="flex-1 text-center text-base font-bold text-[var(--text-light)] sm:text-lg">
                     {new Date(currentYear, currentMonth, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
                   </span>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => {
-                        const prev = new Date(currentYear, currentMonth - 1, 1)
-                        setCurrentYear(prev.getFullYear())
-                        setCurrentMonth(prev.getMonth())
-                      }}
-                      className="p-2 rounded-lg bg-[var(--surface-dark)] text-[var(--text-muted)] hover:bg-[var(--surface-elevated)] hover:text-[var(--text-light)] transition-colors border border-[var(--border)]"
-                    >
-                      <ChevronLeft className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => {
-                        const next = new Date(currentYear, currentMonth + 1, 1)
-                        setCurrentYear(next.getFullYear())
-                        setCurrentMonth(next.getMonth())
-                      }}
-                      className="p-2 rounded-lg bg-[var(--surface-dark)] text-[var(--text-muted)] hover:bg-[var(--surface-elevated)] hover:text-[var(--text-light)] transition-colors border border-[var(--border)]"
-                    >
-                      <ChevronRight className="w-4 h-4" />
-                    </button>
-                  </div>
+
+                  <button
+                    onClick={() => {
+                      const next = new Date(currentYear, currentMonth + 1, 1)
+                      setCurrentYear(next.getFullYear())
+                      setCurrentMonth(next.getMonth())
+                    }}
+                    aria-label="Next month"
+                    className="p-2 rounded-lg bg-[var(--surface-dark)] text-[var(--text-muted)] hover:bg-[var(--surface-elevated)] hover:text-[var(--text-light)] transition-colors border border-[var(--border)]"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
                 </div>
 
                 {servicesLoading && (
@@ -1709,8 +1741,8 @@
 
                 {/* Time Slots */}
                 {selectedDateId && (
-                  <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="pt-6 border-t border-[var(--border)]">
-                    <h3 className="text-sm font-bold text-[var(--text-muted)] mb-4 uppercase tracking-wider">Available Time Slots</h3>
+                  <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="pt-4 sm:pt-6 border-t border-[var(--border)]">
+                    <h3 className="text-xs sm:text-sm font-bold text-[var(--text-muted)] mb-3 sm:mb-4 uppercase tracking-wider">Available Time Slots</h3>
                     {slotsLoading && (
                       <p className="mb-3 text-xs text-[var(--text-muted)]">Checking time availability</p>
                     )}
@@ -1730,29 +1762,31 @@
                       </p>
                     )}
                     {hasAvailableTimeSlots && (
-                      <div className="flex flex-wrap gap-3">
-                        {timeSlots.map(time => {
-                          const isSelected = selectedTime === time
-                          const isUnavailableTime = !availableTimeSet.has(time.toUpperCase())
-                          const isPastTime = selectedDateId && isPastTimeSlot(selectedDateId, time)
-                          const isDisabled = isUnavailableTime || slotsLoading || isPastTime
-                          return (
-                            <button
-                              key={time}
-                              onClick={() => { if (!isDisabled) setSelectedTime(time) }}
-                              disabled={isDisabled}
-                              className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
-                                isSelected
-                                  ? 'bg-[#d4af37] text-black'
-                                  : isDisabled
-                                    ? 'bg-[var(--surface-elevated)] text-[var(--text-muted)]/70 border border-[var(--border)] cursor-not-allowed'
-                                    : 'bg-[var(--surface-dark)] text-[var(--text-light)] border border-[var(--border)] hover:border-[#d4af37]/30'
-                              }`}
-                            >
-                              {time}
-                            </button>
-                          )
-                        })}
+                      <div className="overflow-x-auto pb-1.5 -mx-1 px-1">
+                        <div className="flex min-w-max gap-2 sm:gap-3">
+                          {timeSlots.map(time => {
+                            const isSelected = selectedTime === time
+                            const isUnavailableTime = !availableTimeSet.has(time.toUpperCase())
+                            const isPastTime = selectedDateId && isPastTimeSlot(selectedDateId, time)
+                            const isDisabled = isUnavailableTime || slotsLoading || isPastTime
+                            return (
+                              <button
+                                key={time}
+                                onClick={() => { if (!isDisabled) setSelectedTime(time) }}
+                                disabled={isDisabled}
+                                className={`flex-shrink-0 whitespace-nowrap px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
+                                  isSelected
+                                    ? 'bg-[#d4af37] text-black'
+                                    : isDisabled
+                                      ? 'bg-[var(--surface-elevated)] text-[var(--text-muted)]/70 border border-[var(--border)] cursor-not-allowed'
+                                      : 'bg-[var(--surface-dark)] text-[var(--text-light)] border border-[var(--border)] hover:border-[#d4af37]/30'
+                                }`}
+                              >
+                                {time}
+                              </button>
+                            )
+                          })}
+                        </div>
                       </div>
                     )}
                   </motion.div>
@@ -1782,63 +1816,94 @@
               </div>
 
               <div className="bg-theme-surface-deep border border-[var(--border)] rounded-2xl p-6 shadow-xl space-y-6">
-                <div className="flex justify-between items-end border-b border-[var(--border)] pb-4">
-                    <div>
-                      <p className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-1">Appointment Date</p>
-                      <p className="text-lg font-medium text-[#d4af37]">
-                        {selectedDate?.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric'})} at {selectedTime}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-1">Location</p>
-                      <p className="text-sm font-medium text-[var(--text-light)]">
-                        {selectedAppointmentType === 'service_home'
-                          ? 'Home Service'
-                          : currentBranch.name}
-                      </p>
-                    </div>
+                <div className="flex items-end justify-between gap-3 border-b border-[var(--border)] pb-4 sm:gap-6">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-1">Appointment Date</p>
+                    <p className="text-sm font-medium text-[#d4af37] sm:text-lg">
+                      {selectedDate?.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })} at {selectedTime}
+                    </p>
+                  </div>
+                  <div className="min-w-0 flex-1 text-right">
+                    <p className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-1">Location</p>
+                    <p className="text-sm font-medium text-[var(--text-light)]">
+                      {selectedAppointmentType === 'service_home' ? 'Home Service' : currentBranch.name}
+                    </p>
+                  </div>
                 </div>
-                
+
                 <div className="grid sm:grid-cols-2 gap-6">
                   <div>
-                      <p className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-3">Selected Services</p>
+                    <p className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-3">Selected Services</p>
+                    {selectedDetailedServices.length >= 2 ? (
+                      <div className="space-y-3">
+                        <ul className="space-y-1.5 text-xs text-[var(--text-muted)]">
+                          {selectedDetailedServices.map((svc) => (
+                            <li key={svc.id} className="flex justify-between gap-3">
+                              <span>{svc.name}</span>
+                              <span className="text-[var(--text-light)]">₱{svc.price}</span>
+                            </li>
+                          ))}
+                        </ul>
+                        <div className="flex items-center justify-between gap-3 rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] px-3 py-2">
+                          <span className="text-sm text-[var(--text-light)]">{selectedDetailedServices.length} services selected</span>
+                          <span className="text-sm font-semibold text-[#d4af37]">₱{totalPrice}</span>
+                        </div>
+                      </div>
+                    ) : (
                       <ul className="space-y-2">
-                        {selectedDetailedServices.map(svc => (
+                        {selectedDetailedServices.map((svc) => (
                           <li key={svc.id} className="flex justify-between text-sm">
                             <span className="text-[var(--text-light)]">{svc.name}</span>
                             <span className="text-[#d4af37]">₱{svc.price}</span>
                           </li>
                         ))}
                       </ul>
+                    )}
                   </div>
-                  
-                    <div>
-                      <p className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-3">Guitar Details</p>
-                      <div className="space-y-1 text-sm bg-[var(--surface-dark)] p-3 rounded-lg border border-[var(--border)]">
-                        {selectedGuitarEntries.length > 0 ? (
-                          selectedGuitarEntries.map((guitar, index) => (
-                            <div key={`${guitar.brand}-${guitar.model}-${index}`} className={index > 0 ? 'pt-2 mt-2 border-t border-[var(--border)]' : ''}>
-                              <p><span className="text-[var(--text-muted)]">Guitar {index + 1}:</span> <span className="text-[var(--text-light)]">{guitar.brand} {guitar.model}</span></p>
-                              <p><span className="text-[var(--text-muted)]">Type:</span> <span className="text-[var(--text-light)]">{formatAppointmentGuitarTypeLabel(guitar.type)}</span></p>
-                              {guitar.notes && (
-                                <p><span className="text-[var(--text-muted)]">Notes:</span> <span className="text-[var(--text-light)]">{guitar.notes}</span></p>
-                              )}
-                            </div>
-                          ))
-                        ) : (
-                          <p className="text-[var(--text-muted)]">No guitar selected</p>
-                        )}
-                        {selectedAppointmentType === 'service_home' && (
-                          <>
-                            <p><span className="text-[var(--text-muted)]">Address:</span> <span className="text-[var(--text-light)]">{userAddresses.find(a => a.address_id === homeServiceAddressId)?.street_line1 || 'Not selected'}</span></p>
-                            <p><span className="text-[var(--text-muted)]">Contact:</span> <span className="text-[var(--text-light)]">{homeServiceContact || 'Not provided'}</span></p>
-                          </>
-                        )}
-                      </div>
+
+                  <div>
+                    <p className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-3">Guitar Details</p>
+                    <div className="space-y-1 text-sm bg-[var(--surface-dark)] p-3 rounded-lg border border-[var(--border)]">
+                      {selectedGuitarEntries.length > 0 ? (
+                        selectedGuitarEntries.map((guitar, index) => (
+                          <div key={`${guitar.brand}-${guitar.model}-${index}`} className={index > 0 ? 'pt-2 mt-2 border-t border-[var(--border)]' : ''}>
+                            <p><span className="text-[var(--text-muted)]">Guitar {index + 1}:</span> <span className="text-[var(--text-light)]">{guitar.brand} {guitar.model}</span></p>
+                            <p><span className="text-[var(--text-muted)]">Type:</span> <span className="text-[var(--text-light)]">{formatAppointmentGuitarTypeLabel(guitar.type)}</span></p>
+
+                            {guitar.details?.length > 0 ? (
+                              <>
+                                <dl className="mt-2 max-h-[17rem] overflow-y-auto overscroll-contain divide-y divide-[var(--border)] rounded-lg border border-[var(--border)] px-3">
+                                  {guitar.details.map((item, i) => (
+                                    <div key={`${item.label}-${i}`} className="flex items-start justify-between gap-4 py-1.5 text-xs">
+                                      <dt className="shrink-0 text-[var(--text-muted)]">{item.label}</dt>
+                                      <dd className="text-right font-medium text-[var(--text-light)]">{item.value}</dd>
+                                    </div>
+                                  ))}
+                                </dl>
+                                {guitar.details.length > 5 && (
+                                  <p className="mt-2 text-[10px] text-[var(--text-muted)]">
+                                    Showing 5 of {guitar.details.length} specs. Scroll to see more.
+                                  </p>
+                                )}
+                              </>
+                            ) : guitar.notes ? (
+                              <p><span className="text-[var(--text-muted)]">Notes:</span> <span className="text-[var(--text-light)]">{guitar.notes}</span></p>
+                            ) : null}
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-[var(--text-muted)]">No guitar selected</p>
+                      )}
+                      {selectedAppointmentType === 'service_home' && (
+                        <>
+                          <p><span className="text-[var(--text-muted)]">Address:</span> <span className="text-[var(--text-light)]">{userAddresses.find((a) => a.address_id === homeServiceAddressId)?.street_line1 || 'Not selected'}</span></p>
+                          <p><span className="text-[var(--text-muted)]">Contact:</span> <span className="text-[var(--text-light)]">{homeServiceContact || 'Not provided'}</span></p>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
 
-                {/* Dedicated Notes section in confirmation - only shown if there's content */}
                 {computedNotes && (
                   <div className="border-t border-[var(--border)] pt-4">
                     <p className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-3">Additional Notes</p>
@@ -1868,30 +1933,37 @@
                   </div>
                 )}
 
-                {/* Payment Method Selection */}
                 <div className="border-t border-[var(--border)] pt-4">
                   <p className="text-xs font-bold text-[var(--text-muted)] uppercase tracking-wider mb-3">Payment Method <span className="text-red-500" style={{ color: '#ef4444' }}>*</span></p>
-                  <div className="grid sm:grid-cols-3 gap-3">
-                    {PAYMENT_METHODS.map((method) => {
-                      const isSelected = selectedPaymentMethod === method.value
-                      return (
-                        <button
-                          key={method.value}
-                          type="button"
-                          onClick={() => { setSelectedPaymentMethod(method.value); setPaymentProofFile(null); setPaymentProofPreviewUrl(''); setPaymentValidationError(''); setShowGcashQr(true) }}
-                          className={`rounded-xl border-2 p-4 text-left transition-all ${
-                            isSelected
-                              ? 'border-[#d4af37] bg-[#d4af37]/10'
-                              : 'border-[var(--border)] bg-[var(--surface-dark)] hover:border-[#d4af37]/30'
-                          }`}
-                        >
-                          <p className={`text-sm font-semibold ${isSelected ? 'text-[#d4af37]' : 'text-[var(--text-light)]'}`}>
-                            {method.label}
-                          </p>
-                          <p className="mt-1 text-xs text-[var(--text-muted)]">{method.description}</p>
-                        </button>
-                      )
-                    })}
+                  <div className="overflow-x-auto pb-1">
+                    <div className="flex min-w-max gap-3">
+                      {PAYMENT_METHODS.slice(0, 3).map((method) => {
+                        const isSelected = selectedPaymentMethod === method.value
+                        return (
+                          <button
+                            key={method.value}
+                            type="button"
+                            onClick={() => {
+                              setSelectedPaymentMethod(method.value)
+                              setPaymentProofFile(null)
+                              setPaymentProofPreviewUrl('')
+                              setPaymentValidationError('')
+                              setShowGcashQr(true)
+                            }}
+                            className={`flex min-h-[92px] w-[228px] shrink-0 flex-col justify-center rounded-xl border-2 p-3 text-left transition-all ${
+                              isSelected
+                                ? 'border-[#d4af37] bg-[#d4af37]/10'
+                                : 'border-[var(--border)] bg-[var(--surface-dark)] hover:border-[#d4af37]/30'
+                            }`}
+                          >
+                            <p className={`text-xs font-semibold ${isSelected ? 'text-[#d4af37]' : 'text-[var(--text-light)]'}`}>
+                              {method.label}
+                            </p>
+                            <p className="mt-1 text-[10px] leading-relaxed text-[var(--text-muted)]">{method.description}</p>
+                          </button>
+                        )
+                      })}
+                    </div>
                   </div>
 
                   {selectedPaymentMethod === 'e_wallet' && (
@@ -1931,8 +2003,7 @@
                       </div>
                     </div>
                   )}
-                  
-                  {/* Payment Proof Upload - Required for E-Wallet and E-Bank */}
+
                   {(selectedPaymentMethod === 'e_wallet' || selectedPaymentMethod === 'e_bank') && (
                     <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] p-4 space-y-3">
                       <p className="text-sm font-semibold text-[var(--text-light)]">Upload Payment Proof <span className="text-red-500" style={{ color: '#ef4444' }}>*</span></p>
@@ -1965,11 +2036,13 @@
                       )}
                     </div>
                   )}
+
                   {paymentValidationError && (
                     <p className="mt-3 text-sm font-medium text-red-400">{paymentValidationError}</p>
                   )}
                 </div>
               </div>
+
             </motion.div>
           )
 
@@ -1980,11 +2053,11 @@
 
     return (
       <div className="min-h-screen pt-16 bg-[var(--bg-primary)]">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10">
-          <div className="grid xl:grid-cols-[280px_1fr] gap-6 lg:gap-8 xl:gap-12 min-h-[600px]">
+        <div className="max-w-6xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 lg:py-10">
+          <div className="grid grid-cols-1 xl:grid-cols-[280px_1fr] gap-4 sm:gap-6 lg:gap-8 xl:gap-12 min-h-[600px]">
             
             {/* LEFT SIDEBAR (STEPPER) */}
-            <div className="bg-theme-surface-deep border border-[var(--border)] rounded-3xl p-5 sm:p-8 relative overflow-hidden flex flex-col justify-between">
+            <div className="hidden xl:flex bg-theme-surface-deep border border-[var(--border)] rounded-3xl p-5 sm:p-8 relative overflow-hidden flex-col justify-between">
               {/* Gradient splash mimicking reference */}
               <div className="absolute -top-32 -left-32 w-64 h-64 bg-[#d4af37]/10 blur-[100px] rounded-full pointer-events-none" />
               <div className="absolute -bottom-32 -right-32 w-64 h-64 bg-[#d4af37]/5 blur-[100px] rounded-full pointer-events-none" />
@@ -2058,66 +2131,79 @@
               </div>
 
               {/* Pagination Controls */}
-              <div className="mt-8 pt-6 border-t border-[var(--border)]">
+              <div className="mt-5 pt-4 border-t border-[var(--border)]">
                 {currentStep < 5 && !canProceed() && (
-                  <p className="mb-4 text-sm font-medium text-red-400">{getStepValidationMessage()}</p>
+                  <p className="mb-3 text-xs sm:text-sm font-medium text-red-400" style={{ color: '#f87171' }}>{getStepValidationMessage()}</p>
                 )}
-                <div className="flex items-center justify-between">
-                <button
-                  onClick={handlePrevStep}
-                  disabled={currentStep === 1 || isSubmittingBooking}
-                  className="px-6 py-2.5 rounded-xl text-sm font-bold text-[var(--text-light)] bg-[var(--surface-dark)] border border-[var(--border)] hover:bg-[var(--surface-elevated)] hover:text-[var(--text-light)] transition-colors disabled:opacity-0"
-                >
-                  Back
-                </button>
+                <div className="flex items-center justify-between gap-3">
+                  <button
+                    onClick={handlePrevStep}
+                    disabled={currentStep === 1 || isSubmittingBooking}
+                    className="px-5 py-2 rounded-xl text-xs sm:text-sm font-bold text-[var(--text-light)] bg-[var(--surface-dark)] border border-[var(--border)] hover:bg-[var(--surface-elevated)] hover:text-[var(--text-light)] transition-colors disabled:opacity-0"
+                  >
+                    Back
+                  </button>
 
-                {currentStep < 5 ? (
-                  <button
-                    onClick={handleNextStep}
-                    disabled={!canProceed()}
-                    className="px-8 py-2.5 rounded-xl text-sm font-bold bg-[#d4af37] text-black hover:bg-[#ffe270] transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-[#d4af37]/10"
-                  >
-                    Next
-                  </button>
-                ) : !isAuthenticated ? (
+                  {currentStep < 5 ? (
                     <button
-                      onClick={() => {
-                        saveAppointmentDraft({
-                          currentStep: 5,
-                          guitarSelectionMode,
-                          selectedSavedBuildId,
-                          homeServiceOption,
-                          homeServiceAddressId,
-                          homeServiceContact,
-                          selectedServiceId,
-                          guitarDetails,
-                          selectedDateId,
-                          selectedTime,
-                          selectedPaymentMethod,
-                          additionalNotes,
-                        })
-                        pendingSubmitRef.current = true
-                        openLogin()
-                      }}
-                      className="px-8 py-2.5 rounded-xl text-sm font-bold bg-[#d4af37] text-black hover:bg-[#ffe270] transition-all shadow-[0_0_20px_rgba(212,175,55,0.3)] flex items-center gap-2"
+                      onClick={handleNextStep}
+                      disabled={!canProceed()}
+                      className="px-7 py-2 rounded-xl text-xs sm:text-sm font-bold bg-[#d4af37] text-black hover:bg-[#ffe270] transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-[#d4af37]/10"
                     >
-                      Sign in to Complete
+                      Next
                     </button>
-                ) : (
-                  <button
-                    onClick={handleSubmit}
-                    disabled={isSubmittingBooking || !canProceed()}
-                    className="px-8 py-2.5 rounded-xl text-sm font-bold bg-[#d4af37] text-black hover:bg-[#ffe270] transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(212,175,55,0.3)] shadow-[#d4af37]/20 flex items-center gap-2"
+                  ) : !isAuthenticated ? (
+                      <button
+                        onClick={() => {
+                          saveAppointmentDraft({
+                            currentStep: 5,
+                            guitarSelectionMode,
+                            selectedSavedBuildId,
+                            homeServiceOption,
+                            homeServiceAddressId,
+                            homeServiceContact,
+                            selectedServiceIds,
+                            guitarDetails,
+                            selectedDateId,
+                            selectedTime,
+                            selectedPaymentMethod,
+                            additionalNotes,
+                          })
+                          pendingSubmitRef.current = true
+                          openLogin()
+                        }}
+                        className="px-6 py-2 rounded-xl text-xs sm:text-sm font-bold bg-[#d4af37] text-black hover:bg-[#ffe270] transition-all shadow-[0_0_20px_rgba(212,175,55,0.3)] flex items-center gap-2"
+                      >
+                        Sign in to Complete
+                      </button>
+                  ) : (
+                    <button
+                      onClick={handleSubmit}
+                      disabled={isSubmittingBooking || !canProceed()}
+                      className="px-6 py-2 rounded-xl text-xs sm:text-sm font-bold bg-[#d4af37] text-black hover:bg-[#ffe270] transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(212,175,55,0.3)] shadow-[#d4af37]/20 flex items-center gap-2"
+                    >
+                      {isSubmittingBooking ? (
+                        <>Processing... <Settings className="w-4 h-4 animate-spin" /></>
+                      ) : isRescheduleMode ? (
+                        "Update Appointment"
+                      ) : (
+                        "Complete Booking"
+                      )}
+                    </button>
+                  )}
+                </div>
+
+                <div className="mt-3 text-center text-[10px] sm:text-xs text-[var(--text-muted)] xl:hidden">
+                  Need help with booking?
+                  <br />
+                  <a
+                    href="https://www.facebook.com/messages/t/CosmosGuitars"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-semibold text-[#d4af37] hover:text-[#ffe270] transition-colors"
                   >
-                    {isSubmittingBooking ? (
-                      <>Processing... <Settings className="w-4 h-4 animate-spin" /></>
-                    ) : isRescheduleMode ? (
-                      "Update Appointment"
-                    ) : (
-                      "Complete Booking"
-                    )}
-                  </button>
-                )}
+                    Contact our support
+                  </a>
                 </div>
               </div>
             </div>

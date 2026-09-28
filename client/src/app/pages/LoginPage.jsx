@@ -188,7 +188,7 @@ export function LoginPage() {
               Email Address
             </label>
             <div className="relative">
-              <Mail className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 ${emailError ? 'text-red-400' : 'text-[var(--text-muted)]'}`} />
+              <Mail className={`pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 sm:w-5 sm:h-5 ${emailError ? 'text-red-400' : 'text-[var(--text-muted)]'}`} />
               <input
                 id="email"
                 type="email"
@@ -198,7 +198,7 @@ export function LoginPage() {
                 autoComplete="email"
                 aria-invalid={Boolean(emailError)}
                 aria-describedby={emailError ? 'email-error' : undefined}
-                className={`w-full pl-12 pr-4 py-3 bg-[var(--bg-primary)] border rounded-lg text-white placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:border-transparent transition-all duration-200 ${
+                className={`w-full pl-10 sm:pl-11 pr-4 py-3 bg-[var(--bg-primary)] border rounded-lg text-white placeholder:text-[var(--text-muted)] text-sm sm:text-base focus:outline-none focus:ring-2 focus:border-transparent transition-all duration-200 ${
                   emailError
                     ? 'border-red-500 focus:ring-red-500/50'
                     : 'border-[var(--border)] focus:ring-[var(--gold-primary)]'
@@ -214,7 +214,7 @@ export function LoginPage() {
               Password
             </label>
             <div className="relative">
-              <Lock className={`absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 ${passwordError ? 'text-red-400' : 'text-[var(--text-muted)]'}`} />
+              <Lock className={`pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 sm:w-5 sm:h-5 ${passwordError ? 'text-red-400' : 'text-[var(--text-muted)]'}`} />
               <input
                 id="password"
                 type={showPassword ? 'text' : 'password'}
@@ -224,7 +224,7 @@ export function LoginPage() {
                 autoComplete="current-password"
                 aria-invalid={Boolean(passwordError)}
                 aria-describedby={passwordError ? 'password-error' : undefined}
-                className={`w-full pl-12 pr-12 py-3 bg-[var(--bg-primary)] border rounded-lg text-white placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:border-transparent transition-all duration-200 ${
+                className={`w-full pl-10 sm:pl-11 pr-12 py-3 bg-[var(--bg-primary)] border rounded-lg text-white placeholder:text-[var(--text-muted)] text-sm sm:text-base focus:outline-none focus:ring-2 focus:border-transparent transition-all duration-200 ${
                   passwordError
                     ? 'border-red-500 focus:ring-red-500/50'
                     : 'border-[var(--border)] focus:ring-[var(--gold-primary)]'
@@ -302,7 +302,7 @@ export function LoginPage() {
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
                 <>
-                  <img src="/google.svg" alt="" aria-hidden="true" className="h-4 w-4 object-contain" />
+                  <img src="/social/google-color-svgrepo-com.svg" alt="" aria-hidden="true" className="h-4 w-4 object-contain" />
                   Google
                 </>
               )}
@@ -317,7 +317,7 @@ export function LoginPage() {
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
                 <>
-                  <img src="/facebook.svg" alt="" aria-hidden="true" className="h-4 w-4 object-contain" />
+                  <img src="/social/facebook.svg" alt="" aria-hidden="true" className="h-4 w-4 object-contain" />
                   Facebook
                 </>
               )}

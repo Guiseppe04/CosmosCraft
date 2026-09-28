@@ -67,20 +67,24 @@ export function OAuthSuccessPage() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-light flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-red-500 mb-4">{error}</p>
-          <p className="text-gray-600">Redirecting to login...</p>
+      <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40 px-4 backdrop-blur-[2px]">
+        <div className="w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-8 text-center shadow-2xl">
+          <p className="mb-2 text-red-400">{error}</p>
+          <p className="text-sm text-[var(--text-muted)]">Redirecting to login...</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-light flex items-center justify-center">
-      <div className="text-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#d4af37] mx-auto mb-4"></div>
-        <p className="text-gray-600">Completing your login...</p>
+    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40 px-4 backdrop-blur-[2px]">
+      <div className="w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-8 text-center shadow-2xl">
+        <div className="mb-6 flex justify-center">
+          <img src="/logo-cosmos.png" alt="CosmosCraft Logo" className="h-16 w-auto object-contain" />
+        </div>
+        <h2 className="mb-2 text-2xl font-bold text-white">Signing In</h2>
+        <p className="mb-6 text-sm text-[var(--text-muted)]">Completing your login...</p>
+        <div className="mx-auto h-12 w-12 animate-spin rounded-full border-2 border-[var(--border)] border-t-[var(--gold-primary)]" />
       </div>
     </div>
   )
