@@ -80,6 +80,11 @@
   background: rgba(212, 175, 55, 0.1) !important;
 }
 
+.shop-page .shop-filter-option {
+  flex-direction: row !important;
+  align-items: center !important;
+}
+
 .shop-filters-btn {
   min-height: 36px !important;
   padding: 0.5rem 1rem !important;

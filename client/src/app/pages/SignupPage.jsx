@@ -955,7 +955,9 @@ export function SignupPage() {
                       className="peer sr-only"
                     />
                     <div className={`w-5 h-5 border-2 rounded-md transition-all duration-300 flex items-center justify-center
-                      ${form.terms ? 'bg-[var(--gold-primary)] border-[var(--gold-primary)]' : 'border-white/30 group-hover:border-white/50 bg-white/5'}
+                      ${form.terms
+                        ? 'bg-[var(--gold-primary)] border-[var(--gold-primary)]'
+                        : 'border-[var(--border-strong,#94a3b8)] bg-[var(--surface-dark,#ffffff)] group-hover:border-[var(--gold-primary)]'}
                       ${errors.terms ? 'border-red-500 bg-red-500/10' : ''}
                     `}>
                       {form.terms && <CheckCircle2 className="w-4 h-4 text-black" />}

@@ -9,6 +9,13 @@ import { StarRating } from '../components/common/StarRating.jsx'
 import { API } from '../utils/apiConfig.js'
 import '../../styles/ShopPage.css'
 
+const DEFAULT_PRODUCT_IMAGE = '/default-image.png'
+
+function handleProductImageError(event) {
+  event.currentTarget.onerror = null
+  event.currentTarget.src = DEFAULT_PRODUCT_IMAGE
+}
+
 async function fetchPublicJson(path) {
   const response = await fetch(`${API}${path}`, {
     method: 'GET',
@@ -185,24 +192,26 @@ function FilterSidebar({
           <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] mb-3">Brand</h4>
           <div className="space-y-2 max-h-48 overflow-y-auto">
             {brands.filter(b => b.value !== 'all').map(brand => (
-              <label key={brand.value} className="flex items-center gap-3 cursor-pointer group">
-                <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${selectedBrands.includes(brand.value)
+              <label key={brand.value} className="shop-filter-option flex items-center gap-3 cursor-pointer group">
+                <div className={`relative w-4 h-4 rounded border flex items-center justify-center transition-all ${selectedBrands.includes(brand.value)
                     ? 'bg-[var(--gold-primary)] border-[var(--gold-primary)]'
-                    : 'border-white/30 group-hover:border-white/60'
+                    : 'border-[var(--border-strong,#94a3b8)] group-hover:border-[var(--gold-primary)]'
                   }`}>
+                  <input
+                    type="checkbox"
+                    checked={selectedBrands.includes(brand.value)}
+                    onChange={() => onBrandToggle(brand.value)}
+                    className="peer sr-only"
+                  />
                   {selectedBrands.includes(brand.value) && (
                     <svg className="w-3 h-3 text-black" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
                       <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                     </svg>
                   )}
                 </div>
-                <input
-                  type="checkbox"
-                  checked={selectedBrands.includes(brand.value)}
-                  onChange={() => onBrandToggle(brand.value)}
-                  className="hidden"
-                />
-                <span className="text-sm text-[var(--text-muted)] group-hover:text-white transition-colors">{brand.label}</span>
+                <span className="text-sm text-[var(--text-muted)] group-hover:text-[var(--text-light)] transition-colors">
+                  {brand.label}
+                </span>
               </label>
             ))}
           </div>
@@ -231,24 +240,24 @@ function FilterSidebar({
 
         <div className="border-t border-white/10 pt-4">
           <h4 className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)] mb-3">Availability</h4>
-          <label className="flex items-center gap-3 cursor-pointer group">
-            <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${inStockOnly
+          <label className="shop-filter-option flex items-center gap-3 cursor-pointer group">
+            <div className={`relative w-4 h-4 rounded border flex items-center justify-center transition-all ${inStockOnly
                 ? 'bg-[var(--gold-primary)] border-[var(--gold-primary)]'
-                : 'border-white/30 group-hover:border-white/60'
+                : 'border-[var(--border-strong,#94a3b8)] group-hover:border-[var(--gold-primary)]'
               }`}>
+              <input
+                type="checkbox"
+                checked={inStockOnly}
+                onChange={() => onInStockChange(!inStockOnly)}
+                className="peer sr-only"
+              />
               {inStockOnly && (
                 <svg className="w-3 h-3 text-black" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                 </svg>
               )}
             </div>
-            <input
-              type="checkbox"
-              checked={inStockOnly}
-              onChange={() => onInStockChange(!inStockOnly)}
-              className="hidden"
-            />
-            <span className="text-sm text-[var(--text-muted)] group-hover:text-white transition-colors flex items-center gap-2">
+            <span className="text-sm text-[var(--text-muted)] group-hover:text-[var(--text-light)] transition-colors flex items-center gap-2">
               <Package className="w-4 h-4" />
               In Stock Only
             </span>
@@ -432,7 +441,7 @@ export function ShopPage() {
           id: p.product_id || p.id,
           name: p.name,
           price: Number(p.price),
-          image: p.primary_image || p.image || '/assets/placeholder.jpg',
+          image: p.primary_image || p.image || DEFAULT_PRODUCT_IMAGE,
           category: p.category_name || p.category || 'Uncategorized',
           brand: p.brand,
           description: p.description,
@@ -727,6 +736,7 @@ export function ShopPage() {
                         <img
                           src={product.image}
                           alt={product.name}
+                          onError={handleProductImageError}
                           className="product-card-image w-full h-full object-cover filter brightness-90 group-hover:scale-105 group-hover:brightness-100 transition-all duration-700 ease-out"
                         />
 
@@ -915,6 +925,7 @@ export function ShopPage() {
             <img
               src={product.image}
               alt={product.name}
+              onError={handleProductImageError}
               className="product-card-image w-full h-full object-cover filter brightness-90 group-hover:scale-105 group-hover:brightness-100 transition-all duration-700 ease-out"
             />
 
