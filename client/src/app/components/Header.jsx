@@ -136,7 +136,7 @@ export function Header() {
     { label: 'Shop', to: '/shop' },
   ]
   const navLinksAfterCustomize = [
-    { label: 'Appointment', to: '/appointments' },
+    { label: 'Appointment', to: '/appointments?step=1' },
   ]
 
   const navLinkClasses = (isActive) =>
@@ -658,8 +658,8 @@ export function Header() {
 
                   {/* Appointment */}
                   <Link
-                    to="/appointments"
-                    onClick={(event) => handleNavClick(event, '/appointments')}
+                    to="/appointments?step=1"
+                    onClick={(event) => handleNavClick(event, '/appointments?step=1')}
                     className={`${navLinkClasses(location.pathname === '/appointments')} block w-full`}
                   >
                     Appointment

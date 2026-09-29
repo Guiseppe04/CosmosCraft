@@ -85,7 +85,11 @@ export function SignupPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
   const [currentStep, setCurrentStep] = useState(1)
+  const [addressValidationAttempted, setAddressValidationAttempted] = useState(false)
   const fieldRefs = useRef({})
+
+  const getAddressError = (field) => addressValidationAttempted && errors[`address.${field}`]
+  const showTermsError = addressValidationAttempted && errors.terms
 
   // ZIP Code validation hook
   const {
@@ -377,6 +381,7 @@ export function SignupPage() {
   const handleSubmit = async e => {
     e.preventDefault()
     setSuccess('')
+    setAddressValidationAttempted(true)
     setErrors({})
 
     // ZIP Code validation (await async validation before proceeding)
@@ -687,14 +692,7 @@ export function SignupPage() {
                     </button>
                   </div>
                     <ul className="mt-2 space-y-1">
-                      {passwordChecks.map((rule, index) => {
-                        const firstUnmetIndex = passwordChecks.findIndex(r => !r.isValid)
-                        const isFirstUnmet = index === firstUnmetIndex
-                        const isMet = rule.isValid
-                        const isRevealed = isMet || isFirstUnmet
-
-                        if (!isRevealed) return null
-
+                      {passwordChecks.map((rule) => {
                         return (
                           <li
                             key={rule.label}
@@ -780,20 +778,20 @@ export function SignupPage() {
                 <h2 className="text-xl font-medium text-white tracking-wide">Shipping Address</h2>
               </div>
 
-              <motion.div animate={errors['address.country'] ? shakeAnimation : {}}>
+              <motion.div animate={getAddressError('country') ? shakeAnimation : {}}>
                 <label className="block text-xs uppercase tracking-wider font-semibold text-[var(--text-muted)] mb-2">Country <span style={{ color: '#ef4444' }}>*</span></label>
                 <input
                   type="text"
                   value="Philippines"
                   disabled
-                  className={`${getInputStyles(errors['address.country'])} cursor-not-allowed opacity-70`}
+                  className={`${getInputStyles(getAddressError('country'))} cursor-not-allowed opacity-70`}
                 />
-                {errors['address.country'] && <span className="text-xs text-red-400 mt-1.5 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{errors['address.country']}</span>}
+                {getAddressError('country') && <span className="text-xs text-red-400 mt-1.5 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{getAddressError('country')}</span>}
               </motion.div>
 
               <>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                  <motion.div animate={errors['address.region'] ? shakeAnimation : {}}>
+                  <motion.div animate={getAddressError('region') ? shakeAnimation : {}}>
                     <label className="block text-xs uppercase tracking-wider font-semibold text-[var(--text-muted)] mb-2">Region <span style={{ color: '#ef4444' }}>*</span></label>
                     <select
                       value={phRegion}
@@ -802,17 +800,17 @@ export function SignupPage() {
                         const opt = phRegions.find(r => r.psgcCode === e.target.value)
                         handlePhRegionChange(e.target.value, opt?.designation || opt?.name || '')
                       }}
-                      className={`${getInputStyles(errors['address.region'])} appearance-none cursor-pointer`}
+                      className={`${getInputStyles(getAddressError('region'))} appearance-none cursor-pointer`}
                     >
                       <option value="" disabled className="text-gray-900">Select Region</option>
                       {phRegions.map(r => (
                         <option key={r.psgcCode} value={r.psgcCode} className="text-gray-900">{r.name}</option>
                       ))}
                     </select>
-                    {errors['address.region'] && <span className="text-xs text-red-400 mt-1.5 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{errors['address.region']}</span>}
+                    {getAddressError('region') && <span className="text-xs text-red-400 mt-1.5 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{getAddressError('region')}</span>}
                   </motion.div>
 
-                  <motion.div animate={errors['address.province'] ? shakeAnimation : {}}>
+                  <motion.div animate={getAddressError('province') ? shakeAnimation : {}}>
                     <label className="block text-xs uppercase tracking-wider font-semibold text-[var(--text-muted)] mb-2">Province <span style={{ color: '#ef4444' }}>*</span></label>
                     <select
                       value={phProvince}
@@ -822,19 +820,19 @@ export function SignupPage() {
                         const opt = phProvinces.find(p => p.psgcCode === e.target.value)
                         handlePhProvinceChange(e.target.value, opt?.name || '')
                       }}
-                      className={`${getInputStyles(errors['address.province'])} appearance-none cursor-pointer disabled:opacity-40`}
+                      className={`${getInputStyles(getAddressError('province'))} appearance-none cursor-pointer disabled:opacity-40`}
                     >
                       <option value="" disabled className="text-gray-900">{phRegion ? 'Select Province' : 'Select a region first'}</option>
                       {phProvinces.map(p => (
                         <option key={p.psgcCode} value={p.psgcCode} className="text-gray-900">{p.name}</option>
                       ))}
                     </select>
-                    {errors['address.province'] && <span className="text-xs text-red-400 mt-1.5 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{errors['address.province']}</span>}
+                    {getAddressError('province') && <span className="text-xs text-red-400 mt-1.5 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{getAddressError('province')}</span>}
                   </motion.div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                  <motion.div animate={errors['address.city'] ? shakeAnimation : {}}>
+                  <motion.div animate={getAddressError('city') ? shakeAnimation : {}}>
                     <label className="block text-xs uppercase tracking-wider font-semibold text-[var(--text-muted)] mb-2">Municipality / City <span style={{ color: '#ef4444' }}>*</span></label>
                     <select
                       value={phMunicipality}
@@ -844,17 +842,17 @@ export function SignupPage() {
                         const opt = phMunicipalities.find(m => m.psgcCode === e.target.value)
                         handlePhMunicipalityChange(e.target.value, opt?.name || '')
                       }}
-                      className={`${getInputStyles(errors['address.city'])} appearance-none cursor-pointer disabled:opacity-40`}
+                      className={`${getInputStyles(getAddressError('city'))} appearance-none cursor-pointer disabled:opacity-40`}
                     >
                       <option value="" disabled className="text-gray-900">{phProvince ? 'Select Municipality' : 'Select a province first'}</option>
                       {phMunicipalities.map(m => (
                         <option key={m.psgcCode} value={m.psgcCode} className="text-gray-900">{m.name}</option>
                       ))}
                     </select>
-                    {errors['address.city'] && <span className="text-xs text-red-400 mt-1.5 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{errors['address.city']}</span>}
+                    {getAddressError('city') && <span className="text-xs text-red-400 mt-1.5 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{getAddressError('city')}</span>}
                   </motion.div>
 
-                  <motion.div animate={errors['address.barangay'] ? shakeAnimation : {}}>
+                  <motion.div animate={getAddressError('barangay') ? shakeAnimation : {}}>
                     <label className="block text-xs uppercase tracking-wider font-semibold text-[var(--text-muted)] mb-2">Barangay <span style={{ color: '#ef4444' }}>*</span></label>
                     <select
                       value={phBarangay}
@@ -870,18 +868,18 @@ export function SignupPage() {
                           }
                       }}
                       ref={registerFieldRef('address.barangay')}
-                      className={`${getInputStyles(errors['address.barangay'])} appearance-none cursor-pointer disabled:opacity-40`}
+                      className={`${getInputStyles(getAddressError('barangay'))} appearance-none cursor-pointer disabled:opacity-40`}
                     >
                       <option value="" disabled className="text-gray-900">{phMunicipality ? 'Select Barangay' : 'Select a municipality first'}</option>
                       {phBarangays.map(b => (
                         <option key={b.psgcCode} value={b.name} className="text-gray-900">{b.name}</option>
                       ))}
                     </select>
-                    {errors['address.barangay'] && <span className="text-xs text-red-400 mt-1.5 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{errors['address.barangay']}</span>}
+                    {getAddressError('barangay') && <span className="text-xs text-red-400 mt-1.5 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{getAddressError('barangay')}</span>}
                   </motion.div>
                 </div>
 
-                <motion.div animate={errors['address.streetLine1'] ? shakeAnimation : {}}>
+                <motion.div animate={getAddressError('streetLine1') ? shakeAnimation : {}}>
                   <label className="block text-xs uppercase tracking-wider font-semibold text-[var(--text-muted)] mb-2">Street / Building / House No. *</label>
                   <input
                     type="text"
@@ -889,9 +887,9 @@ export function SignupPage() {
                     ref={registerFieldRef('address.streetLine1')}
                     placeholder={phBarangay ? `Brgy. ${phBarangay}, add street/bldg...` : 'e.g. 123 Rizal St.'}
                     onChange={e => updateAddressField('streetLine1', e.target.value)}
-                    className={getInputStyles(errors['address.streetLine1'])}
+                    className={getInputStyles(getAddressError('streetLine1'))}
                   />
-                  {errors['address.streetLine1'] && <span className="text-xs text-red-400 mt-1.5 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{errors['address.streetLine1']}</span>}
+                  {getAddressError('streetLine1') && <span className="text-xs text-red-400 mt-1.5 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{getAddressError('streetLine1')}</span>}
                 </motion.div>
 
                 <motion.div animate={errors['address.streetLine2'] ? shakeAnimation : {}}>
@@ -904,7 +902,7 @@ export function SignupPage() {
                   />
                 </motion.div>
 
-                <motion.div animate={errors['address.postalZipCode'] || (zipValid === false && phMunicipality && form.address.postalZipCode.trim()) ? shakeAnimation : {}}>
+                <motion.div animate={getAddressError('postalZipCode') || (zipValid === false && phMunicipality && form.address.postalZipCode.trim()) ? shakeAnimation : {}}>
                   <label className="block text-xs uppercase tracking-wider font-semibold text-[var(--text-muted)] mb-2">Postal / ZIP Code <span style={{ color: '#ef4444' }}>*</span></label>
                   <div className="relative">
                     <input
@@ -913,7 +911,7 @@ export function SignupPage() {
                       ref={registerFieldRef('address.postalZipCode')}
                       placeholder="e.g. 1000"
                       onChange={e => updateAddressField('postalZipCode', e.target.value)}
-                      className={getInputStyles(errors['address.postalZipCode'] || (zipValid === false && phMunicipality && form.address.postalZipCode.trim())) + ' pr-10'}
+                      className={getInputStyles(getAddressError('postalZipCode') || (zipValid === false && phMunicipality && form.address.postalZipCode.trim())) + ' pr-10'}
                     />
                     {phMunicipality && form.address.postalZipCode.trim() && zipLoading && (
                       <div className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 border-2 border-gray-400/30 border-t-[var(--gold-primary)] rounded-full animate-spin" />
@@ -922,19 +920,19 @@ export function SignupPage() {
                       <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-green-400" />
                     )}
                   </div>
-                  {errors['address.postalZipCode'] && (
+                  {getAddressError('postalZipCode') && (
                     <span className="text-xs text-red-400 mt-1.5 flex items-center gap-1">
                       <AlertCircle className="w-3 h-3" />
-                      {errors['address.postalZipCode']}
+                      {getAddressError('postalZipCode')}
                     </span>
                   )}
-                  {phMunicipality && form.address.postalZipCode.trim() && !zipLoading && zipValid === false && !errors['address.postalZipCode'] && (
+                  {phMunicipality && form.address.postalZipCode.trim() && !zipLoading && zipValid === false && !getAddressError('postalZipCode') && (
                     <span className="text-xs text-red-400 mt-1.5 flex items-center gap-1">
                       <AlertCircle className="w-3 h-3" />
                       {zipError || 'Invalid ZIP code for the selected city.'}
                     </span>
                   )}
-                  {phMunicipality && form.address.postalZipCode.trim() && !zipLoading && zipValid === true && !errors['address.postalZipCode'] && (
+                  {phMunicipality && form.address.postalZipCode.trim() && !zipLoading && zipValid === true && !getAddressError('postalZipCode') && (
                     <span className="text-xs text-green-400 mt-1.5 flex items-center gap-1">
                       <CheckCircle2 className="w-3 h-3" />
                       Valid ZIP code for {form.address.city}
@@ -945,7 +943,7 @@ export function SignupPage() {
 
               {/* TERMS & ACTIONS */}
               <div className="pt-6 border-t border-white/10">
-                <motion.label animate={errors.terms ? shakeAnimation : {}} className="flex items-start gap-3 mt-2 mb-8 cursor-pointer group">
+                <motion.label animate={showTermsError ? shakeAnimation : {}} className="flex items-start gap-3 mt-2 mb-8 cursor-pointer group">
                   <div className="relative mt-1">
                     <input
                       type="checkbox"
@@ -958,14 +956,14 @@ export function SignupPage() {
                       ${form.terms
                         ? 'bg-[var(--gold-primary)] border-[var(--gold-primary)]'
                         : 'border-[var(--border-strong,#94a3b8)] bg-[var(--surface-dark,#ffffff)] group-hover:border-[var(--gold-primary)]'}
-                      ${errors.terms ? 'border-red-500 bg-red-500/10' : ''}
+                      ${showTermsError ? 'border-red-500 bg-red-500/10' : ''}
                     `}>
                       {form.terms && <CheckCircle2 className="w-4 h-4 text-black" />}
                     </div>
                   </div>
                   <div className="text-sm text-[var(--text-muted)]">
                     I agree to the <span className="text-white font-medium hover:text-[var(--gold-primary)] transition-colors">Terms of Service</span> and acknowledge the <span className="text-white font-medium hover:text-[var(--gold-primary)] transition-colors">Privacy Policy</span>.
-                    {errors.terms && <p className="text-xs text-red-400 mt-1.5 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{errors.terms}</p>}
+                    {showTermsError && <p className="text-xs text-red-400 mt-1.5 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{showTermsError}</p>}
                   </div>
                 </motion.label>
 

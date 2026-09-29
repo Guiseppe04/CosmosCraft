@@ -52,8 +52,8 @@
   }
 
   const STEPS = [
-    { id: 1, label: 'Appointment' },
-    { id: 2, label: 'Service' },
+    { id: 1, label: 'Service' },
+    { id: 2, label: 'Appointment' },
     { id: 3, label: 'Guitar & Service Type' },
     { id: 4, label: 'Location' },
     { id: 5, label: 'Confirmation' },
@@ -384,8 +384,13 @@
     useEffect(() => {
       if (isLoadingUser) return
       const draft = loadAppointmentDraft()
+      const hasServiceRoute = typeof window !== 'undefined' && Boolean(
+        new URLSearchParams(window.location.search).get('service')
+        || new URLSearchParams(window.location.search).get('serviceName')
+        || new URLSearchParams(window.location.search).get('selectedService')
+      )
       if (draft) {
-        if (draft.currentStep) setCurrentStep(draft.currentStep)
+        if (draft.currentStep && !hasServiceRoute) setCurrentStep(draft.currentStep)
         if (draft.guitarSelectionMode) setGuitarSelectionMode(draft.guitarSelectionMode)
         if (draft.selectedSavedBuildId) setSelectedSavedBuildId(draft.selectedSavedBuildId)
         if (draft.homeServiceOption) setHomeServiceOption(draft.homeServiceOption)
@@ -503,7 +508,7 @@
       const requestedStep = Number(params.get('step') || '0')
       const requestedService = params.get('service') || params.get('serviceName') || params.get('selectedService')
 
-      if (requestedStep >= 2) {
+      if (requestedStep >= 1 && requestedStep <= 5) {
         setCurrentStep(requestedStep)
       }
 
@@ -533,7 +538,7 @@
 
       if (match) {
         setSelectedServiceIds((prev) => prev.includes(String(match.service_id)) ? prev : [...prev, String(match.service_id)])
-        setCurrentStep(2)
+        setCurrentStep(1)
         const nextParams = new URLSearchParams(params)
         nextParams.delete('service')
         nextParams.delete('serviceName')
@@ -812,8 +817,8 @@
 
     // Validation
     const canProceed = () => {
-      if (currentStep === 1) return selectedDateId && selectedTime
-      if (currentStep === 2) return Boolean(selectedDateId) && Boolean(selectedTime) && selectedServiceIds.length > 0
+      if (currentStep === 1) return selectedServiceIds.length > 0
+      if (currentStep === 2) return selectedDateId && selectedTime
       if (currentStep === 3) {
         if (!hasSelectedGuitar) return false
         return Boolean(selectedAppointmentType)
@@ -836,11 +841,10 @@
 
     const getStepValidationMessage = () => {
       if (currentStep === 1) {
-        if (!selectedDateId || !selectedTime) return 'Select both appointment date and time.'
+        if (selectedServiceIds.length === 0) return 'Select at least one service to continue.'
       }
       if (currentStep === 2) {
-        if (!selectedDateId || !selectedTime) return 'Select both appointment date and time before continuing.'
-        if (selectedServiceIds.length === 0) return 'Select at least one service to continue.'
+        if (!selectedDateId || !selectedTime) return 'Select both appointment date and time.'
       }
       if (currentStep === 3) {
         if (!hasSelectedGuitar) return 'Please select a guitar before continuing*.'
@@ -1279,7 +1283,7 @@
 
     const renderStepContent = () => {
       switch (currentStep) {
-        case 2:
+        case 1:
           return (
             <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="space-y-4 sm:space-y-6">
               <div>
@@ -1638,7 +1642,7 @@
             </motion.div>
           )
 
-        case 1:
+        case 2:
           return (
             <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
               <div>
