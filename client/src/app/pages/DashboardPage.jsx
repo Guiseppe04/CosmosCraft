@@ -319,7 +319,7 @@ export function DashboardPage() {
 
   const [myProjects, setMyProjects] = useState([])
   const [myProjectSearch, setMyProjectSearch] = useState('')
-  const [myProjectSort, setMyProjectSort] = useState('updated')
+  const [myProjectSort, setMyProjectSort] = useState('created')
   const [myProjectPage, setMyProjectPage] = useState(1)
   const MY_PROJECTS_PAGE_SIZE = 6
   const [myProjectsPagination, setMyProjectsPagination] = useState({ page: 1, pageSize: 6, total: 0, totalPages: 1 })
@@ -330,6 +330,7 @@ export function DashboardPage() {
 
   const [myOrders, setMyOrders] = useState([])
   const [activePurchaseTab, setActivePurchaseTab] = useState('All')
+  const [purchaseSort, setPurchaseSort] = useState('created_latest')
   const [isCancelOrderModalOpen, setIsCancelOrderModalOpen] = useState(false)
   const [cancelOrderTarget, setCancelOrderTarget] = useState(null)
   const [cancelOrderReason, setCancelOrderReason] = useState('')
@@ -395,7 +396,7 @@ export function DashboardPage() {
 
   const [myAppointments, setMyAppointments] = useState([])
   const [appointmentSearch, setAppointmentSearch] = useState('')
-  const [appointmentSort, setAppointmentSort] = useState('soonest')
+  const [appointmentSort, setAppointmentSort] = useState('created_latest')
   const [reschedulingAptId, setReschedulingAptId] = useState(null)
   const [rescheduleDate, setRescheduleDate] = useState('')
   const [rescheduleTime, setRescheduleTime] = useState('')
@@ -1561,6 +1562,11 @@ export function DashboardPage() {
       }
       return false;
     });
+    const sortedOrders = [...filteredOrders].sort((a, b) => {
+      const dateA = new Date(a.created_at || 0).getTime()
+      const dateB = new Date(b.created_at || 0).getTime()
+      return purchaseSort === 'created_earliest' ? dateA - dateB : dateB - dateA
+    })
 
     const isFulfilled = (status) => ['received', 'delivered', 'completed'].includes(status)
 
@@ -1588,6 +1594,21 @@ export function DashboardPage() {
             ))}
           </div>
 
+          <div className="mb-4 flex justify-end">
+            <label className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
+              <span>Sort by:</span>
+              <select
+                value={purchaseSort}
+                onChange={(event) => setPurchaseSort(event.target.value)}
+                className="appt-sort-select"
+                aria-label="Sort purchases"
+              >
+                <option value="created_latest">Recently Purchased</option>
+                <option value="created_earliest">Oldest Created</option>
+              </select>
+            </label>
+          </div>
+
           {myOrders.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-10">
               <div className="w-16 h-16 rounded-full border-2 border-[var(--border)] flex items-center justify-center mb-6">
@@ -1605,7 +1626,7 @@ export function DashboardPage() {
                 Browse Shop
               </button>
             </div>
-          ) : filteredOrders.length === 0 ? (
+          ) : sortedOrders.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-10">
               {activePurchaseTab === 'Refund' ? (
                 <>
@@ -1628,7 +1649,7 @@ export function DashboardPage() {
             </div>
           ) : (
             <div className="space-y-6">
-              {filteredOrders.map(order => {
+              {sortedOrders.map(order => {
                 const subtotalAmount = Number(order.subtotal || 0)
                 const shippingAmount = Number(order.shipping_cost || 0)
                 const taxAmount = Number(order.tax_amount || 0)
