@@ -129,7 +129,6 @@ import { OrderDetailsModal } from './admin/components/modals/OrderDetailsModal'
 import { OrderStatusModal } from './admin/components/modals/OrderStatusModal'
 import { getStockTier } from '../utils/stockUtils'
 
-const SITE_CONTACT_STORAGE_KEY = 'cosmoscraft.site.contact'
 const DEFAULT_SITE_CONTACT = {
   email: 'cosmosguitars@gmail.com',
   phone: '+095213121581',
@@ -610,18 +609,19 @@ export function AdminPage() {
     }
 
     try {
-      const contactRaw = window.localStorage.getItem(SITE_CONTACT_STORAGE_KEY)
-      if (!contactRaw) return
-      const parsedContact = JSON.parse(contactRaw)
-      if (parsedContact?.email || parsedContact?.phone) {
-        setSiteContactInfo({
-          email: parsedContact.email || DEFAULT_SITE_CONTACT.email,
-          phone: parsedContact.phone || DEFAULT_SITE_CONTACT.phone,
-        })
+    adminApi.getContactSettings()
+      .then(({ data }) => {
+        if (data?.email || data?.phone) {
+          setSiteContactInfo({
+            email: data.email || DEFAULT_SITE_CONTACT.email,
+            phone: data.phone || DEFAULT_SITE_CONTACT.phone,
+          })
+        }
+      })
+      .catch((error) => console.error('Could not load site contact settings:', error))
+      } catch {
+        // The contact settings request reports its own errors.
       }
-    } catch {
-      // Ignore invalid persisted contact info
-    }
   }, [])
 
   const saveAppointmentBranchAddress = useCallback(() => {
@@ -648,7 +648,7 @@ export function AdminPage() {
     }
   }, [appointmentBranchAddress, showToast])
 
-  const saveSiteContactInfo = useCallback(() => {
+  const saveSiteContactInfo = useCallback(async () => {
     const cleanEmail = siteContactInfo.email.trim()
     const cleanPhone = siteContactInfo.phone.trim()
 
@@ -658,19 +658,13 @@ export function AdminPage() {
     }
 
     try {
-      const payload = {
-        email: cleanEmail,
-        phone: cleanPhone,
-      }
-
-      window.localStorage.setItem(
-        SITE_CONTACT_STORAGE_KEY,
-        JSON.stringify(payload)
-      )
-      window.dispatchEvent(new CustomEvent('cosmoscraft-site-contact-updated', { detail: payload }))
+      const response = await adminApi.updateContactSettings({ email: cleanEmail, phone: cleanPhone })
+      const savedContact = response.data || { email: cleanEmail, phone: cleanPhone }
+      setSiteContactInfo(savedContact)
+      window.dispatchEvent(new CustomEvent('cosmoscraft-site-contact-updated', { detail: savedContact }))
       showToast('Landing page contact info saved')
-    } catch {
-      showToast('Failed to save contact info', 'error')
+    } catch (error) {
+      showToast(error.message || 'Failed to save contact info', 'error')
     }
   }, [showToast, siteContactInfo])
 

@@ -2,20 +2,22 @@
 import { Link } from 'react-router'
 import {
   ArrowRight,
+  CheckCircle2,
   Phone,
   Sparkles,
+  X,
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { ImageWithFallback } from '../components/figma/ImageWithFallback.jsx'
 import { TestimonialCarousel } from '../components/TestimonialCarousel.jsx'
 import { FacebookIcon, InstagramIcon, TikTokIcon, YouTubeIcon, SocialMediaLink } from '../components/social/SocialMediaIcons.jsx'
+import { API } from '../utils/apiConfig'
 
 const DEFAULT_CONTACT_INFO = {
   email: 'cosmosguitars@gmail.com',
   phone: '+095213121581',
 }
 
-const SITE_CONTACT_STORAGE_KEY = 'cosmoscraft.site.contact'
 const LANDING_SERVICES_STORAGE_KEY = 'cosmoscraft.landing.services'
 
 const defaultServiceCards = [
@@ -110,6 +112,55 @@ export function LandingPage() {
     message: '',
   })
   const servicesScrollRef = useRef(null)
+  const [isSendingContact, setIsSendingContact] = useState(false)
+  const [contactSubmissionMessage, setContactSubmissionMessage] = useState('')
+  const [contactSubmissionError, setContactSubmissionError] = useState(false)
+  const [showContactSuccess, setShowContactSuccess] = useState(false)
+  const contactModalCloseRef = useRef(null)
+
+  const submitContactForm = async (event) => {
+    event.preventDefault()
+    setIsSendingContact(true)
+    setContactSubmissionMessage('')
+    setContactSubmissionError(false)
+
+    try {
+      const response = await fetch(`${API}/api/contact`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(contactForm),
+      })
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.message || 'Could not send your message')
+      setShowContactSuccess(true)
+      setContactForm((previous) => ({ ...previous, message: '' }))
+    } catch (error) {
+      setContactSubmissionError(true)
+      setContactSubmissionMessage(error.message || 'We could not send your message right now. Please try again later.')
+    } finally {
+      setIsSendingContact(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!showContactSuccess) return undefined
+
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') setShowContactSuccess(false)
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    contactModalCloseRef.current?.focus()
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [showContactSuccess])
+
+  useEffect(() => {
+    if (window.location.hash !== '#contact') return
+
+    requestAnimationFrame(() => {
+      document.getElementById('contact')?.scrollIntoView({ behavior: 'smooth' })
+    })
+  }, [])
 
   useEffect(() => {
     if (!isAuthenticated || !user) {
@@ -273,6 +324,19 @@ export function LandingPage() {
     }
 
     applyContactInfo()
+    fetch(`${API}/api/contact/settings`)
+      .then(async (response) => {
+        const result = await response.json()
+        if (!response.ok) throw new Error(result.message || 'Failed to load contact information')
+        return result
+      })
+      .then(({ data }) => {
+        setContactInfo({
+          email: data?.email || DEFAULT_CONTACT_INFO.email,
+          phone: data?.phone || DEFAULT_CONTACT_INFO.phone,
+        })
+      })
+      .catch(() => setContactInfo(DEFAULT_CONTACT_INFO))
 
     const onStorage = (event) => {
       if (event.key === SITE_CONTACT_STORAGE_KEY) {
@@ -464,13 +528,15 @@ export function LandingPage() {
                 <p className="mt-1 text-xs text-[var(--text-muted)] text-center sm:text-left">Available Monday to Friday, 9 AM - 6 PM GMT</p>
               </div>
 
-              <form className="rounded-2xl sm:rounded-3xl border border-[var(--border)] bg-[var(--surface-elevated)] p-4 sm:p-6">
+              <form onSubmit={submitContactForm} className="rounded-2xl sm:rounded-3xl border border-[var(--border)] bg-[var(--surface-elevated)] p-4 sm:p-6">
                 <div className="grid gap-3 sm:gap-4 sm:grid-cols-2">
                   <label className="text-xs font-medium text-[var(--text-muted)]">
                     First Name
                     <input
                       type="text"
                       value={contactForm.firstName}
+                                            required
+                                            maxLength={100}
                       onChange={(event) => setContactForm((prev) => ({ ...prev, firstName: event.target.value }))}
                       placeholder="Enter your first name..."
                       className="mt-2 w-full rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] px-4 py-3 text-sm text-[var(--text-light)] placeholder:text-[var(--text-muted)] outline-none focus:border-[var(--gold-primary)]"
@@ -481,6 +547,8 @@ export function LandingPage() {
                     <input
                       type="text"
                       value={contactForm.lastName}
+                                            required
+                                            maxLength={100}
                       onChange={(event) => setContactForm((prev) => ({ ...prev, lastName: event.target.value }))}
                       placeholder="Enter your last name..."
                       className="mt-2 w-full rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] px-4 py-3 text-sm text-[var(--text-light)] placeholder:text-[var(--text-muted)] outline-none focus:border-[var(--gold-primary)]"
@@ -493,6 +561,8 @@ export function LandingPage() {
                   <input
                     type="email"
                     value={contactForm.email}
+                                        required
+                                        maxLength={254}
                     onChange={(event) => setContactForm((prev) => ({ ...prev, email: event.target.value }))}
                     placeholder="Enter your email address..."
                     className="mt-2 w-full rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] px-4 py-3 text-sm text-[var(--text-light)] placeholder:text-[var(--text-muted)] outline-none focus:border-[var(--gold-primary)]"
@@ -504,6 +574,8 @@ export function LandingPage() {
                   <textarea
                     rows="6"
                     value={contactForm.message}
+                                        required
+                                        maxLength={5000}
                     onChange={(event) => setContactForm((prev) => ({ ...prev, message: event.target.value }))}
                     placeholder="Enter your message..."
                     className="mt-2 w-full resize-none rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] px-4 py-3 text-sm text-[var(--text-light)] placeholder:text-[var(--text-muted)] outline-none focus:border-[var(--gold-primary)]"
@@ -512,13 +584,19 @@ export function LandingPage() {
 
                 <div className="mt-6 flex justify-end">
                   <button
-                    type="button"
-                    className="inline-flex items-center gap-2 rounded-full bg-[var(--bg-primary)] px-5 py-3 text-sm font-semibold text-[var(--text-light)] transition-colors hover:bg-[var(--surface-dark)]"
+                    type="submit"
+                    disabled={isSendingContact}
+                    className="inline-flex items-center gap-2 rounded-full bg-[var(--gold-primary)] px-5 py-3 text-sm font-semibold text-[var(--text-dark)] transition-colors hover:bg-[var(--gold-secondary)] disabled:cursor-not-allowed disabled:opacity-70"
                   >
-                    Send Message
-                    <ArrowRight className="h-4 w-4" />
+                    {isSendingContact ? 'Sending...' : 'Send Message'}
+                    {!isSendingContact && <ArrowRight className="h-4 w-4" />}
                   </button>
                 </div>
+                {contactSubmissionError && contactSubmissionMessage && (
+                  <p role="alert" aria-live="assertive" className="mt-3 text-sm text-red-600">
+                    {contactSubmissionMessage}
+                  </p>
+                )}
               </form>
             </div>
           </div>
@@ -582,6 +660,46 @@ export function LandingPage() {
           <div className="py-6 text-center text-xs text-[var(--text-muted)]">2026 CosmosCraft. All rights reserved.</div>
         </div>
       </footer>
+          {showContactSuccess && (
+            <div
+              className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+              onClick={(event) => {
+                if (event.target === event.currentTarget) setShowContactSuccess(false)
+              }}
+            >
+              <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="contact-success-title"
+                aria-describedby="contact-success-description"
+                className="relative w-full max-w-md rounded-2xl border border-[var(--gold-primary)] bg-[var(--surface-dark)] p-7 text-center shadow-2xl sm:p-8"
+              >
+                <button
+                  ref={contactModalCloseRef}
+                  type="button"
+                  onClick={() => setShowContactSuccess(false)}
+                  aria-label="Close confirmation"
+                  className="absolute right-4 top-4 rounded-lg p-2 text-[var(--text-muted)] transition-colors hover:bg-white/10 hover:text-white"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+                <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-[var(--gold-primary)]/15">
+                  <CheckCircle2 className="h-9 w-9 text-[var(--gold-primary)]" />
+                </div>
+                <h3 id="contact-success-title" className="text-2xl font-bold text-white">Message sent</h3>
+                <p id="contact-success-description" className="mt-3 text-sm leading-relaxed text-[var(--text-muted)]">
+                  Your message has been sent. Thanks for reaching out to CosmosCraft. We’ll get back to you soon.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setShowContactSuccess(false)}
+                  className="mt-7 w-full rounded-xl bg-[var(--gold-primary)] px-5 py-3 text-sm font-semibold text-[var(--text-dark)] transition-colors hover:bg-[var(--gold-secondary)]"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          )}
     </div>
   )
 }

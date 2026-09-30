@@ -362,6 +362,10 @@ export const adminApi = {
   getPaymentSettings: () => request('/api/payment-settings'),
   updatePaymentSettings: (body) => request('/api/payment-settings', { method: 'PUT', body }),
 
+  // Site Contact Settings
+  getContactSettings: () => request('/api/contact/settings'),
+  updateContactSettings: (body) => request('/api/contact/settings', { method: 'PUT', body }),
+
   // User Addresses
   updateAddress: (addressId, body) => request(`/api/users/me/addresses/${addressId}`, { method: 'PUT', body }),
   addAddress: (body) => request('/api/users/me/addresses', { method: 'POST', body }),

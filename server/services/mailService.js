@@ -131,6 +131,7 @@ exports.sendMail = async (options) => {
           const payload = {
             sender: { email: MAIL_FROM, name: MAIL_FROM_NAME },
             to: [{ email: options.to }],
+                        ...(options.replyTo ? { replyTo: { email: options.replyTo } } : {}),
             subject: options.subject,
             htmlContent: options.html,
             textContent: options.text,
@@ -143,6 +144,7 @@ exports.sendMail = async (options) => {
         const mailOptions = {
           from: MAIL_FROM,
           to: options.to,
+                    ...(options.replyTo ? { replyTo: options.replyTo } : {}),
           subject: options.subject,
           html: options.html,
           text: options.text,
@@ -164,6 +166,52 @@ exports.sendMail = async (options) => {
     console.error('Email sending error:', error.message);
     throw error;
   }
+};
+
+exports.sendContactMessageEmail = async ({ to, replyTo, name, message }) => {
+  const escapeHtml = (value) => String(value).replace(/[&<>"']/g, (character) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  }[character]));
+  const safeName = escapeHtml(name);
+  const safeReplyTo = escapeHtml(replyTo);
+  const safeMessage = escapeHtml(message).replace(/\r?\n/g, '<br>');
+  const html = `<!doctype html>
+<html lang="en">
+  <body style="margin:0;padding:32px 16px;background-color:#09090b;color:#a1a1aa;font-family:Arial,Helvetica,sans-serif;">
+    <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:600px;margin:0 auto;background-color:#18181b;">
+      <tr>
+        <td style="padding:32px;">
+          <h1 style="margin:0 0 12px;color:#fafafa;font-size:28px;line-height:1.3;">New contact message</h1>
+          <p style="margin:0 0 24px;color:#a1a1aa;font-size:16px;line-height:1.6;">A customer sent a message through the CosmosCraft website.</p>
+          <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background-color:#27272a;border-radius:8px;">
+            <tr>
+              <td style="padding:18px 20px;color:#a1a1aa;font-size:14px;line-height:1.6;">
+                <p style="margin:0 0 8px;"><strong style="color:#fafafa;">Name:</strong> ${safeName}</p>
+                <p style="margin:0 0 16px;"><strong style="color:#fafafa;">Email:</strong> ${safeReplyTo}</p>
+                <p style="margin:0 0 6px;"><strong style="color:#fafafa;">Message</strong></p>
+                <p style="margin:0;color:#fafafa;">${safeMessage}</p>
+              </td>
+            </tr>
+          </table>
+          <p style="margin:24px 0 0;text-align:center;color:#a1a1aa;font-size:13px;line-height:1.5;">CosmosCraft | Contact message</p>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`;
+  const text = `New contact message\n\nFrom: ${name}\nEmail: ${replyTo}\n\n${message}`;
+
+  return exports.sendMail({
+    to,
+    replyTo,
+    subject: 'CosmosCraft contact message',
+    html,
+    text,
+  });
 };
 
 /**

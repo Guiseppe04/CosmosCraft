@@ -1,4 +1,5 @@
 require('dotenv').config();
+const contactRoutes = require('./routes/contactRoutes.js');
 
 const express = require('express');
 const cookieParser = require('cookie-parser');
@@ -128,6 +129,7 @@ app.use('/api/builder-parts', builderPartsRoutes);
 app.use('/builder-parts', builderPartsRoutes);
 app.use('/api/cloudinary', cloudinaryRoutes);
 app.use('/api/payment-settings', paymentSettingsRoutes);
+app.use('/api/contact', contactRoutes);
 app.use('/api/installments', installmentRoutes);
 app.use('/api/address', addressRoutes);
 app.use('/api/fulfillment', fulfillmentRoutes);

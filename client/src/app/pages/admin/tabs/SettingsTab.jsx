@@ -27,7 +27,7 @@ export function SettingsTab({
             </div>
 
             <div className="pt-2 border-t border-[var(--border)]">
-              <label className="block text-sm font-semibold text-[var(--text-muted)] mb-2">Landing Page Contact Email</label>
+              <label className="block text-sm font-semibold text-[var(--text-muted)] mb-2">Contact Email and Message Recipient</label>
               <input
                 type="email"
                 value={siteContactInfo.email}
@@ -35,6 +35,7 @@ export function SettingsTab({
                 className="w-full px-4 py-3 bg-[var(--bg-primary)] text-white border border-[var(--border)] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]/50"
                 placeholder="your@email.com"
               />
+              <p className="mt-2 text-xs text-[var(--text-muted)]">Customer messages from the landing page will be sent to this address.</p>
             </div>
 
             <div>
