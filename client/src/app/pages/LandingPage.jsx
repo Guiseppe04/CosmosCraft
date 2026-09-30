@@ -25,25 +25,25 @@ const defaultServiceCards = [
     title: 'Setup & Intonation',
     text: 'Precision setup for optimal action, tuning stability, and accurate intonation.',
     image: '/assets/landing/480706588_1131061512149778_5794129601486897065_n.jpg',
-    href: '/appointments?step=2&service=setup%20and%20intonation&serviceName=Setup%20%26%20Intonation',
+    href: '/appointments?step=1&service=setup%20and%20intonation&serviceName=Setup%20%26%20Intonation',
   },
   {
     title: 'Refinishing',
     text: 'Professional refinishing services to restore and elevate your instrument look.',
     image: '/assets/landing/499948200_1197883048800957_5172319103702371821_n.jpg',
-    href: '/appointments?step=2&service=refinishing&serviceName=Refinishing',
+    href: '/appointments?step=1&service=refinishing&serviceName=Refinishing',
   },
   {
     title: 'Repair & Restoration',
     text: 'Reliable structural and cosmetic restoration handled by skilled technicians.',
     image: '/assets/landing/615157658_1389213549667905_4695629074825690570_n.jpg',
-    href: '/appointments?step=2&service=repair%20and%20restoration&serviceName=Repair%20%26%20Restoration',
+    href: '/appointments?step=1&service=repair%20and%20restoration&serviceName=Repair%20%26%20Restoration',
   },
   {
     title: 'Electronics Upgrades',
     text: 'Pickup, wiring, and hardware electronics upgrades for improved tone and control.',
     image: '/assets/landing/480473076_1131061492149780_4368555505559771502_n.jpg',
-    href: '/appointments?step=2&service=electronics%20upgrades&serviceName=Electronics%20Upgrades',
+    href: '/appointments?step=1&service=electronics%20upgrades&serviceName=Electronics%20Upgrades',
   },
 ]
 
