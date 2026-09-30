@@ -1,9 +1,26 @@
 const { pool } = require('../config/database');
 const { AppError } = require('../middleware/errorHandler');
 const { normalizeRole } = require('../utils/roles');
+const { lockAppointmentCapacity } = require('../middleware/appointmentCapacityLock');
 
 const permissionCache = new Map();
 const CACHE_TTL = 5 * 60 * 1000;
+
+const withAppointmentCapacityLock = async (work) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await lockAppointmentCapacity(client);
+    const result = await work(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+};
 
 async function clearCache(userId) {
   permissionCache.delete(`user_${userId}`);
@@ -384,6 +401,13 @@ async function checkUserPermission(userId, permission) {
 }
 
 async function assignRoleToUser(userId, roleId, assignedBy, expiresAt = null, transactionClient = null) {
+  if (!transactionClient) {
+    return withAppointmentCapacityLock((client) =>
+      assignRoleToUser(userId, roleId, assignedBy, expiresAt, client)
+    );
+  }
+
+  await lockAppointmentCapacity(transactionClient);
   const dbQuery = transactionClient ? transactionClient.query.bind(transactionClient) : pool.query.bind(pool);
 
   const userResult = await dbQuery('SELECT user_id FROM users WHERE user_id = $1', [userId]);
@@ -417,10 +441,10 @@ async function assignRoleToUser(userId, roleId, assignedBy, expiresAt = null, tr
 }
 
 async function removeRoleFromUser(userId, roleId) {
-  const result = await pool.query(
+  const result = await withAppointmentCapacityLock((client) => client.query(
     'DELETE FROM user_roles WHERE user_id = $1 AND role_id = $2 RETURNING *',
     [userId, roleId]
-  );
+  ));
 
   if (result.rows.length === 0) {
     throw new AppError('User does not have this role', 404);
@@ -430,15 +454,14 @@ async function removeRoleFromUser(userId, roleId) {
   return { message: 'Role removed from user' };
 }
 
-async function setUserRoles(userId, roleIds, assignedBy) {
-  const userResult = await pool.query('SELECT user_id FROM users WHERE user_id = $1', [userId]);
-  if (userResult.rows.length === 0) {
-    throw new AppError('User not found', 404);
-  }
+async function setUserRoles(userId, roleIds, assignedBy, transactionClient = null) {
+  const updateRoles = async (client) => {
+    await lockAppointmentCapacity(client);
 
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
+    const userResult = await client.query('SELECT user_id FROM users WHERE user_id = $1', [userId]);
+    if (userResult.rows.length === 0) {
+      throw new AppError('User not found', 404);
+    }
 
     await client.query('DELETE FROM user_roles WHERE user_id = $1', [userId]);
 
@@ -456,9 +479,18 @@ async function setUserRoles(userId, roleIds, assignedBy) {
       }
     }
 
-    await client.query('COMMIT');
     await clearCache(userId);
     return { message: 'User roles updated' };
+  };
+
+  if (transactionClient) return updateRoles(transactionClient);
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const result = await updateRoles(client);
+    await client.query('COMMIT');
+    return result;
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;
@@ -516,12 +548,12 @@ async function hasRole(userId, roleName) {
 }
 
 async function activateUserRole(userId, roleId) {
-  const result = await pool.query(
+  const result = await withAppointmentCapacityLock((client) => client.query(
     `UPDATE user_roles SET is_active = true, expires_at = NULL
      WHERE user_id = $1 AND role_id = $2
      RETURNING *`,
     [userId, roleId]
-  );
+  ));
 
   if (result.rows.length === 0) {
     throw new AppError('User role assignment not found', 404);
@@ -532,12 +564,12 @@ async function activateUserRole(userId, roleId) {
 }
 
 async function deactivateUserRole(userId, roleId, expiresAt = null) {
-  const result = await pool.query(
+  const result = await withAppointmentCapacityLock((client) => client.query(
     `UPDATE user_roles SET is_active = false, expires_at = $3
      WHERE user_id = $1 AND role_id = $2
      RETURNING *`,
     [userId, roleId, expiresAt]
-  );
+  ));
 
   if (result.rows.length === 0) {
     throw new AppError('User role assignment not found', 404);

@@ -6,9 +6,35 @@
 
 const { pool } = require('../config/database');
 const { AppError } = require('../middleware/errorHandler');
+const { lockAppointmentCapacity } = require('../middleware/appointmentCapacityLock');
 
 const NON_BLOCKING_APPOINTMENT_STATUSES = ['cancelled', 'rejected'];
-const MAX_APPOINTMENTS_PER_DAY = 10;
+
+async function getActiveStaffCount(db = pool) {
+  const result = await db.query(
+    `SELECT COUNT(DISTINCT u.user_id)::int AS staff_count
+     FROM users u
+     WHERE u.is_active = true
+       AND u.deleted_at IS NULL
+       AND (
+         EXISTS (
+           SELECT 1
+           FROM user_roles ur
+           JOIN roles r ON r.role_id = ur.role_id
+           WHERE ur.user_id = u.user_id
+             AND r.name = 'staff'
+             AND (ur.is_active = true OR ur.expires_at > now())
+         )
+         OR (
+           u.role::text = 'staff'
+           AND NOT EXISTS (
+             SELECT 1 FROM user_roles ur WHERE ur.user_id = u.user_id
+           )
+         )
+       )`
+  );
+  return Number(result.rows?.[0]?.staff_count || 0);
+}
 
 const HOLIDAYS = [
   '01-01',
@@ -112,13 +138,14 @@ async function assertNoScheduleConflict(client, scheduledAt, excludeAppointmentI
    }
 
    const dayCount = await getActiveAppointmentCountForDate(client, scheduledAt, excludeAppointmentId);
-   if (dayCount >= MAX_APPOINTMENTS_PER_DAY) {
+   const capacity = await getActiveStaffCount(client);
+   if (capacity === 0 || dayCount >= capacity) {
      throw new AppError('Selected date is fully booked', 409);
    }
 
    const params = [scheduledAt];
    let query = `
-     SELECT appointment_id
+     SELECT COUNT(*)::int AS booking_count
      FROM appointments
      WHERE date_trunc('minute', scheduled_at) = date_trunc('minute', $1::timestamptz)
        AND lower(status::text) NOT IN (${NON_BLOCKING_APPOINTMENT_STATUSES.map((_, index) => `$${index + 2}`).join(', ')})
@@ -131,11 +158,9 @@ async function assertNoScheduleConflict(client, scheduledAt, excludeAppointmentI
      query += ` AND appointment_id <> $${params.length}`;
    }
 
-   query += ' LIMIT 1';
-
    const conflictRes = await client.query(query, params);
-   if (conflictRes.rows.length > 0) {
-     throw new AppError('Selected appointment schedule is no longer available', 409);
+   if (Number(conflictRes.rows[0]?.booking_count || 0) >= capacity) {
+     throw new AppError('This time slot is fully booked. Please select another available time.', 409);
    }
  }
 
@@ -212,6 +237,7 @@ exports.createAppointment = async ({ appointment_type = 'service_in_shop', servi
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    await lockAppointmentCapacity(client);
 
     let customerName = '';
     let customerEmail = '';
@@ -409,6 +435,7 @@ exports.updateAppointment = async (appointmentId, updates) => {
 
   try {
     await client.query('BEGIN');
+    await lockAppointmentCapacity(client);
 
     const currentRes = await client.query(
       'SELECT * FROM appointments WHERE appointment_id = $1 FOR UPDATE',
@@ -566,6 +593,8 @@ exports.getUnavailableDates = async () => {
 };
 
 exports.getAvailableDates = async (dateFrom, dateTo) => {
+  const capacity = await getActiveStaffCount(pool);
+  if (capacity === 0) return [];
   const result = await pool.query(
     `SELECT d::date AS date
      FROM generate_series($1::date, $2::date, '1 day'::interval) d
@@ -581,9 +610,17 @@ exports.getAvailableDates = async (dateFrom, dateTo) => {
            AND lower(status::text) NOT IN ('cancelled', 'rejected')
        ) < $3
      ORDER BY d::date ASC`,
-    [dateFrom, dateTo, MAX_APPOINTMENTS_PER_DAY]
+    [dateFrom, dateTo, capacity]
   );
   return result.rows.map(row => row.date);
+};
+
+exports.getAppointmentCapacity = async () => {
+  const activeStaffCount = await getActiveStaffCount(pool);
+  return {
+    active_staff_count: activeStaffCount,
+    appointment_capacity: activeStaffCount,
+  };
 };
 
 exports.addUnavailableDate = async (date, reason, userId) => {
@@ -664,8 +701,9 @@ exports.getAvailableSlots = async (serviceId, date, slotDuration = 30) => {
   const isUnavailable = await this.isDateUnavailable(date);
   if (isUnavailable) return [];
 
+  const capacity = await getActiveStaffCount(pool);
   const activeAppointmentsForDay = await getActiveAppointmentCountForDate(pool, date);
-  if (activeAppointmentsForDay >= MAX_APPOINTMENTS_PER_DAY) return [];
+  if (capacity === 0 || activeAppointmentsForDay >= capacity) return [];
 
   // Get existing appointments for the date
   const startOfDay = new Date(date);
@@ -700,13 +738,13 @@ exports.getAvailableSlots = async (serviceId, date, slotDuration = 30) => {
       slotEnd.setMinutes(slotEnd.getMinutes() + slotDuration);
 
       // Check if slot conflicts with any booked appointment
-      const isBooked = bookedSlots.some(booked =>
+      const overlappingBookings = bookedSlots.filter(booked =>
         (slotStart >= booked.start && slotStart < booked.end) ||
         (slotEnd > booked.start && slotEnd <= booked.end) ||
         (slotStart <= booked.start && slotEnd >= booked.end)
-      );
+      ).length;
 
-      if (!isBooked && slotStart > new Date()) {
+      if (overlappingBookings < capacity && slotStart > new Date()) {
         slots.push({
           start: slotStart.toISOString(),
           end: slotEnd.toISOString(),
@@ -729,8 +767,9 @@ exports.checkAvailability = async (serviceId, scheduledAt, durationMinutes) => {
   const isUnavailable = await this.isDateUnavailable(dateStr);
   if (isUnavailable) return false;
 
+  const capacity = await getActiveStaffCount(pool);
   const activeAppointmentsForDay = await getActiveAppointmentCountForDate(pool, scheduledAt);
-  if (activeAppointmentsForDay >= MAX_APPOINTMENTS_PER_DAY) return false;
+  if (capacity === 0 || activeAppointmentsForDay >= capacity) return false;
 
   const startOfDay = new Date(date);
   startOfDay.setHours(0, 0, 0, 0);
@@ -747,6 +786,7 @@ exports.checkAvailability = async (serviceId, scheduledAt, durationMinutes) => {
   const slotEnd = new Date(slotStart);
   slotEnd.setMinutes(slotEnd.getMinutes() + (durationMinutes || 60));
 
+  let overlappingBookings = 0;
   for (const apt of appointmentsResult.rows) {
     const bookedStart = new Date(apt.scheduled_at);
     const bookedEnd = new Date(
@@ -756,24 +796,26 @@ exports.checkAvailability = async (serviceId, scheduledAt, durationMinutes) => {
     if ((slotStart >= bookedStart && slotStart < bookedEnd) ||
         (slotEnd > bookedStart && slotEnd <= bookedEnd) ||
         (slotStart <= bookedStart && slotEnd >= bookedEnd)) {
-      return false;
+      overlappingBookings += 1;
     }
   }
 
-  return true;
+  return overlappingBookings < capacity;
 };
 
 exports.getDailyAppointmentLoad = async (date, excludeAppointmentId = null) => {
   const day = new Date(date);
   const isUnavailable = await this.isDateUnavailable(day);
   const count = await getActiveAppointmentCountForDate(pool, day, excludeAppointmentId);
+  const capacity = await getActiveStaffCount(pool);
 
   return {
     date: day.toISOString().slice(0, 10),
     active_appointments: count,
-    max_appointments: MAX_APPOINTMENTS_PER_DAY,
+    active_staff_count: capacity,
+    max_appointments: capacity,
     is_unavailable: Boolean(isUnavailable),
-    is_fully_booked: count >= MAX_APPOINTMENTS_PER_DAY,
+    is_fully_booked: capacity === 0 || count >= capacity,
   };
 };
 

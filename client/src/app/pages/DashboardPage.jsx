@@ -394,6 +394,7 @@ export function DashboardPage() {
   const [isResumingProject, setIsResumingProject] = useState(false)
 
   const [myAppointments, setMyAppointments] = useState([])
+  const [appointmentSearch, setAppointmentSearch] = useState('')
   const [appointmentSort, setAppointmentSort] = useState('soonest')
   const [reschedulingAptId, setReschedulingAptId] = useState(null)
   const [rescheduleDate, setRescheduleDate] = useState('')
@@ -1960,7 +1961,44 @@ export function DashboardPage() {
     return apt.customer_phone || apt.user_phone || apt.phone || ''
   }
 
-  const renderAppointmentsContent = () => (
+  const renderAppointmentsContent = () => {
+    const searchTerm = appointmentSearch.trim().toLowerCase()
+    const filteredAppointments = myAppointments.filter((apt) => {
+      if (!searchTerm) return true
+
+      const appointmentDateValues = [apt.scheduled_at, apt.date, apt.created_at]
+        .filter(Boolean)
+        .flatMap((value) => {
+          const date = new Date(value)
+          if (Number.isNaN(date.getTime())) return [String(value)]
+
+          return [
+            String(value),
+            date.toLocaleDateString(),
+            date.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' }),
+            date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          ]
+        })
+      const searchableValues = [
+        apt.reference_code,
+        apt.service_name,
+        apt.service_names,
+        Array.isArray(apt.services) ? apt.services.join(' ') : '',
+        apt.status,
+        apt.location_id,
+        apt.appointment_type,
+        apt.time,
+        getSelectedGuitarLabel(apt),
+        apt.notes,
+        getContactNumber(apt),
+        getAddressLabel(apt),
+        ...appointmentDateValues,
+      ]
+
+      return searchableValues.some((value) => String(value || '').toLowerCase().includes(searchTerm))
+    })
+
+    return (
     <div className="dash-card">
       <div className="appt-header">
         <div>
@@ -1972,7 +2010,7 @@ export function DashboardPage() {
           className="appt-book-btn"
         >
           <Calendar className="w-4 h-4" />
-          Book Appointment
+          Book New Appointment
         </button>
       </div>
 
@@ -1986,23 +2024,40 @@ export function DashboardPage() {
         </div>
       ) : (
         <div className="max-h-[62vh] space-y-4 overflow-y-auto pr-2">
-          <div className="appt-sort-row">
-            <label className="appt-sort-label">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+            <div className="relative flex-1 min-w-0">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
+              <input
+                type="search"
+                value={appointmentSearch}
+                onChange={(event) => setAppointmentSearch(event.target.value)}
+                placeholder="Search appointments..."
+                aria-label="Search appointments"
+                className="appt-search-input"
+              />
+            </div>
+            <label className="appt-sort-label flex items-center gap-2">
               <span>Sort by:</span>
               <select
                 value={appointmentSort}
                 onChange={(e) => setAppointmentSort(e.target.value)}
                 className="appt-sort-select"
               >
-                <option value="soonest">Soonest first</option>
-                <option value="latest">Latest first</option>
+                <option value="soonest">Appointment date: soonest</option>
+                <option value="latest">Appointment date: latest</option>
+                <option value="created_latest">Created date: newest</option>
+                <option value="created_earliest">Created date: oldest</option>
               </select>
             </label>
           </div>
-          {[...myAppointments].sort((a, b) => {
-            const dateA = new Date(a.scheduled_at || a.date || a.created_at || 0)
-            const dateB = new Date(b.scheduled_at || b.date || b.created_at || 0)
-            return appointmentSort === 'soonest' ? dateA - dateB : dateB - dateA
+          {filteredAppointments.length === 0 ? (
+            <p className="py-6 text-center text-sm text-[var(--text-muted)]">No appointments match your search.</p>
+          ) : [...filteredAppointments].sort((a, b) => {
+            const usesCreatedDate = appointmentSort === 'created_latest' || appointmentSort === 'created_earliest'
+            const dateA = new Date(usesCreatedDate ? a.created_at || 0 : a.scheduled_at || a.date || a.created_at || 0)
+            const dateB = new Date(usesCreatedDate ? b.created_at || 0 : b.scheduled_at || b.date || b.created_at || 0)
+            const isAscending = appointmentSort === 'soonest' || appointmentSort === 'created_earliest'
+            return isAscending ? dateA - dateB : dateB - dateA
           }).map(apt => {
             const apptDate = apt.scheduled_at || apt.date;
 
@@ -2195,7 +2250,8 @@ export function DashboardPage() {
         </div>
       )}
     </div>
-  )
+    )
+  }
 
   const renderProjectsContent = () => {
     if (activeProjectView) {
@@ -2250,22 +2306,24 @@ export function DashboardPage() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
             <input
               type="text"
-              placeholder="Search projects..."
+              placeholder="Search by project name or build ID..."
               value={myProjectSearch}
               onChange={(e) => setMyProjectSearch(e.target.value)}
               className="guitar-search"
             />
           </div>
-          <select
-            value={myProjectSort}
-            onChange={(e) => setMyProjectSort(e.target.value)}
-            className="guitar-select"
-          >
-            <option value="updated">Recently Updated</option>
-            <option value="created">Recently Created</option>
-            <option value="name">Project Name</option>
-            <option value="progress">Progress</option>
-          </select>
+          <div className="sm:w-48 sm:flex-none">
+            <select
+              value={myProjectSort}
+              onChange={(e) => setMyProjectSort(e.target.value)}
+              className="guitar-select"
+            >
+              <option value="updated">Recently Updated</option>
+              <option value="created">Recently Created</option>
+              <option value="name">Project Name</option>
+              <option value="progress">Progress</option>
+            </select>
+          </div>
         </div>
 
         {myProjects.length === 0 ? (

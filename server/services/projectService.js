@@ -928,6 +928,7 @@ exports.getAllProjects = async (params = {}) => {
     searchClause = `AND (
       p.title ILIKE $${idx++}
       OR p.project_id::TEXT ILIKE $${idx++}
+      OR p.custom_build_id ILIKE $${idx++}
       OR LOWER(u.first_name || ' ' || u.last_name) ILIKE $${idx++}
       OR LOWER(claim_user.first_name || ' ' || claim_user.last_name) ILIKE $${idx++}
       OR p.status::TEXT ILIKE $${idx++}
@@ -941,7 +942,7 @@ exports.getAllProjects = async (params = {}) => {
           AND pst.title ILIKE $${idx++}
       )
     )`;
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 11; i++) {
       queryParams.push(term);
     }
   }

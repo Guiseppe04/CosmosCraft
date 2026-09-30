@@ -1,6 +1,7 @@
 const bcrypt = require('bcryptjs');
 const { pool } = require('../config/database');
 const rbacService = require('./rbacService');
+const { lockAppointmentCapacity } = require('../middleware/appointmentCapacityLock');
 
 const normalizeAddressValue = (value) => String(value || '')
   .trim()
@@ -16,6 +17,26 @@ const getAddressSignature = (address = {}) => ([
   address.postal_code ?? address.postalZipCode ?? address.postalCode,
   address.country,
 ].map(normalizeAddressValue).join('|'));
+
+const updateAccountActiveStatus = async (userId, isActive) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await lockAppointmentCapacity(client);
+    const result = await client.query(
+      'UPDATE users SET is_active = $1, updated_at = now() WHERE user_id = $2 RETURNING user_id',
+      [isActive, userId]
+    );
+    if (result.rows.length === 0) throw new Error('User not found');
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+  return exports.getUserById(userId);
+};
 
 exports.createOAuthUser = async (userData) => {
   const client = await pool.connect();
@@ -357,13 +378,11 @@ exports.updateUserPhone = async (userId, phone) => {
 };
 
 exports.deactivateAccount = async (userId) => {
-  await pool.query('UPDATE users SET is_active = false, updated_at = now() WHERE user_id = $1', [userId]);
-  return exports.getUserById(userId);
+  return updateAccountActiveStatus(userId, false);
 };
 
 exports.reactivateAccount = async (userId) => {
-  await pool.query('UPDATE users SET is_active = true, updated_at = now() WHERE user_id = $1', [userId]);
-  return exports.getUserById(userId);
+  return updateAccountActiveStatus(userId, true);
 };
 
 exports.listUsers = async (filters = {}, limit = 10, skip = 0) => {

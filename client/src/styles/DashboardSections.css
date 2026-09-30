@@ -37,6 +37,31 @@
   line-height: 1.4 !important;
 }
 
+.appt-book-btn {
+  display: inline-flex !important;
+  flex: 0 0 auto !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 0.5rem !important;
+  min-height: 2.5rem !important;
+  padding: 0.625rem 1rem !important;
+  border: 1px solid var(--gold-primary) !important;
+  border-radius: 0.625rem !important;
+  background: var(--gold-primary) !important;
+  color: var(--text-dark) !important;
+  font-size: 0.875rem !important;
+  font-weight: 600 !important;
+  line-height: 1 !important;
+  white-space: nowrap !important;
+  cursor: pointer !important;
+  transition: background-color 150ms ease, border-color 150ms ease !important;
+}
+
+.appt-book-btn:hover {
+  border-color: var(--gold-secondary) !important;
+  background: var(--gold-secondary) !important;
+}
+
 .dash-card-subtitle,
 .addr-details,
 .appt-field-value,
@@ -170,7 +195,8 @@
 
 .guitar-search,
 .guitar-select,
-.appt-sort-select {
+.appt-sort-select,
+.appt-search-input {
   display: block !important;
   box-sizing: border-box !important;
   color: var(--text-light) !important;
@@ -185,6 +211,16 @@
 .guitar-select {
   width: 100% !important;
   margin-bottom: 0.75rem !important;
+}
+
+.guitar-search,
+.appt-search-input {
+  padding-left: 2.5rem !important;
+}
+
+.appt-search-input {
+  width: 100% !important;
+  margin-bottom: 0 !important;
 }
 
 .appt-field {

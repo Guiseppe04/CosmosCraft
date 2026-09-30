@@ -15,6 +15,7 @@ const router = express.Router();
 // ─── MIDDLEWARE ─────────────────────────────────────────────────────────────
 // All routes require authentication
 router.use(authenticateToken);
+router.get('/capacity', appointmentController.getAppointmentCapacity);
 
 // ─── CREATE APPOINTMENT ─────────────────────────────────────────────────────
 /**

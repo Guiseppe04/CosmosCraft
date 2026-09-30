@@ -18,10 +18,22 @@ export function UsersTab({
   isSuperAdmin,
   changeUserRole,
   toggleUserStatus,
+  appointmentCapacity,
 }) {
   return (
     <motion.div key="users" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
       <div className="p-4 bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl">
+        <div className="mb-4 flex items-center gap-3 border-b border-[var(--border)] pb-4" role="status" aria-live="polite">
+          <Users className="h-5 w-5 shrink-0 text-[var(--gold-primary)]" />
+          <div>
+            <p className="text-sm font-semibold text-white">Appointment capacity</p>
+            <p className="text-xs text-[var(--text-muted)]">
+              {appointmentCapacity
+                ? `${appointmentCapacity.active_staff_count} active staff · ${appointmentCapacity.appointment_capacity} appointments per day`
+                : 'Loading current capacity...'}
+            </p>
+          </div>
+        </div>
         <div className="flex flex-col xl:flex-row xl:items-center gap-3">
           <div className="relative min-w-0 flex-[1.7]">
             <Search className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />

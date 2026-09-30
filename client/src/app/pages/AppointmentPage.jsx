@@ -1752,7 +1752,7 @@
                     )}
                     {!slotsLoading && slotAvailabilityStatus === 'fully_booked' && (
                       <p className="mb-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-300">
-                        Fully Booked: This date has reached the maximum of 5 appointments for the day.
+                        Fully Booked: This date has reached its current appointment capacity.
                       </p>
                     )}
                     {!slotsLoading && slotAvailabilityStatus === 'unavailable' && (

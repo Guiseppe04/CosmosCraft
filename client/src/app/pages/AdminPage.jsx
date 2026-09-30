@@ -146,6 +146,7 @@ export function AdminPage() {
   }, [isAuthenticated, navigate])
 
   const [activeTab, setActiveTab] = useState('dashboard')
+  const [appointmentCapacity, setAppointmentCapacity] = useState(null)
   const [searchQuery, setSearchQuery] = useState('')
   const debouncedSearch = useDebounce(searchQuery, 300)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
@@ -193,6 +194,15 @@ export function AdminPage() {
 
     toastTimersRef.current.set(id, timer)
   }, [])
+
+  const fetchAppointmentCapacity = useCallback(async () => {
+    try {
+      const response = await adminApi.getAppointmentCapacity()
+      setAppointmentCapacity(response.data || null)
+    } catch (error) {
+      showToast(error.message || 'Failed to load appointment capacity', 'error')
+    }
+  }, [showToast])
 
   const dismissToast = useCallback((id) => {
     const timer = toastTimersRef.current.get(id)
@@ -812,6 +822,10 @@ export function AdminPage() {
     loaders[activeTab]?.()
   }, [activeTab]) // run only when switching tabs
 
+  useEffect(() => {
+    if (activeTab === 'users') fetchAppointmentCapacity()
+  }, [activeTab, fetchAppointmentCapacity])
+
    // ── Re-fetch when debounced search changes ───────────────────────────────
    useEffect(() => {
      if (activeTab === 'products') {
@@ -868,6 +882,7 @@ export function AdminPage() {
          'orders': fetchOrders,
          'projects': fetchProjects,
          'services': fetchServices,
+         'users': async () => { await fetchUsers(); await fetchAppointmentCapacity(); },
          'appointments': async () => { await fetchAppointments({ silent: true }); fetchCalendarAppointments(); },
          'inventory': () => fetchInventory({ silent: true }),
          'pos': () => fetchInventory({ silent: true }),
@@ -875,7 +890,7 @@ export function AdminPage() {
           'dashboard': async () => { await fetchOrders(); await fetchProjects(); await fetchAppointments({ silent: true }); fetchCalendarAppointments(); await fetchSalesReport() },
        }
        return map[activeTab]?.()
-     }, [activeTab, fetchProducts, fetchParts, fetchCategories, fetchUsers, fetchOrders, fetchProjects, fetchServices, fetchAppointments, fetchCalendarAppointments, fetchInventory, fetchSalesReport])
+    }, [activeTab, fetchProducts, fetchParts, fetchCategories, fetchUsers, fetchAppointmentCapacity, fetchOrders, fetchProjects, fetchServices, fetchAppointments, fetchCalendarAppointments, fetchInventory, fetchSalesReport])
 
   const pollingEnabled = ['dashboard', 'orders', 'inventory', 'pos', 'projects', 'appointments'].includes(activeTab)
   useSmartPolling(pollingFn, { interval: 5000, maxInterval: 60000, backoffFactor: 1.5, enabled: pollingEnabled })
@@ -1289,6 +1304,7 @@ export function AdminPage() {
         await adminApi.updateUserStatus(userId, willActivate)
         showToast(`User ${willActivate ? 'activated' : 'deactivated'}`)
         fetchUsers()
+        fetchAppointmentCapacity()
       },
     })
   }
@@ -1298,6 +1314,7 @@ export function AdminPage() {
       await adminApi.updateUserRole(userId, newRole)
       showToast(`Role updated to ${newRole.replace('_', ' ')}`)
       fetchUsers()
+      fetchAppointmentCapacity()
     } catch (e) { showToast(e.message, 'error') }
   }
 
@@ -2524,6 +2541,7 @@ export function AdminPage() {
               isSuperAdmin={isSuperAdmin}
               changeUserRole={changeUserRole}
               toggleUserStatus={toggleUserStatus}
+              appointmentCapacity={appointmentCapacity}
             />
           )}
 

@@ -3,6 +3,7 @@ const userService = require('../services/userService');
 const rbacService = require('../services/rbacService');
 const { addAddressSchema, updateAddressSchema, updateProfileSchema, updatePhoneSchema } = require('../utils/validation');
 const { hasRole } = require('../utils/roles');
+const { lockAppointmentCapacity } = require('../middleware/appointmentCapacityLock');
 
 /**
  * Get Current User Profile
@@ -208,19 +209,30 @@ exports.updateUserRole = asyncHandler(async (req, res, next) => {
   const roleRecord = await rbacService.getRoleByName(role);
   if (!roleRecord) throw new AppError('Role not found', 404);
 
-  await rbacService.setUserRoles(userId, [roleRecord.role_id], req.user.user_id);
-
   const { pool } = require('../config/database');
-  const res2 = await pool.query(
-    `UPDATE users SET role = $1, updated_at = now() WHERE user_id = $2 RETURNING user_id, email, role, is_active`,
-    [roleRecord.name, userId]
-  );
-  if (!res2.rows[0]) throw new AppError('User not found', 404);
+  const client = await pool.connect();
+  let updatedUser;
+  try {
+    await client.query('BEGIN');
+    await rbacService.setUserRoles(userId, [roleRecord.role_id], req.user.user_id, client);
+    const result = await client.query(
+      `UPDATE users SET role = $1, updated_at = now() WHERE user_id = $2 RETURNING user_id, email, role, is_active`,
+      [roleRecord.name, userId]
+    );
+    if (!result.rows[0]) throw new AppError('User not found', 404);
+    await client.query('COMMIT');
+    updatedUser = result.rows[0];
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 
   res.status(200).json({
     status: 'success',
     message: 'User role updated successfully',
-    data: { user: res2.rows[0] },
+    data: { user: updatedUser },
   });
 });
 
@@ -236,10 +248,22 @@ exports.updateUserStatus = asyncHandler(async (req, res, next) => {
   }
 
   const { pool } = require('../config/database');
-  const result = await pool.query(
-    `UPDATE users SET is_active = $1, updated_at = now() WHERE user_id = $2 RETURNING user_id, email, role, is_active`,
-    [is_active, userId]
-  );
+  const client = await pool.connect();
+  let result;
+  try {
+    await client.query('BEGIN');
+    await lockAppointmentCapacity(client);
+    result = await client.query(
+      `UPDATE users SET is_active = $1, updated_at = now() WHERE user_id = $2 RETURNING user_id, email, role, is_active`,
+      [is_active, userId]
+    );
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
   if (!result.rows[0]) throw new AppError('User not found', 404);
 
   res.status(200).json({

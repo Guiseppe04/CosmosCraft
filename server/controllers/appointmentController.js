@@ -734,6 +734,15 @@ exports.getAvailableDates = async (req, res, next) => {
   }
 };
 
+exports.getAppointmentCapacity = async (req, res, next) => {
+  try {
+    const capacity = await appointmentService.getAppointmentCapacity();
+    res.json({ status: 'success', data: capacity });
+  } catch (err) {
+    next(err);
+  }
+};
+
 // ─── UNAVAILABLE DATES ───────────────────────────────────────────────────────
 
 /**

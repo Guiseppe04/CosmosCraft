@@ -160,6 +160,7 @@ export const adminApi = {
   assignTeam: (id, userIds) => request(`/api/projects/${id}/team`, { method: 'PUT', body: { user_ids: userIds } }),
 
   // Appointments
+    getAppointmentCapacity: () => request('/api/appointments/capacity'),
   getAppointments: (params = {}) => {
     const qs = new URLSearchParams(params).toString()
     return request(`/api/appointments${qs ? '?' + qs : ''}`)
