@@ -2561,6 +2561,7 @@ export function AdminPage() {
               siteContactInfo={siteContactInfo}
               setSiteContactInfo={setSiteContactInfo}
               saveSiteContactInfo={saveSiteContactInfo}
+              showToast={showToast}
             />
           )}
 
