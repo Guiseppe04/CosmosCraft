@@ -381,5 +381,17 @@ export const adminApi = {
   updateAdminCustomizationFeedbackStatus: feedbackService.updateAdminCustomizationFeedbackStatus,
   deleteAdminProductReview: feedbackService.deleteAdminProductReview,
   deleteAdminCustomizationFeedback: feedbackService.deleteAdminCustomizationFeedback,
+
+  // Audit Logs
+  getAuditLogs: (params = {}) => {
+    const qs = new URLSearchParams(params).toString()
+    return request(`/api/audit-logs${qs ? '?' + qs : ''}`)
+  },
+  getAuditLog: (id) => request(`/api/audit-logs/${id}`),
+  getAuditSummary: (params = {}) => {
+    const qs = new URLSearchParams(params).toString()
+    return request(`/api/audit-logs/summary${qs ? '?' + qs : ''}`)
+  },
+  cleanupOldAuditLogs: (days = 90) => request(`/api/audit-logs/cleanup?days=${days}`, { method: 'DELETE' }),
 }
 

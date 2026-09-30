@@ -71,15 +71,15 @@ export function ProjectsTab({
           <div className="grid gap-3 sm:grid-cols-3">
             <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-3">
               <p className="text-[var(--text-muted)] text-sm">Total</p>
-              <p className="text-white text-lg font-semibold">{visibleProjects.length}</p>
+              <p className="text-white text-lg font-semibold">{projects.length}</p>
             </div>
             <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-3">
               <p className="text-[var(--text-muted)] text-sm">In Progress</p>
-              <p className="text-white text-lg font-semibold">{visibleProjects.filter((project) => project.status === 'in_progress').length}</p>
+              <p className="text-white text-lg font-semibold">{projects.filter((project) => project.status === 'in_progress').length}</p>
             </div>
             <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-3">
               <p className="text-[var(--text-muted)] text-sm">Completed</p>
-              <p className="text-white text-lg font-semibold">{visibleProjects.filter((project) => project.status === 'completed').length}</p>
+              <p className="text-white text-lg font-semibold">{projects.filter((project) => project.status === 'completed').length}</p>
             </div>
           </div>
         </div>
@@ -268,6 +268,7 @@ export function ProjectsTab({
             actionLabel="Create Project"
           />
         ) : (
+          <>
           <div className="grid gap-6 xl:grid-cols-2">
             {visibleProjects.map((project) => {
               const status = String(project.status || 'not_started').toLowerCase()
@@ -379,6 +380,11 @@ export function ProjectsTab({
               )
             })}
           </div>
+          <PaginationBar
+            pagination={projectsPagination}
+            onPageChange={(nextPage) => setProjectPage(nextPage)}
+          />
+          </>
         )
       ) : (
         archivedProjects.length === 0 ? (
@@ -387,6 +393,7 @@ export function ProjectsTab({
             label={debouncedSearch ? 'No archived projects match your search' : 'No archived projects'}
           />
         ) : (
+          <>
           <div className="grid gap-6 xl:grid-cols-2">
             {visibleArchivedProjects.map((project) => {
               const status = String(project.status || 'not_started').toLowerCase()
@@ -488,6 +495,11 @@ export function ProjectsTab({
               )
             })}
           </div>
+          <PaginationBar
+            pagination={archivedProjectsPagination}
+            onPageChange={(nextPage) => setArchivedProjectsPagination((prev) => ({ ...prev, page: nextPage }))}
+          />
+          </>
         )
       )}
     </motion.div>

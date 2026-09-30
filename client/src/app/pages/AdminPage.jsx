@@ -2467,6 +2467,7 @@ export function AdminPage() {
               appointmentBranchAddress={appointmentBranchAddress}
               setAppointmentBranchAddress={setAppointmentBranchAddress}
               saveAppointmentBranchAddress={saveAppointmentBranchAddress}
+              showToast={showToast}
             />
           )}
 

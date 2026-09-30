@@ -1,5 +1,7 @@
-import { motion } from 'motion/react'
-import { Settings, User, MapPin, Save, Info } from 'lucide-react'
+import { useState } from 'react'
+import { motion, AnimatePresence } from 'motion/react'
+import { Settings, User, MapPin, Save, Info, History, ArrowRight, ShieldCheck, Activity } from 'lucide-react'
+import { AuditLogsSection } from '../components/settings/AuditLogsSection'
 
 export function SettingsTab({
   user,
@@ -7,91 +9,179 @@ export function SettingsTab({
   appointmentBranchAddress,
   setAppointmentBranchAddress,
   saveAppointmentBranchAddress,
+  showToast,
+  defaultSubTab = 'general',
 }) {
+  const [activeSubTab, setActiveSubTab] = useState(defaultSubTab)
+
   return (
-    <motion.div key="settings" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* General Settings Section */}
-        <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6">
-          <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-3">
-            <Settings className="w-5 h-5 text-[var(--gold-primary)]" />
-            General Settings
-          </h3>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-semibold text-[var(--text-muted)] mb-2">Dashboard Theme</label>
-              <p className="text-white text-sm">Light mode is the default. You can switch to dark mode using the theme toggle in the top bar.</p>
-            </div>
-          </div>
-        </div>
+    <motion.div key="settings" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+      {/* ── Subtabs Navigation ────────────────────────────────────────────── */}
+      <div className="flex items-center gap-2 p-1.5 bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl w-fit">
+        <button
+          onClick={() => setActiveSubTab('general')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
+            activeSubTab === 'general'
+              ? 'bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] shadow-[0_0_15px_rgba(212,175,55,0.25)]'
+              : 'text-[var(--text-muted)] hover:text-white hover:bg-white/5'
+          }`}
+        >
+          <Settings className="w-4 h-4" />
+          <span>General Settings</span>
+        </button>
 
-        {/* User Account */}
-        <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6">
-          <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-3">
-            <User className="w-5 h-5 text-[var(--gold-primary)]" />
-            Your Account
-          </h3>
-          <div className="space-y-3">
-            <div>
-              <span className="text-[var(--text-muted)] text-sm">Email</span>
-              <p className="text-white font-mono">{user?.email || 'Not available'}</p>
-            </div>
-            <div>
-              <span className="text-[var(--text-muted)] text-sm">Name</span>
-              <p className="text-white font-mono">{user?.firstName && user?.lastName ? `${user.firstName} ${user.lastName}` : user?.firstName || 'Admin'}</p>
-            </div>
-          </div>
-        </div>
-
-        {isSuperAdmin && (
-          <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6">
-            <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-3">
-              <MapPin className="w-5 h-5 text-[var(--gold-primary)]" />
-              Appointment Branch
-            </h3>
-            <p className="text-sm text-[var(--text-muted)] mb-3">
-              This address is shown in the customer appointment flow (Step 3 Location).
-            </p>
-            <textarea
-              value={appointmentBranchAddress}
-              onChange={(e) => setAppointmentBranchAddress(e.target.value)}
-              className="w-full h-24 px-4 py-3 bg-[var(--bg-primary)] text-white border border-[var(--border)] rounded-xl text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]/50"
-              placeholder="Branch address"
-            />
-            <div className="mt-4 flex justify-end">
-              <button
-                onClick={saveAppointmentBranchAddress}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--gold-primary)] text-black font-semibold text-sm hover:opacity-90 transition"
-              >
-                <Save className="w-4 h-4" />
-                Save Branch Address
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* System Information */}
-        <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6">
-          <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-3">
-            <Info className="w-5 h-5 text-[var(--gold-primary)]" />
-            System Information
-          </h3>
-          <div className="space-y-3">
-            <div className="flex justify-between items-center">
-              <span className="text-[var(--text-muted)]">System Version</span>
-              <span className="text-white font-mono">v1.0.0</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-[var(--text-muted)]">Last Updated</span>
-              <span className="text-white font-mono">{new Date().toLocaleDateString()}</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-[var(--text-muted)]">Admin Role</span>
-              <span className="text-white font-mono capitalize">{user?.role?.replace('_', ' ')}</span>
-            </div>
-          </div>
-        </div>
+        <button
+          onClick={() => setActiveSubTab('audit')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
+            activeSubTab === 'audit'
+              ? 'bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] shadow-[0_0_15px_rgba(212,175,55,0.25)]'
+              : 'text-[var(--text-muted)] hover:text-white hover:bg-white/5'
+          }`}
+        >
+          <History className="w-4 h-4" />
+          <span>Audit Trail & Logs</span>
+        </button>
       </div>
+
+      {/* ── Subtab Content ────────────────────────────────────────────────── */}
+      <AnimatePresence mode="wait">
+        {activeSubTab === 'general' ? (
+          <motion.div
+            key="subtab-general"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.2 }}
+            className="grid grid-cols-1 lg:grid-cols-2 gap-6"
+          >
+            {/* General Settings Section */}
+            <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6">
+              <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-3">
+                <Settings className="w-5 h-5 text-[var(--gold-primary)]" />
+                General Settings
+              </h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold text-[var(--text-muted)] mb-2">Dashboard Theme</label>
+                  <p className="text-white text-sm">Light mode is the default. You can switch to dark mode using the theme toggle in the top bar.</p>
+                </div>
+              </div>
+            </div>
+
+            {/* User Account */}
+            <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6">
+              <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-3">
+                <User className="w-5 h-5 text-[var(--gold-primary)]" />
+                Your Account
+              </h3>
+              <div className="space-y-3">
+                <div>
+                  <span className="text-[var(--text-muted)] text-sm">Email</span>
+                  <p className="text-white font-mono">{user?.email || 'Not available'}</p>
+                </div>
+                <div>
+                  <span className="text-[var(--text-muted)] text-sm">Name</span>
+                  <p className="text-white font-mono">{user?.firstName && user?.lastName ? `${user.firstName} ${user.lastName}` : user?.firstName || 'Admin'}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Audit Trail Quick Access Banner */}
+            <div className="bg-gradient-to-br from-[var(--surface-dark)] to-[var(--surface-elevated)] border border-[var(--gold-primary)]/30 rounded-2xl p-6 flex flex-col justify-between relative overflow-hidden group">
+              <div className="absolute -top-12 -right-12 w-40 h-40 bg-[var(--gold-primary)]/10 rounded-full blur-2xl pointer-events-none group-hover:scale-125 transition-transform duration-500" />
+              <div>
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[var(--gold-primary)]/15 text-[var(--gold-primary)] text-xs font-semibold mb-3">
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  <span>Security & Compliance</span>
+                </div>
+                <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-3">
+                  <History className="w-5 h-5 text-[var(--gold-primary)]" />
+                  Audit Trail & System Activity
+                </h3>
+                <p className="text-sm text-[var(--text-muted)] leading-relaxed">
+                  Review complete chronological event logs including order state updates, custom project milestones, refunds, payments, and inventory adjustments.
+                </p>
+              </div>
+
+              <div className="mt-6 flex items-center justify-between pt-4 border-t border-[var(--border)]">
+                <span className="text-xs text-[var(--text-muted)] flex items-center gap-1.5">
+                  <Activity className="w-3.5 h-3.5 text-emerald-400" />
+                  Active logging enabled
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setActiveSubTab('audit')}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-bold text-xs hover:shadow-[0_0_15px_rgba(212,175,55,0.3)] transition-all"
+                >
+                  <span>Open Audit Logs</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+
+            {isSuperAdmin && (
+              <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6">
+                <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-3">
+                  <MapPin className="w-5 h-5 text-[var(--gold-primary)]" />
+                  Appointment Branch
+                </h3>
+                <p className="text-sm text-[var(--text-muted)] mb-3">
+                  This address is shown in the customer appointment flow (Step 3 Location).
+                </p>
+                <textarea
+                  value={appointmentBranchAddress}
+                  onChange={(e) => setAppointmentBranchAddress(e.target.value)}
+                  className="w-full h-24 px-4 py-3 bg-[var(--bg-primary)] text-white border border-[var(--border)] rounded-xl text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]/50"
+                  placeholder="Branch address"
+                />
+                <div className="mt-4 flex justify-end">
+                  <button
+                    onClick={saveAppointmentBranchAddress}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--gold-primary)] text-black font-semibold text-sm hover:opacity-90 transition"
+                  >
+                    <Save className="w-4 h-4" />
+                    Save Branch Address
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* System Information */}
+            <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6">
+              <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-3">
+                <Info className="w-5 h-5 text-[var(--gold-primary)]" />
+                System Information
+              </h3>
+              <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-[var(--text-muted)]">System Version</span>
+                  <span className="text-white font-mono">v1.0.0</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-[var(--text-muted)]">Last Updated</span>
+                  <span className="text-white font-mono">{new Date().toLocaleDateString()}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-[var(--text-muted)]">Admin Role</span>
+                  <span className="text-white font-mono capitalize">{user?.role?.replace('_', ' ')}</span>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        ) : (
+          <motion.div
+            key="subtab-audit"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.2 }}
+          >
+            <AuditLogsSection isSuperAdmin={isSuperAdmin} showToast={showToast} />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   )
 }
+
+export default SettingsTab
