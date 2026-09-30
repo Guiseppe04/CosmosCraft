@@ -878,7 +878,6 @@ export function AdminPage() {
          'products': fetchProducts,
          'guitar-parts': fetchParts,
          'product-categories': fetchCategories,
-         'users': fetchUsers,
          'orders': fetchOrders,
          'projects': fetchProjects,
          'services': fetchServices,

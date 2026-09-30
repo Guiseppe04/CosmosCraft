@@ -12,7 +12,6 @@ import {
 import { PaymentModal } from '../components/PaymentModal.jsx'
 import TermsAndConditionsModal from '../components/TermsAndConditionsModal.jsx'
 import { AddressForm } from '../components/AddressForm.jsx'
-import { SelectableCartItemRow } from '../components/cart/SelectableCartItemRow.jsx'
 import { API, getAuthHeaders } from '../utils/apiConfig'
 import { getCustomBuildSummaryTree } from '../utils/customBuildSummary.js'
 import { Country, State } from 'country-state-city'
@@ -23,7 +22,7 @@ const PHILIPPINES = ALL_COUNTRIES.find(c => c.isoCode === 'PH')
 const OTHER_COUNTRIES = ALL_COUNTRIES.filter(c => c.isoCode !== 'PH')
 const COUNTRIES = PHILIPPINES ? [PHILIPPINES, ...OTHER_COUNTRIES] : ALL_COUNTRIES
 const CUSTOM_BUILD_DOWN_PAYMENT_RATE = 0.5
-const ORDER_TAX_RATE = 0
+const ORDER_TAX_RATE = 0.1
 
 // Stable empty object for the "add new address" modal. Passing a fresh `{}`
 // literal on every render would re-trigger AddressForm's reset effect and wipe
@@ -71,26 +70,108 @@ function CartItemCard({
   onToggleSelect,
 }) {
   const customBuildSummaryTree = isCustomBuild ? getCustomBuildSummaryTree(item) : []
+  const quantity = Math.max(1, Number(item.quantity) || 1)
+  const unitPrice = Number(item.price) || 0
+  const itemTotal = unitPrice * quantity
+  const stock = Number(item.stock)
+  const hasStockValue = Number.isFinite(stock) && stock >= 0
+  const variantLabel = [item.model, item.variantName, item.sku]
+    .find(value => typeof value === 'string' && value.trim()) || item.category || 'Product'
+  const formatPrice = (price) => `₱${price.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
   return (
-    <div className="space-y-3">
-      <SelectableCartItemRow
-        item={item}
-        onUpdateQuantity={onUpdateQuantity}
-        onRemove={onRemove}
-        isSelected={isSelected}
-        onToggleSelect={onToggleSelect}
-        selectionEnabled={selectionEnabled}
-        showQuantityControls={!isCustomBuild && !isBuyNow}
-        showRemove={Boolean(onRemove)}
-      />
+    <div className={`rounded-xl border p-3 transition-colors ${
+      isSelected ? 'border-[var(--gold-primary)]/50 bg-[var(--gold-primary)]/5' : 'border-[var(--border)] bg-[var(--surface-elevated)]/40'
+    }`}>
+      <div className="flex min-w-0 items-start gap-3">
+        {selectionEnabled && (
+          <input
+            type="checkbox"
+            checked={Boolean(isSelected)}
+            onChange={() => onToggleSelect(item.id)}
+            aria-label={`Include ${item.name} in this order`}
+            className="mt-1 h-4 w-4 shrink-0 accent-[var(--gold-primary)]"
+          />
+        )}
+        <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--bg-primary)]">
+          {item.image ? (
+            <img
+              src={item.image}
+              alt={item.name || 'Product'}
+              className="h-full w-full object-cover"
+              onError={(event) => { event.currentTarget.src = '/assets/placeholder.jpg' }}
+            />
+          ) : (
+            <div className="flex h-full items-center justify-center"><Guitar className="h-6 w-6 text-[var(--gold-primary)]" /></div>
+          )}
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="break-words text-sm font-semibold text-[var(--text-light)]">{item.name || 'Product'}</p>
+              <p className="mt-0.5 truncate text-xs text-[var(--text-muted)]">{variantLabel}</p>
+            </div>
+            {onRemove && !isBuyNow && !isCustomBuild && (
+              <button
+                type="button"
+                onClick={() => onRemove(item.id)}
+                aria-label={`Remove ${item.name || 'product'}`}
+                className="-mr-1 -mt-1 shrink-0 rounded-md p-1.5 text-[var(--text-muted)] transition-colors hover:bg-red-500/10 hover:text-red-400"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+
+          <div className="mt-2 flex flex-wrap items-end justify-between gap-2">
+            <div>
+              {quantity > 1 ? (
+                <>
+                  <p className="text-xs text-[var(--text-muted)]">{formatPrice(unitPrice)} × {quantity}</p>
+                  <p className="text-base font-bold text-[var(--text-light)]">{formatPrice(itemTotal)}</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-base font-bold text-[var(--text-light)]">{formatPrice(unitPrice)}</p>
+                  <p className="text-xs text-[var(--text-muted)]">Qty: 1</p>
+                </>
+              )}
+            </div>
+
+            {!isCustomBuild && !isBuyNow && (
+              <div className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-2 py-1">
+                <button
+                  type="button"
+                  onClick={() => onUpdateQuantity(item.id, Math.max(1, quantity - 1))}
+                  disabled={quantity <= 1}
+                  aria-label={`Decrease ${item.name || 'product'} quantity`}
+                  className="p-1 text-[var(--text-muted)] transition-colors hover:text-[var(--gold-primary)] disabled:opacity-30"
+                >
+                  <Minus className="h-3 w-3" />
+                </button>
+                <span className="min-w-5 text-center text-xs font-semibold text-[var(--text-light)]">{quantity}</span>
+                <button
+                  type="button"
+                  onClick={() => onUpdateQuantity(item.id, quantity + 1)}
+                  disabled={hasStockValue && quantity >= stock}
+                  aria-label={`Increase ${item.name || 'product'} quantity`}
+                  className="p-1 text-[var(--text-muted)] transition-colors hover:text-[var(--gold-primary)] disabled:opacity-30"
+                >
+                  <Plus className="h-3 w-3" />
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
 
       {isCustomBuild && customBuildSummaryTree.length > 0 && (
-        <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]/60 p-4">
+        <div className="mt-3 space-y-2 border-t border-[var(--border)] pt-3">
           <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--gold-primary)]">
             Build Tree
           </p>
-          <div className="mt-3 space-y-3">
+          <div className="space-y-2">
             {customBuildSummaryTree.map((branch) => (
               <div key={branch.label} className="pl-4">
                 <p className="text-xs font-semibold text-white">{branch.label}</p>
@@ -149,7 +230,7 @@ function AddressSelectionCard({ addresses, selectedAddressId, onSelectAddress, o
       <div className="p-4">
         {hasError && (
           <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
-            <p className="text-sm text-red-400 font-medium">Please select a shipping address to continue</p>
+            <p className="text-sm text-red-400 font-medium">Select a complete shipping address with a street, city, province or state, and postal code.</p>
           </div>
         )}
 
@@ -408,11 +489,18 @@ function OrderSummaryCard({
 }
 
 function CheckoutSummaryCard({
+  items,
+  selectionEnabled,
+  selectedItemIds,
+  onToggleSelect,
+  onUpdateQuantity,
+  onRemove,
+  onToggleAllItems,
+  allItemsSelected,
+  onClearCart,
   subtotal,
   shippingCost,
-  taxAmount = 0,
   total,
-  fullTotal = total,
   remainingBalance = 0,
   requiresDownPayment = false,
   itemCount,
@@ -429,7 +517,6 @@ function CheckoutSummaryCard({
   const safeSubtotal = Number.isFinite(Number(subtotal)) ? Number(subtotal) : 0
   const safeShippingCost = Number.isFinite(Number(shippingCost)) ? Number(shippingCost) : 0
   const safeTotal = Number.isFinite(Number(total)) ? Number(total) : 0
-  const safeFullTotal = Number.isFinite(Number(fullTotal)) ? Number(fullTotal) : safeTotal
   const safeRemainingBalance = Number.isFinite(Number(remainingBalance)) ? Number(remainingBalance) : 0
   const safeMonthlyPayment = Number.isFinite(Number(monthlyPayment)) ? Number(monthlyPayment) : 0
   const safeItemCount = Number.isFinite(Number(itemCount)) ? Number(itemCount) : 0
@@ -442,6 +529,35 @@ function CheckoutSummaryCard({
         <h2 className="text-xl font-bold text-[var(--text-light)]">Order Summary</h2>
       </div>
 
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] pb-3">
+          <p className="text-sm font-semibold text-[var(--text-light)]">Products</p>
+          {selectionEnabled && (
+            <div className="flex items-center gap-3 text-xs">
+              <button type="button" onClick={onToggleAllItems} className="font-medium text-[var(--gold-primary)] hover:text-[var(--text-light)]">
+                {allItemsSelected ? 'Clear Selection' : 'Select All'}
+              </button>
+              <button type="button" onClick={onClearCart} className="font-medium text-red-400 hover:text-red-300">
+                Clear Cart
+              </button>
+            </div>
+          )}
+        </div>
+        {items.map((item) => (
+          <CartItemCard
+            key={item.id}
+            item={item}
+            onUpdateQuantity={onUpdateQuantity}
+            onRemove={onRemove}
+            isCustomBuild={isCustomBuildItem(item)}
+            isBuyNow={!selectionEnabled && !isCustomBuildItem(item)}
+            selectionEnabled={selectionEnabled}
+            isSelected={selectedItemIds.includes(String(item.id))}
+            onToggleSelect={onToggleSelect}
+          />
+        ))}
+      </div>
+
       <div className="space-y-3 border-t border-[var(--border)] pt-4">
         <div className="flex justify-between text-sm">
           <span className="text-[var(--text-muted)]">Subtotal ({safeItemCount} items)</span>
@@ -452,10 +568,6 @@ function CheckoutSummaryCard({
           <span className={`${safeShippingCost === 0 ? 'text-green-400' : 'text-[var(--text-light)]'}`}>
             {safeShippingCost === 0 ? 'Free' : `PHP ${safeShippingCost.toLocaleString('en-PH')}`}
           </span>
-        </div>
-        <div className="flex justify-between text-sm">
-          <span className="text-[var(--text-muted)]">Full Order Total</span>
-          <span className="text-[var(--text-light)]">PHP {safeFullTotal.toLocaleString('en-PH', { maximumFractionDigits: 2 })}</span>
         </div>
       </div>
 
@@ -941,8 +1053,20 @@ export function CheckoutPage() {
       setSelectionError(true)
       return
     }
-    if (!selectedAddressId) {
+    const selectedAddress = uniqueAddresses.find(address => address.address_id === selectedAddressId)
+    const requiredAddressFields = [
+      selectedAddress?.street_line1 ?? selectedAddress?.street ?? selectedAddress?.line1,
+      selectedAddress?.city,
+      selectedAddress?.province ?? selectedAddress?.stateProvince,
+      selectedAddress?.postal_code ?? selectedAddress?.postalZipCode ?? selectedAddress?.postalCode,
+      selectedAddress?.country ?? selectedAddress?.country_code,
+    ]
+    if (!selectedAddressId || requiredAddressFields.some(value => !String(value || '').trim())) {
       setAddressError(true)
+      return
+    }
+    if (!['standard', 'express'].includes(shippingMethod)) {
+      setOrderError('Please select a valid shipping method.')
       return
     }
     if (!acceptedTerms) {
@@ -1181,7 +1305,7 @@ export function CheckoutPage() {
     navigate('/dashboard', { state: { section: 'purchases' } })
   }
 
-  const handleRemove = (id, qty) => updateQuantity(id, -qty)
+  const handleRemove = (id) => removeFromCart(id)
 
   const hasNoAddresses = uniqueAddresses.length === 0
 
@@ -1216,80 +1340,8 @@ export function CheckoutPage() {
             </motion.div>
           )}
 
-          <div className="grid lg:grid-cols-12 gap-6 lg:gap-8">
-            {/* Left Column - Cart & Details */}
-            <div className="lg:col-span-7 space-y-6">
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6"
-              >
-                <div className="flex items-center justify-between mb-5">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-[var(--gold-primary)]/10 flex items-center justify-center">
-                      <ShoppingCart className="w-5 h-5 text-[var(--gold-primary)]" />
-                    </div>
-                    <div>
-                      <h2 className="text-xl font-bold text-white">Your Cart</h2>
-                      {!isCustomBuild && !isBuyNow && (
-                        <p className="text-xs text-[var(--text-muted)]">
-                          {itemCount} of {totalCartItemCount} items selected for checkout
-                        </p>
-                      )}
-                    </div>
-                    <span className="px-2.5 py-0.5 text-xs font-medium bg-[var(--gold-primary)]/20 text-[var(--gold-primary)] rounded-full">
-                      {itemCount} {itemCount === 1 ? 'item' : 'items'}
-                    </span>
-                  </div>
-                  {!isCustomBuild && !isBuyNow && (
-                    <button
-                      type="button"
-                      onClick={handleToggleAllItems}
-                      className="text-sm font-medium text-[var(--gold-primary)] hover:text-white transition-colors"
-                    >
-                      {allSelectableItemsSelected ? 'Clear Selection' : 'Select All'}
-                    </button>
-                  )}
-                </div>
-
-                {(selectionError || (!hasSelectedItems && !isCustomBuild && !isBuyNow)) && (
-                  <div className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3">
-                    <p className="text-sm font-medium text-red-400">Select at least one item to continue with checkout.</p>
-                  </div>
-                )}
-
-                <div className="flex flex-col gap-3">
-                  {baseCheckoutItems.map((item) => (
-                    <CartItemCard
-                      key={item.id}
-                      item={item}
-                      onUpdateQuantity={updateQuantity}
-                      onRemove={handleRemove}
-                      isCustomBuild={isCustomBuildItem(item)}
-                      isBuyNow={isBuyNow}
-                      selectionEnabled={!isCustomBuild && !isBuyNow}
-                      isSelected={activeSelectedItemIds.includes(String(item.id))}
-                      onToggleSelect={handleToggleItemSelection}
-                    />
-                  ))}
-                </div>
-
-                <div className="mt-6 pt-5 border-t border-[var(--border)] flex items-center justify-between">
-                  <Link to="/shop" className="text-sm font-medium text-[var(--text-muted)] hover:text-white transition-colors flex items-center gap-2">
-                    <ArrowLeft className="w-4 h-4" />
-                    Continue Shopping
-                  </Link>
-                  {!isCustomBuild && !isBuyNow && (
-                    <button 
-                      onClick={() => { clearCart(); navigate('/shop'); }}
-                      className="px-5 py-2.5 bg-red-500/10 text-red-500 font-semibold rounded-lg hover:bg-red-500 hover:text-white transition-all"
-                    >
-                      Clear Cart
-                    </button>
-                  )}
-                </div>
-              </motion.div>
-
+          <div className="grid min-w-0 gap-6 lg:grid-cols-12 lg:gap-8">
+            <div className="min-w-0 space-y-6 lg:col-span-7">
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -1308,6 +1360,14 @@ export function CheckoutPage() {
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.15 }}
+              >
+                <OrderNotesCard value={orderNotes} onChange={setOrderNotes} />
+              </motion.div>
+
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.2 }}
               >
                 <ShippingSelector
@@ -1316,32 +1376,28 @@ export function CheckoutPage() {
                 />
               </motion.div>
 
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3 }}
-              >
-                <OrderNotesCard
-                  value={orderNotes}
-                  onChange={setOrderNotes}
-                />
-              </motion.div>
             </div>
 
             {/* Right Column - Order Summary */}
-            <div className="lg:col-span-5">
+            <div className="min-w-0 lg:col-span-5">
               <motion.div
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
                 className="sticky top-24"
               >
                 <CheckoutSummaryCard
+                  items={baseCheckoutItems}
+                  selectionEnabled={!isCustomBuild && !isBuyNow}
+                  selectedItemIds={activeSelectedItemIds}
+                  onToggleSelect={handleToggleItemSelection}
+                  onUpdateQuantity={updateQuantity}
+                  onRemove={handleRemove}
+                  onToggleAllItems={handleToggleAllItems}
+                  allItemsSelected={allSelectableItemsSelected}
+                  onClearCart={() => { clearCart(); navigate('/shop'); }}
                   subtotal={subtotal}
                   shippingCost={shippingCost}
-                  taxAmount={taxAmount}
-                  
                   total={total}
-                  fullTotal={fullPaymentTotal}
                   remainingBalance={remainingBalance}
                   requiresDownPayment={hasSelectedCustomBuild}
                   itemCount={itemCount}
