@@ -1473,6 +1473,59 @@ export function SalesReportTab({ salesReport, categories = [] }) {
     setCustomerSearch("");
   };
 
+  const exportCustomerPreview = () => {
+    if (customerGroups.length === 0) return;
+
+    const rows = [[
+      CUSTOMER_GROUP_LABELS[customerFilters.group_by] || "Category / Group",
+      "Customer",
+      "Orders",
+      "Total Sales",
+      "Last Purchase",
+    ]];
+
+    customerGroups.forEach((group) => {
+      const groupLabel = customerFilters.group_by === "channel"
+        ? CUSTOMER_CHANNEL_LABELS[group.name] || group.name
+        : group.name;
+
+      group.customers.forEach((customer) => {
+        rows.push([
+          groupLabel,
+          customer.customer_name,
+          Number(customer.orders) || 0,
+          Number(customer.total_sales) || 0,
+          customer.last_purchase_date ? format(new Date(customer.last_purchase_date), "MMM d, yyyy") : "",
+        ]);
+      });
+
+      rows.push([
+        groupLabel,
+        `Subtotal · ${group.customers.length} customers`,
+        group.totalOrders,
+        group.totalSales,
+        "",
+      ]);
+    });
+
+    const worksheet = XLSX.utils.aoa_to_sheet(rows);
+    worksheet["!cols"] = [{ wch: 24 }, { wch: 34 }, { wch: 14 }, { wch: 18 }, { wch: 18 }];
+    worksheet["!autofilter"] = {
+      ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: rows.length - 1, c: 4 } }),
+    };
+    worksheet["!views"] = [{ state: "frozen", ySplit: 1, xSplit: 0, topLeftCell: "A2", activeCell: "A2" }];
+    for (let rowIndex = 1; rowIndex < rows.length; rowIndex += 1) {
+      const ordersCell = worksheet[XLSX.utils.encode_cell({ r: rowIndex, c: 2 })];
+      const salesCell = worksheet[XLSX.utils.encode_cell({ r: rowIndex, c: 3 })];
+      if (ordersCell) ordersCell.z = EXCEL_FMTS.int;
+      if (salesCell) salesCell.z = EXCEL_FMTS.currency;
+    }
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Sales Preview");
+    XLSX.writeFile(workbook, `Sales_Preview_${customerFilters.group_by}_${format(new Date(), "yyyy-MM-dd")}.xlsx`);
+  };
+
   const handleExportExcel = async () => {
     if (!salesReport) return;
     try {
@@ -1624,7 +1677,7 @@ export function SalesReportTab({ salesReport, categories = [] }) {
                 {dateLabel} &middot; Generated on {new Date().toLocaleDateString("en-PH")}
               </p>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
+            {!isSalesPreview && <div className="flex flex-wrap items-center gap-2">
               <button
                 onClick={handleExportExcel}
                 disabled={isExporting}
@@ -1640,7 +1693,7 @@ export function SalesReportTab({ salesReport, categories = [] }) {
                 <Printer className="w-4 h-4" />
                 Print Report
               </button>
-            </div>
+            </div>}
           </div>
 
           {/* ── Report View Toggle ── */}
@@ -1674,6 +1727,15 @@ export function SalesReportTab({ salesReport, categories = [] }) {
                     aria-label="Search customers"
                     className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-[var(--text-light)] focus:border-[var(--gold-primary)] focus:outline-none"
                   />
+                  <button
+                    type="button"
+                    onClick={exportCustomerPreview}
+                    disabled={customerLoading || customerGroups.length === 0}
+                    className="inline-flex h-10 items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-3 text-sm font-semibold text-[var(--text-light)] transition-colors hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <Download className="h-4 w-4" />
+                    Export Excel
+                  </button>
                   <div className="relative">
                     <button
                       type="button"
@@ -1924,6 +1986,8 @@ export function SalesReportTab({ salesReport, categories = [] }) {
           </div>
           )}
 
+          {!isSalesPreview && (
+          <>
           {/* ── Channel Analysis ── */}
           <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl overflow-hidden">
             <div className="px-5 py-4 border-b border-[var(--border)]">
@@ -2449,6 +2513,8 @@ export function SalesReportTab({ salesReport, categories = [] }) {
               )}
             </div>
           </div>
+          </>
+          )}
 
         </div>
       ) : (
