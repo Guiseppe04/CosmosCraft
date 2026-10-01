@@ -181,21 +181,21 @@ export default function UnavailableDatesManager({
         onClick={onClose}
       >
         <div
-          className="w-full max-w-[460px] max-h-[92vh] overflow-y-auto rounded-[28px] bg-[#413b3b] border border-white/10 shadow-2xl"
+          className="w-full max-w-[460px] max-h-[92vh] overflow-y-auto rounded-[28px] border border-[var(--border)] bg-[var(--surface-dark)] text-[var(--text-light)] shadow-2xl"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
-          <div className="sticky top-0 z-10 bg-[#413b3b] border-b border-white/10 px-4 py-4 sm:px-6">
+          <div className="sticky top-0 z-10 border-b border-[var(--border)] bg-[var(--surface-dark)] px-4 py-4 sm:px-6">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-[31px] leading-none sm:text-[32px] font-semibold text-white">Unavailable Dates</h2>
-                <p className="text-[#d4d0d0] text-sm mt-2">
+                <h2 className="text-[31px] leading-none font-semibold text-[var(--text-light)] sm:text-[32px]">Unavailable Dates</h2>
+                <p className="mt-2 text-sm text-[var(--text-muted)]">
                   Manage dates when appointments cannot be booked
                 </p>
               </div>
               <button
                 onClick={onClose}
-                className="p-2.5 rounded-2xl border border-white/10 bg-white/5 text-[#d1cbcb] hover:bg-white/10 hover:text-white transition-colors"
+                className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] p-2.5 text-[var(--text-muted)] transition-colors hover:border-[var(--gold-primary)] hover:text-[var(--text-light)]"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -208,38 +208,38 @@ export default function UnavailableDatesManager({
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
               <div className="flex items-center gap-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 px-3 py-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
-                <span className="text-emerald-300">Available</span>
+                <span className="text-[var(--text-muted)]">Available</span>
               </div>
               <div className="flex items-center gap-2 rounded-xl bg-red-500/10 border border-red-500/20 px-3 py-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-red-400" />
-                <span className="text-red-300">Unavailable</span>
+                <span className="text-[var(--text-muted)]">Unavailable</span>
               </div>
               <div className="flex items-center gap-2 rounded-xl bg-slate-400/10 border border-slate-400/20 px-3 py-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-slate-300" />
-                <span className="text-slate-200">Holiday</span>
+                <span className="text-[var(--text-muted)]">Holiday</span>
               </div>
-              <div className="flex items-center gap-2 rounded-xl bg-white/5 border border-white/10 px-3 py-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-white/30" />
-                <span className="text-[#b7b0b0]">Sunday</span>
+              <div className="flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-3 py-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-[var(--text-muted)]/40" />
+                <span className="text-[var(--text-muted)]">Sunday</span>
               </div>
             </div>
 
             {/* Calendar */}
-            <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-4 sm:p-5">
+            <div className="rounded-[24px] border border-[var(--border)] bg-[var(--bg-primary)] p-4 sm:p-5">
               {/* Month Navigation */}
               <div className="flex items-center justify-between mb-6">
                 <button
                   onClick={handlePrevMonth}
-                  className="p-2 rounded-xl border border-white/10 bg-white/5 text-[#d1cbcb] hover:bg-white/10 hover:text-white transition-colors"
+                  className="rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] p-2 text-[var(--text-muted)] transition-colors hover:border-[var(--gold-primary)] hover:text-[var(--text-light)]"
                 >
                   <ChevronLeft className="w-5 h-5" />
                 </button>
-                <h3 className="text-lg font-semibold text-white">
+                <h3 className="text-lg font-semibold text-[var(--text-light)]">
                   {format(currentMonth, 'MMMM yyyy')}
                 </h3>
                 <button
                   onClick={handleNextMonth}
-                  className="p-2 rounded-xl border border-white/10 bg-white/5 text-[#d1cbcb] hover:bg-white/10 hover:text-white transition-colors"
+                  className="rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] p-2 text-[var(--text-muted)] transition-colors hover:border-[var(--gold-primary)] hover:text-[var(--text-light)]"
                 >
                   <ChevronRight className="w-5 h-5" />
                 </button>
@@ -248,7 +248,7 @@ export default function UnavailableDatesManager({
               {/* Day Headers */}
               <div className="grid grid-cols-7 gap-1 mb-2">
                 {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-                  <div key={day} className="text-center text-[11px] uppercase tracking-wider text-[#bdb5b5] py-2">
+                  <div key={day} className="py-2 text-center text-[11px] uppercase tracking-wider text-[var(--text-muted)]">
                     {day}
                   </div>
                 ))}
@@ -274,7 +274,7 @@ export default function UnavailableDatesManager({
                           ? 'border-slate-600/25 bg-slate-700/20 opacity-70'
                           : status.type === 'unavailable'
                             ? 'border-red-500/30 bg-red-500/10'
-                            : 'border-white/15 bg-[#595252] hover:border-white/30'
+                            : 'border-[var(--border)] bg-[var(--surface-elevated)] hover:border-[var(--gold-primary)]'
 
                   return (
                     <button
@@ -282,8 +282,8 @@ export default function UnavailableDatesManager({
                       onClick={() => handleDateClick(date)}
                       disabled={status.disabled}
                       className={`h-10 rounded-lg border text-sm font-medium transition-all ${cellClasses} ${
-                        status.disabled ? 'cursor-not-allowed' : 'cursor-pointer hover:bg-white/[0.08]'
-                      } ${status.type === 'holiday' || status.type === 'sunday' ? 'text-[#d0d4db]' : 'text-white'}`}
+                        status.disabled ? 'cursor-not-allowed' : 'cursor-pointer hover:bg-[var(--surface-dark)]'
+                      } ${status.type === 'holiday' || status.type === 'sunday' || status.type === 'past' ? 'text-[var(--text-muted)]' : 'text-[var(--text-light)]'}`}
                     >
                       {format(date, 'd')}
                     </button>
@@ -293,10 +293,10 @@ export default function UnavailableDatesManager({
             </div>
 
             {/* Unavailable Dates List */}
-            <div className="rounded-[24px] border border-white/10 bg-white/[0.03] p-5">
-              <h3 className="text-lg font-semibold text-white mb-4">Marked Unavailable</h3>
+            <div className="rounded-[24px] border border-[var(--border)] bg-[var(--bg-primary)] p-5">
+              <h3 className="mb-4 text-lg font-semibold text-[var(--text-light)]">Marked Unavailable</h3>
               {unavailableDates.length === 0 ? (
-                <p className="text-[#bfb8b8] text-center py-10">
+                <p className="py-10 text-center text-[var(--text-muted)]">
                   No dates have been marked as unavailable.
                 </p>
               ) : (
@@ -313,7 +313,7 @@ export default function UnavailableDatesManager({
                             <Calendar className="w-4 h-4 text-red-400" />
                           </div>
                           <div>
-                            <p className="text-white font-medium">
+                            <p className="font-medium text-[var(--text-light)]">
                               {format(dateObj, 'MMMM d, yyyy')}
                             </p>
                             {date.reason && (
@@ -357,7 +357,7 @@ export default function UnavailableDatesManager({
               className="w-full max-w-md rounded-3xl border border-[var(--border)] bg-[var(--bg-primary)] p-6"
               onClick={(e) => e.stopPropagation()}
             >
-              <h3 className="text-xl font-semibold text-white mb-2">
+              <h3 className="mb-2 text-xl font-semibold text-[var(--text-light)]">
                 {unavailableSet.has(format(selectedDate, 'yyyy-MM-dd')) 
                   ? 'Remove Unavailable Date' 
                   : 'Mark Date as Unavailable'}
@@ -373,7 +373,7 @@ export default function UnavailableDatesManager({
                     type="text"
                     value={reason}
                     onChange={(e) => setReason(e.target.value)}
-                    className="w-full px-4 py-3 rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] text-white focus:border-[var(--gold-primary)] focus:outline-none"
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] px-4 py-3 text-[var(--text-light)] placeholder:text-[var(--text-muted)] focus:border-[var(--gold-primary)] focus:outline-none"
                     placeholder="e.g., Staff training, Maintenance"
                   />
                 </div>

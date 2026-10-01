@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { Calendar, ChevronLeft, ChevronRight, Clock } from 'lucide-react'
-import { format } from 'date-fns'
+import { addDays, addWeeks, format, startOfWeek, subDays, subMonths, subYears } from 'date-fns'
 
 const DEFAULT_HOLIDAYS = [
   '2026-01-01',
@@ -191,6 +191,195 @@ function TimeGrid({ date, appointments = [], onSlotClick, onAppointmentClick, is
   )
 }
 
+const WEEK_STATUS_OPTIONS = [
+  ['all', 'All statuses'],
+  ['pending', 'Pending'],
+  ['confirmed', 'Confirmed'],
+  ['approved', 'Approved'],
+  ['in_progress', 'In Progress'],
+  ['ready_for_pickup', 'Ready for Pickup'],
+  ['completed', 'Completed'],
+  ['cancelled', 'Cancelled'],
+  ['no_show', 'No Show'],
+]
+
+const WEEK_STATUS_STYLES = {
+  pending: 'border-amber-400/60 bg-amber-500/20 text-amber-100',
+  confirmed: 'border-sky-400/60 bg-sky-500/20 text-sky-100',
+  approved: 'border-sky-400/60 bg-sky-500/20 text-sky-100',
+  in_progress: 'border-violet-400/60 bg-violet-500/20 text-violet-100',
+  ready_for_pickup: 'border-cyan-400/60 bg-cyan-500/20 text-cyan-100',
+  completed: 'border-emerald-400/60 bg-emerald-500/20 text-emerald-100',
+  cancelled: 'border-rose-400/60 bg-rose-500/20 text-rose-100',
+  no_show: 'border-orange-400/60 bg-orange-500/20 text-orange-100',
+}
+
+function getAssignedStaff(appointment) {
+  return appointment.staff_name
+    || appointment.assigned_staff_name
+    || appointment.staff?.name
+    || appointment.assigned_staff?.name
+    || ''
+}
+
+function AdminWeekCalendar({ appointments, unavailableDates = [], onAppointmentClick, onMonthView }) {
+  const [weekOffset, setWeekOffset] = useState(0)
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [staffFilter, setStaffFilter] = useState('all')
+  const [summaryRange, setSummaryRange] = useState('week')
+  const weekStart = startOfWeek(addWeeks(new Date(), weekOffset), { weekStartsOn: 1 })
+  const weekDays = Array.from({ length: 6 }, (_, index) => addDays(weekStart, index))
+  const staffNames = [...new Set(appointments.map(getAssignedStaff).filter(Boolean))].sort()
+  const unavailableSet = new Set(unavailableDates.map((entry) => toISODate(entry?.date || entry)).filter(Boolean))
+  const now = new Date()
+  const summaryStart = {
+    week: subDays(now, 6),
+    month: subMonths(now, 1),
+    year: subYears(now, 1),
+  }[summaryRange]
+  summaryStart.setHours(0, 0, 0, 0)
+  const summaryRangeLabel = { week: 'last 7 days', month: 'last month', year: 'last year' }[summaryRange]
+  const recentAppointments = appointments.filter((appointment) => {
+    const date = new Date(appointment.scheduled_at || appointment.date)
+    return !Number.isNaN(date.getTime()) && date >= summaryStart && date <= now
+  })
+  const completedCount = recentAppointments.filter((appointment) => appointment.status === 'completed').length
+  const noShowCount = recentAppointments.filter((appointment) => appointment.status === 'no_show').length
+
+  const appointmentsForDay = (date) => appointments
+    .filter((appointment) => {
+      const dateKey = toISODate(appointment.scheduled_at || appointment.date)
+      const isMatchingDay = dateKey === formatLocalISO(date)
+      const isMatchingStatus = statusFilter === 'all' || appointment.status === statusFilter
+      const staffName = getAssignedStaff(appointment)
+      const isMatchingStaff = staffFilter === 'all' || staffName === staffFilter
+      return isMatchingDay && isMatchingStatus && isMatchingStaff
+    })
+    .sort((left, right) => new Date(left.scheduled_at || left.date) - new Date(right.scheduled_at || right.date))
+
+  return (
+    <section className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] shadow-xl">
+      <header className="flex flex-wrap items-center justify-between gap-4 border-b border-[var(--border)] px-5 py-4">
+        <div>
+          <h3 className="text-lg font-semibold text-[var(--text-light)]">Appointment schedule</h3>
+          <p className="mt-1 text-sm text-[var(--text-muted)]">{format(weekStart, 'MMMM d')} - {format(weekDays[5], 'MMMM d, yyyy')}</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" onClick={() => setWeekOffset(0)} className="rounded-lg border border-[var(--border)] px-3 py-2 text-sm text-[var(--text-light)] transition hover:border-[var(--gold-primary)]">Today</button>
+          <div className="flex overflow-hidden rounded-lg border border-[var(--border)]">
+            <button type="button" aria-label="Previous week" onClick={() => setWeekOffset((offset) => offset - 1)} className="p-2.5 text-[var(--text-light)] transition hover:bg-[var(--surface-elevated)]"><ChevronLeft className="h-4 w-4" /></button>
+            <button type="button" aria-label="Next week" onClick={() => setWeekOffset((offset) => offset + 1)} className="border-l border-[var(--border)] p-2.5 text-[var(--text-light)] transition hover:bg-[var(--surface-elevated)]"><ChevronRight className="h-4 w-4" /></button>
+          </div>
+          <div className="flex overflow-hidden rounded-lg border border-[var(--border)] p-1 text-sm">
+            <span className="rounded-md bg-[var(--gold-primary)] px-3 py-1.5 font-semibold text-[var(--text-dark)]">Week</span>
+            <button type="button" onClick={onMonthView} className="px-3 py-1.5 text-[var(--text-muted)] transition hover:text-[var(--text-light)]">Month</button>
+          </div>
+        </div>
+      </header>
+
+      <div className="border-b border-[var(--border)] p-4">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <span className="text-sm font-medium text-[var(--text-muted)]">Appointment insights</span>
+          <select aria-label="Summary date range" value={summaryRange} onChange={(event) => setSummaryRange(event.target.value)} className="rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] px-3 py-2 text-sm text-[var(--text-light)]">
+            <option value="week">Last 7 days</option>
+            <option value="month">Last month</option>
+            <option value="year">Last year</option>
+          </select>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] p-4">
+          <p className="text-xs font-medium text-[var(--text-muted)]">Total appointments · {summaryRangeLabel}</p>
+          <p className="mt-2 text-2xl font-semibold text-[var(--text-light)]">{recentAppointments.length}</p>
+        </div>
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] p-4">
+          <p className="text-xs font-medium text-[var(--text-muted)]">Completed · {summaryRangeLabel}</p>
+          <p className="mt-2 text-2xl font-semibold text-emerald-300">{completedCount}</p>
+        </div>
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] p-4">
+          <p className="text-xs font-medium text-[var(--text-muted)]">No-shows · {summaryRangeLabel}</p>
+          <p className="mt-2 text-2xl font-semibold text-amber-200">{noShowCount}</p>
+        </div>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-end gap-2 border-b border-[var(--border)] px-4 py-3">
+        <select aria-label="Filter by status" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] px-3 py-2 text-sm text-[var(--text-light)]">
+          {WEEK_STATUS_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+        </select>
+        {staffNames.length > 0 && (
+          <select aria-label="Filter by staff" value={staffFilter} onChange={(event) => setStaffFilter(event.target.value)} className="rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] px-3 py-2 text-sm text-[var(--text-light)]">
+            <option value="all">All staff</option>
+            {staffNames.map((name) => <option key={name} value={name}>{name}</option>)}
+          </select>
+        )}
+      </div>
+
+      <div className="overflow-x-auto">
+        <div className="min-w-[820px]">
+          <div className="grid grid-cols-[64px_repeat(6,minmax(0,1fr))] border-b border-[var(--border)]">
+            <div className="border-r border-[var(--border)] p-3 text-[10px] text-[var(--text-muted)]">GMT+8</div>
+            {weekDays.map((date) => {
+              const dateKey = formatLocalISO(date)
+              const isUnavailable = unavailableSet.has(dateKey)
+              return (
+              <div key={dateKey} className={`border-r border-[var(--border)] px-2 py-3 text-center last:border-r-0 ${isUnavailable ? 'bg-amber-500/10' : dateKey === formatLocalISO(new Date()) ? 'bg-[var(--gold-primary)]/10' : ''}`}>
+                <div className="text-[10px] font-semibold uppercase text-[var(--text-muted)]">{format(date, 'EEE')}</div>
+                <div className="mt-1 text-sm font-semibold text-[var(--text-light)]">{format(date, 'd')}</div>
+                {isUnavailable && <span className="mt-1 inline-block rounded bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-semibold text-amber-200">Unavailable</span>}
+              </div>
+              )
+            })}
+          </div>
+          <div className="grid grid-cols-[64px_repeat(6,minmax(0,1fr))]">
+            <div className="relative border-r border-[var(--border)]">
+              {Array.from({ length: 9 }, (_, index) => (
+                <div key={index} className="h-[72px] border-b border-[var(--border)] px-2 pt-1 text-[10px] text-[var(--text-muted)]">
+                  {format(new Date(2000, 0, 1, 9 + index), 'h:mm a')}
+                </div>
+              ))}
+            </div>
+            {weekDays.map((date) => {
+              const dayAppointments = appointmentsForDay(date)
+              return (
+                <div key={formatLocalISO(date)} className="relative border-r border-[var(--border)] last:border-r-0">
+                  {Array.from({ length: 9 }, (_, index) => <div key={index} className={`h-[72px] border-b border-[var(--border)] ${unavailableSet.has(formatLocalISO(date)) ? 'bg-amber-500/[0.04]' : ''}`} />)}
+                  {dayAppointments.map((appointment) => {
+                    const scheduledAt = new Date(appointment.scheduled_at || appointment.date)
+                    const minutesFromStart = (scheduledAt.getHours() - 9) * 60 + scheduledAt.getMinutes()
+                    if (minutesFromStart < 0 || minutesFromStart >= 540) return null
+                    const duration = Math.max(30, Number(appointment.duration_minutes || appointment.service_duration_minutes || 60))
+                    const top = (minutesFromStart / 60) * 72
+                    const height = Math.max(38, (Math.min(duration, 540 - minutesFromStart) / 60) * 72)
+                    const customerName = appointment.customer_name || appointment.user?.name || appointment.client_name || 'Guest'
+                    const serviceName = appointment.service_name
+                      || (Array.isArray(appointment.services) ? appointment.services.map((service) => service.replace(/-/g, ' ')).join(', ') : null)
+                      || appointment.title
+                      || 'Consultation'
+                    const statusClass = WEEK_STATUS_STYLES[appointment.status] || WEEK_STATUS_STYLES.pending
+                    return (
+                      <button
+                        key={appointment.id || `${appointment.scheduled_at}-${customerName}`}
+                        type="button"
+                        onClick={() => onAppointmentClick?.(appointment)}
+                        title={`${format(scheduledAt, 'h:mm a')} · ${customerName} · ${serviceName}`}
+                        className={`absolute left-1 right-1 z-10 overflow-hidden rounded-md border-l-2 px-2 py-1 text-left shadow-sm transition hover:z-20 hover:brightness-125 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--gold-primary)] ${statusClass}`}
+                        style={{ top: `${top}px`, height: `${height}px` }}
+                      >
+                        <span className="block truncate text-[10px] font-semibold">{format(scheduledAt, 'h:mm a')} {customerName}</span>
+                        <span className="block truncate text-[10px] opacity-80">{serviceName}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
 export default function AppointmentCalendar({
   appointments = [],
   onAppointmentClick,
@@ -238,6 +427,7 @@ const unavailableSet = useMemo(() => {
   const [selectedDateId, setSelectedDateId] = useState('')
   const [showTimeGrid, setShowTimeGrid] = useState(false)
   const [hoveredAppointment, setHoveredAppointment] = useState(null)
+  const [adminWeekView, setAdminWeekView] = useState(true)
 
   useEffect(() => {
     if (!selectedDateId && appointments.length > 0) {
@@ -250,6 +440,10 @@ const unavailableSet = useMemo(() => {
   const selectedAppointments = selectedDateId ? appointmentsByDate.get(selectedDateId) || [] : []
   const selectedDate = selectedDateId ? parseLocalDateFromISO(selectedDateId) : null
   const selectedDateLabel = selectedDateId ? format(selectedDate, 'MMMM d, yyyy') : null
+
+  if (isAdminMode && adminWeekView) {
+    return <AdminWeekCalendar appointments={appointments} unavailableDates={unavailableDates} onAppointmentClick={onAppointmentClick} onMonthView={() => setAdminWeekView(false)} />
+  }
 
 const getDateStatus = (dateKey) => {
      const date = parseLocalDateFromISO(dateKey)
@@ -394,6 +588,9 @@ const getDateStatus = (dateKey) => {
               <div className="flex flex-col items-end gap-2 text-right">
                 <p className="text-lg font-semibold text-white">{format(new Date(currentYear, currentMonth, 1), 'MMMM yyyy')}</p>
                 <div className="flex items-center gap-2">
+                  {isAdminMode && (
+                    <button type="button" onClick={() => setAdminWeekView(true)} className="rounded-lg border border-[var(--border)] px-3 py-2 text-sm text-[var(--gold-primary)] hover:border-[var(--gold-primary)]">Week</button>
+                  )}
                   <button
                     type="button"
                     onClick={() => {
