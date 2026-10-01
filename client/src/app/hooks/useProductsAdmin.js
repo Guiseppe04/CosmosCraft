@@ -9,7 +9,7 @@ const DEFAULT_PRODUCT_QUERY = {
   sortDir: 'desc',
   category_id: '',
   brand: '',
-  is_active: '',
+  is_active: 'true',
   min_price: '',
   max_price: '',
 }
