@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { CheckCircle, Circle, ChevronDown, ChevronRight, Plus, Trash2, User, Clock, AlertCircle, Calendar, Truck, Store, ShieldCheck, Flag, Loader2, MapPin, Package } from 'lucide-react';
+import { CheckCircle, Circle, ChevronDown, ChevronRight, Plus, Trash2, User, Clock, AlertCircle, Calendar, Truck, Store, ShieldCheck, Flag, Loader2, MapPin, Package, Lock } from 'lucide-react';
 import { adminApi } from '../../utils/adminApi';
 import { staffApi } from '../../utils/staffApi';
 
@@ -303,14 +303,39 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
   // Check if project is on hold
   const isOnHold = String(hierarchy?.status || '').toLowerCase() === 'on_hold';
 
+  const isMilestoneLocked = (milestone) => {
+    if (!isAdmin) return false;
+    const milestoneIndex = milestones.findIndex((item) => item.milestone_id === milestone.milestone_id);
+    if (milestoneIndex <= 0) return false;
+    return milestones.slice(0, milestoneIndex).some((previousMilestone) => {
+      const previousTasks = previousMilestone.subtasks || [];
+      return previousTasks.length > 0 && previousTasks.some((subtask) => subtask.status !== 'completed');
+    });
+  };
+
   // User Actions
   const toggleSubtaskStatus = async (subtask) => {
     if (!isAdmin && !subtask.is_customer_updatable) return;
     if (isAdmin && isOnHold) return;
     if (togglingSubtaskId === subtask.subtask_id) return;
 
+    const parentMilestone = milestones.find((milestone) =>
+      milestone.subtasks?.some((item) => item.subtask_id === subtask.subtask_id)
+    );
+    const milestoneIndex = parentMilestone
+      ? milestones.findIndex((milestone) => milestone.milestone_id === parentMilestone.milestone_id)
+      : -1;
+    if (parentMilestone && isMilestoneLocked(parentMilestone)) return;
+
     try {
       if (subtask.status === 'completed') {
+        const hasCompletedFollowingMilestone = milestones
+          .slice(milestoneIndex + 1)
+          .some((milestone) => milestone.subtasks?.some((item) => item.status === 'completed'));
+        if (hasCompletedFollowingMilestone) {
+          alert('Complete or reopen tasks in later milestones before reopening this task.');
+          return;
+        }
         setPendingUncheckSubtask(subtask);
         return;
       }
@@ -452,19 +477,10 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
     } catch (err) { alert(err.message); }
   };
 
-  const markMilestoneAsDone = async (milestone) => {
-    if (!isAdmin) return;
-    if (isOnHold) return;
-    try {
-      const pendingSubtasks = (milestone.subtasks || []).filter(s => s.status !== 'completed');
-      for (const subtask of pendingSubtasks) {
-        await adminApi.updateSubtask(subtask.subtask_id, { status: 'completed' });
-      }
-      await adminApi.updateMilestone(milestone.milestone_id, { status: 'completed' });
-      loadData();
-    } catch (err) {
-      alert(err.message);
-    }
+  const completeNextSubtask = (milestone) => {
+    if (!isAdmin || isOnHold) return;
+    const nextSubtask = (milestone.subtasks || []).find((subtask) => subtask.status !== 'completed');
+    if (nextSubtask) toggleSubtaskStatus(nextSubtask);
   };
 
   const handleSaveEstimatedCompletion = async () => {
@@ -1400,6 +1416,7 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
           ) : (
             hierarchy.milestones?.map((milestone, i) => {
               const isExpanded = expandedMilestones.has(milestone.milestone_id);
+              const isLockedMilestone = isMilestoneLocked(milestone);
               const mProgress = milestone.subtasks?.length 
                 ? Math.round((milestone.subtasks.filter(s => s.status === 'completed').length / milestone.subtasks.length) * 100)
                 : 0;
@@ -1435,11 +1452,12 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
                       </div>
                     </div>
                      <div className="flex items-center gap-3">
-                       {isAdmin && milestone.status !== 'completed' && (
+                       {isAdmin && milestone.status !== 'completed' && milestone.subtasks?.some((subtask) => subtask.status !== 'completed') && (
                          <button 
-                           onClick={(e) => { e.stopPropagation(); markMilestoneAsDone(milestone); }}
-                           className="p-2 hover:bg-green-500/10 rounded-lg text-green-400 transition-colors"
-                           title="Mark milestone as done"
+                           onClick={(e) => { e.stopPropagation(); completeNextSubtask(milestone); }}
+                           disabled={isOnHold || isLockedMilestone}
+                           className="p-2 hover:bg-green-500/10 rounded-lg text-green-400 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                           title="Complete next task"
                          >
                            <Flag className="w-4 h-4" />
                          </button>
@@ -1471,23 +1489,25 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
                           {milestone.subtasks?.length === 0 ? (
                             <p className="text-[var(--text-muted)] text-sm text-center italic py-2">No tasks defined for this milestone.</p>
                           ) : (
-                            milestone.subtasks?.map(subtask => {
+                            milestone.subtasks?.map((subtask) => {
                               const isCompleted = subtask.status === 'completed';
-                              const canUserUpdate = isAdmin || subtask.is_customer_updatable;
+                              const isLocked = isLockedMilestone;
+                              const canUserUpdate = (isAdmin || subtask.is_customer_updatable) && !isLocked;
 
                               return (
-                                <div key={subtask.subtask_id} className={`flex items-start gap-4 p-4 rounded-xl border transition-all ${isCompleted ? 'bg-green-500/5 border-green-500/30' : 'bg-[var(--surface-dark)] border-[var(--border)] hover:border-[var(--gold-primary)]/50'}`}>
+                                <div key={subtask.subtask_id} className={`flex items-start gap-4 p-4 rounded-xl border transition-all ${isLocked ? 'opacity-60' : ''} ${isCompleted ? 'bg-green-500/5 border-green-500/30' : 'bg-[var(--surface-dark)] border-[var(--border)] hover:border-[var(--gold-primary)]/50'}`}>
                                   <button
                                     onClick={() => toggleSubtaskStatus(subtask)}
                                     disabled={!canUserUpdate || togglingSubtaskId === subtask.subtask_id}
-                                    className={`mt-0.5 rounded-full outline-none focus:ring-2 focus:ring-[var(--gold-primary)] transition-all ${canUserUpdate && !isCompleted && togglingSubtaskId !== subtask.subtask_id ? 'hover:scale-110' : ''}`}
+                                    title={isLocked ? 'Complete all tasks in the previous milestone first' : undefined}
+                                    className={`mt-0.5 rounded-full outline-none focus:ring-2 focus:ring-[var(--gold-primary)] transition-all ${canUserUpdate && !isCompleted && togglingSubtaskId !== subtask.subtask_id ? 'hover:scale-110' : 'cursor-not-allowed opacity-60'}`}
                                   >
                                     {togglingSubtaskId === subtask.subtask_id ? (
                                       <Loader2 className="w-6 h-6 animate-spin text-[var(--gold-primary)]" />
                                     ) : isCompleted ? (
                                       <CheckCircle className="w-6 h-6 text-green-400" />
                                     ) : (
-                                      <Circle className={`w-6 h-6 ${canUserUpdate ? 'text-[var(--text-muted)] hover:text-[var(--gold-primary)]' : 'text-gray-600 cursor-not-allowed'}`} />
+                                      isLocked ? <Lock className="w-5 h-5 text-[var(--text-muted)]" /> : <Circle className={`w-6 h-6 ${canUserUpdate ? 'text-[var(--text-muted)] hover:text-[var(--gold-primary)]' : 'text-gray-600 cursor-not-allowed'}`} />
                                     )}
                                   </button>
                                   <div className="flex-1">
