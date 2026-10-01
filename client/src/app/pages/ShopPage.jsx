@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext.jsx'
 import { useNavigate } from 'react-router'
 import { ProductRatingModal } from '../components/ProductRatingModal.jsx'
 import { StarRating } from '../components/common/StarRating.jsx'
+import { useSocketEvent } from '../context/SocketContext.jsx'
 import { API } from '../utils/apiConfig.js'
 import '../../styles/ShopPage.css'
 
@@ -310,6 +311,85 @@ export function ShopPage() {
   const isOutOfStock = (productId) => getProductStock(productId) === 0
   const isAtMaxLimit = (productId) => isItemAtMaxQuantity(productId)
   const isItemJustAdded = (productId) => getItemAddedState(productId)
+
+  // ── Real-Time Socket Updates for Shop Catalog ──────────────────────────
+  useSocketEvent('stock:updated', (data) => {
+    const targetId = String(data?.productId || data?.product_id || data?.product?.product_id || '')
+    if (!targetId) return
+    const rawStock = data?.stock ?? data?.product?.stock
+    const newStock = Number(rawStock)
+    if (!Number.isFinite(newStock)) return
+
+    setProducts((prev) =>
+      prev.map((item) => {
+        const itemId = String(item.id || item.product_id || '')
+        if (itemId === targetId) {
+          return { ...item, stock: newStock }
+        }
+        return item
+      })
+    )
+  })
+
+  useSocketEvent('product:updated', (data) => {
+    const targetId = String(data?.productId || data?.product_id || data?.product?.product_id || '')
+    if (!targetId) return
+
+    setProducts((prev) =>
+      prev.map((item) => {
+        const itemId = String(item.id || item.product_id || '')
+        if (itemId === targetId) {
+          const rawPrice = data.price !== undefined ? data.price : data?.product?.price
+          const nextPrice = rawPrice !== undefined ? Number(rawPrice) : item.price
+          const nextName = data?.name || data?.product?.name || item.name
+          const nextImage = data?.primary_image || data?.image_url || data?.product?.primary_image || data?.product?.image || item.image
+          const rawStock = data?.stock !== undefined ? data.stock : data?.product?.stock
+          const nextStock = rawStock !== undefined ? Number(rawStock) : item.stock
+          const isActive = data?.is_active !== undefined ? data.is_active : data?.product?.is_active
+
+          return {
+            ...item,
+            price: Number.isFinite(nextPrice) ? nextPrice : item.price,
+            name: nextName,
+            image: nextImage,
+            stock: Number.isFinite(nextStock) ? nextStock : item.stock,
+            is_active: isActive !== undefined ? isActive : item.is_active,
+          }
+        }
+        return item
+      }).filter((p) => p.is_active !== false)
+    )
+  })
+
+  useSocketEvent('product:created', (data) => {
+    const p = data?.product
+    if (!p || p.is_active === false) return
+    const newProduct = {
+      id: p.product_id || p.id,
+      name: p.name,
+      price: Number(p.price) || 0,
+      image: p.primary_image || p.image || DEFAULT_PRODUCT_IMAGE,
+      category: p.category_name || p.category || 'Uncategorized',
+      brand: p.brand,
+      description: p.description,
+      stock: Number(p.stock) || 0,
+      average_rating: Number(p.average_rating) || 0,
+      review_count: Number(p.review_count) || 0,
+      is_active: p.is_active,
+    }
+
+    setProducts((prev) => {
+      const exists = prev.some((item) => String(item.id || item.product_id) === String(newProduct.id))
+      if (exists) return prev
+      return [newProduct, ...prev]
+    })
+  })
+
+  useSocketEvent('product:deleted', (data) => {
+    const targetId = String(data?.productId || data?.product_id || data?.product?.product_id || '')
+    if (!targetId) return
+    setProducts((prev) => prev.filter((item) => String(item.id || item.product_id) !== targetId))
+  })
 
   useEffect(() => {
     const fetchData = async () => {

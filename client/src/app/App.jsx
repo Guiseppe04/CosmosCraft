@@ -3,6 +3,7 @@ import { router } from './routes.jsx'
 import { CartProvider } from './context/CartContext.jsx'
 import { AuthProvider } from './context/AuthContext.jsx'
 import { ThemeProvider } from './context/ThemeContext.jsx'
+import { SocketProvider } from './context/SocketContext.jsx'
 import ToastProvider from './components/ui/Toast.jsx'
 
 /**
@@ -13,11 +14,13 @@ export default function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <CartProvider>
-          <ToastProvider>
-            <RouterProvider router={router} />
-          </ToastProvider>
-        </CartProvider>
+        <ToastProvider>
+          <SocketProvider>
+            <CartProvider>
+              <RouterProvider router={router} />
+            </CartProvider>
+          </SocketProvider>
+        </ToastProvider>
       </AuthProvider>
     </ThemeProvider>
   )

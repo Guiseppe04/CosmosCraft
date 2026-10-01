@@ -7,6 +7,7 @@
 const appointmentService = require('../services/appointmentService');
 const { AppError } = require('../middleware/errorHandler');
 const { appointmentValidation } = require('../utils/appointmentValidation');
+const socketService = require('../services/socketService');
 
 // ─── HELPER: VALIDATION ──────────────────────────────────────────────────────
 
@@ -87,6 +88,11 @@ exports.createAppointment = async (req, res, next) => {
       confirmation_notes: validated.confirmation_notes,
       payment_method: validated.payment_method,
       payment_proof_url: validated.payment_proof_url,
+    });
+
+    socketService.emitToUserAndStaff(appointment?.user_id, 'appointment:created', {
+      appointment,
+      action: 'created',
     });
 
     res.status(201).json({
@@ -211,6 +217,11 @@ exports.updateAppointment = async (req, res, next) => {
     // Perform update
     const updated = await appointmentService.updateAppointment(id, validated);
 
+    socketService.emitToUserAndStaff(updated?.user_id, 'appointment:updated', {
+      appointment: updated,
+      action: 'updated',
+    });
+
     res.json({
       status: 'success',
       data: {
@@ -256,6 +267,11 @@ exports.rescheduleAppointment = async (req, res, next) => {
        validated.reason
      );
 
+    socketService.emitToUserAndStaff(updated?.user_id, 'appointment:updated', {
+      appointment: updated,
+      action: 'rescheduled',
+    });
+
     res.json({
       status: 'success',
       data: {
@@ -294,6 +310,12 @@ exports.updateStatus = async (req, res, next) => {
       validated.reason
     );
 
+    socketService.emitToUserAndStaff(updated?.user_id, 'appointment:updated', {
+      appointment: updated,
+      action: 'status_updated',
+      status: updated.status,
+    });
+
     res.json({
       status: 'success',
       data: {
@@ -327,6 +349,12 @@ exports.cancelAppointment = async (req, res, next) => {
 
     // Perform cancellation
     const cancelled = await appointmentService.cancelAppointment(id, validated.reason);
+
+    socketService.emitToUserAndStaff(cancelled?.user_id, 'appointment:updated', {
+      appointment: cancelled,
+      action: 'cancelled',
+      status: cancelled.status,
+    });
 
     res.json({
       status: 'success',

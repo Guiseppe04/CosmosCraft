@@ -1,5 +1,6 @@
 const inventoryService = require('../services/inventoryService');
 const { AppError } = require('../middleware/errorHandler');
+const socketService = require('../services/socketService');
 
 /**
  * INVENTORY CONTROLLER
@@ -51,6 +52,15 @@ exports.addStock = async (req, res, next) => {
       createdBy: req.user.user_id
     });
 
+    const updatedStock = result?.product?.stock ?? result?.stock;
+    socketService.emitBroadcast('stock:updated', {
+      productId,
+      product_id: productId,
+      stock: updatedStock,
+      product: result?.product,
+    });
+    socketService.emitToStaff('inventory:updated', { productId, result, stock: updatedStock });
+
     res.json({
       status: 'success',
       message: `Added ${quantity} units to stock`,
@@ -83,6 +93,15 @@ exports.deductStock = async (req, res, next) => {
       }
     );
 
+    const updatedStock = result?.product?.stock ?? result?.stock;
+    socketService.emitBroadcast('stock:updated', {
+      productId,
+      product_id: productId,
+      stock: updatedStock,
+      product: result?.product,
+    });
+    socketService.emitToStaff('inventory:updated', { productId, result, stock: updatedStock });
+
     res.json({
       status: 'success',
       message: `Deducted ${quantity} units from stock`,
@@ -108,6 +127,15 @@ exports.adjustStock = async (req, res, next) => {
       notes,
       createdBy: req.user.user_id
     });
+
+    const updatedStock = result?.product?.stock ?? result?.stock;
+    socketService.emitBroadcast('stock:updated', {
+      productId,
+      product_id: productId,
+      stock: updatedStock,
+      product: result?.product,
+    });
+    socketService.emitToStaff('inventory:updated', { productId, result, stock: updatedStock });
 
     const action = quantity > 0 ? 'increased' : 'decreased';
     res.json({

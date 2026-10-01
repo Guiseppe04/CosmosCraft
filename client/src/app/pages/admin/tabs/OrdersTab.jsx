@@ -5,6 +5,7 @@ import { OrderManagement } from '../../../components/admin/OrderManagement'
 import { RefundRequestsTab } from './RefundRequestsTab'
 import ReviewModerationTab from './ReviewModerationTab'
 import { adminApi } from '../../../utils/adminApi'
+import { useSocketEvent } from '../../../context/SocketContext'
 
 export function OrdersTab({ orders, fetchOrders, user, pagination, showToast, onManageProject, ordersLoading = false }) {
   const [view, setView] = useState('orders')
@@ -22,9 +23,32 @@ export function OrdersTab({ orders, fetchOrders, user, pagination, showToast, on
 
   useEffect(() => {
     fetchNewRefundCount()
-    const interval = setInterval(fetchNewRefundCount, 30000)
-    return () => clearInterval(interval)
   }, [])
+
+  useSocketEvent('refund:created', () => {
+    fetchNewRefundCount()
+    showToast?.('New refund request submitted!', 'info')
+  })
+
+  useSocketEvent('refund:updated', () => {
+    fetchNewRefundCount()
+  })
+
+  useSocketEvent('order:created', () => {
+    fetchOrders?.()
+  })
+
+  useSocketEvent('order:updated', () => {
+    fetchOrders?.()
+  })
+
+  useSocketEvent('payment:created', () => {
+    fetchOrders?.()
+  })
+
+  useSocketEvent('payment:updated', () => {
+    fetchOrders?.()
+  })
 
   const handleRefresh = async () => {
     setIsRefreshing(true)

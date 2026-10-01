@@ -34,7 +34,8 @@
     "passport-facebook": "^3.0.0",
     "passport-google-oauth20": "^2.0.0",
     "pg": "^8.20.0",
-    "react-bootstrap": "^2.10.10"
+    "react-bootstrap": "^2.10.10",
+    "socket.io": "^4.8.4"
   },
   "devDependencies": {
     "concurrently": "^8.2.2",

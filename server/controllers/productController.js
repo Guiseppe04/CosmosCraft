@@ -1,6 +1,7 @@
 const productService = require('../services/productService');
 const { AppError } = require('../middleware/errorHandler');
 const auditService = require('../services/auditService');
+const socketService = require('../services/socketService');
 
 // ─── CATEGORIES ──────────────────────────────────────────────────────────────
 
@@ -80,6 +81,12 @@ exports.createProduct = async (req, res, next) => {
       req.ip
     );
 
+    socketService.emitBroadcast('product:created', {
+      productId: product.product_id,
+      product_id: product.product_id,
+      product,
+    });
+
     res.status(201).json({ status: 'success', data: product });
   } catch (err) { next(err); }
 };
@@ -115,6 +122,18 @@ exports.updateProduct = async (req, res, next) => {
       req.ip
     );
 
+    socketService.emitBroadcast('product:updated', {
+      productId: product.product_id,
+      product_id: product.product_id,
+      price: product.price,
+      name: product.name,
+      stock: product.stock,
+      primary_image: product.primary_image,
+      image_url: product.primary_image,
+      is_active: product.is_active,
+      product,
+    });
+
     res.json({ status: 'success', data: product });
   } catch (err) { next(err); }
 };
@@ -134,6 +153,12 @@ exports.deleteProduct = async (req, res, next) => {
       existing,
       req.ip
     );
+
+    socketService.emitBroadcast('product:deleted', {
+      productId: req.params.id,
+      product_id: req.params.id,
+      product,
+    });
 
     res.json({ status: 'success', message: 'Product deactivated', data: product });
   } catch (err) { next(err); }

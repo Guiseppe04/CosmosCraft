@@ -1,12 +1,14 @@
 require('dotenv').config();
 const contactRoutes = require('./routes/contactRoutes.js');
 
+const http = require('http');
 const express = require('express');
 const cookieParser = require('cookie-parser');
 const cors = require('cors');
 const passport = require('passport');
 
 const { connectDB } = require('./config/database.js');
+const socketService = require('./services/socketService.js');
 const passportConfig = require('./config/passport.js');
 const mailService = require('./services/mailService.js');
 const authRoutes = require('./routes/authRoutes.js');
@@ -149,7 +151,12 @@ let server;
 async function startServer() {
   await connectDB();
 
-  server = app.listen(PORT, async () => {
+  server = http.createServer(app);
+  const io = socketService.init(server, allowedOrigins);
+  app.set('io', io);
+  app.set('socketService', socketService);
+
+  server.listen(PORT, async () => {
     console.log(`Backend Running`);
     console.log(`Port: ${PORT}`);
     console.log(`Environment: ${process.env.NODE_ENV}`);
