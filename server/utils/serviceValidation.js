@@ -68,6 +68,7 @@ const serviceValidation = {
         'number.max': 'Duration cannot exceed 1440 minutes (24 hours)',
         'any.required': 'Duration is required',
       }),
+    is_active: Joi.boolean().optional(),
   }),
 
   updateServiceSchema: Joi.object({

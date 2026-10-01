@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import {
   Search, Filter, Calendar, Clock, User, ChevronLeft, ChevronRight,
@@ -168,6 +168,20 @@ export default function AppointmentList({
   const [showDetailsModal, setShowDetailsModal] = useState(false)
   const [sortBy, setSortBy] = useState('scheduled_at')
   const [sortOrder, setSortOrder] = useState('desc')
+  const [filterMenuOpen, setFilterMenuOpen] = useState(false)
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+  const filterMenuRef = useRef(null)
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (filterMenuRef.current && !filterMenuRef.current.contains(event.target)) {
+        setFilterMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   // Filter appointments based on search and filters
   const filteredAppointments = useMemo(() => {
@@ -189,10 +203,10 @@ export default function AppointmentList({
       )
     }
 
-    // Date filter
+    // Date quick filter
     if (dateFilter !== 'all') {
-      const now = new Date()
       result = result.filter(apt => {
+        if (!apt.scheduled_at) return false
         const aptDate = new Date(apt.scheduled_at)
         switch (dateFilter) {
           case 'today':
@@ -207,6 +221,24 @@ export default function AppointmentList({
       })
     }
 
+    // Date range: start date
+    if (dateFrom) {
+      const fromTime = new Date(dateFrom).setHours(0, 0, 0, 0)
+      result = result.filter(apt => {
+        if (!apt.scheduled_at) return false
+        return new Date(apt.scheduled_at).getTime() >= fromTime
+      })
+    }
+
+    // Date range: end date
+    if (dateTo) {
+      const toTime = new Date(dateTo).setHours(23, 59, 59, 999)
+      result = result.filter(apt => {
+        if (!apt.scheduled_at) return false
+        return new Date(apt.scheduled_at).getTime() <= toTime
+      })
+    }
+
     // Status filter
     if (statusFilter !== 'all') {
       result = result.filter(apt => apt.status === statusFilter)
@@ -217,14 +249,25 @@ export default function AppointmentList({
       let aVal, bVal
       switch (sortBy) {
         case 'status':
-          aVal = a.status || ''
-          bVal = b.status || ''
+          aVal = (a.status || '').toLowerCase()
+          bVal = (b.status || '').toLowerCase()
+          break
+        case 'customer':
+          aVal = getCustomerName(a).toLowerCase()
+          bVal = getCustomerName(b).toLowerCase()
+          break
+        case 'reference':
+          aVal = String(a.reference_code || a.appointment_id || '').toLowerCase()
+          bVal = String(b.reference_code || b.appointment_id || '').toLowerCase()
           break
         case 'created_at':
+          aVal = new Date(a.created_at || 0).getTime()
+          bVal = new Date(b.created_at || 0).getTime()
+          break
         case 'scheduled_at':
         default:
-          aVal = new Date(sortBy === 'created_at' ? a.created_at || 0 : a.scheduled_at || 0).getTime()
-          bVal = new Date(sortBy === 'created_at' ? b.created_at || 0 : b.scheduled_at || 0).getTime()
+          aVal = new Date(a.scheduled_at || 0).getTime()
+          bVal = new Date(b.scheduled_at || 0).getTime()
           break
       }
       if (aVal < bVal) return sortOrder === 'asc' ? -1 : 1
@@ -233,7 +276,7 @@ export default function AppointmentList({
     })
 
     return result
-  }, [appointments, searchQuery, dateFilter, statusFilter, sortBy, sortOrder])
+  }, [appointments, searchQuery, dateFilter, dateFrom, dateTo, statusFilter, sortBy, sortOrder])
 
   // Handle filter changes
   const handleDateFilterChange = (value) => {
@@ -255,23 +298,22 @@ export default function AppointmentList({
     onFilterChange?.({ date: dateFilter, status: statusFilter, search: value })
   }
 
-  const handleSortChange = (field) => {
-    if (sortBy === field) {
-      setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')
-    } else {
-      setSortBy(field)
-      setSortOrder('asc')
-    }
+  const handleResetSortAndFilters = () => {
+    setDateFilter('all')
+    setStatusFilter('all')
+    setDateFrom('')
+    setDateTo('')
+    setSortBy('scheduled_at')
+    setSortOrder('desc')
+    onFilterChange?.({ date: 'all', status: 'all', search: searchQuery })
   }
 
   const clearFilters = () => {
     handleSearchChange('')
-    setDateFilter('all')
-    setStatusFilter('all')
-    onFilterChange?.({ date: 'all', status: 'all', search: '' })
+    handleResetSortAndFilters()
   }
 
-  const hasActiveFilters = searchQuery || dateFilter !== 'all' || statusFilter !== 'all'
+  const hasActiveFilters = searchQuery || dateFilter !== 'all' || statusFilter !== 'all' || dateFrom || dateTo || sortBy !== 'scheduled_at' || sortOrder !== 'desc'
 
   // Pagination
   const currentPage = pagination.page || 1
@@ -326,58 +368,131 @@ export default function AppointmentList({
               `${filteredAppointments.length} appointment${filteredAppointments.length !== 1 ? 's' : ''} found`}
           </p>
         </div>
-<div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center">
-           <div className="grid grid-cols-1 gap-2 sm:flex sm:items-center">
-             <span className="text-xs font-semibold text-[var(--text-muted)] sm:shrink-0">Sort By</span>
-             <select
-               value={sortBy}
-               onChange={(e) => setSortBy(e.target.value)}
-               aria-label="Sort By"
-               className="rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] px-3 py-2 text-sm text-[var(--text-muted)] focus:border-[var(--gold-primary)] focus:outline-none"
-             >
-               <option value="scheduled_at">Appointment Date &amp; Time</option>
-               <option value="status">Status</option>
-               <option value="created_at">Created Date &amp; Time</option>
-             </select>
-             <select
-               value={sortOrder}
-               onChange={(e) => setSortOrder(e.target.value)}
-               aria-label="Sort Direction"
-               className="rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] px-3 py-2 text-sm text-[var(--text-muted)] focus:border-[var(--gold-primary)] focus:outline-none"
-             >
-               <option value="desc">Newest to Oldest</option>
-               <option value="asc">Oldest to Newest</option>
-             </select>
-           </div>
-           <button
-             onClick={onCreateNew}
-             className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[var(--gold-primary)] text-black font-medium hover:bg-[var(--gold-primary)]/90 transition-colors sm:shrink-0"
-           >
-             <Plus className="w-4 h-4" />
-             <span>New Appointment</span>
-           </button>
-         </div>
+        <button
+          onClick={onCreateNew}
+          className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[var(--gold-primary)] text-black font-medium hover:bg-[var(--gold-primary)]/90 transition-colors sm:shrink-0"
+        >
+          <Plus className="w-4 h-4" />
+          <span>New Appointment</span>
+        </button>
       </div>
 
-      {/* Search bar */}
-      <div className="relative">
-        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)] pointer-events-none" />
-        <input
-          type="text"
-          value={searchQuery}
-          onChange={(e) => handleSearchChange(e.target.value)}
-          placeholder="Search by customer, reference code, service…"
-          className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] pl-10 pr-10 py-2.5 text-sm text-white placeholder:text-[var(--text-muted)] focus:border-[var(--gold-primary)] focus:outline-none transition-colors"
-        />
-        {searchQuery && (
+      {/* Advanced Search & Filter Controls */}
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <div className="relative flex-1">
+          <Search className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => handleSearchChange(e.target.value)}
+            placeholder="Search by customer, reference code, service…"
+            className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] pl-10 pr-10 py-2.5 text-sm text-white placeholder:text-[var(--text-muted)] focus:border-[var(--gold-primary)] focus:outline-none transition-colors"
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => handleSearchChange('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-white transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+
+        <div className="relative shrink-0" ref={filterMenuRef}>
           <button
             type="button"
-            onClick={() => handleSearchChange('')}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-white transition-colors"
+            onClick={() => setFilterMenuOpen((open) => !open)}
+            aria-expanded={filterMenuOpen}
+            aria-haspopup="true"
+            className="inline-flex h-11 items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] px-3 text-sm font-semibold text-[var(--text-light)] transition-colors hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)]"
           >
-            <X className="w-4 h-4" />
+            <Filter className="h-4 w-4" />
+            Sort &amp; Filter
+            <ChevronDown className="h-4 w-4" />
           </button>
-        )}
+
+          {filterMenuOpen && (
+            <div className="absolute right-0 top-full z-40 mt-2 grid max-h-[70vh] w-[min(88vw,28rem)] gap-3 overflow-y-auto rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] p-4 shadow-2xl sm:grid-cols-2">
+              <label className="text-xs font-semibold text-[var(--text-muted)]">
+                Sort by
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value)}
+                  className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-2.5 py-2 text-sm text-[var(--text-light)] focus:border-[var(--gold-primary)] focus:outline-none"
+                >
+                  <option value="scheduled_at">Appointment date &amp; time</option>
+                  <option value="status">Status</option>
+                  <option value="created_at">Created date &amp; time</option>
+                  <option value="customer">Customer name</option>
+                  <option value="reference">Reference code</option>
+                </select>
+              </label>
+              <label className="text-xs font-semibold text-[var(--text-muted)]">
+                Sort direction
+                <select
+                  value={sortOrder}
+                  onChange={(e) => setSortOrder(e.target.value)}
+                  className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-2.5 py-2 text-sm text-[var(--text-light)] focus:border-[var(--gold-primary)] focus:outline-none"
+                >
+                  <option value="desc">Descending (Newest to Oldest)</option>
+                  <option value="asc">Ascending (Oldest to Newest)</option>
+                </select>
+              </label>
+              <label className="text-xs font-semibold text-[var(--text-muted)]">
+                Appointment status
+                <select
+                  value={statusFilter}
+                  onChange={(e) => handleStatusFilterChange(e.target.value)}
+                  className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-2.5 py-2 text-sm text-[var(--text-light)] focus:border-[var(--gold-primary)] focus:outline-none"
+                >
+                  <option value="all">All statuses</option>
+                  {STATUS_FILTERS.filter(f => f.value !== 'all').map((status) => (
+                    <option key={status.value} value={status.value}>{status.label}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-xs font-semibold text-[var(--text-muted)]">
+                Date quick filter
+                <select
+                  value={dateFilter}
+                  onChange={(e) => handleDateFilterChange(e.target.value)}
+                  className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-2.5 py-2 text-sm text-[var(--text-light)] focus:border-[var(--gold-primary)] focus:outline-none"
+                >
+                  {DATE_FILTERS.map((df) => (
+                    <option key={df.value} value={df.value}>{df.label}</option>
+                  ))}
+                </select>
+              </label>
+              <div className="text-xs font-semibold text-[var(--text-muted)] sm:col-span-2">
+                Date range
+                <div className="mt-1.5 grid grid-cols-2 gap-2">
+                  <input
+                    type="date"
+                    aria-label="Start date"
+                    value={dateFrom}
+                    onChange={(e) => setDateFrom(e.target.value)}
+                    className="min-w-0 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-2 py-2 text-sm text-[var(--text-light)] focus:border-[var(--gold-primary)] focus:outline-none"
+                  />
+                  <input
+                    type="date"
+                    aria-label="End date"
+                    value={dateTo}
+                    onChange={(e) => setDateTo(e.target.value)}
+                    className="min-w-0 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-2 py-2 text-sm text-[var(--text-light)] focus:border-[var(--gold-primary)] focus:outline-none"
+                  />
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleResetSortAndFilters}
+                className="text-left text-xs font-semibold text-[var(--gold-primary)] hover:underline sm:col-span-2"
+              >
+                Reset filters and sort
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Loading State */}

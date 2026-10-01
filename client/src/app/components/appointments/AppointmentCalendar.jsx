@@ -302,17 +302,14 @@ function AdminWeekCalendar({ appointments, unavailableDates = [], onAppointmentC
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center justify-end gap-2 border-b border-[var(--border)] px-4 py-3">
-        <select aria-label="Filter by status" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] px-3 py-2 text-sm text-[var(--text-light)]">
-          {WEEK_STATUS_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-        </select>
-        {staffNames.length > 0 && (
+      {staffNames.length > 0 && (
+        <div className="flex flex-wrap items-center justify-end gap-2 border-b border-[var(--border)] px-4 py-3">
           <select aria-label="Filter by staff" value={staffFilter} onChange={(event) => setStaffFilter(event.target.value)} className="rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] px-3 py-2 text-sm text-[var(--text-light)]">
             <option value="all">All staff</option>
             {staffNames.map((name) => <option key={name} value={name}>{name}</option>)}
           </select>
-        )}
-      </div>
+        </div>
+      )}
 
       <div className="overflow-x-auto">
         <div className="min-w-[820px]">

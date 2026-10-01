@@ -9,6 +9,20 @@ const { AppError } = require('../middleware/errorHandler');
 
 // ─── SERVICES ────────────────────────────────────────────────────────────────
 
+let serviceImageColumnPromise = null;
+
+const ensureServiceImageColumn = async () => {
+  if (!serviceImageColumnPromise) {
+    serviceImageColumnPromise = pool.query(
+      'ALTER TABLE services ADD COLUMN IF NOT EXISTS image_url TEXT'
+    ).catch((error) => {
+      serviceImageColumnPromise = null;
+      throw error;
+    });
+  }
+  await serviceImageColumnPromise;
+};
+
 /**
  * Get all services with optional filtering and pagination
  * @param {Object} filters - { search, is_active, sort, order, limit, offset }
@@ -22,6 +36,7 @@ exports.getAllServices = async ({
   limit = 20,
   offset = 0,
 } = {}) => {
+  await ensureServiceImageColumn();
   let where = [];
   let params = [];
   let idx = 1;
@@ -93,6 +108,7 @@ exports.getServicesCount = async (filters = {}) => {
  * Get single service by ID
  */
 exports.getServiceById = async (serviceId) => {
+  await ensureServiceImageColumn();
   const result = await pool.query(
     'SELECT * FROM services WHERE service_id = $1',
     [serviceId]
@@ -103,7 +119,8 @@ exports.getServiceById = async (serviceId) => {
 /**
  * Create new service
  */
-exports.createService = async ({ name, slug, description, image_url, price, duration_minutes }) => {
+exports.createService = async ({ name, slug, description, image_url, price, duration_minutes, is_active }) => {
+  await ensureServiceImageColumn();
   const finalSlug = (slug || name)
     .toLowerCase()
     .trim()
@@ -113,9 +130,9 @@ exports.createService = async ({ name, slug, description, image_url, price, dura
 
   const result = await pool.query(
     `INSERT INTO services (name, slug, description, image_url, price, duration_minutes, is_active, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, true, now(), now())
+     VALUES ($1, $2, $3, $4, $5, $6, $7, now(), now())
      RETURNING *`,
-    [name, finalSlug, description || null, image_url || null, price, duration_minutes]
+    [name, finalSlug, description || null, image_url || null, price, duration_minutes, is_active !== undefined ? is_active : true]
   );
   return result.rows[0];
 };
@@ -124,6 +141,7 @@ exports.createService = async ({ name, slug, description, image_url, price, dura
  * Update service
  */
 exports.updateService = async (serviceId, updates) => {
+  await ensureServiceImageColumn();
   const { name, slug, description, image_url, price, duration_minutes, is_active } = updates;
 
   const setClauses = [];

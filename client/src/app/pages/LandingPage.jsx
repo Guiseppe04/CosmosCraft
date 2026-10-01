@@ -55,7 +55,7 @@ const readLandingServiceCards = () => {
     if (!raw) return defaultServiceCards
 
     const stored = JSON.parse(raw)
-    if (!Array.isArray(stored) || stored.length === 0) return defaultServiceCards
+    if (!Array.isArray(stored)) return defaultServiceCards
 
     const normalized = stored
       .filter((item) => item && item.enabled !== false)
@@ -66,29 +66,55 @@ const readLandingServiceCards = () => {
         const href = item.href || defaultServiceCards[index % defaultServiceCards.length]?.href || '/appointments'
 
         return {
+          serviceId: item.serviceId ?? item.id ?? null,
           title,
           text,
           image,
           href,
+          order: Number(item.order ?? index + 1),
         }
       })
       .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0))
 
-    return normalized.length ? normalized : defaultServiceCards
+    return normalized
   } catch {
     return defaultServiceCards
   }
 }
 
-const footerServiceLinks = defaultServiceCards.map(({ title, href }) => ({
-  label: title,
-  href,
-}))
+const loadLandingServiceCards = async () => {
+  const localCards = readLandingServiceCards()
+  const localCardByTitle = new Map(localCards.map((card) => [card.title.toLowerCase(), card]))
+
+  try {
+    const response = await fetch(`${API}/api/services?is_active=true&limit=100&sort=name&order=asc`)
+    const result = await response.json()
+    if (!response.ok) throw new Error(result.message || 'Failed to load services')
+
+    return (Array.isArray(result.data) ? result.data : [])
+      .filter((service) => service?.is_active !== false)
+      .map((service, index) => {
+        const localCard = localCardByTitle.get(String(service.name || '').toLowerCase())
+        const slug = String(service.name || '').toLowerCase().replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, ' ')
+        return {
+          serviceId: service.service_id,
+          title: service.name || localCard?.title || 'Service',
+          text: localCard?.text || service.description || 'Premium service tailored for your instrument.',
+          image: service.image_url || localCard?.image || defaultServiceCards[index % defaultServiceCards.length]?.image || '',
+          href: localCard?.href || `/appointments?step=1&service=${encodeURIComponent(slug)}&serviceName=${encodeURIComponent(service.name || 'Service')}`,
+          order: localCard?.order ?? index + 1,
+        }
+      })
+      .sort((a, b) => a.order - b.order)
+  } catch {
+    return localCards
+  }
+}
 
 const footerGroups = [
   {
     title: 'Services',
-    links: footerServiceLinks,
+    links: [],
   },
   {
     title: 'Social Media',
@@ -105,6 +131,9 @@ export function LandingPage() {
   const { isAuthenticated, user } = useAuth()
   const [contactInfo, setContactInfo] = useState(DEFAULT_CONTACT_INFO)
   const [serviceCards, setServiceCards] = useState(() => readLandingServiceCards())
+  const footerGroupsForPage = footerGroups.map((group) => group.title === 'Services'
+    ? { ...group, links: serviceCards.map(({ title, href }) => ({ label: title, href })) }
+    : group)
   const [contactForm, setContactForm] = useState({
     firstName: '',
     lastName: '',
@@ -338,9 +367,19 @@ export function LandingPage() {
       })
       .catch(() => setContactInfo(DEFAULT_CONTACT_INFO))
 
+    let isMounted = true
+    const refreshLandingServices = () => {
+      loadLandingServiceCards().then((cards) => {
+        if (isMounted) setServiceCards(cards)
+      })
+    }
+    refreshLandingServices()
+
     const onStorage = (event) => {
       if (event.key === SITE_CONTACT_STORAGE_KEY) {
         applyContactInfo()
+      } else if (event.key === LANDING_SERVICES_STORAGE_KEY) {
+        refreshLandingServices()
       }
     }
 
@@ -354,7 +393,7 @@ export function LandingPage() {
     }
 
     const onLandingServicesUpdated = () => {
-      setServiceCards(readLandingServiceCards())
+      refreshLandingServices()
     }
 
     window.addEventListener('storage', onStorage)
@@ -362,6 +401,7 @@ export function LandingPage() {
     window.addEventListener('cosmoscraft-landing-services-updated', onLandingServicesUpdated)
 
     return () => {
+      isMounted = false
       window.removeEventListener('storage', onStorage)
       window.removeEventListener('cosmoscraft-site-contact-updated', onContactUpdated)
       window.removeEventListener('cosmoscraft-landing-services-updated', onLandingServicesUpdated)
@@ -613,7 +653,7 @@ export function LandingPage() {
     </p>
   </div>
 
-  {footerGroups.map((group) => (
+  {footerGroupsForPage.map((group) => (
     <div key={group.title} className="text-center sm:text-left">
       <h4 className="text-xs sm:text-sm font-semibold uppercase tracking-[0.08em] text-[var(--text-light)]">{group.title}</h4>
       {group.title === 'Social Media' ? (

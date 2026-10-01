@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { ModalHeader } from '../shared/ModalHeader'
 import { ModalFooter } from '../shared/ModalFooter'
 import { FormField } from '../shared/FormField'
+import { ImageUploadWidget } from '../shared/ImageUploadWidget'
 
 const cleanNumericValue = (value) => {
   const cleaned = String(value).replace(/[^0-9.]/g, '')
@@ -19,7 +20,7 @@ const formatPriceValue = (value) => {
   })
 }
 
-export function ServiceModal({ modal, form, setForm, formErrors, closeModal, isSaving, saveService, labelCls, inputCls }) {
+export function ServiceModal({ modal, form, setForm, formErrors, closeModal, isSaving, isUploading, handleImageUpload, saveService, inputCls }) {
   const [priceDisplay, setPriceDisplay] = useState('')
   const [isPriceFocused, setIsPriceFocused] = useState(false)
 
@@ -84,18 +85,6 @@ export function ServiceModal({ modal, form, setForm, formErrors, closeModal, isS
           />
         </FormField>
 
-        <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)]/40 p-3">
-          <label className="flex items-center gap-3 text-sm font-medium text-[var(--text-light)]">
-            <input
-              type="checkbox"
-              checked={Boolean(form.show_on_landing ?? true)}
-              onChange={(e) => setForm((f) => ({ ...f, show_on_landing: e.target.checked }))}
-              className="h-4 w-4 rounded border-[var(--border)] bg-transparent text-[var(--gold-primary)] focus:ring-[var(--gold-primary)]"
-            />
-            Show this service on the landing page
-          </label>
-        </div>
-
         <FormField label="Landing card text">
           <textarea
             className={`${inputCls} min-h-[90px] resize-none`}
@@ -105,14 +94,14 @@ export function ServiceModal({ modal, form, setForm, formErrors, closeModal, isS
           />
         </FormField>
 
-        <FormField label="Landing image URL">
-          <input
-            className={inputCls}
-            value={form.landing_image_url || form.image_url || form.image || ''}
-            onChange={(e) => setForm((f) => ({ ...f, landing_image_url: e.target.value, image_url: e.target.value, image: e.target.value }))}
-            placeholder="https://example.com/service-image.jpg"
-          />
-        </FormField>
+        <ImageUploadWidget
+          label="Landing page image"
+          imageUrl={form.image_url || ''}
+          previewUrl={form.preview_url || ''}
+          isUploading={isUploading}
+          onUpload={handleImageUpload}
+          hint="Upload a JPG or PNG image for this service card."
+        />
 
         <FormField label="Landing order">
           <input
