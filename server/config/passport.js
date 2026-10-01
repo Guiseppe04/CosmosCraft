@@ -20,6 +20,7 @@ const handleOAuthLogin = async (provider, profile, done) => {
   try {
     console.log(`[OAuth:${provider}] Profile received:`, JSON.stringify(profile, null, 2));
     const email = profile.emails?.[0]?.value;
+    const emailVerified = profile.emails?.[0]?.verified === true || profile._json?.email_verified === true;
     if (!email) {
       console.error(`[OAuth:${provider}] No email found in profile. profileFields may be misconfigured.`);
       return done(new Error('No email address returned by provider. Please ensure the email permission is granted.'), null);
@@ -37,6 +38,7 @@ const handleOAuthLogin = async (provider, profile, done) => {
         firstName,
         middleName: middleName || '',
         lastName,
+        emailVerified,
       });
     } else {
       // Check if identity linked

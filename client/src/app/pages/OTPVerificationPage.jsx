@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router'
+import { useAuth } from '../context/AuthContext.jsx'
 import { API } from '../utils/apiConfig'
 
 export function OTPVerificationPage() {
   const navigate = useNavigate()
+  const { login, fetchUser } = useAuth()
   const [otp, setOtp] = useState(['', '', '', '', '', ''])
   const [email, setEmail] = useState('')
   const [error, setError] = useState('')
@@ -32,7 +34,7 @@ export function OTPVerificationPage() {
     }
   }, [resendTimer, canResend, email])
 
-  const handleOtpChange = (index, value) => {
+  const handleOtpChange = (index, value, e) => {
     // Only allow digits
     if (/^\d?$/.test(value)) {
       const newOtp = [...otp]
@@ -43,6 +45,16 @@ export function OTPVerificationPage() {
       if (value && index < 5) {
         inputRefs.current[index + 1]?.focus()
       }
+    }
+  }
+
+  const handlePaste = (e) => {
+    e.preventDefault()
+    const pastedText = e.clipboardData.getData('text').trim()
+    const digits = pastedText.match(/\d/g)
+    if (digits && digits.length === 6) {
+      setOtp(digits)
+      inputRefs.current[5]?.focus()
     }
   }
 
@@ -84,16 +96,21 @@ export function OTPVerificationPage() {
         return
       }
 
-      setSuccess('Email verified successfully! Redirecting to login...')
-      
+      // Log in the user with the token from the response
+      const token = data.data?.accessToken || data.data?.token
+      if (token) {
+        const userData = await fetchUser()
+        if (userData) {
+          login(userData, token)
+        }
+      }
+
       // Clear localStorage
       localStorage.removeItem('pendingEmail')
       localStorage.removeItem('pendingUserId')
 
-      // Redirect to home page after 2 seconds
-      setTimeout(() => {
-        navigate('/')
-      }, 2000)
+      // Redirect to home page
+      navigate('/')
     } catch (error) {
       console.error('OTP verification error:', error)
       setError('Network error. Please try again.')
@@ -161,9 +178,10 @@ export function OTPVerificationPage() {
                 type="text"
                 maxLength="1"
                 value={digit}
-                onChange={e => handleOtpChange(index, e.target.value)}
+                onChange={e => handleOtpChange(index, e.target.value, e)}
                 onKeyDown={e => handleKeyDown(index, e)}
-                className="w-12 h-12 text-center text-xl font-semibold border-2 border-gray-300 rounded-lg focus:border-gold focus:outline-none"
+                onPaste={index === 0 ? handlePaste : undefined}
+                className="w-12 h-12 text-center text-xl font-semibold text-black border-2 border-gray-300 rounded-lg focus:border-gold focus:outline-none bg-white"
               />
             ))}
           </div>

@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
 const { generateTokens, verifyRefreshToken } = require('../utils/generateTokens');
 const rbacService = require('../services/rbacService');
+const { pool } = require('../config/database');
 
 const getCookieOptions = () => {
   const isProd = process.env.NODE_ENV === 'production';
@@ -16,6 +17,24 @@ const getCookieOptions = () => {
       sameSite: 'lax',
     }),
   };
+};
+
+const PUBLIC_AUTH_ROUTES = new Set([
+  '/auth/verify-otp',
+  '/auth/resend-otp',
+  '/auth/email-login',
+  '/auth/forgot-password',
+  '/auth/reset-password',
+  '/auth/logout',
+]);
+
+const isPublicAuthRoute = (path) => {
+  return PUBLIC_AUTH_ROUTES.has(path);
+};
+
+const getUserVerificationStatus = async (userId) => {
+  const res = await pool.query('SELECT is_verified, is_active FROM users WHERE user_id = $1', [userId]);
+  return res.rows[0] || null;
 };
 
 const handleAuth = async (req, res, next, { required }) => {
@@ -42,6 +61,13 @@ const handleAuth = async (req, res, next, { required }) => {
       if (!refreshToken) return null;
       try {
         const decoded = await verifyRefreshToken(refreshToken);
+        
+        // Check user verification status
+        const userStatus = await getUserVerificationStatus(decoded.id);
+        if (!userStatus || !userStatus.is_active || !userStatus.is_verified) {
+          return null;
+        }
+
         const { accessToken: newAccessToken, refreshToken: newRefreshToken } = await generateTokens(decoded.id, decoded.role);
 
         res.cookie('accessToken', newAccessToken, cookieOptions);
@@ -115,6 +141,31 @@ const handleAuth = async (req, res, next, { required }) => {
           });
         }
       } else {
+        // Check user verification status
+        const userStatus = await getUserVerificationStatus(user.id);
+        if (!userStatus || !userStatus.is_active) {
+          if (!required) {
+            req.user = null;
+            return next();
+          }
+          return res.status(403).json({
+            status: 'error',
+            code: 'ACCOUNT_DEACTIVATED',
+            message: 'Account is deactivated. Please contact support.',
+          });
+        }
+        if (!userStatus.is_verified) {
+          if (!required || isPublicAuthRoute(req.path)) {
+            req.user = null;
+            return next();
+          }
+          return res.status(403).json({
+            status: 'error',
+            code: 'EMAIL_NOT_VERIFIED',
+            message: 'Please verify your email first.',
+          });
+        }
+
         const roleSummary = await rbacService.getUserRoleSummary(user.id, false);
         req.user = {
           ...user,

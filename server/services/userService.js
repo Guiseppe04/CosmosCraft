@@ -49,11 +49,15 @@ exports.createOAuthUser = async (userData) => {
       throw new Error('User already exists with this email');
     }
 
+    // Determine if email is verified by provider
+    // Google and Facebook both return email_verified in profile when email scope is granted
+    const isVerified = userData.emailVerified === true;
+
     // Insert user
     const userRes = await client.query(
       `INSERT INTO users (email, first_name, middle_name, last_name, is_verified) 
-       VALUES ($1, $2, $3, $4, true) RETURNING *`,
-      [userData.email, userData.firstName, userData.middleName || null, userData.lastName]
+       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+      [userData.email, userData.firstName, userData.middleName || null, userData.lastName, isVerified]
     );
     const user = userRes.rows[0];
 
@@ -386,7 +390,7 @@ exports.reactivateAccount = async (userId) => {
 };
 
 exports.listUsers = async (filters = {}, limit = 10, skip = 0) => {
-  let queryStr = 'SELECT user_id, email, first_name, last_name, role, is_active, created_at FROM users WHERE 1=1';
+  let queryStr = 'SELECT user_id, email, first_name, last_name, role, is_active, is_verified, created_at FROM users WHERE is_verified = true AND 1=1';
   const values = [];
   let idx = 1;
 
@@ -449,7 +453,112 @@ exports.verifyAndConsumeOTP = async (userId, otpCode, purpose = 'signup') => {
   return res.rows.length > 0;
 };
 
+exports.verifyAndConsumeOTPWithAttempts = async (userId, otpCode, purpose = 'signup') => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const otpRes = await client.query(
+      `SELECT * FROM otp_codes 
+       WHERE user_id = $1 AND code = $2 AND purpose = $3 AND is_used = false AND expires_at > now()
+       FOR UPDATE`,
+      [userId, otpCode, purpose]
+    );
+
+    if (otpRes.rows.length === 0) {
+      await client.query('COMMIT');
+      return { valid: false, maxAttemptsReached: false };
+    }
+
+    const otpRecord = otpRes.rows[0];
+
+    const attemptRes = await client.query(
+      `SELECT COUNT(*) as attempt_count FROM otp_attempts WHERE otp_id = $1 AND success = false`,
+      [otpRecord.otp_id]
+    );
+    const failedAttempts = parseInt(attemptRes.rows[0].attempt_count, 10);
+
+    if (failedAttempts >= 5) {
+      await client.query('UPDATE otp_codes SET is_used = true WHERE otp_id = $1', [otpRecord.otp_id]);
+      await client.query('COMMIT');
+      return { valid: false, maxAttemptsReached: true };
+    }
+
+    await client.query(
+      `INSERT INTO otp_attempts (otp_id, success) VALUES ($1, $2)`,
+      [otpRecord.otp_id, true]
+    );
+
+    await client.query(
+      `UPDATE otp_codes SET is_used = true WHERE otp_id = $1`,
+      [otpRecord.otp_id]
+    );
+
+    await client.query('COMMIT');
+    return { valid: true, maxAttemptsReached: false };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+};
+
 exports.markEmailVerified = async (userId) => {
   await pool.query('UPDATE users SET is_verified = true, updated_at = now() WHERE user_id = $1', [userId]);
+};
+
+exports.checkResendOTPRateLimit = async (email) => {
+  const user = await pool.query('SELECT user_id FROM users WHERE email = $1', [email.toLowerCase().trim()]);
+  if (user.rows.length === 0) {
+    return { allowed: true, retryAfter: null };
+  }
+
+  const userId = user.rows[0].user_id;
+
+  const recentResend = await pool.query(
+    `SELECT created_at FROM otp_codes 
+     WHERE user_id = $1 AND purpose = 'signup' AND created_at > now() - interval '60 seconds'
+     ORDER BY created_at DESC LIMIT 1`,
+    [userId]
+  );
+  if (recentResend.rows.length > 0) {
+    const secondsAgo = Math.floor((Date.now() - new Date(recentResend.rows[0].created_at).getTime()) / 1000);
+    return { allowed: false, retryAfter: Math.max(60 - secondsAgo, 1) };
+  }
+
+  const hourlyCount = await pool.query(
+    `SELECT COUNT(*) as count FROM otp_codes 
+     WHERE user_id = $1 AND purpose = 'signup' AND created_at > now() - interval '1 hour'`,
+    [userId]
+  );
+  if (parseInt(hourlyCount.rows[0].count, 10) >= 5) {
+    const oldestInWindow = await pool.query(
+      `SELECT created_at FROM otp_codes 
+       WHERE user_id = $1 AND purpose = 'signup' AND created_at > now() - interval '1 hour'
+       ORDER BY created_at ASC LIMIT 1`,
+      [userId]
+    );
+    if (oldestInWindow.rows.length > 0) {
+      const msUntilWindowEnds = new Date(oldestInWindow.rows[0].created_at).getTime() + 60 * 60 * 1000 - Date.now();
+      return { allowed: false, retryAfter: Math.ceil(msUntilWindowEnds / 1000) };
+    }
+    return { allowed: false, retryAfter: 3600 };
+  }
+
+  return { allowed: true, retryAfter: null };
+};
+
+exports.recordResendOTPAttempt = async (email) => {
+  const user = await pool.query('SELECT user_id FROM users WHERE email = $1', [email.toLowerCase().trim()]);
+  if (user.rows.length > 0) {
+    const markerCode = `RL${Date.now().toString(36).slice(-4)}`;
+    await pool.query(
+      `INSERT INTO otp_codes (user_id, code, purpose, expires_at, is_used) 
+       VALUES ($1, $2, 'signup', now() + interval '1 minute', true)
+       ON CONFLICT (user_id, purpose, code) DO NOTHING`,
+      [user.rows[0].user_id, markerCode]
+    );
+  }
 };
 
