@@ -4932,19 +4932,13 @@ export function DashboardPage() {
           <motion.main
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
-            className="flex flex-col space-y-4"
+            className="flex flex-col h-fit"
           >
-            <div className="xl:hidden">
+            <div className="xl:hidden mb-4">
               <DashboardSectionTabs
                 activeSection={activeSection}
                 onSectionChange={setActiveSection}
               />
-            </div>
-
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <h1 className="text-xl sm:text-2xl font-bold text-white">{currentMenu?.label || 'Profile'}</h1>
-              </div>
             </div>
 
             {activeSection === 'profile' && renderProfileContent()}
