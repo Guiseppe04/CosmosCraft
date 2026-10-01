@@ -31,6 +31,12 @@ export function LoginModal() {
       const data = await response.json()
 
       if (!response.ok) {
+        if (data.code === 'EMAIL_NOT_VERIFIED') {
+          const email = data.data?.email || email.trim()
+          closeLogin()
+          navigate(`/verify-otp?email=${encodeURIComponent(email)}`, { replace: true })
+          return
+        }
         setError(data.message || 'Login failed. Please check your credentials.')
         return
       }

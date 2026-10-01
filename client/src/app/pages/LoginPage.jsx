@@ -75,6 +75,11 @@ export function LoginPage() {
       const data = await response.json()
 
       if (!response.ok) {
+        if (data.code === 'EMAIL_NOT_VERIFIED') {
+          const email = data.data?.email || email.trim()
+          navigate(`/verify-otp?email=${encodeURIComponent(email)}`, { replace: true })
+          return
+        }
         if (data.errors && Array.isArray(data.errors) && data.errors.length > 0) {
           data.errors.forEach(err => {
             if (err.field === 'email') setEmailError(err.message)

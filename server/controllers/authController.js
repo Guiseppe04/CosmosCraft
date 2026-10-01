@@ -102,17 +102,7 @@ exports.oauthSignup = asyncHandler(async (req, res, next) => {
   const roleSummary = await rbacService.getUserRoleSummary(newUser.user_id, false);
   const { accessToken, refreshToken } = await generateTokens(newUser.user_id, roleSummary.role);
 
-  const cookieOptions = {
-    httpOnly: true,
-    maxAge: 7 * 24 * 60 * 60 * 1000,
-    ...(process.env.NODE_ENV === 'production' ? {
-      secure: true,
-      sameSite: 'none'
-    } : {
-      secure: false,
-      sameSite: 'lax'
-    })
-  };
+  const cookieOptions = getCookieOptions();
 
   res.cookie('accessToken', accessToken, cookieOptions);
   res.cookie('refreshToken', refreshToken, { ...cookieOptions, maxAge: 7 * 24 * 60 * 60 * 1000 });
@@ -172,25 +162,36 @@ exports.emailSignup = asyncHandler(async (req, res, next) => {
       console.error('Failed to send verification email to', newUser.email, ':', mailError.message || mailError);
     }
 
-    const roleSummary = await rbacService.getUserRoleSummary(newUser.user_id, false);
-    const { accessToken, refreshToken } = await generateTokens(newUser.user_id, roleSummary.role);
-
-    const cookieOptions = getCookieOptions();
-
-    res.cookie('accessToken', accessToken, cookieOptions);
-    res.cookie('refreshToken', refreshToken, { ...cookieOptions, maxAge: 7 * 24 * 60 * 60 * 1000 });
-
     res.status(201).json({
-      status: 'success', message: 'Signup successful. Please check your email for the verification code.',
+      status: 'success',
+      message: 'Signup successful. Please check your email for the verification code.',
       data: {
-        token: accessToken,
-        accessToken,
-        refreshToken,
+        requiresVerification: true,
         user: { id: newUser.user_id, email: newUser.email, is_verified: newUser.is_verified }
       }
     });
   } catch (error) {
     if (error.message && error.message.includes('already exists')) {
+      const existingUser = await userService.getUserByEmail(value.email.toLowerCase());
+      if (existingUser && !existingUser.is_verified && existingUser.password_hash) {
+        const { code: otp, expiresAt: otpExpires } = generateOTPWithExpiry(15);
+        await userService.saveOTP(existingUser.user_id, otp, otpExpires, 'signup');
+
+        try {
+          await mailService.sendVerificationEmail(existingUser.email, otp);
+        } catch (mailError) {
+          console.error('Failed to send verification email to', existingUser.email, ':', mailError.message || mailError);
+        }
+
+        return res.status(201).json({
+          status: 'success',
+          message: 'Signup successful. Please check your email for the verification code.',
+          data: {
+            requiresVerification: true,
+            user: { id: existingUser.user_id, email: existingUser.email, is_verified: existingUser.is_verified }
+          }
+        });
+      }
       throw new AppError('An account with this email already exists.', 409, [], 'EMAIL_EXISTS');
     }
     throw new AppError(error.message || 'Signup failed', 400);
@@ -220,11 +221,25 @@ exports.emailLogin = asyncHandler(async (req, res, next) => {
 
   // Require email verification before allowing login
   if (!user.is_verified) {
+    const rateLimitResult = await userService.checkResendOTPRateLimit(user.email);
+    if (rateLimitResult.allowed) {
+      const { code: otp, expiresAt: otpExpires } = generateOTPWithExpiry(15);
+      await userService.saveOTP(user.user_id, otp, otpExpires, 'signup');
+
+      try {
+        await mailService.sendVerificationEmail(user.email, otp);
+      } catch (mailError) {
+        console.error('Failed to send verification email to', user.email, ':', mailError.message || mailError);
+      }
+
+      await userService.recordResendOTPAttempt(user.email);
+    }
+
     return res.status(403).json({
       status: 'error',
-      message: 'Please verify your email before logging in.',
+      message: 'Email not verified. Verification code sent.',
       code: 'EMAIL_NOT_VERIFIED',
-      data: { emailVerified: false }
+      data: { emailVerified: false, email: user.email }
     });
   }
 
@@ -259,6 +274,14 @@ exports.refreshAccessToken = asyncHandler(async (req, res, next) => {
 
   const decoded = await verifyRefreshToken(refreshToken);
   const user = await userService.getUserById(decoded.id);
+
+  if (!user || !user.is_active) {
+    throw new AppError('Account is deactivated. Please contact support.', 403);
+  }
+
+  if (!user.is_verified) {
+    throw new AppError('Please verify your email first.', 403, [], 'EMAIL_NOT_VERIFIED');
+  }
 
   const roleSummary = await rbacService.getUserRoleSummary(user.user_id, false);
   const tokens = await generateTokens(user.user_id, roleSummary.role);
@@ -326,15 +349,56 @@ exports.verifyEmailOTP = asyncHandler(async (req, res, next) => {
   if (!email || !otp) throw new AppError('Email and OTP are required', 400);
 
   const user = await userService.getUserByEmail(email);
-  if (!user) throw new AppError('User not found', 404);
+  if (!user) {
+    return res.status(401).json({
+      status: 'error',
+      message: 'Invalid or expired OTP',
+      code: 'INVALID_OTP',
+      data: { emailVerified: false }
+    });
+  }
 
-  if (user.is_verified) return res.status(200).json({ status: 'success', message: 'Email is already verified', data: { emailVerified: true } });
+  if (user.is_verified) {
+    return res.status(200).json({ status: 'success', message: 'Email is already verified', data: { emailVerified: true } });
+  }
 
-  const isValidOTP = await userService.verifyAndConsumeOTP(user.user_id, otp, 'signup');
-  if (!isValidOTP) throw new AppError('Invalid or expired OTP', 401);
+  const otpResult = await userService.verifyAndConsumeOTPWithAttempts(user.user_id, otp, 'signup');
+  if (!otpResult.valid) {
+    if (otpResult.maxAttemptsReached) {
+      return res.status(401).json({
+        status: 'error',
+        message: 'Too many failed attempts. Please request a new OTP.',
+        code: 'OTP_MAX_ATTEMPTS',
+        data: { emailVerified: false }
+      });
+    }
+    return res.status(401).json({
+      status: 'error',
+      message: 'Invalid or expired OTP',
+      code: 'INVALID_OTP',
+      data: { emailVerified: false }
+    });
+  }
 
   await userService.markEmailVerified(user.user_id);
-  res.status(200).json({ status: 'success', message: 'Email verified successfully', data: { emailVerified: true } });
+
+  const roleSummary = await rbacService.getUserRoleSummary(user.user_id, false);
+  const { accessToken, refreshToken } = await generateTokens(user.user_id, roleSummary.role);
+
+  const cookieOptions = getCookieOptions();
+  res.cookie('accessToken', accessToken, cookieOptions);
+  res.cookie('refreshToken', refreshToken, { ...cookieOptions, maxAge: 7 * 24 * 60 * 60 * 1000 });
+
+  res.status(200).json({
+    status: 'success',
+    message: 'Email verified successfully',
+    data: {
+      emailVerified: true,
+      token: accessToken,
+      accessToken,
+      refreshToken
+    }
+  });
 });
 
 exports.resendOTP = asyncHandler(async (req, res, next) => {
@@ -342,21 +406,32 @@ exports.resendOTP = asyncHandler(async (req, res, next) => {
   if (!email) throw new AppError('Email is required', 400);
 
   const user = await userService.getUserByEmail(email);
-  if (!user) throw new AppError('User not found', 404);
+  const rateLimitResult = await userService.checkResendOTPRateLimit(email);
 
-  if (user.is_verified) return res.status(200).json({ status: 'success', message: 'Email is already verified', data: { emailVerified: true } });
-
-  const { code: otp, expiresAt: otpExpires } = generateOTPWithExpiry(15);
-  await userService.saveOTP(user.user_id, otp, otpExpires, 'signup');
-
-  try {
-    await mailService.sendVerificationEmail(user.email, otp);
-  } catch (mailError) {
-    console.error('Failed to send OTP:', mailError);
-    throw new AppError('Unable to send verification email. Please try again later.', 502, [], 'EMAIL_SEND_FAILED');
+  if (!rateLimitResult.allowed) {
+    return res.status(429).json({
+      status: 'error',
+      message: 'Too many requests. Please try again later.',
+      code: 'RESEND_RATE_LIMITED',
+      data: { retryAfter: rateLimitResult.retryAfter }
+    });
   }
 
-  res.status(200).json({ status: 'success', message: 'OTP sent to your email' });
+  if (user && !user.is_verified) {
+    const { code: otp, expiresAt: otpExpires } = generateOTPWithExpiry(15);
+    await userService.saveOTP(user.user_id, otp, otpExpires, 'signup');
+
+    try {
+      await mailService.sendVerificationEmail(user.email, otp);
+    } catch (mailError) {
+      console.error('Failed to send OTP:', mailError);
+      throw new AppError('Unable to send verification email. Please try again later.', 502, [], 'EMAIL_SEND_FAILED');
+    }
+
+    await userService.recordResendOTPAttempt(email);
+  }
+
+  res.status(200).json({ status: 'success', message: 'If an account exists and is unverified, an OTP has been sent.' });
 });
 
 // Forgot Password (POST /auth/forgot-password)
