@@ -1,5 +1,6 @@
 const { pool } = require('../config/database');
 const { AppError } = require('../middleware/errorHandler');
+const socketService = require('./socketService');
 
 const NOTIFICATION_TYPES = {
   ORDER: 'order_update',
@@ -36,7 +37,12 @@ async function createNotification({ user_id, title, message, type, related_entit
      [user_id, title, message || '', type || NOTIFICATION_TYPES.GENERAL, related_entity_id, related_entity_type, expires_at || null]
   );
 
-  return result.rows[0];
+  const notification = result.rows[0];
+  if (notification?.user_id) {
+    socketService.emitToUser(notification.user_id, 'notification:new', { notification });
+  }
+
+  return notification;
 }
 
 async function createBatchNotifications(userIds, { title, message, type, related_entity_id, related_entity_type }) {
@@ -72,6 +78,13 @@ async function createBatchNotifications(userIds, { title, message, type, related
     }
 
     await client.query('COMMIT');
+
+    for (const n of notifications) {
+      if (n?.user_id) {
+        socketService.emitToUser(n.user_id, 'notification:new', { notification: n });
+      }
+    }
+
     return { created: notifications.length, notifications };
   } catch (err) {
     await client.query('ROLLBACK');

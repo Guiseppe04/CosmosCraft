@@ -2,6 +2,8 @@ const paymentService = require('../services/paymentService');
 const { AppError } = require('../middleware/errorHandler');
 const paymentValidation = require('../utils/paymentValidation');
 const { hasRole } = require('../utils/roles');
+const socketService = require('../services/socketService');
+const { pool } = require('../config/database');
 
 const validate = (data, schema) => {
   const { error, value } = schema.validate(data, { abortEarly: false });
@@ -11,6 +13,28 @@ const validate = (data, schema) => {
   }
   return value;
 };
+
+async function emitOrderPaymentUpdate(orderId, payment, action = 'payment_status_updated') {
+  try {
+    if (!orderId) return;
+    const orderRes = await pool.query('SELECT * FROM orders WHERE order_id = $1', [orderId]);
+    const order = orderRes.rows[0];
+    if (order) {
+      socketService.emitToUserAndStaff(order.user_id, 'order:updated', {
+        order,
+        payment,
+        action,
+      });
+      socketService.emitToUserAndStaff(order.user_id, 'payment:updated', {
+        order,
+        payment,
+        action,
+      });
+    }
+  } catch (err) {
+    console.error('Failed to emit order/payment socket update:', err);
+  }
+}
 
 async function checkPaymentAccess(paymentId, userId, userRole) {
   const payment = await paymentService.getPaymentById(paymentId);
@@ -45,6 +69,8 @@ exports.createPayment = async (req, res, next) => {
       reference_number: validated.reference_number,
       proof_url: validated.proof_url || null,
     });
+
+    await emitOrderPaymentUpdate(validated.order_id, payment, 'payment_status_updated');
 
     res.status(201).json({
       status: 'success',
@@ -105,6 +131,8 @@ exports.uploadProof = async (req, res, next) => {
       proof_url: proofUrl,
     });
 
+    await emitOrderPaymentUpdate(payment.order_id, payment, 'payment_status_updated');
+
     res.json({
       status: 'success',
       data: {
@@ -163,6 +191,8 @@ exports.verifyPayment = async (req, res, next) => {
       notes
     );
 
+    await emitOrderPaymentUpdate(payment.order_id, payment, 'payment_approved');
+
     res.json({
       status: 'success',
       data: {
@@ -194,6 +224,8 @@ exports.rejectPayment = async (req, res, next) => {
       notes
     );
 
+    await emitOrderPaymentUpdate(payment.order_id, payment, 'payment_status_updated');
+
     res.json({
       status: 'success',
       data: {
@@ -219,6 +251,8 @@ exports.cancelPayment = async (req, res, next) => {
     );
 
     const cancelled = await paymentService.cancelPayment(id, req.user.user_id);
+
+    await emitOrderPaymentUpdate(cancelled.order_id, cancelled, 'payment_status_updated');
 
     res.json({
       status: 'success',
@@ -366,6 +400,8 @@ exports.refundPayment = async (req, res, next) => {
       req.user.user_id,
       reason
     );
+
+    await emitOrderPaymentUpdate(payment.order_id, payment, 'payment_status_updated');
 
     res.json({
       status: 'success',

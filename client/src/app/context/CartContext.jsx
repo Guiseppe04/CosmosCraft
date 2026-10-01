@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { CheckCircle } from 'lucide-react'
 import api from '../services/api.js'
 import { useAuth } from './AuthContext.jsx'
+import { useSocketEvent } from './SocketContext.jsx'
 
 /**
  * CartContext - Global state management for shopping cart
@@ -73,6 +74,51 @@ export function CartProvider({ children }) {
       console.error(err)
     }
   }, [])
+
+  // ── Real-Time Price & Stock sync for Cart ──────────────────────────────
+  useSocketEvent('product:updated', (data) => {
+    const targetId = String(data?.productId || data?.product_id || data?.product?.product_id || '')
+    if (!targetId) return
+
+    setCart((prev) =>
+      prev.map((item) => {
+        const itemId = String(item.id || item.product_id || '')
+        if (itemId === targetId) {
+          const rawPrice = data.price !== undefined ? data.price : data?.product?.price
+          const nextPrice = rawPrice !== undefined ? Number(rawPrice) : item.price
+          const rawStock = data?.stock !== undefined ? data.stock : data?.product?.stock
+          const nextStock = rawStock !== undefined ? Number(rawStock) : item.stock
+          const nextName = data?.name || data?.product?.name || item.name
+
+          return {
+            ...item,
+            name: nextName,
+            price: Number.isFinite(nextPrice) ? nextPrice : item.price,
+            stock: Number.isFinite(nextStock) ? nextStock : item.stock,
+          }
+        }
+        return item
+      })
+    )
+  })
+
+  useSocketEvent('stock:updated', (data) => {
+    const targetId = String(data?.productId || data?.product_id || data?.product?.product_id || '')
+    if (!targetId) return
+    const rawStock = data?.stock ?? data?.product?.stock
+    const newStock = Number(rawStock)
+    if (!Number.isFinite(newStock)) return
+
+    setCart((prev) =>
+      prev.map((item) => {
+        const itemId = String(item.id || item.product_id || '')
+        if (itemId === targetId) {
+          return { ...item, stock: newStock }
+        }
+        return item
+      })
+    )
+  })
 
   const trackCartUpdate = useCallback((request) => {
     let trackedRequest

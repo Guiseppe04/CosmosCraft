@@ -1,6 +1,8 @@
 const { asyncHandler, AppError } = require('../middleware/errorHandler')
 const orderService = require('../services/orderService')
 const userService = require('../services/userService')
+const socketService = require('../services/socketService')
+const { pool } = require('../config/database')
 
 exports.createOrder = asyncHandler(async (req, res, next) => {
   const userId = req.user?.id
@@ -61,6 +63,28 @@ exports.createOrder = asyncHandler(async (req, res, next) => {
     installmentTenureMonths,
   })
 
+  socketService.emitToUserAndStaff(order?.user_id, 'order:created', { order });
+
+  // Emit stock updates for deducted products so shop page reflects new stock immediately
+  try {
+    const itemsRes = await pool.query(
+      `SELECT oi.product_id, i.stock 
+       FROM order_items oi
+       JOIN inventory i ON i.product_id = oi.product_id
+       WHERE oi.order_id = $1 AND oi.product_id IS NOT NULL`,
+      [order.order_id]
+    );
+    for (const row of itemsRes.rows) {
+      socketService.emitBroadcast('stock:updated', {
+        productId: row.product_id,
+        product_id: row.product_id,
+        stock: Number(row.stock),
+      });
+    }
+  } catch (err) {
+    console.error('Failed to emit stock updates for order items:', err);
+  }
+
   res.status(201).json({
     status: 'success',
     data: { order }
@@ -105,12 +129,14 @@ exports.getAllOrders = asyncHandler(async (req, res, next) => {
 exports.updateOrder = asyncHandler(async (req, res, next) => {
   const order = await orderService.updateOrder(req.params.id, req.validatedData || req.body)
   if (!order) throw new AppError('Order not found', 404)
+  socketService.emitToUserAndStaff(order.user_id, 'order:updated', { order, action: 'order_updated' });
   res.status(200).json({ status: 'success', data: order })
 })
 
 exports.cancelOrder = asyncHandler(async (req, res, next) => {
   const order = await orderService.cancelOrder(req.params.id)
   if (!order) throw new AppError('Order not found', 404)
+  socketService.emitToUserAndStaff(order.user_id, 'order:updated', { order, action: 'order_cancelled' });
   res.status(200).json({ status: 'success', data: order })
 })
 
@@ -128,6 +154,7 @@ exports.cancelMyOrder = asyncHandler(async (req, res, next) => {
   }
   try {
     const order = await orderService.cancelMyOrder(req.params.id, userId, reason);
+    socketService.emitToUserAndStaff(order?.user_id, 'order:updated', { order, action: 'order_cancelled' });
     res.status(200).json({ status: 'success', data: order });
   } catch (error) {
     throw new AppError(error.message, 400);
@@ -150,6 +177,7 @@ exports.updatePaymentStatus = asyncHandler(async (req, res, next) => {
     admin_user_id: adminUserId
   })
   if (!order) throw new AppError('Order not found', 404)
+  socketService.emitToUserAndStaff(order.user_id, 'order:updated', { order, action: 'payment_status_updated' });
   res.status(200).json({ status: 'success', data: order })
 })
 
@@ -164,6 +192,7 @@ exports.approvePayment = asyncHandler(async (req, res, next) => {
     admin_user_id: adminUserId
   })
   if (!order) throw new AppError('Order not found', 404)
+  socketService.emitToUserAndStaff(order.user_id, 'order:updated', { order, action: 'payment_approved' });
   res.status(200).json({ status: 'success', data: order })
 })
 
@@ -181,6 +210,7 @@ exports.updateShipment = asyncHandler(async (req, res, next) => {
     rider_contact
   })
   if (!order) throw new AppError('Order not found', 404)
+  socketService.emitToUserAndStaff(order.user_id, 'order:updated', { order, action: 'shipment_updated' });
   res.status(200).json({ status: 'success', data: order })
 })
 
@@ -196,12 +226,14 @@ exports.updateOutForDelivery = asyncHandler(async (req, res, next) => {
     rider_contact
   })
   if (!order) throw new AppError('Order not found', 404)
+  socketService.emitToUserAndStaff(order.user_id, 'order:updated', { order, action: 'out_for_delivery' });
   res.status(200).json({ status: 'success', data: order })
 })
 
 exports.markDelivered = asyncHandler(async (req, res, next) => {
   const order = await orderService.markDelivered(req.params.id)
   if (!order) throw new AppError('Order not found', 404)
+  socketService.emitToUserAndStaff(order.user_id, 'order:updated', { order, action: 'order_delivered' });
   res.status(200).json({ status: 'success', data: order })
 })
 
@@ -212,6 +244,7 @@ exports.markAsReceived = asyncHandler(async (req, res, next) => {
   }
   const order = await orderService.markAsReceived(req.params.id, userId)
   if (!order) throw new AppError('Order not found', 404)
+  socketService.emitToUserAndStaff(order.user_id, 'order:updated', { order, action: 'order_received' });
   res.status(200).json({ status: 'success', data: order })
 })
 
@@ -235,6 +268,7 @@ exports.createRefundRequest = asyncHandler(async (req, res, next) => {
     items,
     images: images || [],
   })
+  socketService.emitToUserAndStaff(refundRequest.user_id, 'refund:created', { refundRequest });
   res.status(201).json({ status: 'success', data: refundRequest })
 })
 
@@ -260,6 +294,7 @@ exports.updateRefundStatus = asyncHandler(async (req, res, next) => {
     adminNotes: adminNotes ? String(adminNotes).trim() : null,
   })
   if (!refundRequest) throw new AppError('Refund request not found', 404)
+  socketService.emitToUserAndStaff(refundRequest.user_id, 'refund:updated', { refundRequest, action: 'status_updated' });
   res.status(200).json({ status: 'success', data: refundRequest })
 })
 
@@ -290,5 +325,6 @@ exports.adjustRefundAmount = asyncHandler(async (req, res, next) => {
       adjustmentReason: adjustmentReason ? String(adjustmentReason).trim() : null,
     }
   )
+  socketService.emitToUserAndStaff(refundRequest?.user_id, 'refund:updated', { refundRequest, action: 'amount_adjusted' });
   res.status(200).json({ status: 'success', data: refundRequest })
 })

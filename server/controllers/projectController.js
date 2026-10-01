@@ -2,6 +2,7 @@ const { asyncHandler, AppError } = require('../middleware/errorHandler');
 const projectService = require('../services/projectService');
 const defaultWorkflowService = require('../services/defaultWorkflowService');
 const fulfillmentService = require('../services/fulfillmentService');
+const socketService = require('../services/socketService');
 
 // --- PROJECT BASE ---
 exports.getProjects = asyncHandler(async (req, res, next) => {
@@ -28,12 +29,20 @@ exports.createProject = asyncHandler(async (req, res, next) => {
 exports.updateProject = asyncHandler(async (req, res, next) => {
   const project = await projectService.updateProject(req.params.id, req.body);
   if (!project) throw new AppError('Project not found', 404);
+  if (project.customer_id) {
+    socketService.emitToUser(project.customer_id, 'project:updated', { project, projectId: req.params.id });
+  }
+  socketService.emitToStaff('project:updated', { project, projectId: req.params.id });
   res.json({ status: 'success', data: project });
 });
 
 exports.cancelProject = asyncHandler(async (req, res, next) => {
   const project = await projectService.cancelProject(req.params.id, req.user.id, req.user.role);
   if (!project) throw new AppError('Project not found', 404);
+  if (project.customer_id) {
+    socketService.emitToUser(project.customer_id, 'project:updated', { project, projectId: req.params.id });
+  }
+  socketService.emitToStaff('project:updated', { project, projectId: req.params.id });
   res.json({ status: 'success', data: project, message: 'Project cancelled successfully' });
 });
 
@@ -150,22 +159,28 @@ exports.createMilestone = asyncHandler(async (req, res, next) => {
 
 exports.updateMilestone = asyncHandler(async (req, res, next) => {
   const milestone = await projectService.updateMilestone(req.params.milestoneId, req.body, req.user.id);
+  socketService.emitBroadcast('project:milestone_updated', { milestone, milestoneId: req.params.milestoneId });
+  socketService.emitToStaff('project:updated', { milestone });
   res.json({ status: 'success', data: milestone });
 });
 
 exports.deleteMilestone = asyncHandler(async (req, res, next) => {
   await projectService.deleteMilestone(req.params.milestoneId, req.user.id);
+  socketService.emitBroadcast('project:milestone_updated', { milestoneId: req.params.milestoneId, deleted: true });
   res.json({ status: 'success', data: null });
 });
 
 // --- SUBTASKS ---
 exports.createSubtask = asyncHandler(async (req, res, next) => {
   const subtask = await projectService.addSubtask(req.params.milestoneId, req.body, req.user.id);
+  socketService.emitBroadcast('project:subtask_updated', { subtask, milestoneId: req.params.milestoneId });
   res.status(201).json({ status: 'success', data: subtask });
 });
 
 exports.updateSubtask = asyncHandler(async (req, res, next) => {
   const subtask = await projectService.updateSubtaskStatus(req.params.subtaskId, req.body, req.user.id, req.user.role);
+  socketService.emitBroadcast('project:subtask_updated', { subtask, subtaskId: req.params.subtaskId });
+  socketService.emitToStaff('project:updated', { subtask });
   res.json({ status: 'success', data: subtask });
 });
 

@@ -41,7 +41,7 @@ import {
 import { uploadToCloudinary } from '../utils/cloudinary'
 import { ConfirmModal } from '../components/ui/ConfirmModal'
 import { useDebounce } from '../hooks/useDebounce'
-import { useSmartPolling } from '../hooks/useSmartPolling'
+import { useSocketEvent } from '../context/SocketContext'
 import { useProductsAdmin } from '../hooks/useProductsAdmin'
 import { useCategoriesAdmin } from '../hooks/useCategoriesAdmin'
 import { usePartsAdmin } from '../hooks/usePartsAdmin'
@@ -866,32 +866,120 @@ export function AdminPage() {
      if (activeTab === 'services') fetchServices()
    }, [activeTab, fetchServices])
 
-    // ── Smart polling: active tab ────────────────────────────────────────────
-     const pollingFn = useCallback(async () => {
-       const map = {
-         'products': fetchProducts,
-         'guitar-parts': fetchParts,
-         'product-categories': fetchCategories,
-         'orders': fetchOrders,
-         'projects': fetchProjects,
-         'services': fetchServices,
-         'users': async () => { await fetchUsers(); await fetchAppointmentCapacity(); },
-         'appointments': async () => { await fetchAppointments({ silent: true }); fetchCalendarAppointments(); },
-         'inventory': () => fetchInventory({ silent: true }),
-         'pos': () => fetchInventory({ silent: true }),
-         'sales-report': fetchSalesReport,
-          'dashboard': async () => { await fetchOrders(); await fetchProjects(); await fetchAppointments({ silent: true }); fetchCalendarAppointments(); await fetchSalesReport() },
-       }
-       return map[activeTab]?.()
-    }, [activeTab, fetchProducts, fetchParts, fetchCategories, fetchUsers, fetchAppointmentCapacity, fetchOrders, fetchProjects, fetchServices, fetchAppointments, fetchCalendarAppointments, fetchInventory, fetchSalesReport])
+  // ── Real-time Event-Driven Updates for Admin Dashboard ─────────────────
+  useSocketEvent('order:created', () => {
+    fetchOrders()
+    if (['dashboard', 'sales-report'].includes(activeTab)) {
+      fetchSalesReport()
+    }
+    showToast('New order received!', 'info')
+  })
 
-  const pollingEnabled = ['dashboard', 'orders', 'inventory', 'pos', 'projects', 'appointments'].includes(activeTab)
-  useSmartPolling(pollingFn, { interval: 5000, maxInterval: 60000, backoffFactor: 1.5, enabled: pollingEnabled })
+  useSocketEvent('order:updated', () => {
+    fetchOrders()
+    if (['dashboard', 'sales-report'].includes(activeTab)) {
+      fetchSalesReport()
+    }
+  })
+
+  useSocketEvent('payment:created', () => {
+    fetchOrders()
+    if (['dashboard', 'sales-report'].includes(activeTab)) {
+      fetchSalesReport()
+    }
+  })
+
+  useSocketEvent('payment:updated', () => {
+    fetchOrders()
+    if (['dashboard', 'sales-report'].includes(activeTab)) {
+      fetchSalesReport()
+    }
+  })
+
+  useSocketEvent('appointment:created', () => {
+    fetchAppointments({ silent: true })
+    fetchCalendarAppointments()
+    showToast('New appointment booked!', 'info')
+  })
+
+  useSocketEvent('appointment:updated', () => {
+    fetchAppointments({ silent: true })
+    fetchCalendarAppointments()
+  })
+
+  useSocketEvent('project:updated', () => {
+    fetchProjects()
+  })
+
+  useSocketEvent('stock:updated', () => {
+    fetchInventory({ silent: true })
+  })
+
+  useSocketEvent('inventory:updated', () => {
+    fetchInventory({ silent: true })
+  })
+
+  useSocketEvent('product:updated', () => {
+    fetchProducts()
+  })
+
+  useSocketEvent('product:created', () => {
+    fetchProducts()
+  })
+
+  useSocketEvent('product:deleted', () => {
+    fetchProducts()
+  })
+
+  useSocketEvent('builder-part:updated', () => {
+    fetchParts()
+  })
+
+  useSocketEvent('builder-part:created', () => {
+    fetchParts()
+  })
+
+  useSocketEvent('builder-part:deleted', () => {
+    fetchParts()
+  })
+
+  useSocketEvent('pos:sale_completed', (data) => {
+    if (['dashboard', 'pos', 'sales-report', 'inventory'].includes(activeTab)) {
+      fetchSalesReport()
+      fetchInventory({ silent: true })
+    }
+    if (data?.saleNumber) {
+      showToast(`POS Sale completed: ${data.saleNumber}`, 'info')
+    }
+  })
+
+  useSocketEvent('refund:created', () => {
+    fetchOrders()
+    showToast('New refund request submitted!', 'info')
+  })
+
+  useSocketEvent('refund:updated', () => {
+    fetchOrders()
+  })
 
   const handleRefresh = () => {
     setIsLoading(true)
     setLastRefreshed(Date.now())
-    pollingFn()?.finally(() => setIsLoading(false))
+    const map = {
+      'products': fetchProducts,
+      'guitar-parts': fetchParts,
+      'product-categories': fetchCategories,
+      'orders': fetchOrders,
+      'projects': fetchProjects,
+      'services': fetchServices,
+      'users': async () => { await fetchUsers(); await fetchAppointmentCapacity(); },
+      'appointments': async () => { await fetchAppointments({ silent: true }); fetchCalendarAppointments(); },
+      'inventory': () => fetchInventory({ silent: true }),
+      'pos': () => fetchInventory({ silent: true }),
+      'sales-report': fetchSalesReport,
+      'dashboard': async () => { await fetchOrders(); await fetchProjects(); await fetchAppointments({ silent: true }); fetchCalendarAppointments(); await fetchSalesReport() },
+    }
+    map[activeTab]?.()?.finally(() => setIsLoading(false))
   }
 
    // ── Modal helpers ────────────────────────────────────────────────────────

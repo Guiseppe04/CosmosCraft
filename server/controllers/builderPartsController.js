@@ -1,6 +1,7 @@
 const builderPartsService = require('../services/builderPartsService');
 const { AppError } = require('../middleware/errorHandler');
 const auditService = require('../services/auditService');
+const socketService = require('../services/socketService');
 
 exports.getAllParts = async (req, res, next) => {
   try {
@@ -34,6 +35,9 @@ exports.createPart = async (req, res, next) => {
       part,
       req.ip
     );
+
+    socketService.emitBroadcast('builder-part:created', { part, partId: part.part_id });
+
     res.status(201).json({ status: 'success', data: { part } });
   } catch (err) { next(err); }
 };
@@ -53,6 +57,14 @@ exports.updatePart = async (req, res, next) => {
       part,
       req.ip
     );
+
+    socketService.emitBroadcast('builder-part:updated', {
+      part,
+      partId: part.part_id,
+      price: part.price,
+      stock: part.stock,
+    });
+
     res.json({ status: 'success', data: { part } });
   } catch (err) { next(err); }
 };
@@ -86,6 +98,9 @@ exports.deletePart = async (req, res, next) => {
       existing,
       req.ip
     );
+
+    socketService.emitBroadcast('builder-part:deleted', { partId: req.params.id, part });
+
     res.json({ status: 'success', message: 'Part deactivated', data: { part } });
   } catch (err) { next(err); }
 };

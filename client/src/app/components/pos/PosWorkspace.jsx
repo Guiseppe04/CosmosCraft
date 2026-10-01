@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState, useRef } from 'react'
 import { Package, Search, X, Printer, Download, ArrowUpDown, Grid3X3, List, Plus, RotateCcw, AlertTriangle } from 'lucide-react'
 import { posApi } from '../../utils/posApi'
 import { formatCurrency } from '../../utils/formatCurrency'
-import { useSmartPolling } from '../../hooks/useSmartPolling'
+import { useSocketEvent } from '../../context/SocketContext'
 import { useAuth } from '../../context/AuthContext'
 import { hasRole } from '../../utils/roles'
 
@@ -679,30 +679,16 @@ export function PosWorkspace({
     loadHistorySales({ reset: true })
   }, [loadHistorySales])
 
-  const lastSaleTimestampRef = useRef(null)
-  const latestSalesRef = useRef(null)
+  // Real-time sale updates via WebSockets (replaces polling)
+  useEffect(() => {
+    loadRecentSales({ silent: true })
+  }, [loadRecentSales])
 
-  const pollRecentSales = useCallback(async () => {
-    const result = await loadRecentSales({ silent: true })
-    if (result?.data?.length > 0) {
-      const latestSale = result.data[0]
-      const latestTimestamp = latestSale.created_at
-      
-      if (lastSaleTimestampRef.current && new Date(latestTimestamp) > new Date(lastSaleTimestampRef.current)) {
-        lastSaleTimestampRef.current = latestTimestamp
-        showToast?.(`New sale: ${latestSale.sale_number}`, 'info')
-      } else if (!lastSaleTimestampRef.current) {
-        lastSaleTimestampRef.current = latestTimestamp
-      }
-      latestSalesRef.current = result.data
+  useSocketEvent('pos:sale_completed', (data) => {
+    loadRecentSales({ silent: true })
+    if (data?.saleNumber) {
+      showToast?.(`New sale: ${data.saleNumber}`, 'info')
     }
-    return result
-  }, [loadRecentSales, showToast])
-
-  useSmartPolling(pollRecentSales, {
-    interval: 5000,
-    maxInterval: 60000,
-    backoffFactor: 1.5,
   })
 
   const addToCart = useCallback((product) => {

@@ -9,6 +9,7 @@ import {
 import { adminApi } from '../../utils/adminApi';
 import { resolveImageUrl, API, getAuthHeaders } from '../../utils/apiConfig';
 import { ConfirmModal } from '../ui/ConfirmModal';
+import { useSocketEvent } from '../../context/SocketContext';
 
 const formatLabel = (value) => {
   if (!value) return '';
@@ -659,6 +660,24 @@ export default function CustomerProjectTracker({ projectId, projectName, project
       loadAddresses();
     }
   }, [projectId]);
+
+  useSocketEvent('project:updated', (data) => {
+    if (!data?.projectId || data.projectId === projectId) {
+      loadData();
+      loadInstallments();
+      loadBuildClaim();
+      loadSettlement();
+      loadFulfillment();
+    }
+  });
+
+  useSocketEvent('project:milestone_updated', () => {
+    loadData();
+  });
+
+  useSocketEvent('project:subtask_updated', () => {
+    loadData();
+  });
 
   const loadFulfillment = async () => {
     if (!projectId) return;

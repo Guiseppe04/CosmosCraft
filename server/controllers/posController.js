@@ -1,5 +1,6 @@
 const posService = require('../services/posService');
 const { AppError } = require('../middleware/errorHandler');
+const socketService = require('../services/socketService');
 
 /**
  * POS CONTROLLER
@@ -232,6 +233,24 @@ exports.checkoutSale = async (req, res, next) => {
     const result = await posService.checkoutSale(req.params.id, paymentMethod, {
       referenceNumber
     });
+
+    socketService.emitToStaff('pos:sale_completed', {
+      sale: result?.sale,
+      saleNumber: result?.sale?.sale_number,
+      result
+    });
+
+    if (result?.deductions && Array.isArray(result.deductions)) {
+      for (const d of result.deductions) {
+        if (d?.product_id) {
+          socketService.emitBroadcast('stock:updated', {
+            productId: d.product_id,
+            product_id: d.product_id,
+            stock: d.new_stock,
+          });
+        }
+      }
+    }
 
     res.json({
       status: 'success',

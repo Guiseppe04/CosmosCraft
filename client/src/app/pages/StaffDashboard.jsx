@@ -20,7 +20,7 @@ import {
 import { Topbar } from '../components/admin/Topbar'
 import { useAuth } from '../context/AuthContext'
 import { useDebounce } from '../hooks/useDebounce'
-import { useSmartPolling } from '../hooks/useSmartPolling'
+import { useSocketEvent } from '../context/SocketContext'
 import { formatCurrency } from '../utils/formatCurrency'
 import { hasRole } from '../utils/roles'
 import { adminApi } from '../utils/adminApi'
@@ -491,8 +491,75 @@ export function StaffDashboard() {
     }
   }, [activeTab, fetchAppointments, fetchArchivedProjects, fetchAvailableDates, fetchInventory, fetchOrders, fetchProjects, fetchSalesReport, fetchUnavailableDates])
 
-  // ── Smart Polling ────────────────────────────────────────────────────────
-  const pollingFn = useCallback(async () => {
+  // ── Real-Time WebSocket Event Listeners (replaces polling) ──────────────
+  useSocketEvent('order:created', () => {
+    fetchOrders()
+    if (activeTab === 'dashboard' || activeTab === 'sales-report') fetchSalesReport()
+    showToast('New customer order received!', 'info')
+  })
+
+  useSocketEvent('order:updated', () => {
+    fetchOrders()
+    if (activeTab === 'dashboard' || activeTab === 'sales-report') fetchSalesReport()
+  })
+
+  useSocketEvent('payment:created', () => {
+    fetchOrders()
+    if (activeTab === 'dashboard' || activeTab === 'sales-report') fetchSalesReport()
+  })
+
+  useSocketEvent('payment:updated', () => {
+    fetchOrders()
+    if (activeTab === 'dashboard' || activeTab === 'sales-report') fetchSalesReport()
+  })
+
+  useSocketEvent('appointment:created', () => {
+    fetchAppointments({ silent: true })
+    fetchAvailableDates()
+    fetchUnavailableDates()
+    showToast('New appointment booked!', 'info')
+  })
+
+  useSocketEvent('appointment:updated', () => {
+    fetchAppointments({ silent: true })
+    fetchUnavailableDates()
+  })
+
+  useSocketEvent('project:updated', () => {
+    fetchProjects()
+    fetchArchivedProjects()
+  })
+
+  useSocketEvent('stock:updated', () => {
+    fetchInventory({ silent: true })
+  })
+
+  useSocketEvent('inventory:updated', () => {
+    fetchInventory({ silent: true })
+  })
+
+  useSocketEvent('pos:sale_completed', (data) => {
+    if (['dashboard', 'pos', 'inventory', 'sales-report'].includes(activeTab)) {
+      fetchSalesReport()
+      fetchInventory({ silent: true })
+    }
+    if (data?.saleNumber) {
+      showToast(`Sale completed: ${data.saleNumber}`, 'info')
+    }
+  })
+
+  useSocketEvent('refund:created', () => {
+    fetchOrders()
+    showToast('New refund request submitted!', 'info')
+  })
+
+  useSocketEvent('refund:updated', () => {
+    fetchOrders()
+  })
+
+  const handleRefresh = useCallback(() => {
+    setIsLoading(true)
+    setLastRefreshed(Date.now())
     const map = {
       dashboard: async () => {
         await Promise.all([fetchOrders(), fetchProjects(), fetchAppointments({ silent: true }), fetchSalesReport(), fetchInventory({ silent: true })])
@@ -503,16 +570,8 @@ export function StaffDashboard() {
       pos: () => fetchInventory({ silent: true }),
       appointments: () => Promise.all([fetchAppointments({ silent: true }), fetchUnavailableDates()]),
     }
-    return map[activeTab]?.()
+    map[activeTab]?.()?.finally(() => setIsLoading(false))
   }, [activeTab, fetchAppointments, fetchInventory, fetchOrders, fetchProjects, fetchSalesReport, fetchUnavailableDates])
-
-  useSmartPolling(pollingFn, { interval: 8000, maxInterval: 60000, backoffFactor: 1.5, enabled: true })
-
-  const handleRefresh = useCallback(() => {
-    setIsLoading(true)
-    setLastRefreshed(Date.now())
-    pollingFn()?.finally(() => setIsLoading(false))
-  }, [pollingFn])
 
   // ── Derived Data Views ───────────────────────────────────────────────────
   const visibleProducts = products || []

@@ -20,6 +20,7 @@ import { Country } from 'country-state-city'
 import { ConfirmModal } from '../components/ui/ConfirmModal'
 import { SelectableCartItemRow } from '../components/cart/SelectableCartItemRow.jsx'
 import { DashboardSectionTabs } from '../components/DashboardSectionTabs.jsx'
+import { useSocketEvent } from '../context/SocketContext.jsx'
 
 import '../../styles/DashboardSections.css'
 
@@ -598,7 +599,11 @@ export function DashboardPage() {
   useEffect(() => {
     const sectionFromState = location.state?.section
     if (!sectionFromState) return
-    setActiveSection(VALID_SECTIONS.has(sectionFromState) ? sectionFromState : 'profile')
+    const nextSection = VALID_SECTIONS.has(sectionFromState) ? sectionFromState : 'profile'
+    setActiveSection(nextSection)
+    if (nextSection === 'purchases') {
+      fetchMyOrders()
+    }
   }, [location.state])
 
   useEffect(() => {
@@ -781,6 +786,78 @@ export function DashboardPage() {
   const fetchMyCustomizations = () => {
     adminApi.getMyCustomizations().then(res => setMyCustomizations(res.data || [])).catch(console.error)
   }
+
+  // ── Real-time WebSocket Subscriptions for Customer ─────────────────────────
+  useSocketEvent('appointment:updated', (data) => {
+    fetchMyAppointments()
+    const status = data?.status || data?.appointment?.status
+    const actionMsg = data?.action === 'status_updated'
+      ? `Appointment status updated to: ${status ? status.replace(/_/g, ' ') : 'Updated'}`
+      : data?.action === 'rescheduled'
+      ? 'Your appointment has been rescheduled.'
+      : data?.action === 'cancelled'
+      ? 'An appointment has been cancelled.'
+      : 'Appointment updated.'
+    setToastMessage(actionMsg)
+  })
+
+  useSocketEvent('appointment:created', () => {
+    fetchMyAppointments()
+  })
+
+  useSocketEvent('order:updated', (data) => {
+    fetchMyOrders()
+    const payStatus = data?.order?.payment_status
+    const formattedPayStatus = payStatus === 'proof_submitted'
+      ? 'Proof Submitted! Awaiting verification.'
+      : payStatus
+      ? `Order payment status updated to: ${formatStatus(payStatus)}`
+      : 'Order payment status updated.'
+    const actionMsg = data?.action === 'payment_approved'
+      ? 'Payment approved! Your order is now being processed.'
+      : data?.action === 'payment_status_updated'
+      ? formattedPayStatus
+      : data?.action === 'order_delivered'
+      ? 'Your order has been delivered!'
+      : data?.action === 'out_for_delivery'
+      ? 'Your order is out for delivery!'
+      : data?.action === 'order_cancelled'
+      ? 'An order has been cancelled.'
+      : 'Order status updated.'
+    setToastMessage(actionMsg)
+  })
+
+  useSocketEvent('order:created', () => {
+    fetchMyOrders()
+  })
+
+  useSocketEvent('payment:created', () => {
+    fetchMyOrders()
+  })
+
+  useSocketEvent('payment:updated', () => {
+    fetchMyOrders()
+  })
+
+  useSocketEvent('refund:updated', (data) => {
+    fetchMyOrders()
+    const refundStatus = data?.refundRequest?.status || data?.status
+    const msg = data?.action === 'amount_adjusted'
+      ? `Refund amount adjusted: ${data?.refundRequest?.approved_amount || 'approved'}`
+      : `Refund request: ${refundStatus ? refundStatus.replace(/_/g, ' ') : 'Updated'}`
+    setToastMessage(msg)
+  })
+
+  useSocketEvent('notification:new', (data) => {
+    if (data?.notification?.title) {
+      setToastMessage(`🔔 ${data.notification.title}`)
+    }
+  })
+
+  useSocketEvent('project:updated', () => {
+    fetchMyProjects()
+    setToastMessage('Guitar build project progress updated!')
+  })
 
   const customizationLookup = useMemo(
     () => new Map(myCustomizations.map(customization => [customization.customization_id, customization])),
