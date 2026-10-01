@@ -41,6 +41,27 @@ const ensureOrderItemsColumns = async () => {
   await ensureOrderItemsColumnsPromise;
 };
 
+let ensureCustomizationBuildColumnsReady = false;
+let ensureCustomizationBuildColumnsPromise = null;
+
+const ensureCustomizationBuildColumns = async () => {
+  if (ensureCustomizationBuildColumnsReady) return;
+  if (!ensureCustomizationBuildColumnsPromise) {
+    ensureCustomizationBuildColumnsPromise = pool.query(`
+      ALTER TABLE customizations
+      ADD COLUMN IF NOT EXISTS config_json JSONB DEFAULT '{}'::jsonb,
+      ADD COLUMN IF NOT EXISTS stickers JSONB DEFAULT '[]'::jsonb,
+      ADD COLUMN IF NOT EXISTS preview_image TEXT
+    `).then(() => {
+      ensureCustomizationBuildColumnsReady = true;
+    }).catch((error) => {
+      ensureCustomizationBuildColumnsPromise = null;
+      throw error;
+    });
+  }
+  await ensureCustomizationBuildColumnsPromise;
+};
+
 let ensureInstallmentColumnsReady = false;
 let ensureInstallmentColumnsPromise = null;
 
@@ -263,6 +284,7 @@ const upsertCustomizationForOrder = async (client, userId, customization, fallba
   const {
     name,
     config = {},
+    stickers,
     summary = {},
     baseBuildPrice,
     additionalParts = [],
@@ -308,10 +330,12 @@ const upsertCustomizationForOrder = async (client, userId, customization, fallba
            pickups = $8,
            color = $9,
            finish_type = $10,
-           total_price = $11,
-           is_saved = $12,
+           config_json = COALESCE($11::jsonb, config_json),
+           stickers = COALESCE($12::jsonb, stickers),
+           total_price = $13,
+           is_saved = $14,
            updated_at = now()
-         WHERE customization_id = $13`,
+         WHERE customization_id = $15`,
         [
           name || 'Custom Build',
           guitarType,
@@ -323,6 +347,8 @@ const upsertCustomizationForOrder = async (client, userId, customization, fallba
           summary.pickups || config.pickups || null,
           summary.bodyFinish || config.bodyFinish || null,
           summary.bodyFinish || config.bodyFinish || null,
+          JSON.stringify(config),
+          Array.isArray(stickers) ? JSON.stringify(stickers) : null,
           totalPrice,
           true,
           requestedCustomizationId,
@@ -348,10 +374,12 @@ const upsertCustomizationForOrder = async (client, userId, customization, fallba
        pickups,
        color,
        finish_type,
+       config_json,
+       stickers,
        total_price,
        is_saved
      )
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, COALESCE($13::jsonb, '[]'::jsonb), $14, $15)
      RETURNING customization_id`,
     [
       userId,
@@ -365,6 +393,8 @@ const upsertCustomizationForOrder = async (client, userId, customization, fallba
       summary.pickups || config.pickups || null,
       summary.bodyFinish || config.bodyFinish || null,
       summary.bodyFinish || config.bodyFinish || null,
+      JSON.stringify(config),
+      Array.isArray(stickers) ? JSON.stringify(stickers) : null,
       totalPrice,
       true
     ]
@@ -498,6 +528,7 @@ exports.createOrder = async (orderData) => {
   // Ensure database columns exist
   await ensureOrderItemsColumns()
   await ensureInstallmentColumns()
+  await ensureCustomizationBuildColumns()
   
   const client = await pool.connect()
   

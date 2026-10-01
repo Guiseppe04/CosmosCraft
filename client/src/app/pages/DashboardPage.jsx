@@ -480,6 +480,7 @@ export function DashboardPage() {
   const debouncedMyProjectSearch = useDebounce(myProjectSearch, 300)
   const [myCustomizations, setMyCustomizations] = useState([])
   const [activeProjectView, setActiveProjectView] = useState(null)
+  const [trackerShowingInstallmentSchedule, setTrackerShowingInstallmentSchedule] = useState(false)
   const [activeBuildTab, setActiveBuildTab] = useState('build-projects')
 
   const [myOrders, setMyOrders] = useState([])
@@ -2031,21 +2032,6 @@ export function DashboardPage() {
                                       >
                                         View
                                       </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          setReviewForm({
-                                            rating: item.review.rating || 5,
-                                            title: item.review.title || '',
-                                            comment: item.review.comment || '',
-                                            images: Array.isArray(item.review.images) ? item.review.images : [],
-                                          })
-                                          setReviewModal({ mode: 'edit', order, item, review: item.review })
-                                        }}
-                                        className="text-xs text-white/70 hover:text-white hover:underline font-medium"
-                                      >
-                                        Edit
-                                      </button>
                                     </div>
                                   </div>
                                 )}
@@ -2091,24 +2077,6 @@ export function DashboardPage() {
                                   className="text-xs text-[var(--gold-primary)] hover:underline font-medium"
                                 >
                                   View
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const fb = order.customization_feedback
-                                    setFeedbackForm({
-                                      overall_rating: fb.overall_rating || 5,
-                                      build_quality_rating: fb.build_quality_rating || 5,
-                                      communication_rating: fb.communication_rating || 5,
-                                      accuracy_rating: fb.accuracy_rating || 5,
-                                      comment: fb.comment || '',
-                                      images: Array.isArray(fb.images) ? fb.images : [],
-                                    })
-                                    setFeedbackModal({ mode: 'edit', order, feedback: fb })
-                                  }}
-                                  className="text-xs text-white/70 hover:text-white hover:underline font-medium"
-                                >
-                                  Edit
                                 </button>
                               </div>
                             </div>
@@ -2385,7 +2353,7 @@ export function DashboardPage() {
           <p className="text-sm text-[var(--text-muted)] mb-6">Book a service appointment to see it here</p>
         </div>
       ) : (
-        <div className="max-h-[62vh] space-y-4 overflow-y-auto pr-2">
+        <div className="space-y-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
             <div className="relative flex-1 min-w-0">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
@@ -2483,6 +2451,7 @@ export function DashboardPage() {
               }}
             />
           </div>
+          <div className="max-h-[62vh] space-y-4 overflow-y-auto pr-2">
           {filteredAppointments.length === 0 ? (
             <p className="py-6 text-center text-sm text-[var(--text-muted)]">No appointments match your search.</p>
           ) : sortedAppointments.map(apt => {
@@ -2674,6 +2643,7 @@ export function DashboardPage() {
               </div>
             );
           })}
+          </div>
         </div>
       )}
     </div>
@@ -2693,14 +2663,23 @@ export function DashboardPage() {
         .trim();
       return (
         <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-4 sm:p-6 lg:p-7 xl:p-8">
-          <button onClick={() => setActiveProjectView(null)} className="mb-6 text-[var(--gold-primary)] hover:underline flex items-center gap-2 text-sm font-semibold">
-            &larr; Back to Build Projects
-          </button>
+          {!trackerShowingInstallmentSchedule && (
+            <button
+              onClick={() => {
+                setTrackerShowingInstallmentSchedule(false);
+                setActiveProjectView(null);
+              }}
+              className="mb-6 text-[var(--gold-primary)] hover:underline flex items-center gap-2 text-sm font-semibold"
+            >
+              &larr; Back to Build Projects
+            </button>
+          )}
           <CustomerProjectTracker
             projectId={activeProjectView.project_id}
             projectName={cleanTrackerName}
             projectData={activeProjectView}
             customBuildId={activeProjectView.customBuildId}
+            onInstallmentScheduleChange={setTrackerShowingInstallmentSchedule}
           />
         </div>
       );
@@ -6261,25 +6240,6 @@ export function DashboardPage() {
                     className="flex-1 py-2.5 rounded-xl border border-[var(--border)] text-white hover:bg-white/5 transition-colors font-medium text-sm"
                   >
                     Close
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const fb = feedbackModal.feedback
-                      setFeedbackForm({
-                        overall_rating: fb?.overall_rating || 5,
-                        build_quality_rating: fb?.build_quality_rating || 5,
-                        communication_rating: fb?.communication_rating || 5,
-                        accuracy_rating: fb?.accuracy_rating || 5,
-                        comment: fb?.comment || '',
-                        images: Array.isArray(fb?.images) ? fb.images : [],
-                      })
-                      setFeedbackModal(prev => ({ ...prev, mode: 'edit' }))
-                    }}
-                    className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-bold text-sm hover:shadow-[0_0_15px_rgba(212,175,55,0.4)] transition-all flex items-center justify-center gap-2"
-                  >
-                    <Edit className="w-4 h-4" />
-                    Edit Feedback
                   </button>
                 </div>
               </div>

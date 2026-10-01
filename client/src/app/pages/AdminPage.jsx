@@ -276,6 +276,7 @@ export function AdminPage() {
   const [projectDueDateTo, setProjectDueDateTo] = useState('')
   const [projectCompletionFilter, setProjectCompletionFilter] = useState('all')
   const [projectSort, setProjectSort] = useState('updated')
+  const [projectSortDirection, setProjectSortDirection] = useState('desc')
   const [projectPage, setProjectPage] = useState(1)
   const PROJECTS_PAGE_SIZE = 10
   const [projectArchiveTab, setProjectArchiveTab] = useState('active')
@@ -684,9 +685,9 @@ export function AdminPage() {
         serviceId: service.service_id ?? null,
         title: form.name || service.name,
         text: form.landing_text || form.description || service.description || 'Premium service tailored for your instrument.',
-        image: form.landing_image_url || form.image_url || form.image || service.image_url || '',
+        image: service.image_url || form.image_url || form.image || '',
         href: `/appointments?step=2&service=${encodeURIComponent((form.name || service.name).toLowerCase().replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, ' '))}&serviceName=${encodeURIComponent(form.name || service.name)}`,
-        enabled: Boolean(form.show_on_landing ?? true),
+        enabled: Boolean(service.is_active ?? form.is_active ?? true),
         order: Number(form.landing_order ?? 1),
       }
 
@@ -728,16 +729,16 @@ export function AdminPage() {
       date_to: projectDateTo || undefined,
       due_date_from: projectDueDateFrom || undefined,
       due_date_to: projectDueDateTo || undefined,
-      completion_percentage: projectCompletionFilter !== 'all' ? projectCompletionFilter : undefined,
+      completion_percentage: projectCompletionFilter === 'all' ? undefined : projectCompletionFilter,
       include_tasks: true,
       page: pageNum,
       page_size: PROJECTS_PAGE_SIZE,
-      sort_by: ({ updated: 'updated_at', created: 'created_at', created_desc: 'created_at', created_asc: 'created_at', name: 'project_name', customer: 'customer_name', progress: 'progress', due: 'estimated_completion_date', status: 'status' })[projectSort] || 'updated_at',
-      sort_dir: projectSort === 'created_asc' ? 'asc' : 'desc',
+      sort_by: ({ updated: 'updated_at', created: 'created_at', name: 'project_name', customer: 'customer_name', progress: 'progress', due: 'estimated_completion_date', status: 'status' })[projectSort] || 'updated_at',
+      sort_dir: projectSortDirection,
     }
-    Object.keys(params).forEach(k => params[k] === undefined && delete params[k])
+    Object.keys(params).forEach((key) => params[key] === undefined && delete params[key])
     return params
-  }, [debouncedSearch, projectStatusFilter, projectAssignedFilter, projectGuitarTypeFilter, projectDateFrom, projectDateTo, projectDueDateFrom, projectDueDateTo, projectCompletionFilter, projectSort])
+  }, [debouncedSearch, projectStatusFilter, projectAssignedFilter, projectGuitarTypeFilter, projectDateFrom, projectDateTo, projectDueDateFrom, projectDueDateTo, projectCompletionFilter, projectSort, projectSortDirection])
 
   // Appointment action handlers
   const handleAppointmentStatusChange = useCallback(async (id, status, reason) => {
@@ -844,15 +845,15 @@ export function AdminPage() {
       if (activeTab === 'projects') {
         fetchProjects(buildProjectQuery(projectPage))
       }
-    }, [activeTab, projectStatusFilter, projectAssignedFilter, projectGuitarTypeFilter, projectDateFrom, projectDateTo, projectDueDateFrom, projectDueDateTo, projectCompletionFilter, projectSort, projectPage, fetchProjects]) // eslint-disable-line
+    }, [activeTab, projectPage, fetchProjects, buildProjectQuery])
 
     useEffect(() => {
       setProjectPage(1)
-    }, [projectStatusFilter, projectAssignedFilter, projectGuitarTypeFilter, projectDateFrom, projectDateTo, projectDueDateFrom, projectDueDateTo, projectCompletionFilter, projectSort, debouncedSearch])
+    }, [projectStatusFilter, projectAssignedFilter, projectGuitarTypeFilter, projectDateFrom, projectDateTo, projectDueDateFrom, projectDueDateTo, projectCompletionFilter, projectSort, projectSortDirection, debouncedSearch])
 
     useEffect(() => {
       setArchivedProjectsPagination((prev) => ({ ...prev, page: 1 }))
-    }, [projectStatusFilter, projectAssignedFilter, projectGuitarTypeFilter, projectDateFrom, projectDateTo, projectDueDateFrom, projectDueDateTo, projectCompletionFilter, projectSort, debouncedSearch])
+    }, [projectStatusFilter, projectAssignedFilter, projectGuitarTypeFilter, projectDateFrom, projectDateTo, projectDueDateFrom, projectDueDateTo, projectCompletionFilter, projectSort, projectSortDirection, debouncedSearch])
 
   useEffect(() => {
     if (activeTab === 'products') fetchProducts()
@@ -1658,16 +1659,16 @@ export function AdminPage() {
       date_to: projectDateTo || undefined,
       due_date_from: projectDueDateFrom || undefined,
       due_date_to: projectDueDateTo || undefined,
-      completion_percentage: projectCompletionFilter !== 'all' ? projectCompletionFilter : undefined,
+      completion_percentage: projectCompletionFilter === 'all' ? undefined : projectCompletionFilter,
       include_tasks: true,
       page: pageNum,
       page_size: PROJECTS_PAGE_SIZE,
-      sort_by: ({ updated: 'updated_at', created: 'created_at', created_desc: 'created_at', created_asc: 'created_at', name: 'project_name', customer: 'customer_name', progress: 'progress', due: 'estimated_completion_date', status: 'status' })[projectSort] || 'updated_at',
-      sort_dir: projectSort === 'created_asc' ? 'asc' : 'desc',
+      sort_by: ({ updated: 'updated_at', created: 'created_at', name: 'project_name', customer: 'customer_name', progress: 'progress', due: 'estimated_completion_date', status: 'status' })[projectSort] || 'updated_at',
+      sort_dir: projectSortDirection,
     }
-    Object.keys(params).forEach(k => params[k] === undefined && delete params[k])
+    Object.keys(params).forEach((key) => params[key] === undefined && delete params[key])
     return params
-  }, [projectStatusFilter, projectAssignedFilter, projectGuitarTypeFilter, projectDateFrom, projectDateTo, projectDueDateFrom, projectDueDateTo, projectCompletionFilter, projectSort])
+  }, [projectStatusFilter, projectAssignedFilter, projectGuitarTypeFilter, projectDateFrom, projectDateTo, projectDueDateFrom, projectDueDateTo, projectCompletionFilter, projectSort, projectSortDirection])
 
   useEffect(() => {
     if (activeTab === 'projects' && projectArchiveTab === 'archived') {
@@ -1687,16 +1688,27 @@ export function AdminPage() {
    const saveService = async () => {
      setIsSaving(true)
      try {
+       let finalImageUrl = form.image_url || modal.data?.image_url || null
+       if (form.image_file) {
+         setIsUploading(true)
+         try {
+           finalImageUrl = await uploadToCloudinary(form.image_file)
+         } finally {
+           setIsUploading(false)
+         }
+       }
+
        const payload = {
          name: form.name,
          description: form.description || '',
          price: Number(form.price),
          duration_minutes: form.duration !== '' && form.duration != null ? Math.round(Number(form.duration) * 60) : null,
+         is_active: form.is_active !== undefined ? Boolean(form.is_active) : true,
        }
+       if (typeof finalImageUrl === 'string') payload.image_url = finalImageUrl
 
        let savedService = null
        if (modal.data?.service_id) {
-         payload.is_active = form.is_active !== undefined ? Boolean(form.is_active) : true
          savedService = await adminApi.updateService(modal.data.service_id, payload)
          showToast('Service updated!')
        } else {
@@ -1704,7 +1716,14 @@ export function AdminPage() {
          showToast('Service added!')
        }
 
-       const mergedService = savedService?.data || savedService || { ...modal.data, ...form, service_id: modal.data?.service_id }
+       const mergedService = {
+         ...(modal.data || {}),
+         ...form,
+         ...(savedService?.data || savedService || {}),
+         image_url: finalImageUrl,
+         is_active: payload.is_active,
+         service_id: savedService?.data?.service_id || savedService?.service_id || modal.data?.service_id,
+       }
        syncLandingServiceConfig(mergedService)
        fetchServices()
        closeModal()
@@ -2537,6 +2556,8 @@ export function AdminPage() {
               setProjectAssignedFilter={setProjectAssignedFilter}
               projectSort={projectSort}
               setProjectSort={setProjectSort}
+              projectSortDirection={projectSortDirection}
+              setProjectSortDirection={setProjectSortDirection}
               projectGuitarTypeFilter={projectGuitarTypeFilter}
               setProjectGuitarTypeFilter={setProjectGuitarTypeFilter}
               projectDateFrom={projectDateFrom}
@@ -2577,7 +2598,6 @@ export function AdminPage() {
               servicesPagination={servicesPagination}
               serviceQuery={serviceQuery}
               setServiceQuery={setServiceQuery}
-              setSearchQuery={setSearchQuery}
               openModal={openModal}
               deleteService={deleteService}
             />
@@ -2895,8 +2915,9 @@ export function AdminPage() {
                   formErrors={formErrors}
                   closeModal={closeModal}
                   isSaving={isSaving}
+                  isUploading={isUploading}
+                  handleImageUpload={handleImageUpload}
                   saveService={validateAndSave(SERVICE_RULES, saveService)}
-                  labelCls={labelCls}
                   inputCls={inputCls}
                 />
               )}

@@ -4,7 +4,7 @@ import {
   CheckCircle, Clock, AlertCircle, Guitar, DollarSign, Calendar,
   CreditCard, RefreshCw, HelpCircle, Info, Layers, Hammer,
   CheckSquare, FileText, ChevronDown, ChevronUp, Package, Truck, ShieldCheck,
-  X, Upload, QrCode, Eye, Loader2, Check, MapPin, Edit2
+  X, Upload, QrCode, Eye, Loader2, Check, MapPin, Edit2, Printer, CircleDot
 } from 'lucide-react';
 import { adminApi } from '../../utils/adminApi';
 import { resolveImageUrl, API, getAuthHeaders } from '../../utils/apiConfig';
@@ -585,7 +585,7 @@ function PaymentSubmittedModal({ isOpen, data, onClose }) {
   );
 }
 
-export default function CustomerProjectTracker({ projectId, projectName, projectData, customBuildId }) {
+export default function CustomerProjectTracker({ projectId, projectName, projectData, customBuildId, onInstallmentScheduleChange }) {
   const [hierarchy, setHierarchy] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -596,6 +596,11 @@ export default function CustomerProjectTracker({ projectId, projectName, project
   const [refundReason, setRefundReason] = useState('');
   const [refundSubmitting, setRefundSubmitting] = useState(false);
   const [refundMessage, setRefundMessage] = useState(null);
+  const [showRefundRequestForm, setShowRefundRequestForm] = useState(false);
+  const [showInstallmentSchedule, setShowInstallmentSchedule] = useState(false);
+  const progressSummaryRef = useRef(null);
+  const refundRequestRef = useRef(null);
+  const installmentScheduleRef = useRef(null);
   const [settlementData, setSettlementData] = useState(null);
   const [settlementLoading, setSettlementLoading] = useState(false);
   const [expandedQuestions, setExpandedQuestions] = useState(true);
@@ -650,6 +655,7 @@ export default function CustomerProjectTracker({ projectId, projectName, project
   }, []);
 
   useEffect(() => {
+    setShowInstallmentSchedule(false);
     if (projectId) {
       loadData();
       loadInstallments();
@@ -660,6 +666,12 @@ export default function CustomerProjectTracker({ projectId, projectName, project
       loadAddresses();
     }
   }, [projectId]);
+
+  useEffect(() => {
+    if (!onInstallmentScheduleChange) return undefined;
+    onInstallmentScheduleChange(showInstallmentSchedule);
+    return () => onInstallmentScheduleChange(false);
+  }, [showInstallmentSchedule, onInstallmentScheduleChange]);
 
   useSocketEvent('project:updated', (data) => {
     if (!data?.projectId || data.projectId === projectId) {
@@ -787,6 +799,7 @@ export default function CustomerProjectTracker({ projectId, projectName, project
       setRefundMessage({ type: 'success', text: 'Refund request submitted. An admin will review it shortly.' });
       setRefundReason('');
       setRefundEligibility(null);
+      setShowRefundRequestForm(false);
       await loadSettlement();
       await loadData();
     } catch (err) {
@@ -869,29 +882,24 @@ export default function CustomerProjectTracker({ projectId, projectName, project
   const taskSummary = hierarchy?.task_summary || { total: 0, completed: 0, pending: 0 };
   const clampedProgress = Math.min(Math.max(Number(hierarchy?.progress) || 0, 0), 100);
   const milestones = Array.isArray(hierarchy?.milestones) ? hierarchy.milestones : [];
-
-  // Find current milestone
-  const currentMilestone = milestones.find((m) => {
-    const subtasks = Array.isArray(m?.subtasks) ? m.subtasks : [];
-    if (subtasks.length > 0) {
-      return subtasks.some((s) => s.status === 'pending' || s.status === 'in_progress');
-    }
-    if (m.status === 'completed') return false;
-    const idx = milestones.indexOf(m);
-    if (idx === 0) return true;
-    const prev = milestones[idx - 1];
-    const prevSubtasks = Array.isArray(prev?.subtasks) ? prev.subtasks : [];
-    return prevSubtasks.length > 0 ? prevSubtasks.every(s => s.status === 'completed') : prev.status === 'completed';
-  });
-
-  const currentTask = currentMilestone?.subtasks?.find((s) => s.status === 'pending' || s.status === 'in_progress');
+  const taskCompletionRate = taskSummary.total > 0
+    ? Math.round((taskSummary.completed / taskSummary.total) * 100)
+    : 0;
+  const completedMilestones = milestones.filter((milestone) => {
+    const subtasks = Array.isArray(milestone?.subtasks) ? milestone.subtasks : [];
+    return subtasks.length > 0
+      ? subtasks.every((subtask) => subtask.status === 'completed')
+      : milestone.status === 'completed';
+  }).length;
+  const totalMilestones = milestones.length;
+  const milestoneCompletionRate = totalMilestones > 0
+    ? Math.round((completedMilestones / totalMilestones) * 100)
+    : 0;
 
   const estimatedCompletion = formatShortDate(
     hierarchy?.estimated_completion_date ||
     projectData?.estimated_completion_date
   );
-
-  const lastUpdated = formatDate(hierarchy?.updated_at || hierarchy?.claimed_at || hierarchy?.created_at);
 
   const installmentSummary = installmentData?.summary;
   const paymentPlan = installmentData?.payment_plan;
@@ -908,9 +916,64 @@ export default function CustomerProjectTracker({ projectId, projectName, project
 
   const paymentStatus = getPaymentStatus();
 
+  const printInstallmentReceipt = (installment) => {
+    if ((installment.display_status || installment.status) !== 'paid') return;
+
+    const printWindow = window.open('', '_blank', 'width=720,height=800');
+    if (!printWindow) {
+      setInstallmentMessage({
+        type: 'error',
+        title: 'Unable to Print',
+        text: 'Allow pop-ups for this site to print your payment receipt.',
+      });
+      return;
+    }
+
+    const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;',
+    })[character]);
+    const receiptDate = formatShortDate(installment.payment_date || installment.paid_at || installment.payment_verified_at) || '—';
+    const dueDate = formatShortDate(installment.due_date) || '—';
+    const paymentReference = installment.payment_reference || installment.schedule_id || '—';
+    const html = `<!doctype html>
+      <html><head><meta charset="utf-8"><title>Installment Payment Receipt</title>
+      <style>
+        body{font-family:Arial,sans-serif;color:#171717;margin:40px auto;max-width:680px;padding:0 24px}
+        header{border-bottom:2px solid #d4af37;padding-bottom:18px;margin-bottom:24px}
+        h1{font-size:24px;margin:0 0 6px}p{margin:6px 0;color:#525252}
+        dl{margin:24px 0}dl div{display:flex;justify-content:space-between;gap:24px;padding:12px 0;border-bottom:1px solid #ddd}
+        dt{color:#525252}dd{margin:0;text-align:right;font-weight:600}
+        .amount{font-size:20px;color:#111}.note{margin-top:30px;font-size:12px;color:#737373}
+        @media print{body{margin:0 auto;padding:0 12px}}
+      </style></head><body>
+        <header><h1>Payment Receipt</h1><p>CosmosCraft · Guitar Build Installment</p></header>
+        <p><strong>Project:</strong> ${escapeHtml(projectName || hierarchy?.name || hierarchy?.title || 'Custom Build')}</p>
+        <dl>
+          <div><dt>Installment</dt><dd>#${escapeHtml(installment.installment_number)}</dd></div>
+          <div><dt>Due date</dt><dd>${escapeHtml(dueDate)}</dd></div>
+          <div><dt>Paid date</dt><dd>${escapeHtml(receiptDate)}</dd></div>
+          <div><dt>Payment method</dt><dd>${escapeHtml(formatLabel(installment.payment_method) || '—')}</dd></div>
+          <div><dt>Reference</dt><dd>${escapeHtml(paymentReference)}</dd></div>
+          <div><dt>Amount paid</dt><dd class="amount">${escapeHtml(formatCurrency(installment.amount))}</dd></div>
+          <div><dt>Status</dt><dd>Paid</dd></div>
+        </dl>
+        <p class="note">This receipt confirms the installment payment shown above.</p>
+      </body></html>`;
+
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.addEventListener('afterprint', () => printWindow.close(), { once: true });
+    window.setTimeout(() => printWindow.print(), 250);
+  };
+
   // Refund status from the project payload
   const refundStatus = hierarchy?.refund_status || settlementData?.refund_status || null;
-  const refundStatusConfig = refundStatus ? (REFUND_STATUS_CONFIG[refundStatus] || REFUND_STATUS_CONFIG.pending) : null;
 
   // Last completed stage
   const lastCompletedStage = hierarchy?.cancelled_stage_snapshot || hierarchy?.last_completed_stage || null;
@@ -1513,149 +1576,156 @@ export default function CustomerProjectTracker({ projectId, projectName, project
 
 
       {/* Progress Header */}
-      <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6">
-        <div className="mb-6">
-          <h2 className="text-xl font-bold text-white">{projectName || hierarchy.name || hierarchy.title || 'Custom Build'}</h2>
-          {customBuildId && (
-            <p className="mt-1 text-sm text-[var(--text-muted)]">
-              Custom Build ID: {customBuildId}
+      {!showInstallmentSchedule && (
+      <div ref={progressSummaryRef} className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6">
+        <div className="mb-6 grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(180px,220px)] lg:items-start">
+          <div className="min-w-0">
+            <h2 className="text-xl font-bold text-white sm:text-2xl">{projectName || hierarchy.name || hierarchy.title || 'Custom Build'}</h2>
+            {(hierarchy.order_number || projectData?.order_number || customBuildId) && (
+              <p className="mt-2 text-sm font-medium text-[var(--text-muted)]">
+                Order: {hierarchy.order_number || projectData?.order_number || customBuildId}
+              </p>
+            )}
+            <p className="mt-2 text-sm text-[var(--text-muted)]">
+              For: {hierarchy.customer_name || projectData?.customer_name || '—'}
             </p>
-          )}
-        </div>
-
-        {/* Status & Progress */}
-        <div className="grid gap-4 sm:grid-cols-2 mb-6">
-          {isOrderOnHold ? (
-            <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 sm:col-span-2">
-              <div className="flex items-center gap-3 mb-2">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-500/20">
-                  <Clock className="h-4 w-4 text-amber-400" />
-                </div>
-                <div>
-                  <p className="text-xs uppercase tracking-[0.14em] text-amber-300/70">Status</p>
-                  <p className="text-lg font-bold text-amber-300">On Hold</p>
-                </div>
-              </div>
-              {hierarchy.customization_hold_reason && (
-                <p className="mt-2 text-sm text-amber-200/80 pl-11">
-                  Reason: {hierarchy.customization_hold_reason}
-                </p>
-              )}
-              {hierarchy.customization_hold_requested_at && (
-                <p className="mt-1 text-xs text-amber-300/60 pl-11">
-                  Placed on hold: {formatDate(hierarchy.customization_hold_requested_at)}
-                </p>
-              )}
-              {hierarchy.hold_at_step && (
-                <p className="mt-1 text-xs text-amber-300/60 pl-11">
-                  Paused at: {formatLabel(hierarchy.hold_at_step)}
-                </p>
-              )}
-              <div className="mt-3 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2">
-                <p className="text-xs text-amber-200/70">
-                  Manufacturing is paused. Staff cannot complete or start any build tasks until you resume the project. You can resume it from your dashboard.
-                </p>
-              </div>
-            </div>
-          ) : (
-            <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] p-4">
-              <p className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">Status</p>
-              <p className="mt-2 text-lg font-bold text-white">{formatStatus(hierarchy.status)}</p>
-            </div>
-          )}
-           <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] p-4">
-             <p className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">Progress</p>
-             <p className="mt-2 text-lg font-bold text-[var(--gold-primary)]">{clampedProgress}%</p>
-           </div>
-        </div>
-
-        {/* Progress Bar */}
-        <div className="mb-6">
-          <div className="mb-2 flex items-center justify-between">
-            <span className="text-sm text-[var(--text-muted)]">Overall Progress</span>
-            <span className="text-sm font-semibold text-white">{taskSummary.completed} of {taskSummary.total} tasks</span>
-          </div>
-          <div className="h-3 overflow-hidden rounded-full bg-white/10">
-            <motion.div
-              initial={{ width: 0 }}
-              animate={{ width: `${clampedProgress}%` }}
-              transition={{ duration: 1, ease: 'easeOut' }}
-              className="h-full rounded-full bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)]"
-            />
-          </div>
-        </div>
-
-        {/* Current Build Progress */}
-        {milestones.length > 0 ? (
-          <div className="rounded-xl border border-[var(--gold-primary)]/30 bg-[var(--gold-primary)]/5 p-5">
-            <div className="flex items-start gap-4">
-              <div className="mt-0.5 flex h-10 w-10 items-center justify-center rounded-full bg-[var(--gold-primary)]/20">
-                {currentMilestone ? (
-                  <Clock className="h-5 w-5 text-[var(--gold-primary)]" />
-                ) : (
-                  <CheckCircle className="h-5 w-5 text-green-400" />
-                )}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs uppercase tracking-[0.1em] text-[var(--text-muted)]">
-                  {currentMilestone ? 'Current Build Progress' : 'Manufacturing Complete'}
-                </p>
-                <p className="mt-1.5 font-semibold text-white text-lg">
-                  {currentMilestone ? formatLabel(currentMilestone.title) : 'All Steps Completed'}
-                </p>
-                {currentTask && (
-                  <p className="mt-1.5 text-sm text-[var(--gold-primary)]">
-                    Current Task: {formatLabel(currentTask.title)}
-                  </p>
-                )}
-
-                {/* Step progress indicator */}
-                {milestones.length > 0 && (
-                  <div className="mt-4 flex items-center gap-2">
-                    {milestones.map((m, i) => {
-                      const subtasks = Array.isArray(m?.subtasks) ? m.subtasks : [];
-                      const isStepComplete = subtasks.length > 0
-                        ? subtasks.every(s => s.status === 'completed')
-                        : m.status === 'completed';
-                      const isCurrentStep = m.milestone_id === currentMilestone?.milestone_id;
-
-                      return (
-                        <div key={m.milestone_id} className="flex items-center gap-1">
-                          <div className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold ${
-                            isStepComplete
-                              ? 'bg-green-500/20 text-green-400 border border-green-500/30'
-                              : isCurrentStep
-                              ? 'bg-[var(--gold-primary)]/20 text-[var(--gold-primary)] border border-[var(--gold-primary)]/40'
-                              : 'bg-white/5 text-[var(--text-muted)] border border-[var(--border)]'
-                          }`}>
-                            {isStepComplete ? (
-                              <CheckCircle className="h-3.5 w-3.5" />
-                            ) : (
-                              i + 1
-                            )}
-                          </div>
-                          {i < milestones.length - 1 && (
-                            <div className={`h-px w-4 ${
-                              isStepComplete ? 'bg-green-500/40' : 'bg-[var(--border)]'
-                            }`} />
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] p-5 text-center">
-            <Guitar className="mx-auto h-8 w-8 text-[var(--text-muted)]/30 mb-2" />
-            <p className="text-white font-semibold">Build Not Yet Started</p>
-            <p className="mt-1 text-sm text-[var(--text-muted)]">
-              The manufacturing process will begin once a staff member claims this project.
+            <p className="mt-2 text-sm text-[var(--text-muted)]">
+              Estimated completion: <span className="font-medium text-white">{estimatedCompletion || 'Not set'}</span>
             </p>
+          </div>
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-3 text-left lg:text-right">
+            <span className="text-3xl font-black leading-none text-[var(--gold-primary)] sm:text-4xl">{clampedProgress}%</span>
+            <p className="mt-1 font-semibold text-white">{formatStatus(hierarchy.status)}</p>
+          </div>
+        </div>
+
+        {isOrderOnHold && (
+          <div className="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3">
+            <p className="text-sm font-semibold text-amber-300">Manufacturing is on hold</p>
+            {hierarchy.customization_hold_reason && (
+              <p className="mt-1 text-xs text-amber-200/80">Reason: {hierarchy.customization_hold_reason}</p>
+            )}
+            {hierarchy.hold_at_step && (
+              <p className="mt-1 text-xs text-amber-200/70">Paused at: {formatLabel(hierarchy.hold_at_step)}</p>
+            )}
           </div>
         )}
+
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)]/50 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm font-semibold text-white">Total progress</p>
+            <span className="rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] px-3 py-1 text-xs font-semibold text-[var(--text-muted)]">Live tracking</span>
+          </div>
+
+          <div className="relative mt-7 pb-7">
+            <div className="h-2 overflow-hidden rounded-full bg-white/10">
+              <motion.div
+                initial={{ width: 0 }}
+                animate={{ width: `${clampedProgress}%` }}
+                transition={{ duration: 1, ease: 'easeOut' }}
+                className="h-full rounded-full bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)]"
+              />
+            </div>
+            <div className="pointer-events-none absolute left-0 top-0 h-2 w-full">
+              <span
+                className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full border border-emerald-400/60 bg-emerald-400/20 p-1"
+                style={{ left: `${Math.min(98, Math.max(2, taskCompletionRate))}%`, top: '50%' }}
+                title={`Tasks completed: ${taskCompletionRate}%`}
+              >
+                <CheckCircle className="h-3 w-3 text-emerald-300" />
+              </span>
+              <span
+                className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full border border-blue-400/60 bg-blue-400/20 p-1"
+                style={{ left: `${Math.min(98, Math.max(2, milestoneCompletionRate))}%`, top: '50%' }}
+                title={`Milestones completed: ${milestoneCompletionRate}%`}
+              >
+                <CircleDot className="h-3 w-3 text-blue-300" />
+              </span>
+            </div>
+            {[0, 25, 50, 100].map((value) => (
+              <span
+                key={value}
+                className={`absolute -bottom-0.5 text-[11px] font-medium text-[var(--text-muted)] ${value === 0 ? 'left-0' : value === 100 ? 'right-0' : '-translate-x-1/2'}`}
+                style={value === 0 || value === 100 ? undefined : { left: `${value}%` }}
+              >
+                {value}%
+              </span>
+            ))}
+          </div>
+
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] p-4">
+              <p className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">Task progress</p>
+              <p className="mt-2 text-2xl font-bold text-white">{taskSummary.completed}<span className="text-base text-[var(--text-muted)]">/{taskSummary.total || 0}</span></p>
+            </div>
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] p-4">
+              <p className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">Milestones done</p>
+              <p className="mt-2 text-2xl font-bold text-white">{completedMilestones}<span className="text-base text-[var(--text-muted)]">/{totalMilestones}</span></p>
+            </div>
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] p-4">
+              <p className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">Percentage</p>
+              <p className="mt-2 text-2xl font-bold text-white">{clampedProgress}<span className="text-base text-[var(--text-muted)]">%</span></p>
+            </div>
+          </div>
+        </div>
+
+      </div>
+      )}
+
+      {!showInstallmentSchedule && (
+        <>
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] p-5">
+            <p className="text-xs uppercase tracking-[0.1em] text-[var(--text-muted)]">Current Build — What You Receive</p>
+            {lastCompletedStage ? (
+              <div className="mt-2 flex items-center gap-3">
+                <CheckCircle className="h-5 w-5 shrink-0 text-green-400" />
+                <div>
+                  <p className="font-semibold text-white">{formatLabel(lastCompletedStage)}</p>
+                  {lastCompletedStageAt && (
+                    <p className="text-xs text-[var(--text-muted)]">Completed {formatDate(lastCompletedStageAt)}</p>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="mt-2 flex items-center gap-3">
+                <AlertCircle className="h-5 w-5 shrink-0 text-[var(--text-muted)]" />
+                <p className="text-sm text-[var(--text-muted)]">No completed build available.</p>
+              </div>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              {!refundStatus && refundEligibility?.eligible ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowRefundRequestForm(true);
+                    requestAnimationFrame(() => refundRequestRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
+                  }}
+                  className="inline-flex items-center gap-2 rounded-xl border border-[var(--gold-primary)]/40 px-4 py-2.5 text-sm font-semibold text-[var(--gold-primary)] transition-colors hover:bg-[var(--gold-primary)]/10"
+                >
+                  <DollarSign className="h-4 w-4" />
+                  Request Refund
+                </button>
+              ) : null}
+            </div>
+            {!isFullPayment && installmentSummary && (
+              <button
+                type="button"
+                onClick={() => {
+                  setShowInstallmentSchedule(true);
+                  requestAnimationFrame(() => installmentScheduleRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+                }}
+                className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] px-4 py-2.5 text-sm font-bold text-black transition-all hover:shadow-[0_0_15px_rgba(212,175,55,0.3)]"
+              >
+                <CreditCard className="h-4 w-4" />
+                View Installment Schedule
+              </button>
+            )}
+          </div>
+        </>
+      )}
 
         {/* 11 Critical Questions & Answers Resolution Card (When Cancelled) */}
         {false && isCancelled && qa && ( // Remove the false && to return
@@ -1846,27 +1916,6 @@ export default function CustomerProjectTracker({ projectId, projectName, project
           </div>
         )}
 
-        {/* Last Completed Stage (what the customer receives if cancelled now) */}
-        <div className="mt-6 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] p-5">
-          <p className="text-xs uppercase tracking-[0.1em] text-[var(--text-muted)]">Current Build — What You Receive</p>
-          {lastCompletedStage ? (
-            <div className="mt-2 flex items-center gap-3">
-              <CheckCircle className="w-5 h-5 text-green-400 shrink-0" />
-              <div>
-                <p className="text-white font-semibold">{formatLabel(lastCompletedStage)}</p>
-                {lastCompletedStageAt && (
-                  <p className="text-xs text-[var(--text-muted)]">Completed {formatDate(lastCompletedStageAt)}</p>
-                )}
-              </div>
-            </div>
-          ) : (
-            <div className="mt-2 flex items-center gap-3">
-              <AlertCircle className="w-5 h-5 text-[var(--text-muted)] shrink-0" />
-              <p className="text-sm text-[var(--text-muted)]">No completed build available.</p>
-            </div>
-          )}
-        </div>
-
         {/* Cancellation Info */}
         {String(hierarchy.status || '').toLowerCase() === 'cancelled' && (
           <div className="mt-6 rounded-xl border border-red-500/30 bg-red-500/5 p-5">
@@ -2021,40 +2070,20 @@ export default function CustomerProjectTracker({ projectId, projectName, project
           </div>
         )}
 
-        {/* Refund Status */}
-        {refundStatusConfig && (
-          <div className="mt-6 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] p-5">
-            <p className="text-xs uppercase tracking-[0.1em] text-[var(--text-muted)]">Refund</p>
-            <div className="mt-2 flex items-center gap-2">
-              <span className={`inline-flex items-center gap-2 px-3 py-1 rounded-full border text-sm font-semibold ${refundStatusConfig.className}`}>
-                {refundStatusConfig.label}
-              </span>
-              {hierarchy.refund_amount_requested && (
-                <span className="text-sm text-white">{formatCurrency(hierarchy.refund_amount_requested)}</span>
-              )}
-            </div>
-            {hierarchy.refund_requested_at && (
-              <p className="mt-1 text-xs text-[var(--text-muted)]">
-                Requested {formatDate(hierarchy.refund_requested_at)}
-              </p>
-            )}
-            {refundStatus === 'pending_payment_verification' && (
-              <p className="mt-2 text-xs text-violet-300/80">
-                Your payment proof is being reviewed by the admin. Once verified, your refund request will be submitted for approval.
-              </p>
-            )}
-            {refundStatus === 'rejected' && (
-              <p className="mt-2 text-xs text-red-300/80">
-                Refund unavailable — your submitted payment proof was not verified by the admin.
-              </p>
-            )}
-          </div>
-        )}
-
         {/* Request Refund (customer-only, only when eligible) */}
-        {refundEligibility?.eligible && !refundStatus && (
-          <div className="mt-6 rounded-xl border border-[var(--gold-primary)]/30 bg-[var(--gold-primary)]/5 p-5">
-            <p className="text-xs uppercase tracking-[0.1em] text-[var(--text-muted)]">Request Refund</p>
+        {refundEligibility?.eligible && !refundStatus && showRefundRequestForm && (
+          <div ref={refundRequestRef} className="mt-6 rounded-xl border border-[var(--gold-primary)]/30 bg-[var(--gold-primary)]/5 p-5">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs uppercase tracking-[0.1em] text-[var(--text-muted)]">Request Refund</p>
+              <button
+                type="button"
+                onClick={() => setShowRefundRequestForm(false)}
+                className="rounded-lg p-1 text-[var(--text-muted)] transition-colors hover:bg-white/5 hover:text-white"
+                aria-label="Close refund request form"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
             <p className="mt-2 text-sm text-white">
               You are eligible for a refund of{' '}
               <span className="font-bold text-[var(--gold-primary)]">{formatCurrency(refundEligibility.refundable_amount)}</span>{' '}
@@ -2094,16 +2123,28 @@ export default function CustomerProjectTracker({ projectId, projectName, project
               </div>
             </div>
           </div>
-        ) : installmentSummary ? (
-          <div className="mt-6 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] p-5">
-            <div className="flex items-center gap-2 mb-4">
+        ) : installmentSummary && showInstallmentSchedule ? (
+          <div ref={installmentScheduleRef} className="mt-6 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] p-5">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
               <CreditCard className="w-5 h-5 text-[var(--gold-primary)]" />
               <h3 className="text-white font-bold text-lg">Payment Installment Schedule</h3>
+              </div>
               {paymentStatus && (
                 <span className={`ml-auto text-xs font-semibold px-2.5 py-1 rounded-full border ${paymentStatus.bg} ${paymentStatus.border} ${paymentStatus.color}`}>
                   {paymentStatus.label}
                 </span>
               )}
+              <button
+                type="button"
+                onClick={() => {
+                  setShowInstallmentSchedule(false);
+                  requestAnimationFrame(() => progressSummaryRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+                }}
+                className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-semibold text-[var(--text-light)] transition-colors hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)]"
+              >
+                Back to Track Progress
+              </button>
             </div>
 
             {/* Action/Feedback message */}
@@ -2154,160 +2195,128 @@ export default function CustomerProjectTracker({ projectId, projectName, project
                   {installmentSummary.next_due_date ? formatShortDate(installmentSummary.next_due_date) : '—'}
                 </p>
               </div>
-              <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] p-3">
-                <p className="text-xs uppercase tracking-[0.1em] text-[var(--text-muted)]">Last Updated</p>
-                <p className="mt-1 text-lg font-bold text-white">
-                  {installmentSummary.last_updated ? formatDate(installmentSummary.last_updated) : '—'}
-                </p>
-              </div>
             </div>
 
-            {/* Installment list / table */}
+            {/* Installment schedule cards */}
             {installmentData?.installments?.length > 0 && (
               <div className="mt-6 space-y-3">
                 <p className="text-xs uppercase tracking-[0.1em] text-[var(--text-muted)]">Schedule Breakdown</p>
-                <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
-                  <table className="w-full text-left text-sm text-white">
-                    <thead className="bg-[var(--surface-dark)] text-xs uppercase text-[var(--text-muted)] border-b border-[var(--border)]">
-                      <tr>
-                        <th className="px-4 py-3">Installment</th>
-                        <th className="px-4 py-3">Due Date</th>
-                        <th className="px-4 py-3 text-right">Amount Due</th>
-                        <th className="px-4 py-3 text-center">Status</th>
-                        <th className="px-4 py-3">Payment Info</th>
-                        <th className="px-4 py-3 text-right">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[var(--border)] bg-[var(--bg-primary)]">
-                      {installmentData.installments.map((inst) => {
-                        const statusKey = inst.display_status || inst.status;
-                        const isPaid = statusKey === 'paid';
-                        const isPendingVerification = statusKey === 'for_verification';
-                        const isRejected = statusKey === 'rejected';
-                        const isOverdue = statusKey === 'overdue';
-                        const isDue = statusKey === 'due';
-                        const isUpcoming = statusKey === 'upcoming';
-                        const isPayable = inst.is_payable || ['due', 'overdue', 'rejected', 'pending'].includes(statusKey);
+                <div className="space-y-3">
+                  {installmentData.installments.map((inst) => {
+                    const statusKey = inst.display_status || inst.status;
+                    const isPaid = statusKey === 'paid';
+                    const isPendingVerification = statusKey === 'for_verification';
+                    const isRejected = statusKey === 'rejected';
+                    const isOverdue = statusKey === 'overdue';
+                    const isDue = statusKey === 'due';
+                    const isPayable = inst.is_payable || ['due', 'overdue', 'rejected', 'pending'].includes(statusKey);
 
-                        const statusBadgeConfig = {
-                          paid: { label: 'Paid ✓', bg: 'bg-green-500/10', border: 'border-green-500/30', text: 'text-green-400' },
-                          for_verification: { label: 'Payment Verification Pending', bg: 'bg-amber-500/10', border: 'border-amber-500/30', text: 'text-amber-400' },
-                          due: { label: 'Due', bg: 'bg-blue-500/10', border: 'border-blue-500/30', text: 'text-blue-400' },
-                          overdue: { label: 'Overdue', bg: 'bg-red-500/10', border: 'border-red-500/30', text: 'text-red-400' },
-                          upcoming: { label: 'Upcoming', bg: 'bg-slate-500/10', border: 'border-slate-500/30', text: 'text-slate-400' },
-                          rejected: { label: 'Payment Rejected', bg: 'bg-red-500/10', border: 'border-red-500/30', text: 'text-red-400' },
-                        }[statusKey] || { label: formatLabel(statusKey), bg: 'bg-yellow-500/10', border: 'border-yellow-500/30', text: 'text-yellow-400' };
+                    const statusBadgeConfig = {
+                      paid: { label: 'Paid ✓', bg: 'bg-green-500/10', border: 'border-green-500/30', text: 'text-green-400' },
+                      for_verification: { label: 'Payment Verification Pending', bg: 'bg-amber-500/10', border: 'border-amber-500/30', text: 'text-amber-400' },
+                      due: { label: 'Due', bg: 'bg-blue-500/10', border: 'border-blue-500/30', text: 'text-blue-400' },
+                      overdue: { label: 'Overdue', bg: 'bg-red-500/10', border: 'border-red-500/30', text: 'text-red-400' },
+                      upcoming: { label: 'Upcoming', bg: 'bg-slate-500/10', border: 'border-slate-500/30', text: 'text-slate-400' },
+                      rejected: { label: 'Payment Rejected', bg: 'bg-red-500/10', border: 'border-red-500/30', text: 'text-red-400' },
+                    }[statusKey] || { label: formatLabel(statusKey), bg: 'bg-yellow-500/10', border: 'border-yellow-500/30', text: 'text-yellow-400' };
 
-                        return (
-                          <React.Fragment key={inst.schedule_id}>
-                            <tr className={`transition-colors hover:bg-white/[0.02] ${isOverdue ? 'bg-red-500/[0.03]' : ''}`}>
-                              <td className="px-4 py-3.5 font-medium">
-                                <div className="flex items-center gap-2">
-                                  <div className={`w-2 h-2 rounded-full ${
-                                    isPaid ? 'bg-green-400' :
-                                    isPendingVerification ? 'bg-amber-400' :
-                                    isOverdue ? 'bg-red-400' :
-                                    isDue ? 'bg-blue-400' :
-                                    'bg-slate-500'
-                                  }`} />
-                                  <span>Installment #{inst.installment_number}</span>
-                                </div>
-                              </td>
-                              <td className="px-4 py-3.5 text-xs text-[var(--text-muted)]">
-                                {formatShortDate(inst.due_date)}
-                              </td>
-                              <td className="px-4 py-3.5 text-right font-semibold text-[var(--gold-primary)]">
-                                {formatCurrency(inst.amount)}
-                              </td>
-                              <td className="px-4 py-3.5 text-center">
-                                <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold border ${statusBadgeConfig.bg} ${statusBadgeConfig.border} ${statusBadgeConfig.text}`}>
-                                  {statusBadgeConfig.label}
-                                </span>
-                              </td>
-                              <td className="px-4 py-3.5 text-xs text-[var(--text-muted)]">
-                                {isPaid ? (
-                                  <div>
-                                    <p className="text-white font-medium">Paid on {formatShortDate(inst.payment_date || inst.paid_at)}</p>
-                                    {inst.payment_reference && <p className="text-[10px] text-[var(--text-muted)]">Ref: {inst.payment_reference}</p>}
-                                  </div>
-                                ) : isPendingVerification ? (
-                                  <div>
-                                    <p className="text-amber-300 font-medium">Submitted {formatShortDate(inst.submitted_at)}</p>
-                                    {inst.payment_reference && <p className="text-[10px] text-[var(--text-muted)]">Ref: {inst.payment_reference}</p>}
-                                  </div>
-                                ) : (
-                                  <span className="text-[var(--text-muted)]">—</span>
-                                )}
-                              </td>
-                              <td className="px-4 py-3.5 text-right">
-                                {isPayable ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => setPayingInstallment(inst)}
-                                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black text-xs font-bold transition-all hover:shadow-[0_0_15px_rgba(212,175,55,0.4)]"
-                                  >
-                                    <CreditCard className="w-3.5 h-3.5" />
-                                    Pay Now
-                                  </button>
-                                ) : isPendingVerification ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => setViewingInstallment(inst)}
-                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-300 text-xs font-medium hover:bg-amber-500/20 transition-colors"
-                                  >
-                                    <Info className="w-3.5 h-3.5" />
-                                    View Proof
-                                  </button>
-                                ) : isPaid ? (
-                                  <span className="inline-flex items-center gap-1 text-xs text-green-400 font-medium">
-                                    <CheckCircle className="w-3.5 h-3.5" />
-                                    Verified
-                                  </span>
-                                ) : (
-                                  <span className="text-xs text-[var(--text-muted)]">—</span>
-                                )}
-                              </td>
-                            </tr>
-                            {/* If rejected, show explanation banner below the row */}
-                            {isRejected && (
-                              <tr className="bg-red-500/10 border-b border-red-500/20">
-                                <td colSpan={6} className="px-4 py-2.5 text-xs text-red-300">
-                                  <div className="flex items-center gap-2">
-                                    <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
-                                    <span>
-                                      <strong>Payment Rejected:</strong> Your previous payment for Installment #{inst.installment_number} could not be verified.
-                                      {inst.rejection_reason ? ` Reason: "${inst.rejection_reason}".` : ''} Please review your payment information and submit a new payment using <strong>Pay Now</strong>.
-                                    </span>
-                                  </div>
-                                </td>
-                              </tr>
+                    return (
+                      <article
+                        key={inst.schedule_id}
+                        className={`min-w-0 rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] p-4 ${isOverdue ? 'border-red-500/30 bg-red-500/[0.04]' : ''}`}
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${
+                                isPaid ? 'bg-green-400' :
+                                isPendingVerification ? 'bg-amber-400' :
+                                isOverdue ? 'bg-red-400' :
+                                isDue ? 'bg-blue-400' :
+                                'bg-slate-500'
+                              }`} />
+                              <h4 className="font-semibold text-white">Installment #{inst.installment_number}</h4>
+                            </div>
+                            <p className="mt-1 pl-[18px] text-xs text-[var(--text-muted)]">Due {formatShortDate(inst.due_date) || '—'}</p>
+                          </div>
+                          <span className={`inline-flex max-w-full whitespace-normal rounded-full border px-2.5 py-1 text-xs font-semibold ${statusBadgeConfig.bg} ${statusBadgeConfig.border} ${statusBadgeConfig.text}`}>
+                            {statusBadgeConfig.label}
+                          </span>
+                        </div>
+
+                        <div className="mt-4 grid min-w-0 gap-3 sm:grid-cols-2">
+                          <div className="min-w-0 rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] p-3">
+                            <p className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">Amount Due</p>
+                            <p className="mt-1 break-words font-bold text-[var(--gold-primary)]">{formatCurrency(inst.amount)}</p>
+                          </div>
+                          <div className="min-w-0 rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] p-3">
+                            <p className="text-[10px] uppercase tracking-wider text-[var(--text-muted)]">Payment Info</p>
+                            {isPaid ? (
+                              <p className="mt-1 break-words text-sm font-medium text-white">Paid on {formatDate(inst.payment_date || inst.paid_at || inst.payment_verified_at)}</p>
+                            ) : isPendingVerification ? (
+                              <div className="mt-1 break-words text-sm text-amber-300">
+                                <p>Submitted {formatShortDate(inst.submitted_at) || '—'}</p>
+                                {inst.payment_reference && <p className="mt-0.5 text-xs text-[var(--text-muted)]">Ref: {inst.payment_reference}</p>}
+                              </div>
+                            ) : (
+                              <p className="mt-1 text-sm text-[var(--text-muted)]">No payment submitted</p>
                             )}
-                          </React.Fragment>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                          </div>
+                        </div>
+
+                        {isRejected && (
+                          <div className="mt-3 flex items-start gap-2 rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-xs text-red-300">
+                            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-400" />
+                            <span>
+                              <strong>Payment rejected.</strong> Your previous payment could not be verified.
+                              {inst.rejection_reason ? ` Reason: "${inst.rejection_reason}".` : ''} Submit a new payment using Pay Now.
+                            </span>
+                          </div>
+                        )}
+
+                        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] pt-3">
+                          {isPaid ? (
+                            <span className="inline-flex items-center gap-1 text-xs font-medium text-green-400">
+                              <CheckCircle className="h-3.5 w-3.5" /> Verified
+                            </span>
+                          ) : <span />}
+                          {isPayable ? (
+                            <button
+                              type="button"
+                              onClick={() => setPayingInstallment(inst)}
+                              className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] px-3.5 py-2 text-xs font-bold text-black transition-all hover:shadow-[0_0_15px_rgba(212,175,55,0.4)]"
+                            >
+                              <CreditCard className="h-3.5 w-3.5" /> Pay Now
+                            </button>
+                          ) : isPendingVerification ? (
+                            <button
+                              type="button"
+                              onClick={() => setViewingInstallment(inst)}
+                              className="inline-flex items-center gap-1 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-xs font-medium text-amber-300 transition-colors hover:bg-amber-500/20"
+                            >
+                              <Info className="h-3.5 w-3.5" /> View Proof
+                            </button>
+                          ) : isPaid ? (
+                            <button
+                              type="button"
+                              onClick={() => printInstallmentReceipt(inst)}
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-2.5 py-1.5 text-xs font-semibold text-[var(--text-light)] transition-colors hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)]"
+                              aria-label={`Print receipt for installment ${inst.installment_number}`}
+                            >
+                              <Printer className="h-3.5 w-3.5" /> Print Receipt
+                            </button>
+                          ) : (
+                            <span className="text-xs text-[var(--text-muted)]">No action required</span>
+                          )}
+                        </div>
+                      </article>
+                    );
+                  })}
                 </div>
               </div>
             )}
           </div>
         ) : null}
-
-        {/* Info Row */}
-        <div className="mt-6 grid gap-3 sm:grid-cols-2">
-          {estimatedCompletion && (
-            <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] p-3">
-              <p className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">Estimated Completion</p>
-              <p className="mt-1 text-sm font-medium text-white">{estimatedCompletion}</p>
-            </div>
-          )}
-          {lastUpdated && (
-            <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] p-3">
-              <p className="text-xs uppercase tracking-[0.14em] text-[var(--text-muted)]">Last Updated</p>
-              <p className="mt-1 text-sm font-medium text-white">{lastUpdated}</p>
-            </div>
-          )}
-        </div>
 
         {/* Pay Installment Modal */}
         {payingInstallment && (
@@ -2366,7 +2375,6 @@ export default function CustomerProjectTracker({ projectId, projectName, project
           onConfirm={handleConfirmDelivery}
           onCancel={() => setShowDeliveryConfirmModal(false)}
         />
-      </div>
     </div>
   );
 }

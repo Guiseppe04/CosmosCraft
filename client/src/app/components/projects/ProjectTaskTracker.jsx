@@ -871,7 +871,7 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
             </div>
             <div className="mt-5 border border-[var(--border)] rounded-2xl overflow-hidden bg-[var(--bg-primary)]/40">
               <div className="divide-y divide-[var(--border)]">
-                {requiredParts.slice(0, 8).map((part, idx) => {
+                {requiredParts.map((part, idx) => {
                   const isReceived = Boolean(part.is_received);
                   const stockLabel = part.stock_status === 'unknown' || !part.stock_status
                     ? 'Not Linked'
@@ -956,11 +956,6 @@ export default function ProjectTaskTracker({ projectId, projectName, isAdmin = f
                   );
                 })}
               </div>
-              {requiredParts.length > 8 && (
-                <div className="p-3 border-t border-[var(--border)] text-xs text-[var(--text-muted)] text-center">
-                  Showing 8 of {requiredParts.length} required parts. View more in the full project details.
-                </div>
-              )}
             </div>
           </div>
         )}

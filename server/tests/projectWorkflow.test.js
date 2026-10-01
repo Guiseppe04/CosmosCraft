@@ -57,6 +57,26 @@ assert.strictEqual(additionalPart.pending_quantity, 2);
 assert.strictEqual(additionalPart.is_fully_received, false);
 assert.ok(additionalPart.part_key.includes('additional_parts'));
 
+const selectedConfigParts = buildRequiredPartsPayload({
+  customization_id: '55555555-5555-5555-5555-555555555555',
+  config_json: {
+    body: 'dc',
+    neckConstruction: '1piece',
+    hardware: 'chrome',
+    electronicsType: 'passive',
+    pickupConfiguration: 'hh',
+    bridgePickupModel: 'vantium',
+    middlePickupModel: 'none',
+  },
+}, []);
+const selectedPartTypes = selectedConfigParts.map((part) => part.part_type);
+assert.ok(selectedPartTypes.includes('body'), 'expected the selected body to be required');
+assert.ok(selectedPartTypes.includes('neckConstruction'), 'expected the selected neck construction to be required');
+assert.ok(selectedPartTypes.includes('hardware'), 'expected the selected hardware to be required');
+assert.ok(selectedPartTypes.includes('electronicsType'), 'expected the selected electronics to be required');
+assert.ok(selectedPartTypes.includes('bridgePickupModel'), 'expected the selected pickup model to be required');
+assert.ok(!selectedPartTypes.includes('middlePickupModel'), 'expected unselected options to be omitted');
+
 // Configuration parts sharing a category (e.g. finish) must still get unique part_keys
 // when their values match (e.g. color "None" and finish_type "None").
 const finishCollisionCustomization = {
