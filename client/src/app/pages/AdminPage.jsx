@@ -2306,10 +2306,10 @@ export function AdminPage() {
       <div className={`transition-all duration-300 bg-[var(--bg-primary)] ${sidebarCollapsed ? 'ml-20' : 'ml-64'}`}>
         <Topbar title={tabs.find(t => t.id === activeTab)?.label || 'Dashboard'} userRole={user?.role} />
 
-        <main className={`p-6 ${activeTab === 'pos' ? 'pt-19' : 'pt-5'}`}>
+        <main className={`p-6 ${activeTab === 'pos' ? 'pt-19' : ['orders', 'sales-report', 'projects', 'users', 'payment-settings', 'settings'].includes(activeTab) ? 'pt-3.5' : 'pt-5'}`}>
 
           {/* Actions bar */}
-          {activeTab !== 'pos' && activeTab !== 'inventory' && activeTab !== 'products' && activeTab !== 'appointments' && (
+          {['product-categories', 'services'].includes(activeTab) && (
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
             {['product-categories', 'services'].includes(activeTab) && (
               <div className="relative max-w-sm w-full">
@@ -2347,11 +2347,6 @@ export function AdminPage() {
                   <button onClick={() => openModal('category')} className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black rounded-xl font-semibold text-sm hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all">
                     <Plus className="w-4 h-4" /> Add Category
                   </button>
-              )}
-              {activeTab === 'projects' && isSuperAdmin && (
-                <button onClick={() => setShowGuitarTypeSelector(true)} className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black rounded-xl font-semibold text-sm hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all">
-                  <Plus className="w-4 h-4" /> New Project
-                </button>
               )}
                {activeTab === 'services' && isSuperAdmin && (
                  <button onClick={() => openModal('service')} className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-black rounded-xl font-semibold text-sm hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all">
@@ -2469,6 +2464,7 @@ export function AdminPage() {
               setProjectPage={setProjectPage}
               openModal={openModal}
               isSuperAdmin={isSuperAdmin}
+              setShowGuitarTypeSelector={setShowGuitarTypeSelector}
               showDefaultWorkflowEditor={showDefaultWorkflowEditor}
               setShowDefaultWorkflowEditor={setShowDefaultWorkflowEditor}
               deleteProject={deleteProject}
