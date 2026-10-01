@@ -317,6 +317,7 @@ CREATE TABLE customizations (
     user_id UUID,
     name VARCHAR(150),
     guitar_type guitar_type_enum NOT NULL,
+    body_model VARCHAR(80),
     body_wood VARCHAR(100),
     neck_wood VARCHAR(100),
     fingerboard_wood VARCHAR(100),

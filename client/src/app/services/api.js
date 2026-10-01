@@ -472,9 +472,10 @@ export const cartAPI = {
     })
   },
 
-  prepareCheckout: () => {
+  prepareCheckout: (checkoutData) => {
     return fetchAPI('/cart/prepare-checkout', {
       method: 'POST',
+      body: JSON.stringify(checkoutData),
     })
   },
 

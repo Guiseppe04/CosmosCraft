@@ -2,31 +2,20 @@ import { useState, useMemo, useEffect } from "react";
 import { motion } from "motion/react";
 import {
   BarChart3, DollarSign, ShoppingBag, TrendingUp, Printer,
-  CreditCard, Calendar, ArrowDownRight, Download, RefreshCw,
-  Filter, ChevronDown, X,
+  CreditCard, Calendar, ArrowDownRight, Download,
+  Filter, ChevronDown, X, List,
 } from "lucide-react";
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
-import {
-  format, startOfWeek, startOfMonth, endOfMonth, subMonths,
-  startOfDay, endOfDay,
-} from "date-fns";
+import { format } from "date-fns";
 import * as XLSX from "xlsx";
 import { formatCurrency } from "../../../utils/formatCurrency";
 import { useAuth } from "../../../context/AuthContext";
 import { adminApi } from "../../../utils/adminApi";
 
 /* ─── Constants ─── */
-
-const PRESETS = [
-  { key: "all", label: "All Time" },
-  { key: "today", label: "Today" },
-  { key: "week", label: "This Week" },
-  { key: "month", label: "This Month" },
-  { key: "last_month", label: "Last Month" },
-];
 
 const PRINT_SECTIONS = [
   { key: "summary", label: "Executive Summary (KPIs)", description: "Gross sales, net sales, transactions, averages" },
@@ -50,27 +39,27 @@ const CHANNEL_META = {
   appointments: { label: "Appointments", color: "#F59E0B" },
 };
 
+const CUSTOMER_CHANNEL_LABELS = {
+  walk_in: "Walk-in / POS",
+  online: "Online Orders",
+  customization: "Customization",
+  appointments: "Appointments",
+};
+
+const CUSTOMER_GROUP_LABELS = {
+  category: "Product Category",
+  product: "Product / Service",
+  region: "Region",
+  salesperson: "Salesperson",
+  status: "Order Status",
+  payment_status: "Payment Status",
+  channel: "Sales Channel",
+  payment_method: "Payment Method",
+};
+
 const PAYMENT_COLORS = ["#10B981", "#3B82F6", "#F59E0B", "#8B5CF6", "#EC4899", "#6366F1"];
 
 /* ─── Helpers ─── */
-
-function getPresetRange(preset) {
-  const now = new Date();
-  switch (preset) {
-    case "today":
-      return { start_date: format(startOfDay(now), "yyyy-MM-dd"), end_date: format(endOfDay(now), "yyyy-MM-dd") };
-    case "week":
-      return { start_date: format(startOfWeek(now, { weekStartsOn: 1 }), "yyyy-MM-dd"), end_date: format(endOfDay(now), "yyyy-MM-dd") };
-    case "month":
-      return { start_date: format(startOfMonth(now), "yyyy-MM-dd"), end_date: format(endOfDay(now), "yyyy-MM-dd") };
-    case "last_month": {
-      const last = subMonths(now, 1);
-      return { start_date: format(startOfMonth(last), "yyyy-MM-dd"), end_date: format(endOfMonth(last), "yyyy-MM-dd") };
-    }
-    default:
-      return {};
-  }
-}
 
 function groupWeekly(data) {
   const weeks = [];
@@ -102,21 +91,6 @@ function groupMonthly(data) {
 function fmtInteger(n) {
   return new Intl.NumberFormat("en-PH").format(Math.round(n || 0));
 }
-
-/* ─── Filename helper ─── */
-
-function sanitizeFilename(str) {
-  // Strip characters that are actually invalid in Windows/Mac/Linux filenames,
-  // but leave spaces, dashes, and other readable characters untouched.
-  return str.replace(/[\\/:*?"<>|]/g, "").trim();
-}
-
-function buildReportFilename(dateLabel, ext) {
-  const period = dateLabel ? sanitizeFilename(dateLabel) : "All Time";
-  return `CosmosCraft Sales Report - ${period}.${ext}`;
-}
-
-/* ─── Excel Table & Formatting Helpers ─── */
 
 const EXCEL_FMTS = {
   currency: '"₱"#,##0.00',
@@ -1388,18 +1362,32 @@ function ToggleGroup({ options, value, onChange }) {
    Main Component
    ═══════════════════════════════════════════════ */
 
-export function SalesReportTab({ salesReport, fetchSalesReport }) {
+export function SalesReportTab({ salesReport, categories = [] }) {
   const { user } = useAuth();
-  const [preset, setPreset] = useState("all");
-  const [customStart, setCustomStart] = useState("");
-  const [customEnd, setCustomEnd] = useState("");
-  const [activePreset, setActivePreset] = useState("all");
+  const [isSalesPreview, setIsSalesPreview] = useState(false);
   const [trendMetric, setTrendMetric] = useState("gross");
   const [chartView, setChartView] = useState("daily");
   const [sortBy, setSortBy] = useState("units");
   const [showPrintModal, setShowPrintModal] = useState(false);
   const [paymentScope, setPaymentScope] = useState("overall"); // "overall" | "appointments"
   const [isExporting, setIsExporting] = useState(false);
+  const [customerFilters, setCustomerFilters] = useState({
+    group_by: "channel",
+    channel: "",
+    order_type: "",
+    status: "",
+    payment_status: "",
+    payment_method: "",
+    category_id: "",
+    region: "",
+    salesperson: "",
+    sort_by: "sales_desc",
+  });
+  const [customerSearch, setCustomerSearch] = useState("");
+  const [customerRows, setCustomerRows] = useState([]);
+  const [customerLoading, setCustomerLoading] = useState(false);
+  const [customerError, setCustomerError] = useState("");
+  const [customerFilterMenuOpen, setCustomerFilterMenuOpen] = useState(false);
 
   const printedBy = user?.name?.firstName && user?.name?.lastName
     ? `${user.name.firstName} ${user.name.lastName}`
@@ -1408,76 +1396,81 @@ export function SalesReportTab({ salesReport, fetchSalesReport }) {
 
   /* ─── Derived data ─── */
 
-  const dateLabel = useMemo(() => {
-    if (preset === "all") return "All Time";
-    if (preset === "custom") {
-      if (customStart && customEnd) {
-        return customStart === customEnd ? customStart : `${customStart} — ${customEnd}`;
+  const dateLabel = "All Time";
+
+  useEffect(() => {
+    let isCurrentRequest = true;
+    const params = {};
+    Object.entries(customerFilters).forEach(([key, value]) => {
+      if (value && key !== "sort_by") params[key] = value;
+    });
+    setCustomerLoading(true);
+    setCustomerError("");
+    adminApi.getSalesCustomers(params)
+      .then((res) => {
+        if (isCurrentRequest) setCustomerRows(res.data?.customers || []);
+      })
+      .catch((err) => {
+        if (!isCurrentRequest) return;
+        setCustomerRows([]);
+        setCustomerError(err.message || "Unable to load customer sales.");
+      })
+      .finally(() => {
+        if (isCurrentRequest) setCustomerLoading(false);
+      });
+    return () => { isCurrentRequest = false; };
+  }, [customerFilters]);
+
+  const customerGroups = useMemo(() => {
+    const search = customerSearch.trim().toLowerCase();
+    const grouped = new Map();
+    customerRows
+      .filter((row) => !search || row.customer_name.toLowerCase().includes(search))
+      .forEach((row) => {
+        if (!grouped.has(row.group)) grouped.set(row.group, []);
+        grouped.get(row.group).push(row);
+      });
+
+    const sortCustomers = (left, right) => {
+      if (customerFilters.sort_by === "orders_desc") return right.orders - left.orders || right.total_sales - left.total_sales;
+      if (customerFilters.sort_by === "recent_desc") return new Date(right.last_purchase_date) - new Date(left.last_purchase_date);
+      if (customerFilters.sort_by === "name_asc") return left.customer_name.localeCompare(right.customer_name);
+      return right.total_sales - left.total_sales || right.orders - left.orders;
+    };
+
+    return [...grouped.entries()].map(([name, customers]) => ({
+      name,
+      customers: customers.sort(sortCustomers),
+      totalOrders: customers.reduce((sum, row) => sum + row.orders, 0),
+      totalSales: customers.reduce((sum, row) => sum + row.total_sales, 0),
+    })).sort((left, right) => {
+      if (customerFilters.sort_by === "orders_desc") return right.totalOrders - left.totalOrders || right.totalSales - left.totalSales;
+      if (customerFilters.sort_by === "recent_desc") {
+        const leftDate = Math.max(...left.customers.map((row) => new Date(row.last_purchase_date).getTime() || 0));
+        const rightDate = Math.max(...right.customers.map((row) => new Date(row.last_purchase_date).getTime() || 0));
+        return rightDate - leftDate;
       }
-      if (customStart) return `From ${customStart}`;
-      if (customEnd) return `Until ${customEnd}`;
-      return "Custom Range";
-    }
-    const range = getPresetRange(preset);
-    if (range.start_date && range.end_date) {
-      if (range.start_date === range.end_date) return range.start_date;
-      return `${range.start_date} — ${range.end_date}`;
-    }
-    return "Custom Range";
-  }, [preset, customStart, customEnd]);
+      if (customerFilters.sort_by === "name_asc") return left.name.localeCompare(right.name);
+      return right.totalSales - left.totalSales || right.totalOrders - left.totalOrders;
+    });
+  }, [customerRows, customerSearch, customerFilters.sort_by]);
 
-  const applyPreset = (key) => {
-    setActivePreset(key);
-    setPreset(key);
-    setCustomStart("");
-    setCustomEnd("");
-    fetchSalesReport(getPresetRange(key));
+  const loyaltyLeader = useMemo(() => customerRows.reduce((leader, row) => (
+    !leader || row.total_sales > leader.total_sales || (row.total_sales === leader.total_sales && row.orders > leader.orders)
+      ? row
+      : leader
+  ), null), [customerRows]);
+
+  const updateCustomerFilter = (key, value) => {
+    setCustomerFilters((current) => ({ ...current, [key]: value }));
   };
 
-  const handleCustomStartChange = (val) => {
-    setCustomStart(val);
-    if (!val && !customEnd) {
-      applyPreset("all");
-      return;
-    }
-    setActivePreset("custom");
-    setPreset("custom");
-    if (val && customEnd && val > customEnd) {
-      setCustomEnd(val);
-      fetchSalesReport({ start_date: val, end_date: val });
-    } else {
-      fetchSalesReport({ start_date: val || undefined, end_date: customEnd || undefined });
-    }
-  };
-
-  const handleCustomEndChange = (val) => {
-    setCustomEnd(val);
-    if (!customStart && !val) {
-      applyPreset("all");
-      return;
-    }
-    setActivePreset("custom");
-    setPreset("custom");
-    if (customStart && val && customStart > val) {
-      setCustomStart(val);
-      fetchSalesReport({ start_date: val, end_date: val });
-    } else {
-      fetchSalesReport({ start_date: customStart || undefined, end_date: val || undefined });
-    }
-  };
-
-  const clearCustomDates = () => {
-    setCustomStart("");
-    setCustomEnd("");
-    applyPreset("all");
-  };
-
-  const handleRefresh = () => {
-    if (activePreset === "custom") {
-      fetchSalesReport({ start_date: customStart || undefined, end_date: customEnd || undefined });
-    } else {
-      fetchSalesReport(getPresetRange(activePreset));
-    }
+  const clearCustomerFilters = () => {
+    setCustomerFilters({
+      group_by: "channel", channel: "", order_type: "", status: "", payment_status: "",
+      payment_method: "", category_id: "", region: "", salesperson: "", sort_by: "sales_desc",
+    });
+    setCustomerSearch("");
   };
 
   const handleExportExcel = async () => {
@@ -1632,13 +1625,6 @@ export function SalesReportTab({ salesReport, fetchSalesReport }) {
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              {/* <button
-                onClick={handleRefresh}
-                className="flex items-center gap-1.5 px-3 py-2 bg-[var(--surface-dark)] border border-[var(--border)] rounded-lg text-sm font-medium text-[var(--text-muted)] hover:border-[var(--gold-primary)] transition-colors"
-              >
-                <RefreshCw className="w-4 h-4" />
-                Refresh
-              </button> */}
               <button
                 onClick={handleExportExcel}
                 disabled={isExporting}
@@ -1657,71 +1643,228 @@ export function SalesReportTab({ salesReport, fetchSalesReport }) {
             </div>
           </div>
 
-          {/* ── Date Range Controls ── */}
-          <div className="flex flex-wrap items-center gap-2 no-print">
-            {PRESETS.map((p) => (
-              <button
-                key={p.key}
-                onClick={() => applyPreset(p.key)}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${activePreset === p.key
-                  ? "bg-[var(--gold-primary)] text-black"
-                  : "bg-[var(--surface-dark)] border border-[var(--border)] text-[var(--text-light)] hover:border-[var(--gold-primary)]"
-                  }`}
-              >
-                {p.label}
-              </button>
-            ))}
-            <div className="flex items-center gap-2 ml-2">
-              <input
-                type="date"
-                value={customStart}
-                max={customEnd || undefined}
-                onChange={(e) => handleCustomStartChange(e.target.value)}
-                className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-lg px-3 py-1.5 text-[var(--text-light)] text-sm focus:border-[var(--gold-primary)] focus:outline-none"
-              />
-              <span className="text-[var(--text-muted)]">to</span>
-              <input
-                type="date"
-                value={customEnd}
-                min={customStart || undefined}
-                onChange={(e) => handleCustomEndChange(e.target.value)}
-                className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-lg px-3 py-1.5 text-[var(--text-light)] text-sm focus:border-[var(--gold-primary)] focus:outline-none"
-              />
-              {(customStart || customEnd) && (
-                <button
-                  onClick={clearCustomDates}
-                  title="Clear custom date filter"
-                  className="px-2.5 py-1.5 bg-[var(--surface-dark)] border border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-light)] rounded-lg text-sm font-medium hover:border-[var(--gold-primary)] transition-colors flex items-center gap-1"
-                >
-                  <X className="w-3.5 h-3.5" />
-                  Clear
-                </button>
-              )}
-            </div>
+          {/* ── Report View Toggle ── */}
+          <div className="flex justify-end no-print">
+            <button
+              type="button"
+              onClick={() => setIsSalesPreview((current) => !current)}
+              aria-pressed={isSalesPreview}
+              className="inline-flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] px-4 py-2 text-sm font-semibold text-[var(--text-light)] transition-colors hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)]"
+            >
+              <List className="h-4 w-4" />
+              {isSalesPreview ? "Back to Summary" : "Sales Preview"}
+            </button>
           </div>
 
-          {/* ── KPI Cards ── */}
-          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
-            {kpis.map((k) => {
-              const Icon = k.icon;
-              return (
-                <div key={k.label} className={`bg-[var(--surface-dark)] border rounded-xl p-5 ${k.borderCls}`}>
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">{k.label}</span>
-                    {k.tag && (
-                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wide ${k.tagCls}`}>{k.tag}</span>
+          {/* ── Customer Sales Preview ── */}
+          {isSalesPreview && (
+          <section className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-[var(--border)]">
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                <div>
+                  <h2 className="font-semibold text-[var(--text-light)] text-lg">Customer Sales Preview</h2>
+                  <p className="text-xs text-[var(--text-muted)] mt-0.5">Customer totals grouped by your selected report dimension</p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 no-print">
+                  <input
+                    type="search"
+                    value={customerSearch}
+                    onChange={(event) => setCustomerSearch(event.target.value)}
+                    placeholder="Search customers..."
+                    aria-label="Search customers"
+                    className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-[var(--text-light)] focus:border-[var(--gold-primary)] focus:outline-none"
+                  />
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setCustomerFilterMenuOpen((open) => !open)}
+                      aria-expanded={customerFilterMenuOpen}
+                      aria-haspopup="true"
+                      className="inline-flex h-10 items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-3 text-sm font-semibold text-[var(--text-light)] transition-colors hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)]"
+                    >
+                      <Filter className="h-4 w-4" />
+                      Sort &amp; Filter
+                      <ChevronDown className="h-4 w-4" />
+                    </button>
+                    {customerFilterMenuOpen && (
+                      <div className="absolute right-0 top-full z-40 mt-2 grid max-h-[70vh] w-[min(88vw,24rem)] gap-3 overflow-y-auto rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] p-4 shadow-2xl sm:grid-cols-2">
+                        <label className="text-xs font-semibold text-[var(--text-muted)]">
+                          Group customers by
+                          <select value={customerFilters.group_by} onChange={(event) => updateCustomerFilter("group_by", event.target.value)} className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-2.5 py-2 text-sm text-[var(--text-light)]">
+                            <option value="category">Product category</option>
+                            <option value="product">Product / service</option>
+                            <option value="region">Region</option>
+                            <option value="salesperson">Salesperson</option>
+                            <option value="status">Order status</option>
+                            <option value="payment_status">Payment status</option>
+                            <option value="channel">Sales channel</option>
+                            <option value="payment_method">Payment method</option>
+                          </select>
+                        </label>
+                        <label className="text-xs font-semibold text-[var(--text-muted)]">
+                          Sort groups and customers
+                          <select value={customerFilters.sort_by} onChange={(event) => updateCustomerFilter("sort_by", event.target.value)} className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-2.5 py-2 text-sm text-[var(--text-light)]">
+                            <option value="sales_desc">Highest sales</option>
+                            <option value="orders_desc">Most orders</option>
+                            <option value="recent_desc">Most recent purchase</option>
+                            <option value="name_asc">Customer / group name</option>
+                          </select>
+                        </label>
+                        <label className="text-xs font-semibold text-[var(--text-muted)]">
+                          Sales channel
+                          <select value={customerFilters.channel} onChange={(event) => updateCustomerFilter("channel", event.target.value)} className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-2.5 py-2 text-sm text-[var(--text-light)]">
+                            <option value="">All channels</option>
+                            <option value="walk_in">Walk-in / POS</option>
+                            <option value="online">Online orders</option>
+                            <option value="customization">Customization</option>
+                            <option value="appointments">Appointments</option>
+                          </select>
+                        </label>
+                        <label className="text-xs font-semibold text-[var(--text-muted)]">
+                          Order type
+                          <select value={customerFilters.order_type} onChange={(event) => updateCustomerFilter("order_type", event.target.value)} className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-2.5 py-2 text-sm text-[var(--text-light)]">
+                            <option value="">All order types</option>
+                            <option value="product">Product</option>
+                            <option value="customization">Customization</option>
+                            <option value="service">Service</option>
+                          </select>
+                        </label>
+                        <label className="text-xs font-semibold text-[var(--text-muted)]">
+                          Order status
+                          <select value={customerFilters.status} onChange={(event) => updateCustomerFilter("status", event.target.value)} className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-2.5 py-2 text-sm text-[var(--text-light)]">
+                            <option value="">All statuses</option>
+                            {["pending", "processing", "shipped", "delivered", "completed", "confirmed", "approved", "cancelled"].map((status) => <option key={status} value={status}>{status.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase())}</option>)}
+                          </select>
+                        </label>
+                        <label className="text-xs font-semibold text-[var(--text-muted)]">
+                          Payment status
+                          <select value={customerFilters.payment_status} onChange={(event) => updateCustomerFilter("payment_status", event.target.value)} className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-2.5 py-2 text-sm text-[var(--text-light)]">
+                            <option value="">All payment statuses</option>
+                            {["pending", "proof_submitted", "under_review", "approved", "verified", "paid", "rejected", "failed"].map((status) => <option key={status} value={status}>{status.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase())}</option>)}
+                          </select>
+                        </label>
+                        <label className="text-xs font-semibold text-[var(--text-muted)]">
+                          Payment method
+                          <select value={customerFilters.payment_method} onChange={(event) => updateCustomerFilter("payment_method", event.target.value)} className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-2.5 py-2 text-sm text-[var(--text-light)]">
+                            <option value="">All payment methods</option>
+                            <option value="cash">Cash</option>
+                            <option value="gcash">GCash</option>
+                            <option value="bank_transfer">Bank transfer</option>
+                          </select>
+                        </label>
+                        {customerFilters.group_by === "category" && categories.length > 0 && (
+                          <label className="text-xs font-semibold text-[var(--text-muted)]">
+                            Product category
+                            <select value={customerFilters.category_id} onChange={(event) => updateCustomerFilter("category_id", event.target.value)} className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-2.5 py-2 text-sm text-[var(--text-light)]">
+                              <option value="">All categories</option>
+                              {categories.map((category) => <option key={category.category_id} value={category.category_id}>{category.name}</option>)}
+                            </select>
+                          </label>
+                        )}
+                        <label className="text-xs font-semibold text-[var(--text-muted)]">
+                          Region contains
+                          <input value={customerFilters.region} onChange={(event) => updateCustomerFilter("region", event.target.value)} placeholder="City or province" className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-2.5 py-2 text-sm text-[var(--text-light)]" />
+                        </label>
+                        <label className="text-xs font-semibold text-[var(--text-muted)]">
+                          Salesperson contains
+                          <input value={customerFilters.salesperson} onChange={(event) => updateCustomerFilter("salesperson", event.target.value)} placeholder="Staff name" className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-2.5 py-2 text-sm text-[var(--text-light)]" />
+                        </label>
+                        <button type="button" onClick={clearCustomerFilters} className="text-left text-xs font-semibold text-[var(--gold-primary)] hover:underline sm:col-span-2">Reset filters and sort</button>
+                      </div>
                     )}
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Icon className="w-5 h-5 flex-shrink-0" style={{ color: k.color }} />
-                    <span className="font-mono text-xl font-semibold text-[var(--text-light)]" style={{ color: k.color }}>{k.value}</span>
+                </div>
+              </div>
+            </div>
+            <div className="p-5 space-y-4">
+              {loyaltyLeader && (
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-xl border border-[var(--gold-primary)]/30 bg-[var(--gold-primary)]/5 px-4 py-3">
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--gold-primary)]">Loyalty leader · highest sales</p>
+                    <p className="mt-0.5 font-semibold text-[var(--text-light)]">{loyaltyLeader.customer_name}</p>
+                  </div>
+                  <div className="flex gap-4 text-sm">
+                    <span className="text-[var(--text-muted)]">{fmtInteger(loyaltyLeader.orders)} orders</span>
+                    <span className="font-mono font-semibold text-[var(--gold-primary)]">{formatCurrency(loyaltyLeader.total_sales)}</span>
                   </div>
                 </div>
-              );
-            })}
-          </div>
+              )}
+              {customerLoading ? (
+                <p className="py-8 text-center text-sm text-[var(--text-muted)]">Updating customer preview...</p>
+              ) : customerError ? (
+                <p className="py-8 text-center text-sm text-red-400">{customerError}</p>
+              ) : customerGroups.length === 0 ? (
+                <p className="py-8 text-center text-sm text-[var(--text-muted)]">No customer sales match these filters.</p>
+              ) : (
+                <div className="overflow-x-auto rounded-lg border border-[var(--border)]">
+                  <table className="w-full min-w-[760px] text-sm">
+                    <thead>
+                      <tr className="bg-[var(--bg-primary)] border-b border-[var(--border)] text-xs uppercase text-[var(--text-muted)]">
+                        <th className="px-4 py-3 text-left font-semibold">{CUSTOMER_GROUP_LABELS[customerFilters.group_by] || "Category / Group"}</th>
+                        <th className="px-4 py-3 text-left font-semibold">Customer</th>
+                        <th className="px-4 py-3 text-right font-semibold">Orders</th>
+                        <th className="px-4 py-3 text-right font-semibold">Total Sales</th>
+                        <th className="px-4 py-3 text-right font-semibold">Last Purchase</th>
+                      </tr>
+                    </thead>
+                    {customerGroups.map((group) => (
+                      <tbody key={group.name} className="divide-y divide-[var(--border)]">
+                        {group.customers.map((customer) => (
+                          <tr key={`${group.name}-${customer.customer_id || customer.customer_name}`} className={customer === loyaltyLeader ? "bg-[var(--gold-primary)]/5" : ""}>
+                            <td className="px-4 py-3 text-[var(--text-light)]">{customerFilters.group_by === "channel" ? CUSTOMER_CHANNEL_LABELS[group.name] || group.name : group.name}</td>
+                            <td className="px-4 py-3 font-medium text-[var(--text-light)]">
+                              <span className="inline-flex flex-wrap items-center gap-2">
+                                {customer.customer_name}
+                                {customer === loyaltyLeader && <span className="rounded border border-[var(--gold-primary)]/30 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-[var(--gold-primary)]">Loyalty Leader</span>}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-right font-mono text-[var(--text-light)]">{fmtInteger(customer.orders)}</td>
+                            <td className="px-4 py-3 text-right font-mono font-medium text-[var(--gold-primary)]">{formatCurrency(customer.total_sales)}</td>
+                            <td className="px-4 py-3 text-right text-[var(--text-muted)]">{customer.last_purchase_date ? format(new Date(customer.last_purchase_date), "MMM d, yyyy") : "—"}</td>
+                          </tr>
+                        ))}
+                        <tr className="bg-[var(--bg-primary)] font-semibold">
+                          <td className="px-4 py-3 text-[var(--text-light)]">{customerFilters.group_by === "channel" ? CUSTOMER_CHANNEL_LABELS[group.name] || group.name : group.name}</td>
+                          <td className="px-4 py-3 text-[var(--text-light)]">Subtotal · {group.customers.length} customers</td>
+                          <td className="px-4 py-3 text-right font-mono text-[var(--text-light)]">{fmtInteger(group.totalOrders)}</td>
+                          <td className="px-4 py-3 text-right font-mono text-[var(--gold-primary)]">{formatCurrency(group.totalSales)}</td>
+                          <td className="px-4 py-3" />
+                        </tr>
+                      </tbody>
+                    ))}
+                  </table>
+                </div>
+              )}
+            </div>
+          </section>
+          )}
 
-          {/* ── Sales Trend Chart ── */}
+          {!isSalesPreview && (
+            <>
+              {/* ── KPI Cards ── */}
+              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
+                {kpis.map((k) => {
+                  const Icon = k.icon;
+                  return (
+                    <div key={k.label} className={`bg-[var(--surface-dark)] border rounded-xl p-5 ${k.borderCls}`}>
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">{k.label}</span>
+                        {k.tag && (
+                          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wide ${k.tagCls}`}>{k.tag}</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Icon className="w-5 h-5 flex-shrink-0" style={{ color: k.color }} />
+                        <span className="font-mono text-xl font-semibold text-[var(--text-light)]" style={{ color: k.color }}>{k.value}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+
+          {!isSalesPreview && (
           <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6">
             <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
               <h2 className="font-semibold text-white text-lg">Sales Trend</h2>
@@ -1779,15 +1922,16 @@ export function SalesReportTab({ salesReport, fetchSalesReport }) {
               </div>
             )}
           </div>
+          )}
 
           {/* ── Channel Analysis ── */}
           <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl overflow-hidden">
             <div className="px-5 py-4 border-b border-[var(--border)]">
               <h2 className="font-semibold text-[var(--text-light)] text-lg">Sales Channel Analysis</h2>
             </div>
-            <div className="grid grid-cols-1 xl:grid-cols-3 divide-y xl:divide-y-0 xl:divide-x divide-[var(--border)]">
+            <div className={isSalesPreview ? "" : "grid grid-cols-1 xl:grid-cols-3 divide-y xl:divide-y-0 xl:divide-x divide-[var(--border)]"}>
               {/* Table */}
-              <div className="xl:col-span-2 overflow-x-auto">
+              <div className={`${isSalesPreview ? "" : "xl:col-span-2"} overflow-x-auto`}>
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-[var(--bg-primary)] border-b border-[var(--border)]">
@@ -1831,6 +1975,7 @@ export function SalesReportTab({ salesReport, fetchSalesReport }) {
                 </table>
               </div>
               {/* Horizontal Bar Chart */}
+              {!isSalesPreview && (
               <div className="p-5 flex flex-col justify-center">
                 <p className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wide mb-3">Net Sales by Channel</p>
                 <ResponsiveContainer width="100%" height={180}>
@@ -1847,6 +1992,7 @@ export function SalesReportTab({ salesReport, fetchSalesReport }) {
                   </BarChart>
                 </ResponsiveContainer>
               </div>
+              )}
             </div>
           </div>
 
@@ -1857,31 +2003,52 @@ export function SalesReportTab({ salesReport, fetchSalesReport }) {
               <p className="text-xs text-[var(--text-muted)] mt-0.5">Refunds, Returns &amp; Voids</p>
             </div>
             <div className="p-5">
-              {/* Adjustment type cards */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
-                {adjustmentsByType.map((a) => (
-                  <div key={a.type} className="bg-[var(--bg-primary)] rounded-xl p-4 border border-[var(--border)]">
-                    <p className="text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide mb-2">
-                      {(a.type || 'Unknown').charAt(0).toUpperCase() + (a.type || 'Unknown').slice(1)}s
-                    </p>
-                    <p className="font-mono text-xl font-semibold text-red-400">{a.count}</p>
-                    <p className="font-mono text-sm text-red-300 mt-0.5">{formatCurrency(a.amount)}</p>
+              {isSalesPreview ? (
+                <div className="overflow-x-auto mb-4">
+                  <table className="w-full text-sm">
+                    <thead><tr className="bg-[var(--bg-primary)] border-b border-[var(--border)]"><th className="px-4 py-3 text-left text-xs font-semibold uppercase text-[var(--text-muted)]">Adjustment Type</th><th className="px-4 py-3 text-right text-xs font-semibold uppercase text-[var(--text-muted)]">Count</th><th className="px-4 py-3 text-right text-xs font-semibold uppercase text-[var(--text-muted)]">Amount</th></tr></thead>
+                    <tbody className="divide-y divide-[var(--border)]">
+                      {adjustmentsByType.map((adjustment) => (
+                        <tr key={adjustment.type}>
+                          <td className="px-4 py-3 text-[var(--text-light)]">{(adjustment.type || "Unknown").replace(/\b\w/g, (letter) => letter.toUpperCase())}</td>
+                          <td className="px-4 py-3 text-right font-mono text-[var(--text-light)]">{fmtInteger(adjustment.count)}</td>
+                          <td className="px-4 py-3 text-right font-mono text-red-400">{formatCurrency(adjustment.amount)}</td>
+                        </tr>
+                      ))}
+                      <tr className="bg-[var(--bg-primary)] font-semibold">
+                        <td className="px-4 py-3 text-[var(--text-light)]">Total Adjustments</td>
+                        <td className="px-4 py-3 text-right font-mono text-[var(--text-light)]">{fmtInteger(adjustmentsByType.reduce((sum, adjustment) => sum + (adjustment.count || 0), 0))}</td>
+                        <td className="px-4 py-3 text-right font-mono text-red-400">{formatCurrency(salesReport?.totalAdjustments || 0)}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
+                    {adjustmentsByType.map((a) => (
+                      <div key={a.type} className="bg-[var(--bg-primary)] rounded-xl p-4 border border-[var(--border)]">
+                        <p className="text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide mb-2">
+                          {(a.type || 'Unknown').charAt(0).toUpperCase() + (a.type || 'Unknown').slice(1)}s
+                        </p>
+                        <p className="font-mono text-xl font-semibold text-red-400">{a.count}</p>
+                        <p className="font-mono text-sm text-red-300 mt-0.5">{formatCurrency(a.amount)}</p>
+                      </div>
+                    ))}
+                    <div className="bg-[var(--bg-primary)] rounded-xl p-4 border border-red-500/20">
+                      <p className="text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide mb-2">Total Adjustments</p>
+                      <p className="font-mono text-xl font-semibold text-red-400">{formatCurrency(salesReport?.totalAdjustments || 0)}</p>
+                      <p className="text-xs text-[var(--text-muted)] mt-1">{adjustmentRate}% adj. rate</p>
+                    </div>
                   </div>
-                ))}
-                <div className="bg-[var(--bg-primary)] rounded-xl p-4 border border-red-500/20">
-                  <p className="text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide mb-2">Total Adjustments</p>
-                  <p className="font-mono text-xl font-semibold text-red-400">{formatCurrency(salesReport?.totalAdjustments || 0)}</p>
-                  <p className="text-xs text-[var(--text-muted)] mt-1">{adjustmentRate}% adj. rate</p>
-                </div>
-              </div>
-
-              {/* Adjustment rate badge */}
-              <div className="flex items-center gap-2 mb-4">
-                <div className="px-3 py-1.5 bg-red-500/10 rounded-lg border border-red-500/20">
-                  <span className="text-xs font-semibold text-red-400">Adjustment Rate: {adjustmentRate}%</span>
-                </div>
-                <span className="text-xs text-[var(--text-muted)]">= Total Adjustments ÷ Gross Sales × 100</span>
-              </div>
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className="px-3 py-1.5 bg-red-500/10 rounded-lg border border-red-500/20">
+                      <span className="text-xs font-semibold text-red-400">Adjustment Rate: {adjustmentRate}%</span>
+                    </div>
+                    <span className="text-xs text-[var(--text-muted)]">= Total Adjustments ÷ Gross Sales × 100</span>
+                  </div>
+                </>
+              )}
 
               {/* By-channel table */}
               {adjustmentsByChannel.length > 0 && (
@@ -1967,6 +2134,22 @@ export function SalesReportTab({ salesReport, fetchSalesReport }) {
                 <h2 className="font-semibold text-[var(--text-light)] text-lg">Customization Performance</h2>
               </div>
               <div className="p-5">
+                {isSalesPreview ? (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead><tr className="bg-[var(--bg-primary)] border-b border-[var(--border)]"><th className="px-4 py-3 text-left text-xs font-semibold uppercase text-[var(--text-muted)]">Metric</th><th className="px-4 py-3 text-right text-xs font-semibold uppercase text-[var(--text-muted)]">Value</th></tr></thead>
+                      <tbody className="divide-y divide-[var(--border)]">
+                        <tr><td className="px-4 py-3 text-[var(--text-light)]">Orders</td><td className="px-4 py-3 text-right font-mono text-[var(--text-light)]">{fmtInteger(custOrders)}</td></tr>
+                        <tr><td className="px-4 py-3 text-[var(--text-light)]">Gross Sales</td><td className="px-4 py-3 text-right font-mono text-[var(--text-light)]">{formatCurrency(custChannel.gross || 0)}</td></tr>
+                        <tr><td className="px-4 py-3 text-[var(--text-light)]">Adjustments</td><td className="px-4 py-3 text-right font-mono text-red-400">{formatCurrency(custChannel.adjustments || 0)}</td></tr>
+                        <tr><td className="px-4 py-3 font-semibold text-[var(--text-light)]">Net Sales</td><td className="px-4 py-3 text-right font-mono font-semibold text-[var(--gold-primary)]">{formatCurrency(custChannel.net || 0)}</td></tr>
+                        <tr><td className="px-4 py-3 text-[var(--text-light)]">Transactions</td><td className="px-4 py-3 text-right font-mono text-[var(--text-light)]">{fmtInteger(custChannel.transactions || 0)}</td></tr>
+                        <tr><td className="px-4 py-3 text-[var(--text-light)]">Average Order Value</td><td className="px-4 py-3 text-right font-mono text-[var(--text-light)]">{formatCurrency(custOrders > 0 ? (custChannel.net || 0) / custOrders : 0)}</td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
                   {[
                     { label: "Orders", value: fmtInteger(custOrders), accent: false },
@@ -2001,6 +2184,8 @@ export function SalesReportTab({ salesReport, fetchSalesReport }) {
                     </div>
                   </div>
                 </div>
+                  </>
+                )}
               </div>
             </div>
 
@@ -2041,6 +2226,7 @@ export function SalesReportTab({ salesReport, fetchSalesReport }) {
               <div className="p-5">
                 {activePaymentMethods.length > 0 ? (
                   <>
+                    {!isSalesPreview && (
                     <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-center">
                       <ResponsiveContainer width="100%" height={180}>
                         <PieChart>
@@ -2070,6 +2256,7 @@ export function SalesReportTab({ salesReport, fetchSalesReport }) {
                         ))}
                       </div>
                     </div>
+                    )}
                     <div className="overflow-x-auto">
                       <table className="w-full text-sm mt-4 pt-4 border-t border-[var(--border)]">
                         <thead>
@@ -2121,6 +2308,40 @@ export function SalesReportTab({ salesReport, fetchSalesReport }) {
               </div>
             </div>
           </div>
+
+          {isSalesPreview && (salesReport.dailyTrend || []).length > 0 && (
+            <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl overflow-hidden">
+              <div className="px-5 py-4 border-b border-[var(--border)]">
+                <h2 className="font-semibold text-[var(--text-light)] text-lg">Daily Sales Trend</h2>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-[var(--bg-primary)] border-b border-[var(--border)]">
+                      {["Date", "Gross Sales", "Adjustments", "Net Sales", "Transactions"].map((heading) => (
+                        <th key={heading} className={`px-4 py-3 text-xs font-semibold uppercase text-[var(--text-muted)] ${heading === "Date" ? "text-left" : "text-right"}`}>{heading}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[var(--border)]">
+                    {salesReport.dailyTrend.map((day) => {
+                      const gross = day.revenue || 0;
+                      const adjustments = day.adjustments || 0;
+                      return (
+                        <tr key={day.date}>
+                          <td className="px-4 py-3 text-[var(--text-light)]">{day.date}</td>
+                          <td className="px-4 py-3 text-right font-mono text-[var(--text-light)]">{formatCurrency(gross)}</td>
+                          <td className="px-4 py-3 text-right font-mono text-red-400">{formatCurrency(adjustments)}</td>
+                          <td className="px-4 py-3 text-right font-mono font-semibold text-[var(--gold-primary)]">{formatCurrency(gross - adjustments)}</td>
+                          <td className="px-4 py-3 text-right font-mono text-[var(--text-light)]">{fmtInteger(day.transactions)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           {/* ── Top Adjusted Products ── */}
           {(salesReport.topAdjustedProducts || []).length > 0 && (
@@ -2180,31 +2401,54 @@ export function SalesReportTab({ salesReport, fetchSalesReport }) {
             </div>
           )}
 
-          {/* ── Performance Summary (All Time fallback) ── */}
-          {preset === "all" && (
-            <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6">
+          {/* ── Performance Summary ── */}
+          <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl overflow-hidden">
+            <div className="px-5 py-4 border-b border-[var(--border)]">
               <h2 className="text-white text-lg font-semibold mb-4">Performance Summary</h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {[
-                  { label: "Daily Performance", sales: salesReport?.dailySales, tx: salesReport?.dailyTransactions },
-                  { label: "Weekly Performance", sales: salesReport?.weeklySales, tx: salesReport?.weeklyTransactions },
-                  { label: "Monthly Performance", sales: salesReport?.monthlySales, tx: salesReport?.monthlyTransactions },
-                ].map((p) => (
-                  <div key={p.label} className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl p-4">
-                    <h3 className="text-white font-semibold mb-3">{p.label}</h3>
-                    <div className="flex justify-between py-2 border-b border-[var(--border)]">
-                      <span className="text-[var(--text-muted)]">Revenue</span>
-                      <span className="text-[var(--gold-primary)] font-bold font-mono">{formatCurrency(p.sales || 0)}</span>
-                    </div>
-                    <div className="flex justify-between py-2">
-                      <span className="text-[var(--text-muted)]">Transactions</span>
-                      <span className="text-white font-medium font-mono">{fmtInteger(p.tx || 0)}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
             </div>
-          )}
+            <div className="p-5">
+              {isSalesPreview ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead><tr className="bg-[var(--bg-primary)] border-b border-[var(--border)]"><th className="px-4 py-3 text-left text-xs font-semibold uppercase text-[var(--text-muted)]">Period</th><th className="px-4 py-3 text-right text-xs font-semibold uppercase text-[var(--text-muted)]">Revenue</th><th className="px-4 py-3 text-right text-xs font-semibold uppercase text-[var(--text-muted)]">Transactions</th></tr></thead>
+                    <tbody className="divide-y divide-[var(--border)]">
+                      {[
+                        { label: "Today", sales: salesReport?.dailySales, transactions: salesReport?.dailyTransactions },
+                        { label: "This Week", sales: salesReport?.weeklySales, transactions: salesReport?.weeklyTransactions },
+                        { label: "This Month", sales: salesReport?.monthlySales, transactions: salesReport?.monthlyTransactions },
+                      ].map((period) => (
+                        <tr key={period.label}>
+                          <td className="px-4 py-3 text-[var(--text-light)]">{period.label}</td>
+                          <td className="px-4 py-3 text-right font-mono font-semibold text-[var(--gold-primary)]">{formatCurrency(period.sales || 0)}</td>
+                          <td className="px-4 py-3 text-right font-mono text-[var(--text-light)]">{fmtInteger(period.transactions || 0)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {[
+                    { label: "Daily Performance", sales: salesReport?.dailySales, tx: salesReport?.dailyTransactions },
+                    { label: "Weekly Performance", sales: salesReport?.weeklySales, tx: salesReport?.weeklyTransactions },
+                    { label: "Monthly Performance", sales: salesReport?.monthlySales, tx: salesReport?.monthlyTransactions },
+                  ].map((p) => (
+                    <div key={p.label} className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl p-4">
+                      <h3 className="text-white font-semibold mb-3">{p.label}</h3>
+                      <div className="flex justify-between py-2 border-b border-[var(--border)]">
+                        <span className="text-[var(--text-muted)]">Revenue</span>
+                        <span className="text-[var(--gold-primary)] font-bold font-mono">{formatCurrency(p.sales || 0)}</span>
+                      </div>
+                      <div className="flex justify-between py-2">
+                        <span className="text-[var(--text-muted)]">Transactions</span>
+                        <span className="text-white font-medium font-mono">{fmtInteger(p.tx || 0)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
 
         </div>
       ) : (

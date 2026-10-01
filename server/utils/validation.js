@@ -724,11 +724,11 @@ exports.createOrderSchema = Joi.object({
       }).or('product_id', 'customization_id', 'productId', 'customization')
     )
     .min(1)
-    .required()
     .messages({
       'array.min': 'At least one order item is required',
       'any.required': 'Items are required',
     }),
+  cartItemIds: Joi.array().items(Joi.string().pattern(/^[1-9]\d{0,18}$/)).min(1).unique(),
   notes: Joi.string().max(500).optional().allow(''),
   shippingMethod: Joi.string().max(100).required().trim().messages({
     'string.max': 'Shipping method must not exceed 100 characters',
@@ -806,7 +806,7 @@ exports.createOrderSchema = Joi.object({
     .messages({
       'number.min': 'Installment tenure must be at least 1 month',
     }),
-});
+}).xor('items', 'cartItemIds');
 
 exports.cancelMyOrderSchema = Joi.object({
   reason: Joi.string().trim().min(10).max(200).required().messages({
@@ -1257,6 +1257,7 @@ const listProjectsSchema = Joi.object({
   status: Joi.string().valid(
     'not_started',
     'in_progress',
+    'on_hold',
     'completed',
     'cancelled'
   ).optional(),
@@ -1264,6 +1265,15 @@ const listProjectsSchema = Joi.object({
   guitar_type: Joi.string().trim().min(2).max(80).optional().allow(''),
   date_from: Joi.string().isoDate().optional(),
   date_to: Joi.string().isoDate().optional(),
+  payment_filter: Joi.string().valid(
+    'all', 'cash_on_delivery', 'cash', 'down_payment', 'fully_paid',
+    'online_payment', 'gcash', 'bank_transfer'
+  ).optional(),
+  guitar_model: Joi.string().trim().max(80).optional().allow(''),
+  progress_operator: Joi.string().valid('all', 'greater_than', 'less_than', 'equal_to', 'between').optional(),
+  progress_value: Joi.number().min(0).max(100).optional().allow(''),
+  progress_min: Joi.number().min(0).max(100).optional().allow(''),
+  progress_max: Joi.number().min(0).max(100).optional().allow(''),
   due_date_from: Joi.string().isoDate().optional(),
   due_date_to: Joi.string().isoDate().optional(),
   completion_percentage: Joi.alternatives().try(Joi.number().integer().min(0).max(100), Joi.string()).optional().allow(''),
@@ -1274,7 +1284,8 @@ const listProjectsSchema = Joi.object({
     'customer_name',
     'progress',
     'estimated_completion_date',
-    'status'
+    'status',
+    'order_total_amount'
   ).optional(),
   sort_dir: Joi.string().valid('asc', 'desc').optional(),
   page: Joi.number().integer().min(1).optional(),

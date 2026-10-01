@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 import { motion, AnimatePresence } from 'motion/react'
-import { User, CreditCard, MapPin, Lock, Package, Calendar, ChevronRight, ChevronLeft, Search, Upload, Save, Wallet, ShoppingBag, ShoppingCart, Trash2, Minus, Plus, MessageSquare, Send, Guitar, Clock, Truck, CheckCircle, XCircle, Briefcase, Activity, Star, Loader2, Edit, AlertCircle, AlertTriangle, X, Banknote, Smartphone, Landmark, CreditCard as CreditCardIcon, Check, RefreshCw, Printer, Info, Camera } from 'lucide-react'
+import { User, CreditCard, MapPin, Lock, Package, Calendar, ChevronRight, ChevronLeft, Search, Upload, Save, Wallet, ShoppingBag, ShoppingCart, Trash2, Minus, Plus, MessageSquare, Send, Guitar, Clock, Truck, CheckCircle, XCircle, Briefcase, Activity, Star, Loader2, Edit, AlertCircle, AlertTriangle, X, Banknote, Smartphone, Landmark, CreditCard as CreditCardIcon, Check, RefreshCw, Printer, Info, Camera, Filter, CircleDot, CalendarDays, ArrowDownWideNarrow, ListFilter, DollarSign } from 'lucide-react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useCart } from '../context/CartContext.jsx'
 import { BASE_PRICE, BODY_OPTIONS, BODY_WOOD_OPTIONS, BODY_FINISH_OPTIONS, NECK_OPTIONS, FRETBOARD_OPTIONS, HEADSTOCK_OPTIONS, HEADSTOCK_WOOD_OPTIONS, INLAY_OPTIONS, BRIDGE_OPTIONS, PICKGUARD_OPTIONS_BY_BODY, KNOB_OPTIONS_BY_BODY, HARDWARE_OPTIONS, PICKUP_OPTIONS } from '../lib/guitarBuilderData.js'
@@ -264,6 +264,136 @@ function DashboardStarPicker({ rating, onChange, maxStars = 5, size = 'w-7 h-7' 
   )
 }
 
+function DashboardFilterMenu({ groups, onReset }) {
+  const [isOpen, setIsOpen] = useState(false)
+  const [activeGroupId, setActiveGroupId] = useState(null)
+  const menuRef = useRef(null)
+  const filterGroups = groups.filter((group) => group.type === 'filter')
+  const sortGroups = groups.filter((group) => group.type === 'sort')
+  const activeGroup = groups.find((group) => group.id === activeGroupId)
+
+  useEffect(() => {
+    if (!isOpen) return
+    const handlePointerDown = (event) => {
+      if (!menuRef.current?.contains(event.target)) {
+        setIsOpen(false)
+        setActiveGroupId(null)
+      }
+    }
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        setIsOpen(false)
+        setActiveGroupId(null)
+      }
+    }
+    document.addEventListener('pointerdown', handlePointerDown)
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isOpen])
+
+  const renderGroup = (group) => {
+    const Icon = group.icon || Calendar
+    const selectedOption = group.options.find((option) => option.value === group.value)
+    return (
+      <button
+        key={group.id}
+        type="button"
+        onClick={() => setActiveGroupId((current) => current === group.id ? null : group.id)}
+        aria-expanded={activeGroupId === group.id}
+        className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors ${activeGroupId === group.id ? 'bg-white/10 text-white' : 'text-[var(--text-light)] hover:bg-white/5'}`}
+      >
+        <Icon className="h-4 w-4 shrink-0 text-[var(--text-muted)]" />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm">{group.label}</span>
+          <span className="block truncate text-xs text-[var(--text-muted)]">{selectedOption?.label || group.summary || 'Choose...'}</span>
+        </span>
+        <ChevronRight className="h-4 w-4 shrink-0 text-[var(--text-muted)]" />
+      </button>
+    )
+  }
+
+  return (
+    <div ref={menuRef} className="relative z-30 shrink-0">
+      <button
+        type="button"
+        onClick={() => {
+          setIsOpen((current) => !current)
+          setActiveGroupId(null)
+        }}
+        aria-expanded={isOpen}
+        aria-haspopup="true"
+        className="inline-flex h-10 items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] px-3 text-sm font-semibold text-[var(--text-light)] transition-colors hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)]"
+      >
+        <Filter className="h-4 w-4" />
+        Sort &amp; Filter
+      </button>
+
+      {isOpen && (
+        <div className="absolute right-0 top-full mt-2 w-64 rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-2 shadow-2xl">
+          {filterGroups.length > 0 && (
+            <>
+              <p className="px-3 pb-1 pt-2 text-xs font-semibold text-[var(--text-muted)]">Filter by</p>
+              <div className="space-y-0.5">{filterGroups.map(renderGroup)}</div>
+            </>
+          )}
+          {sortGroups.length > 0 && (
+            <>
+              {filterGroups.length > 0 && <div className="my-2 h-px bg-[var(--border)]" />}
+              <p className="px-3 pb-1 pt-2 text-xs font-semibold text-[var(--text-muted)]">Sort by</p>
+              <div className="space-y-0.5">{sortGroups.map(renderGroup)}</div>
+            </>
+          )}
+          <div className="my-2 h-px bg-[var(--border)]" />
+          <button
+            type="button"
+            onClick={() => {
+              onReset()
+              setActiveGroupId(null)
+              setIsOpen(false)
+            }}
+            className="w-full rounded-xl px-3 py-2 text-left text-sm font-medium text-[var(--text-muted)] transition-colors hover:bg-white/5 hover:text-white"
+          >
+            Reset all
+          </button>
+
+          {activeGroup && (
+            <div className="absolute left-0 top-full z-40 mt-1 w-[min(82vw,18rem)] rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-2 shadow-2xl sm:left-full sm:top-12 sm:ml-1 sm:mt-0">
+              <p className="px-3 py-2 text-sm font-semibold text-white">{activeGroup.label}</p>
+              <div className="max-h-[60vh] space-y-0.5 overflow-y-auto">
+                {activeGroup.options.map((option) => {
+                  const selected = activeGroup.value === option.value
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => {
+                        activeGroup.onChange(option.value)
+                        if (!option.keepOpen) {
+                          setActiveGroupId(null)
+                          setIsOpen(false)
+                        }
+                      }}
+                      aria-pressed={selected}
+                      className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm transition-colors ${selected ? 'bg-[var(--gold-primary)]/10 text-[var(--gold-primary)]' : 'text-[var(--text-light)] hover:bg-white/5'}`}
+                    >
+                      {selected ? <Check className="h-4 w-4 shrink-0" /> : <CircleDot className="h-4 w-4 shrink-0 text-[var(--text-muted)]" />}
+                      <span>{option.label}</span>
+                    </button>
+                  )
+                })}
+              </div>
+              {activeGroup.extra}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function DashboardPage() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -319,7 +449,17 @@ export function DashboardPage() {
 
   const [myProjects, setMyProjects] = useState([])
   const [myProjectSearch, setMyProjectSearch] = useState('')
-  const [myProjectSort, setMyProjectSort] = useState('created')
+  const [myProjectSort, setMyProjectSort] = useState('created_desc')
+  const [projectPaymentFilter, setProjectPaymentFilter] = useState('all')
+  const [projectProgressOperator, setProjectProgressOperator] = useState('all')
+  const [projectProgressValue, setProjectProgressValue] = useState('')
+  const [projectProgressMin, setProjectProgressMin] = useState('')
+  const [projectProgressMax, setProjectProgressMax] = useState('')
+  const [projectStatusFilter, setProjectStatusFilter] = useState('all')
+  const [projectModelFilter, setProjectModelFilter] = useState('all')
+  const [projectCreatedDateFilter, setProjectCreatedDateFilter] = useState('all')
+  const [projectCreatedDateFrom, setProjectCreatedDateFrom] = useState('')
+  const [projectCreatedDateTo, setProjectCreatedDateTo] = useState('')
   const [myProjectPage, setMyProjectPage] = useState(1)
   const MY_PROJECTS_PAGE_SIZE = 6
   const [myProjectsPagination, setMyProjectsPagination] = useState({ page: 1, pageSize: 6, total: 0, totalPages: 1 })
@@ -396,7 +536,11 @@ export function DashboardPage() {
 
   const [myAppointments, setMyAppointments] = useState([])
   const [appointmentSearch, setAppointmentSearch] = useState('')
-  const [appointmentSort, setAppointmentSort] = useState('created_latest')
+  const [appointmentSort, setAppointmentSort] = useState('upcoming')
+  const [appointmentStatusFilter, setAppointmentStatusFilter] = useState('all')
+  const [appointmentDateFilter, setAppointmentDateFilter] = useState('all')
+  const [appointmentDateFrom, setAppointmentDateFrom] = useState('')
+  const [appointmentDateTo, setAppointmentDateTo] = useState('')
   const [reschedulingAptId, setReschedulingAptId] = useState(null)
   const [rescheduleDate, setRescheduleDate] = useState('')
   const [rescheduleTime, setRescheduleTime] = useState('')
@@ -471,11 +615,11 @@ export function DashboardPage() {
 
   useEffect(() => {
     setMyProjectPage(1)
-  }, [myProjectSearch, myProjectSort])
+  }, [myProjectSearch, myProjectSort, projectPaymentFilter, projectProgressOperator, projectProgressValue, projectProgressMin, projectProgressMax, projectStatusFilter, projectModelFilter, projectCreatedDateFilter, projectCreatedDateFrom, projectCreatedDateTo])
 
   useEffect(() => {
     fetchMyProjects()
-  }, [myProjectPage, myProjectSort, debouncedMyProjectSearch, user?.id])
+  }, [myProjectPage, myProjectSort, debouncedMyProjectSearch, user?.id, projectPaymentFilter, projectProgressOperator, projectProgressValue, projectProgressMin, projectProgressMax, projectStatusFilter, projectModelFilter, projectCreatedDateFilter, projectCreatedDateFrom, projectCreatedDateTo])
 
   useEffect(() => {
     if (activeSection !== 'password') {
@@ -551,7 +695,69 @@ export function DashboardPage() {
   }
 
   const fetchMyProjects = () => {
-    adminApi.getMyProjects({ search: debouncedMyProjectSearch, sort_by: ({ updated: 'updated_at', created: 'created_at', name: 'project_name' })[myProjectSort] || 'updated_at', sort_dir: 'desc', page: myProjectPage, page_size: MY_PROJECTS_PAGE_SIZE, include_tasks: true })
+    const formatDate = (date) => [
+      date.getFullYear(),
+      String(date.getMonth() + 1).padStart(2, '0'),
+      String(date.getDate()).padStart(2, '0'),
+    ].join('-')
+    const today = new Date()
+    let dateFrom = ''
+    let dateTo = ''
+    if (projectCreatedDateFilter === 'today') {
+      dateFrom = dateTo = formatDate(today)
+    } else if (projectCreatedDateFilter === 'this_week') {
+      const weekStart = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+      weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7))
+      const weekEnd = new Date(weekStart)
+      weekEnd.setDate(weekEnd.getDate() + 6)
+      dateFrom = formatDate(weekStart)
+      dateTo = formatDate(weekEnd)
+    } else if (projectCreatedDateFilter === 'this_month') {
+      dateFrom = formatDate(new Date(today.getFullYear(), today.getMonth(), 1))
+      dateTo = formatDate(new Date(today.getFullYear(), today.getMonth() + 1, 0))
+    } else if (projectCreatedDateFilter === 'custom') {
+      dateFrom = projectCreatedDateFrom
+      dateTo = projectCreatedDateTo
+    }
+
+    const progressFilter = {
+      progress_operator: projectProgressOperator !== 'all' ? projectProgressOperator : undefined,
+      progress_value: ['greater_than', 'less_than', 'equal_to'].includes(projectProgressOperator) && projectProgressValue !== ''
+        ? Number(projectProgressValue)
+        : undefined,
+      progress_min: projectProgressOperator === 'between' && projectProgressMin !== '' ? Number(projectProgressMin) : undefined,
+      progress_max: projectProgressOperator === 'between' && projectProgressMax !== '' ? Number(projectProgressMax) : undefined,
+    }
+    const sortBy = ({
+      created_desc: 'created_at',
+      created_asc: 'created_at',
+      updated_desc: 'updated_at',
+      updated_asc: 'updated_at',
+      name_asc: 'project_name',
+      name_desc: 'project_name',
+      price_asc: 'order_total_amount',
+      price_desc: 'order_total_amount',
+      progress_asc: 'progress',
+      progress_desc: 'progress',
+    })[myProjectSort] || 'created_at'
+    const sortDirection = myProjectSort.endsWith('_asc') ? 'asc' : 'desc'
+    const query = {
+      search: debouncedMyProjectSearch || undefined,
+      status: projectStatusFilter !== 'all' ? projectStatusFilter : undefined,
+      payment_filter: projectPaymentFilter !== 'all' ? projectPaymentFilter : undefined,
+      guitar_model: projectModelFilter !== 'all' ? projectModelFilter : undefined,
+      date_from: dateFrom || undefined,
+      date_to: dateTo || undefined,
+      ...progressFilter,
+      sort_by: sortBy,
+      sort_dir: sortDirection,
+      page: myProjectPage,
+      page_size: MY_PROJECTS_PAGE_SIZE,
+      include_tasks: true,
+    }
+    Object.keys(query).forEach((key) => query[key] === undefined && delete query[key])
+
+    adminApi.getMyProjects(query)
       .then(res => {
         setMyProjects(res.data)
         setMyProjectsPagination(res.pagination || { page: 1, pageSize: MY_PROJECTS_PAGE_SIZE, total: 0, totalPages: 1 })
@@ -1984,7 +2190,51 @@ export function DashboardPage() {
 
   const renderAppointmentsContent = () => {
     const searchTerm = appointmentSearch.trim().toLowerCase()
+    const now = new Date()
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    const startOfTomorrow = new Date(startOfToday)
+    startOfTomorrow.setDate(startOfTomorrow.getDate() + 1)
+    const startOfWeek = new Date(startOfToday)
+    startOfWeek.setDate(startOfWeek.getDate() - ((startOfWeek.getDay() + 6) % 7))
+    const startOfNextWeek = new Date(startOfWeek)
+    startOfNextWeek.setDate(startOfNextWeek.getDate() + 7)
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+    const startOfNextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1)
+    const customRangeStart = appointmentDateFrom ? new Date(`${appointmentDateFrom}T00:00:00`) : null
+    const customRangeEnd = appointmentDateTo ? new Date(`${appointmentDateTo}T00:00:00`) : null
+
+    const getAppointmentTimestamp = (apt) => {
+      const value = apt.scheduled_at || apt.date || apt.created_at
+      const timestamp = new Date(value || 0).getTime()
+      return Number.isNaN(timestamp) ? 0 : timestamp
+    }
+
     const filteredAppointments = myAppointments.filter((apt) => {
+      const status = String(apt.status || '').toLowerCase()
+      const statusMatches = appointmentStatusFilter === 'all'
+        || (appointmentStatusFilter === 'confirmed' && ['approved', 'confirmed'].includes(status))
+        || status === appointmentStatusFilter
+      if (!statusMatches) return false
+
+      const appointmentDate = getAppointmentTimestamp(apt)
+      const dateMatches = (() => {
+        switch (appointmentDateFilter) {
+          case 'today':
+            return appointmentDate >= startOfToday.getTime() && appointmentDate < startOfTomorrow.getTime()
+          case 'tomorrow':
+            return appointmentDate >= startOfTomorrow.getTime() && appointmentDate < new Date(startOfTomorrow.getTime() + 86400000).getTime()
+          case 'this_week':
+            return appointmentDate >= startOfWeek.getTime() && appointmentDate < startOfNextWeek.getTime()
+          case 'this_month':
+            return appointmentDate >= startOfMonth.getTime() && appointmentDate < startOfNextMonth.getTime()
+          case 'custom':
+            return Boolean(appointmentDate) && (!customRangeStart || appointmentDate >= customRangeStart.getTime())
+              && (!customRangeEnd || appointmentDate < new Date(customRangeEnd.getTime() + 86400000).getTime())
+          default:
+            return true
+        }
+      })()
+      if (!dateMatches) return false
       if (!searchTerm) return true
 
       const appointmentDateValues = [apt.scheduled_at, apt.date, apt.created_at]
@@ -1992,31 +2242,32 @@ export function DashboardPage() {
         .flatMap((value) => {
           const date = new Date(value)
           if (Number.isNaN(date.getTime())) return [String(value)]
-
-          return [
-            String(value),
-            date.toLocaleDateString(),
-            date.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' }),
-            date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          ]
+          return [String(value), date.toLocaleDateString(), date.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' }), date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })]
         })
-      const searchableValues = [
-        apt.reference_code,
-        apt.service_name,
-        apt.service_names,
-        Array.isArray(apt.services) ? apt.services.join(' ') : '',
-        apt.status,
-        apt.location_id,
-        apt.appointment_type,
-        apt.time,
-        getSelectedGuitarLabel(apt),
-        apt.notes,
-        getContactNumber(apt),
-        getAddressLabel(apt),
-        ...appointmentDateValues,
-      ]
-
+      const searchableValues = [apt.reference_code, apt.service_name, apt.service_names,
+        Array.isArray(apt.services) ? apt.services.join(' ') : '', apt.status, apt.location_id,
+        apt.appointment_type, apt.time, getSelectedGuitarLabel(apt), apt.notes,
+        getContactNumber(apt), getAddressLabel(apt), ...appointmentDateValues]
       return searchableValues.some((value) => String(value || '').toLowerCase().includes(searchTerm))
+    })
+    const sortedAppointments = [...filteredAppointments].sort((a, b) => {
+      const aTimestamp = appointmentSort.startsWith('created_')
+        ? new Date(a.created_at || 0).getTime()
+        : getAppointmentTimestamp(a)
+      const bTimestamp = appointmentSort.startsWith('created_')
+        ? new Date(b.created_at || 0).getTime()
+        : getAppointmentTimestamp(b)
+
+      if (appointmentSort === 'created_latest') return bTimestamp - aTimestamp
+      if (appointmentSort === 'created_earliest') return aTimestamp - bTimestamp
+      if (appointmentSort === 'upcoming') {
+        const aIsUpcoming = aTimestamp >= now.getTime()
+        const bIsUpcoming = bTimestamp >= now.getTime()
+        if (aIsUpcoming !== bIsUpcoming) return aIsUpcoming ? -1 : 1
+        return aIsUpcoming ? aTimestamp - bTimestamp : bTimestamp - aTimestamp
+      }
+      if (appointmentSort === 'latest_appointment' || appointmentSort === 'date_latest') return bTimestamp - aTimestamp
+      return aTimestamp - bTimestamp
     })
 
     return (
@@ -2045,7 +2296,7 @@ export function DashboardPage() {
         </div>
       ) : (
         <div className="max-h-[62vh] space-y-4 overflow-y-auto pr-2">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
             <div className="relative flex-1 min-w-0">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
               <input
@@ -2057,29 +2308,94 @@ export function DashboardPage() {
                 className="appt-search-input"
               />
             </div>
-            <label className="appt-sort-label flex items-center gap-2">
-              <span>Sort by:</span>
-              <select
-                value={appointmentSort}
-                onChange={(e) => setAppointmentSort(e.target.value)}
-                className="appt-sort-select"
-              >
-                <option value="soonest">Appointment date: soonest</option>
-                <option value="latest">Appointment date: latest</option>
-                <option value="created_latest">Created date: newest</option>
-                <option value="created_earliest">Created date: oldest</option>
-              </select>
-            </label>
+            <DashboardFilterMenu
+              groups={[
+                {
+                  id: 'appointment-status', type: 'filter', label: 'Status', icon: CheckCircle,
+                  value: appointmentStatusFilter,
+                  options: [
+                    { value: 'all', label: 'All' },
+                    { value: 'pending', label: 'Pending' },
+                    { value: 'confirmed', label: 'Confirmed' },
+                    { value: 'completed', label: 'Completed' },
+                    { value: 'cancelled', label: 'Cancelled' },
+                    { value: 'rejected', label: 'Rejected' },
+                  ],
+                  onChange: setAppointmentStatusFilter,
+                },
+                {
+                  id: 'appointment-date-filter', type: 'filter', label: 'Date', icon: CalendarDays,
+                  value: appointmentDateFilter,
+                  options: [
+                    { value: 'all', label: 'All Dates' },
+                    { value: 'today', label: 'Today' },
+                    { value: 'tomorrow', label: 'Tomorrow' },
+                    { value: 'this_week', label: 'This Week' },
+                    { value: 'this_month', label: 'This Month' },
+                    { value: 'custom', label: 'Custom Date Range', keepOpen: true },
+                  ],
+                  onChange: setAppointmentDateFilter,
+                  extra: appointmentDateFilter === 'custom' && (
+                    <div className="mt-2 space-y-2 border-t border-[var(--border)] px-2 pt-3">
+                      <label className="block text-xs text-[var(--text-muted)]">
+                        From
+                        <input
+                          type="date"
+                          value={appointmentDateFrom}
+                          onChange={(event) => setAppointmentDateFrom(event.target.value)}
+                          className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-2.5 py-2 text-sm text-[var(--text-light)]"
+                          aria-label="Appointment date from"
+                        />
+                      </label>
+                      <label className="block text-xs text-[var(--text-muted)]">
+                        To
+                        <input
+                          type="date"
+                          value={appointmentDateTo}
+                          onChange={(event) => setAppointmentDateTo(event.target.value)}
+                          className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-2.5 py-2 text-sm text-[var(--text-light)]"
+                          aria-label="Appointment date to"
+                        />
+                      </label>
+                    </div>
+                  ),
+                },
+                {
+                  id: 'appointment-date-sort', type: 'sort', label: 'Appointment Date', icon: CalendarDays,
+                  value: appointmentSort,
+                  summary: appointmentSort.startsWith('created_') ? 'Choose appointment date order' : null,
+                  options: [
+                    { value: 'upcoming', label: 'Upcoming First' },
+                    { value: 'latest_appointment', label: 'Latest Appointment First' },
+                    { value: 'date_earliest', label: 'Date: Earliest to Latest' },
+                    { value: 'date_latest', label: 'Date: Latest to Earliest' },
+                  ],
+                  onChange: setAppointmentSort,
+                },
+                {
+                  id: 'appointment-created-sort', type: 'sort', label: 'Created Date', icon: Clock,
+                  value: appointmentSort,
+                  summary: appointmentSort.startsWith('created_') ? null : 'Choose creation date order',
+                  options: [
+                    { value: 'created_latest', label: 'Newest to Oldest' },
+                    { value: 'created_earliest', label: 'Oldest to Newest' },
+                  ],
+                  onChange: setAppointmentSort,
+                },
+              ]}
+              onReset={() => {
+                setAppointmentStatusFilter('all')
+                setAppointmentDateFilter('all')
+                setAppointmentDateFrom('')
+                setAppointmentDateTo('')
+                setAppointmentSort('upcoming')
+                setAppointmentSearch('')
+              }}
+            />
           </div>
           {filteredAppointments.length === 0 ? (
             <p className="py-6 text-center text-sm text-[var(--text-muted)]">No appointments match your search.</p>
-          ) : [...filteredAppointments].sort((a, b) => {
-            const usesCreatedDate = appointmentSort === 'created_latest' || appointmentSort === 'created_earliest'
-            const dateA = new Date(usesCreatedDate ? a.created_at || 0 : a.scheduled_at || a.date || a.created_at || 0)
-            const dateB = new Date(usesCreatedDate ? b.created_at || 0 : b.scheduled_at || b.date || b.created_at || 0)
-            const isAscending = appointmentSort === 'soonest' || appointmentSort === 'created_earliest'
-            return isAscending ? dateA - dateB : dateB - dateA
-          }).map(apt => {
+          ) : sortedAppointments.map(apt => {
             const apptDate = apt.scheduled_at || apt.date;
 
             // Check if past current time and not completed/cancelled
@@ -2275,6 +2591,11 @@ export function DashboardPage() {
   }
 
   const renderProjectsContent = () => {
+    const projectModelOptions = Object.entries(BODY_OPTIONS)
+      .filter(([, option]) => option?.label)
+      .map(([value, option]) => ({ value, label: option.label }))
+      .sort((left, right) => left.label.localeCompare(right.label))
+
     if (activeProjectView) {
       const cleanTrackerName = (activeProjectView.name || activeProjectView.title || 'Custom Build')
         .replace(/\s*\(((?:PO|CO|SO)-\d{8}-\d+)\)\s*/g, '')
@@ -2333,18 +2654,158 @@ export function DashboardPage() {
               className="guitar-search"
             />
           </div>
-          <div className="sm:w-48 sm:flex-none">
-            <select
-              value={myProjectSort}
-              onChange={(e) => setMyProjectSort(e.target.value)}
-              className="guitar-select"
-            >
-              <option value="updated">Recently Updated</option>
-              <option value="created">Recently Created</option>
-              <option value="name">Project Name</option>
-              <option value="progress">Progress</option>
-            </select>
-          </div>
+          <DashboardFilterMenu
+            groups={[
+              {
+                id: 'project-payment', type: 'filter', label: 'Payment Method', icon: Wallet,
+                value: projectPaymentFilter,
+                options: [
+                  { value: 'all', label: 'All' },
+                  { value: 'cash_on_delivery', label: 'Cash on Delivery' },
+                  { value: 'down_payment', label: 'Down Payment' },
+                  { value: 'fully_paid', label: 'Fully Paid' },
+                  { value: 'online_payment', label: 'Online Payment' },
+                  { value: 'gcash', label: 'GCash' },
+                  { value: 'bank_transfer', label: 'Bank Transfer' },
+                ],
+                onChange: setProjectPaymentFilter,
+              },
+              {
+                id: 'project-progress-filter', type: 'filter', label: 'Progress', icon: Activity,
+                value: projectProgressOperator,
+                options: [
+                  { value: 'all', label: 'All' },
+                  { value: 'greater_than', label: 'Greater than', keepOpen: true },
+                  { value: 'less_than', label: 'Less than', keepOpen: true },
+                  { value: 'equal_to', label: 'Equal to', keepOpen: true },
+                  { value: 'between', label: 'Between', keepOpen: true },
+                ],
+                onChange: setProjectProgressOperator,
+                extra: projectProgressOperator !== 'all' && (
+                  <div className="mt-2 space-y-2 border-t border-[var(--border)] px-2 pt-3">
+                    {projectProgressOperator === 'between' ? (
+                      <div className="grid grid-cols-2 gap-2">
+                        <label className="block text-xs text-[var(--text-muted)]">
+                          Min %
+                          <input type="number" min="0" max="100" value={projectProgressMin} onChange={(event) => setProjectProgressMin(event.target.value)} className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-2.5 py-2 text-sm text-[var(--text-light)]" />
+                        </label>
+                        <label className="block text-xs text-[var(--text-muted)]">
+                          Max %
+                          <input type="number" min="0" max="100" value={projectProgressMax} onChange={(event) => setProjectProgressMax(event.target.value)} className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-2.5 py-2 text-sm text-[var(--text-light)]" />
+                        </label>
+                      </div>
+                    ) : (
+                      <label className="block text-xs text-[var(--text-muted)]">
+                        Progress %
+                        <input type="number" min="0" max="100" value={projectProgressValue} onChange={(event) => setProjectProgressValue(event.target.value)} className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-2.5 py-2 text-sm text-[var(--text-light)]" />
+                      </label>
+                    )}
+                  </div>
+                ),
+              },
+              {
+                id: 'project-status', type: 'filter', label: 'Build Status', icon: CheckCircle,
+                value: projectStatusFilter,
+                options: [
+                  { value: 'all', label: 'All' },
+                  { value: 'not_started', label: 'Draft' },
+                  { value: 'in_progress', label: 'In Progress' },
+                  { value: 'completed', label: 'Completed' },
+                  { value: 'cancelled', label: 'Cancelled' },
+                ],
+                onChange: setProjectStatusFilter,
+              },
+              {
+                id: 'project-model', type: 'filter', label: 'Guitar Model', icon: Guitar,
+                value: projectModelFilter,
+                options: [{ value: 'all', label: 'All' }, ...projectModelOptions],
+                onChange: setProjectModelFilter,
+              },
+              {
+                id: 'project-created-date', type: 'filter', label: 'Date Created', icon: CalendarDays,
+                value: projectCreatedDateFilter,
+                options: [
+                  { value: 'all', label: 'All' },
+                  { value: 'today', label: 'Today' },
+                  { value: 'this_week', label: 'This Week' },
+                  { value: 'this_month', label: 'This Month' },
+                  { value: 'custom', label: 'Custom Date Range', keepOpen: true },
+                ],
+                onChange: setProjectCreatedDateFilter,
+                extra: projectCreatedDateFilter === 'custom' && (
+                  <div className="mt-2 space-y-2 border-t border-[var(--border)] px-2 pt-3">
+                    <label className="block text-xs text-[var(--text-muted)]">
+                      From
+                      <input type="date" value={projectCreatedDateFrom} onChange={(event) => setProjectCreatedDateFrom(event.target.value)} className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-2.5 py-2 text-sm text-[var(--text-light)]" />
+                    </label>
+                    <label className="block text-xs text-[var(--text-muted)]">
+                      To
+                      <input type="date" value={projectCreatedDateTo} onChange={(event) => setProjectCreatedDateTo(event.target.value)} className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-2.5 py-2 text-sm text-[var(--text-light)]" />
+                    </label>
+                  </div>
+                ),
+              },
+              {
+                id: 'project-created-sort', type: 'sort', label: 'Created At', icon: CalendarDays,
+                value: myProjectSort,
+                options: [
+                  { value: 'created_desc', label: 'Newest to Oldest' },
+                  { value: 'created_asc', label: 'Oldest to Newest' },
+                ],
+                onChange: setMyProjectSort,
+              },
+              {
+                id: 'project-updated-sort', type: 'sort', label: 'Recently Updated', icon: Clock,
+                value: myProjectSort,
+                options: [
+                  { value: 'updated_desc', label: 'Recently Updated' },
+                  { value: 'updated_asc', label: 'Oldest Updated to Recently Updated' },
+                ],
+                onChange: setMyProjectSort,
+              },
+              {
+                id: 'project-name-sort', type: 'sort', label: 'Project Name', icon: ListFilter,
+                value: myProjectSort,
+                options: [
+                  { value: 'name_asc', label: 'A to Z' },
+                  { value: 'name_desc', label: 'Z to A' },
+                ],
+                onChange: setMyProjectSort,
+              },
+              {
+                id: 'project-price-sort', type: 'sort', label: 'Price', icon: DollarSign,
+                value: myProjectSort,
+                options: [
+                  { value: 'price_asc', label: 'Lowest to Highest' },
+                  { value: 'price_desc', label: 'Highest to Lowest' },
+                ],
+                onChange: setMyProjectSort,
+              },
+              {
+                id: 'project-progress-sort', type: 'sort', label: 'Progress', icon: ArrowDownWideNarrow,
+                value: myProjectSort,
+                options: [
+                  { value: 'progress_asc', label: 'Lowest to Highest' },
+                  { value: 'progress_desc', label: 'Highest to Lowest' },
+                ],
+                onChange: setMyProjectSort,
+              },
+            ]}
+            onReset={() => {
+              setMyProjectSearch('')
+              setMyProjectSort('created_desc')
+              setProjectPaymentFilter('all')
+              setProjectProgressOperator('all')
+              setProjectProgressValue('')
+              setProjectProgressMin('')
+              setProjectProgressMax('')
+              setProjectStatusFilter('all')
+              setProjectModelFilter('all')
+              setProjectCreatedDateFilter('all')
+              setProjectCreatedDateFrom('')
+              setProjectCreatedDateTo('')
+            }}
+          />
         </div>
 
         {myProjects.length === 0 ? (
@@ -2780,6 +3241,11 @@ export function DashboardPage() {
     const cartCount = getCartCount()
     const selectedCartItemIds = getSelectedItemIds()
     const selectedCount = selectedCartItemIds.length
+    const selectedItems = cart.filter(item => selectedCartItemIds.includes(String(item.id)))
+    const selectedServerCartItemIds = selectedItems.map(item => item.cart_item_id).filter(Boolean)
+    const canProceedToCheckout = selectedCount > 0
+      && selectedServerCartItemIds.length === selectedItems.length
+      && !selectedItems.some(item => item.stock === 0)
     const allItemsSelected = cart.length > 0 && cart.every(item => selectedCartItemIds.includes(String(item.id)))
 
     return (
@@ -2847,8 +3313,15 @@ export function DashboardPage() {
               </div>
               <button
                 type="button"
-                onClick={() => navigate('/checkout')}
-                className="w-full py-3 px-6 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-semibold hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all flex items-center justify-center gap-2"
+                onClick={() => navigate('/checkout?from=dashboard-cart', {
+                  state: {
+                    cartItemIds: selectedServerCartItemIds,
+                    cartProductIds: selectedItems.map(item => String(item.id)),
+                    returnToDashboardCart: true,
+                  },
+                })}
+                disabled={!canProceedToCheckout}
+                className="w-full py-3 px-6 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] font-semibold hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] transition-all flex items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:shadow-none"
               >
                 <ShoppingBag className="w-5 h-5" />
                 Proceed to Checkout

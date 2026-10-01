@@ -247,6 +247,10 @@ export const adminApi = {
     const qs = new URLSearchParams(params).toString()
     return request(`/api/reports/sales${qs ? '?' + qs : ''}`)
   },
+  getSalesCustomers: (params = {}) => {
+    const qs = new URLSearchParams(params).toString()
+    return request(`/api/reports/sales/customers${qs ? '?' + qs : ''}`)
+  },
   getCustomizationReport: (params = {}) => {
     const qs = new URLSearchParams(params).toString()
     return request(`/api/reports/customizations${qs ? '?' + qs : ''}`)

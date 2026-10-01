@@ -1,6 +1,7 @@
 const { pool } = require('../config/database')
 const { generateOrderNumber, generateRefundRequestNumber, determineOrderTypePrefix } = require('../utils/orderNumber')
 const projectRefundService = require('./projectRefundService')
+const { calculateOrderTotals } = require('../utils/orderTotals')
 
 const syncStockToBuilderParts = async (productId, delta) => {
   if (!productId || delta === 0) return;
@@ -270,6 +271,7 @@ const upsertCustomizationForOrder = async (client, userId, customization, fallba
   const requestedCustomizationId = getRequestedCustomizationId(customization)
   const totalPrice = Number(baseBuildPrice ?? fallbackPrice ?? 0)
   const guitarType = config.guitarType || (config.bassType ? 'bass' : 'electric')
+  const bodyModel = String(config.body || config.bodyStyle || config.model || '').trim().toLowerCase() || null
 
   if (requestedCustomizationId) {
     const existingCustomizationRes = await client.query(
@@ -298,20 +300,22 @@ const upsertCustomizationForOrder = async (client, userId, customization, fallba
         `UPDATE customizations
          SET name = $1,
              guitar_type = $2,
-             body_wood = $3,
-             neck_wood = $4,
-             fingerboard_wood = $5,
-             bridge_type = $6,
-             pickups = $7,
-             color = $8,
-             finish_type = $9,
-             total_price = $10,
-             is_saved = $11,
-             updated_at = now()
-         WHERE customization_id = $12`,
+           body_model = $3,
+           body_wood = $4,
+           neck_wood = $5,
+           fingerboard_wood = $6,
+           bridge_type = $7,
+           pickups = $8,
+           color = $9,
+           finish_type = $10,
+           total_price = $11,
+           is_saved = $12,
+           updated_at = now()
+         WHERE customization_id = $13`,
         [
           name || 'Custom Build',
           guitarType,
+          bodyModel,
           summary.bodyWood || config.bodyWood || null,
           summary.neck || config.neck || null,
           summary.fretboard || config.fretboard || null,
@@ -336,6 +340,7 @@ const upsertCustomizationForOrder = async (client, userId, customization, fallba
        user_id,
        name,
        guitar_type,
+      body_model,
        body_wood,
        neck_wood,
        fingerboard_wood,
@@ -346,12 +351,13 @@ const upsertCustomizationForOrder = async (client, userId, customization, fallba
        total_price,
        is_saved
      )
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
      RETURNING customization_id`,
     [
       userId,
       name || 'Custom Build',
       guitarType,
+      bodyModel,
       summary.bodyWood || config.bodyWood || null,
       summary.neck || config.neck || null,
       summary.fretboard || config.fretboard || null,
@@ -487,7 +493,7 @@ const STATUS_FIELD_REQUIREMENTS = {
 }
 
 exports.createOrder = async (orderData) => {
-  const { userId, items, notes, shippingMethod, paymentMethod, billingAddress, termsAccepted, paymentPlan, initialPaymentPercentage, installmentTenureMonths } = orderData
+  const { userId, notes, shippingMethod, paymentMethod, billingAddress, termsAccepted, paymentPlan, initialPaymentPercentage, installmentTenureMonths } = orderData
   
   // Ensure database columns exist
   await ensureOrderItemsColumns()
@@ -497,6 +503,43 @@ exports.createOrder = async (orderData) => {
   
   try {
     await client.query('BEGIN')
+
+    let items = orderData.items || []
+    const cartItemIds = orderData.cartItemIds
+    if (Array.isArray(cartItemIds)) {
+      const cartItemsResult = await client.query(
+        `SELECT ci.cart_item_id, ci.product_id, ci.customization_id, ci.quantity,
+                p.name AS product_name, p.price AS product_price, p.is_active AS product_is_active,
+                cu.name AS customization_name, cu.total_price AS customization_price
+         FROM carts cart
+         JOIN cart_items ci ON ci.cart_id = cart.cart_id
+         LEFT JOIN products p ON p.product_id = ci.product_id
+         LEFT JOIN customizations cu ON cu.customization_id = ci.customization_id
+         WHERE cart.user_id = $1
+           AND ci.cart_item_id = ANY($2::bigint[])
+           AND (ci.customization_id IS NULL OR cu.user_id = $1)
+         FOR UPDATE OF ci`,
+        [userId, cartItemIds]
+      )
+
+      if (cartItemsResult.rows.length !== cartItemIds.length) {
+        throw createValidationError('One or more selected cart items are invalid.', 400)
+      }
+
+      items = cartItemsResult.rows.map((cartItem) => {
+        if (cartItem.product_id && !cartItem.product_is_active) {
+          throw createValidationError(`Product "${cartItem.product_name || 'Item'}" is no longer available`, 400)
+        }
+
+        return {
+          productId: cartItem.product_id,
+          customization_id: cartItem.customization_id,
+          name: cartItem.product_name || cartItem.customization_name || 'Custom Build',
+          quantity: Number(cartItem.quantity),
+          price: Number(cartItem.product_id ? cartItem.product_price : cartItem.customization_price),
+        }
+      })
+    }
 
     // Validate required fields
     if (!billingAddress) {
@@ -515,10 +558,7 @@ exports.createOrder = async (orderData) => {
     let shippingAddressId = null
 
     // Calculate totals
-    const subtotal = items.reduce((sum, item) => sum + (item.price * item.quantity), 0)
-    const shippingCost = shippingMethod === 'express' ? 500 : 0
-    const tax = subtotal * 0.1
-    const total = subtotal + shippingCost + tax
+    const { subtotal, shippingCost, taxAmount: tax, total } = calculateOrderTotals(items, shippingMethod)
 
     const orderTypePrefix = determineOrderTypePrefix(items)
     const orderNumber = await generateOrderNumber(client, orderTypePrefix)
@@ -631,7 +671,7 @@ exports.createOrder = async (orderData) => {
 
     // Insert order items - handle products and custom builds
     for (const item of items) {
-      let customizationId = null
+      let customizationId = item.customization_id || null
 
       if (item.customization) {
         customizationId = await upsertCustomizationForOrder(

@@ -8,10 +8,10 @@ exports.createOrder = asyncHandler(async (req, res, next) => {
     throw new AppError('You must be logged in to place an order', 401)
   }
 
-  const { items, notes, shippingMethod, paymentMethod, shippingAddressId, billingAddress, termsAccepted, paymentPlan, initialPaymentPercentage, installmentTenureMonths } = req.validatedData || req.body
+  const { items, cartItemIds, notes, shippingMethod, paymentMethod, shippingAddressId, billingAddress, termsAccepted, paymentPlan, initialPaymentPercentage, installmentTenureMonths } = req.validatedData || req.body
 
   // Validate required fields
-  if (!items || items.length === 0) {
+  if ((!items || items.length === 0) && (!cartItemIds || cartItemIds.length === 0)) {
     throw new AppError('No items in order', 400)
   }
 
@@ -49,6 +49,7 @@ exports.createOrder = asyncHandler(async (req, res, next) => {
   const order = await orderService.createOrder({
     userId,
     items,
+    cartItemIds,
     notes,
     shippingMethod,
     paymentMethod,
