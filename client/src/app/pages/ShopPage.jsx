@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
-import { Filter, Search, ShoppingCart, Zap, Star, ChevronDown, ChevronRight, Folder, Tag, X, SlidersHorizontal, Package, Wrench } from 'lucide-react'
+import { Filter, Search, ShoppingCart, Zap, Star, Folder, Tag, X, SlidersHorizontal, Package, Wrench } from 'lucide-react'
 import { useCart } from '../context/CartContext.jsx'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useNavigate } from 'react-router'
@@ -32,111 +32,24 @@ async function fetchPublicJson(path) {
   return payload
 }
 
-function buildCategoryTree(categories) {
-  const map = new Map()
-  const roots = []
-
-  categories.forEach(c => {
-    map.set(c.category_id, { ...c, children: [] })
-  })
-
-  categories.forEach(c => {
-    const node = map.get(c.category_id)
-    if (c.parent_id && map.has(c.parent_id)) {
-      map.get(c.parent_id).children.push(node)
-    } else {
-      roots.push(node)
-    }
-  })
-
-  const sortNodes = (nodes) => {
-    nodes.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
-    nodes.forEach(n => sortNodes(n.children))
-  }
-  sortNodes(roots)
-
-  return roots
-}
-
-function findNodeByName(tree, name) {
-  for (const node of tree) {
-    if (node.name === name) return node
-    if (node.children?.length) {
-      const found = findNodeByName(node.children, name)
-      if (found) return found
-    }
-  }
-  return null
-}
-
-function getCategoryWithChildren(tree, categoryName) {
-  const node = findNodeByName(tree, categoryName)
-  if (!node) return [categoryName]
-
-  const names = [node.name]
-  node.children?.forEach(child => names.push(child.name))
-  return names
-}
-
-function CategoryTreeItem({ node, level = 0, selectedCategory, onSelect, expandedCategories, onToggle, path = '' }) {
-  const key = path ? `${path}-${node.name}` : node.name
-  const hasChildren = node.children && node.children.length > 0
-  const isExpanded = expandedCategories.has(key)
-  const isSelected = selectedCategory === node.name
+function CategoryFilterItem({ category, selectedCategory, onSelect }) {
+  const isSelected = selectedCategory === category.name
 
   return (
-    <div className="select-none">
-      <div
-        className={`flex items-center gap-2 py-2 px-3 rounded-lg cursor-pointer transition-all ${level === 0 ? 'font-semibold text-white' : 'text-sm text-[var(--text-muted)] ml-4'
-          } ${isSelected ? 'bg-[var(--gold-primary)]/10 text-[var(--gold-primary)]' : 'hover:bg-white/5'}`}
-        onClick={() => onSelect(node.name)}
-      >
-        {hasChildren && (
-          <button
-            onClick={(e) => { e.stopPropagation(); onToggle(key) }}
-            className="p-0.5 hover:bg-white/10 rounded"
-          >
-            {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
-          </button>
-        )}
-        {!hasChildren && level > 0 && <span className="w-4" />}
-        <Folder className={`w-4 h-4 ${isSelected ? 'text-[var(--gold-primary)]' : level === 0 ? 'text-[var(--gold-primary)]/70' : 'text-white/40'}`} />
-        <span className="truncate text-[13px]">{node.name}</span>
-      </div>
-
-      <AnimatePresence>
-        {hasChildren && isExpanded && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2 }}
-          >
-            {node.children.map((child, idx) => (
-              <CategoryTreeItem
-                key={child.name}
-                node={child}
-                level={level + 1}
-                selectedCategory={selectedCategory}
-                onSelect={onSelect}
-                expandedCategories={expandedCategories}
-                onToggle={onToggle}
-                path={key}
-              />
-            ))}
-          </motion.div>
-        )}
-      </AnimatePresence>
+    <div
+      className={`flex items-center gap-2 py-2 px-3 rounded-lg cursor-pointer transition-all font-semibold text-white ${isSelected ? 'bg-[var(--gold-primary)]/10 text-[var(--gold-primary)]' : 'hover:bg-white/5'}`}
+      onClick={() => onSelect(category.name)}
+    >
+      <Folder className={`w-4 h-4 ${isSelected ? 'text-[var(--gold-primary)]' : 'text-[var(--gold-primary)]/70'}`} />
+      <span className="truncate text-[13px]">{category.name}</span>
     </div>
   )
 }
 
 function FilterSidebar({
-  categoryTree,
+  categories,
   selectedCategory,
   onCategoryChange,
-  expandedCategories,
-  onToggleExpand,
   selectedBrands,
   onBrandToggle,
   brands,
@@ -174,15 +87,12 @@ function FilterSidebar({
               <Tag className="w-4 h-4" />
               <span className="text-[13px]">All Products</span>
             </div>
-            {categoryTree.map((node, idx) => (
-              <CategoryTreeItem
-                key={node.name}
-                node={node}
+            {categories.map((category) => (
+              <CategoryFilterItem
+                key={category.category_id}
+                category={category}
                 selectedCategory={selectedCategory}
                 onSelect={onCategoryChange}
-                expandedCategories={expandedCategories}
-                onToggle={onToggleExpand}
-                path={String(idx)}
               />
             ))}
           </div>
@@ -306,7 +216,6 @@ function ActiveFiltersBar({
   onPriceRangeClear,
   inStockOnly,
   onInStockClear,
-  categoryTree,
   brandLabels
 }) {
   const filters = []
@@ -376,8 +285,7 @@ export function ShopPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [notification, setNotification] = useState(null)
   const [selectedProduct, setSelectedProduct] = useState(null)
-  const [categoryTree, setCategoryTree] = useState([])
-  const [expandedCategories, setExpandedCategories] = useState(new Set())
+  const [categories, setCategories] = useState([])
   const [mobileFilterOpen, setMobileFilterOpen] = useState(false)
   const [productModalTab, setProductModalTab] = useState('details')
   const [quantities, setQuantities] = useState({})
@@ -455,16 +363,7 @@ export function ShopPage() {
 
         setProducts(fetchedProducts)
 
-        const tree = buildCategoryTree(fetchedCategories)
-        setCategoryTree(tree)
-
-        const expanded = new Set()
-        tree.forEach((node, idx) => {
-          if (node.children && node.children.length > 0) {
-            expanded.add(String(idx))
-          }
-        })
-        setExpandedCategories(expanded)
+        setCategories(fetchedCategories)
 
         const uniqueBrands = [...new Set(fetchedProducts.map(p => p.brand).filter(Boolean))]
         setBrands(uniqueBrands.map(b => ({
@@ -483,10 +382,7 @@ export function ShopPage() {
   }, [])
 
   const filteredProducts = products.filter(product => {
-    const categoryNames = selectedCategory === 'all'
-      ? []
-      : getCategoryWithChildren(categoryTree, selectedCategory)
-    const matchesCategory = selectedCategory === 'all' || categoryNames.includes(product.category)
+    const matchesCategory = selectedCategory === 'all' || product.category === selectedCategory
 
     const matchesBrand = selectedBrands.length === 0 || selectedBrands.includes(product.brand)
 
@@ -511,16 +407,6 @@ export function ShopPage() {
         ? prev.filter(b => b !== brand)
         : [...prev, brand]
     )
-  }
-
-  const toggleCategoryExpand = (key) => {
-    const newExpanded = new Set(expandedCategories)
-    if (newExpanded.has(key)) {
-      newExpanded.delete(key)
-    } else {
-      newExpanded.add(key)
-    }
-    setExpandedCategories(newExpanded)
   }
 
   const hasActiveFilters = selectedCategory !== 'all' || selectedBrands.length > 0 || priceRange[0] > 0 || priceRange[1] > 0 || inStockOnly
@@ -658,11 +544,9 @@ export function ShopPage() {
 
         <section className="hidden lg:grid grid-cols-[280px_1fr] gap-8 mb-8 pt-6">
           <FilterSidebar
-            categoryTree={categoryTree}
+            categories={categories}
             selectedCategory={selectedCategory}
             onCategoryChange={handleCategoryChange}
-            expandedCategories={expandedCategories}
-            onToggleExpand={toggleCategoryExpand}
             selectedBrands={selectedBrands}
             onBrandToggle={handleBrandToggle}
             brands={brands}
@@ -706,7 +590,6 @@ export function ShopPage() {
               onPriceRangeClear={() => setPriceRange([0, 0])}
               inStockOnly={inStockOnly}
               onInStockClear={() => setInStockOnly(false)}
-              categoryTree={categoryTree}
               brandLabels={brandLabels}
             />
 
@@ -895,7 +778,6 @@ export function ShopPage() {
             onPriceRangeClear={() => setPriceRange([0, 0])}
             inStockOnly={inStockOnly}
             onInStockClear={() => setInStockOnly(false)}
-            categoryTree={categoryTree}
             brandLabels={brandLabels}
           />
 
@@ -1041,11 +923,9 @@ export function ShopPage() {
 </div>
 
           <FilterSidebar
-            categoryTree={categoryTree}
+            categories={categories}
             selectedCategory={selectedCategory}
             onCategoryChange={handleCategoryChange}
-            expandedCategories={expandedCategories}
-            onToggleExpand={toggleCategoryExpand}
             selectedBrands={selectedBrands}
             onBrandToggle={handleBrandToggle}
             brands={brands}

@@ -24,7 +24,7 @@ export function InventoryTab({
   canAddProduct,
   showAddProduct,
   hideAddProduct = false,
-  categoryTree,
+  categories,
 }) {
   const allowAddProduct = !hideAddProduct && (showAddProduct !== undefined ? showAddProduct : (canAddProduct !== undefined ? canAddProduct : Boolean(isSuperAdmin)))
 
@@ -112,7 +112,7 @@ export function InventoryTab({
             </select>
           </div>
 
-          {(inventoryIsProducts ? categoryTree : inventoryPartCategoryOptions).length > 0 && (
+          {(inventoryIsProducts ? categories : inventoryPartCategoryOptions).length > 0 && (
             <select
               value={inventoryIsProducts ? (inventoryCurrentFilter.category || '') : (inventoryCurrentFilter.category || 'all')}
               onChange={(e) => {
@@ -131,15 +131,10 @@ export function InventoryTab({
                 <option value="all">All Categories</option>
               )}
               {inventoryIsProducts
-                ? categoryTree.map((parent) => (
-                    <optgroup key={parent.category_id} label={parent.name}>
-                      <option value={parent.category_id}>{parent.name} (All)</option>
-                      {parent.children?.map((child) => (
-                        <option key={child.category_id} value={child.category_id}>
-                          {child.name}
-                        </option>
-                      ))}
-                    </optgroup>
+                ? (categories || []).map((category) => (
+                    <option key={category.category_id} value={category.category_id}>
+                      {category.name}
+                    </option>
                   ))
                 : inventoryPartCategoryOptions.map((category) => (
                     <option key={category.value} value={category.value}>

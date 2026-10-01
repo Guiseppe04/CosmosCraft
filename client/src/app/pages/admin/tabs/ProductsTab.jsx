@@ -18,7 +18,7 @@ export function ProductsTab({
   productsLoading,
   visibleProducts,
   productsPagination,
-  categoryTree,
+  categories,
   openModal,
   handleRefresh,
   isLoading,
@@ -111,13 +111,8 @@ export function ProductsTab({
             className={inputCls}
           >
             <option value="">All categories</option>
-            {categoryTree.map((parent) => (
-              <optgroup key={parent.category_id} label={parent.name}>
-                <option value={parent.category_id}>{parent.name} (All)</option>
-                {parent.children?.map((child) => (
-                  <option key={child.category_id} value={child.category_id}>{`→ ${child.name}`}</option>
-                ))}
-              </optgroup>
+            {(categories || []).map((category) => (
+              <option key={category.category_id} value={category.category_id}>{category.name}</option>
             ))}
           </select>
           <select

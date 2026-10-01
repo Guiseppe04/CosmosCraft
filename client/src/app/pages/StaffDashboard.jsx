@@ -26,7 +26,6 @@ import { hasRole } from '../utils/roles'
 import { adminApi } from '../utils/adminApi'
 import { staffApi } from '../utils/staffApi'
 import { getStockTier } from '../utils/stockUtils'
-import { buildCategoryTree } from './admin/utils/categoryTree'
 import {
   normalizeBuilderPart,
   deriveInventoryPartCategory,
@@ -197,9 +196,6 @@ export function StaffDashboard() {
   const [projectSort, setProjectSort] = useState('updated')
   const [projectPage, setProjectPage] = useState(1)
   const PROJECTS_PAGE_SIZE = 10
-
-  // ── Category Tree ────────────────────────────────────────────────────────
-  const categoryTree = useMemo(() => buildCategoryTree(categories), [categories])
 
   // ── Tabs Navigation List ─────────────────────────────────────────────────
   const tabs = [
@@ -571,12 +567,7 @@ export function StaffDashboard() {
 
     const categoryFilter = productsInventoryFilter.category
     if (categoryFilter) {
-      const matchIds = new Set([categoryFilter])
-      const parent = categoryTree.find((cat) => cat.category_id === categoryFilter)
-      if (parent?.children) {
-        parent.children.forEach((child) => matchIds.add(child.category_id))
-      }
-      result = result.filter((item) => matchIds.has(item.category_id))
+      result = result.filter((item) => String(item.category_id) === String(categoryFilter))
     }
 
     const statusFilter = productsInventoryFilter.status
@@ -607,7 +598,7 @@ export function StaffDashboard() {
       return 0
     })
     return result
-  }, [categoryTree, productsInventoryFilter, visibleInventory])
+  }, [productsInventoryFilter, visibleInventory])
 
   const paginatedProductsInventory = useMemo(() => {
     const start = (inventoryPage - 1) * INVENTORY_PAGE_SIZE
@@ -1277,7 +1268,7 @@ export function StaffDashboard() {
               openModal={openModal}
               isSuperAdmin={false}
               canAddProduct={false}
-              categoryTree={categoryTree}
+              categories={categories}
             />
           )}
 

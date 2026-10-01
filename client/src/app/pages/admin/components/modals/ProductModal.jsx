@@ -124,7 +124,7 @@ export function ProductModal({
   isUploading,
   saveProduct,
   handleImageUpload,
-  categoryTree,
+  categories,
   formatCurrency,
   validateAndSave,
   showToast,
@@ -234,20 +234,9 @@ export function ProductModal({
     const rawName = String(form.name || '').trim()
     const categoryId = form.category_id
 
-    let categoryName = ''
-    if (categoryId && categoryTree) {
-      const findCategoryName = (nodes) => {
-        for (const node of nodes) {
-          if (String(node.category_id) === String(categoryId)) return node.name
-          if (node.children && node.children.length) {
-            const found = findCategoryName(node.children)
-            if (found) return found
-          }
-        }
-        return null
-      }
-      categoryName = findCategoryName(categoryTree) || ''
-    }
+    const categoryName = categories?.find(
+      (category) => String(category.category_id) === String(categoryId)
+    )?.name || ''
 
     const toCode = (text, max = 8) =>
       text
@@ -312,7 +301,7 @@ export function ProductModal({
 
     const suffix = modal.data?.product_id ? '' : '-' + Date.now().toString().slice(-4)
     setForm((f) => ({ ...f, sku: sku + suffix }))
-  }, [form.brand, form.name, form.category_id, categoryTree, modal.data?.product_id, setForm])
+  }, [form.brand, form.name, form.category_id, categories, modal.data?.product_id, setForm])
 
   const handleSaveAndAnother = useCallback(async () => {
     await validateAndSave(productRules, async () => {
@@ -517,13 +506,8 @@ export function ProductModal({
                       className={formErrors.category_id ? selErr : selOk}
                     >
                       <option value="">Select Category</option>
-                      {categoryTree.map((parent) => (
-                        <optgroup key={parent.category_id} label={parent.name}>
-                          <option value={parent.category_id}>{parent.name} (All)</option>
-                          {parent.children?.map((child) => (
-                            <option key={child.category_id} value={child.category_id}>{child.name}</option>
-                          ))}
-                        </optgroup>
+                      {(categories || []).map((category) => (
+                        <option key={category.category_id} value={category.category_id}>{category.name}</option>
                       ))}
                     </select>
                     {formErrors.category_id && (
