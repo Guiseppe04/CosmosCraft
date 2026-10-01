@@ -64,7 +64,7 @@ export function ProductsTab({
       </div>
 
       <div className="flex border-b border-[var(--border)] mb-6 gap-4 pb-0">
-        {[{ id: 'all', label: 'All Products' }, { id: 'active', label: 'Active' }, { id: 'inactive', label: 'Inactive' }].map((tab) => {
+        {[{ id: 'active', label: 'Active' }, { id: 'inactive', label: 'Inactive' }, { id: 'all', label: 'All Products' }].map((tab) => {
           const tabIsActive = productActiveTab === tab.id
           return (
             <button
