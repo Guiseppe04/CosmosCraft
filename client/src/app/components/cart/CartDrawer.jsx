@@ -4,6 +4,7 @@ import { useCart } from '../../context/CartContext.jsx'
 import { useAuth } from '../../context/AuthContext.jsx'
 import { Trash2 } from 'lucide-react'
 import { SelectableCartItemRow } from './SelectableCartItemRow.jsx'
+import { useState } from 'react'
 
 export function CartDrawer() {
   const {
@@ -17,18 +18,36 @@ export function CartDrawer() {
     toggleItemSelection,
     toggleSelectAllItems,
     getSelectedItemIds,
+    waitForCartUpdates,
   } = useCart()
   const { isAuthenticated, openLogin } = useAuth()
   const navigate = useNavigate()
+  const [checkoutError, setCheckoutError] = useState('')
 
-  const selectedCartItemIds = getSelectedItemIds()
-  const selectedCount = selectedCartItemIds.length
-  const allItemsSelected = cart.length > 0 && cart.every(item => selectedCartItemIds.includes(String(item.id)))
+  const selectedProductIds = getSelectedItemIds()
+  const selectedCount = selectedProductIds.length
+  const allItemsSelected = cart.length > 0 && cart.every(item => selectedProductIds.includes(String(item.id)))
 
-  const handleCheckout = () => {
+  const handleCheckout = async () => {
+    if (selectedProductIds.length === 0) {
+      setCheckoutError('Please select at least one item to proceed to checkout.')
+      return
+    }
+    if (!await waitForCartUpdates()) {
+      setCheckoutError('Cart quantity could not be saved. Please try again.')
+      return
+    }
+    const selectedItems = cart.filter(item => selectedProductIds.includes(String(item.id)))
+    const cartItemIds = selectedItems.map(item => item.cart_item_id).filter(Boolean)
+    if (isAuthenticated && cartItemIds.length !== selectedItems.length) {
+      setCheckoutError('Your cart is still syncing. Please try checkout again in a moment.')
+      return
+    }
+    setCheckoutError('')
     setIsOpen(false)
-    if (!isAuthenticated) openLogin(() => navigate('/checkout'))
-    else navigate('/checkout')
+    const cartProductIds = selectedItems.map(item => String(item.id))
+    if (!isAuthenticated) openLogin(() => navigate('/checkout', { state: { cartProductIds } }))
+    else navigate('/checkout', { state: { cartItemIds, cartProductIds } })
   }
 
   return (
@@ -91,7 +110,7 @@ export function CartDrawer() {
                       item={item}
                       onUpdateQuantity={updateQuantity}
                       onRemove={removeFromCart}
-                      isSelected={selectedCartItemIds.includes(String(item.id))}
+                      isSelected={selectedProductIds.includes(String(item.id))}
                       onToggleSelect={toggleItemSelection}
                       selectionEnabled
                       showQuantityControls
@@ -120,12 +139,13 @@ export function CartDrawer() {
               </div>
               <button
                 type="button"
-                disabled={cart.length === 0}
+                disabled={cart.length === 0 || selectedCount === 0}
                 onClick={handleCheckout}
                 className="w-full py-3 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] text-sm font-bold hover:shadow-[0_0_20px_rgba(212,175,55,0.4)] hover:scale-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:scale-100"
               >
                 Proceed to Checkout
               </button>
+              {checkoutError && <p role="alert" className="text-sm text-red-400">{checkoutError}</p>}
             </div>
           </motion.div>
         </motion.div>

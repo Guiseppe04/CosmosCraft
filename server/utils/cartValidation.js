@@ -12,6 +12,11 @@ exports.updateItemSchema = Joi.object({
   quantity: Joi.number().integer().min(1).required(),
 });
 
+exports.prepareCheckoutSchema = Joi.object({
+  cart_item_ids: Joi.array().items(Joi.string().pattern(/^[1-9]\d{0,18}$/)).unique().optional(),
+  shipping_method: Joi.string().valid('standard', 'express').default('standard'),
+});
+
 exports.checkoutSchema = Joi.object({
   shipping_address_id: Joi.string().uuid().optional(),
   notes: Joi.string().max(1000).optional().allow(''),

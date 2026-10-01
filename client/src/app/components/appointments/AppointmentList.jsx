@@ -166,7 +166,7 @@ export default function AppointmentList({
   const [showFilters, setShowFilters] = useState(false)
   const [selectedAppointment, setSelectedAppointment] = useState(null)
   const [showDetailsModal, setShowDetailsModal] = useState(false)
-  const [sortBy, setSortBy] = useState('created_at')
+  const [sortBy, setSortBy] = useState('scheduled_at')
   const [sortOrder, setSortOrder] = useState('desc')
 
   // Filter appointments based on search and filters
@@ -221,13 +221,10 @@ export default function AppointmentList({
           bVal = b.status || ''
           break
         case 'created_at':
-          aVal = a.created_at || ''
-          bVal = b.created_at || ''
-          break
         case 'scheduled_at':
         default:
-          aVal = a.scheduled_at || ''
-          bVal = b.scheduled_at || ''
+          aVal = new Date(sortBy === 'created_at' ? a.created_at || 0 : a.scheduled_at || 0).getTime()
+          bVal = new Date(sortBy === 'created_at' ? b.created_at || 0 : b.scheduled_at || 0).getTime()
           break
       }
       if (aVal < bVal) return sortOrder === 'asc' ? -1 : 1
@@ -321,7 +318,7 @@ export default function AppointmentList({
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-2xl font-semibold text-white">Appointments</h2>
           <p className="text-[var(--text-muted)] text-sm mt-1">
@@ -329,29 +326,32 @@ export default function AppointmentList({
               `${filteredAppointments.length} appointment${filteredAppointments.length !== 1 ? 's' : ''} found`}
           </p>
         </div>
-<div className="flex items-center gap-3">
-           <div className="flex items-center gap-2">
+<div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center">
+           <div className="grid grid-cols-1 gap-2 sm:flex sm:items-center">
+             <span className="text-xs font-semibold text-[var(--text-muted)] sm:shrink-0">Sort By</span>
              <select
                value={sortBy}
                onChange={(e) => setSortBy(e.target.value)}
+               aria-label="Sort By"
                className="rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] px-3 py-2 text-sm text-[var(--text-muted)] focus:border-[var(--gold-primary)] focus:outline-none"
              >
-               <option value="scheduled_at">Date &amp; Time</option>
+               <option value="scheduled_at">Appointment Date &amp; Time</option>
                <option value="status">Status</option>
-               <option value="created_at">Created</option>
+               <option value="created_at">Created Date &amp; Time</option>
              </select>
-             <button
-               type="button"
-               onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
-               className="p-2 rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] text-[var(--text-muted)] hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)] transition-colors"
-               title={sortOrder === 'asc' ? 'Ascending' : 'Descending'}
+             <select
+               value={sortOrder}
+               onChange={(e) => setSortOrder(e.target.value)}
+               aria-label="Sort Direction"
+               className="rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] px-3 py-2 text-sm text-[var(--text-muted)] focus:border-[var(--gold-primary)] focus:outline-none"
              >
-               {sortOrder === 'asc' ? '↑' : '↓'}
-             </button>
+               <option value="desc">Newest to Oldest</option>
+               <option value="asc">Oldest to Newest</option>
+             </select>
            </div>
            <button
              onClick={onCreateNew}
-             className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[var(--gold-primary)] text-black font-medium hover:bg-[var(--gold-primary)]/90 transition-colors"
+             className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[var(--gold-primary)] text-black font-medium hover:bg-[var(--gold-primary)]/90 transition-colors sm:shrink-0"
            >
              <Plus className="w-4 h-4" />
              <span>New Appointment</span>

@@ -77,8 +77,9 @@ exports.getCartItemCount = async (req, res, next) => {
 
 exports.prepareCheckout = async (req, res, next) => {
   try {
+    const validated = validate(req.body, cartValidation.prepareCheckoutSchema);
     const userId = req.user.id;
-    const result = await cartService.prepareCheckout(userId, req.body);
+    const result = await cartService.prepareCheckout(userId, validated);
     res.json({ status: 'success', data: result });
   } catch (err) {
     next(err);

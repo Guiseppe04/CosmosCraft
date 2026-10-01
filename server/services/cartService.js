@@ -1,6 +1,7 @@
 const { pool } = require('../config/database');
 const { AppError } = require('../middleware/errorHandler');
 const { generateOrderNumber, determineOrderTypePrefix } = require('../utils/orderNumber');
+const { calculateOrderTotals, ORDER_TAX_RATE } = require('../utils/orderTotals');
 
 const syncStockToBuilderParts = async (productId, delta) => {
   if (!productId || delta === 0) return;
@@ -9,8 +10,6 @@ const syncStockToBuilderParts = async (productId, delta) => {
     [delta, productId]
   );
 };
-
-const TAX_RATE = 0;
 
 async function getOrCreateCart(userId) {
   let result = await pool.query(
@@ -28,7 +27,7 @@ async function getOrCreateCart(userId) {
   return result.rows[0];
 }
 
-async function getCartWithItems(userId) {
+async function getCartWithItems(userId, cartItemIds = null) {
   const cart = await getOrCreateCart(userId);
 
   const itemsResult = await pool.query(
@@ -61,14 +60,15 @@ async function getCartWithItems(userId) {
     LEFT JOIN inventory i ON p.product_id = i.product_id
     LEFT JOIN customizations c ON ci.customization_id = c.customization_id
     WHERE ci.cart_id = $1
+      AND ($2::bigint[] IS NULL OR ci.cart_item_id = ANY($2::bigint[]))
     ORDER BY ci.created_at DESC`,
-    [cart.cart_id]
+    [cart.cart_id, cartItemIds]
   );
 
   const items = itemsResult.rows.map(item => ({
     cart_item_id: item.cart_item_id,
     quantity: item.quantity,
-    unit_price: parseFloat(item.unit_price),
+    unit_price: parseFloat(item.product_id ? item.product_base_price : item.customization_price),
     created_at: item.created_at,
     updated_at: item.updated_at,
     product: item.product_id ? {
@@ -95,15 +95,14 @@ async function getCartWithItems(userId) {
     } : null,
   }));
 
-  const subtotal = items.reduce((sum, item) => sum + (parseFloat(item.unit_price) * item.quantity), 0);
-  const taxAmount = subtotal * TAX_RATE;
+  const totals = calculateOrderTotals(items);
 
   return {
     cart_id: cart.cart_id,
     user_id: cart.user_id,
-    subtotal: parseFloat(subtotal.toFixed(2)),
-    tax_amount: parseFloat(taxAmount.toFixed(2)),
-    total_amount: parseFloat((subtotal + taxAmount).toFixed(2)),
+    subtotal: totals.subtotal,
+    tax_amount: totals.taxAmount,
+    total_amount: totals.total,
     item_count: items.reduce((sum, item) => sum + item.quantity, 0),
     items,
     created_at: cart.created_at,
@@ -306,21 +305,36 @@ async function recalculateCartTotals(cartId) {
     [cartId]
   );
 
-  const subtotal = itemsResult.rows.reduce(
-    (sum, item) => sum + (parseFloat(item.unit_price) * item.quantity),
-    0
-  );
-  const taxAmount = subtotal * TAX_RATE;
+  const totals = calculateOrderTotals(itemsResult.rows);
 
   await pool.query(
     `UPDATE carts SET subtotal = $1, tax_amount = $2, updated_at = now() 
      WHERE cart_id = $3`,
-    [parseFloat(subtotal.toFixed(2)), parseFloat(taxAmount.toFixed(2)), cartId]
+    [totals.subtotal, totals.taxAmount, cartId]
   );
 }
 
-async function prepareCheckout(userId, { shipping_address_id, notes }) {
-  const cart = await getCartWithItems(userId);
+async function prepareCheckout(userId, { cart_item_ids, shipping_address_id, notes, shipping_method = 'standard' }) {
+  if (!Array.isArray(cart_item_ids) || cart_item_ids.length === 0) {
+    const totals = calculateOrderTotals([], shipping_method);
+    return {
+      cart: null,
+      checkout_data: {
+        shipping_address_id,
+        notes,
+        shipping_cost: totals.shippingCost,
+        tax_rate: ORDER_TAX_RATE,
+        tax_amount: totals.taxAmount,
+        total_amount: totals.total,
+      },
+    };
+  }
+
+  const cart = await getCartWithItems(userId, cart_item_ids);
+
+  if (cart.items.length !== new Set(cart_item_ids.map(String)).size) {
+    throw new AppError('One or more selected cart items are invalid.', 400);
+  }
 
   if (cart.items.length === 0) {
     throw new AppError('Cart is empty', 400);
@@ -335,14 +349,21 @@ async function prepareCheckout(userId, { shipping_address_id, notes }) {
     }
   }
 
+  const totals = calculateOrderTotals(cart.items, shipping_method);
+  cart.subtotal = totals.subtotal;
+  cart.tax_amount = totals.taxAmount;
+  cart.total_amount = totals.total;
+
   return {
     cart,
     checkout_data: {
       shipping_address_id,
       notes,
-      subtotal: cart.subtotal,
-      tax_amount: cart.tax_amount,
-      total_amount: cart.total_amount,
+      subtotal: totals.subtotal,
+      shipping_cost: totals.shippingCost,
+      tax_rate: ORDER_TAX_RATE,
+      tax_amount: totals.taxAmount,
+      total_amount: totals.total,
       item_count: cart.item_count,
     },
   };

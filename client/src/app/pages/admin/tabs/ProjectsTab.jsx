@@ -156,19 +156,24 @@ export function ProjectsTab({
             ))}
         </select>
         {/* Sort */}
-        <select
-          value={projectSort}
-          onChange={(e) => { setProjectSort(e.target.value) }}
-          className="min-w-[130px] flex-1 bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] h-[42px]"
-        >
-          <option value="updated">Recently Updated</option>
-          <option value="created">Recently Created</option>
-          <option value="name">Project Name</option>
-          <option value="customer">Customer Name</option>
-          <option value="progress">Progress</option>
-          <option value="due">Due Date</option>
-          <option value="status">Status</option>
-        </select>
+        <label className="min-w-[160px] flex-1">
+          <span className="mb-1 block text-xs font-semibold text-[var(--text-muted)]">Sort By</span>
+          <select
+            aria-label="Sort By"
+            value={projectSort}
+            onChange={(e) => { setProjectSort(e.target.value) }}
+            className="w-full bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] h-[42px]"
+          >
+            <option value="updated">Recently Updated</option>
+            <option value="created_desc">Newest to Oldest</option>
+            <option value="created_asc">Oldest to Newest</option>
+            <option value="name">Project Name</option>
+            <option value="customer">Customer Name</option>
+            <option value="progress">Progress</option>
+            <option value="due">Due Date</option>
+            <option value="status">Status</option>
+          </select>
+        </label>
         {/* Guitar Type */}
         <select
           value={projectGuitarTypeFilter}

@@ -16,17 +16,36 @@ export function CartPage() {
     toggleItemSelection,
     toggleSelectAllItems,
     getSelectedItemIds,
+    waitForCartUpdates,
   } = useCart()
   const { isAuthenticated, openLogin } = useAuth()
   const navigate = useNavigate()
   const [removingItem, setRemovingItem] = useState(null)
   const [showClearConfirm, setShowClearConfirm] = useState(false)
+  const [checkoutError, setCheckoutError] = useState('')
 
-  const handleCheckout = () => {
-    const hasOutOfStock = cart.some(item => item.stock === 0)
-    if (hasOutOfStock) return
-    if (!isAuthenticated) openLogin(() => navigate('/checkout'))
-    else navigate('/checkout')
+  const handleCheckout = async () => {
+    const selectedProductIds = getSelectedItemIds()
+    if (selectedProductIds.length === 0) {
+      setCheckoutError('Please select at least one item to proceed to checkout.')
+      return
+    }
+    if (!await waitForCartUpdates()) {
+      setCheckoutError('Cart quantity could not be saved. Please try again.')
+      return
+    }
+    const selectedItems = cart.filter(item => selectedProductIds.includes(String(item.id)))
+    if (selectedItems.some(item => item.stock === 0)) return
+    const cartItemIds = selectedItems.map(item => item.cart_item_id).filter(Boolean)
+    const cartProductIds = selectedItems.map(item => String(item.id))
+    if (isAuthenticated && cartItemIds.length !== selectedItems.length) {
+      setCheckoutError('Your cart is still syncing. Please try checkout again in a moment.')
+      return
+    }
+    setCheckoutError('')
+    const checkoutState = { cartItemIds, cartProductIds }
+    if (!isAuthenticated) openLogin(() => navigate('/checkout', { state: { cartProductIds } }))
+    else navigate('/checkout', { state: checkoutState })
   }
 
   const handleRemoveItem = (itemId) => {
@@ -47,7 +66,9 @@ export function CartPage() {
   const discount = 0
   const total = subtotal + shipping - discount
   const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0)
-  const hasOutOfStock = cart.some(item => item.stock === 0)
+  const selectedProductIds = getSelectedItemIds()
+  const selectedItems = cart.filter(item => selectedProductIds.includes(String(item.id)))
+  const hasSelectedOutOfStock = selectedItems.some(item => item.stock === 0)
   const hasLowStock = cart.some(item => item.stock > 0 && item.stock <= 5)
 
   const products = cart.filter(item => !item.isCustomBuild)
@@ -79,9 +100,8 @@ export function CartPage() {
     )
   }
 
-  const selectedCartItemIds = getSelectedItemIds()
-  const selectedCount = selectedCartItemIds.length
-  const allItemsSelected = cart.length > 0 && cart.every(item => selectedCartItemIds.includes(String(item.id)))
+  const selectedCount = selectedProductIds.length
+  const allItemsSelected = cart.length > 0 && cart.every(item => selectedProductIds.includes(String(item.id)))
 
   const CartSection = ({ title, icon: Icon, items }) => (
     <div className="space-y-4">
@@ -98,7 +118,7 @@ export function CartPage() {
               item={item}
               onUpdateQuantity={updateQuantity}
               onRemove={handleRemoveItem}
-              isSelected={selectedCartItemIds.includes(String(item.id))}
+              isSelected={selectedProductIds.includes(String(item.id))}
               onToggleSelect={toggleItemSelection}
               selectionEnabled
               showQuantityControls
@@ -149,14 +169,14 @@ export function CartPage() {
           </button>
         </div>
 
-        {hasOutOfStock && (
+        {hasSelectedOutOfStock && (
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             className="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-xl flex items-center gap-3"
           >
             <AlertTriangle className="w-5 h-5 text-red-400 flex-shrink-0" />
-            <p className="text-red-300 text-sm">Some items are out of stock. Please remove them before checkout.</p>
+            <p className="text-red-300 text-sm">A selected item is out of stock. Unselect it or remove it before checkout.</p>
           </motion.div>
         )}
 
@@ -214,12 +234,13 @@ export function CartPage() {
 
               <button 
                 onClick={handleCheckout}
-                disabled={hasOutOfStock}
+                disabled={selectedCount === 0 || hasSelectedOutOfStock}
                 className="w-full px-6 py-4 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] rounded-xl font-semibold hover:shadow-[0_0_30px_rgba(212,175,55,0.5)] transition-all duration-200 text-center disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-none flex items-center justify-center gap-2"
               >
                 Proceed to Checkout
                 <ArrowRight className="w-5 h-5" />
               </button>
+              {checkoutError && <p role="alert" className="text-sm text-red-400">{checkoutError}</p>}
 
               <Link 
                 to="/shop" 
@@ -279,12 +300,13 @@ export function CartPage() {
           </div>
           <button
             onClick={handleCheckout}
-            disabled={hasOutOfStock}
+            disabled={selectedCount === 0 || hasSelectedOutOfStock}
             className="px-8 py-4 bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] text-[var(--text-dark)] rounded-xl font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Checkout
           </button>
         </div>
+        {checkoutError && <p role="alert" className="mt-2 text-right text-xs text-red-400">{checkoutError}</p>}
       </div>
     </div>
   )

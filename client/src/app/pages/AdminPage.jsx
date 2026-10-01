@@ -738,8 +738,8 @@ export function AdminPage() {
       include_tasks: true,
       page: pageNum,
       page_size: PROJECTS_PAGE_SIZE,
-      sort_by: ({ updated: 'updated_at', created: 'created_at', name: 'project_name', customer: 'customer_name', progress: 'progress', due: 'estimated_completion_date', status: 'status' })[projectSort] || 'updated_at',
-      sort_dir: 'desc',
+      sort_by: ({ updated: 'updated_at', created: 'created_at', created_desc: 'created_at', created_asc: 'created_at', name: 'project_name', customer: 'customer_name', progress: 'progress', due: 'estimated_completion_date', status: 'status' })[projectSort] || 'updated_at',
+      sort_dir: projectSort === 'created_asc' ? 'asc' : 'desc',
     }
     Object.keys(params).forEach(k => params[k] === undefined && delete params[k])
     return params
@@ -1592,8 +1592,8 @@ export function AdminPage() {
       include_tasks: true,
       page: pageNum,
       page_size: PROJECTS_PAGE_SIZE,
-      sort_by: ({ updated: 'updated_at', created: 'created_at', name: 'project_name', customer: 'customer_name', progress: 'progress', due: 'estimated_completion_date', status: 'status' })[projectSort] || 'updated_at',
-      sort_dir: 'desc',
+      sort_by: ({ updated: 'updated_at', created: 'created_at', created_desc: 'created_at', created_asc: 'created_at', name: 'project_name', customer: 'customer_name', progress: 'progress', due: 'estimated_completion_date', status: 'status' })[projectSort] || 'updated_at',
+      sort_dir: projectSort === 'created_asc' ? 'asc' : 'desc',
     }
     Object.keys(params).forEach(k => params[k] === undefined && delete params[k])
     return params
@@ -2343,12 +2343,6 @@ export function AdminPage() {
             )}
 
             <div className="flex items-center gap-2 ml-auto">
-              {/* Refresh button (hidden on dashboard/inventory/appointments) */}
-              {activeTab !== 'dashboard' && activeTab !== 'inventory' && activeTab !== 'products' && activeTab !== 'guitar-parts' && activeTab !== 'orders' && activeTab !== 'users' && activeTab !== 'appointments' && (
-                <button onClick={handleRefresh} className="p-2 border border-[var(--border)] rounded-lg hover:border-[var(--gold-primary)] hover:bg-[var(--gold-primary)]/10 transition-all" title="Refresh">
-                  <RefreshCw className={`w-4 h-4 text-[var(--text-muted)] ${isLoading ? 'animate-spin' : ''}`} />
-                </button>
-              )}
                 {activeTab === 'services' && (
                   <div className="flex rounded-lg border border-[var(--border)] overflow-hidden">
                     <button

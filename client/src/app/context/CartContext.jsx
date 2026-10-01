@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useEffect } from 'react'
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { CheckCircle } from 'lucide-react'
 import api from '../services/api.js'
@@ -41,6 +41,7 @@ export function CartProvider({ children }) {
   const [globalToast, setGlobalToast] = useState(null)
 
   const [cart, setCart] = useState([])
+  const pendingCartUpdatesRef = useRef(new Set())
   const [isOpen, setIsOpen] = useState(false)
   const [itemAddedStates, setItemAddedStates] = useState({})
   const [selectedItemIds, setSelectedItemIds] = useState(null)
@@ -71,6 +72,20 @@ export function CartProvider({ children }) {
     } catch (err) {
       console.error(err)
     }
+  }, [])
+
+  const trackCartUpdate = useCallback((request) => {
+    let trackedRequest
+    trackedRequest = Promise.resolve(request).finally(() => {
+      pendingCartUpdatesRef.current.delete(trackedRequest)
+    })
+    pendingCartUpdatesRef.current.add(trackedRequest)
+    return trackedRequest
+  }, [])
+
+  const waitForCartUpdates = useCallback(async () => {
+    const results = await Promise.allSettled(Array.from(pendingCartUpdatesRef.current))
+    return results.every(result => result.status === 'fulfilled')
   }, [])
 
   useEffect(() => {
@@ -310,13 +325,13 @@ export function CartProvider({ children }) {
     )
 
     if (isAuthenticated && item && item.cart_item_id) {
-      api.cart.updateItem(item.cart_item_id, { quantity: clampedQuantity })
-        .catch((error) => {
-          fetchDbCart()
+      trackCartUpdate(api.cart.updateItem(item.cart_item_id, { quantity: clampedQuantity }).catch(async (error) => {
+          await fetchDbCart()
           showToastMessage(error?.message || 'Unable to update cart quantity.')
-        })
+          throw error
+        })).catch(() => {})
     }
-  }, [cart, removeFromCart, isAuthenticated, fetchDbCart, showToastMessage])
+  }, [cart, removeFromCart, isAuthenticated, fetchDbCart, showToastMessage, trackCartUpdate])
 
   const clearCart = useCallback(() => {
     setCart([])
@@ -342,6 +357,8 @@ export function CartProvider({ children }) {
     removeFromCart,
     updateQuantity,
     clearCart,
+    refreshCart: fetchDbCart,
+    waitForCartUpdates,
     getTotalPrice,
     getCartCount,
     isItemAtMaxQuantity,

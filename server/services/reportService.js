@@ -1106,6 +1106,168 @@ async function getSalesReport(filters = {}) {
   };
 }
 
+async function getSalesCustomerBreakdown(filters = {}) {
+  const {
+    start_date, end_date, group_by = 'category',
+    channel, status, payment_status, payment_method, order_type, region, salesperson,
+  } = filters;
+  const groupBy = ['product', 'category', 'region', 'salesperson', 'status', 'payment_status', 'channel', 'payment_method'].includes(group_by)
+    ? group_by
+    : 'category';
+  const groupExpressions = {
+    region: 'region',
+    salesperson: 'salesperson',
+    status: 'status',
+    payment_status: 'payment_status',
+    channel: 'channel',
+    payment_method: 'payment_method',
+  };
+  const params = [
+    parseDate(start_date),
+    parseDate(end_date),
+    status || null,
+    payment_status || null,
+    payment_method || null,
+    channel || null,
+    order_type || null,
+    region || null,
+    salesperson || null,
+  ];
+  const filtersSql = `
+    ($1::timestamptz IS NULL OR sale_date >= $1::timestamptz)
+    AND ($2::timestamptz IS NULL OR sale_date < $2::date + INTERVAL '1 day')
+    AND ($3::text IS NULL OR status = $3)
+    AND ($4::text IS NULL OR payment_status = $4)
+    AND ($5::text IS NULL OR payment_method = $5)
+    AND ($6::text IS NULL OR channel = $6)
+    AND ($7::text IS NULL OR order_type = $7)
+    AND ($8::text IS NULL OR region ILIKE '%' || $8 || '%')
+    AND ($9::text IS NULL OR salesperson ILIKE '%' || $9 || '%')`;
+
+  const salesCte = `WITH sales AS (
+    SELECT
+      'order' AS source_type, o.order_id::text AS source_id, o.order_id::text AS event_id,
+      COALESCE(o.user_id::text, 'guest-order:' || o.order_id::text) AS customer_id,
+      COALESCE(NULLIF(BTRIM(CONCAT_WS(' ', u.first_name, u.last_name)), ''), 'Guest customer') AS customer_name,
+      o.created_at AS sale_date,
+      ${orderRevenueExpr('o')}::numeric AS amount,
+      CASE WHEN o.order_type = 'customization' THEN 'customization' ELSE 'online' END AS channel,
+      o.order_type::text AS order_type,
+      o.status::text AS status,
+      o.payment_status::text AS payment_status,
+      COALESCE((SELECT p.method::text FROM payments p WHERE p.order_id = o.order_id AND p.deleted_at IS NULL ORDER BY p.created_at DESC LIMIT 1), 'unknown') AS payment_method,
+      COALESCE(NULLIF(CONCAT_WS(', ', addr.city, addr.province), ''), 'Unknown') AS region,
+      COALESCE(NULLIF(BTRIM(CONCAT_WS(' ', staff.first_name, staff.last_name)), ''), 'Unassigned') AS salesperson,
+      o.shipping_address_id::text AS address_id,
+      o.reviewed_by::text AS salesperson_id
+    FROM orders o
+    LEFT JOIN users u ON u.user_id = o.user_id
+    LEFT JOIN addresses addr ON addr.address_id = o.shipping_address_id AND addr.deleted_at IS NULL
+    LEFT JOIN users staff ON staff.user_id = o.reviewed_by
+    WHERE o.deleted_at IS NULL AND o.status != 'cancelled' AND o.payment_status = 'approved'
+
+    UNION ALL
+
+    SELECT
+      'pos' AS source_type, ps.sale_id::text AS source_id, ps.sale_id::text AS event_id,
+      'pos:' || COALESCE(NULLIF(ps.customer_phone, ''), LOWER(NULLIF(ps.customer_name, '')), ps.sale_id::text) AS customer_id,
+      COALESCE(NULLIF(BTRIM(ps.customer_name), ''), 'Walk-in customer') AS customer_name,
+      ps.created_at AS sale_date,
+      (ps.total_amount - ps.discount_amount)::numeric AS amount,
+      'walk_in' AS channel, 'product'::text AS order_type,
+      ps.status::text AS status, ps.payment_status::text AS payment_status,
+      ps.payment_method::text AS payment_method, 'Walk-in / POS'::text AS region,
+      COALESCE(NULLIF(BTRIM(CONCAT_WS(' ', staff.first_name, staff.last_name)), ''), 'Unassigned') AS salesperson,
+      NULL::text AS address_id, ps.staff_id::text AS salesperson_id
+    FROM pos_sales ps
+    LEFT JOIN users staff ON staff.user_id = ps.staff_id
+    WHERE ps.deleted_at IS NULL AND ps.status = 'completed' AND ps.payment_status = 'verified'
+
+    UNION ALL
+
+    SELECT
+      'appointment' AS source_type, a.appointment_id::text AS source_id, a.appointment_id::text AS event_id,
+      COALESCE(a.user_id::text, 'appointment:' || LOWER(a.customer_email)) AS customer_id,
+      COALESCE(NULLIF(BTRIM(a.customer_name), ''), 'Appointment customer') AS customer_name,
+      a.scheduled_at AS sale_date,
+      COALESCE((SELECT SUM(s.price) FROM services s WHERE s.service_id::text IN (SELECT jsonb_array_elements_text(a.services))), 0)::numeric AS amount,
+      'appointments' AS channel, 'service'::text AS order_type,
+      a.status::text AS status, a.payment_status::text AS payment_status,
+      CASE WHEN a.payment_method IN ('e_wallet') THEN 'gcash' WHEN a.payment_method IN ('e_bank') THEN 'bank_transfer' ELSE COALESCE(a.payment_method, 'unknown') END AS payment_method,
+      'Unknown'::text AS region, 'Unassigned'::text AS salesperson,
+      NULL::text AS address_id, NULL::text AS salesperson_id
+    FROM appointments a
+    WHERE a.deleted_at IS NULL AND a.status != 'cancelled' AND a.payment_method IS NOT NULL
+  ), customer_items AS (
+    SELECT s.*, COALESCE(p.name, oi.product_name, 'Product') AS product_name,
+           COALESCE(cat.name, 'Uncategorized') AS category_name,
+           cat.category_id::text AS item_category_id,
+           (oi.quantity * oi.unit_price)::numeric AS item_amount
+    FROM sales s
+    JOIN order_items oi ON s.source_type = 'order' AND oi.order_id::text = s.source_id AND oi.deleted_at IS NULL
+    LEFT JOIN products p ON p.product_id = oi.product_id
+    LEFT JOIN categories cat ON cat.category_id = p.category_id
+
+    UNION ALL
+
+    SELECT s.*, COALESCE(p.name, psi.item_name, 'Product') AS product_name,
+           COALESCE(cat.name, 'Uncategorized') AS category_name,
+           cat.category_id::text AS item_category_id,
+           COALESCE(psi.subtotal, psi.quantity * psi.unit_price)::numeric AS item_amount
+    FROM sales s
+    JOIN pos_sale_items psi ON s.source_type = 'pos' AND psi.sale_id::text = s.source_id AND psi.deleted_at IS NULL
+    LEFT JOIN products p ON p.product_id = psi.product_id
+    LEFT JOIN categories cat ON cat.category_id = p.category_id
+
+    UNION ALL
+
+    SELECT s.*, COALESCE(sv.name, 'Service') AS product_name,
+           'Services'::text AS category_name, NULL::text AS item_category_id,
+           COALESCE(sv.price, 0)::numeric AS item_amount
+    FROM sales s
+    JOIN appointments a ON s.source_type = 'appointment' AND a.appointment_id::text = s.source_id
+    CROSS JOIN LATERAL (
+      SELECT service.name, service.price
+      FROM services service
+      WHERE service.service_id::text IN (SELECT jsonb_array_elements_text(a.services))
+    ) sv
+  )`;
+
+  const groupExpr = groupExpressions[groupBy] || (groupBy === 'product' ? 'product_name' : 'category_name');
+  const source = ['product', 'category'].includes(groupBy) ? 'customer_items' : 'sales';
+  const amountExpr = source === 'customer_items' ? 'item_amount' : 'amount';
+  const groupWhere = groupBy === 'category' && filters.category_id
+    ? ' AND item_category_id = $10'
+    : '';
+  if (groupWhere) params.push(String(filters.category_id));
+
+  const result = await pool.query(
+    `${salesCte}
+     SELECT ${groupExpr} AS group_value,
+            customer_id, customer_name,
+            COUNT(DISTINCT event_id)::int AS orders,
+            COALESCE(SUM(${amountExpr}), 0)::numeric AS total_sales,
+            MAX(sale_date) AS last_purchase_date
+     FROM ${source}
+     WHERE ${filtersSql}${groupWhere}
+     GROUP BY ${groupExpr}, customer_id, customer_name
+     ORDER BY group_value, total_sales DESC, customer_name`,
+    params
+  );
+
+  return {
+    group_by: groupBy,
+    customers: result.rows.map((row) => ({
+      group: row.group_value || 'Unknown',
+      customer_id: row.customer_id,
+      customer_name: row.customer_name,
+      orders: parseInt(row.orders || 0, 10),
+      total_sales: parseFloat(row.total_sales || 0),
+      last_purchase_date: row.last_purchase_date,
+    })),
+  };
+}
+
 async function getCustomizationReport(filters = {}) {
   const { start_date, end_date } = filters;
   const { conditions, params } = buildDateFilter(parseDate(start_date), parseDate(end_date), 'c.created_at');
@@ -1323,6 +1485,7 @@ module.exports = {
   getUserReport,
   getDashboardSummary,
   getSalesReport,
+  getSalesCustomerBreakdown,
   getRevenueReport,
   getCustomizationReport,
   getPaymentMethodAnalysis,

@@ -72,6 +72,20 @@ exports.getSalesReport = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+exports.getSalesCustomers = async (req, res, next) => {
+  try {
+    const {
+      start_date, end_date, group_by, channel, status,
+      payment_status, payment_method, order_type, category_id, region, salesperson,
+    } = req.query;
+    const result = await reportService.getSalesCustomerBreakdown({
+      start_date, end_date, group_by, channel, status,
+      payment_status, payment_method, order_type, category_id, region, salesperson,
+    });
+    res.json({ status: 'success', data: result });
+  } catch (err) { next(err); }
+};
+
 exports.getRevenueReport = async (req, res, next) => {
   try {
     const { start_date, end_date, group_by } = req.query;

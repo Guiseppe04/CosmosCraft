@@ -844,6 +844,12 @@ exports.getAllProjects = async (params = {}) => {
     due_date_from,
     due_date_to,
     completion_percentage,
+    progress_operator,
+    progress_value,
+    progress_min,
+    progress_max,
+    payment_filter,
+    guitar_model,
     sort_by = 'updated_at',
     sort_dir = 'desc',
     page = 1,
@@ -854,6 +860,16 @@ exports.getAllProjects = async (params = {}) => {
 
   const limit = Math.min(Math.max(Number(page_size) || 20, 1), 100);
   const offset = (Math.max(Number(page) || 1, 1) - 1) * limit;
+  const taskDerivedProgress = `(
+    SELECT CASE
+      WHEN COUNT(*) = 0 THEN 0
+      ELSE ROUND(COUNT(CASE WHEN ps.status = 'completed' THEN 1 END)::numeric * 100 / COUNT(*))::int
+    END
+    FROM project_subtasks ps
+    JOIN project_milestones pm ON pm.milestone_id = ps.milestone_id
+    WHERE pm.project_id = p.project_id
+  )`;
+  const effectiveProgress = `COALESCE(NULLIF(${taskDerivedProgress}, 0), p.progress, 0)`;
   const allowedSortColumns = [
     'updated_at',
     'created_at',
@@ -862,6 +878,7 @@ exports.getAllProjects = async (params = {}) => {
     'progress',
     'estimated_completion_date',
     'status',
+    'order_total_amount',
   ];
   const orderBy = allowedSortColumns.includes(sort_by) ? sort_by : 'updated_at';
   const orderDir = sort_dir === 'asc' ? 'ASC' : 'DESC';
@@ -893,12 +910,12 @@ exports.getAllProjects = async (params = {}) => {
   }
 
   if (date_from) {
-    where.push(`p.created_at >= $${idx++}`);
+    where.push(`p.created_at >= $${idx++}::date`);
     queryParams.push(date_from);
   }
 
   if (date_to) {
-    where.push(`p.created_at <= $${idx++}`);
+    where.push(`p.created_at < ($${idx++}::date + INTERVAL '1 day')`);
     queryParams.push(date_to);
   }
 
@@ -912,11 +929,65 @@ exports.getAllProjects = async (params = {}) => {
     queryParams.push(due_date_to);
   }
 
-  if (completion_percentage !== undefined && completion_percentage !== '') {
-    const num = Number(completion_percentage);
-    if (!Number.isNaN(num)) {
-      where.push(`p.progress = $${idx++}`);
-      queryParams.push(num);
+  const parseProgress = (value) => {
+    if (value === undefined || value === null || value === '') return null;
+    const number = Number(value);
+    return Number.isFinite(number) && number >= 0 && number <= 100 ? number : null;
+  };
+  const progressValue = parseProgress(progress_value ?? completion_percentage);
+  const progressMin = parseProgress(progress_min);
+  const progressMax = parseProgress(progress_max);
+  if (progress_operator === 'greater_than' && progressValue !== null) {
+    where.push(`${effectiveProgress} > $${idx++}`);
+    queryParams.push(progressValue);
+  } else if (progress_operator === 'less_than' && progressValue !== null) {
+    where.push(`${effectiveProgress} < $${idx++}`);
+    queryParams.push(progressValue);
+  } else if (progress_operator === 'equal_to' && progressValue !== null) {
+    where.push(`${effectiveProgress} = $${idx++}`);
+    queryParams.push(progressValue);
+  } else if (progress_operator === 'between' && progressMin !== null && progressMax !== null) {
+    where.push(`${effectiveProgress} BETWEEN $${idx++} AND $${idx++}`);
+    queryParams.push(Math.min(progressMin, progressMax), Math.max(progressMin, progressMax));
+  } else if (completion_percentage !== undefined && completion_percentage !== '') {
+    const exactProgress = parseProgress(completion_percentage);
+    if (exactProgress !== null) {
+      where.push(`${effectiveProgress} = $${idx++}`);
+      queryParams.push(exactProgress);
+    }
+  }
+
+  if (guitar_model) {
+    where.push(`EXISTS (
+      SELECT 1 FROM order_items oi_model
+      JOIN customizations c_model ON c_model.customization_id = oi_model.customization_id
+      WHERE oi_model.order_id = o.order_id AND c_model.body_model = $${idx++}
+    )`);
+    queryParams.push(String(guitar_model).trim().toLowerCase());
+  }
+
+  const paymentMethodExists = (methods) => `EXISTS (
+    SELECT 1 FROM payments payment_filter
+    WHERE payment_filter.order_id = o.order_id
+      AND payment_filter.method::text = ANY($${idx}::text[])
+  )`;
+  if (payment_filter && payment_filter !== 'all') {
+    if (payment_filter === 'cash_on_delivery' || payment_filter === 'cash') {
+      where.push(`(${paymentMethodExists(['cash'])} OR o.notes ILIKE '%Payment Method: cash%')`);
+      queryParams.push(['cash']);
+      idx++;
+    } else if (payment_filter === 'online_payment') {
+      where.push(`(${paymentMethodExists(['gcash', 'bank_transfer'])} OR o.notes ILIKE '%Payment Method: gcash%' OR o.notes ILIKE '%Payment Method: bank_transfer%')`);
+      queryParams.push(['gcash', 'bank_transfer']);
+      idx++;
+    } else if (['gcash', 'bank_transfer'].includes(payment_filter)) {
+      where.push(`(${paymentMethodExists([payment_filter])} OR o.notes ILIKE $${idx + 1})`);
+      queryParams.push([payment_filter], `%Payment Method: ${payment_filter}%`);
+      idx += 2;
+    } else if (payment_filter === 'down_payment') {
+      where.push(`(o.payment_plan = 'installment' OR COALESCE(o.initial_payment_amount, 0) > 0)`);
+    } else if (payment_filter === 'fully_paid') {
+      where.push(`o.payment_status = 'approved' AND COALESCE(o.payment_plan, 'full_payment') = 'full_payment'`);
     }
   }
 
@@ -953,9 +1024,11 @@ exports.getAllProjects = async (params = {}) => {
       : orderBy === 'customer_name'
         ? `u.last_name ${orderDir}, u.first_name ${orderDir}`
         : orderBy === 'progress'
-          ? `p.progress ${orderDir}`
+          ? `${effectiveProgress} ${orderDir}, p.created_at DESC`
           : orderBy === 'estimated_completion_date'
             ? `p.estimated_completion_date ${orderDir} NULLS LAST`
+              : orderBy === 'order_total_amount'
+                ? `o.total_amount ${orderDir}`
             : orderBy === 'status'
               ? `p.status ${orderDir}`
               : `p.${orderBy} ${orderDir}`;
@@ -981,6 +1054,8 @@ exports.getAllProjects = async (params = {}) => {
       o.user_id AS customer_id,
       o.order_number,
       o.payment_plan AS order_payment_plan,
+      o.payment_status,
+      o.total_amount AS order_total_amount,
       o.customization_status,
       o.customization_hold_reason,
       o.customization_hold_requested_at,
@@ -1004,7 +1079,13 @@ exports.getAllProjects = async (params = {}) => {
         FROM order_items oi2
         JOIN customizations c2 ON c2.customization_id = oi2.customization_id
         WHERE oi2.order_id = o.order_id
-      ) AS guitar_type
+      ) AS guitar_type,
+      (
+        SELECT MAX(c2.body_model)
+        FROM order_items oi2
+        JOIN customizations c2 ON c2.customization_id = oi2.customization_id
+        WHERE oi2.order_id = o.order_id
+      ) AS guitar_model
     FROM projects p
     JOIN orders o ON o.order_id = p.order_id
     LEFT JOIN addresses a ON a.address_id = o.shipping_address_id
@@ -1051,7 +1132,8 @@ exports.getAllProjects = async (params = {}) => {
     `SELECT DISTINCT
        oi.order_id,
        c.customization_id,
-       c.guitar_type
+      c.guitar_type,
+      c.body_model
      FROM order_items oi
      JOIN customizations c ON c.customization_id = oi.customization_id
      WHERE oi.order_id = ANY(
@@ -1084,6 +1166,7 @@ exports.getAllProjects = async (params = {}) => {
       customization_ids: orderCustomizations.map((c) => c.customization_id),
       primary_customization_id: orderCustomizations[0]?.customization_id || null,
       guitar_type: primaryGuitarType,
+      guitar_model: orderCustomizations.find((customization) => customization.body_model)?.body_model || project.guitar_model || null,
       items: [],
       payment_method: null,
       payment: null,

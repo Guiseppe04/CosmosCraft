@@ -13,6 +13,7 @@ import { PaymentModal } from '../components/PaymentModal.jsx'
 import TermsAndConditionsModal from '../components/TermsAndConditionsModal.jsx'
 import { AddressForm } from '../components/AddressForm.jsx'
 import { API, getAuthHeaders } from '../utils/apiConfig'
+import api from '../services/api.js'
 import { getCustomBuildSummaryTree } from '../utils/customBuildSummary.js'
 import { Country, State } from 'country-state-city'
 import { getAllProvinces, getMunicipalitiesByProvince, getBarangaysByMunicipality } from '@aivangogh/ph-address'
@@ -22,7 +23,6 @@ const PHILIPPINES = ALL_COUNTRIES.find(c => c.isoCode === 'PH')
 const OTHER_COUNTRIES = ALL_COUNTRIES.filter(c => c.isoCode !== 'PH')
 const COUNTRIES = PHILIPPINES ? [PHILIPPINES, ...OTHER_COUNTRIES] : ALL_COUNTRIES
 const CUSTOM_BUILD_DOWN_PAYMENT_RATE = 0.5
-const ORDER_TAX_RATE = 0.1
 
 // Stable empty object for the "add new address" modal. Passing a fresh `{}`
 // literal on every render would re-trigger AddressForm's reset effect and wipe
@@ -139,7 +139,7 @@ function CartItemCard({
               )}
             </div>
 
-            {!isCustomBuild && !isBuyNow && (
+            {!isCustomBuild && (
               <div className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-2 py-1">
                 <button
                   type="button"
@@ -497,9 +497,9 @@ function CheckoutSummaryCard({
   onRemove,
   onToggleAllItems,
   allItemsSelected,
-  onClearCart,
   subtotal,
   shippingCost,
+  taxAmount = 0,
   total,
   remainingBalance = 0,
   requiresDownPayment = false,
@@ -537,9 +537,6 @@ function CheckoutSummaryCard({
               <button type="button" onClick={onToggleAllItems} className="font-medium text-[var(--gold-primary)] hover:text-[var(--text-light)]">
                 {allItemsSelected ? 'Clear Selection' : 'Select All'}
               </button>
-              <button type="button" onClick={onClearCart} className="font-medium text-red-400 hover:text-red-300">
-                Clear Cart
-              </button>
             </div>
           )}
         </div>
@@ -569,6 +566,12 @@ function CheckoutSummaryCard({
             {safeShippingCost === 0 ? 'Free' : `PHP ${safeShippingCost.toLocaleString('en-PH')}`}
           </span>
         </div>
+        {Number(taxAmount) > 0 && (
+          <div className="flex justify-between text-sm">
+            <span className="text-[var(--text-muted)]">Tax</span>
+            <span className="text-[var(--text-light)]">PHP {Number(taxAmount).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+          </div>
+        )}
       </div>
 
       {requiresDownPayment && (
@@ -783,11 +786,14 @@ function AddAddressModal({ isOpen, onClose, onSave, isSaving, error }) {
 export function CheckoutPage() {
   const navigate = useNavigate()
   const location = useLocation()
+  const returnToDashboardCart = location.state?.returnToDashboardCart
+    || new URLSearchParams(location.search).get('from') === 'dashboard-cart'
   const {
     cart,
     removeFromCart,
     updateQuantity,
-    clearCart,
+    refreshCart,
+    waitForCartUpdates,
     selectedItemIds,
     setSelectedItemIds,
     toggleItemSelection,
@@ -822,7 +828,17 @@ export function CheckoutPage() {
   const [acceptedTerms, setAcceptedTerms] = useState(false)
   const [termsError, setTermsError] = useState('')
   const [selectionError, setSelectionError] = useState(false)
+  const [preparedCartItems, setPreparedCartItems] = useState([])
+  const [preparedTaxRate, setPreparedTaxRate] = useState(0)
+  const [isPreparingCart, setIsPreparingCart] = useState(false)
   const [generatedCustomItemId] = useState(() => `custom-${Date.now()}`)
+  const [buyNowQuantity, setBuyNowQuantity] = useState(() => Math.max(1, Number(buyNowItem?.quantity) || 1))
+
+  useEffect(() => {
+    if (isBuyNow && buyNowItem) {
+      setBuyNowQuantity(Math.max(1, Number(buyNowItem.quantity) || 1))
+    }
+  }, [isBuyNow, buyNowItem?.id, buyNowItem?.quantity])
 
   const userAddresses = user?.addresses || []
 
@@ -841,10 +857,72 @@ export function CheckoutPage() {
     }
   }, [uniqueAddresses, selectedAddressId])
 
-  let baseCheckoutItems = cart
+  useEffect(() => {
+    const isStandaloneCheckout = isCustomBuild || isBuyNow
+    const requestedProductIds = (location.state?.cartProductIds || []).map(String)
+    let requestedCartItemIds = (location.state?.cartItemIds || []).map(String)
+    if (!isStandaloneCheckout && requestedCartItemIds.length === 0 && requestedProductIds.length > 0) {
+      requestedCartItemIds = cart
+        .filter(item => requestedProductIds.includes(String(item.id)))
+        .map(item => item.cart_item_id)
+        .filter(Boolean)
+        .map(String)
+      if (requestedCartItemIds.length !== requestedProductIds.length) return
+    }
+
+    if (!isStandaloneCheckout && requestedCartItemIds.length === 0) {
+      setPreparedCartItems([])
+      setIsPreparingCart(false)
+      setOrderError('Please select at least one item to proceed to checkout.')
+      return
+    }
+
+    let isCurrentRequest = true
+    setIsPreparingCart(true)
+    setOrderError(null)
+    api.cart.prepareCheckout({
+      cart_item_ids: requestedCartItemIds,
+      shipping_method: shippingMethod,
+    }).then((response) => {
+      if (!isCurrentRequest) return
+      const result = response?.data || {}
+      setPreparedTaxRate(Number(result.checkout_data?.tax_rate) || 0)
+      if (isStandaloneCheckout) {
+        setPreparedCartItems([])
+        setIsPreparingCart(false)
+        return
+      }
+      const cartItems = Array.isArray(result.cart?.items) ? result.cart.items : []
+      const preparedIds = new Set(cartItems.map(item => String(item.cart_item_id)))
+      if (requestedCartItemIds.some(id => !preparedIds.has(id))) {
+        throw new Error('One or more selected cart items are no longer available.')
+      }
+      setPreparedCartItems(cartItems.map(item => ({
+        id: item.product?.product_id || item.customization?.customization_id || item.cart_item_id,
+        cart_item_id: item.cart_item_id,
+        name: item.product?.name || item.customization?.name || 'Custom Build',
+        price: Number(item.unit_price) || 0,
+        image: item.product?.image || '/assets/placeholder.jpg',
+        stock: item.product?.stock,
+        quantity: Number(item.quantity) || 1,
+        type: item.customization ? 'customization' : 'product',
+        customization: item.customization || null,
+      })))
+      setIsPreparingCart(false)
+    }).catch((error) => {
+      if (!isCurrentRequest) return
+      setPreparedCartItems([])
+      setOrderError(error.message || 'Unable to validate your selected cart items.')
+      setIsPreparingCart(false)
+    })
+
+    return () => { isCurrentRequest = false }
+  }, [cart, isCustomBuild, isBuyNow, location.state, shippingMethod])
+
+  let baseCheckoutItems = preparedCartItems
 
   if (isBuyNow && buyNowItem) {
-    baseCheckoutItems = [buyNowItem]
+    baseCheckoutItems = [{ ...buyNowItem, quantity: buyNowQuantity }]
   } else if (isCustomBuild && customBuildItem) {
     const customBuildPrice = Number(customBuildItem.price) || 0
     const customAdditionalPartsTotal = (customBuildItem.additionalParts || []).reduce((sum, part) => {
@@ -883,7 +961,7 @@ export function CheckoutPage() {
   const checkoutItems = baseCheckoutItems.filter(item => activeSelectedItemIds.includes(String(item.id)))
   const subtotal = checkoutItems.reduce((sum, item) => sum + ((Number(item.price) || 0) * (Number(item.quantity) || 0)), 0)
   const shippingCost = shippingMethod === 'express' ? 500 : 0
-  const taxAmount = subtotal * ORDER_TAX_RATE
+  const taxAmount = Math.round((subtotal * preparedTaxRate + Number.EPSILON) * 100) / 100
   
   const fullPaymentTotal = subtotal + shippingCost + taxAmount
   const hasSelectedCustomBuild = checkoutItems.some(item => isCustomBuildItem(item))
@@ -917,6 +995,18 @@ export function CheckoutPage() {
   const handleToggleAllItems = () => {
     toggleSelectAllItems()
     setSelectionError(false)
+  }
+
+  const handleCheckoutQuantityUpdate = (itemId, quantity) => {
+    if (isBuyNow) {
+      const normalizedQuantity = Math.max(1, Math.trunc(Number(quantity) || 1))
+      const stock = Number(buyNowItem?.stock)
+      setBuyNowQuantity(Number.isFinite(stock) && stock > 0
+        ? Math.min(normalizedQuantity, Math.trunc(stock))
+        : normalizedQuantity)
+      return
+    }
+    updateQuantity(itemId, quantity)
   }
 
   const handleOpenTermsModal = () => {
@@ -1044,7 +1134,11 @@ export function CheckoutPage() {
     return !!receipt
   }
 
-  const handlePlaceOrderClick = () => {
+  const handlePlaceOrderClick = async () => {
+    if (!await waitForCartUpdates()) {
+      setOrderError('Cart quantity could not be saved. Please review your cart and try again.')
+      return
+    }
     if (!isAuthenticated) {
       setOrderError('Please log in to place an order.')
       return
@@ -1167,57 +1261,61 @@ export function CheckoutPage() {
       }
 
       // 1. Create order
+      const orderItems = checkoutItems.map(item => {
+        const itemCustomSource = item.customization || item
+        const itemIsCustomBuild = isCustomBuildItem(item)
+
+        return {
+          productId: item.id,
+          name: item.name || 'Product',
+          quantity: item.quantity,
+          price: item.price,
+          notes: item.notes || '',
+          customization: itemIsCustomBuild ? {
+            buildId: item.id,
+            customizationId: itemCustomSource.dbCustomizationId || itemCustomSource.customization_id || null,
+            name: item.name || 'Custom Build',
+            config: itemCustomSource.config || {},
+            summary: itemCustomSource.summary || {},
+            pricingBreakdown: itemCustomSource.pricingBreakdown || {},
+            baseBuildPrice: Number(itemCustomSource.baseBuildPrice ?? customBuildItem?.price ?? item.price) || 0,
+            additionalParts: Array.isArray(itemCustomSource.additionalParts) ? itemCustomSource.additionalParts : [],
+          } : undefined,
+        }
+      })
+      const orderPayload = {
+        ...(!isCustomBuild && !isBuyNow
+          ? { cartItemIds: checkoutItems.map(item => item.cart_item_id) }
+          : { items: orderItems }),
+        notes: additionalNotes,
+        shippingMethod,
+        paymentMethod: mappedPaymentMethod,
+        termsAccepted: acceptedTerms,
+        shippingAddressId: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(selectedAddressId) ? selectedAddressId : undefined,
+        billingAddress: {
+          street: finalAddress.street,
+          street2: finalAddress.street2,
+          city: finalAddress.city,
+          barangay: finalAddress.barangay,
+          stateProvince: finalAddress.province,
+          postalCode: finalAddress.postalCode,
+          country: finalAddress.country,
+        },
+        paymentPlan: hasSelectedCustomBuild
+          ? (paymentPlan === 'full' ? 'full_payment' : 'installment')
+          : 'full_payment',
+        initialPaymentPercentage: hasSelectedCustomBuild && paymentPlan !== 'full'
+          ? CUSTOM_BUILD_DOWN_PAYMENT_RATE
+          : undefined,
+        installmentTenureMonths: hasSelectedCustomBuild && paymentPlan !== 'full'
+          ? 6
+          : undefined,
+      }
       const response = await fetch(`${API}/api/orders`, {
         method: 'POST',
         headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
         credentials: 'include',
-        body: JSON.stringify({
-          items: checkoutItems.map(item => {
-            const itemCustomSource = item.customization || item
-            const itemIsCustomBuild = isCustomBuildItem(item)
-
-            return {
-              productId: item.id,
-              name: item.name || 'Product',
-              quantity: item.quantity,
-              price: item.price,
-              notes: item.notes || '',
-              customization: itemIsCustomBuild ? {
-                buildId: item.id,
-                customizationId: itemCustomSource.dbCustomizationId || itemCustomSource.customization_id || null,
-                name: item.name || 'Custom Build',
-                config: itemCustomSource.config || {},
-                summary: itemCustomSource.summary || {},
-                pricingBreakdown: itemCustomSource.pricingBreakdown || {},
-                baseBuildPrice: Number(itemCustomSource.baseBuildPrice ?? customBuildItem?.price ?? item.price) || 0,
-                additionalParts: Array.isArray(itemCustomSource.additionalParts) ? itemCustomSource.additionalParts : [],
-              } : undefined,
-            }
-          }),
-          notes: additionalNotes,
-          shippingMethod,
-          paymentMethod: mappedPaymentMethod,
-          termsAccepted: acceptedTerms,
-          shippingAddressId: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(selectedAddressId) ? selectedAddressId : undefined,
-          billingAddress: {
-            street: finalAddress.street,
-            street2: finalAddress.street2,
-            city: finalAddress.city,
-            barangay: finalAddress.barangay,
-            stateProvince: finalAddress.province,
-            postalCode: finalAddress.postalCode,
-            country: finalAddress.country,
-          },
-          paymentPlan: hasSelectedCustomBuild
-            ? (paymentPlan === 'full' ? 'full_payment' : 'installment')
-            : 'full_payment',
-          initialPaymentPercentage: hasSelectedCustomBuild && paymentPlan !== 'full'
-            ? CUSTOM_BUILD_DOWN_PAYMENT_RATE
-            : undefined,
-          installmentTenureMonths: hasSelectedCustomBuild && paymentPlan !== 'full'
-            ? 6
-            : undefined,
-        })
+        body: JSON.stringify(orderPayload)
       })
 
       const data = await response.json()
@@ -1267,11 +1365,13 @@ export function CheckoutPage() {
         }
 
         if (!isCustomBuild && !isBuyNow) {
-          if (checkoutItems.length === cart.length) {
-            clearCart()
-          } else {
-            checkoutItems.forEach(item => removeFromCart(item.id))
-          }
+          await Promise.allSettled(
+            checkoutItems
+              .map(item => item.cart_item_id)
+              .filter(Boolean)
+              .map(cartItemId => api.cart.removeItem(cartItemId))
+          )
+          await refreshCart()
         }
         setOrderError(null)
         setShowPaymentModal(false)
@@ -1319,7 +1419,8 @@ export function CheckoutPage() {
             className="flex items-center gap-4 mb-8"
           >
             <Link 
-              to="/cart" 
+              to={returnToDashboardCart ? '/dashboard' : '/cart'}
+              state={returnToDashboardCart ? { section: 'cart' } : undefined}
               className="p-2.5 rounded-xl border border-[var(--border)] hover:border-[var(--gold-primary)] hover:bg-[var(--gold-primary)]/10 transition-all duration-200"
             >
               <ArrowLeft className="w-5 h-5 text-[var(--text-muted)]" />
@@ -1338,6 +1439,11 @@ export function CheckoutPage() {
             >
               <p className="text-red-400 text-sm font-medium">{orderError}</p>
             </motion.div>
+          )}
+          {!isCustomBuild && !isBuyNow && !isPreparingCart && !hasSelectedItems && !orderError && (
+            <p role="alert" className="mb-6 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-300">
+              Please select at least one item to proceed to checkout.
+            </p>
           )}
 
           <div className="grid min-w-0 gap-6 lg:grid-cols-12 lg:gap-8">
@@ -1390,20 +1496,20 @@ export function CheckoutPage() {
                   selectionEnabled={!isCustomBuild && !isBuyNow}
                   selectedItemIds={activeSelectedItemIds}
                   onToggleSelect={handleToggleItemSelection}
-                  onUpdateQuantity={updateQuantity}
+                  onUpdateQuantity={handleCheckoutQuantityUpdate}
                   onRemove={handleRemove}
                   onToggleAllItems={handleToggleAllItems}
                   allItemsSelected={allSelectableItemsSelected}
-                  onClearCart={() => { clearCart(); navigate('/shop'); }}
                   subtotal={subtotal}
                   shippingCost={shippingCost}
+                  taxAmount={taxAmount}
                   total={total}
                   remainingBalance={remainingBalance}
                   requiresDownPayment={hasSelectedCustomBuild}
                   itemCount={itemCount}
                   onPlaceOrder={handlePlaceOrderClick}
                   isProcessing={isProcessing}
-                  disabled={hasNoAddresses || !hasSelectedItems}
+                  disabled={hasNoAddresses || !hasSelectedItems || isPreparingCart}
                   onViewTerms={handleOpenTermsModal}
                   onToggleTerms={handleToggleTerms}
                   termsAccepted={acceptedTerms}
