@@ -425,6 +425,22 @@ const unavailableSet = useMemo(() => {
   const [showTimeGrid, setShowTimeGrid] = useState(false)
   const [hoveredAppointment, setHoveredAppointment] = useState(null)
   const [adminWeekView, setAdminWeekView] = useState(true)
+  const [summaryRange, setSummaryRange] = useState('week')
+
+  const now = new Date()
+  const summaryStart = {
+    week: subDays(now, 6),
+    month: subMonths(now, 1),
+    year: subYears(now, 1),
+  }[summaryRange]
+  summaryStart.setHours(0, 0, 0, 0)
+  const summaryRangeLabel = { week: 'last 7 days', month: 'last month', year: 'last year' }[summaryRange]
+  const recentAppointments = appointments.filter((appointment) => {
+    const date = new Date(appointment.scheduled_at || appointment.date)
+    return !Number.isNaN(date.getTime()) && date >= summaryStart && date <= now
+  })
+  const completedCount = recentAppointments.filter((appointment) => appointment.status === 'completed').length
+  const noShowCount = recentAppointments.filter((appointment) => appointment.status === 'no_show').length
 
   useEffect(() => {
     if (!selectedDateId && appointments.length > 0) {
@@ -569,58 +585,106 @@ const getDateStatus = (dateKey) => {
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 20 }}
-            className="rounded-3xl border border-[var(--border)] bg-[var(--bg-primary)] p-6 shadow-[0_30px_80px_rgba(0,0,0,0.18)]"
+            className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] shadow-xl"
           >
-            <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+            <header className="flex flex-wrap items-center justify-between gap-4 border-b border-[var(--border)] px-5 py-4">
               <div>
-                <div className="flex items-center gap-2 text-[var(--text-muted)] uppercase tracking-[0.3em] text-xs">
-                  <Calendar className="w-4 h-4" />
-                  <span>Calendar</span>
-                </div>
-                <h2 className="mt-2 text-3xl font-semibold text-white">Available / Booked Dates</h2>
-                <p className="mt-2 text-sm leading-6 text-[var(--text-muted)] max-w-2xl">
-                  Booking is enabled Monday through Saturday. Sundays and listed holidays are automatically disabled.
-                </p>
+                <h3 className="text-lg font-semibold text-[var(--text-light)]">Appointment schedule</h3>
+                <p className="mt-1 text-sm text-[var(--text-muted)]">{format(new Date(currentYear, currentMonth, 1), 'MMMM yyyy')}</p>
               </div>
-              <div className="flex flex-col items-end gap-2 text-right">
-                <p className="text-lg font-semibold text-white">{format(new Date(currentYear, currentMonth, 1), 'MMMM yyyy')}</p>
-                <div className="flex items-center gap-2">
-                  {isAdminMode && (
-                    <button type="button" onClick={() => setAdminWeekView(true)} className="rounded-lg border border-[var(--border)] px-3 py-2 text-sm text-[var(--gold-primary)] hover:border-[var(--gold-primary)]">Week</button>
-                  )}
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const present = new Date()
+                    setCurrentYear(present.getFullYear())
+                    setCurrentMonth(present.getMonth())
+                  }}
+                  className="rounded-lg border border-[var(--border)] px-3 py-2 text-sm text-[var(--text-light)] transition hover:border-[var(--gold-primary)]"
+                >
+                  Today
+                </button>
+                <div className="flex overflow-hidden rounded-lg border border-[var(--border)]">
                   <button
                     type="button"
+                    aria-label="Previous month"
                     onClick={() => {
                       const prev = new Date(currentYear, currentMonth - 1, 1)
                       setCurrentYear(prev.getFullYear())
                       setCurrentMonth(prev.getMonth())
                     }}
-                    className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] px-4 py-3 text-sm text-[var(--text-muted)] hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)] transition"
+                    className="p-2.5 text-[var(--text-light)] transition hover:bg-[var(--surface-elevated)]"
                   >
-                    <ChevronLeft className="w-4 h-4" />
+                    <ChevronLeft className="h-4 w-4" />
                   </button>
                   <button
                     type="button"
+                    aria-label="Next month"
                     onClick={() => {
                       const next = new Date(currentYear, currentMonth + 1, 1)
                       setCurrentYear(next.getFullYear())
                       setCurrentMonth(next.getMonth())
                     }}
-                    className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] px-4 py-3 text-sm text-[var(--text-muted)] hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)] transition"
+                    className="border-l border-[var(--border)] p-2.5 text-[var(--text-light)] transition hover:bg-[var(--surface-elevated)]"
                   >
-                    <ChevronRight className="w-4 h-4" />
+                    <ChevronRight className="h-4 w-4" />
                   </button>
+                </div>
+                {isAdminMode && (
+                  <div className="flex overflow-hidden rounded-lg border border-[var(--border)] p-1 text-sm">
+                    <button
+                      type="button"
+                      onClick={() => setAdminWeekView(true)}
+                      className="px-3 py-1.5 text-[var(--text-muted)] transition hover:text-[var(--text-light)]"
+                    >
+                      Week
+                    </button>
+                    <span className="rounded-md bg-[var(--gold-primary)] px-3 py-1.5 font-semibold text-[var(--text-dark)]">
+                      Month
+                    </span>
+                  </div>
+                )}
+              </div>
+            </header>
+
+            <div className="border-b border-[var(--border)] p-4">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <span className="text-sm font-medium text-[var(--text-muted)]">Appointment insights</span>
+                <select
+                  aria-label="Summary date range"
+                  value={summaryRange}
+                  onChange={(event) => setSummaryRange(event.target.value)}
+                  className="rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] px-3 py-2 text-sm text-[var(--text-light)]"
+                >
+                  <option value="week">Last 7 days</option>
+                  <option value="month">Last month</option>
+                  <option value="year">Last year</option>
+                </select>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] p-4">
+                  <p className="text-xs font-medium text-[var(--text-muted)]">Total appointments · {summaryRangeLabel}</p>
+                  <p className="mt-2 text-2xl font-semibold text-[var(--text-light)]">{recentAppointments.length}</p>
+                </div>
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] p-4">
+                  <p className="text-xs font-medium text-[var(--text-muted)]">Completed · {summaryRangeLabel}</p>
+                  <p className="mt-2 text-2xl font-semibold text-emerald-300">{completedCount}</p>
+                </div>
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] p-4">
+                  <p className="text-xs font-medium text-[var(--text-muted)]">No-shows · {summaryRangeLabel}</p>
+                  <p className="mt-2 text-2xl font-semibold text-amber-200">{noShowCount}</p>
                 </div>
               </div>
             </div>
 
-            <div className="grid grid-cols-7 gap-2 text-sm text-[var(--text-muted)] mb-3 font-semibold tracking-widest">
-              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
-                <div key={day} className="text-center py-3">
-                  {day}
-                </div>
-              ))}
-            </div>
+            <div className="p-4 sm:p-6">
+              <div className="grid grid-cols-7 gap-2 text-sm text-[var(--text-muted)] mb-3 font-semibold tracking-widest">
+                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
+                  <div key={day} className="text-center py-3">
+                    {day}
+                  </div>
+                ))}
+              </div>
 
             <div className="grid grid-cols-7 gap-3">
               {monthMatrix.map((week, weekIndex) =>
@@ -719,6 +783,7 @@ const dateKey = day.id
                 Click on any available date (Mon-Sat) to view time slots. Click on marked unavailable dates to toggle availability.
               </p>
             )}
+            </div>
           </motion.div>
         )}
       </AnimatePresence>

@@ -1004,7 +1004,10 @@ export function BassCustomizePage() {
     if (!stage || !stickerId) return
     const rect = stage.getBoundingClientRect()
     if (rect.width <= 0 || rect.height <= 0) return
-    const px = ((clientX - rect.left) / rect.width) * 100
+    let px = ((clientX - rect.left) / rect.width) * 100
+    if (view === 'rear') {
+      px = 100 - px
+    }
     const py = ((clientY - rect.top) / rect.height) * 100
     const clamped = clampSticker(px, py)
     updateStickerById(stickerId, clamped)

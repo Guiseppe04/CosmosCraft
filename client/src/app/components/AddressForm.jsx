@@ -5,7 +5,8 @@ import {
   getMunicipalitiesByProvince,
   getBarangaysByMunicipality
 } from '@aivangogh/ph-address'
-import { Home, Building, X } from 'lucide-react'
+import { Home, Building, X, CheckCircle2, AlertCircle, Loader } from 'lucide-react'
+import { useZipValidation } from '../hooks/useZipValidation'
 
 const ALL_COUNTRIES = Country.getAllCountries()
 const PHILIPPINES = ALL_COUNTRIES.find((c) => c.isoCode === 'PH')
@@ -72,6 +73,23 @@ export function AddressForm({
   const [locationData, setLocationData] = useState({ provinces: [], cities: [], barangays: [] })
 
   const isPhilippines = formData.country === 'PH'
+
+  const {
+    isValid: zipValid,
+    isLoading: zipLoading,
+    error: zipError,
+    validate: validateZip,
+    clearValidation: clearZipValidation,
+  } = useZipValidation()
+
+  // Reactively validate zip whenever city (PSGC code) or postal code changes
+  useEffect(() => {
+    if (!isPhilippines) {
+      clearZipValidation()
+      return
+    }
+    validateZip(formData.city, formData.postalZipCode)
+  }, [isPhilippines, formData.city, formData.postalZipCode, validateZip, clearZipValidation])
 
   const initialAddressKey = useMemo(
     () => JSON.stringify(initialAddress || {}),
@@ -185,7 +203,11 @@ export function AddressForm({
       if (!formData.stateProvince?.trim()) nextErrors.stateProvince = 'Province is required'
       if (!formData.city?.trim()) nextErrors.city = 'City is required'
     }
-    if (!formData.postalZipCode?.trim()) nextErrors.postalZipCode = 'Postal code is required'
+    if (!formData.postalZipCode?.trim()) {
+      nextErrors.postalZipCode = 'Postal code is required'
+    } else if (isPhilippines && formData.city && formData.postalZipCode.trim() && zipValid === false) {
+      nextErrors.postalZipCode = zipError || 'The ZIP code entered is incorrect for the selected city. Please verify and try again.'
+    }
     setErrors(nextErrors)
     return Object.keys(nextErrors).length === 0
   }
@@ -378,14 +400,35 @@ export function AddressForm({
 
       <div>
         <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Postal Code *</label>
-        <input
-          type="text"
-          value={formData.postalZipCode}
-          onChange={(e) => handleChange('postalZipCode', e.target.value)}
-          className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--surface-elevated)] text-[var(--text-light)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]/20 focus:border-[var(--gold-primary)]"
-          placeholder="1234"
-        />
+        <div className="relative">
+          <input
+            type="text"
+            value={formData.postalZipCode}
+            onChange={(e) => handleChange('postalZipCode', e.target.value)}
+            className={`w-full px-4 py-2.5 pr-10 rounded-lg border bg-[var(--surface-elevated)] text-[var(--text-light)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]/20 focus:border-[var(--gold-primary)] ${
+              errors.postalZipCode
+                ? 'border-red-500'
+                : isPhilippines && formData.city && formData.postalZipCode.trim() && zipValid === true
+                ? 'border-green-500'
+                : 'border-[var(--border)]'
+            }`}
+            placeholder="1234"
+          />
+          {isPhilippines && formData.city && formData.postalZipCode.trim() && (
+            <div className="absolute right-3 top-1/2 -translate-y-1/2">
+              {zipLoading && <Loader className="w-4 h-4 text-[var(--text-muted)] animate-spin" />}
+              {!zipLoading && zipValid === true && <CheckCircle2 className="w-4 h-4 text-green-400" />}
+              {!zipLoading && zipValid === false && <AlertCircle className="w-4 h-4 text-red-400" />}
+            </div>
+          )}
+        </div>
         {errors.postalZipCode && <p className="text-xs text-red-400 mt-1.5">{errors.postalZipCode}</p>}
+        {!errors.postalZipCode && isPhilippines && formData.city && formData.postalZipCode.trim() && !zipLoading && zipValid === false && zipError && (
+          <p className="text-xs text-amber-400 mt-1.5">{zipError}</p>
+        )}
+        {!errors.postalZipCode && isPhilippines && formData.city && formData.postalZipCode.trim() && !zipLoading && zipValid === true && (
+          <p className="text-xs text-green-400 mt-1.5">Valid ZIP code for the selected city ✓</p>
+        )}
       </div>
 
       <div className="flex items-center gap-3">
