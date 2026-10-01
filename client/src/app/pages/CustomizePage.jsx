@@ -573,7 +573,10 @@ export function CustomizePage() {
     if (!stage || !stickerId) return
     const rect = stage.getBoundingClientRect()
     if (rect.width <= 0 || rect.height <= 0) return
-    const px = ((clientX - rect.left) / rect.width) * 100
+    let px = ((clientX - rect.left) / rect.width) * 100
+    if (view === 'rear') {
+      px = 100 - px
+    }
     const py = ((clientY - rect.top) / rect.height) * 100
     const clamped = clampSticker(px, py)
     updateStickerById(stickerId, clamped)
@@ -2519,7 +2522,23 @@ export function CustomizePage() {
                               modelImageSrc={null}
                               bodyWoodImageSrc={null}
                               topWoodImageSrc={null}
-                              stickerOverlay={[]}
+                              stickerOverlay={(build.stickers || [])
+                                .filter(s => (s.side || 'front') === 'front')
+                                .map((s, i) => (
+                                  <img
+                                    key={s.id || i}
+                                    src={s.src}
+                                    style={{
+                                      position: 'absolute',
+                                      zIndex: 25 + i,
+                                      left: `${s.x}%`,
+                                      top: `${s.y}%`,
+                                      width: `${s.size}%`,
+                                      transform: `translate(-50%, -50%) rotate(${s.rotation || 0}deg)`,
+                                    }}
+                                    alt=""
+                                  />
+                                ))}
                               stickerMaskSrc={null}
                               stageRef={{ current: null }}
                             />

@@ -2652,7 +2652,7 @@ export function DashboardPage() {
 
   const renderProjectsContent = () => {
     const projectModelOptions = Object.entries(BODY_OPTIONS)
-      .filter(([, option]) => option?.label)
+      .filter(([, option]) => option?.label && !option?.hidden)
       .map(([value, option]) => ({ value, label: option.label }))
       .sort((left, right) => left.label.localeCompare(right.label))
 

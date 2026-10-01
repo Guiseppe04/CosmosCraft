@@ -217,5 +217,5 @@ export const DEFAULT_APPOINTMENT_BRANCH = {
 export const PAGE_SIZE_OPTIONS = [10, 25, 50]
 
 export const ELECTRIC_BODY_KEYS = Object.entries(BODY_OPTIONS || {})
-  .filter(([, option]) => Array.isArray(option?.types) ? option.types.includes('electric') : true)
+  .filter(([, option]) => !option?.hidden && (Array.isArray(option?.types) ? option.types.includes('electric') : true))
   .map(([bodyKey]) => bodyKey)

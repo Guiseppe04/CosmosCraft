@@ -1394,7 +1394,7 @@ export default function useGuitarConfig() {
   )
   const bodyOptions = useMemo(
     () => Object.entries(mergedBodyOptions)
-      .filter(([, opt]) => !opt.types || opt.types.includes(config.guitarType))
+      .filter(([, opt]) => !opt.hidden && (!opt.types || opt.types.includes(config.guitarType)))
       .map(([value, option]) => ({
         value,
         ...option,

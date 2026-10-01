@@ -110,6 +110,7 @@ export const CATEGORIES = {
       solo: {
         label: 'Solo',
         note: 'Modern singlecut body',
+        hidden: true,
         defaultConfig: {
           body: 'solo',
           bodyWood: 'mah',
