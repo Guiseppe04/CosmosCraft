@@ -178,17 +178,14 @@ CREATE TABLE categories (
     category_id SERIAL PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
     description TEXT,
-    parent_id INT,
     sort_order SMALLINT NOT NULL DEFAULT 0,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     deleted_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 
-    FOREIGN KEY (parent_id) REFERENCES categories(category_id) ON DELETE SET NULL,
     CHECK (sort_order >= 0)
 );
-CREATE INDEX idx_categories_parent_id ON categories(parent_id);
 CREATE INDEX idx_categories_deleted_at ON categories(deleted_at) WHERE deleted_at IS NOT NULL;
 
 

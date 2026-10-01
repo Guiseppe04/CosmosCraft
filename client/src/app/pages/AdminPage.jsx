@@ -51,7 +51,6 @@ import { useProjectsAdmin } from '../hooks/useProjectsAdmin'
 import { useAppointmentsAdmin } from '../hooks/useAppointmentsAdmin'
 import { useServicesAdmin } from '../hooks/useServicesAdmin'
 import { useInventoryAdmin } from '../hooks/useInventoryAdmin'
-import { buildCategoryTree, flattenCategoryTreeForAdmin } from './admin/utils/categoryTree'
 import {
   VALID_ROLES,
   GUITAR_TYPE_LABELS,
@@ -307,9 +306,6 @@ export function AdminPage() {
   const [orderStatusDropdownOpen, setOrderStatusDropdownOpen] = useState(false)
   const [paymentStatusDropdownOpen, setPaymentStatusDropdownOpen] = useState(false)
 
-  // Category tree expand/collapse state
-  const [expandedCategoryIds, setExpandedCategoryIds] = useState(new Set())
-
   // Guitar Parts section state
   const [guitarPartViewMode, setGuitarPartViewMode] = useState('tree')
   const [expandedGuitarTypes, setExpandedGuitarTypes] = useState(new Set(['electric', 'general']))
@@ -339,8 +335,6 @@ export function AdminPage() {
       ),
     [products]
   )
-  const categoryTree = useMemo(() => buildCategoryTree(categories || []), [categories])
-  const visibleCategories = useMemo(() => flattenCategoryTreeForAdmin(categoryTree), [categoryTree])
   const visibleOrders = orders || []
   const visibleProjects = projects || []
   const visibleArchivedProjects = archivedProjects || []
@@ -1083,18 +1077,6 @@ export function AdminPage() {
         showToast('Category deleted')
         fetchCategories()
       },
-    })
-  }
-
-  const toggleCategoryExpand = (categoryId) => {
-    setExpandedCategoryIds(prev => {
-      const next = new Set(prev)
-      if (next.has(categoryId)) {
-        next.delete(categoryId)
-      } else {
-        next.add(categoryId)
-      }
-      return next
     })
   }
 
@@ -2409,7 +2391,7 @@ export function AdminPage() {
               productsLoading={productsLoading}
               visibleProducts={visibleProducts}
               productsPagination={productsPagination}
-              categoryTree={categoryTree}
+              categories={categories}
               openModal={openModal}
               handleRefresh={handleRefresh}
               isLoading={isLoading}
@@ -2450,10 +2432,7 @@ export function AdminPage() {
           {/* ── CATEGORIES ─────────────────────────────────────────────────── */}
           {activeTab === 'product-categories' && (
             <ProductCategoriesTab
-              categoryTree={categoryTree}
               categories={categories}
-              expandedCategoryIds={expandedCategoryIds}
-              toggleCategoryExpand={toggleCategoryExpand}
               deleteCategory={deleteCategory}
               openModal={openModal}
               isSuperAdmin={isSuperAdmin}
@@ -2616,7 +2595,7 @@ export function AdminPage() {
               resolveInventoryImage={resolveInventoryImage}
               openModal={openModal}
               isSuperAdmin={isSuperAdmin}
-              categoryTree={categoryTree}
+              categories={categories}
             />
           )}
 
@@ -2684,7 +2663,7 @@ export function AdminPage() {
                   isUploading={isUploading}
                   saveProduct={saveProduct}
                   handleImageUpload={handleImageUpload}
-                  categoryTree={categoryTree}
+                  categories={categories}
                   formatCurrency={formatCurrency}
                   validateAndSave={validateAndSave}
                   showToast={showToast}
@@ -2700,7 +2679,6 @@ export function AdminPage() {
                   form={form}
                   setForm={setForm}
                   formErrors={formErrors}
-                  categoryTree={categoryTree}
                   closeModal={closeModal}
                   validateAndSave={validateAndSave}
                   showToast={showToast}

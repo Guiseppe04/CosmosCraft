@@ -2,47 +2,52 @@ const { pool } = require('../config/database');
 
 // ─── CATEGORIES ─────────────────────────────────────────────────────────────
 
+const withLegacyCategoryFields = (category) => ({
+  ...category,
+  parent_id: null,
+  parent_name: null,
+});
+
 exports.getAllCategories = async () => {
   const res = await pool.query(
-    `SELECT c.*, parent.name AS parent_name
+    `SELECT c.*, NULL::integer AS parent_id, NULL::text AS parent_name
      FROM categories c
-     LEFT JOIN categories parent ON c.parent_id = parent.category_id
      ORDER BY c.sort_order ASC, c.name ASC`
   );
-  return res.rows;
+  return res.rows.map(withLegacyCategoryFields);
 };
 
 exports.getCategoryById = async (id) => {
   const res = await pool.query(
-    'SELECT * FROM categories WHERE category_id = $1', [id]
+    'SELECT *, NULL::integer AS parent_id, NULL::text AS parent_name FROM categories WHERE category_id = $1', [id]
   );
-  return res.rows[0] || null;
+  return res.rows[0] ? withLegacyCategoryFields(res.rows[0]) : null;
 };
 
-exports.createCategory = async ({ name, description, parent_id, sort_order }) => {
+exports.createCategory = async ({ name, description, sort_order }) => {
   const res = await pool.query(
-    `INSERT INTO categories (name, description, parent_id, sort_order)
-     VALUES ($1, $2, $3, $4)
+    `INSERT INTO categories (name, description, sort_order)
+     VALUES ($1, $2, $3)
      RETURNING *`,
-    [name, description || null, parent_id || null, sort_order ?? 0]
+    [name, description || null, sort_order ?? 0]
   );
-  return res.rows[0];
+  return withLegacyCategoryFields(res.rows[0]);
 };
 
-exports.updateCategory = async (id, { name, description, parent_id, sort_order, is_active }) => {
+exports.updateCategory = async (id, category = {}) => {
+  const { name, description, sort_order, is_active } = category;
   const res = await pool.query(
     `UPDATE categories SET
        name        = COALESCE($1, name),
        description = COALESCE($2, description),
-       parent_id   = $3,
-       sort_order  = COALESCE($4, sort_order),
-       is_active   = COALESCE($5, is_active),
+       sort_order  = COALESCE($3, sort_order),
+       is_active   = COALESCE($4, is_active),
        updated_at  = now()
-     WHERE category_id = $6
+     WHERE category_id = $5
      RETURNING *`,
-    [name, description, parent_id || null, sort_order, is_active, id]
+    [name, description, sort_order, is_active, id]
   );
-  return res.rows[0] || null;
+  return res.rows[0] ? withLegacyCategoryFields(res.rows[0]) : null;
 };
 
 exports.deleteCategory = async (id) => {
