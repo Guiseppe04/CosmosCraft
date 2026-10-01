@@ -264,6 +264,19 @@ function DashboardStarPicker({ rating, onChange, maxStars = 5, size = 'w-7 h-7' 
   )
 }
 
+const PasswordRequirement = ({ met, text }) => (
+  <div className="flex items-center gap-2 text-xs">
+    <span
+      className={`flex-shrink-0 w-4 h-4 rounded border transition-colors flex items-center justify-center ${
+        met ? 'border-green-400 bg-green-400' : 'border-[var(--border)] bg-transparent'
+      }`}
+    >
+      {met && <Check className="w-3 h-3 text-white" />}
+    </span>
+    <span className={`text-white/80 ${met ? 'text-green-300' : ''}`}>{text}</span>
+  </div>
+)
+
 export function DashboardPage() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -2912,13 +2925,24 @@ export function DashboardPage() {
       return
     }
 
+    // Match signup password requirements: min 8, max 64, uppercase, lowercase, special character
     if (passwordData.newPassword.length < 8) {
       setPasswordError('Password must be at least 8 characters')
       return
     }
 
-    if (!/[A-Z]/.test(passwordData.newPassword) || !/[a-z]/.test(passwordData.newPassword) || !/[0-9]/.test(passwordData.newPassword) || !/[@$!%*?&]/.test(passwordData.newPassword)) {
-      setPasswordError('Password must contain uppercase, lowercase, number, and special character')
+    if (passwordData.newPassword.length > 64) {
+      setPasswordError('Password must not exceed 64 characters')
+      return
+    }
+
+    // Check for uppercase, lowercase, and special character (non-alphanumeric)
+    const hasUppercase = /[A-Z]/.test(passwordData.newPassword)
+    const hasLowercase = /[a-z]/.test(passwordData.newPassword)
+    const hasSpecialChar = /[^A-Za-z0-9]/.test(passwordData.newPassword)
+
+    if (!hasUppercase || !hasLowercase || !hasSpecialChar) {
+      setPasswordError('Password must include uppercase, lowercase, and special character')
       return
     }
 
@@ -2951,8 +2975,8 @@ export function DashboardPage() {
         setPasswordError('New password must be different from current password')
       } else if (errorMsg.toLowerCase().includes('match')) {
         setPasswordError('Passwords do not match')
-      } else if (errorMsg.toLowerCase().includes('8')) {
-        setPasswordError('Password must be at least 8 characters with uppercase, lowercase, number, and special character')
+      } else if (errorMsg.toLowerCase().includes('8') || errorMsg.toLowerCase().includes('uppercase') || errorMsg.toLowerCase().includes('special')) {
+        setPasswordError('Password must be at least 8 characters with uppercase, lowercase, and special character')
       } else {
         setPasswordError(errorMsg)
       }
@@ -4987,6 +5011,28 @@ export function DashboardPage() {
                       >
                         {showNewPassword ? 'Hide' : 'Show'}
                       </button>
+                    </div>
+                    {/* Password Requirements Checklist */}
+                    <div className="mt-3 p-3 bg-[var(--bg-primary)] border border-[var(--border)] rounded-lg">
+                      <p className="text-xs font-semibold text-white mb-2">Password must include:</p>
+                      <div className="space-y-1">
+                        <PasswordRequirement
+                          met={passwordData.newPassword.length >= 8}
+                          text="At least 8 characters"
+                        />
+                        <PasswordRequirement
+                          met={/[A-Z]/.test(passwordData.newPassword)}
+                          text="At least one uppercase letter"
+                        />
+                        <PasswordRequirement
+                          met={/[a-z]/.test(passwordData.newPassword)}
+                          text="At least one lowercase letter"
+                        />
+                        <PasswordRequirement
+                          met={/[^A-Za-z0-9]/.test(passwordData.newPassword)}
+                          text="At least one special character"
+                        />
+                      </div>
                     </div>
                   </div>
                   <div>
