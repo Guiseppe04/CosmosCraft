@@ -12,6 +12,23 @@ const getClaimService = () => {
   return currentBuildClaimService;
 };
 let projectArchiveColumnsReadyPromise = null;
+let customizationBuildColumnsReadyPromise = null;
+
+const ensureCustomizationBuildColumns = async () => {
+  if (customizationBuildColumnsReadyPromise) return customizationBuildColumnsReadyPromise;
+
+  customizationBuildColumnsReadyPromise = pool.query(`
+    ALTER TABLE customizations
+    ADD COLUMN IF NOT EXISTS config_json JSONB DEFAULT '{}'::jsonb,
+    ADD COLUMN IF NOT EXISTS stickers JSONB DEFAULT '[]'::jsonb,
+    ADD COLUMN IF NOT EXISTS preview_image TEXT
+  `).catch((error) => {
+    customizationBuildColumnsReadyPromise = null;
+    throw error;
+  });
+
+  return customizationBuildColumnsReadyPromise;
+};
 
 const ensureProjectArchiveColumns = async () => {
   if (projectArchiveColumnsReadyPromise) return projectArchiveColumnsReadyPromise;
@@ -490,6 +507,51 @@ const REQUIRED_PART_FIELD_MAP = [
   ['finish_type', 'finish'],
 ];
 
+const REQUIRED_CONFIG_FIELD_MAP = [
+  ['body', 'body', 'Body'],
+  ['bassType', 'body', 'Bass Model'],
+  ['neckConstruction', 'neck', 'Neck Construction'],
+  ['headstock', 'neck', 'Headstock'],
+  ['headstockStyle', 'neck', 'Headstock Style'],
+  ['headstockWood', 'neck', 'Headstock Wood'],
+  ['fingerboardRadius', 'neck', 'Fingerboard Radius'],
+  ['hardware', 'hardware', 'Hardware'],
+  ['electronicsType', 'electronics', 'Electronics'],
+  ['pickupConfiguration', 'pickups', 'Pickup Configuration'],
+  ['pickupConfig', 'pickups', 'Pickup Configuration'],
+  ['pickupTypeStyle', 'pickups', 'Pickup Type'],
+  ['bridgePickupModel', 'pickups', 'Bridge Pickup'],
+  ['middlePickupModel', 'pickups', 'Middle Pickup'],
+  ['neckPickupModel', 'pickups', 'Neck Pickup'],
+  ['vaderBridgePickup', 'pickups', 'Bridge Pickup'],
+  ['vaderNeckPickup', 'pickups', 'Neck Pickup'],
+  ['pbBridgePickupModel', 'pickups', 'PB Bridge Pickup'],
+  ['jbBridgePickupModel', 'pickups', 'JB Bridge Pickup'],
+  ['pbNeckPickupModel', 'pickups', 'PB Neck Pickup'],
+  ['jbNeckPickupModel', 'pickups', 'JB Neck Pickup'],
+  ['pickupColor', 'pickups', 'Pickup Color'],
+  ['pbPickupColor', 'pickups', 'PB Pickup Color'],
+  ['jbPickupColor', 'pickups', 'JB Pickup Color'],
+  ['controls', 'electronics', 'Controls'],
+  ['controlPlate', 'electronics', 'Control Plate'],
+  ['saddle', 'hardware', 'Saddle'],
+  ['nut', 'hardware', 'Nut'],
+  ['outputJack', 'electronics', 'Output Jack'],
+  ['strapButtons', 'hardware', 'Strap Buttons'],
+  ['tunerButtons', 'hardware', 'Tuner Buttons'],
+  ['vaderStrapButtons', 'hardware', 'Strap Buttons'],
+  ['knobs', 'hardware', 'Knobs'],
+  ['vaderKnobs', 'hardware', 'Knobs'],
+  ['pickguard', 'hardware', 'Pickguard'],
+  ['electronicsCavityCover', 'electronics', 'Electronics Cavity Cover'],
+  ['vaderElectronicsCavityCover', 'electronics', 'Electronics Cavity Cover'],
+  ['tremoloCover', 'hardware', 'Tremolo Cover'],
+  ['frets', 'neck', 'Frets'],
+  ['trussRodCover', 'neck', 'Truss Rod Cover'],
+  ['backplate', 'hardware', 'Backplate'],
+  ['pickupScrews', 'hardware', 'Pickup Screws'],
+];
+
 const PART_TYPE_TO_BUILDER_TYPE_MAPPING = {
   body_wood: 'bodyWood',
   neck_wood: 'neck',
@@ -498,6 +560,48 @@ const PART_TYPE_TO_BUILDER_TYPE_MAPPING = {
   pickups: 'pickups',
   color: 'bodyFinish',
   finish_type: 'finishType',
+  body: 'body',
+  bassType: 'body',
+  neckConstruction: 'neckConstruction',
+  headstock: 'headstock',
+  headstockStyle: 'headstock',
+  headstockWood: 'headstockWood',
+  fingerboardRadius: 'fingerboardRadius',
+  hardware: 'hardware',
+  electronicsType: 'electronicsType',
+  pickupConfiguration: 'pickupConfiguration',
+  pickupConfig: 'pickupConfig',
+  pickupTypeStyle: 'pickupTypeStyle',
+  bridgePickupModel: 'bridgePickupModel',
+  middlePickupModel: 'middlePickupModel',
+  neckPickupModel: 'neckPickupModel',
+  vaderBridgePickup: 'vaderBridgePickup',
+  vaderNeckPickup: 'vaderBridgePickup',
+  pbBridgePickupModel: 'pbBridgePickupModel',
+  jbBridgePickupModel: 'jbBridgePickupModel',
+  pbNeckPickupModel: 'pbNeckPickupModel',
+  jbNeckPickupModel: 'jbNeckPickupModel',
+  pickupColor: 'pickupColor',
+  pbPickupColor: 'pickupColor',
+  jbPickupColor: 'pickupColor',
+  controls: 'controls',
+  controlPlate: 'controlPlate',
+  saddle: 'saddle',
+  nut: 'nut',
+  outputJack: 'outputJack',
+  strapButtons: 'strapButtons',
+  tunerButtons: 'tunerButtons',
+  vaderStrapButtons: 'vaderStrapButtons',
+  knobs: 'knobs',
+  vaderKnobs: 'vaderKnobs',
+  pickguard: 'pickguard',
+  electronicsCavityCover: 'electronicsCavityCover',
+  vaderElectronicsCavityCover: 'vaderElectronicsCavityCover',
+  tremoloCover: 'tremoloCover',
+  frets: 'frets',
+  trussRodCover: 'trussRodCover',
+  backplate: 'backplate',
+  pickupScrews: 'pickupScrews',
 };
 
 const getPartStockStatus = (stock, quantity = 1) => {
@@ -533,14 +637,19 @@ const buildPartKey = (part = {}) => {
 const buildRequiredPartsPayload = (customization = {}, linkedParts = []) => {
   const requiredParts = [];
   const customizationId = customization?.customization_id || null;
+  let config = customization?.config_json || {};
+  if (typeof config === 'string') {
+    try {
+      config = JSON.parse(config);
+    } catch {
+      config = {};
+    }
+  }
 
-  REQUIRED_PART_FIELD_MAP.forEach(([fieldName, category]) => {
-    const value = customization?.[fieldName];
-    if (!value) return;
-
+  const addConfigurationPart = (partType, category, name) => {
     const part = {
       customization_id: customizationId,
-      name: String(value),
+      name,
       category,
       quantity: 1,
       source: 'configuration',
@@ -548,13 +657,13 @@ const buildRequiredPartsPayload = (customization = {}, linkedParts = []) => {
       stock_status: 'unknown',
       needs_purchase: true,
       price: 0,
-      part_type: fieldName,
+      part_type: partType,
       part_key: buildPartKey({
         source: 'configuration',
         category,
-        name: String(value),
+        name,
         customization_id: customizationId,
-        part_type: fieldName,
+        part_type: partType,
       }),
       is_received: false,
       received_quantity: 0,
@@ -566,6 +675,18 @@ const buildRequiredPartsPayload = (customization = {}, linkedParts = []) => {
     };
 
     requiredParts.push(part);
+  };
+
+  REQUIRED_PART_FIELD_MAP.forEach(([fieldName, category]) => {
+    const value = customization?.[fieldName];
+    if (!value) return;
+    addConfigurationPart(fieldName, category, String(value));
+  });
+
+  REQUIRED_CONFIG_FIELD_MAP.forEach(([fieldName, category, label]) => {
+    const value = config?.[fieldName];
+    if (value == null || String(value).trim() === '' || /^(none|off|null)$/i.test(String(value).trim())) return;
+    addConfigurationPart(fieldName, category, `${label}: ${String(value)}`);
   });
 
   (Array.isArray(linkedParts) ? linkedParts : []).forEach((part) => {
@@ -1464,6 +1585,7 @@ exports.getProjects = async (params = {}) => {
 
 exports.getProjectById = async (projectId) => {
   await ensureProjectArchiveColumns();
+  await ensureCustomizationBuildColumns();
   const result = await pool.query(
     `${PROJECT_BASE_SELECT}
      WHERE p.project_id = $1
@@ -1473,7 +1595,25 @@ exports.getProjectById = async (projectId) => {
   if (result.rows.length === 0) return null;
   const trackedProject = await applyProjectTaskTracking(pool, result.rows[0], { persist: true });
   const withFulfillment = attachFulfillmentDetails(trackedProject);
-  return getClaimService().attachClaimToProject(withFulfillment);
+  const customizationRes = await pool.query(
+    `SELECT DISTINCT
+       c.customization_id,
+       c.name,
+       c.guitar_type,
+       c.body_model,
+       c.config_json,
+       c.stickers,
+       c.preview_image
+     FROM order_items oi
+     JOIN customizations c ON c.customization_id = oi.customization_id
+     WHERE oi.order_id = $1
+     ORDER BY c.name ASC, c.customization_id ASC`,
+    [withFulfillment.order_id]
+  );
+  return getClaimService().attachClaimToProject({
+    ...withFulfillment,
+    customizations: customizationRes.rows,
+  });
 };
 
 exports.getMyProjects = async (userId, params = {}) => {
@@ -1886,6 +2026,7 @@ const logActivity = async (client, projectId, userId, actionType, details) => {
 
 exports.getProjectRequiredParts = async (projectId) => {
   await ensureProjectArchiveColumns();
+  await ensureCustomizationBuildColumns();
   const client = await pool.connect();
   try {
     const pResult = await client.query(
@@ -1908,7 +2049,8 @@ exports.getProjectRequiredParts = async (projectId) => {
          c.bridge_type,
          c.pickups,
          c.color,
-         c.finish_type
+         c.finish_type,
+         c.config_json
        FROM order_items oi
        JOIN customizations c ON c.customization_id = oi.customization_id
        WHERE oi.order_id = $1
@@ -1971,7 +2113,7 @@ exports.getProjectRequiredParts = async (projectId) => {
         if (guitarTypes.length > 0) {
           const lowercasedTypes = guitarTypes.map(t => t.toLowerCase());
           const builderRes = await client.query(
-            `SELECT gbp.part_id, gbp.guitar_type, gbp.type_mapping, gbp.name, gbp.price, gbp.stock
+            `SELECT gbp.part_id, gbp.guitar_type, gbp.type_mapping, gbp.name, gbp.price, gbp.stock, gbp.metadata
              FROM guitar_builder_parts gbp
              WHERE LOWER(gbp.guitar_type) = ANY($1::text[])
                AND gbp.is_active = true`,
@@ -2021,10 +2163,22 @@ exports.getProjectRequiredParts = async (projectId) => {
           if (builderTypeMapping) {
             const mapKey = `${(customization.guitar_type || '').toLowerCase()}::${builderTypeMapping.toLowerCase()}`;
             const candidates = builderPartsLookup.get(mapKey) || [];
-            const match = candidates.find(p =>
+            let config = customization.config_json || {};
+            if (typeof config === 'string') {
+              try {
+                config = JSON.parse(config);
+              } catch {
+                config = {};
+              }
+            }
+            const selectedOption = config?.[enrichedPart.part_type];
+            const match = candidates.find((p) =>
+              selectedOption != null && String(p.metadata?.option_key || '').toLowerCase() === String(selectedOption).toLowerCase()
+            ) || candidates.find(p =>
               (p.name || '').toLowerCase().includes((enrichedPart.name || '').toLowerCase())
             );
             if (match) {
+              enrichedPart.name = match.name || enrichedPart.name;
               const productPrice = productsByNameLookup?.get((match.name || '').toLowerCase());
               const finalPrice = match.price > 0 ? match.price : (productPrice || 0);
               // console.log(`[projectService] MATCHED part "${enrichedPart.name}" (${enrichedPart.part_type}) → builder part "${match.name}" stock=${match.stock} price=${finalPrice}${productPrice ? ' (from products table)' : ''}`);

@@ -1518,15 +1518,6 @@ export function OrderManagement({ orders, onRefresh, user, pagination, onManageP
     }
   }, [pagination?.page])
 
-  const statusCounts = useMemo(() => {
-    const counts = { all: pagination?.total || orders.length || 0 }
-    orders.forEach(order => {
-      const status = order.status || 'pending'
-      counts[status] = (counts[status] || 0) + 1
-    })
-    return counts
-  }, [orders, pagination?.total])
-
   // Summary KPI Metrics
   const summaryMetrics = useMemo(() => {
     let pendingActionCount = 0
@@ -1717,7 +1708,7 @@ export function OrderManagement({ orders, onRefresh, user, pagination, onManageP
     <motion.div key="order-management" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
       {/* KPI Metric Overview Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
-        <div className="p-4 rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] relative overflow-hidden group hover:border-[var(--gold-primary)]/40 transition-all">
+        <div className="p-4 rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] relative overflow-hidden group hover:border-[var(--gold-primary)]/40 transition-all">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Total Orders</span>
             <div className="w-8 h-8 rounded-xl bg-amber-500/10 flex items-center justify-center text-[var(--gold-primary)]">
@@ -1728,7 +1719,7 @@ export function OrderManagement({ orders, onRefresh, user, pagination, onManageP
           <p className="mt-1 text-xs text-[var(--text-muted)]">Store orders registered</p>
         </div>
 
-        <div className="p-4 rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] relative overflow-hidden group hover:border-amber-500/40 transition-all">
+        <div className="p-4 rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] relative overflow-hidden group hover:border-amber-500/40 transition-all">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wider text-amber-400">Needs Action</span>
             <div className="w-8 h-8 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-400">
@@ -1739,7 +1730,7 @@ export function OrderManagement({ orders, onRefresh, user, pagination, onManageP
           <p className="mt-1 text-xs text-[var(--text-muted)]">Pending verification/fulfillment</p>
         </div>
 
-        <div className="p-4 rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] relative overflow-hidden group hover:border-sky-500/40 transition-all">
+        <div className="p-4 rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] relative overflow-hidden group hover:border-sky-500/40 transition-all">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wider text-sky-400">In Fulfillment</span>
             <div className="w-8 h-8 rounded-xl bg-sky-500/10 flex items-center justify-center text-sky-400">
@@ -1750,7 +1741,7 @@ export function OrderManagement({ orders, onRefresh, user, pagination, onManageP
           <p className="mt-1 text-xs text-[var(--text-muted)]">Processing or in transit</p>
         </div>
 
-        <div className="p-4 rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] relative overflow-hidden group hover:border-green-500/40 transition-all">
+        <div className="p-4 rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] relative overflow-hidden group hover:border-green-500/40 transition-all">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wider text-green-400">Delivered</span>
             <div className="w-8 h-8 rounded-xl bg-green-500/10 flex items-center justify-center text-green-400">
@@ -1762,52 +1753,8 @@ export function OrderManagement({ orders, onRefresh, user, pagination, onManageP
         </div>
       </div>
 
-      {/* Quick Status Filter Chips */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
-        <button
-          type="button"
-          onClick={() => { setStatusFilter('all'); setPage(1) }}
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all border ${
-            statusFilter === 'all'
-              ? 'bg-[var(--gold-primary)] text-black border-[var(--gold-primary)] shadow-md shadow-[var(--gold-primary)]/20'
-              : 'bg-[var(--surface-dark)] text-[var(--text-muted)] border-[var(--border)] hover:text-white hover:border-[var(--gold-primary)]/40'
-          }`}
-        >
-          <span>All Statuses</span>
-          <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${statusFilter === 'all' ? 'bg-black/20 text-black' : 'bg-white/10 text-[var(--text-muted)]'}`}>
-            {statusCounts.all || 0}
-          </span>
-        </button>
-
-        {ORDER_STATUS_LIFECYCLE.map(status => {
-          const isSelected = statusFilter === status.value
-          const count = statusCounts[status.value] || 0
-
-          return (
-            <button
-              key={status.value}
-              type="button"
-              onClick={() => { setStatusFilter(status.value); setPage(1) }}
-              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all border ${
-                isSelected
-                  ? `${status.bgColor} ${status.textColor} ${status.borderColor} ring-1 ring-inset ring-current font-bold`
-                  : 'bg-[var(--surface-dark)] text-[var(--text-muted)] border-[var(--border)] hover:text-white hover:border-[var(--border)]/80'
-              }`}
-            >
-              <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: status.color }} />
-              <span>{status.label}</span>
-              {count > 0 && (
-                <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${isSelected ? 'bg-white/20' : 'bg-white/10 text-[var(--text-muted)]'}`}>
-                  {count}
-                </span>
-              )}
-            </button>
-          )
-        })}
-      </div>
-
       {/* Advanced Search & Filter Controls Box */}
-      <div className="p-4 sm:p-5 rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] shadow-xl">
+      <div className="border-y border-[var(--border)] py-4">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <div className="relative flex-1">
             <Search className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
@@ -1920,7 +1867,7 @@ export function OrderManagement({ orders, onRefresh, user, pagination, onManageP
 
       {/* Orders Table & Pagination Content */}
       {!isDataLoading && orders.length === 0 ? (
-        <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-12 text-center flex flex-col items-center justify-center">
+        <div className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-2xl p-12 text-center flex flex-col items-center justify-center">
           <div className="w-16 h-16 rounded-2xl bg-[var(--gold-primary)]/10 border border-[var(--gold-primary)]/20 flex items-center justify-center text-[var(--gold-primary)] mb-4">
             <ShoppingBag className="w-8 h-8" />
           </div>
@@ -1942,7 +1889,7 @@ export function OrderManagement({ orders, onRefresh, user, pagination, onManageP
         </div>
       ) : (
         <div className="space-y-4">
-          <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl overflow-hidden shadow-2xl relative">
+          <div className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-2xl overflow-hidden shadow-2xl relative">
             {/* Top subtle progress bar during background loading */}
             {showBackgroundProgress && (
               <div className="absolute top-0 left-0 right-0 h-0.5 bg-[var(--gold-primary)]/30 overflow-hidden z-20">

@@ -329,6 +329,7 @@
     const [unavailableDateSet, setUnavailableDateSet] = useState(new Set())
     const [availableTimeSet, setAvailableTimeSet] = useState(new Set())
     const [slotsLoading, setSlotsLoading] = useState(false)
+    const [dailyAppointmentLoad, setDailyAppointmentLoad] = useState(null)
     const [slotAvailabilityStatus, setSlotAvailabilityStatus] = useState('')
     // Payment method selection
     const { toast } = useToast()
@@ -723,6 +724,7 @@
       const loadAvailableSlots = async () => {
         if (!selectedDateId || unavailableDateSet.has(selectedDateId)) {
           setAvailableTimeSet(new Set())
+          setDailyAppointmentLoad(null)
           setSlotAvailabilityStatus('')
           return
         }
@@ -730,11 +732,13 @@
         const fallbackServiceId = selectedServiceIds[0] || availableServices[0]?.service_id
         if (!fallbackServiceId) {
           setAvailableTimeSet(new Set(timeSlots))
+          setDailyAppointmentLoad(null)
           setSlotAvailabilityStatus('open')
           return
         }
 
         setSlotsLoading(true)
+        setDailyAppointmentLoad(null)
         try {
           const response = await fetch(
             `${API}/api/appointments/services/${fallbackServiceId}/availability/slots?date=${selectedDateId}&slot_duration=60`,
@@ -761,6 +765,10 @@
 
           if (!isMounted) return
           setAvailableTimeSet(nextSet)
+          setDailyAppointmentLoad({
+            reserved: Number(payload?.data?.daily_appointments),
+            capacity: Number(payload?.data?.max_daily_appointments),
+          })
           setSlotAvailabilityStatus(availabilityStatus)
           if (selectedTime && (!nextSet.has(selectedTime.toUpperCase()) || isPastTimeSlot(selectedDateId, selectedTime))) {
             setSelectedTime('')
@@ -769,6 +777,7 @@
           if (isMounted) {
             const fallbackSet = new Set(timeSlots.map((slot) => slot.toUpperCase()))
             setAvailableTimeSet(fallbackSet)
+            setDailyAppointmentLoad(null)
             setSlotAvailabilityStatus('')
           }
         } finally {
@@ -1750,6 +1759,12 @@
                     {slotsLoading && (
                       <p className="mb-3 text-xs text-[var(--text-muted)]">Checking time availability</p>
                     )}
+                    {!slotsLoading && Number.isFinite(dailyAppointmentLoad?.reserved) && (
+                      <p className="mb-3 text-xs text-[var(--text-muted)]">
+                        {dailyAppointmentLoad.reserved} appointment{dailyAppointmentLoad.reserved === 1 ? '' : 's'} reserved on this day
+                        {Number.isFinite(dailyAppointmentLoad.capacity) ? ` (${dailyAppointmentLoad.capacity} daily capacity)` : ''}
+                      </p>
+                    )}
                     {!slotsLoading && slotAvailabilityStatus === 'fully_booked' && (
                       <p className="mb-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-300">
                         Fully Booked: This date has reached its current appointment capacity.
@@ -1765,7 +1780,7 @@
                         No available time slots.
                       </p>
                     )}
-                    {hasAvailableTimeSlots && (
+                    {!slotsLoading && (
                       <div className="overflow-x-auto pb-1.5 -mx-1 px-1">
                         <div className="flex min-w-max gap-2 sm:gap-3">
                           {timeSlots.map(time => {

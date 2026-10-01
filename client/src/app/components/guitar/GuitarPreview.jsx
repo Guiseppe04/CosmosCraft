@@ -1052,6 +1052,27 @@ function GuitarPreview({ config, view, onViewChange, modelImageSrc, bodyWoodImag
                         protectedLayer={layer.protectedLayer}
                       />
                     ))}
+                    {stickerOverlay && (
+                      <div
+                        aria-hidden="true"
+                        className="absolute inset-0 z-[25] pointer-events-none select-none"
+                        style={stickerMaskSrc ? {
+                          WebkitMaskImage: `url(${stickerMaskSrc})`,
+                          maskImage: `url(${stickerMaskSrc})`,
+                          WebkitMaskRepeat: 'no-repeat',
+                          maskRepeat: 'no-repeat',
+                          WebkitMaskSize: 'contain',
+                          maskSize: 'contain',
+                          WebkitMaskPosition: 'center',
+                          maskPosition: 'center',
+                          WebkitMaskMode: 'alpha',
+                          maskMode: 'alpha',
+                        } : undefined}
+                        data-sticker-clip-mask-src={stickerMaskSrc || ''}
+                      >
+                        {stickerOverlay}
+                      </div>
+                    )}
                     {outputJackAsset && (
                       <GuitarLayer src={outputJackAsset} className="opacity-95" style={{ zIndex: 55, transform: 'scaleX(-1)' }} layerName="output-jack" protectedLayer />
                     )}

@@ -63,10 +63,10 @@ export function OrdersTab({ orders, fetchOrders, user, pagination, showToast, on
 
 
   return (
-    <motion.div key="orders" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+    <motion.div key="orders" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="space-y-5 rounded-3xl border border-[var(--border)] bg-[var(--surface-dark)] p-6">
       {/* Sub-tab Switcher and Refresh */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2 p-1.5 rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] w-fit">
+        <div className="flex flex-wrap items-center gap-2">
           {subTabs.map((tab) => {
             const isActive = view === tab.id
             const TabIcon = tab.icon
@@ -78,20 +78,13 @@ export function OrdersTab({ orders, fetchOrders, user, pagination, showToast, on
                   setView(tab.id)
                   if (tab.id === 'refunds') fetchNewRefundCount()
                 }}
-                className={`relative inline-flex items-center gap-2.5 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
+                className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold transition-colors ${
                   isActive
-                    ? 'text-black shadow-lg shadow-[var(--gold-primary)]/20'
-                    : 'text-[var(--text-muted)] hover:text-white hover:bg-white/5'
+                    ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)] text-black'
+                    : 'border-[var(--border)] text-[var(--text-muted)] hover:text-white'
                 }`}
               >
-                {isActive && (
-                  <motion.div
-                    layoutId="orders-subtab-active"
-                    className="absolute inset-0 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)]"
-                    transition={{ type: 'spring', stiffness: 450, damping: 35 }}
-                  />
-                )}
-                <span className="relative z-10 flex items-center gap-2">
+                <span className="flex items-center gap-2">
                   <TabIcon className={`w-4 h-4 ${isActive ? 'text-black' : 'text-[var(--gold-primary)]'}`} />
                   {tab.label}
                   {tab.count != null && !isActive && (
