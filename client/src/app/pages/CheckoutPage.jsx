@@ -718,7 +718,7 @@ function SuccessModal({ isOpen, onClose, onGoToMyPurchase }) {
               <CheckCircle className="w-10 h-10 text-[var(--text-dark)]" />
             </motion.div>
             <h3 className="text-2xl font-bold text-white mb-2">Order Placed!</h3>
-            <p className="text-[var(--text-muted)] mb-8">Order placed successfully. View it in Dashboard → My Purchase.</p>
+            <p className="text-[var(--text-muted)] mb-8">Your order was placed successfully. Redirecting to My Purchases in a few seconds…</p>
             <div className="flex flex-col gap-3">
               <button
                 onClick={onGoToMyPurchase}
@@ -1398,12 +1398,22 @@ export function CheckoutPage() {
 
   const handleSuccessModalClose = () => {
     setShowSuccessModal(false)
+    navigate('/shop')
   }
 
   const handleGoToMyPurchase = () => {
     setShowSuccessModal(false)
     navigate('/dashboard', { state: { section: 'purchases' } })
   }
+
+  // Auto-redirect to My Purchases after order success
+  useEffect(() => {
+    if (!showSuccessModal) return
+    const timer = setTimeout(() => {
+      navigate('/dashboard', { state: { section: 'purchases' } })
+    }, 3000)
+    return () => clearTimeout(timer)
+  }, [showSuccessModal, navigate])
 
   const handleRemove = (id) => removeFromCart(id)
 
