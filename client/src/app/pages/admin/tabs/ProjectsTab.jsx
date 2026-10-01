@@ -1,5 +1,5 @@
 import { motion } from 'motion/react'
-import { Search, Settings, Briefcase, CheckCircle, Edit, Trash2, X, RotateCcw, Archive } from 'lucide-react'
+import { Search, Settings, Briefcase, CheckCircle, Edit, Trash2, X, RotateCcw, Archive, Plus } from 'lucide-react'
 import { EmptyState } from '../components/shared/EmptyState'
 import DefaultWorkflowEditor from '../../../components/projects/DefaultWorkflowEditor'
 import { PaginationBar } from '../components/shared/PaginationBar'
@@ -33,6 +33,7 @@ export function ProjectsTab({
   setProjectPage,
   openModal,
   isAdmin,
+  setShowGuitarTypeSelector,
   showDefaultWorkflowEditor,
   setShowDefaultWorkflowEditor,
   deleteProject,
@@ -55,13 +56,22 @@ export function ProjectsTab({
               Open a project to manage milestones and subtasks for the build.
             </p>
             {isAdmin && (
-              <button
-                onClick={() => setShowDefaultWorkflowEditor(true)}
-                className="mt-3 inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] text-sm font-semibold text-white transition-all hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)]"
-              >
-                <Settings className="w-4 h-4" />
-                Edit Default Tasks
-              </button>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <button
+                  onClick={() => setShowDefaultWorkflowEditor(true)}
+                  className="inline-flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-4 py-2 text-sm font-semibold text-white transition-all hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)]"
+                >
+                  <Settings className="w-4 h-4" />
+                  Edit Default Tasks
+                </button>
+                <button
+                  onClick={() => setShowGuitarTypeSelector(true)}
+                  className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[var(--gold-primary)] to-[var(--gold-secondary)] px-4 py-2 text-sm font-semibold text-black transition-all hover:shadow-[0_0_20px_rgba(212,175,55,0.4)]"
+                >
+                  <Plus className="w-4 h-4" />
+                  New Project
+                </button>
+              </div>
             )}
             <DefaultWorkflowEditor
               isOpen={showDefaultWorkflowEditor}

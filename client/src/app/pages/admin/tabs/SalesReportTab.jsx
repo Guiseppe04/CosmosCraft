@@ -1677,36 +1677,36 @@ export function SalesReportTab({ salesReport, categories = [] }) {
                 {dateLabel} &middot; Generated on {new Date().toLocaleDateString("en-PH")}
               </p>
             </div>
-            {!isSalesPreview && <div className="flex flex-wrap items-center gap-2">
-              <button
-                onClick={handleExportExcel}
-                disabled={isExporting}
-                className="flex items-center gap-1.5 px-3 py-2 bg-[var(--surface-dark)] border border-[var(--border)] rounded-lg text-sm font-medium text-[var(--text-muted)] hover:border-[var(--gold-primary)] transition-colors disabled:opacity-50"
-              >
-                <Download className={`w-4 h-4 ${isExporting ? "animate-pulse text-[var(--gold-primary)]" : ""}`} />
-                {isExporting ? "Exporting..." : "Export Excel"}
-              </button>
-              <button
-                onClick={() => setShowPrintModal(true)}
-                className="flex items-center gap-1.5 px-3 py-2 bg-[var(--gold-primary)] text-black rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
-              >
-                <Printer className="w-4 h-4" />
-                Print Report
-              </button>
-            </div>}
-          </div>
-
-          {/* ── Report View Toggle ── */}
-          <div className="flex justify-end no-print">
-            <button
-              type="button"
-              onClick={() => setIsSalesPreview((current) => !current)}
-              aria-pressed={isSalesPreview}
-              className="inline-flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] px-4 py-2 text-sm font-semibold text-[var(--text-light)] transition-colors hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)]"
-            >
-              <List className="h-4 w-4" />
-              {isSalesPreview ? "Back to Summary" : "Sales Preview"}
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              {!isSalesPreview ? (
+                <>
+                  <button
+                    onClick={() => setShowPrintModal(true)}
+                    className="flex items-center gap-1.5 px-3 py-2 bg-[var(--gold-primary)] text-black rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
+                  >
+                    <Printer className="w-4 h-4" />
+                    Print Report
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsSalesPreview(true)}
+                    className="inline-flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] px-3 py-2 text-sm font-semibold text-[var(--text-light)] transition-colors hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)]"
+                  >
+                    <List className="h-4 w-4" />
+                    View Sales Preview
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setIsSalesPreview(false)}
+                  className="inline-flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] px-3 py-2 text-sm font-semibold text-[var(--text-light)] transition-colors hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)]"
+                >
+                  <List className="h-4 w-4" />
+                  Back to Summary
+                </button>
+              )}
+            </div>
           </div>
 
           {/* ── Customer Sales Preview ── */}

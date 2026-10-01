@@ -1,12 +1,12 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import {
-  ShoppingBag, Eye, Edit, Search, Filter,
+  ShoppingBag, Eye, Edit, Search, Filter, ChevronDown,
   Package, CreditCard, RefreshCw, ChevronLeft, ChevronRight,
   CheckCircle, XCircle, Clock, AlertCircle, Loader2, BriefcaseBusiness,
   FileText, Image as ImageIcon, ExternalLink, Save, User,
   History, DollarSign, Trash2, Check, X, Printer, Calendar,
-  ArrowUp, ArrowDown, ArrowUpRight, Truck, MapPin, ArrowRight,
+  ArrowUpRight, Truck, MapPin, ArrowRight,
 } from 'lucide-react'
 import { formatCurrency } from '../../utils/formatCurrency'
 import { adminApi } from '../../utils/adminApi'
@@ -81,7 +81,6 @@ function getOrderPaymentMethodCode(order) {
     || methodLower.includes('unionbank')
   ) return 'bank_transfer'
   if (methodLower.includes('cod') || methodLower.includes('cash')) return 'cash'
-
   return methodLower || 'unknown'
 }
 
@@ -158,7 +157,7 @@ function getOrderTotal(order) {
 }
 
 function getOrderRiderDetails(order) {
-  return order.rider_details || [order.rider_name, order.rider_contact].filter(Boolean).join(' • ')
+  return order.rider_details || [order.rider_name, order.rider_contact].filter(Boolean).join(' \\u2022 ')
 }
 
 function printOrderReceipt(order) {
@@ -1022,7 +1021,7 @@ function OrderDetailsModal({ order, onClose, onUpdatePaymentStatus, onUpdateOrde
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-[var(--bg-primary)]/50 rounded-lg p-4">
                   <p className="text-[var(--text-muted)] text-xs uppercase tracking-wider mb-2">Created</p>
-                  <p className="text-white text-sm">{order.created_at ? new Date(order.created_at).toLocaleString() : '—'}</p>
+                  <p className="text-white text-sm">{order.created_at ? new Date(order.created_at).toLocaleString() : '\u2014'}</p>
                 </div>
                 <div className="bg-[var(--bg-primary)]/50 rounded-lg p-4">
                   <p className="text-[var(--text-muted)] text-xs uppercase tracking-wider mb-2">Payment Method</p>
@@ -1043,49 +1042,49 @@ function OrderDetailsModal({ order, onClose, onUpdatePaymentStatus, onUpdateOrde
               </div>
 
               {order.order_type !== 'customization' && (
-              <div>
-                <p className="text-[var(--text-muted)] text-xs uppercase tracking-wider mb-3">Timeline</p>
-                <div className="relative">
-                  <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-[var(--border)]" />
-                  <div className="space-y-4">
-                    {TIMELINE_STEPS.map((step, idx) => {
-                      const currentStatus = order.status || 'pending'
-                      const stepConfig = getOrderStatusConfig(step.status)
-                      const stepIndex = ORDER_STATUS_LIFECYCLE.findIndex(s => s.value === step.status)
-                      const currentIndex = ORDER_STATUS_LIFECYCLE.findIndex(s => s.value === currentStatus)
-                      const isCompleted = currentStatus === 'cancelled'
-                        ? step.status === 'cancelled'
-                        : stepIndex < currentIndex || (stepIndex === 0 && currentStatus !== 'cancelled')
-                      const isCurrent = step.status === currentStatus && currentStatus !== 'cancelled'
-                      const isCancelled = currentStatus === 'cancelled' && step.status !== 'cancelled'
+                <div>
+                  <p className="text-[var(--text-muted)] text-xs uppercase tracking-wider mb-3">Timeline</p>
+                  <div className="relative">
+                    <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-[var(--border)]" />
+                    <div className="space-y-4">
+                      {TIMELINE_STEPS.map((step, idx) => {
+                        const currentStatus = order.status || 'pending'
+                        const stepConfig = getOrderStatusConfig(step.status)
+                        const stepIndex = ORDER_STATUS_LIFECYCLE.findIndex((item) => item.value === step.status)
+                        const currentIndex = ORDER_STATUS_LIFECYCLE.findIndex((item) => item.value === currentStatus)
+                        const isCompleted = currentStatus === 'cancelled'
+                          ? step.status === 'cancelled'
+                          : stepIndex < currentIndex || (stepIndex === 0 && currentStatus !== 'cancelled')
+                        const isCurrent = step.status === currentStatus && currentStatus !== 'cancelled'
+                        const isCancelled = currentStatus === 'cancelled' && step.status !== 'cancelled'
 
-                      return (
-                        <div key={step.status} className="flex items-start gap-4 relative">
-                          <div className={`z-10 w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 ${
-                            isCompleted
-                              ? 'bg-green-500 text-white'
-                              : isCurrent
-                                ? `${stepConfig.bgColor} ${stepConfig.textColor} border ${stepConfig.borderColor}`
-                                : isCancelled
-                                  ? 'bg-red-500/50 text-red-300'
-                                  : 'bg-[var(--surface-dark)] text-[var(--text-muted)] border border-[var(--border)]'
-                          }`}>
-                            {isCompleted ? <Check className="w-4 h-4" /> : idx + 1}
-                          </div>
-                          <div className="flex-1">
-                            <p className={`text-sm font-semibold ${
-                              isCompleted ? 'text-green-400' : isCurrent ? stepConfig.textColor : isCancelled ? 'text-red-400' : 'text-[var(--text-muted)]'
+                        return (
+                          <div key={step.status} className="flex items-start gap-4 relative">
+                            <div className={`z-10 w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 ${
+                              isCompleted
+                                ? 'bg-green-500 text-white'
+                                : isCurrent
+                                  ? `${stepConfig.bgColor} ${stepConfig.textColor} border ${stepConfig.borderColor}`
+                                  : isCancelled
+                                    ? 'bg-red-500/50 text-red-300'
+                                    : 'bg-[var(--surface-dark)] text-[var(--text-muted)] border border-[var(--border)]'
                             }`}>
-                              {step.label}
-                            </p>
-                            <p className="text-xs text-[var(--text-muted)]">{step.desc}</p>
+                              {isCompleted ? <Check className="w-4 h-4" /> : idx + 1}
+                            </div>
+                            <div className="flex-1">
+                              <p className={`text-sm font-semibold ${
+                                isCompleted ? 'text-green-400' : isCurrent ? stepConfig.textColor : isCancelled ? 'text-red-400' : 'text-[var(--text-muted)]'
+                              }`}>
+                                {step.label}
+                              </p>
+                              <p className="text-xs text-[var(--text-muted)]">{step.desc}</p>
+                            </div>
                           </div>
-                        </div>
-                      )
-                    })}
+                        )
+                      })}
+                    </div>
                   </div>
                 </div>
-              </div>
               )}
 
               <div className="bg-[var(--bg-primary)]/50 rounded-lg p-4 space-y-2">
@@ -1105,32 +1104,16 @@ function OrderDetailsModal({ order, onClose, onUpdatePaymentStatus, onUpdateOrde
             </div>
           )}
 
-          {activeSection === 'receipt' && (
-            <ReceiptPanel order={order} />
-          )}
-
+          {activeSection === 'receipt' && <ReceiptPanel order={order} />}
           {activeSection === 'payment' && !isCODOrder && (
-            <PaymentVerificationPanel
-              order={order}
-              onVerify={onVerifyPayment}
-              user={user}
-            />
+            <PaymentVerificationPanel order={order} onVerify={onVerifyPayment} user={user} />
           )}
-
           {activeSection === 'order' && (
-            <OrderStatusPanel
-              order={order}
-              onUpdate={onUpdateOrderStatus}
-            />
+            <OrderStatusPanel order={order} onUpdate={onUpdateOrderStatus} />
           )}
-
           {activeSection === 'installment' && (
-            <InstallmentTracking
-              orderId={order.order_id}
-              order={order}
-            />
+            <InstallmentTracking orderId={order.order_id} order={order} />
           )}
-
           {activeSection === 'fulfillment' && (
             <OrderFulfillmentPanel
               order={order}
@@ -1493,6 +1476,7 @@ function OrderStatusPanel({ order, onUpdate }) {
 
 export function OrderManagement({ orders, onRefresh, user, pagination, onManageProject, loading = false }) {
   const [searchQuery, setSearchQuery] = useState('')
+  const [filterMenuOpen, setFilterMenuOpen] = useState(false)
   const [statusFilter, setStatusFilter] = useState('all')
   const [orderTypeFilter, setOrderTypeFilter] = useState('all')
   const [paymentStatusFilter, setPaymentStatusFilter] = useState('all')
@@ -1712,22 +1696,28 @@ export function OrderManagement({ orders, onRefresh, user, pagination, onManageP
 
   const hasActiveFilters = statusFilter !== 'all' || orderTypeFilter !== 'all' || paymentStatusFilter !== 'all' || paymentMethodFilter !== 'all' || !!dateFrom || !!dateTo || !!searchQuery
 
-  const handleClearAllFilters = () => {
-    setSearchQuery('')
+  const handleResetSortAndFilters = () => {
     setStatusFilter('all')
     setOrderTypeFilter('all')
     setPaymentStatusFilter('all')
     setPaymentMethodFilter('all')
     setDateFrom('')
     setDateTo('')
+    setSortField('date')
+    setSortDirection('desc')
     setPage(1)
+  }
+
+  const handleClearAllFilters = () => {
+    setSearchQuery('')
+    handleResetSortAndFilters()
   }
 
   return (
     <motion.div key="order-management" initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
       {/* KPI Metric Overview Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
-        <div className="p-4 rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)]/80 backdrop-blur-sm relative overflow-hidden group hover:border-[var(--gold-primary)]/40 transition-all">
+        <div className="p-4 rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] relative overflow-hidden group hover:border-[var(--gold-primary)]/40 transition-all">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Total Orders</span>
             <div className="w-8 h-8 rounded-xl bg-amber-500/10 flex items-center justify-center text-[var(--gold-primary)]">
@@ -1738,7 +1728,7 @@ export function OrderManagement({ orders, onRefresh, user, pagination, onManageP
           <p className="mt-1 text-xs text-[var(--text-muted)]">Store orders registered</p>
         </div>
 
-        <div className="p-4 rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)]/80 backdrop-blur-sm relative overflow-hidden group hover:border-amber-500/40 transition-all">
+        <div className="p-4 rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] relative overflow-hidden group hover:border-amber-500/40 transition-all">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wider text-amber-400">Needs Action</span>
             <div className="w-8 h-8 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-400">
@@ -1749,7 +1739,7 @@ export function OrderManagement({ orders, onRefresh, user, pagination, onManageP
           <p className="mt-1 text-xs text-[var(--text-muted)]">Pending verification/fulfillment</p>
         </div>
 
-        <div className="p-4 rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)]/80 backdrop-blur-sm relative overflow-hidden group hover:border-sky-500/40 transition-all">
+        <div className="p-4 rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] relative overflow-hidden group hover:border-sky-500/40 transition-all">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wider text-sky-400">In Fulfillment</span>
             <div className="w-8 h-8 rounded-xl bg-sky-500/10 flex items-center justify-center text-sky-400">
@@ -1760,7 +1750,7 @@ export function OrderManagement({ orders, onRefresh, user, pagination, onManageP
           <p className="mt-1 text-xs text-[var(--text-muted)]">Processing or in transit</p>
         </div>
 
-        <div className="p-4 rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)]/80 backdrop-blur-sm relative overflow-hidden group hover:border-green-500/40 transition-all">
+        <div className="p-4 rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] relative overflow-hidden group hover:border-green-500/40 transition-all">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wider text-green-400">Delivered</span>
             <div className="w-8 h-8 rounded-xl bg-green-500/10 flex items-center justify-center text-green-400">
@@ -1817,10 +1807,8 @@ export function OrderManagement({ orders, onRefresh, user, pagination, onManageP
       </div>
 
       {/* Advanced Search & Filter Controls Box */}
-      <div className="p-4 sm:p-5 rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)]/90 backdrop-blur-sm space-y-4 shadow-xl">
-        {/* Top Row: Search Bar & Sort Controls */}
-        <div className="flex flex-col lg:flex-row gap-3 items-stretch lg:items-center justify-between">
-          {/* Search Input */}
+      <div className="p-4 sm:p-5 rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] shadow-xl">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <div className="relative flex-1">
             <Search className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
             <input
@@ -1836,184 +1824,103 @@ export function OrderManagement({ orders, onRefresh, user, pagination, onManageP
                 onClick={() => { setSearchQuery(''); setPage(1) }}
                 className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-md text-[var(--text-muted)] hover:text-white hover:bg-white/10 transition-colors"
                 title="Clear search"
+                aria-label="Clear order search"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
             )}
           </div>
 
-          {/* Sort Controls */}
-          <div className="flex items-center gap-2 self-end lg:self-auto">
-            <span className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Sort by:</span>
-            <select
-              value={sortField}
-              onChange={(e) => setSortField(e.target.value)}
-              className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]/50 focus:border-[var(--gold-primary)] transition-all cursor-pointer"
-            >
-              <option value="date">Order Date</option>
-              <option value="order_number">Order Number</option>
-              <option value="customer">Customer Name</option>
-              <option value="total">Total Amount</option>
-              <option value="status">Order Status</option>
-              <option value="payment_status">Payment Status</option>
-              <option value="order_type">Order Type</option>
-            </select>
+          <div className="relative shrink-0">
             <button
               type="button"
-              onClick={() => setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')}
-              className="p-2.5 bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl text-[var(--text-muted)] hover:text-white hover:border-[var(--gold-primary)]/50 transition-colors"
-              title={sortDirection === 'asc' ? 'Sort Ascending' : 'Sort Descending'}
+              onClick={() => setFilterMenuOpen((open) => !open)}
+              aria-expanded={filterMenuOpen}
+              aria-haspopup="true"
+              className="inline-flex h-11 items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-3 text-sm font-semibold text-[var(--text-light)] transition-colors hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)]"
             >
-              {sortDirection === 'asc' ? <ArrowUp className="w-4 h-4 text-[var(--gold-primary)]" /> : <ArrowDown className="w-4 h-4 text-[var(--gold-primary)]" />}
+              <Filter className="h-4 w-4" />
+              Sort &amp; Filter
+              <ChevronDown className="h-4 w-4" />
             </button>
+
+            {filterMenuOpen && (
+              <div className="absolute right-0 top-full z-40 mt-2 grid max-h-[70vh] w-[min(88vw,28rem)] gap-3 overflow-y-auto rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] p-4 shadow-2xl sm:grid-cols-2">
+                <label className="text-xs font-semibold text-[var(--text-muted)]">
+                  Sort by
+                  <select value={sortField} onChange={(event) => setSortField(event.target.value)} className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-2.5 py-2 text-sm text-[var(--text-light)]">
+                    <option value="date">Order date</option>
+                    <option value="order_number">Order number</option>
+                    <option value="customer">Customer name</option>
+                    <option value="total">Total amount</option>
+                    <option value="status">Order status</option>
+                    <option value="payment_status">Payment status</option>
+                    <option value="order_type">Order type</option>
+                  </select>
+                </label>
+                <label className="text-xs font-semibold text-[var(--text-muted)]">
+                  Sort direction
+                  <select value={sortDirection} onChange={(event) => setSortDirection(event.target.value)} className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-2.5 py-2 text-sm text-[var(--text-light)]">
+                    <option value="desc">Descending</option>
+                    <option value="asc">Ascending</option>
+                  </select>
+                </label>
+                <label className="text-xs font-semibold text-[var(--text-muted)]">
+                  Order type
+                  <select value={orderTypeFilter} onChange={(event) => setOrderTypeFilter(event.target.value)} className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-2.5 py-2 text-sm text-[var(--text-light)]">
+                    <option value="all">All order types</option>
+                    <option value="product">Standard products</option>
+                    <option value="customization">Custom guitars</option>
+                    <option value="service">Service orders</option>
+                  </select>
+                </label>
+                <label className="text-xs font-semibold text-[var(--text-muted)]">
+                  Order status
+                  <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-2.5 py-2 text-sm text-[var(--text-light)]">
+                    <option value="all">All statuses</option>
+                    {ORDER_STATUS_LIFECYCLE.map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}
+                  </select>
+                </label>
+                <label className="text-xs font-semibold text-[var(--text-muted)]">
+                  Payment status
+                  <select value={paymentStatusFilter} onChange={(event) => setPaymentStatusFilter(event.target.value)} className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-2.5 py-2 text-sm text-[var(--text-light)]">
+                    <option value="all">All payment statuses</option>
+                    <option value="pending">Pending payment</option>
+                    <option value="proof_submitted">Proof submitted</option>
+                    <option value="under_review">Under review</option>
+                    <option value="approved">Approved / paid</option>
+                    <option value="rejected">Payment rejected</option>
+                    <option value="failed">Payment failed</option>
+                  </select>
+                </label>
+                <label className="text-xs font-semibold text-[var(--text-muted)]">
+                  Payment method
+                  <select value={paymentMethodFilter} onChange={(event) => setPaymentMethodFilter(event.target.value)} className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-2.5 py-2 text-sm text-[var(--text-light)]">
+                    <option value="all">All payment methods</option>
+                    <option value="gcash">GCash</option>
+                    <option value="bank_transfer">Bank transfer</option>
+                    <option value="cash">Cash on delivery</option>
+                  </select>
+                </label>
+                <div className="text-xs font-semibold text-[var(--text-muted)]">
+                  Date range
+                  <div className="mt-1.5 grid grid-cols-2 gap-2">
+                    <input type="date" aria-label="Start date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} className="min-w-0 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-2 py-2 text-sm text-[var(--text-light)]" />
+                    <input type="date" aria-label="End date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} className="min-w-0 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-2 py-2 text-sm text-[var(--text-light)]" />
+                  </div>
+                </div>
+                <button type="button" onClick={handleResetSortAndFilters} className="text-left text-xs font-semibold text-[var(--gold-primary)] hover:underline sm:col-span-2">
+                  Reset filters and sort
+                </button>
+              </div>
+            )}
           </div>
         </div>
-
-        {/* Second Row: Detailed Filter Dropdowns */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 pt-3 border-t border-[var(--border)]/50">
-          {/* Order Type Filter */}
-          <div className="space-y-1">
-            <label className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Order Type</label>
-            <select
-              value={orderTypeFilter}
-              onChange={(e) => { setOrderTypeFilter(e.target.value); setPage(1) }}
-              className="w-full bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]/50 focus:border-[var(--gold-primary)] transition-all cursor-pointer"
-            >
-              <option value="all">All Order Types</option>
-              <option value="product">Standard Products</option>
-              <option value="customization">Custom Guitars</option>
-              <option value="service">Service Orders</option>
-            </select>
-          </div>
-
-          {/* Payment Status Filter */}
-          <div className="space-y-1">
-            <label className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Payment Status</label>
-            <select
-              value={paymentStatusFilter}
-              onChange={(e) => { setPaymentStatusFilter(e.target.value); setPage(1) }}
-              className="w-full bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]/50 focus:border-[var(--gold-primary)] transition-all cursor-pointer"
-            >
-              <option value="all">All Payment Statuses</option>
-              <option value="pending">Pending Payment</option>
-              <option value="proof_submitted">Proof Submitted</option>
-              <option value="under_review">Under Review</option>
-              <option value="approved">Approved / Paid</option>
-              <option value="rejected">Payment Rejected</option>
-              <option value="failed">Payment Failed</option>
-            </select>
-          </div>
-
-          {/* Payment Method Filter */}
-          <div className="space-y-1">
-            <label className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Payment Method</label>
-            <select
-              value={paymentMethodFilter}
-              onChange={(e) => { setPaymentMethodFilter(e.target.value); setPage(1) }}
-              className="w-full bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]/50 focus:border-[var(--gold-primary)] transition-all cursor-pointer"
-            >
-              <option value="all">All Payment Methods</option>
-              <option value="gcash">GCash</option>
-              <option value="bank_transfer">Bank Transfer</option>
-              <option value="cash">Cash on Delivery (COD)</option>
-            </select>
-          </div>
-
-          {/* Date Range Group */}
-          <div className="space-y-1">
-            <label className="text-[11px] font-semibold uppercase tracking-wider text-[var(--text-muted)]">Date Range</label>
-            <div className="grid grid-cols-2 gap-2">
-              <input
-                type="date"
-                value={dateFrom}
-                onChange={(e) => { setDateFrom(e.target.value); setPage(1) }}
-                className="w-full bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl px-2.5 py-2 text-white text-xs focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]/50 transition-all cursor-pointer"
-                title="Date From"
-              />
-              <input
-                type="date"
-                value={dateTo}
-                onChange={(e) => { setDateTo(e.target.value); setPage(1) }}
-                className="w-full bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl px-2.5 py-2 text-white text-xs focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)]/50 transition-all cursor-pointer"
-                title="Date To"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Active Filters Badges */}
-        {hasActiveFilters && (
-          <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-[var(--border)]/40">
-            <span className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)] mr-1">Active:</span>
-
-            {searchQuery && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[var(--gold-primary)]/10 text-[var(--gold-primary)] border border-[var(--gold-primary)]/30 text-xs font-medium">
-                Search: "{searchQuery}"
-                <button type="button" onClick={() => { setSearchQuery(''); setPage(1) }} className="hover:text-white">
-                  <X className="w-3 h-3" />
-                </button>
-              </span>
-            )}
-
-            {statusFilter !== 'all' && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[var(--surface-dark)] text-white border border-[var(--border)] text-xs font-medium">
-                Status: {ORDER_STATUS_MAP[statusFilter]?.label || statusFilter}
-                <button type="button" onClick={() => { setStatusFilter('all'); setPage(1) }} className="hover:text-red-400">
-                  <X className="w-3 h-3" />
-                </button>
-              </span>
-            )}
-
-            {orderTypeFilter !== 'all' && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[var(--surface-dark)] text-white border border-[var(--border)] text-xs font-medium capitalize">
-                Type: {orderTypeFilter}
-                <button type="button" onClick={() => { setOrderTypeFilter('all'); setPage(1) }} className="hover:text-red-400">
-                  <X className="w-3 h-3" />
-                </button>
-              </span>
-            )}
-
-            {paymentStatusFilter !== 'all' && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[var(--surface-dark)] text-white border border-[var(--border)] text-xs font-medium capitalize">
-                Payment: {paymentStatusFilter.replace(/_/g, ' ')}
-                <button type="button" onClick={() => { setPaymentStatusFilter('all'); setPage(1) }} className="hover:text-red-400">
-                  <X className="w-3 h-3" />
-                </button>
-              </span>
-            )}
-
-            {paymentMethodFilter !== 'all' && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[var(--surface-dark)] text-white border border-[var(--border)] text-xs font-medium capitalize">
-                Method: {paymentMethodFilter.replace(/_/g, ' ')}
-                <button type="button" onClick={() => { setPaymentMethodFilter('all'); setPage(1) }} className="hover:text-red-400">
-                  <X className="w-3 h-3" />
-                </button>
-              </span>
-            )}
-
-            {(dateFrom || dateTo) && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[var(--surface-dark)] text-white border border-[var(--border)] text-xs font-medium">
-                Date: {dateFrom || 'Start'} → {dateTo || 'Present'}
-                <button type="button" onClick={() => { setDateFrom(''); setDateTo(''); setPage(1) }} className="hover:text-red-400">
-                  <X className="w-3 h-3" />
-                </button>
-              </span>
-            )}
-
-            <button
-              type="button"
-              onClick={handleClearAllFilters}
-              className="inline-flex items-center gap-1 ml-auto px-2.5 py-1 rounded-lg bg-red-500/10 text-red-400 border border-red-500/20 text-xs font-semibold hover:bg-red-500/20 transition-colors"
-            >
-              <X className="w-3 h-3" /> Reset All
-            </button>
-          </div>
-        )}
       </div>
 
       {/* Orders Table & Pagination Content */}
       {!isDataLoading && orders.length === 0 ? (
-        <div className="bg-[var(--surface-dark)]/80 border border-[var(--border)] rounded-2xl p-12 text-center flex flex-col items-center justify-center">
+        <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-12 text-center flex flex-col items-center justify-center">
           <div className="w-16 h-16 rounded-2xl bg-[var(--gold-primary)]/10 border border-[var(--gold-primary)]/20 flex items-center justify-center text-[var(--gold-primary)] mb-4">
             <ShoppingBag className="w-8 h-8" />
           </div>
@@ -2035,7 +1942,7 @@ export function OrderManagement({ orders, onRefresh, user, pagination, onManageP
         </div>
       ) : (
         <div className="space-y-4">
-          <div className="bg-[var(--surface-dark)]/90 border border-[var(--border)] rounded-2xl overflow-hidden shadow-2xl backdrop-blur-sm relative">
+          <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl overflow-hidden shadow-2xl relative">
             {/* Top subtle progress bar during background loading */}
             {showBackgroundProgress && (
               <div className="absolute top-0 left-0 right-0 h-0.5 bg-[var(--gold-primary)]/30 overflow-hidden z-20">
