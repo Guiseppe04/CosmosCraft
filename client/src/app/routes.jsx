@@ -19,6 +19,7 @@ import { FeedbackPage } from './pages/FeedbackPage.jsx'
 import { ResetPasswordPage } from './pages/ResetPasswordPage.jsx'
 import { ForgotPassword } from './pages/ForgotPassword.jsx'
 import { NotFoundPage } from './pages/NotFoundPage.jsx'
+import { ErrorPage } from './pages/ErrorPage.jsx'
 import CloudinaryAssetsPage from './pages/CloudinaryAssetsPage.jsx'
 import { ProtectedRoute } from './components/auth/ProtectedRoute.jsx'
 
@@ -34,6 +35,7 @@ export const router = createBrowserRouter([
   {
     path: "/",
     Component: RootLayout,
+    errorElement: <ErrorPage />,
     children: [
       // Public routes
       { index: true, Component: LandingPage },

@@ -948,16 +948,37 @@ async function getSalesReport(filters = {}) {
   const dailyWeeklyMonthlyQ = hasDateRange
     ? Promise.resolve({ rows: [{}] })
     : pool.query(
-        `SELECT
-           COALESCE(SUM(CASE WHEN o.created_at >= $1 THEN ${revenue('o')} ELSE 0 END), 0)::numeric AS "dailySales",
-           COUNT(CASE WHEN o.created_at >= $1 THEN 1 END)::int AS "dailyTransactions",
-           COALESCE(SUM(CASE WHEN o.created_at >= $2 THEN ${revenue('o')} ELSE 0 END), 0)::numeric AS "weeklySales",
-           COUNT(CASE WHEN o.created_at >= $2 THEN 1 END)::int AS "weeklyTransactions",
-           COALESCE(SUM(CASE WHEN o.created_at >= $3 THEN ${revenue('o')} ELSE 0 END), 0)::numeric AS "monthlySales",
-           COUNT(CASE WHEN o.created_at >= $3 THEN 1 END)::int AS "monthlyTransactions"
-         FROM orders o
-         WHERE o.deleted_at IS NULL ${orderFilterSql ? renum([orderFilterSql], 4).join('') : ''}`,
-        [todayStart, weekStart, monthStart, ...orderStatusParams]
+        `WITH sales AS (
+           SELECT o.created_at AS sold_at, ${revenue('o')} AS amount
+           FROM orders o
+           WHERE o.deleted_at IS NULL ${orderFilterSql ? renum([orderFilterSql], 4).join('') : ''}
+
+           UNION ALL
+
+           SELECT ps.created_at AS sold_at, ps.total_amount - ps.discount_amount AS amount
+           FROM pos_sales ps
+           WHERE ps.status = 'completed' AND ps.payment_status = 'verified' AND ps.deleted_at IS NULL
+
+           UNION ALL
+
+           SELECT a.scheduled_at AS sold_at, SUM(s.price) AS amount
+           FROM appointments a
+           JOIN services s ON s.service_id::text IN (
+             SELECT jsonb_array_elements_text(a.services)
+           )
+           WHERE a.deleted_at IS NULL AND a.payment_method IS NOT NULL
+             ${apptFilterSql ? renum([apptFilterSql], 4 + orderStatusParams.length).join('') : ''}
+           GROUP BY a.appointment_id, a.scheduled_at
+         )
+         SELECT
+           COALESCE(SUM(CASE WHEN sold_at >= $1 THEN amount ELSE 0 END), 0)::numeric AS "dailySales",
+           COUNT(CASE WHEN sold_at >= $1 THEN 1 END)::int AS "dailyTransactions",
+           COALESCE(SUM(CASE WHEN sold_at >= $2 THEN amount ELSE 0 END), 0)::numeric AS "weeklySales",
+           COUNT(CASE WHEN sold_at >= $2 THEN 1 END)::int AS "weeklyTransactions",
+           COALESCE(SUM(CASE WHEN sold_at >= $3 THEN amount ELSE 0 END), 0)::numeric AS "monthlySales",
+           COUNT(CASE WHEN sold_at >= $3 THEN 1 END)::int AS "monthlyTransactions"
+         FROM sales`,
+        [todayStart, weekStart, monthStart, ...orderStatusParams, ...apptFilterParams]
       );
 
 
