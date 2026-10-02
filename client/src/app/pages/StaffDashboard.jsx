@@ -143,6 +143,7 @@ export function StaffDashboard() {
   const [salesReport, setSalesReport] = useState(null)
 
   const [appointments, setAppointments] = useState([])
+  const [calendarAppointments, setCalendarAppointments] = useState([])
   const [appointmentSearch, setAppointmentSearch] = useState('')
   const debouncedAppointmentSearch = useDebounce(appointmentSearch, 300)
   const [appointmentPagination, setAppointmentPagination] = useState({ page: 1, limit: 20, total: 0, pages: 1 })
@@ -429,6 +430,21 @@ export function StaffDashboard() {
     }
   }, [appointmentPagination.limit, appointmentPagination.page, debouncedAppointmentSearch, debouncedSearch, showToast])
 
+  const fetchCalendarAppointments = useCallback(async () => {
+    try {
+      const res = await staffApi.getAppointments({
+        search: debouncedAppointmentSearch || debouncedSearch,
+        limit: 500,
+        offset: 0,
+        sort_by: 'scheduled_at',
+        sort_order: 'asc',
+      })
+      setCalendarAppointments(normalizeArray(res, 'appointments'))
+    } catch (error) {
+      console.warn('Failed to load staff appointment calendar:', error)
+    }
+  }, [debouncedAppointmentSearch, debouncedSearch])
+
   const fetchServices = useCallback(async () => {
     try {
       const res = await staffApi.getServices()
@@ -475,6 +491,7 @@ export function StaffDashboard() {
       fetchOrders()
       fetchProjects()
       fetchAppointments({ silent: true })
+      fetchCalendarAppointments()
       fetchSalesReport()
       fetchInventory({ silent: true })
     }
@@ -486,10 +503,11 @@ export function StaffDashboard() {
     if (activeTab === 'inventory' || activeTab === 'pos') fetchInventory()
     if (activeTab === 'appointments') {
       fetchAppointments()
+      fetchCalendarAppointments()
       fetchUnavailableDates()
       fetchAvailableDates()
     }
-  }, [activeTab, fetchAppointments, fetchArchivedProjects, fetchAvailableDates, fetchInventory, fetchOrders, fetchProjects, fetchSalesReport, fetchUnavailableDates])
+  }, [activeTab, fetchAppointments, fetchArchivedProjects, fetchAvailableDates, fetchCalendarAppointments, fetchInventory, fetchOrders, fetchProjects, fetchSalesReport, fetchUnavailableDates])
 
   // ── Real-Time WebSocket Event Listeners (replaces polling) ──────────────
   useSocketEvent('order:created', () => {
@@ -515,6 +533,7 @@ export function StaffDashboard() {
 
   useSocketEvent('appointment:created', () => {
     fetchAppointments({ silent: true })
+    fetchCalendarAppointments()
     fetchAvailableDates()
     fetchUnavailableDates()
     showToast('New appointment booked!', 'info')
@@ -522,6 +541,7 @@ export function StaffDashboard() {
 
   useSocketEvent('appointment:updated', () => {
     fetchAppointments({ silent: true })
+    fetchCalendarAppointments()
     fetchUnavailableDates()
   })
 
@@ -1058,41 +1078,41 @@ export function StaffDashboard() {
     try {
       await staffApi.updateAppointmentStatus(id, status, reason)
       showToast('Appointment status updated')
-      await fetchAppointments()
+      await Promise.all([fetchAppointments(), fetchCalendarAppointments()])
     } catch (error) {
       showToast(error.message, 'error')
     }
-  }, [fetchAppointments, showToast])
+  }, [fetchAppointments, fetchCalendarAppointments, showToast])
 
   const rescheduleAppointment = useCallback(async (id, scheduledAt, reason) => {
     try {
       await staffApi.rescheduleAppointment(id, scheduledAt, reason)
       showToast('Appointment rescheduled')
-      await fetchAppointments()
+      await Promise.all([fetchAppointments(), fetchCalendarAppointments()])
     } catch (error) {
       showToast(error.message, 'error')
     }
-  }, [fetchAppointments, showToast])
+  }, [fetchAppointments, fetchCalendarAppointments, showToast])
 
   const cancelAppointment = useCallback(async (id, reason) => {
     try {
       await staffApi.cancelAppointment(id, reason)
       showToast('Appointment cancelled')
-      await fetchAppointments()
+      await Promise.all([fetchAppointments(), fetchCalendarAppointments()])
     } catch (error) {
       showToast(error.message, 'error')
     }
-  }, [fetchAppointments, showToast])
+  }, [fetchAppointments, fetchCalendarAppointments, showToast])
 
   const updateAppointmentPaymentStatus = useCallback(async (id, paymentStatus) => {
     try {
       await staffApi.updateAppointmentPaymentStatus(id, paymentStatus)
       showToast('Payment status updated')
-      await fetchAppointments()
+      await Promise.all([fetchAppointments(), fetchCalendarAppointments()])
     } catch (error) {
       showToast(error.message, 'error')
     }
-  }, [fetchAppointments, showToast])
+  }, [fetchAppointments, fetchCalendarAppointments, showToast])
 
   const submitAppointment = useCallback(async (payload) => {
     try {
@@ -1103,7 +1123,7 @@ export function StaffDashboard() {
         await staffApi.createAppointment(payload)
         showToast('Appointment created')
       }
-      await fetchAppointments()
+      await Promise.all([fetchAppointments(), fetchCalendarAppointments()])
       setAppointmentFormOpen(false)
       setAppointmentFormData(null)
       setSelectedCalendarDate(null)
@@ -1111,7 +1131,7 @@ export function StaffDashboard() {
       showToast(error.message, 'error')
       throw error
     }
-  }, [appointmentFormData, fetchAppointments, showToast])
+  }, [appointmentFormData, fetchAppointments, fetchCalendarAppointments, showToast])
 
   const pageTitle = tabs.find((t) => t.id === activeTab)?.label || 'Staff Dashboard'
 
@@ -1335,6 +1355,7 @@ export function StaffDashboard() {
           {activeTab === 'appointments' && (
             <AppointmentsTab
               visibleAppointments={appointments}
+              visibleCalendarAppointments={calendarAppointments}
               appointmentLoading={appointmentLoading}
               appointmentPagination={appointmentPagination}
               selectedCalendarDate={selectedCalendarDate}
@@ -1347,7 +1368,7 @@ export function StaffDashboard() {
               setAppointmentFormOpen={setAppointmentFormOpen}
               setUnavailableDatesOpen={setUnavailableDatesOpen}
               setAppointmentPagination={setAppointmentPagination}
-              isSuperAdmin={true}
+              isSuperAdmin={false}
               searchQuery={appointmentSearch}
               onSearchChange={setAppointmentSearch}
             />

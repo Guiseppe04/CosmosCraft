@@ -151,6 +151,7 @@ export default function AppointmentList({
   onViewDetails,
   onEdit,
   onCreateNew,
+  onViewCalendar,
   pagination = {},
   onPageChange,
   onFilterChange,
@@ -368,13 +369,26 @@ export default function AppointmentList({
               `${filteredAppointments.length} appointment${filteredAppointments.length !== 1 ? 's' : ''} found`}
           </p>
         </div>
-        <button
-          onClick={onCreateNew}
-          className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[var(--gold-primary)] text-black font-medium hover:bg-[var(--gold-primary)]/90 transition-colors sm:shrink-0"
-        >
-          <Plus className="w-4 h-4" />
-          <span>New Appointment</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
+          <button
+            type="button"
+            onClick={onCreateNew}
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-[var(--gold-primary)] px-4 text-sm font-semibold text-black transition-colors hover:bg-[var(--gold-primary)]/90"
+          >
+            <Plus className="w-4 h-4" />
+            <span>New Appointment</span>
+          </button>
+          {onViewCalendar && (
+            <button
+              type="button"
+              onClick={onViewCalendar}
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] px-4 text-sm font-semibold text-white transition-colors hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)]"
+            >
+              <Calendar className="w-4 h-4" />
+              <span>View Calendar</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Advanced Search & Filter Controls */}
