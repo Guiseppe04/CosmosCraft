@@ -1,197 +1,274 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import {
-  X, Calendar, Plus, Trash2, Loader2, AlertCircle, CheckCircle,
-  ChevronLeft, ChevronRight
+  X, Calendar, Trash2, Loader2, ChevronLeft, ChevronRight,
+  CalendarOff, AlertTriangle, Info
 } from 'lucide-react'
-import { format, parseISO, addMonths, subMonths, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, isToday, isSunday, isPast } from 'date-fns'
+import {
+  format, parseISO, addMonths, subMonths,
+  startOfMonth, endOfMonth, eachDayOfInterval,
+  isSameMonth, isSameDay, isToday, isSunday, isPast, isBefore, startOfDay
+} from 'date-fns'
+import Holidays from 'date-holidays'
 
-// Default holidays
-const DEFAULT_HOLIDAYS = [
-  '2026-01-01', '2026-02-17', '2026-04-02', '2026-04-03', '2026-04-04',
-  '2026-04-09', '2026-05-01', '2026-06-12', '2026-08-21', '2026-08-31',
-  '2026-11-01', '2026-11-02', '2026-11-30', '2026-12-08', '2026-12-24',
-  '2026-12-25', '2026-12-30', '2026-12-31',
-]
+// ---------------------------------------------------------------------------
+// Holiday helper (Philippines)
+// ---------------------------------------------------------------------------
+const hd = new Holidays('PH')
 
-const HOLIDAY_LABELS = {
-  '2026-01-01': "New Year's Day",
-  '2026-02-17': 'Chinese New Year',
-  '2026-04-02': 'Maundy Thursday',
-  '2026-04-03': 'Good Friday',
-  '2026-04-04': 'Black Saturday',
-  '2026-04-09': 'Araw ng Kagitingan',
-  '2026-05-01': 'Labor Day',
-  '2026-06-12': 'Independence Day',
-  '2026-08-21': 'Ninoy Aquino Day',
-  '2026-08-31': 'National Heroes Day',
-  '2026-11-01': 'All Saints\' Day',
-  '2026-11-02': 'All Souls\' Day',
-  '2026-11-30': 'Bonifacio Day',
-  '2026-12-08': 'Feast of the Immaculate Conception',
-  '2026-12-24': 'Christmas Eve',
-  '2026-12-25': 'Christmas Day',
-  '2026-12-30': 'Rizal Day',
-  '2026-12-31': 'Last Day of the Year',
+function getHolidaysForYear(year) {
+  const raw = hd.getHolidays(year)
+  const map = {}
+  for (const h of raw) {
+    // date-holidays gives date as a Date or ISO string depending on version
+    const d = h.date instanceof Date ? h.date : new Date(h.date)
+    const key = format(d, 'yyyy-MM-dd')
+    if (!map[key]) {
+      map[key] = h.name
+    }
+  }
+  return map
 }
 
+function normalizeDateKey(d) {
+  if (!d) return null
+  if (typeof d === 'string') return d.slice(0, 10)
+  return format(d, 'yyyy-MM-dd')
+}
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
 export default function UnavailableDatesManager({
   isOpen,
   onClose,
   unavailableDates = [],
+  openOverrides = [],
   onAddUnavailable,
   onRemoveUnavailable,
+  onAddOpenOverride,
+  onRemoveOpenOverride,
+  onOpen,
   onAdd,
   onRemove,
   loading = false,
 }) {
+  const today = startOfDay(new Date())
   const [currentMonth, setCurrentMonth] = useState(new Date())
-  const [showAddModal, setShowAddModal] = useState(false)
   const [selectedDate, setSelectedDate] = useState(null)
+  const [modal, setModal] = useState(null) // 'add' | 'remove-confirm' | 'open-override' | 'revert-holiday'
   const [reason, setReason] = useState('')
   const [actionLoading, setActionLoading] = useState(false)
+
   const handleAddAction = onAddUnavailable || onAdd
   const handleRemoveAction = onRemoveUnavailable || onRemove
 
-  // Get unavailable dates as a Set for quick lookup
-  const unavailableSet = new Set(
-    unavailableDates.map(d => {
-      const date = d.date instanceof Date ? d.date : parseISO(d.date)
-      return format(date, 'yyyy-MM-dd')
-    })
-  )
+  // Fetch open overrides when panel opens
+  useEffect(() => {
+    if (isOpen && onOpen) onOpen()
+  }, [isOpen])
 
-  // Generate calendar days
+  // ── Holidays for the visible month's year (and next, if near year end) ──
+  const holidayMap = useMemo(() => {
+    const year = currentMonth.getFullYear()
+    const map = getHolidaysForYear(year)
+    // Also load next year if viewing Dec, so Jan of next year is available
+    if (currentMonth.getMonth() === 11) {
+      Object.assign(map, getHolidaysForYear(year + 1))
+    }
+    return map
+  }, [currentMonth])
+
+  // ── Open override set for O(1) lookup ──
+  const openOverrideSet = useMemo(() => {
+    return new Set(openOverrides.map(d => normalizeDateKey(d.date)))
+  }, [openOverrides])
+
+  // ── Unavailable set for O(1) lookup ──
+  const unavailableSet = useMemo(() => {
+    return new Set(unavailableDates.map(d => normalizeDateKey(d.date)))
+  }, [unavailableDates])
+
+  // ── Calendar days for current month ──
   const calendarDays = useMemo(() => {
     const start = startOfMonth(currentMonth)
     const end = endOfMonth(currentMonth)
     const days = eachDayOfInterval({ start, end })
-    
-    // Add padding for first week
-    const firstDayOfWeek = start.getDay()
-    const paddingDays = Array(firstDayOfWeek).fill(null)
-    
-    return [...paddingDays, ...days]
+    const padding = Array(start.getDay()).fill(null)
+    return [...padding, ...days]
   }, [currentMonth])
 
-  const handlePrevMonth = () => {
-    setCurrentMonth(prev => subMonths(prev, 1))
-  }
+  // ── Sorted unavailable dates for the current month only ──
+  const sortedUnavailable = useMemo(() => {
+    return [...unavailableDates]
+      .map(d => ({
+        ...d,
+        _dateObj: d.date instanceof Date ? d.date : parseISO(d.date),
+        _key: normalizeDateKey(d.date),
+      }))
+      .filter(d => isSameMonth(d._dateObj, currentMonth))
+      .sort((a, b) => a._dateObj - b._dateObj)
+  }, [unavailableDates, currentMonth])
 
-  const handleNextMonth = () => {
-    setCurrentMonth(prev => addMonths(prev, 1))
-  }
+  // ── Navigation ──
+  const goToToday = () => setCurrentMonth(new Date())
+  const prevMonth = () => setCurrentMonth(m => subMonths(m, 1))
+  const nextMonth = () => setCurrentMonth(m => addMonths(m, 1))
 
+  // ── Date status (priority order) ──
+  const getDateStatus = useCallback((date) => {
+    if (!date) return { type: 'empty' }
+    const key = normalizeDateKey(date)
+    const isPastDate = isBefore(date, today)
+    const isHolidayDay = !!holidayMap[key]
+    const isSundayDay = isSunday(date)
+    const isUnavailableDay = unavailableSet.has(key)
+    const isOpenOverride = openOverrideSet.has(key)
+
+    // Priority: Past > Sunday > Holiday (unless open override) > Admin-Unavailable > Available
+    if (isPastDate) return { type: 'past', disabled: true }
+    if (isSundayDay) return { type: 'sunday', label: 'Closed — Sunday', disabled: true }
+    if (isHolidayDay && isOpenOverride) return { type: 'open-holiday', label: `Open on ${holidayMap[key]}`, disabled: false }
+    if (isHolidayDay) return { type: 'holiday', label: holidayMap[key], disabled: false } // clickable!
+    if (isUnavailableDay) return { type: 'unavailable', label: 'Marked Unavailable', disabled: false }
+    return { type: 'available', label: 'Available', disabled: false }
+  }, [holidayMap, unavailableSet, openOverrideSet, today])
+
+  // ── Click handler ──
   const handleDateClick = (date) => {
     if (!date) return
-    
-    const dateStr = format(date, 'yyyy-MM-dd')
-    const isUnavailable = unavailableSet.has(dateStr)
-    const isHoliday = DEFAULT_HOLIDAYS.includes(dateStr)
-    const isSundayDay = isSunday(date)
-    const isPastDate = isPast(date) && !isToday(date)
+    const status = getDateStatus(date)
+    if (status.disabled) return
 
-    // Can't toggle holidays or past dates
-    if (isHoliday || isPastDate) return
-
-    if (isUnavailable) {
-      // Find the unavailable date entry
-      const unavailableEntry = unavailableDates.find(d => 
-        format(parseISO(d.date), 'yyyy-MM-dd') === dateStr
-      )
-      if (unavailableEntry) {
-        setSelectedDate(date)
-        setReason(unavailableEntry.reason || '')
-        setShowAddModal(true)
-      }
+    setSelectedDate(date)
+    if (status.type === 'unavailable') {
+      setModal('remove-confirm')
+    } else if (status.type === 'holiday') {
+      setModal('open-override')       // offer to mark holiday as open
+    } else if (status.type === 'open-holiday') {
+      setModal('revert-holiday')      // offer to revert back to closed
     } else {
-      setSelectedDate(date)
       setReason('')
-      setShowAddModal(true)
+      setModal('add')
     }
   }
 
-  const handleAddUnavailable = async () => {
+  // ── From list: navigate to month and open remove ──
+  const handleListItemClick = (entry) => {
+    setCurrentMonth(entry._dateObj)
+    setSelectedDate(entry._dateObj)
+    setModal('remove-confirm')
+  }
+
+  // ── Actions ──
+  const handleConfirmAdd = async () => {
     if (!selectedDate) return
     setActionLoading(true)
     try {
-      const dateStr = format(selectedDate, 'yyyy-MM-dd')
-      await handleAddAction?.(dateStr, reason)
-      setShowAddModal(false)
-      setSelectedDate(null)
-      setReason('')
+      await handleAddAction?.(normalizeDateKey(selectedDate), reason.trim())
+      closeModal()
     } finally {
       setActionLoading(false)
     }
   }
 
-  const handleRemoveUnavailable = async () => {
+  const handleConfirmRemove = async () => {
     if (!selectedDate) return
     setActionLoading(true)
     try {
-      const dateStr = format(selectedDate, 'yyyy-MM-dd')
-      const entry = unavailableDates.find(d => 
-        format(parseISO(d.date), 'yyyy-MM-dd') === dateStr
-      )
-      if (entry?.id) {
-        await handleRemoveAction?.(entry.id)
-      }
-      setShowAddModal(false)
-      setSelectedDate(null)
-      setReason('')
+      const key = normalizeDateKey(selectedDate)
+      const entry = unavailableDates.find(d => normalizeDateKey(d.date) === key)
+      const targetId = entry?.id || key
+      await handleRemoveAction?.(targetId)
+      closeModal()
     } finally {
       setActionLoading(false)
     }
   }
 
-  const getDateStatus = (date) => {
-    if (!date) return { type: 'empty' }
-    
-    const dateStr = format(date, 'yyyy-MM-dd')
-    const isHoliday = DEFAULT_HOLIDAYS.includes(dateStr)
-    const isUnavailable = unavailableSet.has(dateStr)
-    const isSundayDay = isSunday(date)
-    const isPastDate = isPast(date) && !isToday(date)
-    const isCurrentMonth = isSameMonth(date, currentMonth)
+  const handleConfirmOpenOverride = async () => {
+    if (!selectedDate) return
+    setActionLoading(true)
+    try {
+      await onAddOpenOverride?.(normalizeDateKey(selectedDate))
+      closeModal()
+    } finally {
+      setActionLoading(false)
+    }
+  }
 
-    if (isHoliday) {
-      return { type: 'holiday', label: HOLIDAY_LABELS[dateStr] || 'Holiday', disabled: true }
+  const handleConfirmRevertHoliday = async () => {
+    if (!selectedDate) return
+    setActionLoading(true)
+    try {
+      const key = normalizeDateKey(selectedDate)
+      const entry = openOverrides.find(d => normalizeDateKey(d.date) === key)
+      const targetId = entry?.id || key
+      await onRemoveOpenOverride?.(targetId)
+      closeModal()
+    } finally {
+      setActionLoading(false)
     }
-    if (isSundayDay) {
-      return { type: 'sunday', label: 'Sunday Closed', disabled: true }
-    }
-    if (isPastDate) {
-      return { type: 'past', label: 'Past', disabled: true }
-    }
-    if (isUnavailable) {
-      return { type: 'unavailable', label: 'Unavailable', disabled: false }
-    }
-    return { type: 'available', label: 'Available', disabled: false }
+  }
+
+  const closeModal = () => {
+    setModal(null)
+    setSelectedDate(null)
+    setReason('')
   }
 
   if (!isOpen) return null
 
+  // ── Cell styles by status ──
+  const cellStyle = (date, status, isSelected) => {
+    const base = 'relative h-10 w-full rounded-lg border text-sm font-medium transition-all duration-150 flex items-center justify-center'
+    if (isSelected) return `${base} border-[var(--gold-primary)] bg-[var(--gold-primary)]/20 text-[var(--gold-primary)] ring-1 ring-[var(--gold-primary)]/50`
+    if (isToday(date)) {
+      if (status.type === 'available') return `${base} border-[var(--gold-primary)]/50 bg-[var(--gold-primary)]/10 text-[var(--gold-primary)] cursor-pointer hover:bg-[var(--gold-primary)]/20`
+    }
+    switch (status.type) {
+      case 'holiday':
+        return `${base} border-amber-500/35 bg-amber-500/10 text-amber-400 cursor-pointer hover:bg-amber-500/18 hover:border-amber-400/60`
+      case 'open-holiday':
+        return `${base} border-emerald-500/40 bg-emerald-500/10 text-emerald-400 cursor-pointer hover:bg-emerald-500/20`
+      case 'sunday':
+        return `${base} border-slate-600/30 bg-slate-700/20 text-[var(--text-muted)]/50 cursor-not-allowed`
+      case 'past':
+        return `${base} border-transparent bg-transparent text-[var(--text-muted)]/30 cursor-not-allowed`
+      case 'unavailable':
+        return `${base} border-red-500/40 bg-red-500/10 text-red-400 cursor-pointer hover:bg-red-500/20`
+      case 'available':
+        return `${base} border-[var(--border)]/50 bg-transparent text-[var(--text-light)] cursor-pointer hover:border-[var(--gold-primary)]/60 hover:bg-[var(--gold-primary)]/5`
+      default:
+        return base
+    }
+  }
+
+  const isCurrentMonthToday = isSameMonth(currentMonth, new Date())
+
   return (
     <>
       <motion.div
-        initial={{ opacity: 0, x: 100 }}
-        animate={{ opacity: 1, x: 0 }}
-        exit={{ opacity: 0, x: 100 }}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
         className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
         onClick={onClose}
       >
-        <div
-          className="w-full max-w-[460px] max-h-[92vh] overflow-y-auto rounded-[28px] border border-[var(--border)] bg-[var(--surface-dark)] text-[var(--text-light)] shadow-2xl"
-          onClick={(e) => e.stopPropagation()}
+        <motion.div
+          initial={{ opacity: 0, y: 20, scale: 0.97 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: 20, scale: 0.97 }}
+          transition={{ duration: 0.2 }}
+          className="w-full max-w-[480px] max-h-[92vh] overflow-y-auto rounded-[28px] border border-[var(--border)] bg-[var(--surface-dark)] text-[var(--text-light)] shadow-2xl"
+          onClick={e => e.stopPropagation()}
         >
           {/* Header */}
-          <div className="sticky top-0 z-10 border-b border-[var(--border)] bg-[var(--surface-dark)] px-4 py-4 sm:px-6">
+          <div className="sticky top-0 z-10 border-b border-[var(--border)] bg-[var(--surface-dark)] px-5 py-4 sm:px-6">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-[31px] leading-none font-semibold text-[var(--text-light)] sm:text-[32px]">Unavailable Dates</h2>
-                <p className="mt-2 text-sm text-[var(--text-muted)]">
-                  Manage dates when appointments cannot be booked
-                </p>
+                <h2 className="text-2xl font-semibold text-[var(--text-light)]">Unavailable Dates</h2>
+                <p className="mt-0.5 text-sm text-[var(--text-muted)]">Manage dates when appointments cannot be booked</p>
               </div>
               <button
                 onClick={onClose}
@@ -202,209 +279,418 @@ export default function UnavailableDatesManager({
             </div>
           </div>
 
-          {/* Content */}
           <div className="p-4 sm:p-6 space-y-5">
-            {/* Legend */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
-              <div className="flex items-center gap-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 px-3 py-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
-                <span className="text-[var(--text-muted)]">Available</span>
-              </div>
-              <div className="flex items-center gap-2 rounded-xl bg-red-500/10 border border-red-500/20 px-3 py-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-red-400" />
-                <span className="text-[var(--text-muted)]">Unavailable</span>
-              </div>
-              <div className="flex items-center gap-2 rounded-xl bg-slate-400/10 border border-slate-400/20 px-3 py-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-slate-300" />
-                <span className="text-[var(--text-muted)]">Holiday</span>
-              </div>
-              <div className="flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] px-3 py-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-[var(--text-muted)]/40" />
-                <span className="text-[var(--text-muted)]">Sunday</span>
-              </div>
-            </div>
-
             {/* Calendar */}
-            <div className="rounded-[24px] border border-[var(--border)] bg-[var(--bg-primary)] p-4 sm:p-5">
-              {/* Month Navigation */}
-              <div className="flex items-center justify-between mb-6">
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] p-4 sm:p-5">
+              {/* Month nav */}
+              <div className="flex items-center justify-between mb-5">
                 <button
-                  onClick={handlePrevMonth}
+                  onClick={prevMonth}
                   className="rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] p-2 text-[var(--text-muted)] transition-colors hover:border-[var(--gold-primary)] hover:text-[var(--text-light)]"
                 >
-                  <ChevronLeft className="w-5 h-5" />
+                  <ChevronLeft className="w-4 h-4" />
                 </button>
-                <h3 className="text-lg font-semibold text-[var(--text-light)]">
-                  {format(currentMonth, 'MMMM yyyy')}
-                </h3>
+
+                <div className="flex items-center gap-3">
+                  <h3 className="text-base font-semibold text-[var(--text-light)]">
+                    {format(currentMonth, 'MMMM yyyy')}
+                  </h3>
+                  {!isCurrentMonthToday && (
+                    <button
+                      onClick={goToToday}
+                      className="text-xs px-2.5 py-1 rounded-lg bg-[var(--gold-primary)]/15 text-[var(--gold-primary)] border border-[var(--gold-primary)]/30 hover:bg-[var(--gold-primary)]/25 transition-colors"
+                    >
+                      Today
+                    </button>
+                  )}
+                </div>
+
                 <button
-                  onClick={handleNextMonth}
+                  onClick={nextMonth}
                   className="rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] p-2 text-[var(--text-muted)] transition-colors hover:border-[var(--gold-primary)] hover:text-[var(--text-light)]"
                 >
-                  <ChevronRight className="w-5 h-5" />
+                  <ChevronRight className="w-4 h-4" />
                 </button>
               </div>
 
-              {/* Day Headers */}
-              <div className="grid grid-cols-7 gap-1 mb-2">
-                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
-                  <div key={day} className="py-2 text-center text-[11px] uppercase tracking-wider text-[var(--text-muted)]">
-                    {day}
+              {/* Day headers */}
+              <div className="grid grid-cols-7 mb-1">
+                {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(d => (
+                  <div key={d} className="py-1.5 text-center text-[10px] uppercase tracking-widest text-[var(--text-muted)]/60 font-medium">
+                    {d}
                   </div>
                 ))}
               </div>
 
-              {/* Calendar Grid */}
-              <div className="grid grid-cols-7 gap-1.5">
-                {calendarDays.map((date, index) => {
-                  if (!date) {
-                    return <div key={`empty-${index}`} className="h-10" />
-                  }
+              {/* Grid */}
+              <div className="grid grid-cols-7 gap-1">
+                {calendarDays.map((date, i) => {
+                  if (!date) return <div key={`pad-${i}`} className="h-10" />
 
                   const status = getDateStatus(date)
                   const isSelected = selectedDate && isSameDay(date, selectedDate)
-
-                  const cellClasses = isSelected
-                    ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)]/15'
-                    : status.type === 'holiday'
-                      ? 'border-slate-400/30 bg-slate-400/10'
-                      : status.type === 'sunday'
-                        ? 'border-slate-500/25 bg-slate-700/25'
-                        : status.type === 'past'
-                          ? 'border-slate-600/25 bg-slate-700/20 opacity-70'
-                          : status.type === 'unavailable'
-                            ? 'border-red-500/30 bg-red-500/10'
-                            : 'border-[var(--border)] bg-[var(--surface-elevated)] hover:border-[var(--gold-primary)]'
+                  const dateIsToday = isToday(date)
 
                   return (
                     <button
                       key={date.toISOString()}
                       onClick={() => handleDateClick(date)}
                       disabled={status.disabled}
-                      className={`h-10 rounded-lg border text-sm font-medium transition-all ${cellClasses} ${
-                        status.disabled ? 'cursor-not-allowed' : 'cursor-pointer hover:bg-[var(--surface-dark)]'
-                      } ${status.type === 'holiday' || status.type === 'sunday' || status.type === 'past' ? 'text-[var(--text-muted)]' : 'text-[var(--text-light)]'}`}
+                      title={status.label || ''}
+                      className={cellStyle(date, status, isSelected)}
                     >
-                      {format(date, 'd')}
+                      <span className="relative z-10">{format(date, 'd')}</span>
+                      {/* Today dot */}
+                      {dateIsToday && (
+                        <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-[var(--gold-primary)]" />
+                      )}
+                      {/* Holiday dot */}
+                      {status.type === 'holiday' && (
+                        <span className="absolute top-1 right-1 w-1 h-1 rounded-full bg-amber-400" />
+                      )}
+                      {/* Open holiday dot */}
+                      {status.type === 'open-holiday' && !isSelected && (
+                        <span className="absolute top-1 right-1 w-1 h-1 rounded-full bg-emerald-400" />
+                      )}
+                      {/* Unavailable dot */}
+                      {status.type === 'unavailable' && !isSelected && (
+                        <span className="absolute top-1 right-1 w-1 h-1 rounded-full bg-red-400" />
+                      )}
                     </button>
                   )
                 })}
               </div>
+
+              {/* Compact legend */}
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-4 pt-4 border-t border-[var(--border)]/50">
+                {[
+                  { color: 'bg-emerald-400', label: 'Available' },
+                  { color: 'bg-red-400', label: 'Unavailable' },
+                  { color: 'bg-amber-400', label: 'Holiday (click to open)' },
+                  { color: 'bg-emerald-400/60', label: 'Holiday (open)' },
+                  { color: 'bg-[var(--text-muted)]/30', label: 'Sunday / Past' },
+                ].map(item => (
+                  <div key={item.label} className="flex items-center gap-1.5">
+                    <span className={`w-2 h-2 rounded-full ${item.color}`} />
+                    <span className="text-[11px] text-[var(--text-muted)]">{item.label}</span>
+                  </div>
+                ))}
+              </div>
             </div>
 
             {/* Unavailable Dates List */}
-            <div className="rounded-[24px] border border-[var(--border)] bg-[var(--bg-primary)] p-5">
-              <h3 className="mb-4 text-lg font-semibold text-[var(--text-light)]">Marked Unavailable</h3>
-              {unavailableDates.length === 0 ? (
-                <p className="py-10 text-center text-[var(--text-muted)]">
-                  No dates have been marked as unavailable.
-                </p>
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-primary)] p-4 sm:p-5">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-semibold text-[var(--text-light)] uppercase tracking-wider">
+                  {format(currentMonth, 'MMMM yyyy')}
+                </h3>
+                {sortedUnavailable.length > 0 && (
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-red-500/15 text-red-400 border border-red-500/20">
+                    {sortedUnavailable.length} date{sortedUnavailable.length !== 1 ? 's' : ''}
+                  </span>
+                )}
+              </div>
+
+              {loading ? (
+                <div className="flex items-center justify-center py-8 text-[var(--text-muted)]">
+                  <Loader2 className="w-5 h-5 animate-spin mr-2" />
+                  <span className="text-sm">Loading...</span>
+                </div>
+              ) : sortedUnavailable.length === 0 ? (
+                <div className="py-8 flex flex-col items-center gap-2 text-[var(--text-muted)]">
+                  <CalendarOff className="w-8 h-8 opacity-30" />
+                  <p className="text-sm">No unavailable dates in {format(currentMonth, 'MMMM')}</p>
+                </div>
               ) : (
-                <div className="space-y-2 max-h-60 overflow-y-auto">
-                  {unavailableDates.map((date, index) => {
-                    const dateObj = date.date instanceof Date ? date.date : parseISO(date.date)
+                <div className="space-y-1.5 max-h-52 overflow-y-auto pr-0.5">
+                  {sortedUnavailable.map((entry, i) => {
+                    const isPastEntry = isBefore(entry._dateObj, today)
                     return (
-                      <div
-                        key={date.id || index}
-                        className="flex items-center justify-between p-3 rounded-xl border border-red-500/20 bg-red-500/5"
+                      <button
+                        key={entry.id || i}
+                        onClick={() => !isPastEntry && handleListItemClick(entry)}
+                        disabled={isPastEntry}
+                        className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl border transition-all text-left group ${
+                          isPastEntry
+                            ? 'border-[var(--border)]/30 bg-transparent opacity-40 cursor-not-allowed'
+                            : 'border-red-500/20 bg-red-500/5 hover:bg-red-500/10 hover:border-red-500/35 cursor-pointer'
+                        }`}
                       >
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-lg bg-red-500/20 flex items-center justify-center">
-                            <Calendar className="w-4 h-4 text-red-400" />
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-7 h-7 shrink-0 rounded-lg bg-red-500/15 flex items-center justify-center">
+                            <Calendar className="w-3.5 h-3.5 text-red-400" />
                           </div>
-                          <div>
-                            <p className="font-medium text-[var(--text-light)]">
-                              {format(dateObj, 'MMMM d, yyyy')}
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-[var(--text-light)] leading-tight">
+                              {format(entry._dateObj, 'EEE, MMM d, yyyy')}
                             </p>
-                            {date.reason && (
-                              <p className="text-sm text-[var(--text-muted)]">{date.reason}</p>
+                            {entry.reason && (
+                              <p className="text-xs text-[var(--text-muted)] truncate mt-0.5">{entry.reason}</p>
                             )}
                           </div>
                         </div>
-                        <button
-                          onClick={() => {
-                            setSelectedDate(dateObj)
-                            setShowAddModal(true)
-                          }}
-                          className="p-2 rounded-lg hover:bg-red-500/20 text-red-400 transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
+                        {!isPastEntry && (
+                          <Trash2 className="w-3.5 h-3.5 text-red-400/50 group-hover:text-red-400 shrink-0 ml-2 transition-colors" />
+                        )}
+                      </button>
                     )
                   })}
                 </div>
               )}
             </div>
           </div>
-        </div>
+        </motion.div>
       </motion.div>
 
-      {/* Add/Edit Modal */}
+      {/* ── Add Modal ── */}
       <AnimatePresence>
-        {showAddModal && selectedDate && (
+        {modal === 'add' && selectedDate && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
-            onClick={() => setShowAddModal(false)}
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+            onClick={closeModal}
           >
             <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
+              initial={{ scale: 0.92, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="w-full max-w-md rounded-3xl border border-[var(--border)] bg-[var(--bg-primary)] p-6"
-              onClick={(e) => e.stopPropagation()}
+              exit={{ scale: 0.92, opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              className="w-full max-w-sm rounded-3xl border border-[var(--border)] bg-[var(--bg-primary)] p-6"
+              onClick={e => e.stopPropagation()}
             >
-              <h3 className="mb-2 text-xl font-semibold text-[var(--text-light)]">
-                {unavailableSet.has(format(selectedDate, 'yyyy-MM-dd')) 
-                  ? 'Remove Unavailable Date' 
-                  : 'Mark Date as Unavailable'}
-              </h3>
-              <p className="text-[var(--text-muted)] mb-4">
-                {format(selectedDate, 'MMMM d, yyyy')}
-              </p>
-
-              {!unavailableSet.has(format(selectedDate, 'yyyy-MM-dd')) && (
-                <div>
-                  <label className="block text-sm text-[var(--text-muted)] mb-2">Reason (optional)</label>
-                  <input
-                    type="text"
-                    value={reason}
-                    onChange={(e) => setReason(e.target.value)}
-                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] px-4 py-3 text-[var(--text-light)] placeholder:text-[var(--text-muted)] focus:border-[var(--gold-primary)] focus:outline-none"
-                    placeholder="e.g., Staff training, Maintenance"
-                  />
+              <div className="flex items-start gap-3 mb-5">
+                <div className="w-10 h-10 shrink-0 rounded-xl bg-[var(--gold-primary)]/15 flex items-center justify-center">
+                  <CalendarOff className="w-5 h-5 text-[var(--gold-primary)]" />
                 </div>
-              )}
+                <div>
+                  <h3 className="text-lg font-semibold text-[var(--text-light)]">Mark as Unavailable</h3>
+                  <p className="text-sm text-[var(--text-muted)] mt-0.5">
+                    {format(selectedDate, 'EEEE, MMMM d, yyyy')}
+                  </p>
+                </div>
+              </div>
 
-              <div className="flex justify-end gap-3 mt-6">
+              <div className="mb-5">
+                <label className="block text-xs font-medium text-[var(--text-muted)] uppercase tracking-wider mb-2">
+                  Reason <span className="normal-case font-normal">(optional)</span>
+                </label>
+                <input
+                  type="text"
+                  value={reason}
+                  onChange={e => setReason(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleConfirmAdd()}
+                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] px-4 py-3 text-sm text-[var(--text-light)] placeholder:text-[var(--text-muted)] focus:border-[var(--gold-primary)] focus:outline-none transition-colors"
+                  placeholder="e.g. Staff training, Maintenance…"
+                  autoFocus
+                />
+              </div>
+
+              <div className="flex gap-2.5">
                 <button
-                  onClick={() => setShowAddModal(false)}
-                  className="px-4 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] text-[var(--text-muted)] hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)] transition-colors"
+                  onClick={closeModal}
+                  className="flex-1 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] text-sm text-[var(--text-muted)] hover:border-[var(--gold-primary)] hover:text-[var(--text-light)] transition-colors"
                 >
                   Cancel
                 </button>
-                {unavailableSet.has(format(selectedDate, 'yyyy-MM-dd')) ? (
-                  <button
-                    onClick={handleRemoveUnavailable}
-                    disabled={actionLoading}
-                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-red-500 text-white font-medium hover:bg-red-600 transition-colors disabled:opacity-50"
-                  >
-                    {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                    Remove
-                  </button>
-                ) : (
-                  <button
-                    onClick={handleAddUnavailable}
-                    disabled={actionLoading}
-                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[var(--gold-primary)] text-black font-medium hover:bg-[var(--gold-primary)]/90 transition-colors disabled:opacity-50"
-                  >
-                    {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
-                    Mark Unavailable
-                  </button>
-                )}
+                <button
+                  onClick={handleConfirmAdd}
+                  disabled={actionLoading}
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-[var(--gold-primary)] text-sm font-medium text-black hover:bg-[var(--gold-primary)]/90 transition-colors disabled:opacity-50"
+                >
+                  {actionLoading
+                    ? <Loader2 className="w-4 h-4 animate-spin" />
+                    : <CalendarOff className="w-4 h-4" />}
+                  Mark Unavailable
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Remove Confirm Modal ── */}
+      <AnimatePresence>
+        {modal === 'remove-confirm' && selectedDate && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+            onClick={closeModal}
+          >
+            <motion.div
+              initial={{ scale: 0.92, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.92, opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              className="w-full max-w-sm rounded-3xl border border-[var(--border)] bg-[var(--bg-primary)] p-6"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex items-start gap-3 mb-4">
+                <div className="w-10 h-10 shrink-0 rounded-xl bg-red-500/15 flex items-center justify-center">
+                  <AlertTriangle className="w-5 h-5 text-red-400" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-[var(--text-light)]">Remove Unavailable Date</h3>
+                  <p className="text-sm text-[var(--text-muted)] mt-0.5">
+                    {format(selectedDate, 'EEEE, MMMM d, yyyy')}
+                  </p>
+                </div>
+              </div>
+
+              <p className="text-sm text-[var(--text-muted)] mb-5 pl-[52px]">
+                This date will become available for appointment bookings again.
+              </p>
+
+              {/* Show existing reason if any */}
+              {(() => {
+                const key = normalizeDateKey(selectedDate)
+                const entry = unavailableDates.find(d => normalizeDateKey(d.date) === key)
+                return entry?.reason ? (
+                  <div className="mb-5 pl-[52px]">
+                    <p className="text-xs text-[var(--text-muted)] mb-1">Current reason</p>
+                    <p className="text-sm text-[var(--text-light)] bg-[var(--surface-dark)] border border-[var(--border)] rounded-xl px-3 py-2">
+                      {entry.reason}
+                    </p>
+                  </div>
+                ) : null
+              })()}
+
+              <div className="flex gap-2.5">
+                <button
+                  onClick={closeModal}
+                  className="flex-1 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] text-sm text-[var(--text-muted)] hover:border-[var(--gold-primary)] hover:text-[var(--text-light)] transition-colors"
+                >
+                  Keep
+                </button>
+                <button
+                  onClick={handleConfirmRemove}
+                  disabled={actionLoading}
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-red-500/90 text-sm font-medium text-white hover:bg-red-500 transition-colors disabled:opacity-50"
+                >
+                  {actionLoading
+                    ? <Loader2 className="w-4 h-4 animate-spin" />
+                    : <Trash2 className="w-4 h-4" />}
+                  Remove Date
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Open Override Modal (mark holiday as open) ── */}
+      <AnimatePresence>
+        {modal === 'open-override' && selectedDate && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+            onClick={closeModal}
+          >
+            <motion.div
+              initial={{ scale: 0.92, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.92, opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              className="w-full max-w-sm rounded-3xl border border-[var(--border)] bg-[var(--bg-primary)] p-6"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex items-start gap-3 mb-4">
+                <div className="w-10 h-10 shrink-0 rounded-xl bg-amber-500/15 flex items-center justify-center">
+                  <Calendar className="w-5 h-5 text-amber-400" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-[var(--text-light)]">Open Holiday for Bookings</h3>
+                  <p className="text-sm text-[var(--text-muted)] mt-0.5">
+                    {format(selectedDate, 'EEEE, MMMM d, yyyy')}
+                  </p>
+                </div>
+              </div>
+
+              <p className="text-sm text-[var(--text-muted)] mb-6 pl-[52px]">
+                {(() => { const k = normalizeDateKey(selectedDate); return holidayMap[k] ? <><strong className="text-amber-400">{holidayMap[k]}</strong> is normally closed. </> : null })()}
+                Clients will be able to book appointments on this day.
+              </p>
+
+              <div className="flex gap-2.5">
+                <button
+                  onClick={closeModal}
+                  className="flex-1 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] text-sm text-[var(--text-muted)] hover:border-[var(--gold-primary)] hover:text-[var(--text-light)] transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleConfirmOpenOverride}
+                  disabled={actionLoading || !onAddOpenOverride}
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-emerald-500/90 text-sm font-medium text-white hover:bg-emerald-500 transition-colors disabled:opacity-50"
+                >
+                  {actionLoading
+                    ? <Loader2 className="w-4 h-4 animate-spin" />
+                    : <Calendar className="w-4 h-4" />}
+                  Mark as Open
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Revert Holiday Modal (close an open override) ── */}
+      <AnimatePresence>
+        {modal === 'revert-holiday' && selectedDate && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+            onClick={closeModal}
+          >
+            <motion.div
+              initial={{ scale: 0.92, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.92, opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              className="w-full max-w-sm rounded-3xl border border-[var(--border)] bg-[var(--bg-primary)] p-6"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex items-start gap-3 mb-4">
+                <div className="w-10 h-10 shrink-0 rounded-xl bg-amber-500/15 flex items-center justify-center">
+                  <AlertTriangle className="w-5 h-5 text-amber-400" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-[var(--text-light)]">Revert to Holiday (Closed)</h3>
+                  <p className="text-sm text-[var(--text-muted)] mt-0.5">
+                    {format(selectedDate, 'EEEE, MMMM d, yyyy')}
+                  </p>
+                </div>
+              </div>
+
+              <p className="text-sm text-[var(--text-muted)] mb-6 pl-[52px]">
+                {(() => { const k = normalizeDateKey(selectedDate); return holidayMap[k] ? <><strong className="text-amber-400">{holidayMap[k]}</strong> — </> : null })()}
+                This day will be closed again. Clients will not be able to book appointments.
+              </p>
+
+              <div className="flex gap-2.5">
+                <button
+                  onClick={closeModal}
+                  className="flex-1 py-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] text-sm text-[var(--text-muted)] hover:border-[var(--gold-primary)] hover:text-[var(--text-light)] transition-colors"
+                >
+                  Keep Open
+                </button>
+                <button
+                  onClick={handleConfirmRevertHoliday}
+                  disabled={actionLoading || !onRemoveOpenOverride}
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-amber-500/90 text-sm font-medium text-black hover:bg-amber-500 transition-colors disabled:opacity-50"
+                >
+                  {actionLoading
+                    ? <Loader2 className="w-4 h-4 animate-spin" />
+                    : <CalendarOff className="w-4 h-4" />}
+                  Close Holiday
+                </button>
               </div>
             </motion.div>
           </motion.div>

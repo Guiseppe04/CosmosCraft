@@ -44,6 +44,13 @@ router.post('/', appointmentController.createAppointment);
  */
 router.get('/available-dates', appointmentController.getAvailableDates);
 
+// ─── UNAVAILABLE DATES ───────────────────────────────────────────────────────
+
+/**
+ * GET /api/appointments/unavailable-dates
+ * Get all unavailable dates
+ * Access: Any authenticated user
+ */
 router.get('/unavailable-dates', appointmentController.getUnavailableDates);
 
 /**
@@ -55,6 +62,51 @@ router.post(
   '/unavailable-dates',
   authorize('admin', 'super_admin'),
   appointmentController.addUnavailableDate
+);
+
+/**
+ * DELETE /api/appointments/unavailable-dates/:id
+ * Remove unavailable date
+ * Access: Admin only
+ */
+router.delete(
+  '/unavailable-dates/:id',
+  authorize('admin', 'super_admin'),
+  appointmentController.removeUnavailableDate
+);
+
+// ─── HOLIDAY OPEN OVERRIDES ──────────────────────────────────────────────────
+
+/**
+ * GET /api/appointments/open-overrides
+ * List all holiday open overrides
+ * Access: Authenticated users (customers can see which holidays are open)
+ */
+router.get(
+  '/open-overrides',
+  appointmentController.getOpenOverrides
+);
+
+/**
+ * POST /api/appointments/open-overrides
+ * Mark a holiday as open
+ * Access: Admin only
+ */
+router.post(
+  '/open-overrides',
+  authorize('admin', 'super_admin'),
+  appointmentController.addOpenOverride
+);
+
+/**
+ * DELETE /api/appointments/open-overrides/:id
+ * Revert a holiday override back to closed
+ * Access: Admin only
+ */
+router.delete(
+  '/open-overrides/:id',
+  authorize('admin', 'super_admin'),
+  appointmentController.removeOpenOverride
 );
 
 // ─── REFUND REQUESTS ─────────────────────────────────────────────────────────
@@ -79,108 +131,6 @@ router.get(
   '/refund-requests',
   appointmentController.getRefundRequests
 );
-
-/**
- * GET /api/appointments/:id/refund-requests
- * Get refund requests for a specific appointment
- * Access: Appointment owner or admin/staff
- */
-router.get(
-  '/:id/refund-requests',
-  appointmentController.getRefundRequestsByAppointment
-);
-
-/**
- * GET /api/appointments/:id
- * Get appointment details
- * Access: Customers see own, Admin/Staff see all
- */
-router.get('/:id', appointmentController.getAppointment);
-
-// ─── LIST APPOINTMENTS ─────────────────────────────────────────────────────
-
-/**
- * GET /api/appointments
- * List appointments with filtering
- * Query params:
- *   - user_id (optional) - Filter by user
- *   - service_id (optional) - Filter by service
- *   - status (optional) - pending, approved, completed, cancelled
- *   - date_from (optional) - ISO date string
- *   - date_to (optional) - ISO date string
- *   - sort_by (optional) - scheduled_at, created_at, status (default: scheduled_at)
- *   - sort_order (optional) - asc, desc (default: asc)
- *   - limit (optional) - 1-100 (default: 20)
- *   - offset (optional) - 0+ (default: 0)
- * Access: Customers see own, Admin/Staff see all
- */
-router.get('/', appointmentController.listAppointments);
-
-// ─── UPDATE APPOINTMENT ────────────────────────────────────────────────────
-
-/**
- * PATCH /api/appointments/:id
- * Update appointment
- * Body:
- *   - scheduled_at (optional) - New date/time
- *   - status (optional) - Admin/Staff only
- *   - notes (optional) - Appointment notes
- * Access: Customers update own, Admin/Staff update any
- */
-router.patch('/:id', appointmentController.updateAppointment);
-
-// ─── RESCHEDULE APPOINTMENT ───────────────────────────────────────────────
-
-/**
- * PATCH /api/appointments/:id/reschedule
- * Reschedule appointment to new date/time
- * Body:
- *   - new_scheduled_at (required) - ISO date string, must be in future
- *   - reason (optional) - Reason for rescheduling
- * Access: Customers reschedule own, Admin/Staff reschedule any
- */
-router.patch('/:id/reschedule', appointmentController.rescheduleAppointment);
-
-// ─── UPDATE STATUS ────────────────────────────────────────────────────────
-
-/**
- * PATCH /api/appointments/:id/status
- * Update appointment status (with state machine validation)
- * Body:
- *   - new_status (required) - pending, approved, completed, cancelled
- *   - reason (optional) - Reason for status change
- * Valid transitions:
- *   - pending → approved, cancelled
- *   - approved → completed, cancelled
- *   - completed (terminal)
- *   - cancelled (terminal)
- * Access: Admin/Staff only
- */
-router.patch(
-  '/:id/status',
-  authorize('admin', 'staff', 'super_admin'),
-  appointmentController.updateStatus
-);
-
-// ─── CANCEL APPOINTMENT ────────────────────────────────────────────────────
-
-/**
- * DELETE /api/appointments/:id
- * Cancel appointment
- * Body:
- *   - reason (optional) - Cancellation reason
- * Access: Customers cancel own, Admin/Staff cancel any
- */
-router.delete('/:id', appointmentController.cancelAppointment);
-
-/**
- * POST /api/appointments/:id/cancel
- * Cancel appointment (alternative endpoint for customers)
- * Body:
- *   - reason (optional) - Cancellation reason
- * Access: Customers cancel own, Admin/Staff cancel any
- */
-router.post('/:id/cancel', appointmentController.cancelAppointment);
 
 // ─── GET APPOINTMENTS BY DATE RANGE ───────────────────────────────────────
 
@@ -325,17 +275,88 @@ router.get(
  */
 router.get('/users/:userId/stats', appointmentController.getUserStats);
 
-// ─── UNAVAILABLE DATES ───────────────────────────────────────────────────────
+// ─── LIST APPOINTMENTS ─────────────────────────────────────────────────────
 
 /**
- * DELETE /api/appointments/unavailable-dates/:id
- * Remove unavailable date
- * Access: Admin only
+ * GET /api/appointments
+ * List appointments with filtering
+ * Query params:
+ *   - user_id (optional) - Filter by user
+ *   - service_id (optional) - Filter by service
+ *   - status (optional) - pending, approved, completed, cancelled
+ *   - date_from (optional) - ISO date string
+ *   - date_to (optional) - ISO date string
+ *   - sort_by (optional) - scheduled_at, created_at, status (default: scheduled_at)
+ *   - sort_order (optional) - asc, desc (default: asc)
+ *   - limit (optional) - 1-100 (default: 20)
+ *   - offset (optional) - 0+ (default: 0)
+ * Access: Customers see own, Admin/Staff see all
  */
-router.delete(
-  '/unavailable-dates/:id',
-  authorize('admin', 'super_admin'),
-  appointmentController.removeUnavailableDate
+router.get('/', appointmentController.listAppointments);
+
+// ─── PARAMETERIZED ROUTES (/:id) ──────────────────────────────────────────
+
+/**
+ * GET /api/appointments/:id/refund-requests
+ * Get refund requests for a specific appointment
+ * Access: Appointment owner or admin/staff
+ */
+router.get(
+  '/:id/refund-requests',
+  appointmentController.getRefundRequestsByAppointment
+);
+
+/**
+ * GET /api/appointments/:id
+ * Get appointment details
+ * Access: Customers see own, Admin/Staff see all
+ */
+router.get('/:id', appointmentController.getAppointment);
+
+// ─── UPDATE APPOINTMENT ────────────────────────────────────────────────────
+
+/**
+ * PATCH /api/appointments/:id
+ * Update appointment
+ * Body:
+ *   - scheduled_at (optional) - New date/time
+ *   - status (optional) - Admin/Staff only
+ *   - notes (optional) - Appointment notes
+ * Access: Customers update own, Admin/Staff update any
+ */
+router.patch('/:id', appointmentController.updateAppointment);
+
+// ─── RESCHEDULE APPOINTMENT ───────────────────────────────────────────────
+
+/**
+ * PATCH /api/appointments/:id/reschedule
+ * Reschedule appointment to new date/time
+ * Body:
+ *   - new_scheduled_at (required) - ISO date string, must be in future
+ *   - reason (optional) - Reason for rescheduling
+ * Access: Customers reschedule own, Admin/Staff reschedule any
+ */
+router.patch('/:id/reschedule', appointmentController.rescheduleAppointment);
+
+// ─── UPDATE STATUS ────────────────────────────────────────────────────────
+
+/**
+ * PATCH /api/appointments/:id/status
+ * Update appointment status (with state machine validation)
+ * Body:
+ *   - new_status (required) - pending, approved, completed, cancelled
+ *   - reason (optional) - Reason for status change
+ * Valid transitions:
+ *   - pending → approved, cancelled
+ *   - approved → completed, cancelled
+ *   - completed (terminal)
+ *   - cancelled (terminal)
+ * Access: Admin/Staff only
+ */
+router.patch(
+  '/:id/status',
+  authorize('admin', 'staff', 'super_admin'),
+  appointmentController.updateStatus
 );
 
 // ─── PAYMENT STATUS ─────────────────────────────────────────────────────────
@@ -351,5 +372,24 @@ router.patch(
   appointmentController.updatePaymentStatus
 );
 
+// ─── CANCEL APPOINTMENT ────────────────────────────────────────────────────
+
+/**
+ * DELETE /api/appointments/:id
+ * Cancel appointment
+ * Body:
+ *   - reason (optional) - Cancellation reason
+ * Access: Customers cancel own, Admin/Staff cancel any
+ */
+router.delete('/:id', appointmentController.cancelAppointment);
+
+/**
+ * POST /api/appointments/:id/cancel
+ * Cancel appointment (alternative endpoint for customers)
+ * Body:
+ *   - reason (optional) - Cancellation reason
+ * Access: Customers cancel own, Admin/Staff cancel any
+ */
+router.post('/:id/cancel', appointmentController.cancelAppointment);
 
 module.exports = router;

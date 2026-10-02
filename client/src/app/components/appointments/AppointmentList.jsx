@@ -8,11 +8,11 @@ import {
 import { format, parseISO, isToday, isTomorrow, isPast, isFuture } from 'date-fns'
 import React from 'react';
 import AppointmentDetailsModal from './AppointmentDetailsModal';
+import { adminApi } from '../../utils/adminApi';
 
 // Status configuration
 const STATUS_CONFIG = {
   pending: { label: 'Pending', color: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30', icon: AlertCircle },
-  approved: { label: 'Approved', color: 'bg-blue-500/20 text-blue-400 border-blue-500/30', icon: CheckCircle },
   confirmed: { label: 'Confirmed', color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30', icon: CheckCircle },
   in_progress: { label: 'In Progress', color: 'bg-purple-500/20 text-purple-400 border-purple-500/30', icon: Clock },
   ready_for_pickup: { label: 'Ready for Pickup', color: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30', icon: CheckCircle },
@@ -88,6 +88,7 @@ function StatusBadge({ status, config = STATUS_CONFIG }) {
 function formatAppointmentDate(dateStr) {
   if (!dateStr) return 'N/A'
   const date = new Date(dateStr)
+  if (Number.isNaN(date.getTime())) return 'N/A'
   if (isToday(date)) return `Today, ${format(date, 'h:mm a')}`
   if (isTomorrow(date)) return `Tomorrow, ${format(date, 'h:mm a')}`
   return format(date, 'MMM d, yyyy h:mm a')
@@ -158,6 +159,8 @@ export default function AppointmentList({
   selectedDate = null,
   searchQuery: externalSearchQuery,
   onSearchChange: externalOnSearchChange,
+  onStatusChange,
+  onPaymentStatusUpdate,
 }) {
   const [internalSearchQuery, setInternalSearchQuery] = useState('')
   const searchQuery = externalSearchQuery !== undefined ? externalSearchQuery : internalSearchQuery
@@ -167,7 +170,7 @@ export default function AppointmentList({
   const [showFilters, setShowFilters] = useState(false)
   const [selectedAppointment, setSelectedAppointment] = useState(null)
   const [showDetailsModal, setShowDetailsModal] = useState(false)
-  const [sortBy, setSortBy] = useState('scheduled_at')
+  const [sortBy, setSortBy] = useState('created_at')
   const [sortOrder, setSortOrder] = useState('desc')
   const [filterMenuOpen, setFilterMenuOpen] = useState(false)
   const [dateFrom, setDateFrom] = useState('')
@@ -261,18 +264,28 @@ export default function AppointmentList({
           aVal = String(a.reference_code || a.appointment_id || '').toLowerCase()
           bVal = String(b.reference_code || b.appointment_id || '').toLowerCase()
           break
-        case 'created_at':
-          aVal = new Date(a.created_at || 0).getTime()
-          bVal = new Date(b.created_at || 0).getTime()
-          break
         case 'scheduled_at':
-        default:
           aVal = new Date(a.scheduled_at || 0).getTime()
           bVal = new Date(b.scheduled_at || 0).getTime()
+          break
+        case 'created_at':
+        default:
+          aVal = new Date(a.created_at || 0).getTime()
+          bVal = new Date(b.created_at || 0).getTime()
           break
       }
       if (aVal < bVal) return sortOrder === 'asc' ? -1 : 1
       if (aVal > bVal) return sortOrder === 'asc' ? 1 : -1
+
+      if (sortBy === 'created_at') {
+        const aSched = new Date(a.scheduled_at || 0).getTime()
+        const bSched = new Date(b.scheduled_at || 0).getTime()
+        if (aSched !== bSched) return sortOrder === 'asc' ? aSched - bSched : bSched - aSched
+      } else if (sortBy === 'scheduled_at') {
+        const aCreated = new Date(a.created_at || 0).getTime()
+        const bCreated = new Date(b.created_at || 0).getTime()
+        if (aCreated !== bCreated) return sortOrder === 'asc' ? aCreated - bCreated : bCreated - aCreated
+      }
       return 0
     })
 
@@ -304,7 +317,7 @@ export default function AppointmentList({
     setStatusFilter('all')
     setDateFrom('')
     setDateTo('')
-    setSortBy('scheduled_at')
+    setSortBy('created_at')
     setSortOrder('desc')
     onFilterChange?.({ date: 'all', status: 'all', search: searchQuery })
   }
@@ -314,7 +327,7 @@ export default function AppointmentList({
     handleResetSortAndFilters()
   }
 
-  const hasActiveFilters = searchQuery || dateFilter !== 'all' || statusFilter !== 'all' || dateFrom || dateTo || sortBy !== 'scheduled_at' || sortOrder !== 'desc'
+  const hasActiveFilters = searchQuery || dateFilter !== 'all' || statusFilter !== 'all' || dateFrom || dateTo || sortBy !== 'created_at' || sortOrder !== 'desc'
 
   // Pagination
   const currentPage = pagination.page || 1
@@ -343,19 +356,49 @@ export default function AppointmentList({
     setSelectedAppointment(null)
   }
 
-  const handleEditAppointment = () => {
-    console.log('Edit appointment:', selectedAppointment)
-    // Add logic to handle editing the appointment
+  const handleEditAppointment = (appointment) => {
+    setShowDetailsModal(false)
+    if (onEdit) {
+      onEdit(appointment || selectedAppointment)
+    }
   }
 
-  const handleCancelAppointment = () => {
-    console.log('Cancel appointment:', selectedAppointment)
-    // Add logic to handle canceling the appointment
+  const handleStatusChange = async (nextStatus, reason) => {
+    const apt = selectedAppointment
+    if (!apt) return
+    const id = apt.appointment_id || apt.id
+    if (onStatusChange) {
+      await onStatusChange(id, nextStatus, reason)
+    } else {
+      await adminApi.updateAppointmentStatus(id, nextStatus, reason)
+    }
+    setSelectedAppointment((prev) => prev ? { ...prev, status: nextStatus } : null)
+    onRefresh?.()
   }
 
-  const handleCompleteAppointment = () => {
-    console.log('Mark appointment as completed:', selectedAppointment)
-    // Add logic to handle marking the appointment as completed
+  const handleCancelAppointment = async (reason) => {
+    const apt = selectedAppointment
+    if (!apt) return
+    const id = apt.appointment_id || apt.id
+    if (onStatusChange) {
+      await onStatusChange(id, 'cancelled', reason)
+    } else {
+      await adminApi.updateAppointmentStatus(id, 'cancelled', reason)
+    }
+    setSelectedAppointment((prev) => prev ? { ...prev, status: 'cancelled' } : null)
+    onRefresh?.()
+  }
+
+  const handlePaymentStatusUpdate = async (id, newPaymentStatus) => {
+    const aptId = id || selectedAppointment?.appointment_id || selectedAppointment?.id
+    if (!aptId) return
+    if (onPaymentStatusUpdate) {
+      await onPaymentStatusUpdate(aptId, newPaymentStatus)
+    } else {
+      await adminApi.updateAppointmentPaymentStatus(aptId, newPaymentStatus)
+    }
+    setSelectedAppointment((prev) => prev ? { ...prev, payment_status: newPaymentStatus } : null)
+    onRefresh?.()
   }
 
   return (
@@ -526,7 +569,8 @@ export default function AppointmentList({
                 <th className="px-4 py-3 text-left font-semibold">Ref</th>
                 <th className="px-4 py-3 text-left font-semibold">Customer</th>
                 <th className="px-4 py-3 text-left font-semibold">Service</th>
-                <th className="px-4 py-3 text-left font-semibold">Date & Time</th>
+                <th className="px-4 py-3 text-left font-semibold">Date &amp; Time</th>
+                <th className="px-4 py-3 text-left font-semibold">Created</th>
                 <th className="px-4 py-3 text-left font-semibold">Status</th>
                 <th className="px-4 py-3 text-center font-semibold">Actions</th>
               </tr>
@@ -536,7 +580,7 @@ export default function AppointmentList({
                 <tr
                   key={apt.appointment_id}
                   className="border-b border-[var(--border)] hover:bg-[var(--bg-primary)]/40 transition-colors group cursor-pointer"
-                  onClick={() => onViewDetails?.(apt)}
+                  onClick={() => (onViewDetails ? onViewDetails(apt) : handleViewDetails(apt))}
                 >
                   <td className="px-4 py-3 whitespace-nowrap font-mono text-[var(--text-muted)]">
                     {apt.reference_code || apt.appointment_id}
@@ -550,15 +594,25 @@ export default function AppointmentList({
                   <td className="px-4 py-3 capitalize text-[var(--gold-primary)]">
                     {renderAppointmentServiceSummary(apt)}
                   </td>
-                  <td className="px-4 py-3 text-white">
+                  <td className="px-4 py-3 text-white whitespace-nowrap">
                     <div>{formatAppointmentDate(apt.scheduled_at)}</div>
+                  </td>
+                  <td className="px-4 py-3 text-[var(--text-muted)] whitespace-nowrap text-xs">
+                    <div>{formatAppointmentDate(apt.created_at)}</div>
                   </td>
                   <td className="px-4 py-3">
                     <StatusBadge status={apt.status} config={STATUS_CONFIG} />
                   </td>
                   <td className="px-4 py-3 text-center">
                     <button
-                      onClick={e => { e.stopPropagation(); onViewDetails?.(apt); }}
+                      onClick={e => {
+                        e.stopPropagation()
+                        if (onViewDetails) {
+                          onViewDetails(apt)
+                        } else {
+                          handleViewDetails(apt)
+                        }
+                      }}
                       className="p-2 rounded-lg hover:bg-[var(--gold-primary)]/20 text-[var(--text-muted)] hover:text-[var(--gold-primary)] transition-colors"
                       title="View Details"
                     >
@@ -622,7 +676,8 @@ export default function AppointmentList({
           appointment={selectedAppointment}
           onEdit={handleEditAppointment}
           onCancel={handleCancelAppointment}
-          onComplete={handleCompleteAppointment}
+          onStatusChange={handleStatusChange}
+          onPaymentStatusUpdate={handlePaymentStatusUpdate}
         />
       )}
     </div>

@@ -79,7 +79,12 @@ exports.createAppointment = async (req, res, next) => {
     const appointment = await appointmentService.createAppointment({
       appointment_type: validated.appointment_type,
       services: validated.services,
-      location_id: validated.location_id,
+      // For home service, address_id is the selected delivery address UUID.
+      // The appointments table stores this in location_id until a dedicated
+      // address_id FK column is added via migration (see architecture notes).
+      location_id: validated.location_id
+        || (validated.appointment_type === 'service_home' ? validated.address_id : undefined),
+      address_id: validated.address_id || null,
       guitar_details: validated.guitar_details,
       scheduled_at: validated.scheduled_at,
       notes: validated.notes,
@@ -377,7 +382,7 @@ exports.cancelAppointment = async (req, res, next) => {
 exports.getUserAppointments = async (req, res, next) => {
   try {
     const { userId } = req.params;
-    const { limit = 20, offset = 0 } = req.query;
+    const { limit = 100, offset = 0 } = req.query;
 
     // Customers can only see their own appointments
     if (req.user.role === 'customer' && userId !== req.user.user_id) {
@@ -841,6 +846,66 @@ exports.removeUnavailableDate = async (req, res, next) => {
         removed: result,
       },
       message: 'Date availability restored',
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ─── HOLIDAY OPEN OVERRIDES ──────────────────────────────────────────────────
+
+/**
+ * GET /appointments/open-overrides
+ * Get all holiday open override dates
+ * Access: Admin/Staff only
+ */
+exports.getOpenOverrides = async (req, res, next) => {
+  try {
+    const overrides = await appointmentService.getOpenOverrides();
+    res.json({
+      status: 'success',
+      data: { open_overrides: overrides },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * POST /appointments/open-overrides
+ * Mark a holiday as open for bookings
+ * Access: Admin/Staff only
+ */
+exports.addOpenOverride = async (req, res, next) => {
+  try {
+    const { date } = req.body;
+    if (!date) throw new AppError('date is required', 400);
+
+    const result = await appointmentService.addOpenOverride(date, req.user.user_id);
+    res.status(201).json({
+      status: 'success',
+      data: { open_override: result },
+      message: 'Holiday marked as open',
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * DELETE /appointments/open-overrides/:id
+ * Remove a holiday open override (revert to closed)
+ * Access: Admin/Staff only
+ */
+exports.removeOpenOverride = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const result = await appointmentService.removeOpenOverride(id);
+    if (!result) throw new AppError('Override not found', 404);
+    res.json({
+      status: 'success',
+      data: { removed: result },
+      message: 'Holiday reverted to closed',
     });
   } catch (err) {
     next(err);

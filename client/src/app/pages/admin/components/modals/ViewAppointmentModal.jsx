@@ -48,7 +48,6 @@ export function ViewAppointmentModal({ modal, closeModal }) {
   const primaryGuitar = appointmentGuitars[0] || null
   const statusColors = {
     pending: 'bg-yellow-500/10 text-yellow-500 border-yellow-500/30',
-    approved: 'bg-green-500/10 text-green-400 border-green-500/30',
     confirmed: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
     in_progress: 'bg-purple-500/10 text-purple-400 border-purple-500/30',
     ready_for_pickup: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30',

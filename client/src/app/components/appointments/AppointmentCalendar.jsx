@@ -372,7 +372,7 @@ function AdminWeekCalendar({ appointments, unavailableDates = [], onAppointmentC
               return (
                 <div key={formatLocalISO(date)} className="relative border-r border-[var(--border)] last:border-r-0">
                   {Array.from({ length: 9 }, (_, index) => <div key={index} className={`h-[72px] border-b border-[var(--border)] ${unavailableSet.has(formatLocalISO(date)) ? 'bg-amber-500/[0.04]' : ''}`} />)}
-                  {appointmentLayouts.map(({ appointment, startMinutes, endMinutes, column, columnCount }) => {
+                  {appointmentLayouts.map(({ appointment, startMinutes, endMinutes, column, columnCount }, apptIdx) => {
                     const scheduledAt = new Date(appointment.scheduled_at || appointment.date)
                     const top = (startMinutes / 60) * 72
                     const height = Math.max(38, ((endMinutes - startMinutes) / 60) * 72)
@@ -386,7 +386,7 @@ function AdminWeekCalendar({ appointments, unavailableDates = [], onAppointmentC
                     const statusClass = WEEK_STATUS_STYLES[appointment.status] || WEEK_STATUS_STYLES.pending
                     return (
                       <button
-                        key={appointment.id || `${appointment.scheduled_at}-${customerName}`}
+                        key={appointment.appointment_id || appointment.id || `${appointment.scheduled_at}-${customerName}-${apptIdx}`}
                         type="button"
                         onClick={() => onAppointmentClick?.(appointment)}
                         title={`${format(scheduledAt, 'h:mm a')} · ${customerName} · ${serviceName}`}
@@ -412,6 +412,7 @@ export default function AppointmentCalendar({
   appointments = [],
   onAppointmentClick,
   holidays = [],
+  openOverrides = [],
   unavailableDates = [],
   availableDates = [],
   isAdminMode = false,
@@ -425,10 +426,16 @@ export default function AppointmentCalendar({
   }, [])
   const timeSlots = useMemo(() => buildTimeSlots(), [])
 
+  const openOverrideSet = useMemo(() => {
+    return new Set(openOverrides.map(toISODate).filter(Boolean))
+  }, [openOverrides])
+
   const holidaySet = useMemo(() => {
     const source = holidays.length ? holidays : DEFAULT_HOLIDAYS
-    return new Set(source.map(toISODate).filter(Boolean))
-  }, [holidays])
+    const set = new Set(source.map(toISODate).filter(Boolean))
+    openOverrideSet.forEach((d) => set.delete(d))
+    return set
+  }, [holidays, openOverrideSet])
 
 const unavailableSet = useMemo(() => {
      return new Set(unavailableDates.map(toISODate).filter(Boolean))
