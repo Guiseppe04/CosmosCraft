@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'motion/react'
-import { CreditCard, FileText, Loader2, Save, Smartphone, Upload } from 'lucide-react'
+import { CreditCard, FileText, Loader2, Save, Smartphone, Upload, DollarSign } from 'lucide-react'
 import { adminApi } from '../../../../utils/adminApi'
 import { uploadToCloudinary } from '../../../../utils/cloudinary'
 import { SectionLoader } from '../shared/SectionLoader'
@@ -14,6 +14,7 @@ export function PaymentSettingsTab({ showToast }) {
     maya_number: '',
     qr_image_url: '',
     notes: '',
+    pickup_storage_fee: 0,
   })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -208,6 +209,28 @@ export function PaymentSettingsTab({ showToast }) {
             rows={6}
             className="w-full px-4 py-3 bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl text-[var(--text-light)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--gold-primary)] text-sm resize-none"
           />
+        </div>
+
+        <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6">
+          <h3 className="text-xl font-bold text-white mb-2 flex items-center gap-3">
+            <DollarSign className="w-5 h-5 text-[var(--gold-primary)]" />
+            Missed Pickup Storage Fee
+          </h3>
+          <p className="text-sm text-[var(--text-muted)] mb-4">
+            Daily storage fee shown to customers who do not collect their guitar by the scheduled pickup time. Set to 0 to show that no fee is currently configured.
+          </p>
+          <label className="block max-w-sm">
+            <span className={labelCls}>Fee per day (PHP)</span>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={settings.pickup_storage_fee ?? 0}
+              onChange={(event) => setSettings((prev) => ({ ...prev, pickup_storage_fee: event.target.value }))}
+              className={inputCls}
+              placeholder="0.00"
+            />
+          </label>
         </div>
       </div>
 

@@ -992,6 +992,7 @@ exports.updateFulfillmentStatusSchema = Joi.object({
     'any.required': 'Status is required',
   }),
   admin_notes: Joi.string().max(500).optional().allow('').trim(),
+  pickup_id_verified: Joi.boolean().optional().default(false),
 });
 
 

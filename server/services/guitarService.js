@@ -189,6 +189,28 @@ exports.getMyCustomizationById = async (customizationId, userId) => {
   return customization;
 };
 
+const sanitizeStickersForStorage = async (stickers) => {
+  if (!Array.isArray(stickers)) return [];
+  const result = [];
+  for (const item of stickers) {
+    if (!item || typeof item !== 'object') continue;
+    let src = item.src;
+    if (typeof src === 'string' && src.startsWith('data:')) {
+      try {
+        const { uploadImage } = require('./cloudinaryService');
+        src = await uploadImage(src, { folder: 'cosmoscraft_assets/stickers' });
+      } catch (err) {
+        console.warn('Failed to upload data-URI sticker to Cloudinary in guitarService:', err.message);
+      }
+    }
+    result.push({
+      ...item,
+      src,
+    });
+  }
+  return result;
+};
+
 exports.createMyCustomization = async (userId, payload) => {
   await ensureCustomizationColumns();
   const {
@@ -223,6 +245,8 @@ exports.createMyCustomization = async (userId, payload) => {
     );
   }
 
+  const resolvedStickers = Array.isArray(stickers) ? await sanitizeStickersForStorage(stickers) : null;
+
   const res = await pool.query(
     `INSERT INTO customizations (
       user_id, name, guitar_type, body_wood, neck_wood, fingerboard_wood,
@@ -241,7 +265,7 @@ exports.createMyCustomization = async (userId, payload) => {
       userId, name, guitar_type, body_wood, neck_wood, fingerboard_wood,
       bridge_type, pickups, color, finish_type, total_price, is_saved ?? true,
       config_json ? JSON.stringify(config_json) : null,
-      stickers ? JSON.stringify(stickers) : null,
+      resolvedStickers ? JSON.stringify(resolvedStickers) : null,
       preview_image || null,
     ]
   );
@@ -273,6 +297,8 @@ exports.updateMyCustomization = async (customizationId, userId, payload) => {
     preview_image,
   } = payload;
 
+  const resolvedStickers = Array.isArray(stickers) ? await sanitizeStickersForStorage(stickers) : null;
+
   const res = await pool.query(
     `UPDATE customizations SET
       name             = COALESCE($1, name),
@@ -287,7 +313,7 @@ exports.updateMyCustomization = async (customizationId, userId, payload) => {
       total_price      = COALESCE($10, total_price),
       is_saved         = COALESCE($11, is_saved),
       config_json      = COALESCE($12::jsonb, config_json),
-      stickers         = COALESCE($13::jsonb, stickers),
+      stickers         = CASE WHEN $13::jsonb IS NOT NULL THEN $13::jsonb ELSE stickers END,
       preview_image    = COALESCE($14, preview_image),
       updated_at       = now()
     WHERE customization_id = $15 AND user_id = $16
@@ -296,7 +322,7 @@ exports.updateMyCustomization = async (customizationId, userId, payload) => {
       name, guitar_type, body_wood, neck_wood, fingerboard_wood, bridge_type,
       pickups, color, finish_type, total_price, is_saved,
       config_json ? JSON.stringify(config_json) : null,
-      stickers ? JSON.stringify(stickers) : null,
+      resolvedStickers ? JSON.stringify(resolvedStickers) : null,
       preview_image || null,
       customizationId, userId,
     ]
@@ -304,6 +330,7 @@ exports.updateMyCustomization = async (customizationId, userId, payload) => {
 
   return res.rows[0] || null;
 };
+
 
 exports.deleteMyCustomization = async (customizationId, userId) => {
   await ensureCustomizationColumns();

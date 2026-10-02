@@ -10,6 +10,22 @@ import { adminApi } from '../../utils/adminApi';
 import { resolveImageUrl, API, getAuthHeaders } from '../../utils/apiConfig';
 import { ConfirmModal } from '../ui/ConfirmModal';
 import { useSocketEvent } from '../../context/SocketContext';
+import { APPOINTMENT_BRANCH_STORAGE_KEY, DEFAULT_APPOINTMENT_BRANCH } from '../../pages/admin/constants/adminOptions.js';
+
+const getAppointmentBranch = () => {
+  if (typeof window === 'undefined') return DEFAULT_APPOINTMENT_BRANCH;
+  try {
+    const storedBranch = JSON.parse(window.localStorage.getItem(APPOINTMENT_BRANCH_STORAGE_KEY) || '{}');
+    return {
+      ...DEFAULT_APPOINTMENT_BRANCH,
+      ...storedBranch,
+      name: storedBranch.name || DEFAULT_APPOINTMENT_BRANCH.name,
+      address: storedBranch.address || DEFAULT_APPOINTMENT_BRANCH.address,
+    };
+  } catch {
+    return DEFAULT_APPOINTMENT_BRANCH;
+  }
+};
 
 const formatLabel = (value) => {
   if (!value) return '';
@@ -617,6 +633,8 @@ export default function CustomerProjectTracker({ projectId, projectName, project
   const [markReceivedLoading, setMarkReceivedLoading] = useState(false);
   // Fulfillment state
   const [fulfillmentData, setFulfillmentData] = useState(null);
+  const [pickupBranch] = useState(getAppointmentBranch);
+  const [pickupStorageFee, setPickupStorageFee] = useState(0);
   const [fulfillmentLoading, setFulfillmentLoading] = useState(false);
   const [isEditingMethod, setIsEditingMethod] = useState(false);
   const [userAddresses, setUserAddresses] = useState([]);
@@ -663,6 +681,7 @@ export default function CustomerProjectTracker({ projectId, projectName, project
       loadBuildClaim();
       loadSettlement();
       loadFulfillment();
+      loadPickupStorageFee();
       loadAddresses();
     }
   }, [projectId]);
@@ -713,6 +732,16 @@ export default function CustomerProjectTracker({ projectId, projectName, project
       console.warn('Failed to load fulfillment data:', err);
     } finally {
       setFulfillmentLoading(false);
+    }
+  };
+
+  const loadPickupStorageFee = async () => {
+    try {
+      const res = await adminApi.getPaymentSettings();
+      setPickupStorageFee(Math.max(0, Number(res?.data?.pickup_storage_fee) || 0));
+    } catch (err) {
+      console.warn('Failed to load pickup storage fee:', err);
+      setPickupStorageFee(0);
     }
   };
 
@@ -881,6 +910,7 @@ export default function CustomerProjectTracker({ projectId, projectName, project
 
   const taskSummary = hierarchy?.task_summary || { total: 0, completed: 0, pending: 0 };
   const clampedProgress = Math.min(Math.max(Number(hierarchy?.progress) || 0, 0), 100);
+  const isProgressComplete = clampedProgress >= 100 || String(hierarchy?.status || '').toLowerCase() === 'completed';
   const milestones = Array.isArray(hierarchy?.milestones) ? hierarchy.milestones : [];
   const taskCompletionRate = taskSummary.total > 0
     ? Math.round((taskSummary.completed / taskSummary.total) * 100)
@@ -939,6 +969,8 @@ export default function CustomerProjectTracker({ projectId, projectName, project
     const receiptDate = formatShortDate(installment.payment_date || installment.paid_at || installment.payment_verified_at) || '—';
     const dueDate = formatShortDate(installment.due_date) || '—';
     const paymentReference = installment.payment_reference || installment.schedule_id || '—';
+    const buildName = projectName || hierarchy?.name || hierarchy?.title || 'Custom Build';
+    const buildNumber = hierarchy?.order_number || projectData?.order_number || customBuildId || '—';
     const html = `<!doctype html>
       <html><head><meta charset="utf-8"><title>Installment Payment Receipt</title>
       <style>
@@ -951,8 +983,9 @@ export default function CustomerProjectTracker({ projectId, projectName, project
         @media print{body{margin:0 auto;padding:0 12px}}
       </style></head><body>
         <header><h1>Payment Receipt</h1><p>CosmosCraft · Guitar Build Installment</p></header>
-        <p><strong>Project:</strong> ${escapeHtml(projectName || hierarchy?.name || hierarchy?.title || 'Custom Build')}</p>
+        <p><strong>Build:</strong> ${escapeHtml(buildName)} (${escapeHtml(buildNumber)})</p>
         <dl>
+          <div><dt>Build number</dt><dd>${escapeHtml(buildNumber)}</dd></div>
           <div><dt>Installment</dt><dd>#${escapeHtml(installment.installment_number)}</dd></div>
           <div><dt>Due date</dt><dd>${escapeHtml(dueDate)}</dd></div>
           <div><dt>Paid date</dt><dd>${escapeHtml(receiptDate)}</dd></div>
@@ -962,6 +995,71 @@ export default function CustomerProjectTracker({ projectId, projectName, project
           <div><dt>Status</dt><dd>Paid</dd></div>
         </dl>
         <p class="note">This receipt confirms the installment payment shown above.</p>
+      </body></html>`;
+
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.addEventListener('afterprint', () => printWindow.close(), { once: true });
+    window.setTimeout(() => printWindow.print(), 250);
+  };
+
+  const printPickupClaimReceipt = () => {
+    if (!fulfillmentData || !String(fulfillmentData.fulfillment_method || '').includes('pickup')) return;
+
+    const printWindow = window.open('', '_blank', 'width=720,height=800');
+    if (!printWindow) {
+      setFulfillmentMessage({ type: 'error', text: 'Allow pop-ups for this site to print your pickup claim receipt.' });
+      return;
+    }
+
+    const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;',
+    })[character]);
+    const customerName = [fulfillmentData.first_name, fulfillmentData.last_name].filter(Boolean).join(' ') || 'Customer';
+    const projectTitle = fulfillmentData.project_title || projectName || hierarchy?.name || hierarchy?.title || 'Custom Guitar Build';
+    const pickupSchedule = formatDate(fulfillmentData.pickup_scheduled_at) || 'To be arranged with the workshop';
+    const generatedDate = formatDate(new Date()) || '';
+    const storageFeeNotice = pickupStorageFee > 0
+      ? `If you do not collect the guitar by the scheduled pickup time, a storage fee of ${formatCurrency(pickupStorageFee)} per day will be charged.`
+      : 'No missed-pickup storage fee is currently configured.';
+    const html = `<!doctype html>
+      <html><head><meta charset="utf-8"><title>Guitar Pickup Claim Receipt</title>
+      <style>
+        body{font-family:Arial,sans-serif;color:#171717;margin:40px auto;max-width:680px;padding:0 24px}
+        header{border-bottom:2px solid #d4af37;padding-bottom:18px;margin-bottom:24px}
+        h1{font-size:24px;margin:0 0 6px}p{margin:6px 0;color:#525252}
+        dl{margin:24px 0}dl div{display:flex;justify-content:space-between;gap:24px;padding:12px 0;border-bottom:1px solid #ddd}
+        dt{color:#525252}dd{margin:0;text-align:right;font-weight:600;overflow-wrap:anywhere}
+        .notice{border:1px solid #d4af37;padding:14px;margin:24px 0;font-weight:600}
+        .signatures{display:grid;grid-template-columns:1fr 1fr;gap:32px;margin-top:56px}
+        .signature{border-top:1px solid #777;padding-top:8px;font-size:12px;color:#525252}
+        .note{margin-top:28px;font-size:11px;color:#737373}
+        @media print{body{margin:0 auto;padding:0 12px}}
+      </style></head><body>
+        <header><h1>Guitar Pickup Claim Receipt</h1><p>${escapeHtml(pickupBranch.name)}</p></header>
+        <dl>
+          <div><dt>Receipt reference</dt><dd>${escapeHtml(fulfillmentData.id || projectId)}</dd></div>
+          <div><dt>Order number</dt><dd>${escapeHtml(fulfillmentData.order_number || '—')}</dd></div>
+          <div><dt>Project</dt><dd>${escapeHtml(projectTitle)}</dd></div>
+          <div><dt>Claimant</dt><dd>${escapeHtml(customerName)}</dd></div>
+          <div><dt>Email</dt><dd>${escapeHtml(fulfillmentData.email || '—')}</dd></div>
+          <div><dt>Phone</dt><dd>${escapeHtml(fulfillmentData.phone || '—')}</dd></div>
+          <div><dt>Pickup location</dt><dd>${escapeHtml(pickupBranch.address)}</dd></div>
+          <div><dt>Pickup schedule</dt><dd>${escapeHtml(pickupSchedule)}</dd></div>
+          <div><dt>Fulfillment status</dt><dd>${escapeHtml(formatLabel(fulfillmentData.status))}</dd></div>
+        </dl>
+        <div class="notice">Bring this receipt and a valid government-issued photo ID. The name on your ID must match the claimant name printed above. Staff will verify the ID before releasing the guitar. ${escapeHtml(storageFeeNotice)}</div>
+        <div class="signatures">
+          <div class="signature">Customer signature and date</div>
+          <div class="signature">Staff name, signature, and date</div>
+        </div>
+        <p class="note">Generated ${escapeHtml(generatedDate)}. This receipt is for in-store pickup of the custom build listed above.</p>
       </body></html>`;
 
     printWindow.document.open();
@@ -1165,6 +1263,11 @@ export default function CustomerProjectTracker({ projectId, projectName, project
 
         const activeSteps = activeMethod === 'delivery' ? deliverySteps : pickupSteps;
         const selectedAddress = userAddresses.find((a) => a.address_id === selectedAddressId) || userAddresses[0] || fulfillmentData?.delivery_address_snapshot || null;
+        const scheduledPickup = fulfillmentData?.pickup_scheduled_at
+          ? formatDate(fulfillmentData.pickup_scheduled_at)
+          : pickupDate
+            ? `${pickupDate}${pickupTime ? ` at ${pickupTime}` : ''}`
+            : null;
 
         return (
           <div className="rounded-3xl border border-[var(--gold-primary)]/40 bg-[var(--surface-dark)] p-6 shadow-2xl space-y-6">
@@ -1384,11 +1487,29 @@ export default function CustomerProjectTracker({ projectId, projectName, project
                 {activeMethod === 'pickup' && (
                   <div className="pt-3 border-t border-[var(--border)] text-xs text-[var(--text-muted)] space-y-1">
                     <p className="font-semibold text-white">Pickup Location:</p>
-                    <p>CosmosCraft Workshop & Custom Shop, Luzon</p>
-                    {pickupDate && (
+                    <p>{pickupBranch.name}, {pickupBranch.address}</p>
+                    {scheduledPickup && (
                       <p className="text-[var(--gold-primary)] font-semibold mt-1">
-                        Scheduled: {pickupDate} {pickupTime ? `at ${pickupTime}` : ''}
+                        Scheduled: {scheduledPickup}
                       </p>
+                    )}
+                    {hasRequested && (
+                      <div className="pt-3">
+                        <button
+                          type="button"
+                          onClick={printPickupClaimReceipt}
+                          className="inline-flex items-center justify-center gap-2 rounded-xl bg-[var(--gold-primary)] px-4 py-2.5 text-xs font-extrabold text-black shadow-md shadow-[var(--gold-primary)]/25 transition-all hover:-translate-y-0.5 hover:bg-[var(--gold-secondary)] hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white cursor-pointer"
+                        >
+                          <Printer className="h-4 w-4" />
+                          Print Claim Receipt
+                        </button>
+                        <p className="mt-2 text-[11px]">Bring a valid photo ID. Its name must match the claimant name on your receipt.</p>
+                        <p className="mt-1 text-[11px]">
+                          {pickupStorageFee > 0
+                            ? `If you miss the scheduled pickup time, a storage fee of ${formatCurrency(pickupStorageFee)} per day will be charged.`
+                            : 'No missed-pickup storage fee is currently configured.'}
+                        </p>
+                      </div>
                     )}
                   </div>
                 )}
@@ -1576,7 +1697,7 @@ export default function CustomerProjectTracker({ projectId, projectName, project
 
 
       {/* Progress Header */}
-      {!showInstallmentSchedule && (
+      {!showInstallmentSchedule && !isProgressComplete && (
       <div ref={progressSummaryRef} className="rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] p-6">
         <div className="mb-6 grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(180px,220px)] lg:items-start">
           <div className="min-w-0">
@@ -1674,25 +1795,27 @@ export default function CustomerProjectTracker({ projectId, projectName, project
 
       {!showInstallmentSchedule && (
         <>
-          <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] p-5">
-            <p className="text-xs uppercase tracking-[0.1em] text-[var(--text-muted)]">Current Build — What You Receive</p>
-            {lastCompletedStage ? (
-              <div className="mt-2 flex items-center gap-3">
-                <CheckCircle className="h-5 w-5 shrink-0 text-green-400" />
-                <div>
-                  <p className="font-semibold text-white">{formatLabel(lastCompletedStage)}</p>
-                  {lastCompletedStageAt && (
-                    <p className="text-xs text-[var(--text-muted)]">Completed {formatDate(lastCompletedStageAt)}</p>
-                  )}
+          {!isProgressComplete && (
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--bg-primary)] p-5">
+              <p className="text-xs uppercase tracking-[0.1em] text-[var(--text-muted)]">Current Build — What You Receive</p>
+              {lastCompletedStage ? (
+                <div className="mt-2 flex items-center gap-3">
+                  <CheckCircle className="h-5 w-5 shrink-0 text-green-400" />
+                  <div>
+                    <p className="font-semibold text-white">{formatLabel(lastCompletedStage)}</p>
+                    {lastCompletedStageAt && (
+                      <p className="text-xs text-[var(--text-muted)]">Completed {formatDate(lastCompletedStageAt)}</p>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ) : (
-              <div className="mt-2 flex items-center gap-3">
-                <AlertCircle className="h-5 w-5 shrink-0 text-[var(--text-muted)]" />
-                <p className="text-sm text-[var(--text-muted)]">No completed build available.</p>
-              </div>
-            )}
-          </div>
+              ) : (
+                <div className="mt-2 flex items-center gap-3">
+                  <AlertCircle className="h-5 w-5 shrink-0 text-[var(--text-muted)]" />
+                  <p className="text-sm text-[var(--text-muted)]">No completed build available.</p>
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
@@ -2113,7 +2236,7 @@ export default function CustomerProjectTracker({ projectId, projectName, project
         )}
 
         {/* Installment Schedule */}
-        {isFullPayment ? (
+        {isFullPayment && !isProgressComplete ? (
           <div className="mt-6 rounded-xl border border-green-500/30 bg-green-500/5 p-5">
             <div className="flex items-center gap-3">
               <CheckCircle className="w-6 h-6 text-green-400" />
@@ -2277,7 +2400,7 @@ export default function CustomerProjectTracker({ projectId, projectName, project
                         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] pt-3">
                           {isPaid ? (
                             <span className="inline-flex items-center gap-1 text-xs font-medium text-green-400">
-                              <CheckCircle className="h-3.5 w-3.5" /> Verified
+                              <CheckCircle className="h-3.5 w-3.5 text-green-400" /> Verified
                             </span>
                           ) : <span />}
                           {isPayable ? (
