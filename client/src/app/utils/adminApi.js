@@ -259,13 +259,13 @@ export const adminApi = {
     const qs = new URLSearchParams(params).toString()
     return request(`/api/reports/payment-methods${qs ? '?' + qs : ''}`)
   },
-  exportSalesExcel: async ({ salesReport, customerSummary, dateLabel, printedBy, datePrinted }) => {
+  exportSalesExcel: async (payload = {}) => {
     const headers = getAuthHeaders({ 'Content-Type': 'application/json' });
     const res = await fetch(`${API_URL}/api/reports/sales/export-excel`, {
       method: 'POST',
       credentials: 'include',
       headers,
-      body: JSON.stringify({ salesReport, customerSummary, dateLabel, printedBy, datePrinted }),
+      body: JSON.stringify(payload),
     });
     if (!res.ok) throw new Error('Failed to generate Excel report');
     return res.blob();
