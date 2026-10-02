@@ -26,6 +26,7 @@ const ensurePaymentSettingsTable = async () => {
           maya_number VARCHAR(255) NOT NULL DEFAULT '',
           qr_image_url TEXT NOT NULL DEFAULT '',
           notes TEXT NOT NULL DEFAULT '',
+          pickup_storage_fee NUMERIC(12, 2) NOT NULL DEFAULT 0,
           created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
           updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
         )
@@ -36,6 +37,12 @@ const ensurePaymentSettingsTable = async () => {
          ON CONFLICT (id) DO NOTHING`
       );
     }
+    await pool.query(
+      'ALTER TABLE payment_settings ADD COLUMN IF NOT EXISTS pickup_storage_fee NUMERIC(12, 2) NOT NULL DEFAULT 0'
+    );
+    await pool.query(
+      `INSERT INTO payment_settings (id) VALUES (1) ON CONFLICT (id) DO NOTHING`
+    );
     paymentSettingsTableReady = true;
   } catch (err) {
     console.warn('Could not create payment_settings table (may already exist):', err.message);
@@ -48,7 +55,7 @@ router.get('/', async (req, res) => {
   try {
     await ensurePaymentSettingsTable();
     const result = await pool.query(
-      'SELECT id, bank_name, account_name, account_number, gcash_number, maya_number, qr_image_url, notes, updated_at FROM payment_settings WHERE id = 1'
+      'SELECT id, bank_name, account_name, account_number, gcash_number, maya_number, qr_image_url, notes, pickup_storage_fee, updated_at FROM payment_settings WHERE id = 1'
     );
     if (result.rows.length === 0) {
       return res.json({
@@ -61,6 +68,7 @@ router.get('/', async (req, res) => {
           maya_number: '',
           qr_image_url: '',
           notes: '',
+          pickup_storage_fee: 0,
         }
       });
     }
@@ -75,6 +83,13 @@ router.get('/', async (req, res) => {
 router.put('/', authenticateToken, authorize('admin', 'super_admin'), async (req, res) => {
   try {
     const { bank_name, account_name, account_number, gcash_number, maya_number, qr_image_url, notes } = req.body;
+    let pickupStorageFee = null;
+    if (req.body.pickup_storage_fee !== undefined) {
+      pickupStorageFee = Number(req.body.pickup_storage_fee);
+      if (!Number.isFinite(pickupStorageFee) || pickupStorageFee < 0) {
+        return res.status(400).json({ success: false, message: 'Pickup storage fee must be a non-negative amount.' });
+      }
+    }
     
     // Ensure table and default row exist
     await ensurePaymentSettingsTable();
@@ -88,10 +103,11 @@ router.put('/', authenticateToken, authorize('admin', 'super_admin'), async (req
         maya_number = COALESCE($5, maya_number),
         qr_image_url = COALESCE($6, qr_image_url),
         notes = COALESCE($7, notes),
+        pickup_storage_fee = COALESCE($8, pickup_storage_fee),
         updated_at = NOW()
        WHERE id = 1
        RETURNING *`,
-      [bank_name, account_name, account_number, gcash_number, maya_number, qr_image_url, notes]
+      [bank_name, account_name, account_number, gcash_number, maya_number, qr_image_url, notes, pickupStorageFee]
     );
 
     res.json({ success: true, data: result.rows[0] });

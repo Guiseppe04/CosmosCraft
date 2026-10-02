@@ -87,4 +87,14 @@ const browseFolder = async ({ folder = '', maxResults = 60, cursor = null } = {}
   };
 };
 
-module.exports = { browseFolder, ensureCloudinaryConfigured, ROOT_FOLDER, resolveFolder };
+const uploadImage = async (fileOrDataUri, { folder = 'cosmoscraft_assets/stickers' } = {}) => {
+  ensureCloudinaryConfigured();
+  const targetFolder = resolveFolder(folder);
+  const result = await cloudinary.uploader.upload(fileOrDataUri, {
+    folder: targetFolder,
+    resource_type: 'auto',
+  });
+  return result.secure_url;
+};
+
+module.exports = { browseFolder, ensureCloudinaryConfigured, ROOT_FOLDER, resolveFolder, uploadImage };

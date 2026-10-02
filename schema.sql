@@ -590,6 +590,7 @@ CREATE TABLE payment_settings (
     maya_number VARCHAR(255) NOT NULL DEFAULT '',
     qr_image_url TEXT NOT NULL DEFAULT '',
     notes TEXT NOT NULL DEFAULT '',
+    pickup_storage_fee NUMERIC(12, 2) NOT NULL DEFAULT 0,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
 );
@@ -1111,6 +1112,9 @@ CREATE TABLE IF NOT EXISTS fulfillment_requests (
     delivered_at TIMESTAMPTZ,
     delivered_by_user_id UUID REFERENCES users(user_id) ON DELETE SET NULL,
     delivery_confirmation_method VARCHAR(20) CHECK (delivery_confirmation_method IS NULL OR delivery_confirmation_method IN ('customer', 'admin', 'staff')),
+    pickup_id_verified BOOLEAN NOT NULL DEFAULT FALSE,
+    pickup_id_verified_by UUID REFERENCES users(user_id) ON DELETE SET NULL,
+    pickup_id_verified_at TIMESTAMPTZ,
     completed_at TIMESTAMPTZ,
     cancelled_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),

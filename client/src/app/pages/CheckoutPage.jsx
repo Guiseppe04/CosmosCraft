@@ -7,11 +7,15 @@ import {
   ArrowLeft, ShoppingCart, CreditCard, Truck, ShieldCheck,
   Plus, Minus, MessageSquare, Package, Guitar,
   ChevronDown, ChevronUp, MapPin, FileText, Check,
-  X, CheckCircle, Trash2, Home, Building, PlusCircle
+  X, CheckCircle, Trash2, Home, Building, PlusCircle, Maximize2
 } from 'lucide-react'
 import { PaymentModal } from '../components/PaymentModal.jsx'
 import TermsAndConditionsModal from '../components/TermsAndConditionsModal.jsx'
 import { AddressForm } from '../components/AddressForm.jsx'
+import GuitarPreview from '../components/guitar/GuitarPreview.jsx'
+import BassPreview from '../components/bass/BassPreview.jsx'
+import { BODY_OPTIONS, DEFAULT_CONFIG } from '../lib/guitarBuilderData.js'
+import { BASS_BODY_OPTIONS, BASS_DEFAULT_CONFIG } from '../lib/bassBuilderData.js'
 import { API, getAuthHeaders } from '../utils/apiConfig'
 import api from '../services/api.js'
 import { getCustomBuildSummaryTree } from '../utils/customBuildSummary.js'
@@ -57,6 +61,27 @@ const isCustomBuildItem = (item = {}) => {
   )
 }
 
+const parseObjectValue = (value) => {
+  if (typeof value !== 'string') return value && typeof value === 'object' ? value : {}
+  try {
+    const parsed = JSON.parse(value)
+    return parsed && typeof parsed === 'object' ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+
+const parseArrayValue = (value) => {
+  if (Array.isArray(value)) return value
+  if (typeof value !== 'string') return []
+  try {
+    const parsed = JSON.parse(value)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
 // ==================== REUSABLE COMPONENTS ====================
 
 function CartItemCard({
@@ -69,7 +94,44 @@ function CartItemCard({
   isSelected,
   onToggleSelect,
 }) {
+  const [isBuildPreviewOpen, setIsBuildPreviewOpen] = useState(false)
+  const [buildPreviewView, setBuildPreviewView] = useState('front')
   const customBuildSummaryTree = isCustomBuild ? getCustomBuildSummaryTree(item) : []
+  const customBuildData = isCustomBuild ? (item.customization || item) : {}
+  const savedBuildConfig = parseObjectValue(customBuildData.config || customBuildData.config_json)
+  const isBassBuild = Boolean(
+    customBuildData.isBass ||
+    String(customBuildData.guitar_type || savedBuildConfig.guitarType || '').toLowerCase().includes('bass') ||
+    savedBuildConfig.bassType
+  )
+  const buildPreviewConfig = {
+    ...(isBassBuild ? BASS_DEFAULT_CONFIG : DEFAULT_CONFIG),
+    ...savedBuildConfig,
+  }
+  const PreviewComponent = isBassBuild ? BassPreview : GuitarPreview
+  const stickerMaskSrc = isBassBuild
+    ? BASS_BODY_OPTIONS[buildPreviewConfig.bassType]?.bodySrc || null
+    : BODY_OPTIONS[buildPreviewConfig.body]?.bodySrc || null
+  const buildStickers = parseArrayValue(customBuildData.stickers)
+  const renderStickerOverlay = (side) => buildStickers
+    .filter((sticker) => (sticker.side || 'front') === side && typeof sticker.src === 'string' && sticker.src)
+    .map((sticker, index) => (
+      <img
+        key={sticker.id || `${side}-${index}`}
+        src={sticker.src}
+        alt=""
+        className="absolute select-none"
+        draggable={false}
+        style={{
+          zIndex: 25 + index,
+          left: `${Number(sticker.x) || 0}%`,
+          top: `${Number(sticker.y) || 0}%`,
+          width: `${Number(sticker.size) || 18}%`,
+          transform: `translate(-50%, -50%) rotate(${Number(sticker.rotation) || 0}deg)`,
+          pointerEvents: 'none',
+        }}
+      />
+    ))
   const quantity = Math.max(1, Number(item.quantity) || 1)
   const unitPrice = Number(item.price) || 0
   const itemTotal = unitPrice * quantity
@@ -94,7 +156,32 @@ function CartItemCard({
           />
         )}
         <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--bg-primary)]">
-          {item.image ? (
+          {isCustomBuild ? (
+            <button
+              type="button"
+              onClick={() => {
+                setBuildPreviewView('front')
+                setIsBuildPreviewOpen(true)
+              }}
+              aria-label={`View ${item.name || 'custom build'} front and rear preview`}
+              className="group relative flex h-full w-full items-center justify-center overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--gold-primary)]"
+            >
+              <div className="pointer-events-none absolute left-1/2 top-1/2 h-[240px] w-[240px] -translate-x-1/2 -translate-y-1/2 scale-[0.22]">
+                <PreviewComponent
+                  config={buildPreviewConfig}
+                  view="front"
+                  modelImageSrc={null}
+                  bodyWoodImageSrc={null}
+                  topWoodImageSrc={null}
+                  stickerOverlay={renderStickerOverlay('front')}
+                  stickerMaskSrc={stickerMaskSrc}
+                />
+              </div>
+              <span className="absolute inset-0 flex items-center justify-center bg-black/45 text-white opacity-0 transition-opacity group-hover:opacity-100">
+                <Maximize2 className="h-4 w-4" />
+              </span>
+            </button>
+          ) : item.image ? (
             <img
               src={item.image}
               alt={item.name || 'Product'}
@@ -185,6 +272,64 @@ function CartItemCard({
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {isBuildPreviewOpen && isCustomBuild && (
+        <div
+          className="fixed inset-0 z-[250] flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) setIsBuildPreviewOpen(false)
+          }}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-label={`${item.name || 'Custom build'} preview`}
+            className="w-full max-w-4xl overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <header className="flex items-center justify-between gap-3 border-b border-[var(--border)] px-5 py-4">
+              <div className="min-w-0">
+                <h2 className="truncate text-lg font-bold text-[var(--text-light)]">{item.name || 'Custom Build'}</h2>
+                <p className="text-xs text-[var(--text-muted)]">Build preview</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsBuildPreviewOpen(false)}
+                aria-label="Close build preview"
+                className="rounded-lg p-2 text-[var(--text-muted)] transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold-primary)]"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </header>
+            <div className="flex justify-center border-b border-[var(--border)] p-3">
+              <div className="inline-flex rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] p-1" role="group" aria-label="Preview side">
+                {['front', 'rear'].map((side) => (
+                  <button
+                    key={side}
+                    type="button"
+                    onClick={() => setBuildPreviewView(side)}
+                    aria-pressed={buildPreviewView === side}
+                    className={`rounded-md px-5 py-2 text-sm font-semibold capitalize transition-colors ${buildPreviewView === side ? 'bg-[var(--gold-primary)] text-black' : 'text-[var(--text-muted)] hover:text-white'}`}
+                  >
+                    {side}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="h-[min(65vh,620px)] min-h-[320px] bg-[var(--bg-primary)] p-4 sm:p-8">
+              <PreviewComponent
+                config={buildPreviewConfig}
+                view={buildPreviewView}
+                modelImageSrc={null}
+                bodyWoodImageSrc={null}
+                topWoodImageSrc={null}
+                stickerOverlay={renderStickerOverlay(buildPreviewView)}
+                stickerMaskSrc={stickerMaskSrc}
+              />
+            </div>
+          </section>
         </div>
       )}
     </div>
@@ -906,7 +1051,11 @@ export function CheckoutPage() {
         stock: item.product?.stock,
         quantity: Number(item.quantity) || 1,
         type: item.customization ? 'customization' : 'product',
-        customization: item.customization || null,
+        customization: item.customization ? {
+          ...item.customization,
+          config: item.customization.config_json || item.customization.config || {},
+          stickers: parseArrayValue(item.customization.stickers),
+        } : null,
       })))
       setIsPreparingCart(false)
     }).catch((error) => {
@@ -935,9 +1084,6 @@ export function CheckoutPage() {
       isCustomBuild: true,
       price: customBuildPrice + customAdditionalPartsTotal,
       quantity: 1,
-      image: customBuildItem.config?.bodyStyle === 'lespaul' ? 'https://images.unsplash.com/photo-1550985616-10810253b84d?w=800&q=80' :
-             customBuildItem.config?.bodyStyle === 'tele' ? 'https://images.unsplash.com/photo-1510915361894-db8b60106cb1?w=800&q=80' :
-             'https://images.unsplash.com/photo-1564186763535-ebb21ef5277f?w=800&q=80',
       id: customBuildItem.id || generatedCustomItemId,
     }]
   }
@@ -1276,11 +1422,14 @@ export function CheckoutPage() {
             customizationId: itemCustomSource.dbCustomizationId || itemCustomSource.customization_id || null,
             name: item.name || 'Custom Build',
             config: itemCustomSource.config || {},
+            stickers: Array.isArray(itemCustomSource.stickers) ? itemCustomSource.stickers : [],
+            preview_image: itemCustomSource.preview_image || null,
             summary: itemCustomSource.summary || {},
             pricingBreakdown: itemCustomSource.pricingBreakdown || {},
             baseBuildPrice: Number(itemCustomSource.baseBuildPrice ?? customBuildItem?.price ?? item.price) || 0,
             additionalParts: Array.isArray(itemCustomSource.additionalParts) ? itemCustomSource.additionalParts : [],
           } : undefined,
+
         }
       })
       const orderPayload = {

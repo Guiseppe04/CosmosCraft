@@ -527,7 +527,7 @@ exports.getFulfillmentRequestById = async (requestId, userId, userRole) => {
 /**
  * Admin action: Transition fulfillment status
  */
-exports.updateFulfillmentStatus = async (requestId, newStatus, adminNotes, actorId, actorRole) => {
+exports.updateFulfillmentStatus = async (requestId, newStatus, adminNotes, actorId, actorRole, pickupIdVerified = false) => {
   const isPrivileged = ['staff', 'admin', 'super_admin'].includes(actorRole);
   if (!isPrivileged) {
     throw new AppError('You are not authorized to perform this action.', 403);
@@ -554,6 +554,10 @@ exports.updateFulfillmentStatus = async (requestId, newStatus, adminNotes, actor
     const currentReq = reqRes.rows[0];
     const method = normalizeMethod(currentReq.fulfillment_method);
     const currentStatus = currentReq.status;
+
+    if (method === 'pickup' && newStatus === 'completed' && pickupIdVerified !== true) {
+      throw new AppError('Verify that the claimant photo ID name matches the pickup receipt before completing pickup.', 400);
+    }
 
     // Validate transition
     const allowedNext = VALID_STATUS_TRANSITIONS[method]?.[currentStatus] || [];
@@ -582,8 +586,11 @@ exports.updateFulfillmentStatus = async (requestId, newStatus, adminNotes, actor
            delivered_at = COALESCE($7, delivered_at),
            delivered_by_user_id = COALESCE($8, delivered_by_user_id),
            delivery_confirmation_method = COALESCE($9, delivery_confirmation_method),
+             pickup_id_verified = CASE WHEN $10::boolean THEN true ELSE pickup_id_verified END,
+             pickup_id_verified_by = CASE WHEN $10::boolean THEN $11 ELSE pickup_id_verified_by END,
+             pickup_id_verified_at = CASE WHEN $10::boolean THEN now() ELSE pickup_id_verified_at END,
            updated_at = now()
-       WHERE id = $10
+           WHERE id = $12
        RETURNING *`,
       [
         newStatus,
@@ -595,6 +602,8 @@ exports.updateFulfillmentStatus = async (requestId, newStatus, adminNotes, actor
         deliveredAt,
         deliveredBy,
         confirmationMethod,
+        method === 'pickup' && newStatus === 'completed' && pickupIdVerified === true,
+        actorId,
         requestId
       ]
     );

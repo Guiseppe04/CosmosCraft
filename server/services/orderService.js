@@ -280,11 +280,34 @@ const syncCustomizationParts = async (client, customizationId, additionalParts =
   }
 }
 
+const sanitizeStickersForStorage = async (stickers) => {
+  if (!Array.isArray(stickers)) return [];
+  const result = [];
+  for (const item of stickers) {
+    if (!item || typeof item !== 'object') continue;
+    let src = item.src;
+    if (typeof src === 'string' && src.startsWith('data:')) {
+      try {
+        const { uploadImage } = require('./cloudinaryService');
+        src = await uploadImage(src, { folder: 'cosmoscraft_assets/stickers' });
+      } catch (err) {
+        console.warn('Failed to upload data-URI sticker to Cloudinary on backend:', err.message);
+      }
+    }
+    result.push({
+      ...item,
+      src,
+    });
+  }
+  return result;
+};
+
 const upsertCustomizationForOrder = async (client, userId, customization, fallbackPrice) => {
   const {
     name,
     config = {},
     stickers,
+    preview_image,
     summary = {},
     baseBuildPrice,
     additionalParts = [],
@@ -294,6 +317,8 @@ const upsertCustomizationForOrder = async (client, userId, customization, fallba
   const totalPrice = Number(baseBuildPrice ?? fallbackPrice ?? 0)
   const guitarType = config.guitarType || (config.bassType ? 'bass' : 'electric')
   const bodyModel = String(config.body || config.bodyStyle || config.model || '').trim().toLowerCase() || null
+
+  const resolvedStickers = Array.isArray(stickers) ? await sanitizeStickersForStorage(stickers) : null
 
   if (requestedCustomizationId) {
     const existingCustomizationRes = await client.query(
@@ -331,11 +356,12 @@ const upsertCustomizationForOrder = async (client, userId, customization, fallba
            color = $9,
            finish_type = $10,
            config_json = COALESCE($11::jsonb, config_json),
-           stickers = COALESCE($12::jsonb, stickers),
-           total_price = $13,
-           is_saved = $14,
+           stickers = CASE WHEN $12::jsonb IS NOT NULL THEN $12::jsonb ELSE stickers END,
+           preview_image = COALESCE($13, preview_image),
+           total_price = $14,
+           is_saved = $15,
            updated_at = now()
-         WHERE customization_id = $15`,
+         WHERE customization_id = $16`,
         [
           name || 'Custom Build',
           guitarType,
@@ -348,7 +374,8 @@ const upsertCustomizationForOrder = async (client, userId, customization, fallba
           summary.bodyFinish || config.bodyFinish || null,
           summary.bodyFinish || config.bodyFinish || null,
           JSON.stringify(config),
-          Array.isArray(stickers) ? JSON.stringify(stickers) : null,
+          resolvedStickers ? JSON.stringify(resolvedStickers) : null,
+          preview_image || null,
           totalPrice,
           true,
           requestedCustomizationId,
@@ -366,7 +393,7 @@ const upsertCustomizationForOrder = async (client, userId, customization, fallba
        user_id,
        name,
        guitar_type,
-      body_model,
+       body_model,
        body_wood,
        neck_wood,
        fingerboard_wood,
@@ -376,10 +403,11 @@ const upsertCustomizationForOrder = async (client, userId, customization, fallba
        finish_type,
        config_json,
        stickers,
+       preview_image,
        total_price,
        is_saved
      )
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, COALESCE($13::jsonb, '[]'::jsonb), $14, $15)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, COALESCE($13::jsonb, '[]'::jsonb), $14, $15, $16)
      RETURNING customization_id`,
     [
       userId,
@@ -394,7 +422,8 @@ const upsertCustomizationForOrder = async (client, userId, customization, fallba
       summary.bodyFinish || config.bodyFinish || null,
       summary.bodyFinish || config.bodyFinish || null,
       JSON.stringify(config),
-      Array.isArray(stickers) ? JSON.stringify(stickers) : null,
+      resolvedStickers ? JSON.stringify(resolvedStickers) : null,
+      preview_image || null,
       totalPrice,
       true
     ]
@@ -405,6 +434,7 @@ const upsertCustomizationForOrder = async (client, userId, customization, fallba
 
   return customizationId
 }
+
 
 const validateAndDeductInventory = async (client, reservations, orderId) => {
   const productIds = Array.from(reservations.keys()).sort()

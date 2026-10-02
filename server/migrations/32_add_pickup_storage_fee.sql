@@ -1,0 +1,2 @@
+ALTER TABLE payment_settings
+  ADD COLUMN IF NOT EXISTS pickup_storage_fee NUMERIC(12, 2) NOT NULL DEFAULT 0;

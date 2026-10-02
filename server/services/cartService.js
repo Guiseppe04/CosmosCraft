@@ -54,6 +54,9 @@ async function getCartWithItems(userId, cartItemIds = null) {
       c.pickups,
       c.color,
       c.finish_type,
+      c.config_json,
+      c.stickers,
+      c.preview_image,
       c.total_price AS customization_price
     FROM cart_items ci
     LEFT JOIN products p ON ci.product_id = p.product_id
@@ -91,6 +94,9 @@ async function getCartWithItems(userId, cartItemIds = null) {
       pickups: item.pickups,
       color: item.color,
       finish_type: item.finish_type,
+      config_json: item.config_json,
+      stickers: item.stickers,
+      preview_image: item.preview_image,
       price: parseFloat(item.customization_price),
     } : null,
   }));

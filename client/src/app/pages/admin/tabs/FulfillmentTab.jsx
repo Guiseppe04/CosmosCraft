@@ -74,12 +74,13 @@ export function FulfillmentTab({ showToast }) {
     fetchRequests(1);
   }, [fetchRequests]);
 
-  const handleAdvanceStatus = async (requestId, nextStatus, notes = '') => {
+  const handleAdvanceStatus = async (requestId, nextStatus, notes = '', options = {}) => {
     try {
       setActionLoading(requestId);
       await adminApi.updateFulfillmentStatus(requestId, {
         status: nextStatus,
         admin_notes: notes || undefined,
+        ...options,
       });
 
       if (showToast) {

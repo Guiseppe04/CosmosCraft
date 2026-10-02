@@ -3,10 +3,33 @@ import ProjectTaskTracker from '../../../../components/projects/ProjectTaskTrack
 import GuitarPreview from '../../../../components/guitar/GuitarPreview'
 import BassPreview from '../../../../components/bass/BassPreview'
 import { DEFAULT_CONFIG } from '../../../../lib/guitarBuilderData.js'
-import { BASS_DEFAULT_CONFIG } from '../../../../lib/bassBuilderData.js'
+import { BODY_OPTIONS } from '../../../../lib/guitarBuilderData.js'
+import { BASS_DEFAULT_CONFIG, BASS_BODY_OPTIONS } from '../../../../lib/bassBuilderData.js'
 import { BASE_STICKER_Z_INDEX } from '../../../../utils/stickerPlacement.js'
 import { adminApi } from '../../../../utils/adminApi'
 import { ModalHeader } from '../shared/ModalHeader'
+import { Download } from 'lucide-react'
+
+const parseJsonValue = (value) => {
+  if (typeof value !== 'string') return value
+  try {
+    return JSON.parse(value)
+  } catch {
+    return null
+  }
+}
+
+const normalizeStickerList = (value) => {
+  const parsed = parseJsonValue(value)
+  const stickerList = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.stickers) ? parsed.stickers : []
+  return stickerList
+    .filter((sticker) => sticker && typeof sticker === 'object')
+    .map((sticker) => ({
+      ...sticker,
+      src: sticker.src || sticker.url || sticker.image_url || sticker.imageUrl || '',
+    }))
+    .filter((sticker) => Boolean(sticker.src))
+}
 
 export function ProjectTasksModal({ modal, closeModal, visibleParts }) {
   const [selectedBuildId, setSelectedBuildId] = useState('')
@@ -57,8 +80,12 @@ export function ProjectTasksModal({ modal, closeModal, visibleParts }) {
     ...(isBass ? BASS_DEFAULT_CONFIG : DEFAULT_CONFIG),
     ...(savedConfig && typeof savedConfig === 'object' ? savedConfig : {}),
   }
-  const stickers = Array.isArray(selectedBuild?.stickers) ? selectedBuild.stickers : []
-  const renderStickerOverlay = (side) => stickers
+  const stickerMaskSrc = isBass
+    ? BASS_BODY_OPTIONS[previewConfig.bassType]?.bodySrc || null
+    : BODY_OPTIONS[previewConfig.body]?.bodySrc || null
+  const stickers = normalizeStickerList(selectedBuild?.stickers)
+  const resolvedStickers = stickers.length > 0 ? stickers : normalizeStickerList(savedConfig?.stickers)
+  const renderStickerOverlay = (side) => resolvedStickers
     .filter((sticker) => (sticker.side || 'front') === side && typeof sticker.src === 'string' && sticker.src)
     .map((sticker, index) => (
       <img
@@ -83,6 +110,26 @@ export function ProjectTasksModal({ modal, closeModal, visibleParts }) {
         }}
       />
     ))
+
+  const downloadSticker = async (sticker, index) => {
+    try {
+      const response = await fetch(sticker.src)
+      if (!response.ok) throw new Error(`Sticker download failed: ${response.status}`)
+      const blob = await response.blob()
+      const objectUrl = URL.createObjectURL(blob)
+      const extension = blob.type.startsWith('image/') ? blob.type.slice(6).split('+')[0] : 'png'
+      const link = document.createElement('a')
+      link.href = objectUrl
+      link.download = `customer-sticker-${index + 1}.${extension}`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000)
+    } catch (error) {
+      console.warn('Could not download sticker directly; opening the image instead:', error)
+      window.open(sticker.src, '_blank', 'noopener,noreferrer')
+    }
+  }
 
   return (
     <>
@@ -129,6 +176,7 @@ export function ProjectTasksModal({ modal, closeModal, visibleParts }) {
                         config={previewConfig}
                         view={side}
                         stickerOverlay={renderStickerOverlay(side)}
+                        stickerMaskSrc={stickerMaskSrc}
                       />
                     </div>
                   </div>
@@ -138,11 +186,11 @@ export function ProjectTasksModal({ modal, closeModal, visibleParts }) {
             <div className="mt-5">
               <div className="mb-3 flex items-center justify-between gap-3">
                 <h4 className="text-sm font-semibold text-white">Customer Sticker Images</h4>
-                <span className="text-xs text-[var(--text-muted)]">{stickers.length} uploaded</span>
+                <span className="text-xs text-[var(--text-muted)]">{resolvedStickers.length} uploaded</span>
               </div>
-              {stickers.length > 0 ? (
+              {resolvedStickers.length > 0 ? (
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-                  {stickers.map((sticker, index) => (
+                  {resolvedStickers.map((sticker, index) => (
                     <figure key={sticker.id || `sticker-image-${index}`} className="overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--bg-primary)]">
                       <div className="flex aspect-square items-center justify-center p-3">
                         <img
@@ -151,8 +199,17 @@ export function ProjectTasksModal({ modal, closeModal, visibleParts }) {
                           className="max-h-full max-w-full object-contain"
                         />
                       </div>
-                      <figcaption className="border-t border-[var(--border)] px-3 py-2 text-xs text-[var(--text-muted)]">
-                        Sticker {index + 1} · {(sticker.side || 'front') === 'rear' ? 'Rear' : 'Front'} placement
+                      <figcaption className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--border)] px-3 py-2 text-xs text-[var(--text-muted)]">
+                        <span>Sticker {index + 1} · {(sticker.side || 'front') === 'rear' ? 'Rear' : 'Front'} placement</span>
+                        <button
+                          type="button"
+                          onClick={() => void downloadSticker(sticker, index)}
+                          className="inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] px-2 py-1 font-semibold text-[var(--text-light)] transition-colors hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold-primary)]"
+                          aria-label={`Download customer sticker ${index + 1}`}
+                        >
+                          <Download className="h-3.5 w-3.5" />
+                          Download
+                        </button>
                       </figcaption>
                     </figure>
                   ))}

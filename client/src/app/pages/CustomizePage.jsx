@@ -1,8 +1,8 @@
 import { useMemo, useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { useSearchParams, useNavigate, useBlocker } from 'react-router'
-import { 
-  ChevronDown, Info, 
+import {
+  ChevronDown, Info,
   Check, CheckCircle,
   Sparkles, Layers, Palette, Cog, Zap, Image, ZoomIn, ZoomOut, Trash2
 } from 'lucide-react'
@@ -33,38 +33,38 @@ import {
 
 // Configuration categories with icons and tooltips
 const CATEGORIES = [
-  { 
-    id: 'general', 
-    label: 'General', 
-    icon: Sparkles, 
+  {
+    id: 'general',
+    label: 'General',
+    icon: Sparkles,
     color: '#f59e0b',
     tooltip: 'Basic configuration including dexterity, strings, scale length, and case.'
   },
-  { 
-    id: 'body', 
-    label: 'Body', 
-    icon: Layers, 
+  {
+    id: 'body',
+    label: 'Body',
+    icon: Layers,
     color: '#d4af37',
     tooltip: 'The body shape determines the guitar\'s tonal characteristics and playability.'
   },
-  { 
-    id: 'neck', 
-    label: 'Neck & Headstock', 
-    icon: Palette, 
+  {
+    id: 'neck',
+    label: 'Neck & Headstock',
+    icon: Palette,
     color: '#6366f1',
     tooltip: 'The neck profile affects how the guitar feels in your hand.'
   },
-  { 
-    id: 'hardware', 
-    label: 'Hardware', 
-    icon: Cog, 
+  {
+    id: 'hardware',
+    label: 'Hardware',
+    icon: Cog,
     color: '#8b5cf6',
     tooltip: 'Hardware includes bridges, tuners, and control knobs.'
   },
-  { 
-    id: 'electronics', 
-    label: 'Electronics', 
-    icon: Zap, 
+  {
+    id: 'electronics',
+    label: 'Electronics',
+    icon: Zap,
     color: '#14b8a6',
     tooltip: 'Pickups convert string vibration into electrical signals.'
   },
@@ -92,13 +92,12 @@ function OptionButton({ option, isSelected, onClick, disabled = false }) {
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={`group relative w-full rounded-xl border p-3.5 text-left transition-all duration-200 ${
-        disabled
+      className={`group relative w-full rounded-xl border p-3.5 text-left transition-all duration-200 ${disabled
           ? 'opacity-50 cursor-not-allowed'
           : isSelected
             ? 'border-[#d4af37] bg-gradient-to-br from-[#d4af37]/20 to-[#d4af37]/5 shadow-lg shadow-[#d4af37]/10'
             : 'border-[var(--border)] bg-[var(--surface-elevated)] hover:border-[var(--gold-primary)] hover:bg-[var(--surface-dark)]'
-      }`}
+        }`}
     >
       {/* Selected indicator */}
       {isSelected && (
@@ -106,11 +105,10 @@ function OptionButton({ option, isSelected, onClick, disabled = false }) {
           <Check className="h-3 w-3 text-black" />
         </div>
       )}
-      
+
       <div className="space-y-1.5">
-        <div className={`text-[15px] font-bold leading-tight tracking-tight transition-colors duration-200 ${
-          isSelected ? 'text-[var(--text-light)]' : 'text-[var(--text-light)] group-hover:text-white'
-        }`}>
+        <div className={`text-[15px] font-bold leading-tight tracking-tight transition-colors duration-200 ${isSelected ? 'text-[var(--text-light)]' : 'text-[var(--text-light)] group-hover:text-white'
+          }`}>
           {option.label}
         </div>
         {option.note && (
@@ -119,9 +117,8 @@ function OptionButton({ option, isSelected, onClick, disabled = false }) {
           </div>
         )}
         {option.price > 0 && (
-          <div className={`text-[11px] font-semibold ${
-            isSelected ? 'text-[#d4af37]' : 'text-[#d4af37]/70'
-          }`}>
+          <div className={`text-[11px] font-semibold ${isSelected ? 'text-[#d4af37]' : 'text-[#d4af37]/70'
+            }`}>
             +₱{option.price.toLocaleString('en-PH')}
           </div>
         )}
@@ -131,7 +128,7 @@ function OptionButton({ option, isSelected, onClick, disabled = false }) {
 }
 
 // Visual card option for wood/material selection
-function VisualCard({ option, isSelected, onClick, previewImage, fallbackImage, imageHeight = 'h-16' , fit = 'cover', imageZoom, imagePosition }) {
+function VisualCard({ option, isSelected, onClick, previewImage, fallbackImage, imageHeight = 'h-16', fit = 'cover', imageZoom, imagePosition }) {
   const [displayImage, setDisplayImage] = useState(previewImage || fallbackImage || '')
 
   useEffect(() => {
@@ -146,11 +143,10 @@ function VisualCard({ option, isSelected, onClick, previewImage, fallbackImage, 
     <button
       type="button"
       onClick={onClick}
-      className={`group relative overflow-hidden rounded-xl border transition-all duration-300 ${
-        isSelected
+      className={`group relative overflow-hidden rounded-xl border transition-all duration-300 ${isSelected
           ? 'border-[#d4af37] shadow-lg shadow-[#d4af37]/20 ring-2 ring-[#d4af37]/30'
           : 'border-[var(--border)] hover:border-[var(--gold-primary)]/40'
-      }`}
+        }`}
     >
       {/* Preview image/gradient */}
       <div className={`relative ${imageHeight} w-full overflow-hidden `}>
@@ -166,11 +162,10 @@ function VisualCard({ option, isSelected, onClick, previewImage, fallbackImage, 
               }
               setDisplayImage('')
             }}
-            className={`absolute inset-0 h-full w-full transition-transform duration-500 ${
-              fit === 'contain'
+            className={`absolute inset-0 h-full w-full transition-transform duration-500 ${fit === 'contain'
                 ? 'object-contain p-1.5 group-hover:scale-110'
                 : 'object-cover group-hover:scale-105'
-            }`}
+              }`}
             style={{
               objectPosition: resolvedImagePosition,
               transform: `scale(${resolvedImageZoom})`,
@@ -180,23 +175,21 @@ function VisualCard({ option, isSelected, onClick, previewImage, fallbackImage, 
         ) : (
           <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-white/5" />
         )}
-        
+
         {/* Selected overlay */}
         {isSelected && (
           <div className="absolute inset-0 bg-[#d4af37]/20" />
         )}
-        
+
         {/* Subtle shine effect */}
         <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
       </div>
-      
+
       {/* Content */}
-      <div className={`border-t border-[var(--border)] p-2.5 transition-colors duration-200 ${
-        isSelected ? 'bg-[#d4af37]/10' : 'bg-[var(--surface-elevated)]'
-      }`}>
-        <div className={`text-sm font-bold leading-tight tracking-tight transition-colors duration-200 ${
-          isSelected ? 'text-[var(--text-light)]' : 'text-[var(--text-light)]'
+      <div className={`border-t border-[var(--border)] p-2.5 transition-colors duration-200 ${isSelected ? 'bg-[#d4af37]/10' : 'bg-[var(--surface-elevated)]'
         }`}>
+        <div className={`text-sm font-bold leading-tight tracking-tight transition-colors duration-200 ${isSelected ? 'text-[var(--text-light)]' : 'text-[var(--text-light)]'
+          }`}>
           {option.label}
         </div>
         {option.note && (
@@ -205,14 +198,13 @@ function VisualCard({ option, isSelected, onClick, previewImage, fallbackImage, 
           </div>
         )}
         {option.price > 0 && (
-          <div className={`mt-1 text-[11px] font-semibold ${
-            isSelected ? 'text-[#d4af37]' : 'text-[#d4af37]/70'
-          }`}>
+          <div className={`mt-1 text-[11px] font-semibold ${isSelected ? 'text-[#d4af37]' : 'text-[#d4af37]/70'
+            }`}>
             +₱{option.price.toLocaleString('en-PH')}
           </div>
         )}
       </div>
-      
+
       {/* Selected checkmark */}
       {isSelected && (
         <div className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-[#d4af37] shadow-lg">
@@ -220,7 +212,7 @@ function VisualCard({ option, isSelected, onClick, previewImage, fallbackImage, 
         </div>
       )}
     </button>
-   )
+  )
 }
 
 // Smart option picker: automatically chooses VisualCard if option has an image,
@@ -294,7 +286,7 @@ export function CustomizePage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const editBuildId = searchParams.get('edit')
   const [activeBuildId, setActiveBuildId] = useState(editBuildId)
-  
+
   const {
     config,
     updateConfig: baseUpdateConfig,
@@ -308,10 +300,10 @@ export function CustomizePage() {
     options,
     refreshPrices,
     loadingPrices,
-   } = useGuitarConfig()
-   const navigate = useNavigate()
-   // Responsible for active-electronics visibility toggles in the Electronics panel.
-   const isActive = config.electronicsType === 'active'
+  } = useGuitarConfig()
+  const navigate = useNavigate()
+  // Responsible for active-electronics visibility toggles in the Electronics panel.
+  const isActive = config.electronicsType === 'active'
   const [view, setView] = useState('front')
   const [zoomLevel, setZoomLevel] = useState(1)
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 })
@@ -737,7 +729,7 @@ export function CustomizePage() {
 
   // Get guitar type from URL and sync with config
   const urlGuitarType = searchParams.get('type') || 'electric'
-  
+
   // Sync config with URL parameter on mount
   useEffect(() => {
     if (config.guitarType !== urlGuitarType) {
@@ -811,7 +803,7 @@ export function CustomizePage() {
           setIsLockedCustomization(false)
           try {
             setSavedSnapshot(JSON.stringify({ config: target.config, stickers: loadedStickers }))
-          } catch {}
+          } catch { }
         } catch (e) {
           console.error('Failed to load build config for editing:', e)
         }
@@ -915,7 +907,7 @@ export function CustomizePage() {
 
     let storedKey = 'cosmoscraft_saved_builds'
     let stored = JSON.parse(window.localStorage.getItem(storedKey) || '[]')
-    
+
     // Look in bass builds if not found in normal builds (for safety)
     let existingIndex = stored.findIndex(b => b.id === buildId)
     if (existingIndex === -1 && window.localStorage.getItem('cosmoscraft_saved_bass_builds')) {
@@ -967,7 +959,7 @@ export function CustomizePage() {
       const snap = JSON.stringify({ config, stickers })
       setSavedSnapshot(snap)
       window.sessionStorage.setItem('cosmoscraft.electricBuild.savedSnapshot', snap)
-    } catch {}
+    } catch { }
 
     try {
       const payload = {
@@ -1028,7 +1020,7 @@ export function CustomizePage() {
       }
       setToastMessage('Saved locally. Database sync failed.')
     }
-    
+
     if (continueBlockedNavigation && blocker.state === 'blocked') {
       setShowUnsavedModal(false)
       bypassNavigationBlockRef.current = true
@@ -1062,7 +1054,7 @@ export function CustomizePage() {
     void saveBuild({ shouldNavigate: false })
   }
 
-  
+
   const handleSaveAndLeave = () => {
     if (!isAuthenticated) {
       openLogin(() => { void saveBuild({ shouldNavigate: false, continueBlockedNavigation: true }) })
@@ -1143,7 +1135,7 @@ export function CustomizePage() {
     setShowLoadModal(false)
     try {
       window.sessionStorage.removeItem('cosmoscraft.electricBuild.savedSnapshot')
-    } catch {}
+    } catch { }
     setSearchParams((params) => {
       params.delete('edit')
       return params
@@ -1183,17 +1175,17 @@ export function CustomizePage() {
         )}
       </AnimatePresence>
       <div className="mx-auto flex h-full max-w-[2000px] flex-col px-3 pb-3 sm:px-4 lg:px-6 lg:pb-6">
-        
+
         {/* Main layout: Left panel - Center guitar - Right panel */}
         <div className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[340px_minmax(0,1fr)_400px]">
-          
-{/* LEFT PANEL - Configuration Categories */}
-<aside className="min-h-0 rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] overflow-hidden flex flex-col">
+
+          {/* LEFT PANEL - Configuration Categories */}
+          <aside className="min-h-0 rounded-2xl border border-[var(--border)] bg-[var(--surface-dark)] overflow-hidden flex flex-col">
             <div className="border-b border-[var(--border)] px-4 py-4">
               <h2 className="text-lg font-semibold tracking-tight">Build Your Guitar</h2>
               <p className="mt-1 text-xs text-[var(--text-muted)]">Select a category to customize</p>
             </div>
-            
+
             {/* Combined dropdown - Guitar Type + Categories */}
             <div className="p-3 flex-shrink-0" ref={categoryDropdownRef}>
               <div className="relative">
@@ -1202,9 +1194,9 @@ export function CustomizePage() {
                   onClick={() => setCategoryDropdownOpen(!categoryDropdownOpen)}
                   className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-all duration-200 border border-[var(--border)] bg-[var(--surface-elevated)]"
                 >
-                  <div 
+                  <div
                     className="flex h-9 w-9 items-center justify-center rounded-lg"
-                    style={{ 
+                    style={{
                       backgroundColor: CATEGORIES.find(c => c.id === activeCategory)?.color + '20',
                     }}
                   >
@@ -1218,7 +1210,7 @@ export function CustomizePage() {
                   </span>
                   <ChevronDown className={`h-4 w-4 text-[var(--text-muted)] transition-transform duration-200 ${categoryDropdownOpen ? 'rotate-180' : ''}`} />
                 </button>
-                
+
                 {/* Dropdown menu */}
                 {categoryDropdownOpen && (
                   <div className="absolute top-full left-0 right-0 mt-1 z-50 border border-[var(--border)] rounded-xl bg-[var(--surface-elevated)] shadow-lg overflow-hidden">
@@ -1229,7 +1221,7 @@ export function CustomizePage() {
                     {CATEGORIES.map((category) => {
                       const Icon = category.icon
                       const isActive = activeCategory === category.id
-                      
+
                       return (
                         <button
                           key={category.id}
@@ -1238,15 +1230,14 @@ export function CustomizePage() {
                             setActiveCategory(category.id)
                             setCategoryDropdownOpen(false)
                           }}
-                          className={`flex w-full items-center gap-3 px-3 py-2.5 text-left transition-all duration-200 ${
-                            isActive
+                          className={`flex w-full items-center gap-3 px-3 py-2.5 text-left transition-all duration-200 ${isActive
                               ? 'bg-gradient-to-r from-[#d4af37]/20 border-l-2 border-[#d4af37]'
                               : 'hover:bg-[var(--surface-dark)] border-l-2 border-transparent'
-                          }`}
+                            }`}
                         >
-                          <div 
+                          <div
                             className="flex h-9 w-9 items-center justify-center rounded-lg"
-                            style={{ 
+                            style={{
                               backgroundColor: isActive ? `${category.color}20` : 'var(--surface-dark)',
                             }}
                           >
@@ -1262,10 +1253,10 @@ export function CustomizePage() {
                 )}
               </div>
             </div>
-            
+
             {/* Category-specific options */}
             <div className="flex-1 overflow-y-auto border-t border-[var(--border)]">
-              
+
               {/* GENERAL OPTIONS */}
               {activeCategory === 'general' && (
                 <div className="p-4 space-y-5">
@@ -1283,7 +1274,7 @@ export function CustomizePage() {
                       ))}
                     </div>
                   </div>
-                  
+
                   {/* Strings */}
                   <div>
                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Number of Strings</h3>
@@ -1298,7 +1289,7 @@ export function CustomizePage() {
                       ))}
                     </div>
                   </div>
-                  
+
                   {/* Multiscale */}
                   <div>
                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Multiscale</h3>
@@ -1313,7 +1304,7 @@ export function CustomizePage() {
                       ))}
                     </div>
                   </div>
-                  
+
                   {/* Scale Length */}
                   <div>
                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Scale Length</h3>
@@ -1328,7 +1319,7 @@ export function CustomizePage() {
                       ))}
                     </div>
                   </div>
-                  
+
                   {/* Case */}
                   <div>
                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Case</h3>
@@ -1345,7 +1336,7 @@ export function CustomizePage() {
                   </div>
                 </div>
               )}
-              
+
               {/* BODY OPTIONS */}
               {activeCategory === 'body' && (
                 <div className="p-4 space-y-5">
@@ -1366,7 +1357,7 @@ export function CustomizePage() {
                       ))}
                     </div>
                   </div>
-                  
+
                   {/* Beveled Body Edges */}
                   <div>
                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Bevel</h3>
@@ -1381,7 +1372,7 @@ export function CustomizePage() {
                       ))}
                     </div>
                   </div>
-                  
+
                   {/* Body Wood */}
                   <div>
                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Body Wood</h3>
@@ -1397,79 +1388,79 @@ export function CustomizePage() {
                       ))}
                     </div>
                   </div>
-                  
-                   {/* Top Wood */}
-                   <div>
-                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Top Wood</h3>
-                     <div className="grid grid-cols-2 gap-2">
-                       {options.topWoodOptions?.map((opt) => (
-                         <VisualCard
-                           key={opt.value}
-                           option={opt}
-                           isSelected={config.topWood === opt.value}
-                           onClick={() => updateConfig({ topWood: opt.value })}
-                           previewImage={opt.preview || opt.texture}
-                           imageHeight="h-16"
-                         />
-                       ))}
-                     </div>
-                   </div>
-                  
-                  {/* Finish Type */}
-                  {showDcFinish && (
+
+                  {/* Top Wood */}
                   <div>
-                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Finish Type</h3>
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Top Wood</h3>
                     <div className="grid grid-cols-2 gap-2">
-                      {options.finishTypeOptions?.map((opt) => (
-                        <OptionButton
+                      {options.topWoodOptions?.map((opt) => (
+                        <VisualCard
                           key={opt.value}
                           option={opt}
-                          isSelected={config.finishType === opt.value}
-                          onClick={() => updateConfig({ finishType: opt.value, finishColor: opt.value === 'metallic' ? 'black' : opt.value === 'translucent' ? 'black' : opt.value === 'sparkle' ? 'black' : config.finishColor })}
+                          isSelected={config.topWood === opt.value}
+                          onClick={() => updateConfig({ topWood: opt.value })}
+                          previewImage={opt.preview || opt.texture}
+                          imageHeight="h-16"
                         />
                       ))}
                     </div>
                   </div>
+
+                  {/* Finish Type */}
+                  {showDcFinish && (
+                    <div>
+                      <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Finish Type</h3>
+                      <div className="grid grid-cols-2 gap-2">
+                        {options.finishTypeOptions?.map((opt) => (
+                          <OptionButton
+                            key={opt.value}
+                            option={opt}
+                            isSelected={config.finishType === opt.value}
+                            onClick={() => updateConfig({ finishType: opt.value, finishColor: opt.value === 'metallic' ? 'black' : opt.value === 'translucent' ? 'black' : opt.value === 'sparkle' ? 'black' : config.finishColor })}
+                          />
+                        ))}
+                      </div>
+                    </div>
                   )}
-                  
-                   {/* Finish Color - dynamically discovered from selected finish folder */}
-                   {showDcFinish && config.finishType && config.finishType !== 'solid' && (
-                     <div>
-                       <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Finish Color</h3>
-                       <div className="grid grid-cols-2 gap-2">
-                         {options.finishColorOptions?.map((opt) => (
-                           <VisualCard
-                             key={opt.value}
-                             option={opt}
-                             isSelected={config.finishColor === opt.value}
-                             onClick={() => updateConfig({ finishColor: opt.value })}
-                             previewImage={opt.preview}
-                             imageHeight="h-14"
-                           />
-                         ))}
-                       </div>
-                     </div>
-                   )}
-                  
-                   {/* Top Coat */}
-                     {showDcTopCoat && (
-                     <div>
-                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Top Coat</h3>
-                     <div className="grid grid-cols-2 gap-2">
-                       {visibleTopCoatOptions?.map((opt) => (
-                         <VisualCard
-                           key={opt.value}
-                           option={opt}
-                           isSelected={config.topCoat === opt.value}
-                           onClick={() => updateConfig({ topCoat: opt.value })}
-                           previewImage={opt.preview}
-                           imageHeight="h-14"
-                         />
-                       ))}
-                     </div>
-                   </div>
+
+                  {/* Finish Color - dynamically discovered from selected finish folder */}
+                  {showDcFinish && config.finishType && config.finishType !== 'solid' && (
+                    <div>
+                      <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Finish Color</h3>
+                      <div className="grid grid-cols-2 gap-2">
+                        {options.finishColorOptions?.map((opt) => (
+                          <VisualCard
+                            key={opt.value}
+                            option={opt}
+                            isSelected={config.finishColor === opt.value}
+                            onClick={() => updateConfig({ finishColor: opt.value })}
+                            previewImage={opt.preview}
+                            imageHeight="h-14"
+                          />
+                        ))}
+                      </div>
+                    </div>
                   )}
-                  
+
+                  {/* Top Coat */}
+                  {showDcTopCoat && (
+                    <div>
+                      <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Top Coat</h3>
+                      <div className="grid grid-cols-2 gap-2">
+                        {visibleTopCoatOptions?.map((opt) => (
+                          <VisualCard
+                            key={opt.value}
+                            option={opt}
+                            isSelected={config.topCoat === opt.value}
+                            onClick={() => updateConfig({ topCoat: opt.value })}
+                            previewImage={opt.preview}
+                            imageHeight="h-14"
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Additional Finish Options (Burst Finish) - depends on Top Coat */}
                   <div>
                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Additional Finish Options</h3>
@@ -1484,7 +1475,7 @@ export function CustomizePage() {
                       ))}
                     </div>
                   </div>
-                  
+
                   {/* Body Finish - Solid color picker, shown when finishType is 'solid' or not set */}
                   {showDcFinish && (!config.finishType || config.finishType === 'solid') && (
                     <div>
@@ -1497,7 +1488,7 @@ export function CustomizePage() {
                       <p className="text-xs text-[var(--text-muted)] mt-3">Choose any custom color for your guitar body using the RGB picker or enter a hex value.</p>
                     </div>
                   )}
-                  
+
                   {/* Pickguard */}
                   <div>
                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Pickguard</h3>
@@ -1528,7 +1519,7 @@ export function CustomizePage() {
                   </div>
                 </div>
               )}
-              
+
               {/* NECK OPTIONS */}
               {activeCategory === 'neck' && (
                 <div className="p-4 space-y-5">
@@ -1546,43 +1537,43 @@ export function CustomizePage() {
                       ))}
                     </div>
                   </div>
-                  
-                    {/* Neck */}
-                    <div>
-                      <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Neck Wood</h3>
-                      <div className="grid grid-cols-2 gap-2">
-{options.neckOptions?.filter(opt => opt.construction === config.neckConstruction).map((opt) => (
-                            <VisualCard
-                              key={opt.value}
-                              option={opt}
-                              isSelected={config.neck === opt.value}
-                              onClick={() => updateConfig({ neck: opt.value })}
-                              previewImage={opt.preview}
-                              imageHeight="h-16"
-                              fit="contain"
-                            />
-                          ))}
-                      </div>
-                    </div>
 
-                    {/* Fretboard */}
-                    <div>
-                      <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Fingerboard Wood</h3>
-                      <div className="grid grid-cols-2 gap-2">
-{options.fretboardOptions?.map((opt) => (
-                            <VisualCard
-                              key={opt.value}
-                              option={opt}
-                              isSelected={config.fretboard === opt.value}
-                              onClick={() => updateConfig({ fretboard: opt.value })}
-                              previewImage={opt.preview}
-                              imageHeight="h-16"
-                              fit="contain"
-                            />
-                          ))}
-                      </div>
+                  {/* Neck */}
+                  <div>
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Neck Wood</h3>
+                    <div className="grid grid-cols-2 gap-2">
+                      {options.neckOptions?.filter(opt => opt.construction === config.neckConstruction).map((opt) => (
+                        <VisualCard
+                          key={opt.value}
+                          option={opt}
+                          isSelected={config.neck === opt.value}
+                          onClick={() => updateConfig({ neck: opt.value })}
+                          previewImage={opt.preview}
+                          imageHeight="h-16"
+                          fit="contain"
+                        />
+                      ))}
                     </div>
-                  
+                  </div>
+
+                  {/* Fretboard */}
+                  <div>
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Fingerboard Wood</h3>
+                    <div className="grid grid-cols-2 gap-2">
+                      {options.fretboardOptions?.map((opt) => (
+                        <VisualCard
+                          key={opt.value}
+                          option={opt}
+                          isSelected={config.fretboard === opt.value}
+                          onClick={() => updateConfig({ fretboard: opt.value })}
+                          previewImage={opt.preview}
+                          imageHeight="h-16"
+                          fit="contain"
+                        />
+                      ))}
+                    </div>
+                  </div>
+
                   {/* Frets */}
                   <div>
                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Frets</h3>
@@ -1597,29 +1588,29 @@ export function CustomizePage() {
                       ))}
                     </div>
                   </div>
-                  
-                   {/* Neck Rear Finish */}
-                   <div>
-                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Neck Rear Finish</h3>
-                     <div className="grid grid-cols-2 gap-2">
-                       {options.neckRearFinishOptions?.map((opt) => (
-                         <OptionButton
-                           key={opt.value}
-                           option={opt}
-                           isSelected={config.neckRearFinish === opt.value}
-                           onClick={() => updateConfig({ neckRearFinish: opt.value })}
-                           disabled={config.topCoat === 'tungOil'}
-                         />
-                       ))}
-                     </div>
-                     {config.neckRearFinish && (() => {
-                       const opt = options.neckRearFinishOptions?.find(o => o.value === config.neckRearFinish)
-                       return opt?.disclaimer ? (
-                         <p className="mt-2 text-[10px] leading-tight text-amber-300/80">{opt.disclaimer}</p>
-                       ) : null
-                     })()}
-                   </div>
-                  
+
+                  {/* Neck Rear Finish */}
+                  <div>
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Neck Rear Finish</h3>
+                    <div className="grid grid-cols-2 gap-2">
+                      {options.neckRearFinishOptions?.map((opt) => (
+                        <OptionButton
+                          key={opt.value}
+                          option={opt}
+                          isSelected={config.neckRearFinish === opt.value}
+                          onClick={() => updateConfig({ neckRearFinish: opt.value })}
+                          disabled={config.topCoat === 'tungOil'}
+                        />
+                      ))}
+                    </div>
+                    {config.neckRearFinish && (() => {
+                      const opt = options.neckRearFinishOptions?.find(o => o.value === config.neckRearFinish)
+                      return opt?.disclaimer ? (
+                        <p className="mt-2 text-[10px] leading-tight text-amber-300/80">{opt.disclaimer}</p>
+                      ) : null
+                    })()}
+                  </div>
+
                   {/* Headstock Shape */}
                   <div>
                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Headstock Shape</h3>
@@ -1639,25 +1630,25 @@ export function CustomizePage() {
                       ))}
                     </div>
                   </div>
-                  
+
                   {/* Headstock Wood */}
                   <div>
                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Headstock Overlay</h3>
                     <div className="grid grid-cols-2 gap-2">
-{options.headstockWoodOptions?.map((opt) => (
-                            <VisualCard
-                              key={opt.value}
-                              option={opt}
-                              isSelected={config.headstockWood === opt.value}
-                              onClick={() => updateConfig({ headstockWood: opt.value })}
-                              previewImage={opt.preview}
-                              imageHeight="h-16"
-                              fit="contain"
-                            />
-                          ))}
+                      {options.headstockWoodOptions?.map((opt) => (
+                        <VisualCard
+                          key={opt.value}
+                          option={opt}
+                          isSelected={config.headstockWood === opt.value}
+                          onClick={() => updateConfig({ headstockWood: opt.value })}
+                          previewImage={opt.preview}
+                          imageHeight="h-16"
+                          fit="contain"
+                        />
+                      ))}
                     </div>
                   </div>
-                  
+
                   {/* Truss Rod Cover */}
                   <div>
                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Truss Rod Cover</h3>
@@ -1677,47 +1668,47 @@ export function CustomizePage() {
                       ))}
                     </div>
                   </div>
-                  
-                   {/* Inlay Shape */}
-                   <div>
-                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Inlay Shape</h3>
-                     <div className="grid grid-cols-2 gap-2">
-                       {options.inlayShapeOptions?.map((opt) => (
-                         <OptionButton
-                           key={opt.value}
-                           option={opt}
-                           isSelected={config.inlayShape === opt.value}
-                           onClick={() => updateConfig({ inlayShape: opt.value })}
-                         />
-                       ))}
-                     </div>
-                   </div>
-                   <div>
-                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Inlay Material</h3>
-                     <div className="grid grid-cols-2 gap-2">
-                       {options.inlayMaterialOptions?.map((opt) => (
-                         <VisualCard
-                           key={opt.value}
-                           option={opt}
-                           isSelected={config.inlayMaterial === opt.value}
-                           onClick={() => updateConfig({ inlayMaterial: opt.value })}
-                           previewImage={opt.preview}
-                           imageHeight="h-16"
-                           fit="contain"
-                         />
-                       ))}
-                     </div>
-                   </div>
+
+                  {/* Inlay Shape */}
+                  <div>
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Inlay Shape</h3>
+                    <div className="grid grid-cols-2 gap-2">
+                      {options.inlayShapeOptions?.map((opt) => (
+                        <OptionButton
+                          key={opt.value}
+                          option={opt}
+                          isSelected={config.inlayShape === opt.value}
+                          onClick={() => updateConfig({ inlayShape: opt.value })}
+                        />
+                      ))}
+                    </div>
                   </div>
-                )}
-                
-                {/* HARDWARE OPTIONS */}
-                {activeCategory === 'hardware' && (
-                  <div className="p-4 space-y-5">
-                    {/* Hardware Color */}
-                    <div>
-                      <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Hardware Color</h3>
-                      <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Inlay Material</h3>
+                    <div className="grid grid-cols-2 gap-2">
+                      {options.inlayMaterialOptions?.map((opt) => (
+                        <VisualCard
+                          key={opt.value}
+                          option={opt}
+                          isSelected={config.inlayMaterial === opt.value}
+                          onClick={() => updateConfig({ inlayMaterial: opt.value })}
+                          previewImage={opt.preview}
+                          imageHeight="h-16"
+                          fit="contain"
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* HARDWARE OPTIONS */}
+              {activeCategory === 'hardware' && (
+                <div className="p-4 space-y-5">
+                  {/* Hardware Color */}
+                  <div>
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Hardware Color</h3>
+                    <div className="grid grid-cols-2 gap-2">
                       {options.hardwareOptions?.map((opt) => (
                         <OptionButton
                           key={opt.value}
@@ -1728,7 +1719,7 @@ export function CustomizePage() {
                       ))}
                     </div>
                   </div>
-                  
+
                   {/* Bridge */}
                   <div>
                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Bridge</h3>
@@ -1740,12 +1731,12 @@ export function CustomizePage() {
                           isSelected={config.bridge === opt.value}
                           onClick={() => updateConfig({ bridge: opt.value })}
                           previewImage={opt.preview}
-                           imageHeight="h-16"
+                          imageHeight="h-16"
                         />
                       ))}
                     </div>
                   </div>
-                  
+
                   {/* Knobs */}
                   <div>
                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Control Knobs</h3>
@@ -1762,7 +1753,7 @@ export function CustomizePage() {
                       ))}
                     </div>
                   </div>
-                  
+
                   {/* Nut */}
                   <div>
                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Nut</h3>
@@ -1777,25 +1768,25 @@ export function CustomizePage() {
                       ))}
                     </div>
                   </div>
-                  
-                   {/* Tuning */}
-                   <div>
-                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Tuning</h3>
-                     <div className="grid grid-cols-2 gap-2">
-                       {options.tuningOptions?.map((opt) => (
-                         <OptionButton
-                           key={opt.value}
-                           option={opt}
-                           isSelected={config.tuning === opt.value}
-                           onClick={() => updateConfig({ tuning: opt.value })}
-                         />
-                       ))}
-                     </div>
-                     {options.tuningDisclaimer && (
-                       <p className="mt-2 text-[10px] leading-relaxed text-[var(--text-muted)] italic">{options.tuningDisclaimer}</p>
-                     )}
-                   </div>
-                  
+
+                  {/* Tuning */}
+                  <div>
+                    <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Tuning</h3>
+                    <div className="grid grid-cols-2 gap-2">
+                      {options.tuningOptions?.map((opt) => (
+                        <OptionButton
+                          key={opt.value}
+                          option={opt}
+                          isSelected={config.tuning === opt.value}
+                          onClick={() => updateConfig({ tuning: opt.value })}
+                        />
+                      ))}
+                    </div>
+                    {options.tuningDisclaimer && (
+                      <p className="mt-2 text-[10px] leading-relaxed text-[var(--text-muted)] italic">{options.tuningDisclaimer}</p>
+                    )}
+                  </div>
+
                   {/* String Brand */}
                   <div>
                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">String Brand</h3>
@@ -1810,7 +1801,7 @@ export function CustomizePage() {
                       ))}
                     </div>
                   </div>
-                  
+
                   {/* Output Jack */}
                   <div>
                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Output Jack</h3>
@@ -1825,7 +1816,7 @@ export function CustomizePage() {
                       ))}
                     </div>
                   </div>
-                  
+
                   {/* Strap Buttons */}
                   <div>
                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Strap Buttons</h3>
@@ -1840,7 +1831,7 @@ export function CustomizePage() {
                       ))}
                     </div>
                   </div>
-                  
+
                   {/* Tuner Buttons */}
                   <div>
                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Tuner Buttons</h3>
@@ -1855,7 +1846,7 @@ export function CustomizePage() {
                       ))}
                     </div>
                   </div>
-                  
+
                   {/* Electronics Cavity Cover */}
                   {config.body !== 'delos' && (
                     <div>
@@ -1875,33 +1866,33 @@ export function CustomizePage() {
                       </div>
                     </div>
                   )}
-                  
-                   {/* Tremolo Cover - only for bridges with a tremolo */}
-                   {(config.bridge === 'hipshotTremolo' || config.bridge === 'floydRoseTremolo') && (
-                   <div>
-                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Tremolo Cover</h3>
-                     <div className="grid grid-cols-2 gap-2">
-                       {options.tremoloCoverOptions?.map((opt) => (
-                         <VisualCard
-                           key={opt.value}
-                           option={opt}
-                           isSelected={config.tremoloCover === opt.value}
-                           onClick={() => updateConfig({ tremoloCover: opt.value })}
-                           previewImage={opt.preview}
-                           imageHeight="h-16"
-                         />
-                       ))}
-                     </div>
-                   </div>
-                   )}
+
+                  {/* Tremolo Cover - only for bridges with a tremolo */}
+                  {(config.bridge === 'hipshotTremolo' || config.bridge === 'floydRoseTremolo') && (
+                    <div>
+                      <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Tremolo Cover</h3>
+                      <div className="grid grid-cols-2 gap-2">
+                        {options.tremoloCoverOptions?.map((opt) => (
+                          <VisualCard
+                            key={opt.value}
+                            option={opt}
+                            isSelected={config.tremoloCover === opt.value}
+                            onClick={() => updateConfig({ tremoloCover: opt.value })}
+                            previewImage={opt.preview}
+                            imageHeight="h-16"
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
-              
-               {/* ELECTRONICS OPTIONS */}
-               {activeCategory === 'electronics' && (
-                 <div className="p-4 space-y-4">
-                   {/* Pickup Configuration */}
-                   <AccordionSection title="Pickup Configuration" icon={Zap} defaultOpen={true}>
+
+              {/* ELECTRONICS OPTIONS */}
+              {activeCategory === 'electronics' && (
+                <div className="p-4 space-y-4">
+                  {/* Pickup Configuration */}
+                  <AccordionSection title="Pickup Configuration" icon={Zap} defaultOpen={true}>
                     {/* Electronics Type */}
                     <div>
                       <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Electronics Type</h3>
@@ -1918,101 +1909,101 @@ export function CustomizePage() {
                       </div>
                     </div>
 
-                     {/* Pickup Configuration - hidden when Active (Fluence locks the layout) */}
-                     {!isActive && (
-                     <div>
-                       <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Pickup Configuration</h3>
-                       {/* Responsible for rendering pickup configuration selector (HH / H-S-H) */}
-                       <div className="grid grid-cols-2 gap-2">
-                         {options.pickupConfigurationOptions?.map((opt) => (
-                           <OptionButton
-                             key={opt.value}
-                             option={opt}
-                             isSelected={config.pickupConfiguration === opt.value}
-                             onClick={() => updateConfig({ pickupConfiguration: opt.value })}
-                           />
-                         ))}
-                       </div>
-                     </div>
-                     )}
+                    {/* Pickup Configuration - hidden when Active (Fluence locks the layout) */}
+                    {!isActive && (
+                      <div>
+                        <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Pickup Configuration</h3>
+                        {/* Responsible for rendering pickup configuration selector (HH / H-S-H) */}
+                        <div className="grid grid-cols-2 gap-2">
+                          {options.pickupConfigurationOptions?.map((opt) => (
+                            <OptionButton
+                              key={opt.value}
+                              option={opt}
+                              isSelected={config.pickupConfiguration === opt.value}
+                              onClick={() => updateConfig({ pickupConfiguration: opt.value })}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
-                     {/* Bridge Pickup Model - hidden when Active */}
-                     {!isActive && (
-                     <div>
-                       <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Bridge Pickup</h3>
-                       {/* Responsible for rendering bridge humbucker model selector */}
-                       <div className="grid grid-cols-2 gap-2">
-                         {options.bridgePickupModelOptions?.map((opt) => (
-                           <OptionButton
-                             key={opt.value}
-                             option={opt}
-                             isSelected={config.bridgePickupModel === opt.value}
-                             onClick={() => updateConfig({ bridgePickupModel: opt.value })}
-                           />
-                         ))}
-                       </div>
-                     </div>
-                     )}
+                    {/* Bridge Pickup Model - hidden when Active */}
+                    {!isActive && (
+                      <div>
+                        <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Bridge Pickup</h3>
+                        {/* Responsible for rendering bridge humbucker model selector */}
+                        <div className="grid grid-cols-2 gap-2">
+                          {options.bridgePickupModelOptions?.map((opt) => (
+                            <OptionButton
+                              key={opt.value}
+                              option={opt}
+                              isSelected={config.bridgePickupModel === opt.value}
+                              onClick={() => updateConfig({ bridgePickupModel: opt.value })}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
-                     {/* Middle Pickup Model - only for H-S-H - hidden when Active */}
-                     {!isActive && ['hss'].includes(config.pickupConfiguration || config.pickups) && (
-                       <div>
-                         <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Middle Pickup</h3>
-                         {/* Responsible for rendering middle single coil model selector */}
-                         <div className="grid grid-cols-2 gap-2">
-                           {options.middlePickupModelOptions?.map((opt) => (
-                             <OptionButton
-                               key={opt.value}
-                               option={opt}
-                               isSelected={config.middlePickupModel === opt.value}
-                               onClick={() => updateConfig({ middlePickupModel: opt.value })}
-                             />
-                           ))}
-                         </div>
-                       </div>
-                     )}
+                    {/* Middle Pickup Model - only for H-S-H - hidden when Active */}
+                    {!isActive && ['hss'].includes(config.pickupConfiguration || config.pickups) && (
+                      <div>
+                        <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Middle Pickup</h3>
+                        {/* Responsible for rendering middle single coil model selector */}
+                        <div className="grid grid-cols-2 gap-2">
+                          {options.middlePickupModelOptions?.map((opt) => (
+                            <OptionButton
+                              key={opt.value}
+                              option={opt}
+                              isSelected={config.middlePickupModel === opt.value}
+                              onClick={() => updateConfig({ middlePickupModel: opt.value })}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
-                     {/* Neck Pickup Model - hidden when Active */}
-                     {!isActive && (
-                     <div>
-                       <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Neck Pickup</h3>
-                       {/* Responsible for rendering neck humbucker model selector */}
-                       <div className="grid grid-cols-2 gap-2">
-                         {options.neckPickupModelOptions?.map((opt) => (
-                           <OptionButton
-                             key={opt.value}
-                             option={opt}
-                             isSelected={config.neckPickupModel === opt.value}
-                             onClick={() => updateConfig({ neckPickupModel: opt.value })}
-                           />
-                         ))}
-                       </div>
-                     </div>
-                     )}
+                    {/* Neck Pickup Model - hidden when Active */}
+                    {!isActive && (
+                      <div>
+                        <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Neck Pickup</h3>
+                        {/* Responsible for rendering neck humbucker model selector */}
+                        <div className="grid grid-cols-2 gap-2">
+                          {options.neckPickupModelOptions?.map((opt) => (
+                            <OptionButton
+                              key={opt.value}
+                              option={opt}
+                              isSelected={config.neckPickupModel === opt.value}
+                              onClick={() => updateConfig({ neckPickupModel: opt.value })}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </AccordionSection>
 
                   {/* Pickup Appearance */}
                   <AccordionSection title="Pickup Appearance" icon={Palette} defaultOpen={true}>
-                     {/* Pickup Color - hidden when Active (Painted Bobbin RGB is used instead) */}
-                     {!isActive && (
-                     <div>
-                       <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Pickup Color</h3>
-                       {/* Responsible for rendering pickup color/style selector (bobbins, painted, wooden, covers) */}
-                       <div className="grid grid-cols-2 gap-2">
-                         {options.pickupColorOptions?.map((opt) => (
-                           <OptionButton
-                             key={opt.value}
-                             option={opt}
-                             isSelected={config.pickupColor === opt.value}
+                    {/* Pickup Color - hidden when Active (Painted Bobbin RGB is used instead) */}
+                    {!isActive && (
+                      <div>
+                        <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Pickup Color</h3>
+                        {/* Responsible for rendering pickup color/style selector (bobbins, painted, wooden, covers) */}
+                        <div className="grid grid-cols-2 gap-2">
+                          {options.pickupColorOptions?.map((opt) => (
+                            <OptionButton
+                              key={opt.value}
+                              option={opt}
+                              isSelected={config.pickupColor === opt.value}
                               onClick={() => updateConfig({ pickupColor: opt.value })}
                             />
                           ))}
                         </div>
                       </div>
-                      )}
+                    )}
 
-                     {/* Pickup Color Variant - hidden when Active */}
-                     {!isActive && config.pickupColor === 'bobbins' && (
+                    {/* Pickup Color Variant - hidden when Active */}
+                    {!isActive && config.pickupColor === 'bobbins' && (
                       <div>
                         <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Bobbin Color</h3>
                         {/* Responsible for rendering bobbin color variant selector */}
@@ -2029,8 +2020,8 @@ export function CustomizePage() {
                       </div>
                     )}
 
-                     {/* Cover Color - hidden when Active */}
-                     {!isActive && config.pickupColor === 'covers' && (
+                    {/* Cover Color - hidden when Active */}
+                    {!isActive && config.pickupColor === 'covers' && (
                       <div>
                         <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Cover Color</h3>
                         {/* Responsible for rendering cover color variant selector */}
@@ -2047,8 +2038,8 @@ export function CustomizePage() {
                       </div>
                     )}
 
-                     {/* Painted Color (RGB) - visible in Active mode (Fluence mask tint) */}
-                     {(config.pickupColor === 'painted' || isActive) && (
+                    {/* Painted Color (RGB) - visible in Active mode (Fluence mask tint) */}
+                    {(config.pickupColor === 'painted' || isActive) && (
                       <div>
                         <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Painted Color (RGB)</h3>
                         {/* Responsible for rendering RGB color picker for painted bobbins */}
@@ -2059,44 +2050,44 @@ export function CustomizePage() {
                       </div>
                     )}
 
-                     {/* Wood Type - hidden when Active */}
-{!isActive && config.pickupColor === 'wooden' && (
-                       <div>
-                         <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Wood Type</h3>
-                         {/* Responsible for rendering wood type selector for wooden bobbins */}
-                         <div className="grid grid-cols-2 gap-2">
-{options.pickupWoodTypeOptions?.map((opt) => (
-                              <VisualCard
-                                key={opt.value}
-                                option={opt}
-                                isSelected={config.pickupWoodType === opt.value}
-                                onClick={() => updateConfig({ pickupWoodType: opt.value })}
-                                previewImage={opt.preview}
-                                imageHeight="h-12"
-                                fit="contain"
-                              />
-                            ))}
-                         </div>
-                       </div>
-                     )}
-                   
-                   {/* Pole Piece Color - hidden when Active (Fluence pickups use fixed poles) */}
-                   {!isActive && (
-                   <div>
-                     <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Pole Piece Color</h3>
-                     {/* Responsible for rendering pole piece color selector (black, chrome, gold) */}
-                     <div className="grid grid-cols-2 gap-2">
-                       {options.pickupPoleColorOptions?.map((opt) => (
-                         <OptionButton
-                           key={opt.value}
-                           option={opt}
-                           isSelected={config.pickupPoleColor === opt.value}
-                           onClick={() => updateConfig({ pickupPoleColor: opt.value })}
-                         />
-                       ))}
-                     </div>
-                   </div>
-                   )}
+                    {/* Wood Type - hidden when Active */}
+                    {!isActive && config.pickupColor === 'wooden' && (
+                      <div>
+                        <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Wood Type</h3>
+                        {/* Responsible for rendering wood type selector for wooden bobbins */}
+                        <div className="grid grid-cols-2 gap-2">
+                          {options.pickupWoodTypeOptions?.map((opt) => (
+                            <VisualCard
+                              key={opt.value}
+                              option={opt}
+                              isSelected={config.pickupWoodType === opt.value}
+                              onClick={() => updateConfig({ pickupWoodType: opt.value })}
+                              previewImage={opt.preview}
+                              imageHeight="h-12"
+                              fit="contain"
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Pole Piece Color - hidden when Active (Fluence pickups use fixed poles) */}
+                    {!isActive && (
+                      <div>
+                        <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Pole Piece Color</h3>
+                        {/* Responsible for rendering pole piece color selector (black, chrome, gold) */}
+                        <div className="grid grid-cols-2 gap-2">
+                          {options.pickupPoleColorOptions?.map((opt) => (
+                            <OptionButton
+                              key={opt.value}
+                              option={opt}
+                              isSelected={config.pickupPoleColor === opt.value}
+                              onClick={() => updateConfig({ pickupPoleColor: opt.value })}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </AccordionSection>
 
                   {/* Controls */}
@@ -2104,13 +2095,13 @@ export function CustomizePage() {
                     <div>
                       <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-[var(--text-muted)] mb-2">Controls</h3>
                       {/* Responsible for rendering controls layout selector (Off, DTC, DTMV) */}
-                       <div className="grid grid-cols-2 gap-2">
-                         {options.controlsOptions?.map((opt) => (
-                           <OptionButton
-                             key={opt.value}
-                             option={opt}
-                             isSelected={config.controls === opt.value}
-                             onClick={() => updateConfig({ controls: opt.value })}
+                      <div className="grid grid-cols-2 gap-2">
+                        {options.controlsOptions?.map((opt) => (
+                          <OptionButton
+                            key={opt.value}
+                            option={opt}
+                            isSelected={config.controls === opt.value}
+                            onClick={() => updateConfig({ controls: opt.value })}
                           />
                         ))}
                       </div>
@@ -2123,13 +2114,13 @@ export function CustomizePage() {
                       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#14b8a6]/10">
                         <Info className="h-4 w-4 text-[#14b8a6]" />
                       </div>
-                       <div>
+                      <div>
                         <h4 className="text-xs font-semibold uppercase tracking-[0.1em] text-[var(--text-muted)]">
                           About Pickups
                         </h4>
                         <p className="mt-1 text-xs text-[var(--text-muted)] leading-relaxed">
-                          <strong>HH:</strong> Dual humbuckers - warm, high output<br/>
-                          <strong>H-S-H:</strong> Bridge humbucker, middle single, neck humbucker - versatile<br/>
+                          <strong>HH:</strong> Dual humbuckers - warm, high output<br />
+                          <strong>H-S-H:</strong> Bridge humbucker, middle single, neck humbucker - versatile<br />
                           <strong>Fluence:</strong> Modern active pickups - clean, powerful
                         </p>
                       </div>
@@ -2138,7 +2129,7 @@ export function CustomizePage() {
                 </div>
               )}
             </div>
-            
+
           </aside>
 
           {/* CENTER - Guitar Preview */}
@@ -2150,7 +2141,7 @@ export function CustomizePage() {
                 <div className="absolute top-1/4 left-1/4 w-[400px] h-[400px] bg-gradient-radial from-white/5 via-transparent to-transparent rounded-full" />
                 <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[800px] h-[200px] bg-gradient-to-t from-[#d4af37]/5 via-transparent to-transparent" />
               </div>
-              
+
               {/* Guitar container */}
               <div
                 ref={previewViewportRef}
@@ -2211,31 +2202,29 @@ export function CustomizePage() {
                   />
                 </div>
               </div>
-              
+
               {/* Subtle reflection/shadow beneath guitar */}
               <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-3/4 h-8 bg-gradient-to-b from-transparent to-black/40 blur-xl" />
-              
+
               {/* View toggle */}
               <div className="absolute top-4 left-4 z-10 flex gap-2">
                 <button
                   type="button"
                   onClick={() => setView('front')}
-                  className={`rounded-lg px-4 py-2 text-xs font-semibold transition-all duration-200 ${
-                    view === 'front'
+                  className={`rounded-lg px-4 py-2 text-xs font-semibold transition-all duration-200 ${view === 'front'
                       ? 'bg-[#d4af37] text-black'
                       : 'bg-[var(--border)] text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]'
-                  }`}
+                    }`}
                 >
                   Front View
                 </button>
                 <button
                   type="button"
                   onClick={() => setView('rear')}
-                  className={`rounded-lg px-4 py-2 text-xs font-semibold transition-all duration-200 ${
-                    view === 'rear'
+                  className={`rounded-lg px-4 py-2 text-xs font-semibold transition-all duration-200 ${view === 'rear'
                       ? 'bg-[#d4af37] text-black'
                       : 'bg-[var(--border)] text-[var(--text-muted)] hover:bg-[var(--surface-elevated)]'
-                  }`}
+                    }`}
                 >
                   Rear View
                 </button>
@@ -2381,15 +2370,14 @@ export function CustomizePage() {
                         key={stickerItem.id}
                         type="button"
                         onClick={() => setSelectedStickerId(stickerItem.id)}
-                        className={`w-full flex items-center gap-2 rounded px-1.5 py-1 text-left text-[10px] ${
-                          selectedStickerId === stickerItem.id
+                        className={`w-full flex items-center gap-2 rounded px-1.5 py-1 text-left text-[10px] ${selectedStickerId === stickerItem.id
                             ? 'bg-[#d4af37]/20 text-[#d4af37]'
                             : 'bg-[var(--surface-elevated)] text-[var(--text-light)] hover:bg-[var(--surface-elevated)]'
-                        }`}
+                          }`}
                       >
                         <img src={stickerItem.src} alt={`Sticker ${index + 1}`} className="h-5 w-5 rounded object-cover" />
-                          <span>{view === 'front' ? 'Front' : 'Rear'} Sticker {index + 1}</span>
-                          <span className="ml-auto">z:{index + 1}</span>
+                        <span>{view === 'front' ? 'Front' : 'Rear'} Sticker {index + 1}</span>
+                        <span className="ml-auto">z:{index + 1}</span>
                       </button>
                     ))}
                   </div>
@@ -2430,7 +2418,7 @@ export function CustomizePage() {
                 {getCategoryInfo()?.tooltip || 'Choose from the left panel'}
               </p>
             </div>
-            
+
             {/* Current selection summary */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
               <BuilderConfigurationPanel
@@ -2474,7 +2462,7 @@ export function CustomizePage() {
           </aside>
         </div>
       </div>
-      
+
       {/* Disclaimer */}
       <p className="mt-2 text-center text-[10px] uppercase tracking-[0.15em] text-[var(--text-muted)]">
         Graphic representation only. Actual product may differ slightly due to natural wood variations.
