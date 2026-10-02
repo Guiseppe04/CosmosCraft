@@ -380,6 +380,16 @@ export function PaymentModal({
                     <p className="font-bold text-slate-900">Bank Transfer Details</p>
                     <p className="mt-1 text-xs text-slate-500">Please transfer to this account</p>
                   </div>
+                  {paymentSettings?.bank_transfer_qr_image_url && (
+                    <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-md">
+                      <p className="mb-3 text-center text-xs font-medium text-slate-500">Scan bank transfer QR code</p>
+                      <img
+                        src={paymentSettings.bank_transfer_qr_image_url}
+                        alt="Bank transfer QR code"
+                        className="mx-auto h-auto w-full max-w-xs object-contain"
+                      />
+                    </div>
+                  )}
                   <div className="space-y-4 rounded-2xl border border-slate-100 bg-white p-5 shadow-md">
                     <div className="flex items-center justify-between border-b border-slate-200 py-3">
                       <span className="text-sm font-medium text-slate-600">Bank</span>

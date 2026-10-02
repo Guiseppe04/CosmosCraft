@@ -13,6 +13,7 @@ export function PaymentSettingsTab({ showToast }) {
     gcash_number: '',
     maya_number: '',
     qr_image_url: '',
+    bank_transfer_qr_image_url: '',
     notes: '',
     pickup_storage_fee: 0,
   })
@@ -20,6 +21,8 @@ export function PaymentSettingsTab({ showToast }) {
   const [saving, setSaving] = useState(false)
   const [qrFile, setQrFile] = useState(null)
   const [qrPreview, setQrPreview] = useState(null)
+  const [bankTransferQrFile, setBankTransferQrFile] = useState(null)
+  const [bankTransferQrPreview, setBankTransferQrPreview] = useState(null)
 
   useEffect(() => {
     loadSettings()
@@ -47,13 +50,20 @@ export function PaymentSettingsTab({ showToast }) {
       if (qrFile) {
         qr_image_url = await uploadToCloudinary(qrFile)
       }
+      let bank_transfer_qr_image_url = settings.bank_transfer_qr_image_url
+      if (bankTransferQrFile) {
+        bank_transfer_qr_image_url = await uploadToCloudinary(bankTransferQrFile)
+      }
       await adminApi.updatePaymentSettings({
         ...settings,
         qr_image_url,
+        bank_transfer_qr_image_url,
       })
       showToast?.('Payment settings saved successfully!', 'success')
       setQrFile(null)
       setQrPreview(null)
+      setBankTransferQrFile(null)
+      setBankTransferQrPreview(null)
       loadSettings()
     } catch (err) {
       showToast?.(err.message || 'Failed to save payment settings', 'error')
@@ -68,6 +78,15 @@ export function PaymentSettingsTab({ showToast }) {
     setQrFile(file)
     const reader = new FileReader()
     reader.onloadend = () => setQrPreview(reader.result)
+    reader.readAsDataURL(file)
+  }
+
+  const handleBankTransferQrUpload = (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setBankTransferQrFile(file)
+    const reader = new FileReader()
+    reader.onloadend = () => setBankTransferQrPreview(reader.result)
     reader.readAsDataURL(file)
   }
 
@@ -185,6 +204,47 @@ export function PaymentSettingsTab({ showToast }) {
                 onClick={() => {
                   setQrFile(null)
                   setQrPreview(null)
+                }}
+                className="text-xs text-red-400 hover:text-red-300"
+              >
+                Remove selected file
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6">
+          <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-3">
+            <Upload className="w-5 h-5 text-[var(--gold-primary)]" />
+            Bank Transfer QR Image
+          </h3>
+          <p className="text-sm text-[var(--text-muted)] mb-4">
+            Upload the bank account QR customers can scan when they select Bank Transfer.
+          </p>
+          <div className="flex flex-col items-start gap-4">
+            {(bankTransferQrPreview || settings.bank_transfer_qr_image_url) && (
+              <div className="w-full max-w-[200px] overflow-hidden rounded-xl border border-[var(--border)] bg-white">
+                <img
+                  src={bankTransferQrPreview || settings.bank_transfer_qr_image_url}
+                  alt="Bank transfer QR code preview"
+                  className="h-auto w-full object-contain"
+                />
+              </div>
+            )}
+            <label className="flex h-32 w-full cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-[var(--border)] bg-[var(--bg-primary)]/30 transition-colors hover:border-[var(--gold-primary)]/50">
+              <div className="flex flex-col items-center gap-2 text-[var(--text-muted)]">
+                <Upload className="h-6 w-6" />
+                <span className="text-sm">{bankTransferQrFile ? 'Change QR Image' : 'Upload QR Image'}</span>
+                <span className="text-xs">PNG, JPG up to 5MB</span>
+              </div>
+              <input type="file" accept="image/png, image/jpeg, image/jpg" className="hidden" onChange={handleBankTransferQrUpload} />
+            </label>
+            {bankTransferQrPreview && (
+              <button
+                type="button"
+                onClick={() => {
+                  setBankTransferQrFile(null)
+                  setBankTransferQrPreview(null)
                 }}
                 className="text-xs text-red-400 hover:text-red-300"
               >
