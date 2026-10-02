@@ -46,16 +46,17 @@ const CUSTOMER_CHANNEL_LABELS = {
   appointments: "Appointments",
 };
 
-const CUSTOMER_GROUP_LABELS = {
-  category: "Product Category",
-  product: "Product / Service",
-  region: "Region",
-  salesperson: "Salesperson",
-  status: "Order Status",
-  payment_status: "Payment Status",
-  channel: "Sales Channel",
-  payment_method: "Payment Method",
+const CUSTOMER_CHANNEL_STATUSES = {
+  walk_in: ["completed"],
+  online: ["pending", "processing", "shipped", "out_for_delivery", "delivered", "received"],
+  customization: ["pending", "processing", "shipped", "out_for_delivery", "delivered", "received"],
+  appointments: ["pending", "confirmed", "in_progress", "ready_for_pickup", "completed", "no_show"],
 };
+
+const CUSTOMER_STATUSES = [
+  "pending", "processing", "shipped", "out_for_delivery", "delivered", "received",
+  "confirmed", "in_progress", "ready_for_pickup", "completed", "no_show",
+];
 
 const PAYMENT_COLORS = ["#10B981", "#3B82F6", "#F59E0B", "#8B5CF6", "#EC4899", "#6366F1"];
 
@@ -117,6 +118,11 @@ function formatExcelAdjustmentType(type) {
   const clean = type.trim();
   const capitalized = clean.charAt(0).toUpperCase() + clean.slice(1);
   return capitalized.endsWith("s") ? capitalized : `${capitalized}s`;
+}
+
+function buildReportFilename(dateLabel, extension) {
+  const safeLabel = (dateLabel || "All Time").replace(/[\\/:*?"<>|]/g, "").trim() || "All Time";
+  return `CosmosCraft Sales Report - ${safeLabel}.${extension}`;
 }
 
 /**
@@ -819,6 +825,48 @@ function exportExcel(salesReport, dateLabel, printedBy, datePrinted) {
   XLSX.writeFile(wb, buildReportFilename(dateLabel, "xlsx"));
 }
 
+function exportCustomerSummaryExcel(customerSummary, printedBy, datePrinted) {
+  const filters = customerSummary.filters || {};
+  const filterLabels = {
+    channel: "Sales channel",
+    status: "Order status",
+    payment_status: "Payment status",
+    payment_method: "Payment method",
+    start_date: "From",
+    end_date: "To",
+  };
+  const activeFilters = Object.entries(filterLabels)
+    .filter(([key]) => filters[key])
+    .map(([key, label]) => `${label}: ${String(filters[key]).replace(/_/g, " ")}`);
+  const sortLabels = { sales: "Total sales", orders: "Transactions", recent: "Last purchase", name: "Customer name" };
+  const rows = customerSummary.rows || [];
+  const totals = customerSummary.totals || { customers: 0, transactions: 0, sales: 0 };
+  const headerRowIndex = 7;
+  const worksheetRows = [
+    ["CUSTOMER SALES PREVIEW"],
+    ["Search", customerSummary.search || "All customers"],
+    ["Filters", activeFilters.length ? activeFilters.join("; ") : "None"],
+    ["Sorted By", `${sortLabels[filters.sort_by] || filters.sort_by} (${filters.sort_order || "desc"})`],
+    ["Printed By", printedBy || "Unknown User"],
+    ["Printed On", datePrinted || ""],
+    [],
+    ["Sales Channel", "Customer", "Transactions", "Total Sales", "Last Purchase"],
+    ...rows.map((row) => [row.channel, row.customer_name, Number(row.transactions) || 0, Number(row.total_sales) || 0, row.last_purchase_date || ""]),
+    ["TOTAL", `${totals.customers} customers`, Number(totals.transactions) || 0, Number(totals.sales) || 0, ""],
+  ];
+  const worksheet = buildExcelWorksheet(worksheetRows, {
+    headerRowIndex,
+    autofilter: true,
+    autofilterEndRow: headerRowIndex + rows.length,
+    freezeRow: headerRowIndex + 1,
+    colFormats: { 2: "int", 3: "currency" },
+    minColWidth: 16,
+  });
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, "Customer Summary");
+  XLSX.writeFile(workbook, buildReportFilename("Customer Summary", "xlsx"));
+}
+
 /* ─── Shared HTML builder (used by Print) ─── */
 
 function buildSalesReportHTML(salesReport, dateLabel, selectedSections, printedBy, datePrinted) {
@@ -1156,6 +1204,90 @@ function printSalesReport(salesReport, dateLabel, selectedSections, printedBy, d
   pw.onload = () => { pw.focus(); pw.print(); };
 }
 
+function escapeHTML(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  })[character]);
+}
+
+function printCustomerSummary(groups, totals, filters, search, printedBy, datePrinted) {
+  const filterLabels = {
+    channel: "Sales channel",
+    status: "Order status",
+    payment_status: "Payment status",
+    payment_method: "Payment method",
+    start_date: "From",
+    end_date: "To",
+  };
+  const activeFilters = Object.entries(filterLabels)
+    .filter(([key]) => filters[key])
+    .map(([key, label]) => `${label}: ${filters[key].replace(/_/g, " ")}`);
+  const sortLabels = {
+    sales: "Total sales",
+    orders: "Transactions",
+    recent: "Last purchase",
+    name: "Customer name",
+  };
+  const criteria = [
+    search && `Search: ${search}`,
+    ...activeFilters,
+    `Sorted by ${sortLabels[filters.sort_by] || filters.sort_by} (${filters.sort_order})`,
+  ].filter(Boolean).map(escapeHTML).join(" · ");
+  const rows = groups.flatMap((group) => group.customers.map((customer) => {
+    const purchaseDate = customer.last_purchase_date ? new Date(customer.last_purchase_date) : null;
+    const lastPurchase = purchaseDate && !Number.isNaN(purchaseDate.getTime())
+      ? format(purchaseDate, "MMM d, yyyy")
+      : "—";
+    return `<tr>
+      <td>${escapeHTML(CUSTOMER_CHANNEL_LABELS[group.name] || group.name)}</td>
+      <td>${escapeHTML(customer.customer_name)}</td>
+      <td class="number">${fmtInteger(customer.orders)}</td>
+      <td class="number">${escapeHTML(formatCurrency(customer.total_sales))}</td>
+      <td class="number">${escapeHTML(lastPurchase)}</td>
+    </tr>`;
+  })).join("");
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Customer Sales Preview</title>
+  <style>
+    body { font: 12px Arial, sans-serif; color: #111; margin: 24px; }
+    header { border-bottom: 2px solid #222; margin-bottom: 16px; padding-bottom: 10px; }
+    h1 { font-size: 20px; margin: 0 0 6px; }
+    p { color: #444; font-size: 10px; margin: 3px 0; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #bbb; padding: 7px 8px; text-align: left; }
+    th { background: #eee; }
+    .number { text-align: right; }
+    tfoot { font-weight: bold; background: #eee; }
+    @media print { body { margin: 12mm; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Customer Sales Preview</h1>
+    <p>${criteria || "No filters applied"}</p>
+    <p>Printed ${escapeHTML(datePrinted)} by ${escapeHTML(printedBy)}</p>
+  </header>
+  <table>
+    <thead><tr><th>Sales Channel</th><th>Customer</th><th class="number">Transactions</th><th class="number">Total Sales</th><th class="number">Last Purchase</th></tr></thead>
+    <tbody>${rows || '<tr><td colspan="5">No customer sales match these filters.</td></tr>'}</tbody>
+    <tfoot><tr><td>Total</td><td>${totals.customers} customers</td><td class="number">${fmtInteger(totals.transactions)}</td><td class="number">${escapeHTML(formatCurrency(totals.sales))}</td><td></td></tr></tfoot>
+  </table>
+</body>
+</html>`;
+  const pw = window.open("", "_blank");
+  if (!pw) return;
+  pw.document.write(html);
+  pw.document.close();
+  pw.onload = () => { pw.focus(); pw.print(); };
+}
+
 /* ─── Print Options Modal ─── */
 
 function PrintOptionsModal({
@@ -1358,6 +1490,56 @@ function ToggleGroup({ options, value, onChange }) {
   );
 }
 
+function buildCustomerSummaryData(rows, { search = "", sortBy = "sales", sortOrder = "desc" } = {}) {
+  const query = search.trim().toLowerCase();
+  const grouped = new Map();
+  (rows || [])
+    .filter((row) => !query || String(row.customer_name || "").toLowerCase().includes(query))
+    .forEach((row) => {
+      if (!grouped.has(row.group)) grouped.set(row.group, []);
+      grouped.get(row.group).push(row);
+    });
+
+  const direction = sortOrder === "asc" ? 1 : -1;
+  const compareCustomers = (a, b) => {
+    if (sortBy === "orders") return direction * (a.orders - b.orders || a.total_sales - b.total_sales);
+    if (sortBy === "recent") return direction * ((new Date(a.last_purchase_date).getTime() || 0) - (new Date(b.last_purchase_date).getTime() || 0));
+    if (sortBy === "name") return direction * a.customer_name.localeCompare(b.customer_name);
+    return direction * (a.total_sales - b.total_sales || a.orders - b.orders);
+  };
+
+  const groups = [...grouped.entries()].map(([name, customers]) => ({
+    name,
+    customers: customers.sort(compareCustomers),
+    totalOrders: customers.reduce((sum, row) => sum + Number(row.orders || 0), 0),
+    totalSales: customers.reduce((sum, row) => sum + Number(row.total_sales || 0), 0),
+  })).sort((a, b) => {
+    if (sortBy === "orders") return direction * (a.totalOrders - b.totalOrders || a.totalSales - b.totalSales);
+    if (sortBy === "recent") {
+      const latestDate = (group) => Math.max(...group.customers.map((row) => new Date(row.last_purchase_date).getTime() || 0));
+      return direction * (latestDate(a) - latestDate(b));
+    }
+    if (sortBy === "name") return direction * a.name.localeCompare(b.name);
+    return direction * (a.totalSales - b.totalSales || a.totalOrders - b.totalOrders);
+  });
+
+  const exportRows = groups.flatMap((group) => group.customers.map((customer) => ({
+    channel: CUSTOMER_CHANNEL_LABELS[group.name] || group.name,
+    customer_name: customer.customer_name,
+    transactions: Number(customer.orders) || 0,
+    total_sales: Number(customer.total_sales) || 0,
+    last_purchase_date: customer.last_purchase_date || null,
+  })));
+
+  const totals = exportRows.reduce((result, row) => ({
+    customers: result.customers + 1,
+    transactions: result.transactions + row.transactions,
+    sales: result.sales + row.total_sales,
+  }), { customers: 0, transactions: 0, sales: 0 });
+
+  return { groups, rows: exportRows, totals };
+}
+
 /* ═══════════════════════════════════════════════
    Main Component
    ═══════════════════════════════════════════════ */
@@ -1372,16 +1554,14 @@ export function SalesReportTab({ salesReport, categories = [] }) {
   const [paymentScope, setPaymentScope] = useState("overall"); // "overall" | "appointments"
   const [isExporting, setIsExporting] = useState(false);
   const [customerFilters, setCustomerFilters] = useState({
-    group_by: "channel",
+    start_date: "",
+    end_date: "",
     channel: "",
-    order_type: "",
     status: "",
     payment_status: "",
     payment_method: "",
-    category_id: "",
-    region: "",
-    salesperson: "",
-    sort_by: "sales_desc",
+    sort_by: "sales",
+    sort_order: "desc",
   });
   const [customerSearch, setCustomerSearch] = useState("");
   const [customerRows, setCustomerRows] = useState([]);
@@ -1400,9 +1580,9 @@ export function SalesReportTab({ salesReport, categories = [] }) {
 
   useEffect(() => {
     let isCurrentRequest = true;
-    const params = {};
+    const params = { group_by: "channel" };
     Object.entries(customerFilters).forEach(([key, value]) => {
-      if (value && key !== "sort_by") params[key] = value;
+      if (value && key !== "sort_by" && key !== "sort_order") params[key] = value;
     });
     setCustomerLoading(true);
     setCustomerError("");
@@ -1421,109 +1601,51 @@ export function SalesReportTab({ salesReport, categories = [] }) {
     return () => { isCurrentRequest = false; };
   }, [customerFilters]);
 
-  const customerGroups = useMemo(() => {
-    const search = customerSearch.trim().toLowerCase();
-    const grouped = new Map();
-    customerRows
-      .filter((row) => !search || row.customer_name.toLowerCase().includes(search))
-      .forEach((row) => {
-        if (!grouped.has(row.group)) grouped.set(row.group, []);
-        grouped.get(row.group).push(row);
-      });
-
-    const sortCustomers = (left, right) => {
-      if (customerFilters.sort_by === "orders_desc") return right.orders - left.orders || right.total_sales - left.total_sales;
-      if (customerFilters.sort_by === "recent_desc") return new Date(right.last_purchase_date) - new Date(left.last_purchase_date);
-      if (customerFilters.sort_by === "name_asc") return left.customer_name.localeCompare(right.customer_name);
-      return right.total_sales - left.total_sales || right.orders - left.orders;
-    };
-
-    return [...grouped.entries()].map(([name, customers]) => ({
-      name,
-      customers: customers.sort(sortCustomers),
-      totalOrders: customers.reduce((sum, row) => sum + row.orders, 0),
-      totalSales: customers.reduce((sum, row) => sum + row.total_sales, 0),
-    })).sort((left, right) => {
-      if (customerFilters.sort_by === "orders_desc") return right.totalOrders - left.totalOrders || right.totalSales - left.totalSales;
-      if (customerFilters.sort_by === "recent_desc") {
-        const leftDate = Math.max(...left.customers.map((row) => new Date(row.last_purchase_date).getTime() || 0));
-        const rightDate = Math.max(...right.customers.map((row) => new Date(row.last_purchase_date).getTime() || 0));
-        return rightDate - leftDate;
-      }
-      if (customerFilters.sort_by === "name_asc") return left.name.localeCompare(right.name);
-      return right.totalSales - left.totalSales || right.totalOrders - left.totalOrders;
-    });
-  }, [customerRows, customerSearch, customerFilters.sort_by]);
-
-  const loyaltyLeader = useMemo(() => customerRows.reduce((leader, row) => (
-    !leader || row.total_sales > leader.total_sales || (row.total_sales === leader.total_sales && row.orders > leader.orders)
-      ? row
-      : leader
-  ), null), [customerRows]);
+  const processedSummaryData = useMemo(() => buildCustomerSummaryData(customerRows, {
+    search: customerSearch,
+    sortBy: customerFilters.sort_by,
+    sortOrder: customerFilters.sort_order,
+  }), [customerRows, customerSearch, customerFilters.sort_by, customerFilters.sort_order]);
+  const { groups: customerGroups, totals: customerTotals } = processedSummaryData;
 
   const updateCustomerFilter = (key, value) => {
     setCustomerFilters((current) => ({ ...current, [key]: value }));
   };
 
-  const clearCustomerFilters = () => {
-    setCustomerFilters({
-      group_by: "channel", channel: "", order_type: "", status: "", payment_status: "",
-      payment_method: "", category_id: "", region: "", salesperson: "", sort_by: "sales_desc",
-    });
-    setCustomerSearch("");
+  const updateCustomerChannel = (channel) => {
+    setCustomerFilters((current) => ({
+      ...current,
+      channel,
+      status: channel && current.status && !CUSTOMER_CHANNEL_STATUSES[channel].includes(current.status)
+        ? ""
+        : current.status,
+    }));
   };
 
-  const exportCustomerPreview = () => {
-    if (customerGroups.length === 0) return;
+  const updateCustomerStatus = (status) => {
+    setCustomerFilters((current) => ({
+      ...current,
+      status,
+      channel: current.channel && status && !CUSTOMER_CHANNEL_STATUSES[current.channel].includes(status)
+        ? ""
+        : current.channel,
+    }));
+  };
 
-    const rows = [[
-      CUSTOMER_GROUP_LABELS[customerFilters.group_by] || "Category / Group",
-      "Customer",
-      "Orders",
-      "Total Sales",
-      "Last Purchase",
-    ]];
+  const availableCustomerChannels = Object.entries(CUSTOMER_CHANNEL_LABELS).filter(([channel]) => (
+    !customerFilters.status || CUSTOMER_CHANNEL_STATUSES[channel].includes(customerFilters.status)
+  ));
+  const availableCustomerStatuses = customerFilters.channel
+    ? CUSTOMER_CHANNEL_STATUSES[customerFilters.channel]
+    : CUSTOMER_STATUSES;
 
-    customerGroups.forEach((group) => {
-      const groupLabel = customerFilters.group_by === "channel"
-        ? CUSTOMER_CHANNEL_LABELS[group.name] || group.name
-        : group.name;
-
-      group.customers.forEach((customer) => {
-        rows.push([
-          groupLabel,
-          customer.customer_name,
-          Number(customer.orders) || 0,
-          Number(customer.total_sales) || 0,
-          customer.last_purchase_date ? format(new Date(customer.last_purchase_date), "MMM d, yyyy") : "",
-        ]);
-      });
-
-      rows.push([
-        groupLabel,
-        `Subtotal · ${group.customers.length} customers`,
-        group.totalOrders,
-        group.totalSales,
-        "",
-      ]);
+  const clearCustomerFilters = () => {
+    setCustomerFilters({
+      start_date: "", end_date: "",
+      channel: "", status: "", payment_status: "",
+      payment_method: "", sort_by: "sales", sort_order: "desc",
     });
-
-    const worksheet = XLSX.utils.aoa_to_sheet(rows);
-    worksheet["!cols"] = [{ wch: 24 }, { wch: 34 }, { wch: 14 }, { wch: 18 }, { wch: 18 }];
-    worksheet["!autofilter"] = {
-      ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: rows.length - 1, c: 4 } }),
-    };
-    worksheet["!views"] = [{ state: "frozen", ySplit: 1, xSplit: 0, topLeftCell: "A2", activeCell: "A2" }];
-    for (let rowIndex = 1; rowIndex < rows.length; rowIndex += 1) {
-      const ordersCell = worksheet[XLSX.utils.encode_cell({ r: rowIndex, c: 2 })];
-      const salesCell = worksheet[XLSX.utils.encode_cell({ r: rowIndex, c: 3 })];
-      if (ordersCell) ordersCell.z = EXCEL_FMTS.int;
-      if (salesCell) salesCell.z = EXCEL_FMTS.currency;
-    }
-
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Sales Preview");
-    XLSX.writeFile(workbook, `Sales_Preview_${customerFilters.group_by}_${format(new Date(), "yyyy-MM-dd")}.xlsx`);
+    setCustomerSearch("");
   };
 
   const handleExportExcel = async () => {
@@ -1550,6 +1672,41 @@ export function SalesReportTab({ salesReport, categories = [] }) {
     } finally {
       setIsExporting(false);
     }
+  };
+
+  const handleExportCustomerSummaryExcel = async () => {
+    if (!salesReport) return;
+    const customerSummary = {
+      rows: processedSummaryData.rows,
+      totals: customerTotals,
+      filters: customerFilters,
+      search: customerSearch,
+    };
+    try {
+      setIsExporting(true);
+      const blob = await adminApi.exportSalesExcel({
+        customerSummary,
+        printedBy,
+        datePrinted,
+      });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", buildReportFilename("Customer Summary", "xlsx"));
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.warn("Aspose customer summary export failed, using client-side export fallback:", err);
+      exportCustomerSummaryExcel(customerSummary, printedBy, datePrinted);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handlePreviewPrint = () => {
+    printCustomerSummary(customerGroups, customerTotals, customerFilters, customerSearch, printedBy, datePrinted);
   };
 
   // Channel data array
@@ -1670,17 +1827,12 @@ export function SalesReportTab({ salesReport, categories = [] }) {
         <div className="space-y-6">
 
           {/* ── Header ── */}
-          <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 no-print">
-            <div>
-              <h1 className="text-[var(--text-light)] text-2xl font-bold tracking-tight">Sales Report</h1>
-              <p className="text-[var(--text-muted)] text-sm mt-0.5">
-                {dateLabel} &middot; Generated on {new Date().toLocaleDateString("en-PH")}
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              {!isSalesPreview ? (
+          <div className="flex flex-col lg:flex-row items-start lg:items-center justify-end gap-4 no-print">
+            <div className="flex w-full flex-wrap items-center justify-end gap-2">
+              {!isSalesPreview && (
                 <>
                   <button
+                    type="button"
                     onClick={() => setShowPrintModal(true)}
                     className="flex items-center gap-1.5 px-3 py-2 bg-[var(--gold-primary)] text-black rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
                   >
@@ -1689,33 +1841,33 @@ export function SalesReportTab({ salesReport, categories = [] }) {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setIsSalesPreview(true)}
-                    className="inline-flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] px-3 py-2 text-sm font-semibold text-[var(--text-light)] transition-colors hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)]"
+                    onClick={handleExportExcel}
+                    disabled={isExporting}
+                    className="inline-flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] px-3 py-2 text-sm font-semibold text-[var(--text-light)] transition-colors hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)] disabled:cursor-wait disabled:opacity-60"
                   >
-                    <List className="h-4 w-4" />
-                    View Sales Preview
+                    <Download className="h-4 w-4" />
+                    {isExporting ? "Exporting..." : "Export Excel"}
                   </button>
                 </>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setIsSalesPreview(false)}
-                  className="inline-flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] px-3 py-2 text-sm font-semibold text-[var(--text-light)] transition-colors hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)]"
-                >
-                  <List className="h-4 w-4" />
-                  Back to Summary
-                </button>
               )}
+              <button
+                type="button"
+                onClick={() => setIsSalesPreview((current) => !current)}
+                className="inline-flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] px-3 py-2 text-sm font-semibold text-[var(--text-light)] transition-colors hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)]"
+              >
+                <List className="h-4 w-4" />
+                {isSalesPreview ? "Back to Summary" : "Preview Summary"}
+              </button>
             </div>
           </div>
 
           {/* ── Customer Sales Preview ── */}
           {isSalesPreview && (
-          <section className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl overflow-hidden">
+          <section className={`relative bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl ${customerFilterMenuOpen ? "z-30 overflow-visible" : "overflow-hidden"}`}>
             <div className="px-5 py-4 border-b border-[var(--border)]">
               <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
                 <div>
-                  <h2 className="font-semibold text-[var(--text-light)] text-lg">Customer Sales Preview</h2>
+                  <h2 className="font-semibold text-[var(--text-light)] text-lg">Preview Summary</h2>
                   <p className="text-xs text-[var(--text-muted)] mt-0.5">Customer totals grouped by your selected report dimension</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2 no-print">
@@ -1727,15 +1879,6 @@ export function SalesReportTab({ salesReport, categories = [] }) {
                     aria-label="Search customers"
                     className="bg-[var(--bg-primary)] border border-[var(--border)] rounded-lg px-3 py-2 text-sm text-[var(--text-light)] focus:border-[var(--gold-primary)] focus:outline-none"
                   />
-                  <button
-                    type="button"
-                    onClick={exportCustomerPreview}
-                    disabled={customerLoading || customerGroups.length === 0}
-                    className="inline-flex h-10 items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-3 text-sm font-semibold text-[var(--text-light)] transition-colors hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)] disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <Download className="h-4 w-4" />
-                    Export Excel
-                  </button>
                   <div className="relative">
                     <button
                       type="button"
@@ -1749,108 +1892,134 @@ export function SalesReportTab({ salesReport, categories = [] }) {
                       <ChevronDown className="h-4 w-4" />
                     </button>
                     {customerFilterMenuOpen && (
-                      <div className="absolute right-0 top-full z-40 mt-2 grid max-h-[70vh] w-[min(88vw,24rem)] gap-3 overflow-y-auto rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] p-4 shadow-2xl sm:grid-cols-2">
-                        <label className="text-xs font-semibold text-[var(--text-muted)]">
-                          Group customers by
-                          <select value={customerFilters.group_by} onChange={(event) => updateCustomerFilter("group_by", event.target.value)} className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-2.5 py-2 text-sm text-[var(--text-light)]">
-                            <option value="category">Product category</option>
-                            <option value="product">Product / service</option>
-                            <option value="region">Region</option>
-                            <option value="salesperson">Salesperson</option>
-                            <option value="status">Order status</option>
-                            <option value="payment_status">Payment status</option>
-                            <option value="channel">Sales channel</option>
-                            <option value="payment_method">Payment method</option>
-                          </select>
-                        </label>
-                        <label className="text-xs font-semibold text-[var(--text-muted)]">
-                          Sort groups and customers
-                          <select value={customerFilters.sort_by} onChange={(event) => updateCustomerFilter("sort_by", event.target.value)} className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-2.5 py-2 text-sm text-[var(--text-light)]">
-                            <option value="sales_desc">Highest sales</option>
-                            <option value="orders_desc">Most orders</option>
-                            <option value="recent_desc">Most recent purchase</option>
-                            <option value="name_asc">Customer / group name</option>
-                          </select>
-                        </label>
-                        <label className="text-xs font-semibold text-[var(--text-muted)]">
-                          Sales channel
-                          <select value={customerFilters.channel} onChange={(event) => updateCustomerFilter("channel", event.target.value)} className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-2.5 py-2 text-sm text-[var(--text-light)]">
-                            <option value="">All channels</option>
-                            <option value="walk_in">Walk-in / POS</option>
-                            <option value="online">Online orders</option>
-                            <option value="customization">Customization</option>
-                            <option value="appointments">Appointments</option>
-                          </select>
-                        </label>
-                        <label className="text-xs font-semibold text-[var(--text-muted)]">
-                          Order type
-                          <select value={customerFilters.order_type} onChange={(event) => updateCustomerFilter("order_type", event.target.value)} className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-2.5 py-2 text-sm text-[var(--text-light)]">
-                            <option value="">All order types</option>
-                            <option value="product">Product</option>
-                            <option value="customization">Customization</option>
-                            <option value="service">Service</option>
-                          </select>
-                        </label>
-                        <label className="text-xs font-semibold text-[var(--text-muted)]">
-                          Order status
-                          <select value={customerFilters.status} onChange={(event) => updateCustomerFilter("status", event.target.value)} className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-2.5 py-2 text-sm text-[var(--text-light)]">
-                            <option value="">All statuses</option>
-                            {["pending", "processing", "shipped", "delivered", "completed", "confirmed", "approved", "cancelled"].map((status) => <option key={status} value={status}>{status.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase())}</option>)}
-                          </select>
-                        </label>
-                        <label className="text-xs font-semibold text-[var(--text-muted)]">
-                          Payment status
-                          <select value={customerFilters.payment_status} onChange={(event) => updateCustomerFilter("payment_status", event.target.value)} className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-2.5 py-2 text-sm text-[var(--text-light)]">
-                            <option value="">All payment statuses</option>
-                            {["pending", "proof_submitted", "under_review", "approved", "verified", "paid", "rejected", "failed"].map((status) => <option key={status} value={status}>{status.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase())}</option>)}
-                          </select>
-                        </label>
-                        <label className="text-xs font-semibold text-[var(--text-muted)]">
-                          Payment method
-                          <select value={customerFilters.payment_method} onChange={(event) => updateCustomerFilter("payment_method", event.target.value)} className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-2.5 py-2 text-sm text-[var(--text-light)]">
-                            <option value="">All payment methods</option>
-                            <option value="cash">Cash</option>
-                            <option value="gcash">GCash</option>
-                            <option value="bank_transfer">Bank transfer</option>
-                          </select>
-                        </label>
-                        {customerFilters.group_by === "category" && categories.length > 0 && (
+                      <div className="absolute right-0 top-full z-40 mt-2 w-[min(92vw,22rem)] overflow-y-auto max-h-[70vh] rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] shadow-2xl">
+
+                        {/* ── Sort section ── */}
+                        <div className="px-4 pt-4 pb-3 border-b border-[var(--border)]">
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)] mb-3">Sort</p>
+                          <div className="space-y-2.5">
+                            <label className="text-xs font-semibold text-[var(--text-muted)]">
+                              Sort by
+                              <select
+                                value={customerFilters.sort_by}
+                                onChange={(e) => updateCustomerFilter("sort_by", e.target.value)}
+                                className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-2.5 py-2 text-sm text-[var(--text-light)] focus:outline-none focus:border-[var(--gold-primary)]"
+                              >
+                                <option value="sales">Highest sales</option>
+                                <option value="orders">Most orders</option>
+                                <option value="recent">Most recent purchase</option>
+                                <option value="name">Customer name</option>
+                              </select>
+                            </label>
+                            <label className="text-xs font-semibold text-[var(--text-muted)]">
+                              Sort order
+                              <select
+                                value={customerFilters.sort_order}
+                                onChange={(e) => updateCustomerFilter("sort_order", e.target.value)}
+                                className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-2.5 py-2 text-sm text-[var(--text-light)] focus:outline-none focus:border-[var(--gold-primary)]"
+                              >
+                                <option value="desc">Descending</option>
+                                <option value="asc">Ascending</option>
+                              </select>
+                            </label>
+                          </div>
+                        </div>
+
+                        {/* ── Filters section ── */}
+                        <div className="px-4 pt-3 pb-4 space-y-2.5">
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)] mb-3">Filters</p>
+
+                          <div className="grid grid-cols-2 gap-2.5">
+                            <label className="text-xs font-semibold text-[var(--text-muted)]">
+                              From
+                              <input
+                                type="date"
+                                value={customerFilters.start_date}
+                                max={customerFilters.end_date || undefined}
+                                onChange={(e) => updateCustomerFilter("start_date", e.target.value)}
+                                className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-2.5 py-2 text-sm text-[var(--text-light)] focus:outline-none focus:border-[var(--gold-primary)]"
+                              />
+                            </label>
+                            <label className="text-xs font-semibold text-[var(--text-muted)]">
+                              To
+                              <input
+                                type="date"
+                                value={customerFilters.end_date}
+                                min={customerFilters.start_date || undefined}
+                                onChange={(e) => updateCustomerFilter("end_date", e.target.value)}
+                                className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-2.5 py-2 text-sm text-[var(--text-light)] focus:outline-none focus:border-[var(--gold-primary)]"
+                              />
+                            </label>
+                          </div>
+
                           <label className="text-xs font-semibold text-[var(--text-muted)]">
-                            Product category
-                            <select value={customerFilters.category_id} onChange={(event) => updateCustomerFilter("category_id", event.target.value)} className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-2.5 py-2 text-sm text-[var(--text-light)]">
-                              <option value="">All categories</option>
-                              {categories.map((category) => <option key={category.category_id} value={category.category_id}>{category.name}</option>)}
+                            Sales channel
+                            <select value={customerFilters.channel} onChange={(e) => updateCustomerChannel(e.target.value)} className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-2.5 py-2 text-sm text-[var(--text-light)] focus:outline-none focus:border-[var(--gold-primary)]">
+                              <option value="">All channels</option>
+                              {availableCustomerChannels.map(([channel, label]) => (
+                                <option key={channel} value={channel}>{label}</option>
+                              ))}
                             </select>
                           </label>
-                        )}
-                        <label className="text-xs font-semibold text-[var(--text-muted)]">
-                          Region contains
-                          <input value={customerFilters.region} onChange={(event) => updateCustomerFilter("region", event.target.value)} placeholder="City or province" className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-2.5 py-2 text-sm text-[var(--text-light)]" />
-                        </label>
-                        <label className="text-xs font-semibold text-[var(--text-muted)]">
-                          Salesperson contains
-                          <input value={customerFilters.salesperson} onChange={(event) => updateCustomerFilter("salesperson", event.target.value)} placeholder="Staff name" className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-2.5 py-2 text-sm text-[var(--text-light)]" />
-                        </label>
-                        <button type="button" onClick={clearCustomerFilters} className="text-left text-xs font-semibold text-[var(--gold-primary)] hover:underline sm:col-span-2">Reset filters and sort</button>
+
+                          <label className="text-xs font-semibold text-[var(--text-muted)]">
+                            Order status
+                            <select value={customerFilters.status} onChange={(e) => updateCustomerStatus(e.target.value)} className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-2.5 py-2 text-sm text-[var(--text-light)] focus:outline-none focus:border-[var(--gold-primary)]">
+                              <option value="">All statuses</option>
+                              {availableCustomerStatuses.map((status) => (
+                                <option key={status} value={status}>{status.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase())}</option>
+                              ))}
+                            </select>
+                          </label>
+
+                          <label className="text-xs font-semibold text-[var(--text-muted)]">
+                            Payment status
+                            <select value={customerFilters.payment_status} onChange={(e) => updateCustomerFilter("payment_status", e.target.value)} className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-2.5 py-2 text-sm text-[var(--text-light)] focus:outline-none focus:border-[var(--gold-primary)]">
+                              <option value="">All payment statuses</option>
+                              {["pending", "proof_submitted", "under_review", "approved", "verified", "paid", "rejected", "failed"].map((s) => (
+                                <option key={s} value={s}>{s.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())}</option>
+                              ))}
+                            </select>
+                          </label>
+
+                          <label className="text-xs font-semibold text-[var(--text-muted)]">
+                            Payment method
+                            <select value={customerFilters.payment_method} onChange={(e) => updateCustomerFilter("payment_method", e.target.value)} className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-2.5 py-2 text-sm text-[var(--text-light)] focus:outline-none focus:border-[var(--gold-primary)]">
+                              <option value="">All payment methods</option>
+                              <option value="cash">Cash</option>
+                              <option value="gcash">GCash</option>
+                              <option value="bank_transfer">Bank transfer</option>
+                            </select>
+                          </label>
+
+                          <button type="button" onClick={clearCustomerFilters} className="pt-1 text-left text-xs font-semibold text-[var(--gold-primary)] hover:underline">
+                            Reset filters and sort
+                          </button>
+                        </div>
                       </div>
                     )}
                   </div>
+                  <button
+                    type="button"
+                    onClick={handlePreviewPrint}
+                    className="inline-flex h-10 items-center gap-1.5 rounded-lg bg-[var(--gold-primary)] px-3 text-sm font-medium text-black transition-opacity hover:opacity-90"
+                  >
+                    <Printer className="h-4 w-4" />
+                    Print Report
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleExportCustomerSummaryExcel}
+                    disabled={isExporting}
+                    className="inline-flex h-10 items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-3 text-sm font-semibold text-[var(--text-light)] transition-colors hover:border-[var(--gold-primary)] hover:text-[var(--gold-primary)] disabled:cursor-wait disabled:opacity-60"
+                  >
+                    <Download className="h-4 w-4" />
+                    {isExporting ? "Exporting..." : "Export Excel"}
+                  </button>
                 </div>
               </div>
             </div>
             <div className="p-5 space-y-4">
-              {loyaltyLeader && (
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-xl border border-[var(--gold-primary)]/30 bg-[var(--gold-primary)]/5 px-4 py-3">
-                  <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--gold-primary)]">Loyalty leader · highest sales</p>
-                    <p className="mt-0.5 font-semibold text-[var(--text-light)]">{loyaltyLeader.customer_name}</p>
-                  </div>
-                  <div className="flex gap-4 text-sm">
-                    <span className="text-[var(--text-muted)]">{fmtInteger(loyaltyLeader.orders)} orders</span>
-                    <span className="font-mono font-semibold text-[var(--gold-primary)]">{formatCurrency(loyaltyLeader.total_sales)}</span>
-                  </div>
-                </div>
-              )}
               {customerLoading ? (
                 <p className="py-8 text-center text-sm text-[var(--text-muted)]">Updating customer preview...</p>
               ) : customerError ? (
@@ -1862,9 +2031,9 @@ export function SalesReportTab({ salesReport, categories = [] }) {
                   <table className="w-full min-w-[760px] text-sm">
                     <thead>
                       <tr className="bg-[var(--bg-primary)] border-b border-[var(--border)] text-xs uppercase text-[var(--text-muted)]">
-                        <th className="px-4 py-3 text-left font-semibold">{CUSTOMER_GROUP_LABELS[customerFilters.group_by] || "Category / Group"}</th>
+                        <th className="px-4 py-3 text-left font-semibold">Sales Channel</th>
                         <th className="px-4 py-3 text-left font-semibold">Customer</th>
-                        <th className="px-4 py-3 text-right font-semibold">Orders</th>
+                        <th className="px-4 py-3 text-right font-semibold">Transactions</th>
                         <th className="px-4 py-3 text-right font-semibold">Total Sales</th>
                         <th className="px-4 py-3 text-right font-semibold">Last Purchase</th>
                       </tr>
@@ -1872,28 +2041,25 @@ export function SalesReportTab({ salesReport, categories = [] }) {
                     {customerGroups.map((group) => (
                       <tbody key={group.name} className="divide-y divide-[var(--border)]">
                         {group.customers.map((customer) => (
-                          <tr key={`${group.name}-${customer.customer_id || customer.customer_name}`} className={customer === loyaltyLeader ? "bg-[var(--gold-primary)]/5" : ""}>
-                            <td className="px-4 py-3 text-[var(--text-light)]">{customerFilters.group_by === "channel" ? CUSTOMER_CHANNEL_LABELS[group.name] || group.name : group.name}</td>
-                            <td className="px-4 py-3 font-medium text-[var(--text-light)]">
-                              <span className="inline-flex flex-wrap items-center gap-2">
-                                {customer.customer_name}
-                                {customer === loyaltyLeader && <span className="rounded border border-[var(--gold-primary)]/30 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-[var(--gold-primary)]">Loyalty Leader</span>}
-                              </span>
-                            </td>
+                          <tr key={`${group.name}-${customer.customer_id || customer.customer_name}`}>
+                            <td className="px-4 py-3 text-[var(--text-light)]">{CUSTOMER_CHANNEL_LABELS[group.name] || group.name}</td>
+                            <td className="px-4 py-3 font-medium text-[var(--text-light)]">{customer.customer_name}</td>
                             <td className="px-4 py-3 text-right font-mono text-[var(--text-light)]">{fmtInteger(customer.orders)}</td>
                             <td className="px-4 py-3 text-right font-mono font-medium text-[var(--gold-primary)]">{formatCurrency(customer.total_sales)}</td>
                             <td className="px-4 py-3 text-right text-[var(--text-muted)]">{customer.last_purchase_date ? format(new Date(customer.last_purchase_date), "MMM d, yyyy") : "—"}</td>
                           </tr>
                         ))}
-                        <tr className="bg-[var(--bg-primary)] font-semibold">
-                          <td className="px-4 py-3 text-[var(--text-light)]">{customerFilters.group_by === "channel" ? CUSTOMER_CHANNEL_LABELS[group.name] || group.name : group.name}</td>
-                          <td className="px-4 py-3 text-[var(--text-light)]">Subtotal · {group.customers.length} customers</td>
-                          <td className="px-4 py-3 text-right font-mono text-[var(--text-light)]">{fmtInteger(group.totalOrders)}</td>
-                          <td className="px-4 py-3 text-right font-mono text-[var(--gold-primary)]">{formatCurrency(group.totalSales)}</td>
-                          <td className="px-4 py-3" />
-                        </tr>
                       </tbody>
                     ))}
+                    <tfoot>
+                      <tr className="border-t-2 border-[var(--border)] bg-[var(--bg-primary)] font-semibold">
+                        <td className="px-4 py-3 text-[var(--text-light)]">Total</td>
+                        <td className="px-4 py-3 text-[var(--text-light)]">{customerTotals.customers} customers</td>
+                        <td className="px-4 py-3 text-right font-mono text-[var(--text-light)]">{fmtInteger(customerTotals.transactions)}</td>
+                        <td className="px-4 py-3 text-right font-mono text-[var(--gold-primary)]">{formatCurrency(customerTotals.sales)}</td>
+                        <td className="px-4 py-3" />
+                      </tr>
+                    </tfoot>
                   </table>
                 </div>
               )}
