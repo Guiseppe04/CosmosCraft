@@ -1224,6 +1224,7 @@ async function getSalesReport(filters = {}) {
     related_number: t.related_number || null,
     reason: t.reason || null,
     notes: t.notes || null,
+    service_names: t.service_names || null,
   }));
 
   // Daily Trend formatted
