@@ -191,18 +191,6 @@ function TimeGrid({ date, appointments = [], onSlotClick, onAppointmentClick, is
   )
 }
 
-const WEEK_STATUS_OPTIONS = [
-  ['all', 'All statuses'],
-  ['pending', 'Pending'],
-  ['confirmed', 'Confirmed'],
-  ['approved', 'Approved'],
-  ['in_progress', 'In Progress'],
-  ['ready_for_pickup', 'Ready for Pickup'],
-  ['completed', 'Completed'],
-  ['cancelled', 'Cancelled'],
-  ['no_show', 'No Show'],
-]
-
 const WEEK_STATUS_STYLES = {
   pending: 'border-amber-400/60 bg-amber-500/20 text-amber-100',
   confirmed: 'border-sky-400/60 bg-sky-500/20 text-sky-100',
@@ -222,9 +210,53 @@ function getAssignedStaff(appointment) {
     || ''
 }
 
+function layoutOverlappingAppointments(appointments) {
+  const intervals = appointments
+    .map((appointment) => {
+      const scheduledAt = new Date(appointment.scheduled_at || appointment.date)
+      const startMinutes = (scheduledAt.getHours() - 9) * 60 + scheduledAt.getMinutes()
+      const requestedDuration = Number(appointment.duration_minutes || appointment.service_duration_minutes || 60)
+
+      if (Number.isNaN(scheduledAt.getTime()) || startMinutes < 0 || startMinutes >= 540) return null
+
+      return {
+        appointment,
+        startMinutes,
+        endMinutes: Math.min(540, startMinutes + Math.max(30, Number.isFinite(requestedDuration) ? requestedDuration : 60)),
+      }
+    })
+    .filter(Boolean)
+    .sort((left, right) => left.startMinutes - right.startMinutes || left.endMinutes - right.endMinutes)
+
+  const layoutGroup = (group) => {
+    const laneEnds = []
+    group.forEach((entry) => {
+      let column = laneEnds.findIndex((endMinutes) => endMinutes <= entry.startMinutes)
+      if (column === -1) column = laneEnds.length
+      laneEnds[column] = entry.endMinutes
+      entry.column = column
+    })
+    group.forEach((entry) => { entry.columnCount = laneEnds.length })
+  }
+
+  let group = []
+  let groupEndMinutes = -1
+  intervals.forEach((entry) => {
+    if (group.length > 0 && entry.startMinutes >= groupEndMinutes) {
+      layoutGroup(group)
+      group = []
+      groupEndMinutes = -1
+    }
+    group.push(entry)
+    groupEndMinutes = Math.max(groupEndMinutes, entry.endMinutes)
+  })
+  if (group.length > 0) layoutGroup(group)
+
+  return intervals
+}
+
 function AdminWeekCalendar({ appointments, unavailableDates = [], onAppointmentClick, onMonthView }) {
   const [weekOffset, setWeekOffset] = useState(0)
-  const [statusFilter, setStatusFilter] = useState('all')
   const [staffFilter, setStaffFilter] = useState('all')
   const [summaryRange, setSummaryRange] = useState('week')
   const weekStart = startOfWeek(addWeeks(new Date(), weekOffset), { weekStartsOn: 1 })
@@ -250,10 +282,9 @@ function AdminWeekCalendar({ appointments, unavailableDates = [], onAppointmentC
     .filter((appointment) => {
       const dateKey = toISODate(appointment.scheduled_at || appointment.date)
       const isMatchingDay = dateKey === formatLocalISO(date)
-      const isMatchingStatus = statusFilter === 'all' || appointment.status === statusFilter
       const staffName = getAssignedStaff(appointment)
       const isMatchingStaff = staffFilter === 'all' || staffName === staffFilter
-      return isMatchingDay && isMatchingStatus && isMatchingStaff
+      return isMatchingDay && isMatchingStaff
     })
     .sort((left, right) => new Date(left.scheduled_at || left.date) - new Date(right.scheduled_at || right.date))
 
@@ -337,16 +368,16 @@ function AdminWeekCalendar({ appointments, unavailableDates = [], onAppointmentC
             </div>
             {weekDays.map((date) => {
               const dayAppointments = appointmentsForDay(date)
+              const appointmentLayouts = layoutOverlappingAppointments(dayAppointments)
               return (
                 <div key={formatLocalISO(date)} className="relative border-r border-[var(--border)] last:border-r-0">
                   {Array.from({ length: 9 }, (_, index) => <div key={index} className={`h-[72px] border-b border-[var(--border)] ${unavailableSet.has(formatLocalISO(date)) ? 'bg-amber-500/[0.04]' : ''}`} />)}
-                  {dayAppointments.map((appointment) => {
+                  {appointmentLayouts.map(({ appointment, startMinutes, endMinutes, column, columnCount }) => {
                     const scheduledAt = new Date(appointment.scheduled_at || appointment.date)
-                    const minutesFromStart = (scheduledAt.getHours() - 9) * 60 + scheduledAt.getMinutes()
-                    if (minutesFromStart < 0 || minutesFromStart >= 540) return null
-                    const duration = Math.max(30, Number(appointment.duration_minutes || appointment.service_duration_minutes || 60))
-                    const top = (minutesFromStart / 60) * 72
-                    const height = Math.max(38, (Math.min(duration, 540 - minutesFromStart) / 60) * 72)
+                    const top = (startMinutes / 60) * 72
+                    const height = Math.max(38, ((endMinutes - startMinutes) / 60) * 72)
+                    const left = (column / columnCount) * 100
+                    const width = 100 / columnCount
                     const customerName = appointment.customer_name || appointment.user?.name || appointment.client_name || 'Guest'
                     const serviceName = appointment.service_name
                       || (Array.isArray(appointment.services) ? appointment.services.map((service) => service.replace(/-/g, ' ')).join(', ') : null)
@@ -359,8 +390,8 @@ function AdminWeekCalendar({ appointments, unavailableDates = [], onAppointmentC
                         type="button"
                         onClick={() => onAppointmentClick?.(appointment)}
                         title={`${format(scheduledAt, 'h:mm a')} · ${customerName} · ${serviceName}`}
-                        className={`absolute left-1 right-1 z-10 overflow-hidden rounded-md border-l-2 px-2 py-1 text-left shadow-sm transition hover:z-20 hover:brightness-125 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--gold-primary)] ${statusClass}`}
-                        style={{ top: `${top}px`, height: `${height}px` }}
+                        className={`absolute z-10 box-border overflow-hidden rounded-md border-l-2 px-1 py-1 text-left shadow-sm transition hover:z-20 hover:brightness-125 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--gold-primary)] sm:px-2 ${statusClass}`}
+                        style={{ top: `${top}px`, height: `${height}px`, left: `calc(${left}% + 1px)`, width: `calc(${width}% - 2px)` }}
                       >
                         <span className="block truncate text-[10px] font-semibold">{format(scheduledAt, 'h:mm a')} {customerName}</span>
                         <span className="block truncate text-[10px] opacity-80">{serviceName}</span>
@@ -426,6 +457,7 @@ const unavailableSet = useMemo(() => {
   const [hoveredAppointment, setHoveredAppointment] = useState(null)
   const [adminWeekView, setAdminWeekView] = useState(true)
   const [summaryRange, setSummaryRange] = useState('week')
+  const [monthStaffFilter, setMonthStaffFilter] = useState('all')
 
   const now = new Date()
   const summaryStart = {
@@ -441,6 +473,7 @@ const unavailableSet = useMemo(() => {
   })
   const completedCount = recentAppointments.filter((appointment) => appointment.status === 'completed').length
   const noShowCount = recentAppointments.filter((appointment) => appointment.status === 'no_show').length
+  const monthStaffNames = [...new Set(appointments.map(getAssignedStaff).filter(Boolean))].sort()
 
   useEffect(() => {
     if (!selectedDateId && appointments.length > 0) {
@@ -677,7 +710,23 @@ const getDateStatus = (dateKey) => {
               </div>
             </div>
 
+            {isAdminMode && monthStaffNames.length > 0 && (
+              <div className="flex flex-wrap items-center justify-end gap-2 border-b border-[var(--border)] px-4 py-3">
+                <select
+                  aria-label="Filter appointments by staff"
+                  value={monthStaffFilter}
+                  onChange={(event) => setMonthStaffFilter(event.target.value)}
+                  className="rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] px-3 py-2 text-sm text-[var(--text-light)]"
+                >
+                  <option value="all">All staff</option>
+                  {monthStaffNames.map((name) => <option key={name} value={name}>{name}</option>)}
+                </select>
+              </div>
+            )}
+
             <div className="p-4 sm:p-6">
+              <div className="overflow-x-auto">
+                <div className={isAdminMode ? 'min-w-[820px]' : undefined}>
               <div className="grid grid-cols-7 gap-2 text-sm text-[var(--text-muted)] mb-3 font-semibold tracking-widest">
                 {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
                   <div key={day} className="text-center py-3">
@@ -686,11 +735,11 @@ const getDateStatus = (dateKey) => {
                 ))}
               </div>
 
-            <div className="grid grid-cols-7 gap-3">
+            <div className="grid grid-cols-7 gap-2">
               {monthMatrix.map((week, weekIndex) =>
                 week.map((day, dayIndex) => {
                   if (!day.inCurrentMonth) {
-                    return <div key={`empty-${weekIndex}-${dayIndex}`} className="h-20 rounded-3xl bg-[var(--surface-dark)]" />
+                    return <div key={`empty-${weekIndex}-${dayIndex}`} className={`${isAdminMode ? 'min-h-[132px]' : 'h-20'} rounded-xl bg-[var(--surface-dark)]`} />
                   }
 
 const dateKey = day.id
@@ -702,6 +751,10 @@ const dateKey = day.id
                    const isPastDate = isDisabled && isPast
                    const isUnavailableCell = isUnavailable
                    const isAvailableCell = isAvailable && !isUnavailable && !isHoliday && !isSunday && !isPast
+                   const dayAppointments = (appointmentsByDate.get(dateKey) || [])
+                     .filter((appointment) => monthStaffFilter === 'all' || getAssignedStaff(appointment) === monthStaffFilter)
+                     .sort((left, right) => new Date(left.scheduled_at || left.date) - new Date(right.scheduled_at || right.date))
+                   const displayedBookingCount = isAdminMode ? dayAppointments.length : bookingCount
 
                     const cellClasses = isSelected
                       ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)]/15 text-white shadow-lg shadow-[var(--gold-primary)]/10'
@@ -711,7 +764,7 @@ const dateKey = day.id
                           ? 'border-slate-500/35 bg-slate-700/30 text-slate-100 cursor-not-allowed'
                           : isUnavailableCell
                             ? 'border-amber-500/30 bg-amber-500/10 text-amber-200 cursor-pointer hover:border-amber-400 hover:bg-amber-500/20'
-                            : bookingCount
+                            : displayedBookingCount
                               ? 'border-red-500/10 bg-red-500/10 text-red-200 hover:border-red-400 hover:bg-red-500/15'
                               : isAvailableCell
                                 ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200 cursor-pointer hover:border-emerald-400 hover:bg-emerald-500/20'
@@ -723,11 +776,70 @@ const dateKey = day.id
                         ? 'bg-slate-600/35 text-slate-100 border border-slate-400/35'
                         : isUnavailableCell
                           ? 'bg-amber-500/15 text-amber-200 border border-amber-500/20'
-                          : bookingCount
+                          : displayedBookingCount
                             ? 'bg-red-500/15 text-red-200 border border-red-500/20'
                             : isAvailableCell
                               ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/20'
                               : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/20'
+
+                    if (isAdminMode) {
+                      return (
+                        <div key={dateKey} className={`min-h-[132px] overflow-hidden rounded-xl border p-2 ${cellClasses}`}>
+                          <div className="flex items-center justify-between gap-1">
+                            <button
+                              type="button"
+                              onClick={() => handleDateSelect(dateKey, isUnavailableCell)}
+                              title={status}
+                              disabled={isSunday || isHoliday}
+                              className="rounded-md px-1.5 py-0.5 text-sm font-semibold transition hover:bg-black/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--gold-primary)] disabled:cursor-not-allowed"
+                            >
+                              {day.dayNumber}
+                            </button>
+                            <span className={`max-w-[75%] truncate rounded-md px-1.5 py-0.5 text-[9px] font-semibold uppercase ${badgeClasses}`}>
+                              {displayedBookingCount ? `${displayedBookingCount} booked` : status}
+                            </span>
+                          </div>
+                          <div className="mt-2 space-y-1">
+                            {dayAppointments.slice(0, 3).map((appointment) => {
+                              const scheduledAt = new Date(appointment.scheduled_at || appointment.date)
+                              const customerName = appointment.customer_name || appointment.user?.name || appointment.client_name || 'Guest'
+                              const serviceName = appointment.service_name
+                                || (Array.isArray(appointment.services) ? appointment.services.map((service) => service.replace(/-/g, ' ')).join(', ') : null)
+                                || appointment.title
+                                || 'Consultation'
+                              const eventClass = WEEK_STATUS_STYLES[appointment.status] || WEEK_STATUS_STYLES.pending
+                              return (
+                                <button
+                                  key={appointment.appointment_id || appointment.id || `${dateKey}-${scheduledAt.getTime()}-${customerName}`}
+                                  type="button"
+                                  onClick={() => onAppointmentClick?.(appointment)}
+                                  title={`${format(scheduledAt, 'h:mm a')} · ${customerName} · ${serviceName}`}
+                                  className={`flex w-full min-w-0 items-center gap-1 overflow-hidden rounded-md border-l-2 px-1.5 py-1 text-left text-[10px] leading-tight transition hover:brightness-125 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--gold-primary)] ${eventClass}`}
+                                >
+                                  <span className="shrink-0 font-semibold">{format(scheduledAt, 'h:mm a')}</span>
+                                  <span className="truncate">{customerName}</span>
+                                </button>
+                              )
+                            })}
+                            {dayAppointments.length > 3 && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedDateId(dateKey)
+                                  setShowTimeGrid(true)
+                                }}
+                                className="px-1.5 text-[10px] font-semibold text-[var(--gold-primary)] hover:underline"
+                              >
+                                +{dayAppointments.length - 3} more
+                              </button>
+                            )}
+                            {dayAppointments.length === 0 && bookingCount > 0 && (
+                              <span className="px-1.5 text-[10px] text-[var(--text-muted)]">No matching appointments</span>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    }
 
                     return (
                       <button
@@ -755,15 +867,13 @@ const dateKey = day.id
                 })
               )}
             </div>
+                </div>
+              </div>
 
 <div className="mt-6 grid gap-2 sm:grid-cols-5 text-sm text-[var(--text-muted)]">
                <div className="flex items-center gap-2 rounded-3xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2">
                  <span className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
                  Has Availability
-               </div>
-               <div className="flex items-center gap-2 rounded-3xl border border-green-500/20 bg-green-500/10 px-3 py-2">
-                 <span className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
-                 Open
                </div>
                <div className="flex items-center gap-2 rounded-3xl border border-red-500/20 bg-red-500/10 px-3 py-2">
                  <span className="h-2.5 w-2.5 rounded-full bg-red-400" />

@@ -371,6 +371,16 @@ function PayInstallmentModal({ isOpen, installment, projectId, onClose, onSucces
           ) : (
             <div className="space-y-2 text-xs">
               <p className="text-xs text-[var(--text-muted)] mb-1 font-medium text-center">Transfer to the shop bank account</p>
+              {paymentSettings?.bank_transfer_display_mode === 'qr' && paymentSettings?.bank_transfer_qr_image_url && (
+                <div className="mx-auto h-36 w-36 rounded-xl border border-[var(--border)] bg-white p-2">
+                  <img
+                    src={paymentSettings.bank_transfer_qr_image_url}
+                    alt="Bank transfer QR code"
+                    className="h-full w-full object-contain"
+                  />
+                </div>
+              )}
+              {(paymentSettings?.bank_transfer_display_mode !== 'qr' || !paymentSettings?.bank_transfer_qr_image_url) && (
               <div className="bg-[var(--surface-dark)] rounded-xl p-3 border border-[var(--border)] space-y-1.5">
                 <div className="flex justify-between">
                   <span className="text-[var(--text-muted)]">Bank Name:</span>
@@ -385,6 +395,7 @@ function PayInstallmentModal({ isOpen, installment, projectId, onClose, onSucces
                   <span className="text-[var(--gold-primary)] font-mono font-bold">{bankInfo.accountNumber || '1234 5678 9012'}</span>
                 </div>
               </div>
+              )}
             </div>
           )}
         </div>

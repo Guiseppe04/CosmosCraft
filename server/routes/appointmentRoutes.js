@@ -49,11 +49,11 @@ router.get('/unavailable-dates', appointmentController.getUnavailableDates);
 /**
  * POST /api/appointments/unavailable-dates
  * Add unavailable date
- * Access: Admin/Staff only
+ * Access: Admin only
  */
 router.post(
   '/unavailable-dates',
-  authorize('admin', 'staff', 'super_admin'),
+  authorize('admin', 'super_admin'),
   appointmentController.addUnavailableDate
 );
 
@@ -194,7 +194,7 @@ router.post('/:id/cancel', appointmentController.cancelAppointment);
  *   - status (optional)
  *   - limit (optional) - 1-500 (default: 100)
  *   - offset (optional) - 0+ (default: 0)
- * Access: Admin/Staff only
+ * Access: Admin only
  */
 router.get(
   '/search/by-date',
@@ -330,11 +330,11 @@ router.get('/users/:userId/stats', appointmentController.getUserStats);
 /**
  * DELETE /api/appointments/unavailable-dates/:id
  * Remove unavailable date
- * Access: Admin/Staff only
+ * Access: Admin only
  */
 router.delete(
   '/unavailable-dates/:id',
-  authorize('admin', 'staff', 'super_admin'),
+  authorize('admin', 'super_admin'),
   appointmentController.removeUnavailableDate
 );
 

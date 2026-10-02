@@ -206,7 +206,7 @@ export function AddressForm({
     if (!formData.postalZipCode?.trim()) {
       nextErrors.postalZipCode = 'Postal code is required'
     } else if (isPhilippines && formData.city && formData.postalZipCode.trim() && zipValid === false) {
-      nextErrors.postalZipCode = zipError || 'The ZIP code entered is incorrect for the selected city. Please verify and try again.'
+      nextErrors.postalZipCode = zipError || 'The ZIP code entered is incorrect for the selected city.'
     }
     setErrors(nextErrors)
     return Object.keys(nextErrors).length === 0
@@ -244,7 +244,7 @@ export function AddressForm({
     <div className="space-y-4">
       {showCategory && (
         <div>
-          <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Address Label *</label>
+          <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Address Label <span className="text-red-400" style={{ color: '#f87171' }}>*</span></label>
           <div className="flex gap-2">
             {ADDRESS_CATEGORIES.map((category) => (
               <button
@@ -266,7 +266,7 @@ export function AddressForm({
       )}
 
       <div>
-        <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Country *</label>
+        <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Country <span className="text-red-400" style={{ color: '#f87171' }}>*</span></label>
         <select
           value={formData.country}
           onChange={(e) => handleChange('country', e.target.value)}
@@ -283,7 +283,7 @@ export function AddressForm({
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Street Address 1 *</label>
+        <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Street Address 1 <span className="text-red-400" style={{ color: '#f87171' }}>*</span></label>
         <input
           type="text"
           value={formData.streetLine1}
@@ -309,7 +309,7 @@ export function AddressForm({
         <>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Province *</label>
+              <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Province <span className="text-red-400" style={{ color: '#f87171' }}>*</span></label>
               <select
                 value={formData.province}
                 onChange={(e) => {
@@ -328,7 +328,7 @@ export function AddressForm({
               {errors.province && <p className="text-xs text-red-400 mt-1.5">{errors.province}</p>}
             </div>
             <div>
-              <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">City / Municipality *</label>
+              <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">City / Municipality <span className="text-red-400" style={{ color: '#f87171' }}>*</span></label>
               <select
                 value={formData.city}
                 onChange={(e) => {
@@ -352,7 +352,7 @@ export function AddressForm({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Barangay *</label>
+            <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Barangay <span className="text-red-400" style={{ color: '#f87171' }}>*</span></label>
             <select
               value={formData.barangay}
               onChange={(e) => handleChange('barangay', e.target.value)}
@@ -374,7 +374,7 @@ export function AddressForm({
       ) : (
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">State / Province *</label>
+            <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">State / Province <span className="text-red-400" style={{ color: '#f87171' }}>*</span></label>
             <input
               type="text"
               value={formData.stateProvince}
@@ -385,7 +385,7 @@ export function AddressForm({
             {errors.stateProvince && <p className="text-xs text-red-400 mt-1.5">{errors.stateProvince}</p>}
           </div>
           <div>
-            <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">City *</label>
+            <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">City <span className="text-red-400" style={{ color: '#f87171' }}>*</span></label>
             <input
               type="text"
               value={formData.city}
@@ -399,7 +399,7 @@ export function AddressForm({
       )}
 
       <div>
-        <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Postal Code *</label>
+        <label className="block text-sm font-medium text-[var(--text-muted)] mb-2">Postal Code <span className="text-red-400" style={{ color: '#f87171' }}>*</span></label>
         <div className="relative">
           <input
             type="text"
@@ -424,7 +424,7 @@ export function AddressForm({
         </div>
         {errors.postalZipCode && <p className="text-xs text-red-400 mt-1.5">{errors.postalZipCode}</p>}
         {!errors.postalZipCode && isPhilippines && formData.city && formData.postalZipCode.trim() && !zipLoading && zipValid === false && zipError && (
-          <p className="text-xs text-amber-400 mt-1.5">{zipError}</p>
+          <p className="text-xs text-red-400 mt-1.5">{zipError}</p>
         )}
         {!errors.postalZipCode && isPhilippines && formData.city && formData.postalZipCode.trim() && !zipLoading && zipValid === true && (
           <p className="text-xs text-green-400 mt-1.5">Valid ZIP code for the selected city ✓</p>
