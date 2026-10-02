@@ -17,7 +17,7 @@ import {
 } from 'recharts'
 import ProjectTaskTracker from '../components/projects/ProjectTaskTracker'
 import DefaultWorkflowEditor from '../components/projects/DefaultWorkflowEditor'
-import AppointmentModal from '../components/appointments/AppointmentModal'
+import AppointmentDetailsModal from '../components/appointments/AppointmentDetailsModal'
 import AppointmentForm from '../components/appointments/AppointmentForm'
 import UnavailableDatesManager from '../components/appointments/UnavailableDatesManager'
 import { PosWorkspace } from '../components/pos/PosWorkspace'
@@ -302,6 +302,7 @@ export function AdminPage() {
   const [appointmentFormOpen, setAppointmentFormOpen] = useState(false)
   const [appointmentFormData, setAppointmentFormData] = useState(null)
   const [unavailableDatesOpen, setUnavailableDatesOpen] = useState(false)
+  const [openOverrides, setOpenOverrides] = useState([])
   const [selectedCalendarDate, setSelectedCalendarDate] = useState(null)
   
   const [orderStatusDropdownOpen, setOrderStatusDropdownOpen] = useState(false)
@@ -796,6 +797,29 @@ export function AdminPage() {
       fetchUnavailableDates()
     } catch (e) { showToast(e.message, 'error') }
   }, [showToast, fetchUnavailableDates])
+
+  const fetchOpenOverrides = useCallback(async () => {
+    try {
+      const res = await adminApi.getOpenOverrides()
+      setOpenOverrides(res.data?.open_overrides || [])
+    } catch (e) { /* silent */ }
+  }, [])
+
+  const handleAddOpenOverride = useCallback(async (date) => {
+    try {
+      await adminApi.addOpenOverride(date)
+      showToast('Holiday marked as open', 'success')
+      fetchOpenOverrides()
+    } catch (e) { showToast(e.message, 'error') }
+  }, [showToast, fetchOpenOverrides])
+
+  const handleRemoveOpenOverride = useCallback(async (id) => {
+    try {
+      await adminApi.removeOpenOverride(id)
+      showToast('Holiday reverted to closed', 'success')
+      fetchOpenOverrides()
+    } catch (e) { showToast(e.message, 'error') }
+  }, [showToast, fetchOpenOverrides])
 
   // ── Initial data load on tab change ─────────────────────────────────────
   useEffect(() => {
@@ -3067,18 +3091,28 @@ export function AdminPage() {
       </AnimatePresence>
 
       {/* ── APPOINTMENT MODALS ─────────────────────────────────────────────── */}
-      <AppointmentModal
-        isOpen={appointmentModalOpen}
+      <AppointmentDetailsModal
+        show={appointmentModalOpen}
         onClose={() => {
           setAppointmentModalOpen(false)
           setSelectedAppointment(null)
         }}
         appointment={selectedAppointment}
-        onStatusChange={handleAppointmentStatusChange}
-        onReschedule={handleAppointmentReschedule}
-        onCancel={handleAppointmentCancel}
+        onStatusChange={async (nextStatus, reason) => {
+          const id = selectedAppointment?.appointment_id || selectedAppointment?.id
+          if (id) {
+            await handleAppointmentStatusChange(id, nextStatus, reason)
+            setSelectedAppointment((prev) => prev ? { ...prev, status: nextStatus } : null)
+          }
+        }}
+        onCancel={async (reason) => {
+          const id = selectedAppointment?.appointment_id || selectedAppointment?.id
+          if (id) {
+            await handleAppointmentCancel(id, reason)
+            setSelectedAppointment((prev) => prev ? { ...prev, status: 'cancelled' } : null)
+          }
+        }}
         onPaymentStatusUpdate={handleAppointmentPaymentStatusUpdate}
-        loading={appointmentLoading}
       />
 
       <AppointmentForm
@@ -3099,8 +3133,12 @@ export function AdminPage() {
         isOpen={unavailableDatesOpen}
         onClose={() => setUnavailableDatesOpen(false)}
         unavailableDates={unavailableDates}
+        openOverrides={openOverrides}
         onAddUnavailable={handleAddUnavailableDate}
         onRemoveUnavailable={handleRemoveUnavailableDate}
+        onAddOpenOverride={handleAddOpenOverride}
+        onRemoveOpenOverride={handleRemoveOpenOverride}
+        onOpen={fetchOpenOverrides}
         loading={appointmentLoading}
       />
     </div>

@@ -221,6 +221,11 @@ export const adminApi = {
   setUnavailableDate: (date, reason) => request('/api/appointments/unavailable-dates', { method: 'POST', body: { date, reason } }),
   removeUnavailableDate: (dateId) => request(`/api/appointments/unavailable-dates/${dateId}`, { method: 'DELETE' }),
 
+  // Holiday Open Overrides
+  getOpenOverrides: () => request('/api/appointments/open-overrides'),
+  addOpenOverride: (date) => request('/api/appointments/open-overrides', { method: 'POST', body: { date } }),
+  removeOpenOverride: (id) => request(`/api/appointments/open-overrides/${id}`, { method: 'DELETE' }),
+
    // Inventory
   getInventoryProducts: (params = {}) => {
     const qs = new URLSearchParams(params).toString()

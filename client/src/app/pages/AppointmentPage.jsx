@@ -224,7 +224,7 @@
       .replace(/\b\w/g, (c) => c.toUpperCase())
   }
 
-  function getMonthMatrix(year, month, maxLeadTimeDays, disabledDateSet = new Set()) {
+  function getMonthMatrix(year, month, maxLeadTimeDays, disabledDateSet = new Set(), openOverrideSet = new Set()) {
     const firstDay = new Date(year, month, 1)
     const firstWeekday = firstDay.getDay()
     const daysInMonth = new Date(year, month + 1, 0).getDate()
@@ -247,13 +247,16 @@
         let id = null
         let isAvailable = false
         let isHolidayDate = false
+        let isOpenHoliday = false
 
         if (inCurrentMonth) {
           id = formatLocalDateId(date)
           const isPast = date < today
           const isTooSoon = date < minAvailableDate
           const isSunday = date.getDay() === 0
-          isHolidayDate = isHoliday(date)
+          const isHolidayDay = isHoliday(date)
+          isOpenHoliday = isHolidayDay && openOverrideSet.has(id)
+          isHolidayDate = isHolidayDay && !isOpenHoliday
           const isAdminDisabled = disabledDateSet.has(id)
           isAvailable = !isPast && !isTooSoon && !isSunday && !isHolidayDate && !isAdminDisabled
         }
@@ -264,6 +267,7 @@
           inCurrentMonth,
           isAvailable,
           isHolidayDate,
+          isOpenHoliday,
           isPastDate: inCurrentMonth ? date < today : false,
         })
       }
@@ -327,6 +331,7 @@
     const [selectedDateId, setSelectedDateId] = useState('')
     const [selectedTime, setSelectedTime] = useState('')
     const [unavailableDateSet, setUnavailableDateSet] = useState(new Set())
+    const [openOverrideSet, setOpenOverrideSet] = useState(new Set())
     const [availableTimeSet, setAvailableTimeSet] = useState(new Set())
     const [slotsLoading, setSlotsLoading] = useState(false)
     const [dailyAppointmentLoad, setDailyAppointmentLoad] = useState(null)
@@ -682,14 +687,22 @@
 
       const loadUnavailableDates = async () => {
         try {
-          const response = await fetch(`${API}/api/appointments/unavailable-dates`, {
-            credentials: 'include',
-          })
-          const payload = await response.json().catch(() => ({}))
+          const [unavailRes, overrideRes] = await Promise.all([
+            fetch(`${API}/api/appointments/unavailable-dates`, {
+              credentials: 'include',
+            }),
+            fetch(`${API}/api/appointments/open-overrides`, {
+              credentials: 'include',
+            }).catch(() => null),
+          ])
 
-          if (!response.ok) {
+          const payload = await unavailRes.json().catch(() => ({}))
+          const overridePayload = overrideRes && overrideRes.ok ? await overrideRes.json().catch(() => ({})) : null
+
+          if (!unavailRes.ok) {
             if (!isMounted) return
             setUnavailableDateSet(new Set())
+            setOpenOverrideSet(new Set())
             return
           }
 
@@ -700,8 +713,16 @@
               .filter(Boolean)
           )
 
+          const overrideDates = Array.isArray(overridePayload?.data?.open_overrides) ? overridePayload.data.open_overrides : []
+          const nextOverrideSet = new Set(
+            overrideDates
+              .map((entry) => String(entry?.date || '').slice(0, 10))
+              .filter(Boolean)
+          )
+
           if (isMounted) {
             setUnavailableDateSet(nextSet)
+            setOpenOverrideSet(nextOverrideSet)
             if (selectedDateId && nextSet.has(selectedDateId)) {
               setSelectedDateId('')
               setSelectedTime('')
@@ -710,6 +731,7 @@
         } catch {
           if (isMounted) {
             setUnavailableDateSet(new Set())
+            setOpenOverrideSet(new Set())
           }
         }
       }
@@ -814,8 +836,8 @@
     }, [selectedServices])
 
     const monthMatrix = useMemo(
-      () => getMonthMatrix(currentYear, currentMonth, maxLeadTime, unavailableDateSet),
-      [currentYear, currentMonth, maxLeadTime, unavailableDateSet]
+      () => getMonthMatrix(currentYear, currentMonth, maxLeadTime, unavailableDateSet, openOverrideSet),
+      [currentYear, currentMonth, maxLeadTime, unavailableDateSet, openOverrideSet]
     )
 
     const referenceNumber = selectedDate && selectedTime

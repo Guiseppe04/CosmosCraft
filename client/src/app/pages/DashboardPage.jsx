@@ -23,6 +23,8 @@ import { ConfirmModal } from '../components/ui/ConfirmModal'
 import { SelectableCartItemRow } from '../components/cart/SelectableCartItemRow.jsx'
 import { DashboardSectionTabs } from '../components/DashboardSectionTabs.jsx'
 import { useSocketEvent } from '../context/SocketContext.jsx'
+import AppointmentCard, { getSelectedGuitarLabel, formatAppointmentServiceType } from '../components/appointments/AppointmentCard.jsx'
+import { printAppointmentReceipt } from '../utils/appointmentReceipt'
 
 import '../../styles/DashboardSections.css'
 
@@ -552,9 +554,11 @@ export function DashboardPage() {
   const [isResumingProject, setIsResumingProject] = useState(false)
 
   const [myAppointments, setMyAppointments] = useState([])
+  const [isAppointmentsLoading, setIsAppointmentsLoading] = useState(false)
   const [appointmentSearch, setAppointmentSearch] = useState('')
   const [appointmentSort, setAppointmentSort] = useState('upcoming')
   const [appointmentStatusFilter, setAppointmentStatusFilter] = useState('all')
+  const [appointmentPaymentFilter, setAppointmentPaymentFilter] = useState('all')
   const [appointmentDateFilter, setAppointmentDateFilter] = useState('all')
   const [appointmentDateFrom, setAppointmentDateFrom] = useState('')
   const [appointmentDateTo, setAppointmentDateTo] = useState('')
@@ -573,7 +577,7 @@ export function DashboardPage() {
   const isDigitalPayment = (method) => DIGITAL_PAYMENT_METHODS.includes(method?.toLowerCase())
   const isPaymentConfirmed = (status) => {
     const normalized = (status || 'pending').toLowerCase()
-    return ['verified', 'approved', 'paid'].includes(normalized)
+    return ['verified', 'approved', 'paid', 'confirmed'].includes(normalized)
   }
 
   const [ratingModalOrderId, setRatingModalOrderId] = useState(null)
@@ -658,9 +662,26 @@ export function DashboardPage() {
       return
     }
 
+    setIsAppointmentsLoading(true)
     adminApi.getUserAppointments(user.id)
       .then(res => setMyAppointments(res.data?.appointments || []))
       .catch(console.error)
+      .finally(() => setIsAppointmentsLoading(false))
+  }
+
+  const handlePrintAppointmentReceipt = (apt) => {
+    if (!apt) return
+    const payStatus = apt.payment_status || 'pending'
+    if (!isPaymentConfirmed(payStatus)) {
+      setToastMessage('Payment is not yet confirmed. Receipt cannot be generated.')
+      return
+    }
+    try {
+      printAppointmentReceipt(apt)
+    } catch (err) {
+      console.error('Failed to print appointment receipt:', err)
+      setToastMessage('Unable to generate the receipt. Please try again.')
+    }
   }
 
   const fetchMyOrders = () => {
@@ -1506,7 +1527,7 @@ export function DashboardPage() {
     try {
       // type="time" provides HH:MM (24-hour)
       const scheduledAt = new Date(`${rescheduleDate}T${rescheduleTime}:00`);
-      await adminApi.updateAppointment(aptId, { scheduled_at: scheduledAt.toISOString(), time: rescheduleTime, status: 'approved' });
+      await adminApi.updateAppointment(aptId, { scheduled_at: scheduledAt.toISOString() });
       setToastMessage('Appointment successfully rescheduled!');
       setReschedulingAptId(null);
       setRescheduleDate('');
@@ -2248,407 +2269,358 @@ export function DashboardPage() {
     return apt.customer_phone || apt.user_phone || apt.phone || ''
   }
 
-  const renderAppointmentsContent = () => {
+  const handleResetAppointmentFilters = () => {
+    setAppointmentStatusFilter('all')
+    setAppointmentPaymentFilter('all')
+    setAppointmentDateFilter('all')
+    setAppointmentDateFrom('')
+    setAppointmentDateTo('')
+    setAppointmentSort('upcoming')
+    setAppointmentSearch('')
+  }
+
+  const filteredAndSortedAppointments = useMemo(() => {
+    if (!Array.isArray(myAppointments) || myAppointments.length === 0) return []
+
     const searchTerm = appointmentSearch.trim().toLowerCase()
     const now = new Date()
-    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-    const startOfTomorrow = new Date(startOfToday)
-    startOfTomorrow.setDate(startOfTomorrow.getDate() + 1)
-    const startOfWeek = new Date(startOfToday)
-    startOfWeek.setDate(startOfWeek.getDate() - ((startOfWeek.getDay() + 6) % 7))
-    const startOfNextWeek = new Date(startOfWeek)
-    startOfNextWeek.setDate(startOfNextWeek.getDate() + 7)
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-    const startOfNextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1)
-    const customRangeStart = appointmentDateFrom ? new Date(`${appointmentDateFrom}T00:00:00`) : null
-    const customRangeEnd = appointmentDateTo ? new Date(`${appointmentDateTo}T00:00:00`) : null
+    const nowTime = now.getTime()
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+    const startOfTomorrow = startOfToday + 86400000
+    const startOfNextDay = startOfTomorrow + 86400000
 
-    const getAppointmentTimestamp = (apt) => {
+    const currentDay = now.getDay()
+    const daysSinceMonday = (currentDay + 6) % 7
+    const startOfWeek = startOfToday - daysSinceMonday * 86400000
+    const startOfNextWeek = startOfWeek + 7 * 86400000
+
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime()
+    const startOfNextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1).getTime()
+
+    const customRangeStart = appointmentDateFrom ? new Date(`${appointmentDateFrom}T00:00:00`).getTime() : null
+    const customRangeEnd = appointmentDateTo ? new Date(`${appointmentDateTo}T23:59:59.999`).getTime() : null
+
+    const getAptTimestamp = (apt) => {
       const value = apt.scheduled_at || apt.date || apt.created_at
       const timestamp = new Date(value || 0).getTime()
       return Number.isNaN(timestamp) ? 0 : timestamp
     }
 
-    const filteredAppointments = myAppointments.filter((apt) => {
+    const filtered = myAppointments.filter((apt) => {
       const status = String(apt.status || '').toLowerCase()
-      const statusMatches = appointmentStatusFilter === 'all'
-        || (appointmentStatusFilter === 'confirmed' && ['approved', 'confirmed'].includes(status))
-        || status === appointmentStatusFilter
-      if (!statusMatches) return false
+      if (appointmentStatusFilter !== 'all' && status !== appointmentStatusFilter) {
+        return false
+      }
 
-      const appointmentDate = getAppointmentTimestamp(apt)
-      const dateMatches = (() => {
+      if (appointmentPaymentFilter !== 'all') {
+        const payStatus = String(apt.payment_status || 'pending').toLowerCase()
+        if (appointmentPaymentFilter === 'confirmed') {
+          if (!isPaymentConfirmed(payStatus)) return false
+        } else if (appointmentPaymentFilter === 'pending') {
+          if (payStatus !== 'pending') return false
+        } else if (appointmentPaymentFilter === 'for_verification') {
+          if (!['proof_submitted', 'awaiting_approval', 'for_verification'].includes(payStatus)) return false
+        } else if (appointmentPaymentFilter === 'rejected') {
+          if (!['rejected', 'failed'].includes(payStatus)) return false
+        } else if (appointmentPaymentFilter === 'refunded') {
+          if (payStatus !== 'refunded') return false
+        }
+      }
+
+      const appointmentTime = getAptTimestamp(apt)
+
+      if (appointmentDateFilter !== 'all') {
         switch (appointmentDateFilter) {
           case 'today':
-            return appointmentDate >= startOfToday.getTime() && appointmentDate < startOfTomorrow.getTime()
+            if (appointmentTime < startOfToday || appointmentTime >= startOfTomorrow) return false
+            break
           case 'tomorrow':
-            return appointmentDate >= startOfTomorrow.getTime() && appointmentDate < new Date(startOfTomorrow.getTime() + 86400000).getTime()
+            if (appointmentTime < startOfTomorrow || appointmentTime >= startOfNextDay) return false
+            break
           case 'this_week':
-            return appointmentDate >= startOfWeek.getTime() && appointmentDate < startOfNextWeek.getTime()
+            if (appointmentTime < startOfWeek || appointmentTime >= startOfNextWeek) return false
+            break
           case 'this_month':
-            return appointmentDate >= startOfMonth.getTime() && appointmentDate < startOfNextMonth.getTime()
+            if (appointmentTime < startOfMonth || appointmentTime >= startOfNextMonth) return false
+            break
           case 'custom':
-            return Boolean(appointmentDate) && (!customRangeStart || appointmentDate >= customRangeStart.getTime())
-              && (!customRangeEnd || appointmentDate < new Date(customRangeEnd.getTime() + 86400000).getTime())
+            if (!appointmentTime) return false
+            if (customRangeStart && appointmentTime < customRangeStart) return false
+            if (customRangeEnd && appointmentTime > customRangeEnd) return false
+            break
           default:
-            return true
+            break
         }
-      })()
-      if (!dateMatches) return false
+      }
+
       if (!searchTerm) return true
 
-      const appointmentDateValues = [apt.scheduled_at, apt.date, apt.created_at]
-        .filter(Boolean)
-        .flatMap((value) => {
-          const date = new Date(value)
-          if (Number.isNaN(date.getTime())) return [String(value)]
-          return [String(value), date.toLocaleDateString(), date.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' }), date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })]
-        })
-      const searchableValues = [apt.reference_code, apt.service_name, apt.service_names,
-        Array.isArray(apt.services) ? apt.services.join(' ') : '', apt.status, apt.location_id,
-        apt.appointment_type, apt.time, getSelectedGuitarLabel(apt), apt.notes,
-        getContactNumber(apt), getAddressLabel(apt), ...appointmentDateValues]
-      return searchableValues.some((value) => String(value || '').toLowerCase().includes(searchTerm))
+      const dateObj = (apt.scheduled_at || apt.date) ? new Date(apt.scheduled_at || apt.date) : null
+      const dateStrings = dateObj && !Number.isNaN(dateObj.getTime())
+        ? [
+            dateObj.toLocaleDateString(),
+            dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+            dateObj.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
+            dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          ]
+        : []
+
+      const guitarLabel = getSelectedGuitarLabel(apt)
+      const contactNo = getContactNumber(apt)
+      const address = getAddressLabel(apt)
+
+      const searchableValues = [
+        apt.reference_code,
+        apt.service_name,
+        Array.isArray(apt.service_names) ? apt.service_names.join(' ') : '',
+        Array.isArray(apt.services) ? apt.services.join(' ') : '',
+        apt.status,
+        apt.location_id,
+        apt.appointment_type,
+        apt.payment_method,
+        apt.time,
+        guitarLabel,
+        contactNo,
+        address,
+        ...dateStrings,
+      ]
+
+      return searchableValues.some((val) => val && String(val).toLowerCase().includes(searchTerm))
     })
-    const sortedAppointments = [...filteredAppointments].sort((a, b) => {
+
+    return filtered.sort((a, b) => {
       const aTimestamp = appointmentSort.startsWith('created_')
         ? new Date(a.created_at || 0).getTime()
-        : getAppointmentTimestamp(a)
+        : getAptTimestamp(a)
       const bTimestamp = appointmentSort.startsWith('created_')
         ? new Date(b.created_at || 0).getTime()
-        : getAppointmentTimestamp(b)
+        : getAptTimestamp(b)
 
       if (appointmentSort === 'created_latest') return bTimestamp - aTimestamp
       if (appointmentSort === 'created_earliest') return aTimestamp - bTimestamp
       if (appointmentSort === 'upcoming') {
-        const aIsUpcoming = aTimestamp >= now.getTime()
-        const bIsUpcoming = bTimestamp >= now.getTime()
+        const aIsUpcoming = aTimestamp >= nowTime
+        const bIsUpcoming = bTimestamp >= nowTime
         if (aIsUpcoming !== bIsUpcoming) return aIsUpcoming ? -1 : 1
         return aIsUpcoming ? aTimestamp - bTimestamp : bTimestamp - aTimestamp
       }
-      if (appointmentSort === 'latest_appointment' || appointmentSort === 'date_latest') return bTimestamp - aTimestamp
+      if (appointmentSort === 'latest_appointment' || appointmentSort === 'date_latest') {
+        return bTimestamp - aTimestamp
+      }
       return aTimestamp - bTimestamp
     })
+  }, [
+    myAppointments,
+    appointmentSearch,
+    appointmentStatusFilter,
+    appointmentPaymentFilter,
+    appointmentDateFilter,
+    appointmentDateFrom,
+    appointmentDateTo,
+    appointmentSort,
+  ])
 
+  const renderAppointmentsContent = () => {
     return (
-    <div className="dash-card">
-      <div className="appt-header">
-        <div>
-          <h2 className="dash-card-title">My Appointments</h2>
-          <p className="dash-card-subtitle">View and manage your service appointments</p>
-        </div>
-        <button
-          onClick={() => navigate('/appointments')}
-          className="appt-book-btn"
-        >
-          <Calendar className="w-4 h-4" />
-          Book New Appointment
-        </button>
-      </div>
-
-      {myAppointments.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-10">
-          <div className="w-16 h-16 rounded-full border-2 border-[var(--border)] flex items-center justify-center mb-6">
-            <Calendar className="w-8 h-8 text-[var(--text-muted)]" />
+      <div className="dash-card">
+        <div className="appt-header">
+          <div>
+            <h2 className="dash-card-title">My Appointments</h2>
+            <p className="dash-card-subtitle">View and manage your service appointments</p>
           </div>
-          <p className="text-white font-medium mb-1">No appointments yet</p>
-          <p className="text-sm text-[var(--text-muted)] mb-6">Book a service appointment to see it here</p>
+          <button
+            onClick={() => navigate('/appointments')}
+            className="appt-book-btn"
+          >
+            <Calendar className="w-4 h-4" />
+            Book New Appointment
+          </button>
         </div>
-      ) : (
-        <div className="space-y-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <div className="relative flex-1 min-w-0">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
-              <input
-                type="search"
-                value={appointmentSearch}
-                onChange={(event) => setAppointmentSearch(event.target.value)}
-                placeholder="Search appointments..."
-                aria-label="Search appointments"
-                className="appt-search-input"
+
+        {isAppointmentsLoading ? (
+          <div className="flex flex-col items-center justify-center py-16 text-center">
+            <Loader2 className="w-8 h-8 animate-spin text-[var(--gold-primary)] mb-3" />
+            <p className="text-white font-medium text-sm">Loading your appointments...</p>
+            <p className="text-xs text-[var(--text-muted)] mt-1">Please wait while we fetch your service schedule.</p>
+          </div>
+        ) : myAppointments.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-12 text-center">
+            <div className="w-16 h-16 rounded-full border-2 border-[var(--border)] flex items-center justify-center mb-4 text-[var(--text-muted)]">
+              <Calendar className="w-8 h-8" />
+            </div>
+            <p className="text-white font-medium mb-1">No appointments yet</p>
+            <p className="text-sm text-[var(--text-muted)] mb-6">Book a service appointment to see it here.</p>
+            <button
+              onClick={() => navigate('/appointments')}
+              className="appt-book-btn"
+            >
+              <Calendar className="w-4 h-4" />
+              Book New Appointment
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <div className="relative flex-1 min-w-0">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" />
+                <input
+                  type="search"
+                  value={appointmentSearch}
+                  onChange={(event) => setAppointmentSearch(event.target.value)}
+                  placeholder="Search appointments..."
+                  aria-label="Search appointments"
+                  className="appt-search-input"
+                />
+              </div>
+              <DashboardFilterMenu
+                groups={[
+                  {
+                    id: 'appointment-status', type: 'filter', label: 'Status', icon: CheckCircle,
+                    value: appointmentStatusFilter,
+                    options: [
+                      { value: 'all', label: 'All' },
+                      { value: 'pending', label: 'Pending' },
+                      { value: 'confirmed', label: 'Confirmed' },
+                      { value: 'in_progress', label: 'In Progress' },
+                      { value: 'ready_for_pickup', label: 'Ready for Pickup' },
+                      { value: 'completed', label: 'Completed' },
+                      { value: 'cancelled', label: 'Cancelled' },
+                      { value: 'rejected', label: 'Rejected' },
+                      { value: 'no_show', label: 'No Show' },
+                    ],
+                    onChange: setAppointmentStatusFilter,
+                  },
+                  {
+                    id: 'appointment-payment-filter', type: 'filter', label: 'Payment', icon: CreditCard,
+                    value: appointmentPaymentFilter,
+                    options: [
+                      { value: 'all', label: 'All Payments' },
+                      { value: 'confirmed', label: 'Confirmed / Paid' },
+                      { value: 'pending', label: 'Pending Payment' },
+                      { value: 'for_verification', label: 'Verification Pending' },
+                      { value: 'rejected', label: 'Rejected / Failed' },
+                      { value: 'refunded', label: 'Refunded' },
+                    ],
+                    onChange: setAppointmentPaymentFilter,
+                  },
+                  {
+                    id: 'appointment-date-filter', type: 'filter', label: 'Date', icon: CalendarDays,
+                    value: appointmentDateFilter,
+                    options: [
+                      { value: 'all', label: 'All Dates' },
+                      { value: 'today', label: 'Today' },
+                      { value: 'tomorrow', label: 'Tomorrow' },
+                      { value: 'this_week', label: 'This Week' },
+                      { value: 'this_month', label: 'This Month' },
+                      { value: 'custom', label: 'Custom Date Range', keepOpen: true },
+                    ],
+                    onChange: setAppointmentDateFilter,
+                    extra: appointmentDateFilter === 'custom' && (
+                      <div className="mt-2 space-y-2 border-t border-[var(--border)] px-2 pt-3">
+                        <label className="block text-xs text-[var(--text-muted)]">
+                          From
+                          <input
+                            type="date"
+                            value={appointmentDateFrom}
+                            onChange={(event) => setAppointmentDateFrom(event.target.value)}
+                            className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-2.5 py-2 text-sm text-[var(--text-light)]"
+                            aria-label="Appointment date from"
+                          />
+                        </label>
+                        <label className="block text-xs text-[var(--text-muted)]">
+                          To
+                          <input
+                            type="date"
+                            value={appointmentDateTo}
+                            onChange={(event) => setAppointmentDateTo(event.target.value)}
+                            className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-2.5 py-2 text-sm text-[var(--text-light)]"
+                            aria-label="Appointment date to"
+                          />
+                        </label>
+                      </div>
+                    ),
+                  },
+                  {
+                    id: 'appointment-date-sort', type: 'sort', label: 'Appointment Date', icon: CalendarDays,
+                    value: appointmentSort,
+                    summary: appointmentSort.startsWith('created_') ? 'Choose appointment date order' : null,
+                    options: [
+                      { value: 'upcoming', label: 'Upcoming First' },
+                      { value: 'latest_appointment', label: 'Latest Appointment First' },
+                      { value: 'date_earliest', label: 'Date: Earliest to Latest' },
+                      { value: 'date_latest', label: 'Date: Latest to Earliest' },
+                    ],
+                    onChange: setAppointmentSort,
+                  },
+                  {
+                    id: 'appointment-created-sort', type: 'sort', label: 'Created Date', icon: Clock,
+                    value: appointmentSort,
+                    summary: appointmentSort.startsWith('created_') ? null : 'Choose creation date order',
+                    options: [
+                      { value: 'created_latest', label: 'Newest to Oldest' },
+                      { value: 'created_earliest', label: 'Oldest to Newest' },
+                    ],
+                    onChange: setAppointmentSort,
+                  },
+                ]}
+                onReset={handleResetAppointmentFilters}
               />
             </div>
-            <DashboardFilterMenu
-              groups={[
-                {
-                  id: 'appointment-status', type: 'filter', label: 'Status', icon: CheckCircle,
-                  value: appointmentStatusFilter,
-                  options: [
-                    { value: 'all', label: 'All' },
-                    { value: 'pending', label: 'Pending' },
-                    { value: 'confirmed', label: 'Confirmed' },
-                    { value: 'completed', label: 'Completed' },
-                    { value: 'cancelled', label: 'Cancelled' },
-                    { value: 'rejected', label: 'Rejected' },
-                  ],
-                  onChange: setAppointmentStatusFilter,
-                },
-                {
-                  id: 'appointment-date-filter', type: 'filter', label: 'Date', icon: CalendarDays,
-                  value: appointmentDateFilter,
-                  options: [
-                    { value: 'all', label: 'All Dates' },
-                    { value: 'today', label: 'Today' },
-                    { value: 'tomorrow', label: 'Tomorrow' },
-                    { value: 'this_week', label: 'This Week' },
-                    { value: 'this_month', label: 'This Month' },
-                    { value: 'custom', label: 'Custom Date Range', keepOpen: true },
-                  ],
-                  onChange: setAppointmentDateFilter,
-                  extra: appointmentDateFilter === 'custom' && (
-                    <div className="mt-2 space-y-2 border-t border-[var(--border)] px-2 pt-3">
-                      <label className="block text-xs text-[var(--text-muted)]">
-                        From
-                        <input
-                          type="date"
-                          value={appointmentDateFrom}
-                          onChange={(event) => setAppointmentDateFrom(event.target.value)}
-                          className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-2.5 py-2 text-sm text-[var(--text-light)]"
-                          aria-label="Appointment date from"
-                        />
-                      </label>
-                      <label className="block text-xs text-[var(--text-muted)]">
-                        To
-                        <input
-                          type="date"
-                          value={appointmentDateTo}
-                          onChange={(event) => setAppointmentDateTo(event.target.value)}
-                          className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-primary)] px-2.5 py-2 text-sm text-[var(--text-light)]"
-                          aria-label="Appointment date to"
-                        />
-                      </label>
-                    </div>
-                  ),
-                },
-                {
-                  id: 'appointment-date-sort', type: 'sort', label: 'Appointment Date', icon: CalendarDays,
-                  value: appointmentSort,
-                  summary: appointmentSort.startsWith('created_') ? 'Choose appointment date order' : null,
-                  options: [
-                    { value: 'upcoming', label: 'Upcoming First' },
-                    { value: 'latest_appointment', label: 'Latest Appointment First' },
-                    { value: 'date_earliest', label: 'Date: Earliest to Latest' },
-                    { value: 'date_latest', label: 'Date: Latest to Earliest' },
-                  ],
-                  onChange: setAppointmentSort,
-                },
-                {
-                  id: 'appointment-created-sort', type: 'sort', label: 'Created Date', icon: Clock,
-                  value: appointmentSort,
-                  summary: appointmentSort.startsWith('created_') ? null : 'Choose creation date order',
-                  options: [
-                    { value: 'created_latest', label: 'Newest to Oldest' },
-                    { value: 'created_earliest', label: 'Oldest to Newest' },
-                  ],
-                  onChange: setAppointmentSort,
-                },
-              ]}
-              onReset={() => {
-                setAppointmentStatusFilter('all')
-                setAppointmentDateFilter('all')
-                setAppointmentDateFrom('')
-                setAppointmentDateTo('')
-                setAppointmentSort('upcoming')
-                setAppointmentSearch('')
-              }}
-            />
-          </div>
-          <div className="max-h-[62vh] space-y-4 overflow-y-auto pr-2">
-          {filteredAppointments.length === 0 ? (
-            <p className="py-6 text-center text-sm text-[var(--text-muted)]">No appointments match your search.</p>
-          ) : sortedAppointments.map(apt => {
-            const apptDate = apt.scheduled_at || apt.date;
 
-            // Check if past current time and not completed/cancelled
-            const isPast = apptDate && new Date(apptDate) < new Date();
-            const needsReschedule = isPast && apt.status !== 'completed' && apt.status !== 'cancelled';
-            const isReschedulingThis = reschedulingAptId === (apt.appointment_id || apt.id);
-
-            const selectedGuitar = getSelectedGuitarLabel(apt);
-            const contactNumber = getContactNumber(apt);
-            const addressLabel = getAddressLabel(apt);
-            const appointmentNotes = apt.notes || '';
-            const isCancelledApt = apt.status === 'cancelled';
-            let cancellationReason = '';
-            let displayNotes = appointmentNotes;
-
-            if (isCancelledApt) {
-              // Handle both customer cancellations ("Cancelled: ...") and
-              // admin/shop cancellations ("Status changed: ...")
-              const cancelMatch = appointmentNotes.match(/^\s*(?:Cancelled|Status changed):\s*(.*)$/im);
-              if (cancelMatch) {
-                cancellationReason = cancelMatch[1].trim();
-                // Strip "Cancelled by customer:" prefix so only the reason is shown
-                cancellationReason = cancellationReason.replace(/^Cancelled by customer:\s*/i, '').trim();
-                displayNotes = appointmentNotes.replace(/^\s*(?:Cancelled|Status changed):[^\n]*\n?/im, '').trim();
-              }
-            }
-
-            return (
-              <div key={apt.appointment_id || apt.id} className="appt-card">
-                <div className="appt-header">
-                  <div>
-                    <h3 className="font-bold text-white text-lg">Appointment</h3>
-                    {apt.reference_code && (
-                      <p className="text-xs font-mono text-[#d4af37] mt-0.5">{apt.reference_code}</p>
-                    )}
-                    <p className="text-xs text-[var(--text-muted)] mt-1 capitalize">
-                      {apt.service_name || (Array.isArray(apt.services) ? apt.services.map(s => s.replace(/-/g, ' ')).join(', ') : 'Consultation')}
-                    </p>
+            <div className="max-h-[62vh] space-y-4 overflow-y-auto pr-2">
+              {filteredAndSortedAppointments.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 text-center bg-white/[0.02] border border-[var(--border)] rounded-2xl p-6">
+                  <div className="w-12 h-12 rounded-full border border-[var(--border)] flex items-center justify-center mb-3 text-[var(--text-muted)]">
+                    <Search className="w-5 h-5" />
                   </div>
-                  <span className={`px-3 py-1 rounded-full text-xs font-semibold capitalize border ${apt.status === 'approved' ? 'bg-green-500/10 text-green-400 border-green-500/30' :
-                    apt.status === 'completed' ? 'bg-blue-500/10 text-blue-400 border-blue-500/30' :
-                      apt.status === 'cancelled' ? 'bg-red-500/10 text-red-500 border-red-500/30' :
-                        'bg-yellow-500/10 text-yellow-500 border-yellow-500/30'
-                    }`}>
-                    {apt.status || 'Pending'}
-                  </span>
+                  <p className="text-white font-medium mb-1">No appointments match your filters.</p>
+                  <p className="text-xs text-[var(--text-muted)] mb-4">Try clearing your search query or resetting active filters.</p>
+                  <button
+                    type="button"
+                    onClick={handleResetAppointmentFilters}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold bg-white/10 text-white hover:bg-white/20 transition-colors"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    Reset Filters
+                  </button>
                 </div>
-
-                {isReschedulingThis ? (
-                  <div className="mt-4 pt-4 border-t border-[var(--border)] bg-[var(--surface-dark)] p-4 rounded-xl">
-                    <p className="text-white font-semibold mb-3">Select New Schedule</p>
-                    <div className="grid sm:grid-cols-2 gap-4 mb-4">
-                      <div>
-                        <label className="block text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-1">New Date</label>
-                        <input type="date" min={new Date().toISOString().split('T')[0]} value={rescheduleDate} onChange={(e) => setRescheduleDate(e.target.value)} className="w-full px-4 py-2.5 bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl text-white text-sm" />
-                      </div>
-                      <div>
-                        <label className="block text-xs uppercase tracking-wider text-[var(--text-muted)] font-semibold mb-1">New Time</label>
-                        <input type="time" value={rescheduleTime} onChange={(e) => setRescheduleTime(e.target.value)} className="w-full px-4 py-2.5 bg-[var(--bg-primary)] border border-[var(--border)] rounded-xl text-white text-sm" />
-                      </div>
-                    </div>
-                    <div className="flex justify-end gap-2">
-                      <button onClick={() => setReschedulingAptId(null)} className="px-4 py-2 rounded-lg text-[var(--text-muted)] text-sm font-semibold hover:text-white transition">Cancel</button>
-                      <button onClick={() => handleRescheduleSubmit(apt.appointment_id || apt.id)} className="px-4 py-2 rounded-lg bg-[var(--gold-primary)] text-black text-sm font-semibold hover:bg-[var(--gold-secondary)] transition">Confirm Reschedule</button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="grid sm:grid-cols-2 gap-x-6 gap-y-3 text-sm mt-4 pt-4 border-t border-[var(--border)]">
-                    <div>
-                      <span className="block text-[var(--text-muted)] mb-0.5">Date & Time</span>
-                      <span className="text-white">
-                        {apptDate ? new Date(apptDate).toLocaleDateString() : '—'} at {apt.time || (apptDate ? new Date(apptDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—')}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="block text-[var(--text-muted)] mb-0.5">Branch</span>
-                      <span className="text-white capitalize">{apt.location_id ? apt.location_id.replace(/-/g, ' ') : '—'}</span>
-                    </div>
-                    <div>
-                      <span className="block text-[var(--text-muted)] mb-0.5">Service Type</span>
-                      <span className="text-white">{formatAppointmentServiceType(apt.appointment_type)}</span>
-                    </div>
-                    <div>
-                      <span className="block text-[var(--text-muted)] mb-0.5">Selected Guitar</span>
-                      <span className="text-white">{selectedGuitar || '—'}</span>
-                    </div>
-                    {displayNotes && (
-                      <div className="sm:col-span-2 mt-1">
-                        <span className="block text-[var(--text-muted)] mb-0.5">Notes</span>
-                        <div className="space-y-2">
-                          {(() => {
-                            const lines = displayNotes.split('\n')
-                            const textParts = []
-                            const imageParts = []
-
-                            lines.forEach(line => {
-                              const imageMatch = line.match(/(https?:\/\/[^\s]+(?:\.jpg|\.jpeg|\.png|\.gif|\.webp|\.bmp)[^\s]*)/i)
-                              if (imageMatch) {
-                                const before = line.replace(imageMatch[0], '').trim()
-                                // Skip image reference labels like "Guitar reference image:" / "Service reference image:"
-                                const isImageLabel = /^(?:guitar|service)\s+reference\s+image:?\s*$/i.test(before)
-                                if (before && !isImageLabel) textParts.push(before)
-                                imageParts.push(imageMatch[1])
-                              } else {
-                                const trimmed = line.trim()
-                                if (trimmed) textParts.push(trimmed)
-                              }
-                            })
-
-                            return (
-                              <>
-                                {textParts.filter(Boolean).length > 0 && (
-                                  <span className="text-white/80 text-xs leading-relaxed block bg-[var(--surface-dark)] rounded-lg p-3 border border-[var(--border)]">
-                                    {textParts.filter(Boolean).join('\n')}
-                                  </span>
-                                )}
-                                {imageParts.map((url, i) => (
-                                  <div key={i} className="rounded-lg border border-[var(--border)] bg-[var(--surface-dark)] p-2">
-                                    <img
-                                      src={url}
-                                      alt={`Reference image ${i + 1}`}
-                                      className="h-40 w-full rounded-lg object-cover"
-                                      onError={(e) => { e.target.style.display = 'none' }}
-                                    />
-                                  </div>
-                                ))}
-                              </>
-                            )
-                          })()}
-                        </div>
-                      </div>
-                    )}
-
-                    {isCancelledApt && cancellationReason && (
-                      <div className="sm:col-span-2 mt-3 pt-4 border-t border-[var(--border)]">
-                        <span className="block text-[var(--text-muted)] mb-0.5">Cancellation Reason</span>
-                        <span className="text-red-400 text-xs leading-relaxed">{cancellationReason}</span>
-                      </div>
-                    )}
-
-                    {apt.status !== 'completed' && apt.status !== 'cancelled' && (
-                      <div className="sm:col-span-2 mt-3 pt-4 border-t border-[var(--border)] flex justify-end">
-                        <button
-                          onClick={() => handleCancelClick(apt)}
-                          className="px-4 py-2 border border-red-500/30 text-red-500 hover:bg-red-500/10 transition-colors rounded-lg text-sm font-semibold"
-                        >
-                          Cancel Appointment
-                        </button>
-                      </div>
-                    )}
-
-                    {needsReschedule && (
-                      <div className="sm:col-span-2 mt-3 pt-4 border-t border-[var(--border)] flex items-center justify-between bg-orange-500/10 p-4 rounded-xl border border-orange-500/20">
-                        <div className="flex items-center gap-3">
-                          <AlertCircle className="w-5 h-5 text-orange-400" />
-                          <div>
-                            <p className="text-orange-400 font-semibold text-sm">Action Required</p>
-                            <p className="text-orange-400/80 text-xs mt-0.5">This appointment is past due. Please reschedule it.</p>
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => {
-                            navigate('/appointments', {
-                              state: {
-                                rescheduleAppointment: {
-                                  appointment_id: apt.appointment_id || apt.id,
-                                  appointment_type: apt.appointment_type,
-                                  services: apt.services,
-                                  location_id: apt.location_id,
-                                  guitar_details: apt.guitar_details,
-                                  notes: apt.notes,
-                                  scheduled_at: apt.scheduled_at,
-                                  status: apt.status,
-                                }
-                              }
-                            });
-                          }}
-                          className="px-4 py-2 rounded-lg bg-orange-500 text-white font-semibold text-xs hover:bg-orange-600 transition"
-                        >
-                          Reschedule
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+              ) : (
+                filteredAndSortedAppointments.map((apt) => (
+                  <AppointmentCard
+                    key={apt.appointment_id || apt.id}
+                    apt={apt}
+                    isRescheduling={reschedulingAptId === (apt.appointment_id || apt.id)}
+                    rescheduleDate={rescheduleDate}
+                    rescheduleTime={rescheduleTime}
+                    setRescheduleDate={setRescheduleDate}
+                    setRescheduleTime={setRescheduleTime}
+                    onCancelReschedule={() => setReschedulingAptId(null)}
+                    onSubmitReschedule={handleRescheduleSubmit}
+                    onPrintReceipt={handlePrintAppointmentReceipt}
+                    onCancel={handleCancelClick}
+                    onRescheduleNavigate={(targetApt) => {
+                      navigate('/appointments', {
+                        state: {
+                          rescheduleAppointment: {
+                            appointment_id: targetApt.appointment_id || targetApt.id,
+                            appointment_type: targetApt.appointment_type,
+                            services: targetApt.services,
+                            location_id: targetApt.location_id,
+                            guitar_details: targetApt.guitar_details,
+                            notes: targetApt.notes,
+                            scheduled_at: targetApt.scheduled_at,
+                            status: targetApt.status,
+                          },
+                        },
+                      })
+                    }}
+                  />
+                ))
+              )}
+            </div>
           </div>
-        </div>
-      )}
-    </div>
+        )}
+      </div>
     )
   }
 

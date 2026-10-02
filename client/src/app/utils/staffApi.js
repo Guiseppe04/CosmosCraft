@@ -96,6 +96,11 @@ export const staffApi = {
   addUnavailableDate: (data) => request('/api/appointments/unavailable-dates', { method: 'POST', body: data }),
   removeUnavailableDate: (id) => request(`/api/appointments/unavailable-dates/${id}`, { method: 'DELETE' }),
 
+  // Holiday Open Overrides
+  getOpenOverrides: () => request('/api/appointments/open-overrides'),
+  addOpenOverride: (date) => request('/api/appointments/open-overrides', { method: 'POST', body: { date } }),
+  removeOpenOverride: (id) => request(`/api/appointments/open-overrides/${id}`, { method: 'DELETE' }),
+
   // Inventory
   getInventorySummary: () => request('/api/inventory/summary'),
   getInventoryProducts: (params = {}) => {

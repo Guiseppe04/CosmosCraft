@@ -357,12 +357,12 @@ const appointmentValidation = {
     sort_by: Joi.string()
       .valid('scheduled_at', 'created_at', 'status')
       .optional()
-      .default('scheduled_at'),
+      .default('created_at'),
 
     sort_order: Joi.string()
       .valid('asc', 'desc')
       .optional()
-      .default('asc'),
+      .default('desc'),
 
     limit: Joi.number()
       .integer()

@@ -46,7 +46,7 @@ import { ConfirmModal } from '../components/ui/ConfirmModal'
 import { ProjectTasksModal } from './admin/components/modals/ProjectTasksModal'
 import { ProjectModal } from './admin/components/modals/ProjectModal'
 import { AdjustStockModal, AdjustPartStockModal } from './admin/components/inventory/StockAdjustmentModals'
-import AppointmentModal from '../components/appointments/AppointmentModal'
+import AppointmentDetailsModal from '../components/appointments/AppointmentDetailsModal'
 import AppointmentForm from '../components/appointments/AppointmentForm'
 import UnavailableDatesManager from '../components/appointments/UnavailableDatesManager'
 
@@ -165,6 +165,7 @@ export function StaffDashboard() {
   const [appointmentFormOpen, setAppointmentFormOpen] = useState(false)
   const [appointmentFormData, setAppointmentFormData] = useState(null)
   const [unavailableDatesOpen, setUnavailableDatesOpen] = useState(false)
+  const [openOverrides, setOpenOverrides] = useState([])
   const [selectedCalendarDate, setSelectedCalendarDate] = useState(null)
 
   const [confirm, setConfirm] = useState({
@@ -417,6 +418,8 @@ export function StaffDashboard() {
         search: debouncedAppointmentSearch || debouncedSearch,
         limit: appointmentPagination.limit,
         offset: (appointmentPagination.page - 1) * appointmentPagination.limit,
+        sort_by: 'created_at',
+        sort_order: 'desc',
       })
       const rows = normalizeArray(res, 'appointments')
       const total = res.data?.pagination?.total || rows.length
@@ -1462,18 +1465,28 @@ export function StaffDashboard() {
         )}
       </AnimatePresence>
 
-      <AppointmentModal
-        isOpen={appointmentModalOpen}
+      <AppointmentDetailsModal
+        show={appointmentModalOpen}
         onClose={() => {
           setAppointmentModalOpen(false)
           setSelectedAppointment(null)
         }}
         appointment={selectedAppointment}
-        onStatusChange={updateAppointmentStatus}
-        onReschedule={rescheduleAppointment}
-        onCancel={cancelAppointment}
+        onStatusChange={async (nextStatus, reason) => {
+          const id = selectedAppointment?.appointment_id || selectedAppointment?.id
+          if (id) {
+            await updateAppointmentStatus(id, nextStatus, reason)
+            setSelectedAppointment((prev) => prev ? { ...prev, status: nextStatus } : null)
+          }
+        }}
+        onCancel={async (reason) => {
+          const id = selectedAppointment?.appointment_id || selectedAppointment?.id
+          if (id) {
+            await cancelAppointment(id, reason)
+            setSelectedAppointment((prev) => prev ? { ...prev, status: 'cancelled' } : null)
+          }
+        }}
         onPaymentStatusUpdate={updateAppointmentPaymentStatus}
-        loading={appointmentLoading}
       />
 
       <AppointmentForm
@@ -1495,6 +1508,7 @@ export function StaffDashboard() {
         isOpen={unavailableDatesOpen}
         onClose={() => setUnavailableDatesOpen(false)}
         unavailableDates={unavailableDates}
+        openOverrides={openOverrides}
         onAddUnavailable={async (date, reason) => {
           try {
             await staffApi.addUnavailableDate({ date, reason })
@@ -1512,6 +1526,32 @@ export function StaffDashboard() {
           } catch (error) {
             showToast(error.message, 'error')
           }
+        }}
+        onAddOpenOverride={async (date) => {
+          try {
+            await staffApi.addOpenOverride(date)
+            showToast('Holiday marked as open')
+            const res = await staffApi.getOpenOverrides()
+            setOpenOverrides(res.data?.open_overrides || [])
+          } catch (error) {
+            showToast(error.message, 'error')
+          }
+        }}
+        onRemoveOpenOverride={async (id) => {
+          try {
+            await staffApi.removeOpenOverride(id)
+            showToast('Holiday reverted to closed')
+            const res = await staffApi.getOpenOverrides()
+            setOpenOverrides(res.data?.open_overrides || [])
+          } catch (error) {
+            showToast(error.message, 'error')
+          }
+        }}
+        onOpen={async () => {
+          try {
+            const res = await staffApi.getOpenOverrides()
+            setOpenOverrides(res.data?.open_overrides || [])
+          } catch (e) { /* silent */ }
         }}
         loading={appointmentLoading}
       />

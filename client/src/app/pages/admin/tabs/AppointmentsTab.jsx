@@ -8,7 +8,6 @@ const STATUS_OPTIONS = [
   { value: 'all', label: 'All Statuses' },
   { value: 'pending', label: 'Pending' },
   { value: 'confirmed', label: 'Confirmed' },
-  { value: 'approved', label: 'Approved' },
   { value: 'in_progress', label: 'In Progress' },
   { value: 'ready_for_pickup', label: 'Ready for Pickup' },
   { value: 'completed', label: 'Completed' },
@@ -108,10 +107,6 @@ export function AppointmentsTab({
           appointments={visibleAppointments}
           loading={appointmentLoading}
           onRefresh={fetchAppointments}
-          onViewDetails={(apt) => {
-            setSelectedAppointment(apt)
-            setAppointmentModalOpen(true)
-          }}
           onEdit={(apt) => {
             setAppointmentFormData(apt)
             setAppointmentFormOpen(true)

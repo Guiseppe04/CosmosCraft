@@ -10,6 +10,75 @@ const { lockAppointmentCapacity } = require('../middleware/appointmentCapacityLo
 
 const NON_BLOCKING_APPOINTMENT_STATUSES = ['cancelled', 'rejected'];
 
+// ─── STATUS TRANSITION RULES ─────────────────────────────────────────────────
+
+/**
+ * Defines the valid status transitions for each appointment type.
+ * `null` in the appointmentType key means the rule applies to ALL types.
+ */
+const STATUS_TRANSITIONS = {
+  pending: [
+    { to: 'confirmed', types: null },
+    { to: 'cancelled', types: null },
+  ],
+  confirmed: [
+    { to: 'in_progress', types: null },
+    { to: 'cancelled', types: null },
+    { to: 'no_show', types: null },
+  ],
+  in_progress: [
+    { to: 'completed', types: ['service_home'] },
+    { to: 'ready_for_pickup', types: ['service_in_shop'] },
+    { to: 'cancelled', types: null },
+  ],
+  ready_for_pickup: [
+    { to: 'completed', types: ['service_in_shop'] },
+    { to: 'cancelled', types: null },
+  ],
+  // Terminal statuses — no transitions allowed
+  completed: [],
+  cancelled: [],
+  no_show: [],
+};
+
+/**
+ * Validates that the requested status transition is allowed for the given
+ * appointment type. Throws HTTP 409 Conflict on invalid transitions.
+ *
+ * @param {string} currentStatus - The appointment's current status
+ * @param {string} nextStatus    - The requested new status
+ * @param {string} appointmentType - 'service_in_shop' | 'service_home' | 'pickup'
+ */
+function assertValidAppointmentStatusTransition(currentStatus, nextStatus, appointmentType) {
+  // Same-status update is a no-op — allowed silently
+  if (currentStatus === nextStatus) return;
+
+  const allowed = STATUS_TRANSITIONS[currentStatus];
+
+  if (!allowed) {
+    throw new AppError(
+      `Unknown current status '${currentStatus}'. Cannot transition to '${nextStatus}'.`,
+      409
+    );
+  }
+
+  const match = allowed.find((rule) => {
+    if (rule.to !== nextStatus) return false;
+    // If types is null the rule applies to all appointment types
+    if (rule.types === null) return true;
+    return rule.types.includes(appointmentType);
+  });
+
+  if (!match) {
+    throw new AppError(
+      `Invalid status transition: '${currentStatus}' → '${nextStatus}' is not allowed` +
+      (appointmentType ? ` for appointment type '${appointmentType}'` : '') +
+      '.',
+      409
+    );
+  }
+}
+
 async function getActiveStaffCount(db = pool) {
   const result = await db.query(
     `SELECT COUNT(DISTINCT u.user_id)::int AS staff_count
@@ -124,12 +193,22 @@ async function assertNoScheduleConflict(client, scheduledAt, excludeAppointmentI
      throw new AppError('Selected appointment date is unavailable (Sunday closure)', 409);
    }
 
+   // Check for holiday — but allow if admin has created an open override
    if (isHoliday(scheduledDate)) {
-     throw new AppError('Selected appointment date is unavailable (holiday)', 409);
+     const overrideRes = await client.query(
+       `SELECT id FROM unavailable_dates
+        WHERE date = ($1::timestamptz)::date AND is_open_override = TRUE LIMIT 1`,
+       [scheduledAt]
+     );
+     if (overrideRes.rows.length === 0) {
+       throw new AppError('Selected appointment date is unavailable (holiday)', 409);
+     }
    }
 
+   // Block if admin has explicitly marked this date unavailable (non-override)
    const unavailableRes = await client.query(
-     `SELECT id FROM unavailable_dates WHERE date = ($1::timestamptz)::date LIMIT 1`,
+     `SELECT id FROM unavailable_dates
+      WHERE date = ($1::timestamptz)::date AND is_open_override = FALSE LIMIT 1`,
      [scheduledAt]
    );
 
@@ -201,6 +280,10 @@ function formatAppointmentResponse(appointment) {
     try { parsedGuitarDetails = JSON.parse(parsedGuitarDetails); } catch(e){}
   }
 
+  const calculatedTotal = Array.isArray(appointment.service_details) && appointment.service_details.length > 0
+    ? appointment.service_details.reduce((sum, s) => sum + (Number(s.price) || 0), 0)
+    : (Number(appointment.total_amount) || null);
+
   return {
     appointment_id: appointment.appointment_id,
     reference_code: appointment.reference_code || null,
@@ -216,7 +299,11 @@ function formatAppointmentResponse(appointment) {
     services: parsedServices,
     service_name: appointment.service_name || null,
     service_names: appointment.service_names || null,
+    service_details: appointment.service_details || null,
+    total_amount: calculatedTotal,
+    amount_paid: calculatedTotal,
     location_id: appointment.location_id,
+    customer_address: appointment.customer_address || appointment.address || null,
     guitar_details: parsedGuitarDetails,
     scheduled_at: appointment.scheduled_at,
     estimated_end_at: appointment.estimated_end_at,
@@ -233,7 +320,57 @@ function formatAppointmentResponse(appointment) {
   };
 }
 
-exports.createAppointment = async ({ appointment_type = 'service_in_shop', services = [], location_id, guitar_details, scheduled_at, notes, user_id, order_id = null, confirmation_notes = null, payment_method = null, payment_proof_url = null }) => {
+// ─── SERVICE VALIDATION & DURATION ──────────────────────────────────────────
+
+/**
+ * Validates that every submitted service ID exists, is active, and is not
+ * deleted. Returns the loaded service rows (for duration calculation).
+ *
+ * @param {import('pg').PoolClient|import('pg').Pool} db
+ * @param {Array<string|number>} serviceIds
+ * @returns {Promise<Array<{service_id:number, name:string, duration_minutes:number, price:string}>>}
+ */
+async function validateAndLoadServices(db, serviceIds) {
+  if (!Array.isArray(serviceIds) || serviceIds.length === 0) {
+    throw new AppError('services must be a non-empty array of service IDs', 400);
+  }
+
+  const ids = serviceIds.map((id) => parseInt(id, 10));
+  if (ids.some((id) => Number.isNaN(id))) {
+    throw new AppError('All service IDs must be valid integers', 400);
+  }
+
+  const result = await db.query(
+    `SELECT service_id, name, duration_minutes, price
+     FROM services
+     WHERE service_id = ANY($1::int[])
+       AND is_active = true
+       AND deleted_at IS NULL`,
+    [ids]
+  );
+
+  if (result.rows.length !== ids.length) {
+    const foundIds = new Set(result.rows.map((r) => r.service_id));
+    const missing = ids.filter((id) => !foundIds.has(id));
+    throw new AppError(
+      `Service ID(s) not found or inactive: ${missing.join(', ')}`,
+      422
+    );
+  }
+
+  return result.rows;
+}
+
+/**
+ * Calculates total appointment duration in minutes from an array of service rows.
+ * @param {Array<{duration_minutes:number}>} serviceRows
+ * @returns {number}
+ */
+function calculateTotalDuration(serviceRows) {
+  return serviceRows.reduce((sum, s) => sum + (Number(s.duration_minutes) || 0), 0);
+}
+
+exports.createAppointment = async ({ appointment_type = 'service_in_shop', services = [], location_id, guitar_details, scheduled_at, notes, user_id, order_id = null, confirmation_notes = null, payment_method = null, payment_proof_url = null, address_id = null }) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -256,21 +393,39 @@ exports.createAppointment = async ({ appointment_type = 'service_in_shop', servi
 
     const normalizedGuitarDetails = normalizeGuitarDetails(guitar_details || {});
 
+    // ── Service validation: load from DB, reject invalid/inactive IDs ─────────
+    // Only validate for service appointment types (not pickup)
+    let serviceIds = [];
+    let totalDurationMinutes = 0;
+    if (appointment_type !== 'pickup' && Array.isArray(services) && services.length > 0) {
+      const serviceRows = await validateAndLoadServices(client, services);
+      serviceIds = serviceRows.map((s) => s.service_id);
+      totalDurationMinutes = calculateTotalDuration(serviceRows);
+    } else {
+      serviceIds = Array.isArray(services) ? services.map((id) => parseInt(id, 10)) : [];
+    }
+
+    // ── estimated_end_at: scheduled_at + total service duration ───────────────
+    const estimatedEndAt = totalDurationMinutes > 0
+      ? new Date(new Date(scheduled_at).getTime() + totalDurationMinutes * 60 * 1000).toISOString()
+      : null;
+
     // Generate the sequential reference code for this appointment
     const referenceCode = await generateReferenceCode(client, scheduled_at);
 
     const appointmentResult = await client.query(
-      `INSERT INTO appointments (user_id, appointment_type, order_id, services, location_id, guitar_details, scheduled_at, status, payment_method, payment_proof_url, notes, confirmation_notes, customer_name, customer_email, customer_phone, reference_code, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', $8, $9, $10, $11, $12, $13, $14, $15, now(), now())
+      `INSERT INTO appointments (user_id, appointment_type, order_id, services, location_id, guitar_details, scheduled_at, estimated_end_at, status, payment_method, payment_proof_url, notes, confirmation_notes, customer_name, customer_email, customer_phone, reference_code, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending', $9, $10, $11, $12, $13, $14, $15, $16, now(), now())
        RETURNING *`,
       [
         user_id || null,
         appointment_type,
         order_id,
-        JSON.stringify(Array.isArray(services) ? services : []),
+        JSON.stringify(serviceIds),
         location_id || null,
         JSON.stringify(normalizedGuitarDetails),
         scheduled_at,
+        estimatedEndAt,
         payment_method || null,
         payment_proof_url || null,
         notes || null,
@@ -315,18 +470,38 @@ exports.getAppointmentById = async (appointmentId) => {
        u.phone AS user_phone,
        s.service_name,
        s.service_names,
+       s.service_details,
+       COALESCE(
+         NULLIF(TRIM(CONCAT_WS(', ', addr.line1, addr.line2, addr.barangay, addr.city, addr.province, addr.postal_code)), ''),
+         CASE WHEN a.appointment_type = 'service_home' THEN a.location_id ELSE NULL END
+       ) AS customer_address,
        EXTRACT(EPOCH FROM (a.scheduled_at - now())) / 60 as time_until_appointment_minutes
      FROM appointments a
      LEFT JOIN users u ON a.user_id = u.user_id
      LEFT JOIN LATERAL (
        SELECT
          string_agg(s.name, ', ') AS service_name,
-         jsonb_agg(s.name ORDER BY s.name) AS service_names
+         jsonb_agg(s.name ORDER BY s.name) AS service_names,
+         jsonb_agg(
+           jsonb_build_object(
+             'service_id', s.service_id,
+             'name', s.name,
+             'price', s.price,
+             'duration_minutes', s.duration_minutes
+           ) ORDER BY s.name
+         ) AS service_details
        FROM services s
        WHERE s.service_id IN (
-         SELECT (jsonb_array_elements_text(a.services))::int
+         SELECT el::int
+         FROM jsonb_array_elements_text(COALESCE(NULLIF(a.services, 'null'::jsonb), '[]'::jsonb)) AS el
+         WHERE el ~ '^[0-9]+$'
        )
      ) s ON true
+     LEFT JOIN addresses addr ON (
+       a.appointment_type = 'service_home'
+       AND a.location_id IS NOT NULL
+       AND addr.address_id::text = a.location_id
+     )
      WHERE a.appointment_id = $1`,
     [appointmentId]
   );
@@ -334,7 +509,7 @@ exports.getAppointmentById = async (appointmentId) => {
   return formatAppointmentResponse(result.rows[0]);
 };
 
-exports.listAppointments = async ({ user_id, appointment_type, status, date_from, date_to, payment_method, search, sort_by = 'scheduled_at', sort_order = 'asc', limit = 20, offset = 0 } = {}) => {
+exports.listAppointments = async ({ user_id, appointment_type, status, date_from, date_to, payment_method, search, sort_by = 'created_at', sort_order = 'desc', limit = 20, offset = 0 } = {}) => {
   await this.autoMarkNoShows();
   let where = [];
   let params = [];
@@ -363,18 +538,38 @@ exports.listAppointments = async ({ user_id, appointment_type, status, date_from
        u.first_name || ' ' || u.last_name AS user_name,
        u.phone AS user_phone,
        s.service_name,
-       s.service_names
+       s.service_names,
+       s.service_details,
+       COALESCE(
+         NULLIF(TRIM(CONCAT_WS(', ', addr.line1, addr.line2, addr.barangay, addr.city, addr.province, addr.postal_code)), ''),
+         CASE WHEN a.appointment_type = 'service_home' THEN a.location_id ELSE NULL END
+       ) AS customer_address
      FROM appointments a
      LEFT JOIN users u ON a.user_id = u.user_id
      LEFT JOIN LATERAL (
        SELECT
          string_agg(s.name, ', ') AS service_name,
-         jsonb_agg(s.name ORDER BY s.name) AS service_names
+         jsonb_agg(s.name ORDER BY s.name) AS service_names,
+         jsonb_agg(
+           jsonb_build_object(
+             'service_id', s.service_id,
+             'name', s.name,
+             'price', s.price,
+             'duration_minutes', s.duration_minutes
+           ) ORDER BY s.name
+         ) AS service_details
        FROM services s
        WHERE s.service_id IN (
-         SELECT (jsonb_array_elements_text(a.services))::int
+         SELECT el::int
+         FROM jsonb_array_elements_text(COALESCE(NULLIF(a.services, 'null'::jsonb), '[]'::jsonb)) AS el
+         WHERE el ~ '^[0-9]+$'
        )
      ) s ON true
+     LEFT JOIN addresses addr ON (
+       a.appointment_type = 'service_home'
+       AND a.location_id IS NOT NULL
+       AND addr.address_id::text = a.location_id
+     )
      ${whereClause}
      ORDER BY a.${sortColumn} ${sortOrderUpper}
      LIMIT $${idx} OFFSET $${idx + 1}`,
@@ -411,6 +606,11 @@ exports.getAppointmentsCount = async (filters = {}) => {
 exports.getAppointmentsByUser = async (userId, filters = {}) => this.listAppointments({ ...filters, user_id: userId });
 
 exports.getUserUpcomingAppointments = async (userId) => {
+  // 'Upcoming' = the appointment is not yet terminal and has not started.
+  // pending  → waiting for staff confirmation
+  // confirmed → scheduled but not yet started
+  // in_progress and ready_for_pickup are active/on-going, intentionally excluded
+  // from the 'upcoming' list to avoid confusion with truly future appointments.
   const result = await pool.query(
     `SELECT 
        a.*,
@@ -419,7 +619,7 @@ exports.getUserUpcomingAppointments = async (userId) => {
      FROM appointments a
      LEFT JOIN users u ON a.user_id = u.user_id
      WHERE a.user_id = $1
-       AND a.status::text IN ('pending', 'approved', 'confirmed', 'ready_for_pickup')
+       AND a.status::text IN ('pending', 'confirmed')
        AND a.scheduled_at > now()
      ORDER BY a.scheduled_at ASC`,
     [userId]
@@ -523,11 +723,54 @@ exports.rescheduleAppointment = async (appointmentId, newScheduledAt, reason) =>
     ...(reason !== undefined && reason !== null ? { reason } : {}),
   });
 
-exports.updateStatus = async (appointmentId, newStatus, reason) =>
-  this.updateAppointment(appointmentId, {
-    status: newStatus,
-    ...(reason !== undefined && reason !== null ? { reason } : {}),
-  });
+exports.updateStatus = async (appointmentId, newStatus, reason) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // 1. Retrieve the current appointment (with row-lock to prevent races)
+    const currentRes = await client.query(
+      'SELECT appointment_id, status, appointment_type FROM appointments WHERE appointment_id = $1 FOR UPDATE',
+      [appointmentId]
+    );
+
+    // 2. Verify appointment exists
+    if (currentRes.rows.length === 0) {
+      throw new AppError('Appointment not found', 404);
+    }
+
+    const { status: currentStatus, appointment_type: appointmentType } = currentRes.rows[0];
+
+    // 3. Validate the requested transition (throws 409 on invalid)
+    assertValidAppointmentStatusTransition(currentStatus, newStatus, appointmentType);
+
+    // 4. Same-status → no-op, return current data immediately
+    if (currentStatus === newStatus) {
+      await client.query('COMMIT');
+      return this.getAppointmentById(appointmentId);
+    }
+
+    // 5. Perform the update
+    const params = [newStatus, appointmentId];
+    let sql = `UPDATE appointments SET status = $1, updated_at = now()`;
+    if (reason !== undefined && reason !== null) {
+      sql += `, reason = $3`;
+      params.push(reason);
+    }
+    sql += ` WHERE appointment_id = $2`;
+    await client.query(sql, params);
+
+    await client.query('COMMIT');
+
+    // 6. Return the formatted appointment response
+    return this.getAppointmentById(appointmentId);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+};
 
 exports.cancelAppointment = async (appointmentId, reason) => {
   const appointment = await this.getAppointmentById(appointmentId);
@@ -546,13 +789,13 @@ exports.getAppointmentStats = async (filters = {}) => {
   const result = await pool.query(
     `SELECT
        COUNT(*) as total_appointments,
-       SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending_count,
-       SUM(CASE WHEN status::text IN ('approved', 'confirmed') THEN 1 ELSE 0 END) as approved_count,
+       SUM(CASE WHEN status::text = 'pending' THEN 1 ELSE 0 END) as pending_count,
        SUM(CASE WHEN status::text = 'confirmed' THEN 1 ELSE 0 END) as confirmed_count,
        SUM(CASE WHEN status::text = 'in_progress' THEN 1 ELSE 0 END) as in_progress_count,
        SUM(CASE WHEN status::text = 'ready_for_pickup' THEN 1 ELSE 0 END) as ready_for_pickup_count,
-       SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed_count,
-       SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled_count
+       SUM(CASE WHEN status::text = 'completed' THEN 1 ELSE 0 END) as completed_count,
+       SUM(CASE WHEN status::text = 'cancelled' THEN 1 ELSE 0 END) as cancelled_count,
+       SUM(CASE WHEN status::text = 'no_show' THEN 1 ELSE 0 END) as no_show_count
      FROM appointments ${whereClause}`, params
   );
   return result.rows[0];
@@ -583,10 +826,29 @@ exports.getUnavailableDates = async () => {
        date::text AS date,
        reason,
        is_recurring,
+       is_open_override,
        created_by,
        created_at,
        updated_at
      FROM unavailable_dates
+     WHERE is_open_override = FALSE
+     ORDER BY date ASC`
+  );
+  return result.rows;
+};
+
+exports.getOpenOverrides = async () => {
+  const result = await pool.query(
+    `SELECT
+       id,
+       date::text AS date,
+       reason,
+       is_open_override,
+       created_by,
+       created_at,
+       updated_at
+     FROM unavailable_dates
+     WHERE is_open_override = TRUE
      ORDER BY date ASC`
   );
   return result.rows;
@@ -600,7 +862,7 @@ exports.getAvailableDates = async (dateFrom, dateTo) => {
      FROM generate_series($1::date, $2::date, '1 day'::interval) d
      WHERE EXTRACT(DOW FROM d) != 0
        AND NOT EXISTS (
-         SELECT 1 FROM unavailable_dates WHERE date = d::date
+         SELECT 1 FROM unavailable_dates WHERE date = d::date AND is_open_override = FALSE
        )
        AND (
          SELECT COUNT(*)
@@ -625,14 +887,16 @@ exports.getAppointmentCapacity = async () => {
 
 exports.addUnavailableDate = async (date, reason, userId) => {
   const result = await pool.query(
-    `INSERT INTO unavailable_dates (date, reason, created_by)
-     VALUES ($1, $2, $3)
-     ON CONFLICT (date) DO UPDATE SET reason = $2, updated_at = now()
+    `INSERT INTO unavailable_dates (date, reason, created_by, is_open_override)
+     VALUES ($1, $2, $3, FALSE)
+     ON CONFLICT (date) DO UPDATE
+       SET reason = $2, is_open_override = FALSE, updated_at = now()
      RETURNING
        id,
        date::text AS date,
        reason,
        is_recurring,
+       is_open_override,
        created_by,
        created_at,
        updated_at`,
@@ -641,20 +905,64 @@ exports.addUnavailableDate = async (date, reason, userId) => {
   return result.rows[0];
 };
 
-exports.removeUnavailableDate = async (dateId) => {
+exports.addOpenOverride = async (date, userId) => {
   const result = await pool.query(
-    `DELETE FROM unavailable_dates
-     WHERE id = $1
+    `INSERT INTO unavailable_dates (date, reason, created_by, is_open_override)
+     VALUES ($1, 'Holiday open override', $2, TRUE)
+     ON CONFLICT (date) DO UPDATE
+       SET is_open_override = TRUE, reason = 'Holiday open override', updated_at = now()
      RETURNING
        id,
        date::text AS date,
        reason,
-       is_recurring,
+       is_open_override,
        created_by,
        created_at,
        updated_at`,
-    [dateId]
+    [date, userId || null]
   );
+  return result.rows[0];
+};
+
+exports.removeOpenOverride = async (dateId) => {
+  const isDate = /^\d{4}-\d{2}-\d{2}$/.test(String(dateId).trim());
+  const query = isDate
+    ? `DELETE FROM unavailable_dates
+       WHERE date = $1 AND is_open_override = TRUE
+       RETURNING id, date::text AS date`
+    : `DELETE FROM unavailable_dates
+       WHERE id = $1 AND is_open_override = TRUE
+       RETURNING id, date::text AS date`;
+
+  const result = await pool.query(query, [dateId]);
+  return result.rows[0];
+};
+
+exports.removeUnavailableDate = async (dateId) => {
+  const isDate = /^\d{4}-\d{2}-\d{2}$/.test(String(dateId).trim());
+  const query = isDate
+    ? `DELETE FROM unavailable_dates
+       WHERE date = $1 AND is_open_override = FALSE
+       RETURNING
+         id,
+         date::text AS date,
+         reason,
+         is_recurring,
+         created_by,
+         created_at,
+         updated_at`
+    : `DELETE FROM unavailable_dates
+       WHERE id = $1
+       RETURNING
+         id,
+         date::text AS date,
+         reason,
+         is_recurring,
+         created_by,
+         created_at,
+         updated_at`;
+
+  const result = await pool.query(query, [dateId]);
   return result.rows[0];
 };
 
