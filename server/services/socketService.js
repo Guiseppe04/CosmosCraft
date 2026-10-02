@@ -1,5 +1,6 @@
 const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
+const rbacService = require('./rbacService');
 
 let io = null;
 
@@ -124,7 +125,7 @@ function init(httpServer, allowedOrigins = []) {
   /**
    * Socket authentication middleware.
    */
-  io.use((socket, next) => {
+  io.use(async (socket, next) => {
     try {
       const token = getSocketToken(socket);
 
@@ -160,28 +161,26 @@ function init(httpServer, allowedOrigins = []) {
       }
 
       /**
-       * IMPORTANT:
-       *
-       * The token has been cryptographically verified.
-       *
-       * Roles are read from the token here for compatibility
-       * with the existing CosmosCraft authentication system.
-       *
-       * If your RBAC database is authoritative, you can
-       * replace this section with a database role lookup.
+       * Resolve roles from the RBAC database, which is the
+       * authoritative source, instead of trusting the role
+       * claims embedded in the JWT. This ensures role
+       * assignments and revocations take effect immediately
+       * on the next socket connection.
        */
-      const role =
-        decoded.role || 'customer';
-
-      const roles = Array.isArray(decoded.roles)
-        ? decoded.roles
-        : [role];
+      const roleSummary =
+        await rbacService.getUserRoleSummary(
+          userId,
+          false
+        );
 
       socket.user = {
         id: userId,
         user_id: userId,
-        role,
-        roles,
+        role: roleSummary.role,
+        roles:
+          roleSummary.roles && roleSummary.roles.length
+            ? roleSummary.roles
+            : [roleSummary.role],
       };
 
       return next();
