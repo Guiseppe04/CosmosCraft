@@ -368,7 +368,7 @@ function AddressSelectionCard({ addresses, selectedAddressId, onSelectAddress, o
         <div className="flex items-center gap-3">
           <MapPin className="w-5 h-5 text-[var(--gold-primary)]" />
           <h2 className="text-lg font-bold text-[var(--text-light)]">Shipping Address</h2>
-          <span className="text-xs text-red-400">Required</span>
+          <span className="text-xs" style={{ color: '#f87171' }}>Required</span>
         </div>
       </div>
 

@@ -14,6 +14,7 @@ export function PaymentSettingsTab({ showToast }) {
     maya_number: '',
     qr_image_url: '',
     bank_transfer_qr_image_url: '',
+    bank_transfer_display_mode: 'details',
     notes: '',
     pickup_storage_fee: 0,
   })
@@ -252,6 +253,30 @@ export function PaymentSettingsTab({ showToast }) {
               </button>
             )}
           </div>
+          <fieldset className="mt-5">
+            <legend className={labelCls}>Display to customers</legend>
+            <div className="grid max-w-md grid-cols-2 gap-2">
+              {[
+                { value: 'details', label: 'Bank details' },
+                { value: 'qr', label: 'QR code' },
+              ].map((mode) => (
+                <label
+                  key={mode.value}
+                  className={`flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-semibold transition-colors ${settings.bank_transfer_display_mode === mode.value ? 'border-[var(--gold-primary)] bg-[var(--gold-primary)]/10 text-[var(--gold-primary)]' : 'border-[var(--border)] bg-[var(--bg-primary)] text-[var(--text-muted)] hover:border-[var(--gold-primary)]/50'}`}
+                >
+                  <input
+                    type="radio"
+                    name="bank-transfer-display-mode"
+                    value={mode.value}
+                    checked={(settings.bank_transfer_display_mode || 'details') === mode.value}
+                    onChange={() => setSettings((prev) => ({ ...prev, bank_transfer_display_mode: mode.value }))}
+                    className="accent-[var(--gold-primary)]"
+                  />
+                  {mode.label}
+                </label>
+              ))}
+            </div>
+          </fieldset>
         </div>
 
         <div className="bg-[var(--surface-dark)] border border-[var(--border)] rounded-2xl p-6">

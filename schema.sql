@@ -590,6 +590,7 @@ CREATE TABLE payment_settings (
     maya_number VARCHAR(255) NOT NULL DEFAULT '',
     qr_image_url TEXT NOT NULL DEFAULT '',
     bank_transfer_qr_image_url TEXT NOT NULL DEFAULT '',
+    bank_transfer_display_mode VARCHAR(20) NOT NULL DEFAULT 'details',
     notes TEXT NOT NULL DEFAULT '',
     pickup_storage_fee NUMERIC(12, 2) NOT NULL DEFAULT 0,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),

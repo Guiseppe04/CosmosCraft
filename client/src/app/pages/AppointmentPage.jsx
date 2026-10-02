@@ -2006,7 +2006,7 @@
                   {selectedPaymentMethod === 'e_bank' && (
                     <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--surface-dark)] p-4 space-y-3">
                       <p className="text-sm font-semibold text-[var(--text-light)]">Bank Transfer Details</p>
-                      {paymentSettings?.bank_transfer_qr_image_url && (
+                      {paymentSettings?.bank_transfer_display_mode === 'qr' && paymentSettings?.bank_transfer_qr_image_url && (
                         <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-white p-3">
                           <img
                             src={paymentSettings.bank_transfer_qr_image_url}
@@ -2015,6 +2015,7 @@
                           />
                         </div>
                       )}
+                      {(paymentSettings?.bank_transfer_display_mode !== 'qr' || !paymentSettings?.bank_transfer_qr_image_url) && (
                       <div className="space-y-2 text-xs text-[var(--text-muted)]">
                         <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] pb-2">
                           <span>Bank</span>
@@ -2029,6 +2030,7 @@
                           <span className="font-medium text-[var(--text-light)]">{paymentSettings?.account_number || FALLBACK_BANK.accountNumber}</span>
                         </div>
                       </div>
+                      )}
                     </div>
                   )}
 

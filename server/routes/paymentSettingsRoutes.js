@@ -26,6 +26,7 @@ const ensurePaymentSettingsTable = async () => {
           maya_number VARCHAR(255) NOT NULL DEFAULT '',
           qr_image_url TEXT NOT NULL DEFAULT '',
           bank_transfer_qr_image_url TEXT NOT NULL DEFAULT '',
+          bank_transfer_display_mode VARCHAR(20) NOT NULL DEFAULT 'details',
           notes TEXT NOT NULL DEFAULT '',
           pickup_storage_fee NUMERIC(12, 2) NOT NULL DEFAULT 0,
           created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
@@ -45,6 +46,9 @@ const ensurePaymentSettingsTable = async () => {
       "ALTER TABLE payment_settings ADD COLUMN IF NOT EXISTS bank_transfer_qr_image_url TEXT NOT NULL DEFAULT ''"
     );
     await pool.query(
+      "ALTER TABLE payment_settings ADD COLUMN IF NOT EXISTS bank_transfer_display_mode VARCHAR(20) NOT NULL DEFAULT 'details'"
+    );
+    await pool.query(
       `INSERT INTO payment_settings (id) VALUES (1) ON CONFLICT (id) DO NOTHING`
     );
     paymentSettingsTableReady = true;
@@ -59,7 +63,7 @@ router.get('/', async (req, res) => {
   try {
     await ensurePaymentSettingsTable();
     const result = await pool.query(
-      'SELECT id, bank_name, account_name, account_number, gcash_number, maya_number, qr_image_url, bank_transfer_qr_image_url, notes, pickup_storage_fee, updated_at FROM payment_settings WHERE id = 1'
+      'SELECT id, bank_name, account_name, account_number, gcash_number, maya_number, qr_image_url, bank_transfer_qr_image_url, bank_transfer_display_mode, notes, pickup_storage_fee, updated_at FROM payment_settings WHERE id = 1'
     );
     if (result.rows.length === 0) {
       return res.json({
@@ -72,6 +76,7 @@ router.get('/', async (req, res) => {
           maya_number: '',
           qr_image_url: '',
           bank_transfer_qr_image_url: '',
+          bank_transfer_display_mode: 'details',
           notes: '',
           pickup_storage_fee: 0,
         }
@@ -87,7 +92,10 @@ router.get('/', async (req, res) => {
 // PUT /api/payment-settings - Admin-only route to update payment settings
 router.put('/', authenticateToken, authorize('admin', 'super_admin'), async (req, res) => {
   try {
-    const { bank_name, account_name, account_number, gcash_number, maya_number, qr_image_url, bank_transfer_qr_image_url, notes } = req.body;
+    const { bank_name, account_name, account_number, gcash_number, maya_number, qr_image_url, bank_transfer_qr_image_url, bank_transfer_display_mode, notes } = req.body;
+    if (bank_transfer_display_mode !== undefined && !['details', 'qr'].includes(bank_transfer_display_mode)) {
+      return res.status(400).json({ success: false, message: 'Bank transfer display mode must be QR or bank details.' });
+    }
     let pickupStorageFee = null;
     if (req.body.pickup_storage_fee !== undefined) {
       pickupStorageFee = Number(req.body.pickup_storage_fee);
@@ -110,10 +118,11 @@ router.put('/', authenticateToken, authorize('admin', 'super_admin'), async (req
         notes = COALESCE($7, notes),
         pickup_storage_fee = COALESCE($8, pickup_storage_fee),
         bank_transfer_qr_image_url = COALESCE($9, bank_transfer_qr_image_url),
+        bank_transfer_display_mode = COALESCE($10, bank_transfer_display_mode),
         updated_at = NOW()
        WHERE id = 1
        RETURNING *`,
-      [bank_name, account_name, account_number, gcash_number, maya_number, qr_image_url, notes, pickupStorageFee, bank_transfer_qr_image_url]
+      [bank_name, account_name, account_number, gcash_number, maya_number, qr_image_url, notes, pickupStorageFee, bank_transfer_qr_image_url, bank_transfer_display_mode]
     );
 
     res.json({ success: true, data: result.rows[0] });

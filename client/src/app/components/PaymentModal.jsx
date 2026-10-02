@@ -380,7 +380,7 @@ export function PaymentModal({
                     <p className="font-bold text-slate-900">Bank Transfer Details</p>
                     <p className="mt-1 text-xs text-slate-500">Please transfer to this account</p>
                   </div>
-                  {paymentSettings?.bank_transfer_qr_image_url && (
+                  {paymentSettings?.bank_transfer_display_mode === 'qr' && paymentSettings?.bank_transfer_qr_image_url && (
                     <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-md">
                       <p className="mb-3 text-center text-xs font-medium text-slate-500">Scan bank transfer QR code</p>
                       <img
@@ -390,6 +390,7 @@ export function PaymentModal({
                       />
                     </div>
                   )}
+                  {(paymentSettings?.bank_transfer_display_mode !== 'qr' || !paymentSettings?.bank_transfer_qr_image_url) && (
                   <div className="space-y-4 rounded-2xl border border-slate-100 bg-white p-5 shadow-md">
                     <div className="flex items-center justify-between border-b border-slate-200 py-3">
                       <span className="text-sm font-medium text-slate-600">Bank</span>
@@ -404,6 +405,7 @@ export function PaymentModal({
                       <span className="font-mono font-semibold text-slate-900">{paymentSettings?.account_number || FALLBACK_BANK.accountNumber}</span>
                     </div>
                   </div>
+                  )}
                   <p className="text-sm leading-relaxed text-slate-600">
                     Transfer the exact amount of PHP {amountDue.toLocaleString('en-PH', { maximumFractionDigits: 2 })} to this account and upload proof of payment below.
                   </p>
