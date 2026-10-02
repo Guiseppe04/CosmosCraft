@@ -536,573 +536,765 @@ async function getRevenueReport(filters = {}) {
 async function getSalesReport(filters = {}) {
   const {
     start_date, end_date,
+    report_type = 'all',
     order_type, payment_method,
-    status, payment_status
+    status, payment_status,
+    staff_id, refund_type,
+    search, sort_by = 'date', sort_order = 'desc',
+    page = 1, limit = 10,
   } = filters;
 
   const startDate = parseDate(start_date);
-  const endDate   = parseDate(end_date);
-
-  const posRange              = buildDateFilter(startDate, endDate, 'ps.created_at');
-  const orderRange            = buildDateFilter(startDate, endDate, 'o.created_at');
-  const appointmentRange      = buildDateFilter(startDate, endDate, 'a.scheduled_at');
-  const refundRange           = buildDateFilter(startDate, endDate, 'rr.created_at');
+  const endDate = parseDate(end_date);
+  const now = new Date();
+  const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0);
+  const weekStart = new Date(todayStart); weekStart.setDate(weekStart.getDate() - 6);
+  const monthStart = new Date(todayStart.getFullYear(), todayStart.getMonth(), 1);
 
   const hasDateRange = !!(startDate || endDate);
 
-  const now        = new Date();
-  const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0);
-  const weekStart  = new Date(todayStart); weekStart.setDate(weekStart.getDate() - 6);
-  const monthStart = new Date(todayStart.getFullYear(), todayStart.getMonth(), 1);
+  // Common date condition builders
+  function dateCond(column, params, startVal, endVal) {
+    const conds = [];
+    if (startVal) {
+      params.push(startVal);
+      conds.push(`${column} >= $${params.length}`);
+    }
+    if (endVal) {
+      params.push(endVal);
+      conds.push(`${column} <= $${params.length}`);
+    }
+    return conds.length > 0 ? conds.join(' AND ') : '1=1';
+  }
 
-  const revenue = (alias) => orderRevenueExpr(alias);
+  // 1. Fetch Staff List for POS Cashier Filter metadata
+  const staffListQ = pool.query(
+    `SELECT DISTINCT u.user_id, CONCAT(u.first_name, ' ', u.last_name) AS name, u.role
+     FROM users u
+     WHERE u.role IN ('staff', 'admin', 'super_admin') AND u.is_active = true
+     ORDER BY name ASC`
+  );
 
-  // Dynamic order-level status filters
-  const orderStatusClauses = [];
-  const orderStatusParams = [];
-  let orderFilterIdx = 1;
-  if (status) {
-    orderStatusClauses.push(`o.status = $${orderFilterIdx++}`);
-    orderStatusParams.push(status);
-  } else {
-    orderStatusClauses.push(`o.status != 'cancelled'`);
-  }
-  if (payment_status) {
-    orderStatusClauses.push(`o.payment_status = $${orderFilterIdx++}`);
-    orderStatusParams.push(payment_status);
-  } else {
-    orderStatusClauses.push(`o.payment_status = 'approved'`);
-  }
-  if (order_type) {
-    orderStatusClauses.push(`o.order_type = $${orderFilterIdx++}`);
-    orderStatusParams.push(order_type);
-  }
-  const orderFilterSql = orderStatusClauses.length > 0 ? `AND ${orderStatusClauses.join(' AND ')}` : '';
-
-  // Dynamic appointment-level filters
-  const apptFilterClauses = [];
-  const apptFilterParams  = [];
-  let apptFilterIdx = 1;
-  if (status) {
-    apptFilterClauses.push(`a.status = $${apptFilterIdx++}`);
-    apptFilterParams.push(status);
-  } else {
-    apptFilterClauses.push(`a.status != 'cancelled'`);
-  }
-  if (payment_status) {
-    apptFilterClauses.push(`a.payment_status = $${apptFilterIdx++}`);
-    apptFilterParams.push(payment_status);
-  }
-  if (payment_method) {
-    apptFilterClauses.push(`(
-      CASE
-        WHEN a.payment_method IN ('cash') THEN 'cash'
-        WHEN a.payment_method IN ('gcash', 'e_wallet') THEN 'gcash'
-        WHEN a.payment_method IN ('bank_transfer', 'e_bank') THEN 'bank_transfer'
-        ELSE a.payment_method
-      END
-    ) = $${apptFilterIdx++}`);
-    apptFilterParams.push(payment_method);
-  }
-  const apptFilterSql = apptFilterClauses.length > 0 ? `AND ${apptFilterClauses.join(' AND ')}` : '';
-
-  // Helper to renumber params starting from a given index
-  const renum = (conditions, startIdx) => {
-    let i = startIdx;
-    return conditions.map(c => c.replace(/\$\d+/g, () => `$${i++}`));
-  };
-
-  // ── Walk-in (POS) channel ──────────────────────────────────────────────────
-  // Gross = completed+verified sales; Adjustments = total_amount of voided/returned sales
-  const walkInGrossQ = pool.query(
-    `SELECT COUNT(*)::int AS transactions,
-            COALESCE(SUM(ps.total_amount - ps.discount_amount), 0)::numeric AS gross
+  // 2. Fetch baseline channel totals for high-level KPIs & backwards compatibility
+  const posParams = [];
+  const posDateClause = dateCond('ps.created_at', posParams, startDate, endDate);
+  const walkInStatsQ = pool.query(
+    `SELECT
+       COUNT(CASE WHEN ps.status = 'completed' AND ps.payment_status = 'verified' THEN 1 END)::int AS completed_transactions,
+       COALESCE(SUM(CASE WHEN ps.status = 'completed' AND ps.payment_status = 'verified' THEN ps.total_amount ELSE 0 END), 0)::numeric AS gross,
+       COUNT(CASE WHEN ps.status IN ('voided', 'returned') THEN 1 END)::int AS adjustment_count,
+       COALESCE(SUM(CASE WHEN ps.status IN ('voided', 'returned') THEN ps.total_amount ELSE 0 END), 0)::numeric AS adjustments
      FROM pos_sales ps
-     WHERE ps.status = 'completed' AND ps.payment_status = 'verified' AND ps.deleted_at IS NULL
-       ${posRange.conditions.length > 0 ? 'AND ' + posRange.conditions.join(' AND ') : ''}`,
-    posRange.params
+     WHERE ps.deleted_at IS NULL AND ${posDateClause}`,
+    posParams
   );
 
-  const walkInAdjQ = pool.query(
-    `SELECT COALESCE(SUM(ps.total_amount), 0)::numeric AS adjustments
-     FROM pos_sales ps
-     WHERE ps.status IN ('voided', 'returned') AND ps.deleted_at IS NULL
-       ${posRange.conditions.length > 0 ? 'AND ' + renum(posRange.conditions, 1).join(' AND ') : ''}`,
-    posRange.params
-  );
-
-  // ── Online orders channel ──────────────────────────────────────────────────
-  // Online = paid product orders (no customization items)
-  const onlineGrossQ = pool.query(
-    `SELECT COUNT(*)::int AS transactions, COALESCE(SUM(${revenue('o')}), 0)::numeric AS gross
+  const orderParams = [];
+  const orderDateClause = dateCond('o.created_at', orderParams, startDate, endDate);
+  const orderStatsQ = pool.query(
+    `SELECT
+       -- Online product orders
+       COUNT(CASE WHEN o.order_type = 'product' AND o.payment_status = 'approved' AND o.status != 'cancelled' THEN 1 END)::int AS online_transactions,
+       COALESCE(SUM(CASE WHEN o.order_type = 'product' AND o.payment_status = 'approved' AND o.status != 'cancelled' THEN o.total_amount ELSE 0 END), 0)::numeric AS online_gross,
+       -- Customization orders
+       COUNT(CASE WHEN o.order_type = 'customization' AND o.payment_status = 'approved' AND o.status != 'cancelled' THEN 1 END)::int AS cust_transactions,
+       COALESCE(SUM(CASE WHEN o.order_type = 'customization' AND o.payment_status = 'approved' AND o.status != 'cancelled' THEN o.total_amount ELSE 0 END), 0)::numeric AS cust_gross
      FROM orders o
-     WHERE o.deleted_at IS NULL
-       AND o.order_type = 'product'
-       ${orderFilterSql}
-       ${orderRange.conditions.length > 0 ? 'AND ' + renum(orderRange.conditions, orderFilterIdx).join(' AND ') : ''}`,
-    [...orderStatusParams, ...orderRange.params]
+     WHERE o.deleted_at IS NULL AND ${orderDateClause}`,
+    orderParams
   );
 
-  // Online adjustments: refund_requests joined to orders via rr.order_id
-  const onlineAdjQ = pool.query(
-    `SELECT COALESCE(SUM(COALESCE(rr.approved_amount, rr.amount_requested, 0)), 0)::numeric AS adjustments
+  const refundParams = [];
+  const refundDateClause = dateCond('rr.created_at', refundParams, startDate, endDate);
+  const refundStatsQ = pool.query(
+    `SELECT
+       COUNT(*)::int AS refund_count,
+       COALESCE(SUM(COALESCE(rr.approved_amount, rr.refunded_amount, rr.amount_requested, 0)), 0)::numeric AS total_refunds,
+       COALESCE(SUM(CASE WHEN o.order_type = 'product' THEN COALESCE(rr.approved_amount, rr.refunded_amount, rr.amount_requested, 0) ELSE 0 END), 0)::numeric AS online_refunds,
+       COALESCE(SUM(CASE WHEN o.order_type = 'customization' OR rr.project_id IS NOT NULL THEN COALESCE(rr.approved_amount, rr.refunded_amount, rr.amount_requested, 0) ELSE 0 END), 0)::numeric AS cust_refunds
      FROM refund_requests rr
-     JOIN orders o ON o.order_id = rr.order_id
-     WHERE rr.status IN ('approved', 'processed') AND o.order_type = 'product'
-       AND o.deleted_at IS NULL
-       ${refundRange.conditions.length > 0 ? 'AND ' + renum(refundRange.conditions, 1).join(' AND ') : ''}`,
-    refundRange.params
+     LEFT JOIN orders o ON o.order_id = rr.order_id
+     WHERE rr.status IN ('approved', 'processing', 'refunded') AND ${refundDateClause}`,
+    refundParams
   );
 
-  // ── Customization orders channel ───────────────────────────────────────────
-  const custGrossQ = pool.query(
-    `SELECT COUNT(*)::int AS transactions, COALESCE(SUM(${revenue('o')}), 0)::numeric AS gross
-     FROM orders o
-     WHERE o.deleted_at IS NULL
-       AND o.order_type = 'customization'
-       ${orderFilterSql}
-       ${orderRange.conditions.length > 0 ? 'AND ' + renum(orderRange.conditions, orderFilterIdx).join(' AND ') : ''}`,
-    [...orderStatusParams, ...orderRange.params]
-  );
-
-  const custAdjQ = pool.query(
-    `SELECT COALESCE(SUM(COALESCE(rr.approved_amount, rr.amount_requested, 0)), 0)::numeric AS adjustments
-     FROM refund_requests rr
-     JOIN orders o ON o.order_id = rr.order_id
-     WHERE rr.status IN ('approved', 'processed') AND o.order_type = 'customization'
-       AND o.deleted_at IS NULL
-       ${refundRange.conditions.length > 0 ? 'AND ' + renum(refundRange.conditions, 1).join(' AND ') : ''}`,
-    refundRange.params
-  );
-
-  // ── Appointments channel ───────────────────────────────────────────────────
-  const apptGrossQ = pool.query(
-    `SELECT COUNT(DISTINCT a.appointment_id)::int AS transactions,
-            COALESCE(SUM(s.price), 0)::numeric AS gross
+  // Appointment baseline stats (revenue = sum of service prices for completed appointments)
+  const apptParams = [];
+  const apptDateClause = dateCond('a.scheduled_at', apptParams, startDate, endDate);
+  const apptStatsQ = pool.query(
+    `SELECT
+       COUNT(CASE WHEN a.status = 'completed' THEN 1 END)::int AS completed_transactions,
+       COALESCE(SUM(
+         CASE WHEN a.status = 'completed' THEN (
+           SELECT COALESCE(SUM(s.price), 0)
+           FROM services s
+           WHERE s.service_id::text = ANY(ARRAY(SELECT jsonb_array_elements_text(a.services)))
+         ) ELSE 0 END
+       ), 0)::numeric AS gross
      FROM appointments a
-     JOIN services s ON s.service_id::text IN (
-       SELECT jsonb_array_elements_text(a.services)
-     )
-     WHERE a.deleted_at IS NULL AND a.payment_method IS NOT NULL
-       ${apptFilterSql}
-       ${appointmentRange.conditions.length > 0 ? 'AND ' + renum(appointmentRange.conditions, apptFilterIdx).join(' AND ') : ''}`,
-    [...apptFilterParams, ...appointmentRange.params]
+     WHERE a.deleted_at IS NULL AND ${apptDateClause}`,
+    apptParams
   );
 
-  const apptAdjQ = pool.query(
-    `SELECT COALESCE(SUM(COALESCE(rr.approved_amount, rr.amount_requested, 0)), 0)::numeric AS adjustments
-     FROM refund_requests rr
-     JOIN appointments a ON a.order_id = rr.order_id
-     WHERE rr.status IN ('approved', 'processed')
-       AND a.deleted_at IS NULL
-       ${refundRange.conditions.length > 0 ? 'AND ' + renum(refundRange.conditions, 1).join(' AND ') : ''}`,
-    refundRange.params
-  );
-
-  // ── Adjustments by type ────────────────────────────────────────────────────
-  const adjByTypeQ = pool.query(
-    `SELECT 'void' AS type, COUNT(*)::int AS count, COALESCE(SUM(ps.total_amount), 0)::numeric AS amount
-     FROM pos_sales ps WHERE ps.status = 'voided' AND ps.deleted_at IS NULL
-       ${posRange.conditions.length > 0 ? 'AND ' + renum(posRange.conditions, 1).join(' AND ') : ''}
-     UNION ALL
-     SELECT 'return', COUNT(*)::int, COALESCE(SUM(ps.total_amount), 0)
-     FROM pos_sales ps WHERE ps.status = 'returned' AND ps.deleted_at IS NULL
-       ${posRange.conditions.length > 0 ? 'AND ' + renum(posRange.conditions, posRange.params.length + 1).join(' AND ') : ''}
-     UNION ALL
-     SELECT 'refund', COUNT(*)::int, COALESCE(SUM(COALESCE(rr.approved_amount, rr.amount_requested, 0)), 0)
-     FROM refund_requests rr
-     WHERE rr.status IN ('approved', 'processed')
-       ${refundRange.conditions.length > 0 ? 'AND ' + renum(refundRange.conditions, posRange.params.length * 2 + 1).join(' AND ') : ''}`,
-    [...posRange.params, ...posRange.params, ...refundRange.params]
-  );
-
-  // ── Adjustments by channel ─────────────────────────────────────────────────
-  const adjByChannelQ = pool.query(
-    `SELECT 'walkIn' AS channel, COUNT(*)::int AS count, COALESCE(SUM(ps.total_amount), 0)::numeric AS amount
-     FROM pos_sales ps WHERE ps.status IN ('voided', 'returned') AND ps.deleted_at IS NULL
-       ${posRange.conditions.length > 0 ? 'AND ' + renum(posRange.conditions, 1).join(' AND ') : ''}
-     UNION ALL
-     SELECT 'online', COUNT(*)::int, COALESCE(SUM(COALESCE(rr.approved_amount, rr.amount_requested, 0)), 0)
-     FROM refund_requests rr
-     JOIN orders o ON o.order_id = rr.order_id
-     WHERE rr.status IN ('approved', 'processed') AND o.order_type = 'product'
-       AND o.deleted_at IS NULL
-       ${refundRange.conditions.length > 0 ? 'AND ' + renum(refundRange.conditions, posRange.params.length + 1).join(' AND ') : ''}
-     UNION ALL
-     SELECT 'customization', COUNT(*)::int, COALESCE(SUM(COALESCE(rr.approved_amount, rr.amount_requested, 0)), 0)
-     FROM refund_requests rr
-     JOIN orders o ON o.order_id = rr.order_id
-     WHERE rr.status IN ('approved', 'processed') AND o.order_type = 'customization'
-       AND o.deleted_at IS NULL
-       ${refundRange.conditions.length > 0 ? 'AND ' + renum(refundRange.conditions, posRange.params.length + refundRange.params.length + 1).join(' AND ') : ''}
-     UNION ALL
-     SELECT 'appointments', COUNT(*)::int, COALESCE(SUM(COALESCE(rr.approved_amount, rr.amount_requested, 0)), 0)
-     FROM refund_requests rr
-     JOIN appointments a ON a.order_id = rr.order_id
-     WHERE rr.status IN ('approved', 'processed')
-       AND a.deleted_at IS NULL
-       ${refundRange.conditions.length > 0 ? 'AND ' + renum(refundRange.conditions, posRange.params.length + refundRange.params.length * 2 + 1).join(' AND ') : ''}`,
-    [...posRange.params, ...refundRange.params, ...refundRange.params, ...refundRange.params]
-  );
-
-
-  // ── Daily trend (orders + POS) ─────────────────────────────────────────────
+  // 3. Payment methods & daily trends (includes appointments)
+  const trendParams = [];
+  const trendDateClauseOrder = dateCond('o.created_at', trendParams, startDate, endDate);
+  const trendDateClausePos = dateCond('ps.created_at', trendParams, startDate, endDate);
+  const trendDateClauseAppt = dateCond('a.scheduled_at', trendParams, startDate, endDate);
   const dailyTrendQ = pool.query(
-    `WITH daily_sales AS (
-       SELECT DATE_TRUNC('day', o.created_at) AS day,
-              ${revenue('o')} AS revenue, 1 AS tx
+    `WITH combined_days AS (
+       SELECT DATE_TRUNC('day', o.created_at) AS day, o.total_amount AS revenue, 1 AS tx
        FROM orders o
-       WHERE o.deleted_at IS NULL
-         ${orderFilterSql}
-         ${orderRange.conditions.length > 0 ? 'AND ' + renum(orderRange.conditions, orderFilterIdx).join(' AND ') : ''}
+       WHERE o.deleted_at IS NULL AND o.payment_status = 'approved' AND o.status != 'cancelled'
+         AND ${trendDateClauseOrder}
        UNION ALL
-       SELECT DATE_TRUNC('day', ps.created_at) AS day,
-              ps.total_amount - ps.discount_amount AS revenue, 1 AS tx
+       SELECT DATE_TRUNC('day', ps.created_at) AS day, ps.total_amount AS revenue, 1 AS tx
        FROM pos_sales ps
-       WHERE ps.status = 'completed' AND ps.payment_status = 'verified' AND ps.deleted_at IS NULL
-         ${posRange.conditions.length > 0 ? 'AND ' + renum(posRange.conditions, orderFilterIdx + orderRange.params.length).join(' AND ') : ''}
+       WHERE ps.deleted_at IS NULL AND ps.status = 'completed' AND ps.payment_status = 'verified'
+         AND ${trendDateClausePos}
+       UNION ALL
+       SELECT DATE_TRUNC('day', a.scheduled_at) AS day,
+         COALESCE((
+           SELECT SUM(s.price)
+           FROM services s
+           WHERE s.service_id::text = ANY(ARRAY(SELECT jsonb_array_elements_text(a.services)))
+         ), 0) AS revenue,
+         1 AS tx
+       FROM appointments a
+       WHERE a.deleted_at IS NULL AND a.status = 'completed'
+         AND ${trendDateClauseAppt}
      )
      SELECT day AS date,
-            COALESCE(SUM(revenue), 0)::numeric AS revenue,
+            COALESCE(SUM(revenue), 0)::numeric AS gross,
             COUNT(*)::int AS transactions
-     FROM daily_sales
+     FROM combined_days
      GROUP BY day
      ORDER BY day ASC
      LIMIT 90`,
-    [...orderStatusParams, ...orderRange.params, ...posRange.params]
+    trendParams
   );
 
-  // ── Best selling products (orders + POS) ──────────────────────────────────
-  const bestProductsQ = pool.query(
-    `WITH combined_sales AS (
-       SELECT
-         COALESCE(p.name, oi.product_name, 'Product') AS name,
-         COALESCE(cat.name, 'Uncategorized') AS category,
-         oi.quantity::int AS units,
-         (oi.quantity * oi.unit_price)::numeric AS revenue
-       FROM order_items oi
-       JOIN orders o ON o.order_id = oi.order_id
-       LEFT JOIN products p ON p.product_id = oi.product_id
-       LEFT JOIN categories cat ON cat.category_id = p.category_id
-       WHERE o.deleted_at IS NULL
-         AND oi.product_id IS NOT NULL AND oi.deleted_at IS NULL
-         ${orderFilterSql}
-         ${orderRange.conditions.length > 0 ? 'AND ' + renum(orderRange.conditions, orderFilterIdx).join(' AND ') : ''}
+  // 4. Build Context-Aware Transactions Query
+  let txItems = [];
+  let totalRecords = 0;
+  const numLimit = Math.max(1, parseInt(limit, 10) || 50);
+  const numPage = Math.max(1, parseInt(page, 10) || 1);
+  const offset = (numPage - 1) * numLimit;
 
-       UNION ALL
+  const validSortCols = {
+    date: 'date',
+    amount: 'gross_amount',
+    identifier: 'transaction_number',
+    status: 'status',
+    customer: 'customer_name',
+  };
+  const resolvedSort = validSortCols[sort_by] || 'date';
+  const resolvedDir = String(sort_order).toLowerCase() === 'asc' ? 'ASC' : 'DESC';
 
-       SELECT
-         COALESCE(p.name, psi.item_name, 'Product') AS name,
-         COALESCE(cat.name, 'Uncategorized') AS category,
-         psi.quantity::int AS units,
-         COALESCE(psi.subtotal, psi.quantity * psi.unit_price)::numeric AS revenue
-       FROM pos_sale_items psi
-       JOIN pos_sales ps ON ps.sale_id = psi.sale_id
-       LEFT JOIN products p ON p.product_id = psi.product_id
-       LEFT JOIN categories cat ON cat.category_id = p.category_id
-       WHERE ps.status = 'completed' AND ps.deleted_at IS NULL
-         AND psi.product_id IS NOT NULL AND psi.deleted_at IS NULL
-         ${posRange.conditions.length > 0 ? 'AND ' + renum(posRange.conditions, orderFilterIdx + orderRange.params.length).join(' AND ') : ''}
-     )
-     SELECT name, category,
-            SUM(units)::int AS units,
-            COALESCE(SUM(revenue), 0)::numeric AS revenue
-     FROM combined_sales
-     GROUP BY name, category
-     ORDER BY units DESC, revenue DESC
-     LIMIT 10`,
-    [...orderStatusParams, ...orderRange.params, ...posRange.params]
-  );
+  if (report_type === 'online') {
+    const qParams = [];
+    const qConds = [`o.deleted_at IS NULL`, `o.order_type = 'product'`];
 
-  // ── Top adjusted products (from refund_requests + voided POS items) ────────
-  // Since there's no refund_request_items table, derive from refund_requests
-  // and pos_sale_items of voided/returned sales
-  const topAdjustedQ = pool.query(
-    `WITH adjusted AS (
-       -- Refunds attributed to service or order
-       SELECT COALESCE(sv.name, p.name, 'Refund') AS name,
-              COALESCE(rr.approved_amount, rr.amount_requested, 0)::numeric AS adjustmentAmount,
-              COALESCE(rr.reason, 'Refund') AS reason
-       FROM refund_requests rr
-       LEFT JOIN orders o ON o.order_id = rr.order_id
-       LEFT JOIN appointments a ON a.order_id = rr.order_id
-       LEFT JOIN LATERAL (
-         SELECT s.name FROM services s
-         WHERE a.appointment_id IS NOT NULL
-           AND s.service_id::text IN (SELECT jsonb_array_elements_text(a.services))
-         LIMIT 1
-       ) sv ON true
-       LEFT JOIN LATERAL (
-         SELECT pr.name FROM products pr
-         JOIN order_items oi ON oi.product_id = pr.product_id
-         WHERE o.order_id IS NOT NULL AND oi.order_id = o.order_id
-         LIMIT 1
-       ) p ON true
-       WHERE rr.status IN ('approved', 'processed')
-         ${refundRange.conditions.length > 0 ? 'AND ' + renum(refundRange.conditions, 1).join(' AND ') : ''}
+    if (startDate) { qParams.push(startDate); qConds.push(`o.created_at >= $${qParams.length}`); }
+    if (endDate) { qParams.push(endDate); qConds.push(`o.created_at <= $${qParams.length}`); }
+    if (status && status !== 'all') { qParams.push(status); qConds.push(`o.status = $${qParams.length}`); }
+    if (payment_status && payment_status !== 'all') { qParams.push(payment_status); qConds.push(`o.payment_status = $${qParams.length}`); }
+    if (payment_method && payment_method !== 'all') {
+      qParams.push(payment_method);
+      qConds.push(`EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.order_id AND p.method::text = $${qParams.length})`);
+    }
+    if (search && search.trim()) {
+      qParams.push(`%${search.trim()}%`);
+      const sIdx = qParams.length;
+      qConds.push(`(o.order_number ILIKE $${sIdx} OR u.first_name ILIKE $${sIdx} OR u.last_name ILIKE $${sIdx} OR u.email ILIKE $${sIdx})`);
+    }
 
-       UNION ALL
+    const whereSql = qConds.join(' AND ');
 
-       -- Voided/returned POS items
-       SELECT COALESCE(p.name, psi.item_name, 'Product') AS name,
-              psi.subtotal::numeric AS adjustmentAmount,
-              'POS void/return' AS reason
-       FROM pos_sale_items psi
-       JOIN pos_sales ps ON ps.sale_id = psi.sale_id
-       LEFT JOIN products p ON p.product_id = psi.product_id
-       WHERE ps.status IN ('voided', 'returned') AND ps.deleted_at IS NULL
-         AND psi.deleted_at IS NULL
-         ${posRange.conditions.length > 0 ? 'AND ' + renum(posRange.conditions, refundRange.params.length + 1).join(' AND ') : ''}
-     )
-     SELECT name, SUM(adjustmentAmount)::numeric AS "adjustmentAmount", MAX(reason) AS reason
-     FROM adjusted
-     GROUP BY name
-     ORDER BY "adjustmentAmount" DESC
-     LIMIT 10`,
-    [...refundRange.params, ...posRange.params]
-  );
+    const countRes = await pool.query(
+      `SELECT COUNT(*)::int AS total FROM orders o LEFT JOIN users u ON o.user_id = u.user_id WHERE ${whereSql}`,
+      qParams
+    );
+    totalRecords = countRes.rows[0]?.total || 0;
 
-  // ── Refund reasons ────────────────────────────────────────────────────────
-  const refundReasonsQ = pool.query(
-    `SELECT rr.reason,
-            COUNT(*)::int AS count,
-            COALESCE(SUM(COALESCE(rr.approved_amount, rr.amount_requested, 0)), 0)::numeric AS amount
-     FROM refund_requests rr
-     WHERE rr.status IN ('approved', 'processed') AND rr.reason IS NOT NULL
-       ${refundRange.conditions.length > 0 ? 'AND ' + renum(refundRange.conditions, 1).join(' AND ') : ''}
-     GROUP BY rr.reason
-     ORDER BY count DESC
-     LIMIT 10`,
-    refundRange.params
-  );
+    const dataQ = await pool.query(
+      `SELECT
+         o.order_id AS id,
+         o.order_number AS transaction_number,
+         o.created_at AS date,
+         'online' AS channel,
+         CONCAT(u.first_name, ' ', u.last_name) AS customer_name,
+         u.email AS customer_email,
+         o.status::text AS status,
+         o.payment_status::text AS payment_status,
+         COALESCE((SELECT p.method::text FROM payments p WHERE p.order_id = o.order_id AND p.deleted_at IS NULL ORDER BY p.created_at DESC LIMIT 1), 'gcash') AS payment_method,
+         COALESCE((SELECT SUM(oi.quantity)::int FROM order_items oi WHERE oi.order_id = o.order_id AND oi.deleted_at IS NULL), 0)::int AS item_count,
+         o.subtotal::numeric AS subtotal,
+         o.discount_amount::numeric AS discount_amount,
+         o.shipping_cost::numeric AS shipping_cost,
+         o.tax_amount::numeric AS tax_amount,
+         o.total_amount::numeric AS gross_amount,
+         COALESCE((SELECT SUM(COALESCE(rr.approved_amount, rr.amount_requested, 0)) FROM refund_requests rr WHERE rr.order_id = o.order_id AND rr.status IN ('approved', 'refunded', 'processing')), 0)::numeric AS adjustment_amount,
+         (o.total_amount - COALESCE((SELECT SUM(COALESCE(rr.approved_amount, rr.amount_requested, 0)) FROM refund_requests rr WHERE rr.order_id = o.order_id AND rr.status IN ('approved', 'refunded', 'processing')), 0))::numeric AS net_amount,
+         o.notes
+       FROM orders o
+       LEFT JOIN users u ON o.user_id = u.user_id
+       WHERE ${whereSql}
+       ORDER BY ${resolvedSort} ${resolvedDir}
+       LIMIT ${numLimit} OFFSET ${offset}`,
+      qParams
+    );
+    txItems = dataQ.rows;
 
-  // ── Overall Sales payment methods (regular orders: gcash, bank_transfer) ──
-  const orderPaymentFilterClauses = [];
-  const orderPaymentFilterParams = [];
-  let orderPayIdx = 1;
-  if (status) { orderPaymentFilterClauses.push(`o.status = $${orderPayIdx++}`); orderPaymentFilterParams.push(status); }
-  if (payment_status) { orderPaymentFilterClauses.push(`o.payment_status = $${orderPayIdx++}`); orderPaymentFilterParams.push(payment_status); }
-  if (order_type) { orderPaymentFilterClauses.push(`o.order_type = $${orderPayIdx++}`); orderPaymentFilterParams.push(order_type); }
-  if (payment_method) { orderPaymentFilterClauses.push(`p.method::text = $${orderPayIdx++}`); orderPaymentFilterParams.push(payment_method); }
-  const orderPaymentFilterSql = orderPaymentFilterClauses.length > 0 ? `AND ${orderPaymentFilterClauses.join(' AND ')}` : '';
+  } else if (report_type === 'pos') {
+    const qParams = [];
+    const qConds = [`ps.deleted_at IS NULL`];
 
-  const orderPaymentsQ = pool.query(
-    `SELECT p.method::text AS method,
-            COUNT(DISTINCT o.order_id)::int AS transactions,
-            COALESCE(SUM(p.amount), 0)::numeric AS amount
-     FROM payments p
-     JOIN orders o ON o.order_id = p.order_id
-     WHERE p.status = 'verified'
-       AND p.deleted_at IS NULL AND o.deleted_at IS NULL
-       AND p.method::text IN ('gcash', 'bank_transfer')
-       ${orderPaymentFilterSql}
-       ${orderRange.conditions.length > 0 ? 'AND ' + renum(orderRange.conditions, orderPayIdx).join(' AND ') : ''}
-     GROUP BY p.method
-     ORDER BY amount DESC`,
-    [...orderPaymentFilterParams, ...orderRange.params]
-  );
+    if (startDate) { qParams.push(startDate); qConds.push(`ps.created_at >= $${qParams.length}`); }
+    if (endDate) { qParams.push(endDate); qConds.push(`ps.created_at <= $${qParams.length}`); }
+    if (status && status !== 'all') { qParams.push(status); qConds.push(`ps.status::text = $${qParams.length}`); }
+    if (payment_method && payment_method !== 'all') { qParams.push(payment_method); qConds.push(`ps.payment_method::text = $${qParams.length}`); }
+    if (staff_id && staff_id !== 'all') { qParams.push(staff_id); qConds.push(`ps.staff_id = $${qParams.length}`); }
+    if (search && search.trim()) {
+      qParams.push(`%${search.trim()}%`);
+      const sIdx = qParams.length;
+      qConds.push(`(ps.sale_number ILIKE $${sIdx} OR ps.customer_name ILIKE $${sIdx} OR u.first_name ILIKE $${sIdx} OR u.last_name ILIKE $${sIdx})`);
+    }
 
-  // ── Appointment payment methods ───────────────────────────────────────────
-  const apptPaymentFilterClauses = [];
-  const apptPaymentFilterParams = [];
-  let apptPaymentFilterIdx = 1;
-  if (status) { apptPaymentFilterClauses.push(`a.status = $${apptPaymentFilterIdx++}`); apptPaymentFilterParams.push(status); }
-  if (payment_status) { apptPaymentFilterClauses.push(`a.payment_status = $${apptPaymentFilterIdx++}`); apptPaymentFilterParams.push(payment_status); }
-  if (payment_method) {
-    apptPaymentFilterClauses.push(`(
-      CASE
-        WHEN a.payment_method IN ('cash') THEN 'cash'
-        WHEN a.payment_method IN ('gcash', 'e_wallet') THEN 'gcash'
-        WHEN a.payment_method IN ('bank_transfer', 'e_bank') THEN 'bank_transfer'
-        ELSE a.payment_method
-      END
-    ) = $${apptPaymentFilterIdx++}`);
-    apptPaymentFilterParams.push(payment_method);
+    const whereSql = qConds.join(' AND ');
+
+    const countRes = await pool.query(
+      `SELECT COUNT(*)::int AS total FROM pos_sales ps LEFT JOIN users u ON ps.staff_id = u.user_id WHERE ${whereSql}`,
+      qParams
+    );
+    totalRecords = countRes.rows[0]?.total || 0;
+
+    const dataQ = await pool.query(
+      `SELECT
+         ps.sale_id AS id,
+         ps.sale_number AS transaction_number,
+         ps.created_at AS date,
+         'walkIn' AS channel,
+         CONCAT(u.first_name, ' ', u.last_name) AS staff_name,
+         ps.staff_id,
+         COALESCE(ps.customer_name, 'Walk-in Customer') AS customer_name,
+         ps.customer_phone,
+         ps.status::text AS status,
+         ps.payment_status::text AS payment_status,
+         ps.payment_method::text AS payment_method,
+         COALESCE((SELECT SUM(psi.quantity)::int FROM pos_sale_items psi WHERE psi.sale_id = ps.sale_id AND psi.deleted_at IS NULL), 0)::int AS item_count,
+         ps.subtotal::numeric AS subtotal,
+         ps.discount_amount::numeric AS discount_amount,
+         ps.tax_amount::numeric AS tax_amount,
+         ps.total_amount::numeric AS gross_amount,
+         (CASE WHEN ps.status IN ('voided', 'returned') THEN ps.total_amount ELSE COALESCE(ps.refund_amount, 0) END)::numeric AS adjustment_amount,
+         (CASE WHEN ps.status IN ('voided', 'returned') THEN 0 ELSE (ps.total_amount - COALESCE(ps.refund_amount, 0)) END)::numeric AS net_amount,
+         ps.notes,
+         ps.void_reason,
+         ps.return_reason
+       FROM pos_sales ps
+       LEFT JOIN users u ON ps.staff_id = u.user_id
+       WHERE ${whereSql}
+       ORDER BY ${resolvedSort} ${resolvedDir}
+       LIMIT ${numLimit} OFFSET ${offset}`,
+      qParams
+    );
+    txItems = dataQ.rows;
+
+  } else if (report_type === 'customization') {
+    const qParams = [];
+    const qConds = [`o.deleted_at IS NULL`, `o.order_type = 'customization'`];
+
+    if (startDate) { qParams.push(startDate); qConds.push(`o.created_at >= $${qParams.length}`); }
+    if (endDate) { qParams.push(endDate); qConds.push(`o.created_at <= $${qParams.length}`); }
+    if (status && status !== 'all') {
+      qParams.push(status);
+      qConds.push(`(o.customization_status = $${qParams.length} OR o.status::text = $${qParams.length})`);
+    }
+    if (payment_status && payment_status !== 'all') { qParams.push(payment_status); qConds.push(`o.payment_status = $${qParams.length}`); }
+    if (payment_method && payment_method !== 'all') {
+      qParams.push(payment_method);
+      qConds.push(`EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.order_id AND p.method::text = $${qParams.length})`);
+    }
+    if (search && search.trim()) {
+      qParams.push(`%${search.trim()}%`);
+      const sIdx = qParams.length;
+      qConds.push(`(o.order_number ILIKE $${sIdx} OR u.first_name ILIKE $${sIdx} OR u.last_name ILIKE $${sIdx} OR u.email ILIKE $${sIdx})`);
+    }
+
+    const whereSql = qConds.join(' AND ');
+
+    const countRes = await pool.query(
+      `SELECT COUNT(*)::int AS total FROM orders o LEFT JOIN users u ON o.user_id = u.user_id WHERE ${whereSql}`,
+      qParams
+    );
+    totalRecords = countRes.rows[0]?.total || 0;
+
+    const dataQ = await pool.query(
+      `SELECT
+         o.order_id AS id,
+         o.order_number AS transaction_number,
+         o.created_at AS date,
+         'customization' AS channel,
+         CONCAT(u.first_name, ' ', u.last_name) AS customer_name,
+         u.email AS customer_email,
+         COALESCE(o.customization_status, o.status::text) AS status,
+         o.payment_status::text AS payment_status,
+         COALESCE((SELECT p.method::text FROM payments p WHERE p.order_id = o.order_id AND p.deleted_at IS NULL ORDER BY p.created_at DESC LIMIT 1), 'bank_transfer') AS payment_method,
+         o.total_amount::numeric AS gross_amount,
+         COALESCE((SELECT SUM(COALESCE(rr.approved_amount, rr.amount_requested, 0)) FROM refund_requests rr WHERE rr.order_id = o.order_id AND rr.status IN ('approved', 'refunded', 'processing')), 0)::numeric AS adjustment_amount,
+         (o.total_amount - COALESCE((SELECT SUM(COALESCE(rr.approved_amount, rr.amount_requested, 0)) FROM refund_requests rr WHERE rr.order_id = o.order_id AND rr.status IN ('approved', 'refunded', 'processing')), 0))::numeric AS net_amount,
+         o.notes
+       FROM orders o
+       LEFT JOIN users u ON o.user_id = u.user_id
+       WHERE ${whereSql}
+       ORDER BY ${resolvedSort} ${resolvedDir}
+       LIMIT ${numLimit} OFFSET ${offset}`,
+      qParams
+    );
+    txItems = dataQ.rows;
+
+  } else if (report_type === 'appointments') {
+    const qParams = [];
+    const qConds = [`a.deleted_at IS NULL`];
+
+    if (startDate) { qParams.push(startDate); qConds.push(`a.scheduled_at >= $${qParams.length}`); }
+    if (endDate) { qParams.push(endDate); qConds.push(`a.scheduled_at <= $${qParams.length}`); }
+    if (status && status !== 'all') { qParams.push(status); qConds.push(`a.status::text = $${qParams.length}`); }
+    if (payment_method && payment_method !== 'all') { qParams.push(payment_method); qConds.push(`a.payment_method::text = $${qParams.length}`); }
+    if (payment_status && payment_status !== 'all') { qParams.push(payment_status); qConds.push(`a.payment_status::text = $${qParams.length}`); }
+    if (search && search.trim()) {
+      qParams.push(`%${search.trim()}%`);
+      const sIdx = qParams.length;
+      qConds.push(`(a.reference_code ILIKE $${sIdx} OR a.customer_name ILIKE $${sIdx} OR a.customer_email ILIKE $${sIdx} OR u.first_name ILIKE $${sIdx} OR u.last_name ILIKE $${sIdx})`);
+    }
+
+    const whereSql = qConds.join(' AND ');
+
+    const countRes = await pool.query(
+      `SELECT COUNT(*)::int AS total
+       FROM appointments a
+       LEFT JOIN users u ON a.user_id = u.user_id
+       WHERE ${whereSql}`,
+      qParams
+    );
+    totalRecords = countRes.rows[0]?.total || 0;
+
+    // Determine sort column
+    const apptSortMap = {
+      date: 'a.scheduled_at',
+      amount: 'gross_amount',
+      identifier: 'transaction_number',
+      status: 'a.status',
+      customer: 'customer_name',
+    };
+    const apptSort = apptSortMap[sort_by] || 'a.scheduled_at';
+
+    const dataQ = await pool.query(
+      `SELECT
+         a.appointment_id AS id,
+         COALESCE(a.reference_code, CONCAT('APT-', a.appointment_id::text)) AS transaction_number,
+         a.scheduled_at AS date,
+         'appointment' AS channel,
+         COALESCE(a.customer_name, CONCAT(u.first_name, ' ', u.last_name), 'Walk-in Customer') AS customer_name,
+         COALESCE(a.customer_email, u.email) AS customer_email,
+         COALESCE(a.customer_phone, u.phone) AS customer_phone,
+         a.status::text AS status,
+         a.payment_status::text AS payment_status,
+         COALESCE(a.payment_method::text, 'gcash') AS payment_method,
+         COALESCE((
+           SELECT string_agg(s.name, ', ' ORDER BY s.name)
+           FROM services s
+           WHERE s.service_id::text = ANY(ARRAY(SELECT jsonb_array_elements_text(a.services)))
+         ), 'Service Appointment') AS service_names,
+         COALESCE((
+           SELECT SUM(s.price)
+           FROM services s
+           WHERE s.service_id::text = ANY(ARRAY(SELECT jsonb_array_elements_text(a.services)))
+         ), 0)::numeric AS gross_amount,
+         0::numeric AS adjustment_amount,
+         COALESCE((
+           SELECT SUM(s.price)
+           FROM services s
+           WHERE s.service_id::text = ANY(ARRAY(SELECT jsonb_array_elements_text(a.services)))
+         ), 0)::numeric AS net_amount,
+         a.notes
+       FROM appointments a
+       LEFT JOIN users u ON a.user_id = u.user_id
+       WHERE ${whereSql}
+       ORDER BY ${apptSort} ${resolvedDir}
+       LIMIT ${numLimit} OFFSET ${offset}`,
+      qParams
+    );
+    txItems = dataQ.rows;
+
+  } else if (report_type === 'refunds') {
+    const qParams = [];
+    const qConds = [`1=1`];
+
+    if (startDate) { qParams.push(startDate); qConds.push(`date >= $${qParams.length}`); }
+    if (endDate) { qParams.push(endDate); qConds.push(`date <= $${qParams.length}`); }
+    if (status && status !== 'all') { qParams.push(status); qConds.push(`status = $${qParams.length}`); }
+    if (refund_type && refund_type !== 'all') { qParams.push(refund_type); qConds.push(`adjustment_type = $${qParams.length}`); }
+    if (search && search.trim()) {
+      qParams.push(`%${search.trim()}%`);
+      const sIdx = qParams.length;
+      qConds.push(`(transaction_number ILIKE $${sIdx} OR customer_name ILIKE $${sIdx} OR related_number ILIKE $${sIdx} OR reason ILIKE $${sIdx})`);
+    }
+
+    const whereSql = qConds.join(' AND ');
+
+    const refundUnionQuery = `
+      WITH unified_refunds AS (
+        -- Refund requests
+        SELECT
+          rr.refund_request_id AS id,
+          COALESCE(rr.request_number, CONCAT('REF-', SUBSTRING(rr.refund_request_id::text, 1, 8))) AS transaction_number,
+          rr.created_at AS date,
+          CASE
+            WHEN rr.project_id IS NOT NULL OR o.order_type = 'customization' THEN 'customization'
+            ELSE 'online'
+          END AS channel,
+          COALESCE(o.order_number, 'Direct Project') AS related_number,
+          CONCAT(u.first_name, ' ', u.last_name) AS customer_name,
+          COALESCE(rr.refund_type, 'money_refund') AS adjustment_type,
+          COALESCE(rr.reason, 'Customer Refund') AS reason,
+          rr.status::text AS status,
+          COALESCE(rr.amount_requested, 0)::numeric AS gross_amount,
+          COALESCE(rr.approved_amount, rr.refunded_amount, rr.amount_requested, 0)::numeric AS adjustment_amount,
+          COALESCE(rr.approved_amount, rr.refunded_amount, rr.amount_requested, 0)::numeric AS net_amount,
+          rr.refund_method AS payment_method,
+          CONCAT(pb.first_name, ' ', pb.last_name) AS staff_name
+        FROM refund_requests rr
+        LEFT JOIN users u ON rr.user_id = u.user_id
+        LEFT JOIN users pb ON rr.processed_by = pb.user_id
+        LEFT JOIN orders o ON rr.order_id = o.order_id
+
+        UNION ALL
+
+        -- POS Voids and Returns
+        SELECT
+          ps.sale_id AS id,
+          ps.sale_number AS transaction_number,
+          COALESCE(ps.returned_at, ps.voided_at, ps.created_at) AS date,
+          'walkIn' AS channel,
+          ps.sale_number AS related_number,
+          COALESCE(ps.customer_name, 'Walk-in Customer') AS customer_name,
+          ps.status::text AS adjustment_type,
+          COALESCE(ps.void_reason, ps.return_reason, 'POS Sale Adjustment') AS reason,
+          ps.status::text AS status,
+          ps.total_amount::numeric AS gross_amount,
+          ps.total_amount::numeric AS adjustment_amount,
+          ps.total_amount::numeric AS net_amount,
+          ps.payment_method::text AS payment_method,
+          CONCAT(st.first_name, ' ', st.last_name) AS staff_name
+        FROM pos_sales ps
+        LEFT JOIN users st ON ps.staff_id = st.user_id
+        WHERE ps.status IN ('voided', 'returned') AND ps.deleted_at IS NULL
+      )
+    `;
+
+    const countRes = await pool.query(
+      `${refundUnionQuery} SELECT COUNT(*)::int AS total FROM unified_refunds WHERE ${whereSql}`,
+      qParams
+    );
+    totalRecords = countRes.rows[0]?.total || 0;
+
+    const dataQ = await pool.query(
+      `${refundUnionQuery}
+       SELECT * FROM unified_refunds
+       WHERE ${whereSql}
+       ORDER BY ${resolvedSort} ${resolvedDir}
+       LIMIT ${numLimit} OFFSET ${offset}`,
+      qParams
+    );
+    txItems = dataQ.rows;
+
+  } else {
+    // report_type === 'all'
+    const qParams = [];
+    const qConds = [`1=1`];
+
+    if (startDate) { qParams.push(startDate); qConds.push(`date >= $${qParams.length}`); }
+    if (endDate) { qParams.push(endDate); qConds.push(`date <= $${qParams.length}`); }
+    if (order_type && order_type !== 'all') { qParams.push(order_type); qConds.push(`channel = $${qParams.length}`); }
+    if (payment_method && payment_method !== 'all') { qParams.push(payment_method); qConds.push(`payment_method = $${qParams.length}`); }
+    if (status && status !== 'all') { qParams.push(status); qConds.push(`status = $${qParams.length}`); }
+    if (search && search.trim()) {
+      qParams.push(`%${search.trim()}%`);
+      const sIdx = qParams.length;
+      qConds.push(`(transaction_number ILIKE $${sIdx} OR customer_name ILIKE $${sIdx})`);
+    }
+
+    const whereSql = qConds.join(' AND ');
+
+    const allUnionQuery = `
+      WITH unified_sales AS (
+        -- Online Orders
+        SELECT
+          o.order_id AS id,
+          o.order_number AS transaction_number,
+          o.created_at AS date,
+          'online' AS channel,
+          CONCAT(u.first_name, ' ', u.last_name) AS customer_name,
+          COALESCE((SELECT p.method::text FROM payments p WHERE p.order_id = o.order_id AND p.deleted_at IS NULL ORDER BY p.created_at DESC LIMIT 1), 'gcash') AS payment_method,
+          o.status::text AS status,
+          o.total_amount::numeric AS gross_amount,
+          COALESCE((SELECT SUM(COALESCE(rr.approved_amount, rr.amount_requested, 0)) FROM refund_requests rr WHERE rr.order_id = o.order_id AND rr.status IN ('approved', 'refunded', 'processing')), 0)::numeric AS adjustment_amount,
+          (o.total_amount - COALESCE((SELECT SUM(COALESCE(rr.approved_amount, rr.amount_requested, 0)) FROM refund_requests rr WHERE rr.order_id = o.order_id AND rr.status IN ('approved', 'refunded', 'processing')), 0))::numeric AS net_amount,
+          NULL AS staff_name
+        FROM orders o
+        LEFT JOIN users u ON o.user_id = u.user_id
+        WHERE o.deleted_at IS NULL AND o.order_type = 'product'
+
+        UNION ALL
+
+        -- POS Sales
+        SELECT
+          ps.sale_id AS id,
+          ps.sale_number AS transaction_number,
+          ps.created_at AS date,
+          'walkIn' AS channel,
+          COALESCE(ps.customer_name, 'Walk-in Customer') AS customer_name,
+          ps.payment_method::text AS payment_method,
+          ps.status::text AS status,
+          ps.total_amount::numeric AS gross_amount,
+          (CASE WHEN ps.status IN ('voided', 'returned') THEN ps.total_amount ELSE COALESCE(ps.refund_amount, 0) END)::numeric AS adjustment_amount,
+          (CASE WHEN ps.status IN ('voided', 'returned') THEN 0 ELSE (ps.total_amount - COALESCE(ps.refund_amount, 0)) END)::numeric AS net_amount,
+          CONCAT(st.first_name, ' ', st.last_name) AS staff_name
+        FROM pos_sales ps
+        LEFT JOIN users st ON ps.staff_id = st.user_id
+        WHERE ps.deleted_at IS NULL
+
+        UNION ALL
+
+        -- Customization
+        SELECT
+          o.order_id AS id,
+          o.order_number AS transaction_number,
+          o.created_at AS date,
+          'customization' AS channel,
+          CONCAT(u.first_name, ' ', u.last_name) AS customer_name,
+          COALESCE((SELECT p.method::text FROM payments p WHERE p.order_id = o.order_id AND p.deleted_at IS NULL ORDER BY p.created_at DESC LIMIT 1), 'bank_transfer') AS payment_method,
+          COALESCE(o.customization_status, o.status::text) AS status,
+          o.total_amount::numeric AS gross_amount,
+          COALESCE((SELECT SUM(COALESCE(rr.approved_amount, rr.amount_requested, 0)) FROM refund_requests rr WHERE rr.order_id = o.order_id AND rr.status IN ('approved', 'refunded', 'processing')), 0)::numeric AS adjustment_amount,
+          (o.total_amount - COALESCE((SELECT SUM(COALESCE(rr.approved_amount, rr.amount_requested, 0)) FROM refund_requests rr WHERE rr.order_id = o.order_id AND rr.status IN ('approved', 'refunded', 'processing')), 0))::numeric AS net_amount,
+          NULL AS staff_name
+        FROM orders o
+        LEFT JOIN users u ON o.user_id = u.user_id
+        WHERE o.deleted_at IS NULL AND o.order_type = 'customization'
+
+        UNION ALL
+
+        -- Appointments
+        SELECT
+          a.appointment_id AS id,
+          COALESCE(a.reference_code, CONCAT('APT-', a.appointment_id::text)) AS transaction_number,
+          a.scheduled_at AS date,
+          'appointment' AS channel,
+          COALESCE(a.customer_name, CONCAT(u.first_name, ' ', u.last_name), 'Walk-in Customer') AS customer_name,
+          COALESCE(a.payment_method::text, 'gcash') AS payment_method,
+          a.status::text AS status,
+          COALESCE((
+            SELECT SUM(s.price)
+            FROM services s
+            WHERE s.service_id::text = ANY(ARRAY(SELECT jsonb_array_elements_text(a.services)))
+          ), 0)::numeric AS gross_amount,
+          0::numeric AS adjustment_amount,
+          COALESCE((
+            SELECT SUM(s.price)
+            FROM services s
+            WHERE s.service_id::text = ANY(ARRAY(SELECT jsonb_array_elements_text(a.services)))
+          ), 0)::numeric AS net_amount,
+          NULL AS staff_name
+        FROM appointments a
+        LEFT JOIN users u ON a.user_id = u.user_id
+        WHERE a.deleted_at IS NULL
+      )
+    `;
+
+    const countRes = await pool.query(
+      `${allUnionQuery} SELECT COUNT(*)::int AS total FROM unified_sales WHERE ${whereSql}`,
+      qParams
+    );
+    totalRecords = countRes.rows[0]?.total || 0;
+
+    const dataQ = await pool.query(
+      `${allUnionQuery}
+       SELECT * FROM unified_sales
+       WHERE ${whereSql}
+       ORDER BY ${resolvedSort} ${resolvedDir}
+       LIMIT ${numLimit} OFFSET ${offset}`,
+      qParams
+    );
+    txItems = dataQ.rows;
   }
-  const apptPaymentFilterSql = apptPaymentFilterClauses.length > 0 ? `AND ${apptPaymentFilterClauses.join(' AND ')}` : '';
 
-  const apptPaymentsQ = pool.query(
-    `SELECT (
-              CASE
-                WHEN a.payment_method IN ('cash') THEN 'cash'
-                WHEN a.payment_method IN ('gcash', 'e_wallet') THEN 'gcash'
-                WHEN a.payment_method IN ('bank_transfer', 'e_bank') THEN 'bank_transfer'
-                ELSE a.payment_method
-              END
-            ) AS method,
-            COUNT(DISTINCT a.appointment_id)::int AS appointments,
-            COALESCE(SUM(s.price), 0)::numeric AS revenue
-     FROM appointments a
-     JOIN services s ON s.service_id::text IN (
-       SELECT jsonb_array_elements_text(a.services)
-     )
-     WHERE a.deleted_at IS NULL AND a.payment_method IS NOT NULL
-       ${apptPaymentFilterSql}
-       ${appointmentRange.conditions.length > 0 ? 'AND ' + renum(appointmentRange.conditions, apptPaymentFilterIdx).join(' AND ') : ''}
-     GROUP BY 1
-     ORDER BY revenue DESC`,
-    [...apptPaymentFilterParams, ...appointmentRange.params]
-  );
-
-  // ── Daily/Weekly/Monthly performance (all-time only) ──────────────────────
-  const dailyWeeklyMonthlyQ = hasDateRange
-    ? Promise.resolve({ rows: [{}] })
-    : pool.query(
-        `SELECT
-           COALESCE(SUM(CASE WHEN o.created_at >= $1 THEN ${revenue('o')} ELSE 0 END), 0)::numeric AS "dailySales",
-           COUNT(CASE WHEN o.created_at >= $1 THEN 1 END)::int AS "dailyTransactions",
-           COALESCE(SUM(CASE WHEN o.created_at >= $2 THEN ${revenue('o')} ELSE 0 END), 0)::numeric AS "weeklySales",
-           COUNT(CASE WHEN o.created_at >= $2 THEN 1 END)::int AS "weeklyTransactions",
-           COALESCE(SUM(CASE WHEN o.created_at >= $3 THEN ${revenue('o')} ELSE 0 END), 0)::numeric AS "monthlySales",
-           COUNT(CASE WHEN o.created_at >= $3 THEN 1 END)::int AS "monthlyTransactions"
-         FROM orders o
-         WHERE o.deleted_at IS NULL ${orderFilterSql ? renum([orderFilterSql], 4).join('') : ''}`,
-        [todayStart, weekStart, monthStart, ...orderStatusParams]
-      );
-
-
-  // ── Run all queries in parallel ───────────────────────────────────────────
-  const [
-    walkInGrossR, walkInAdjR,
-    onlineGrossR, onlineAdjR,
-    custGrossR,   custAdjR,
-    apptGrossR,   apptAdjR,
-    adjByTypeR, adjByChannelR,
-    dailyTrendR, bestProductsR,
-    topAdjustedR, refundReasonsR,
-    orderPaymentsR, apptPaymentsR, dailyWeeklyMonthlyR,
-  ] = await Promise.all([
-    walkInGrossQ, walkInAdjQ,
-    onlineGrossQ, onlineAdjQ,
-    custGrossQ,   custAdjQ,
-    apptGrossQ,   apptAdjQ,
-    adjByTypeQ, adjByChannelQ,
-    dailyTrendQ, bestProductsQ,
-    topAdjustedQ, refundReasonsQ,
-    orderPaymentsQ, apptPaymentsQ, dailyWeeklyMonthlyQ,
+  // Await the baseline and breakdown promises
+  const [staffListR, walkInStatsR, orderStatsR, refundStatsR, apptStatsR, dailyTrendR] = await Promise.all([
+    staffListQ,
+    walkInStatsQ,
+    orderStatsQ,
+    refundStatsQ,
+    apptStatsQ,
+    dailyTrendQ,
   ]);
 
-  // ── Aggregate channel values ──────────────────────────────────────────────
-  const walkInGross        = parseFloat(walkInGrossR.rows[0]?.gross        || 0);
-  const walkInTransactions = parseInt(walkInGrossR.rows[0]?.transactions   || 0, 10);
-  const walkInAdj          = parseFloat(walkInAdjR.rows[0]?.adjustments    || 0);
+  const walkInStats = walkInStatsR.rows[0] || {};
+  const orderStats = orderStatsR.rows[0] || {};
+  const refundStats = refundStatsR.rows[0] || {};
+  const apptStats = apptStatsR.rows[0] || {};
 
-  const onlineGross        = parseFloat(onlineGrossR.rows[0]?.gross        || 0);
-  const onlineTransactions = parseInt(onlineGrossR.rows[0]?.transactions   || 0, 10);
-  const onlineAdj          = parseFloat(onlineAdjR.rows[0]?.adjustments    || 0);
+  const walkInGross = parseFloat(walkInStats.gross || 0);
+  const walkInTx = parseInt(walkInStats.completed_transactions || 0, 10);
+  const walkInAdj = parseFloat(walkInStats.adjustments || 0);
 
-  const custGross          = parseFloat(custGrossR.rows[0]?.gross          || 0);
-  const custTransactions   = parseInt(custGrossR.rows[0]?.transactions     || 0, 10);
-  const custAdj            = parseFloat(custAdjR.rows[0]?.adjustments      || 0);
+  const onlineGross = parseFloat(orderStats.online_gross || 0);
+  const onlineTx = parseInt(orderStats.online_transactions || 0, 10);
+  const onlineAdj = parseFloat(refundStats.online_refunds || 0);
 
-  const apptGross          = parseFloat(apptGrossR.rows[0]?.gross          || 0);
-  const apptTransactions   = parseInt(apptGrossR.rows[0]?.transactions     || 0, 10);
-  const apptAdj            = parseFloat(apptAdjR.rows[0]?.adjustments      || 0);
+  const custGross = parseFloat(orderStats.cust_gross || 0);
+  const custTx = parseInt(orderStats.cust_transactions || 0, 10);
+  const custAdj = parseFloat(refundStats.cust_refunds || 0);
 
-  const totalGross        = walkInGross + onlineGross + custGross + apptGross;
-  const totalAdjustments  = walkInAdj  + onlineAdj  + custAdj  + apptAdj;
-  const totalTransactions = walkInTransactions + onlineTransactions + custTransactions + apptTransactions;
-  const netSales          = totalGross - totalAdjustments;
-  const adjustmentRate    = totalGross > 0 ? Number(((totalAdjustments / totalGross) * 100).toFixed(1)) : 0;
-  const avg               = (v, c) => (c > 0 ? Number((v / c).toFixed(2)) : 0);
+  const apptGross = parseFloat(apptStats.gross || 0);
+  const apptTx = parseInt(apptStats.completed_transactions || 0, 10);
+  const apptAdj = 0;
 
-  // ── Daily/Weekly/Monthly ──────────────────────────────────────────────────
-  let dailySales = 0, dailyTransactions = 0;
-  let weeklySales = 0, weeklyTransactions = 0;
-  let monthlySales = 0, monthlyTransactions = 0;
-  if (!hasDateRange) {
-    const dwm = dailyWeeklyMonthlyR.rows[0] || {};
-    dailySales         = parseFloat(dwm.dailySales        || 0);
-    dailyTransactions  = parseInt(dwm.dailyTransactions   || 0, 10);
-    weeklySales        = parseFloat(dwm.weeklySales       || 0);
-    weeklyTransactions = parseInt(dwm.weeklyTransactions  || 0, 10);
-    monthlySales       = parseFloat(dwm.monthlySales      || 0);
-    monthlyTransactions= parseInt(dwm.monthlyTransactions || 0, 10);
+  // Compute Active Report KPIs based on report_type
+  let reportGross = 0;
+  let reportAdj = 0;
+  let reportTx = 0;
+
+  if (report_type === 'online') {
+    reportGross = onlineGross;
+    reportAdj = onlineAdj;
+    reportTx = onlineTx;
+  } else if (report_type === 'pos') {
+    reportGross = walkInGross;
+    reportAdj = walkInAdj;
+    reportTx = walkInTx;
+  } else if (report_type === 'customization') {
+    reportGross = custGross;
+    reportAdj = custAdj;
+    reportTx = custTx;
+  } else if (report_type === 'appointments') {
+    reportGross = apptGross;
+    reportAdj = apptAdj;
+    reportTx = apptTx;
+  } else if (report_type === 'refunds') {
+    reportGross = parseFloat(refundStats.total_refunds || 0) + walkInAdj;
+    reportAdj = reportGross;
+    reportTx = parseInt(refundStats.refund_count || 0, 10) + parseInt(walkInStats.adjustment_count || 0, 10);
+  } else {
+    // all
+    reportGross = walkInGross + onlineGross + custGross + apptGross;
+    reportAdj = walkInAdj + onlineAdj + custAdj;
+    reportTx = walkInTx + onlineTx + custTx + apptTx;
   }
 
+  const reportNet = reportGross - reportAdj;
+  const avgTx = reportTx > 0 ? reportGross / reportTx : 0;
+  const adjRate = reportGross > 0 ? (reportAdj / reportGross) * 100 : 0;
+
+  // Format transactions
+  const formattedTransactions = (txItems || []).map((t) => ({
+    id: t.id,
+    transaction_number: t.transaction_number,
+    date: t.date ? new Date(t.date).toISOString() : null,
+    channel: t.channel,
+    customer_name: t.customer_name || 'Guest / Walk-in',
+    customer_email: t.customer_email || null,
+    customer_phone: t.customer_phone || null,
+    status: t.status,
+    payment_status: t.payment_status || null,
+    payment_method: t.payment_method || 'gcash',
+    item_count: t.item_count !== undefined ? parseInt(t.item_count, 10) : null,
+    subtotal: parseFloat(t.subtotal || 0),
+    discount_amount: parseFloat(t.discount_amount || 0),
+    shipping_cost: parseFloat(t.shipping_cost || 0),
+    tax_amount: parseFloat(t.tax_amount || 0),
+    gross_amount: parseFloat(t.gross_amount || 0),
+    adjustment_amount: parseFloat(t.adjustment_amount || 0),
+    net_amount: parseFloat(t.net_amount || 0),
+    staff_name: t.staff_name || null,
+    staff_id: t.staff_id || null,
+    adjustment_type: t.adjustment_type || null,
+    related_number: t.related_number || null,
+    reason: t.reason || null,
+    notes: t.notes || null,
+    service_names: t.service_names || null,
+  }));
+
+  // Daily Trend formatted
+  const formattedDailyTrend = (dailyTrendR.rows || []).map((r) => ({
+    date: r.date ? new Date(r.date).toISOString().split('T')[0] : '',
+    revenue: parseFloat(r.gross || 0),
+    gross: parseFloat(r.gross || 0),
+    net: parseFloat(r.gross || 0),
+    transactions: parseInt(r.transactions || 0, 10),
+  }));
+
   return {
-    grossSales:            Number(totalGross.toFixed(2)),
-    totalAdjustments:      Number(totalAdjustments.toFixed(2)),
-    netSales:              Number(netSales.toFixed(2)),
-    totalTransactions,
-    averagePerTransaction: avg(totalGross, totalTransactions),
-    customizationOrders:   custTransactions,
+    reportType: report_type,
+    summary: {
+      grossSales: Number(reportGross.toFixed(2)),
+      totalAdjustments: Number(reportAdj.toFixed(2)),
+      netSales: Number(reportNet.toFixed(2)),
+      totalTransactions: reportTx,
+      averagePerTransaction: Number(avgTx.toFixed(2)),
+      adjustmentRate: Number(adjRate.toFixed(1)),
+    },
+    // Top-level legacy fields for backwards compatibility with widgets
+    grossSales: Number(reportGross.toFixed(2)),
+    totalAdjustments: Number(reportAdj.toFixed(2)),
+    netSales: Number(reportNet.toFixed(2)),
+    totalTransactions: reportTx,
+    averagePerTransaction: Number(avgTx.toFixed(2)),
+    customizationOrders: custTx,
     channels: {
       walkIn: {
-        gross:        Number(walkInGross.toFixed(2)),
-        adjustments:  Number(walkInAdj.toFixed(2)),
-        net:          Number((walkInGross - walkInAdj).toFixed(2)),
-        transactions: walkInTransactions,
+        gross: Number(walkInGross.toFixed(2)),
+        adjustments: Number(walkInAdj.toFixed(2)),
+        net: Number((walkInGross - walkInAdj).toFixed(2)),
+        transactions: walkInTx,
       },
       online: {
-        gross:        Number(onlineGross.toFixed(2)),
-        adjustments:  Number(onlineAdj.toFixed(2)),
-        net:          Number((onlineGross - onlineAdj).toFixed(2)),
-        transactions: onlineTransactions,
+        gross: Number(onlineGross.toFixed(2)),
+        adjustments: Number(onlineAdj.toFixed(2)),
+        net: Number((onlineGross - onlineAdj).toFixed(2)),
+        transactions: onlineTx,
       },
       customization: {
-        gross:        Number(custGross.toFixed(2)),
-        adjustments:  Number(custAdj.toFixed(2)),
-        net:          Number((custGross - custAdj).toFixed(2)),
-        transactions: custTransactions,
+        gross: Number(custGross.toFixed(2)),
+        adjustments: Number(custAdj.toFixed(2)),
+        net: Number((custGross - custAdj).toFixed(2)),
+        transactions: custTx,
       },
       appointments: {
-        gross:        Number(apptGross.toFixed(2)),
-        adjustments:  Number(apptAdj.toFixed(2)),
-        net:          Number((apptGross - apptAdj).toFixed(2)),
-        transactions: apptTransactions,
+        gross: Number(apptGross.toFixed(2)),
+        adjustments: 0,
+        net: Number(apptGross.toFixed(2)),
+        transactions: apptTx,
       },
     },
-    adjustmentsByType: (adjByTypeR.rows || []).map(r => ({
-      type:   r.type,
-      count:  parseInt(r.count  || 0, 10),
-      amount: parseFloat(r.amount || 0),
-    })),
-    adjustmentsByChannel: (adjByChannelR.rows || []).map(r => ({
-      channel: r.channel,
-      count:   parseInt(r.count  || 0, 10),
-      amount:  parseFloat(r.amount || 0),
-    })),
-    adjustmentRate,
-    dailyTrend: (dailyTrendR.rows || [])
-      .filter(r => r.date)
-      .map(r => ({
-        date:         new Date(r.date).toISOString().split('T')[0],
-        revenue:      parseFloat(r.revenue      || 0),
-        transactions: parseInt(r.transactions   || 0, 10),
+    dailyTrend: formattedDailyTrend,
+    transactions: formattedTransactions,
+    pagination: {
+      page: numPage,
+      limit: numLimit,
+      totalRecords,
+      totalPages: Math.ceil(totalRecords / numLimit) || 1,
+    },
+    metadata: {
+      staffList: (staffListR.rows || []).map((s) => ({
+        id: s.user_id,
+        name: s.name || 'Staff Member',
+        role: s.role,
       })),
-    bestSellingProducts: (bestProductsR.rows || []).map(r => ({
-      name:     r.name,
-      units:    parseInt(r.units   || 0, 10),
-      revenue:  parseFloat(r.revenue || 0),
-      category: r.category,
-    })),
-    topAdjustedProducts: (topAdjustedR.rows || []).map(r => ({
-      name:             r.name,
-      adjustmentAmount: parseFloat(r.adjustmentAmount || 0),
-      reason:           r.reason,
-    })),
-    refundReasons: (refundReasonsR.rows || []).map(r => ({
-      reason: r.reason,
-      count:  parseInt(r.count  || 0, 10),
-      amount: parseFloat(r.amount || 0),
-    })),
-    orderPaymentMethods: (orderPaymentsR.rows || []).map(r => ({
-      method:       r.method,
-      transactions: parseInt(r.transactions || 0, 10),
-      amount:       parseFloat(r.amount       || 0),
-    })),
-    appointmentPaymentMethods: (apptPaymentsR.rows || []).map(r => ({
-      method:       r.method,
-      appointments: parseInt(r.appointments || 0, 10),
-      revenue:      parseFloat(r.revenue      || 0),
-    })),
-    dailySales:          Number(dailySales.toFixed(2)),
-    dailyTransactions,
-    weeklySales:         Number(weeklySales.toFixed(2)),
-    weeklyTransactions,
-    monthlySales:        Number(monthlySales.toFixed(2)),
-    monthlyTransactions,
+      reportType: report_type,
+    },
   };
 }
 

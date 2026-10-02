@@ -66,8 +66,16 @@ exports.getDashboardSummary = async (req, res, next) => {
 
 exports.getSalesReport = async (req, res, next) => {
   try {
-    const { start_date, end_date, order_type, payment_method, category_id, status, payment_status } = req.query;
-    const result = await reportService.getSalesReport({ start_date, end_date, order_type, payment_method, category_id, status, payment_status });
+    const {
+      start_date, end_date, report_type, order_type, payment_method,
+      category_id, status, payment_status, staff_id, refund_type,
+      search, sort_by, sort_order, page, limit,
+    } = req.query;
+    const result = await reportService.getSalesReport({
+      start_date, end_date, report_type, order_type, payment_method,
+      category_id, status, payment_status, staff_id, refund_type,
+      search, sort_by, sort_order, page, limit,
+    });
     res.json({ status: 'success', data: result });
   } catch (err) { next(err); }
 };
@@ -110,7 +118,7 @@ exports.getPaymentMethodAnalysis = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-const salesExcelService = require('../services/salesExcelAsposeService');
+const salesExcelService = require('../services/salesExcelService');
 
 exports.exportReport = async (req, res, next) => {
   try {
@@ -127,7 +135,7 @@ exports.exportSalesExcel = async (req, res, next) => {
     const datePrinted = req.body?.datePrinted || new Date().toLocaleString('en-PH');
 
     if (req.body?.customerSummary) {
-      const buffer = salesExcelService.generateCustomerSummaryExcelWorkbook(req.body.customerSummary, {
+      const buffer = await salesExcelService.generateCustomerSummaryExcelWorkbook(req.body.customerSummary, {
         printedBy,
         datePrinted,
       });
@@ -137,22 +145,27 @@ exports.exportSalesExcel = async (req, res, next) => {
       return res.send(buffer);
     }
 
-    let salesReport = req.body?.salesReport;
+    let reportData = req.body?.salesReport || req.body?.reportData;
     const dateLabel = req.body?.dateLabel || req.query?.dateLabel || 'All Time';
+    const reportType = req.body?.reportType || req.query?.reportType || reportData?.reportType || 'all';
+    const activeFilters = req.body?.activeFilters || {};
 
-    if (!salesReport) {
-      const { start_date, end_date, order_type, payment_method, category_id, status, payment_status } = { ...req.query, ...req.body };
-      salesReport = await reportService.getSalesReport({ start_date, end_date, order_type, payment_method, category_id, status, payment_status });
+    if (!reportData || !reportData.transactions) {
+      const filters = { ...req.query, ...req.body, report_type: reportType, limit: 10000 };
+      reportData = await reportService.getSalesReport(filters);
     }
 
-    const buffer = salesExcelService.generateSalesExcelWorkbook(salesReport, {
+    const buffer = await salesExcelService.generateReportWorkbook(reportData, {
+      reportType,
       dateLabel,
       printedBy,
       datePrinted,
+      activeFilters,
     });
 
     const safeLabel = (dateLabel || 'All Time').replace(/[\\/:*?"<>|]/g, '').trim();
-    const filename = `CosmosCraft Sales Report - ${safeLabel}.xlsx`;
+    const typeLabel = (reportType || 'Sales').replace(/[\\/:*?"<>|]/g, '').trim();
+    const filename = `CosmosCraft ${typeLabel.toUpperCase()} Report - ${safeLabel}.xlsx`;
 
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
@@ -162,5 +175,6 @@ exports.exportSalesExcel = async (req, res, next) => {
     next(err);
   }
 };
+
 
 
